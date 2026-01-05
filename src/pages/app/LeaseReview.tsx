@@ -12,7 +12,7 @@ import {
   DollarSign,
   User,
   Download,
-  Edit,
+  Save,
   Loader2
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -21,9 +21,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+
+interface ExtractedJson {
+  property_address?: string;
+  security_deposit?: string;
+  renewal_options?: string;
+  escalation_clauses?: string;
+  termination_clauses?: string;
+  key_dates?: { date: string; description: string }[];
+}
 
 interface LeaseData {
   id: string;
@@ -35,14 +47,7 @@ interface LeaseData {
   lease_end: string | null;
   base_rent_amount: string | null;
   base_rent_frequency: string | null;
-  extracted_json: {
-    property_address?: string;
-    security_deposit?: string;
-    renewal_options?: string;
-    escalation_clauses?: string;
-    termination_clauses?: string;
-    key_dates?: { date: string; description: string }[];
-  } | null;
+  extracted_json: ExtractedJson | null;
   uploaded_at: string;
   processed_at: string | null;
 }
@@ -56,12 +61,40 @@ interface Risk {
   citation_page: number | null;
 }
 
+interface EditableFields {
+  landlord_name: string;
+  tenant_name: string;
+  property_address: string;
+  lease_start: string;
+  lease_end: string;
+  base_rent_amount: string;
+  base_rent_frequency: string;
+  security_deposit: string;
+  renewal_options: string;
+  escalation_clauses: string;
+  termination_clauses: string;
+}
+
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
   const [lease, setLease] = useState<LeaseData | null>(null);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editableFields, setEditableFields] = useState<EditableFields>({
+    landlord_name: '',
+    tenant_name: '',
+    property_address: '',
+    lease_start: '',
+    lease_end: '',
+    base_rent_amount: '',
+    base_rent_frequency: '',
+    security_deposit: '',
+    renewal_options: '',
+    escalation_clauses: '',
+    termination_clauses: '',
+  });
 
   useEffect(() => {
     async function fetchLease() {
@@ -76,12 +109,27 @@ export default function LeaseReview() {
 
         if (leaseError) throw leaseError;
         
-        // Type assertion for extracted_json since Supabase returns Json type
         const typedLease: LeaseData = {
           ...leaseData,
-          extracted_json: leaseData.extracted_json as LeaseData['extracted_json']
+          extracted_json: leaseData.extracted_json as ExtractedJson | null
         };
         setLease(typedLease);
+
+        // Populate editable fields
+        const extracted = typedLease.extracted_json || {};
+        setEditableFields({
+          landlord_name: typedLease.landlord_name || '',
+          tenant_name: typedLease.tenant_name || '',
+          property_address: extracted.property_address || '',
+          lease_start: typedLease.lease_start || '',
+          lease_end: typedLease.lease_end || '',
+          base_rent_amount: typedLease.base_rent_amount || '',
+          base_rent_frequency: typedLease.base_rent_frequency || '',
+          security_deposit: extracted.security_deposit || '',
+          renewal_options: extracted.renewal_options || '',
+          escalation_clauses: extracted.escalation_clauses || '',
+          termination_clauses: extracted.termination_clauses || '',
+        });
 
         const { data: risksData, error: risksError } = await supabase
           .from('risks')
@@ -100,6 +148,59 @@ export default function LeaseReview() {
 
     fetchLease();
   }, [leaseId]);
+
+  const handleFieldChange = (field: keyof EditableFields, value: string) => {
+    setEditableFields(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!lease) return;
+
+    setSaving(true);
+    try {
+      const updatedExtractedJson: ExtractedJson = {
+        ...(lease.extracted_json || {}),
+        property_address: editableFields.property_address || undefined,
+        security_deposit: editableFields.security_deposit || undefined,
+        renewal_options: editableFields.renewal_options || undefined,
+        escalation_clauses: editableFields.escalation_clauses || undefined,
+        termination_clauses: editableFields.termination_clauses || undefined,
+      };
+
+      const { error } = await supabase
+        .from('leases')
+        .update({
+          landlord_name: editableFields.landlord_name || null,
+          tenant_name: editableFields.tenant_name || null,
+          lease_start: editableFields.lease_start || null,
+          lease_end: editableFields.lease_end || null,
+          base_rent_amount: editableFields.base_rent_amount || null,
+          base_rent_frequency: editableFields.base_rent_frequency || null,
+          extracted_json: JSON.parse(JSON.stringify(updatedExtractedJson)),
+        })
+        .eq('id', lease.id);
+
+      if (error) throw error;
+
+      setLease({
+        ...lease,
+        landlord_name: editableFields.landlord_name || null,
+        tenant_name: editableFields.tenant_name || null,
+        lease_start: editableFields.lease_start || null,
+        lease_end: editableFields.lease_end || null,
+        base_rent_amount: editableFields.base_rent_amount || null,
+        base_rent_frequency: editableFields.base_rent_frequency || null,
+        extracted_json: updatedExtractedJson,
+      });
+
+      toast.success('Lease saved successfully');
+    } catch (error) {
+      console.error('Error saving lease:', error);
+      toast.error('Failed to save lease');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleFinalize = async () => {
     if (!lease) return;
@@ -168,7 +269,7 @@ export default function LeaseReview() {
     );
   }
 
-  const extractedData = lease.extracted_json || {};
+  const keyDates = lease.extracted_json?.key_dates || [];
 
   return (
     <AppLayout>
@@ -181,10 +282,18 @@ export default function LeaseReview() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
+            <Button variant="outline" onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Save
+            </Button>
             {lease.status === 'review' && (
               <Button variant="accent" onClick={handleFinalize}>
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Finalize Lease
+                Finalize
               </Button>
             )}
           </div>
@@ -199,7 +308,7 @@ export default function LeaseReview() {
             <div>
               <p className="font-medium text-yellow-600">Review Required</p>
               <p className="text-sm text-muted-foreground">
-                Please review the extracted information below and make any necessary corrections before finalizing.
+                Review and edit the extracted information below, then save your changes before finalizing.
               </p>
             </div>
           </div>
@@ -229,13 +338,23 @@ export default function LeaseReview() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-sm text-muted-foreground">Landlord</p>
-                  <p className="font-medium">{lease.landlord_name || 'Not extracted'}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="landlord_name">Landlord</Label>
+                  <Input
+                    id="landlord_name"
+                    value={editableFields.landlord_name}
+                    onChange={(e) => handleFieldChange('landlord_name', e.target.value)}
+                    placeholder="Landlord name"
+                  />
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Tenant</p>
-                  <p className="font-medium">{lease.tenant_name || 'Not extracted'}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="tenant_name">Tenant</Label>
+                  <Input
+                    id="tenant_name"
+                    value={editableFields.tenant_name}
+                    onChange={(e) => handleFieldChange('tenant_name', e.target.value)}
+                    placeholder="Tenant name"
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -249,33 +368,40 @@ export default function LeaseReview() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Property Address</p>
-                  <p className="font-medium">{extractedData.property_address || 'Not extracted'}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="property_address">Property Address</Label>
+                  <Input
+                    id="property_address"
+                    value={editableFields.property_address}
+                    onChange={(e) => handleFieldChange('property_address', e.target.value)}
+                    placeholder="Full property address"
+                  />
                 </div>
                 <Separator />
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Commencement Date</p>
-                      <p className="font-medium">
-                        {lease.lease_start 
-                          ? format(new Date(lease.lease_start), 'MMM d, yyyy')
-                          : 'Not extracted'}
-                      </p>
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lease_start" className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      Commencement Date
+                    </Label>
+                    <Input
+                      id="lease_start"
+                      type="date"
+                      value={editableFields.lease_start}
+                      onChange={(e) => handleFieldChange('lease_start', e.target.value)}
+                    />
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm text-muted-foreground">Expiration Date</p>
-                      <p className="font-medium">
-                        {lease.lease_end 
-                          ? format(new Date(lease.lease_end), 'MMM d, yyyy')
-                          : 'Not extracted'}
-                      </p>
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lease_end" className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      Expiration Date
+                    </Label>
+                    <Input
+                      id="lease_end"
+                      type="date"
+                      value={editableFields.lease_end}
+                      onChange={(e) => handleFieldChange('lease_end', e.target.value)}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -290,55 +416,77 @@ export default function LeaseReview() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-sm text-muted-foreground">Base Rent</p>
-                  <p className="font-medium text-lg">
-                    {lease.base_rent_amount || 'Not extracted'}
-                    {lease.base_rent_frequency && (
-                      <span className="text-sm text-muted-foreground ml-1">
-                        / {lease.base_rent_frequency}
-                      </span>
-                    )}
-                  </p>
+                <div className="space-y-2">
+                  <Label htmlFor="base_rent_amount">Base Rent Amount</Label>
+                  <Input
+                    id="base_rent_amount"
+                    value={editableFields.base_rent_amount}
+                    onChange={(e) => handleFieldChange('base_rent_amount', e.target.value)}
+                    placeholder="e.g., $5,000"
+                  />
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Security Deposit</p>
-                  <p className="font-medium">{extractedData.security_deposit || 'Not extracted'}</p>
+                <div className="space-y-2">
+                  <Label htmlFor="base_rent_frequency">Rent Frequency</Label>
+                  <Input
+                    id="base_rent_frequency"
+                    value={editableFields.base_rent_frequency}
+                    onChange={(e) => handleFieldChange('base_rent_frequency', e.target.value)}
+                    placeholder="e.g., monthly, annually"
+                  />
                 </div>
-                {extractedData.escalation_clauses && (
-                  <div className="sm:col-span-2">
-                    <p className="text-sm text-muted-foreground">Escalation Clauses</p>
-                    <p className="text-sm">{extractedData.escalation_clauses}</p>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <Label htmlFor="security_deposit">Security Deposit</Label>
+                  <Input
+                    id="security_deposit"
+                    value={editableFields.security_deposit}
+                    onChange={(e) => handleFieldChange('security_deposit', e.target.value)}
+                    placeholder="e.g., $10,000"
+                  />
+                </div>
+                <div className="sm:col-span-2 space-y-2">
+                  <Label htmlFor="escalation_clauses">Escalation Clauses</Label>
+                  <Textarea
+                    id="escalation_clauses"
+                    value={editableFields.escalation_clauses}
+                    onChange={(e) => handleFieldChange('escalation_clauses', e.target.value)}
+                    placeholder="Summary of rent escalation terms"
+                    rows={3}
+                  />
+                </div>
               </CardContent>
             </Card>
 
             {/* Additional Terms */}
-            {(extractedData.renewal_options || extractedData.termination_clauses) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Additional Terms</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {extractedData.renewal_options && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Renewal Options</p>
-                      <p className="text-sm">{extractedData.renewal_options}</p>
-                    </div>
-                  )}
-                  {extractedData.termination_clauses && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Termination Clauses</p>
-                      <p className="text-sm">{extractedData.termination_clauses}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Additional Terms</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="renewal_options">Renewal Options</Label>
+                  <Textarea
+                    id="renewal_options"
+                    value={editableFields.renewal_options}
+                    onChange={(e) => handleFieldChange('renewal_options', e.target.value)}
+                    placeholder="Summary of renewal options"
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="termination_clauses">Termination Clauses</Label>
+                  <Textarea
+                    id="termination_clauses"
+                    value={editableFields.termination_clauses}
+                    onChange={(e) => handleFieldChange('termination_clauses', e.target.value)}
+                    placeholder="Summary of termination provisions"
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Key Dates */}
-            {extractedData.key_dates && extractedData.key_dates.length > 0 && (
+            {keyDates.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Key Dates</CardTitle>
@@ -346,7 +494,7 @@ export default function LeaseReview() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {extractedData.key_dates.map((item, index) => (
+                    {keyDates.map((item, index) => (
                       <div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <div>
@@ -378,16 +526,10 @@ export default function LeaseReview() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <Download className="h-4 w-4 mr-1" />
-                    Download
-                  </Button>
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <Edit className="h-4 w-4 mr-1" />
-                    Edit
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" className="w-full">
+                  <Download className="h-4 w-4 mr-1" />
+                  Download Original
+                </Button>
               </CardContent>
             </Card>
 
