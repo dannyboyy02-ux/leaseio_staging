@@ -230,7 +230,8 @@ serve(async (req) => {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     // Create Supabase client with user token to verify auth
-    const supabaseClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3a3dveHhjcHJuamp1ZmtiemFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMjIzNzAsImV4cCI6MjA4Mjg5ODM3MH0.6ymyHJ5yDoLxnEHupdhcLUnile__H8HxN3bZ5x77jto';
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } }
     });
     
