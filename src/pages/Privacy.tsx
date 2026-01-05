@@ -68,8 +68,8 @@ export default function Privacy() {
               <h2 className="text-2xl font-semibold text-foreground">6. Contact Us</h2>
               <p>
                 If you have any questions about this Privacy Policy, please contact us at{' '}
-                <a href="mailto:privacy@leaseabstract.pro" className="text-primary hover:underline">
-                  privacy@leaseabstract.pro
+                <a href="mailto:privacy@leaseio.com" className="text-primary hover:underline">
+                  privacy@leaseio.com
                 </a>
               </p>
             </section>

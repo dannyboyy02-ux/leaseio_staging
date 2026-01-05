@@ -17,7 +17,7 @@ export default function Terms() {
             <section className="space-y-4">
               <h2 className="text-2xl font-semibold text-foreground">1. Acceptance of Terms</h2>
               <p>
-                By accessing or using LeaseAbstract Pro, you agree to be bound by these Terms of Service. 
+                By accessing or using LeaseIO, you agree to be bound by these Terms of Service. 
                 If you do not agree to these terms, you may not use our service.
               </p>
             </section>
@@ -25,7 +25,7 @@ export default function Terms() {
             <section className="space-y-4">
               <h2 className="text-2xl font-semibold text-foreground">2. Description of Service</h2>
               <p>
-                LeaseAbstract Pro provides AI-powered lease abstraction and lease operations management 
+                LeaseIO provides AI-powered lease abstraction and lease operations management 
                 services. Our platform extracts key terms from lease documents, tracks important dates, 
                 and integrates with accounting systems.
               </p>
@@ -59,7 +59,7 @@ export default function Terms() {
             <section className="space-y-4">
               <h2 className="text-2xl font-semibold text-foreground">6. Limitation of Liability</h2>
               <p>
-                LeaseAbstract Pro is provided "as is" without warranties of any kind. We are not 
+                LeaseIO is provided "as is" without warranties of any kind. We are not 
                 liable for any errors in AI-extracted data. Users are responsible for reviewing 
                 and verifying all extracted information before finalizing.
               </p>
@@ -77,8 +77,8 @@ export default function Terms() {
               <h2 className="text-2xl font-semibold text-foreground">8. Contact</h2>
               <p>
                 For questions about these terms, contact us at{' '}
-                <a href="mailto:legal@leaseabstract.pro" className="text-primary hover:underline">
-                  legal@leaseabstract.pro
+                <a href="mailto:legal@leaseio.com" className="text-primary hover:underline">
+                  legal@leaseio.com
                 </a>
               </p>
             </section>

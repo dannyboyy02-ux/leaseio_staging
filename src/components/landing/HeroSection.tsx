@@ -21,7 +21,7 @@ export function HeroSection() {
 
           {/* Subheadline */}
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-            LeaseAbstract Pro uses AI to automatically extract key terms, track renewals, 
+            LeaseIO uses AI to automatically extract key terms, track renewals, 
             manage escalations, and sync with your accounting—so you never miss a deadline.
           </p>
 
