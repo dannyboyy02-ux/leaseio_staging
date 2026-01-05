@@ -139,8 +139,10 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
     try {
       // Get the current session for auth
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('You must be logged in to upload leases');
+      if (!session?.access_token) {
+        toast.error('Session expired. Please log in again.');
+        navigate('/login');
+        return;
       }
 
       // Create form data
