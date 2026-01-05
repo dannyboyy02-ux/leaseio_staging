@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, Workspace, WorkspaceMember, SubscriptionPlan } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from './AuthContext';
 
 interface AppContextType {
   user: User | null;
@@ -11,6 +13,7 @@ interface AppContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
+  refreshProfile: () => Promise<void>;
   
   // Helpers
   canAccessFeature: (requiredPlan: SubscriptionPlan) => boolean;
@@ -19,39 +22,80 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Mock data for development
-const mockUser: User = {
-  id: '1',
-  email: 'demo@leaseos.com',
-  firstName: 'Alex',
-  lastName: 'Morgan',
-  companyName: 'Acme Properties',
-  timezone: 'America/New_York',
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-};
-
-const mockWorkspace: Workspace = {
-  id: '1',
-  name: 'Acme Properties',
-  ownerId: '1',
-  plan: 'business',
-  documentLimit: 20,
-  documentsUsed: 7,
-  timezone: 'America/New_York',
-  defaultNotificationDays: 90,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-};
-
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(mockUser);
-  const [workspace, setWorkspace] = useState<Workspace | null>(mockWorkspace);
+  const { user: authUser, isLoading: authLoading } = useAuth();
+  const [user, setUser] = useState<User | null>(null);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [userRole, setUserRole] = useState<WorkspaceMember['role'] | null>('owner');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const isAuthenticated = !!user;
+  const isAuthenticated = !!authUser;
+
+  // Fetch profile from Supabase when auth user changes
+  const fetchProfile = async () => {
+    if (!authUser) {
+      setUser(null);
+      setWorkspace(null);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        setIsLoading(false);
+        return;
+      }
+
+      if (profile) {
+        setUser({
+          id: profile.id,
+          email: profile.email || authUser.email || '',
+          firstName: profile.first_name || '',
+          lastName: profile.last_name || '',
+          companyName: profile.company_name || '',
+          timezone: profile.timezone || 'America/New_York',
+          createdAt: profile.created_at,
+          updatedAt: profile.created_at,
+        });
+
+        // Create a workspace from profile data for now
+        setWorkspace({
+          id: profile.id,
+          name: profile.company_name || 'My Workspace',
+          ownerId: profile.id,
+          plan: profile.plan as SubscriptionPlan || 'pro',
+          documentLimit: profile.plan === 'business' ? 50 : profile.plan === 'pro' ? 20 : 3,
+          documentsUsed: profile.processed_count || 0,
+          timezone: profile.timezone || 'America/New_York',
+          defaultNotificationDays: 90,
+          createdAt: profile.created_at,
+          renewalDate: profile.subscription_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          updatedAt: profile.created_at,
+        });
+      }
+    } catch (err) {
+      console.error('Error in fetchProfile:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshProfile = async () => {
+    await fetchProfile();
+  };
+
+  useEffect(() => {
+    if (!authLoading) {
+      fetchProfile();
+    }
+  }, [authUser, authLoading]);
 
   const canAccessFeature = (requiredPlan: SubscriptionPlan): boolean => {
     if (!workspace) return false;
@@ -85,6 +129,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         setIsLoading,
+        refreshProfile,
         canAccessFeature,
         hasPermission,
       }}
