@@ -74,14 +74,14 @@ export function AppSidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground flex flex-col">
       {/* Logo */}
-      <div className="flex h-16 items-center gap-2 px-6 border-b border-sidebar-border">
+      <Link to="/app/dashboard" className="flex h-16 items-center gap-2 px-6 border-b border-sidebar-border hover:bg-sidebar-accent/30 transition-colors">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
           <FileText className="h-5 w-5" />
         </div>
         <span className="font-display text-lg font-bold text-sidebar-foreground">
           Lease<span className="text-primary">IO</span>
         </span>
-      </div>
+      </Link>
 
       {/* Main Navigation */}
       <nav className="flex-1 overflow-y-auto py-6 px-3 scrollbar-thin">
