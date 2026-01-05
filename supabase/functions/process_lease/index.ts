@@ -35,6 +35,97 @@ interface LeaseExtractionResult {
   risks: { title: string; severity: 'low' | 'medium' | 'high'; explanation: string; citation_snippet?: string; citation_page?: number }[];
 }
 
+// Helper to sanitize date strings before inserting into Postgres DATE columns
+function safeDate(input: string | null | undefined): string | null {
+  // Return null for falsy values
+  if (!input || typeof input !== 'string') {
+    return null;
+  }
+  
+  const trimmed = input.trim();
+  
+  // Return null for empty strings
+  if (!trimmed) {
+    return null;
+  }
+  
+  // Return null if contains underscores (placeholder like 20__-__-__ or ____-__-__)
+  if (trimmed.includes('_')) {
+    console.log(`[safeDate] Rejecting placeholder date: ${trimmed}`);
+    return null;
+  }
+  
+  // Return null for common non-date tokens
+  const invalidTokens = ['tbd', 'n/a', 'unknown', 'pending', 'none', 'null', 'undefined'];
+  if (invalidTokens.includes(trimmed.toLowerCase())) {
+    console.log(`[safeDate] Rejecting non-date token: ${trimmed}`);
+    return null;
+  }
+  
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  
+  // Try to parse common date formats
+  try {
+    // MM/DD/YYYY or M/D/YYYY
+    const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+      const [, month, day, year] = slashMatch;
+      const formatted = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      console.log(`[safeDate] Parsed MM/DD/YYYY: ${trimmed} -> ${formatted}`);
+      return formatted;
+    }
+    
+    // Month D, YYYY or Month DD, YYYY (e.g., "January 1, 2024" or "Jan 15, 2024")
+    const monthNames: Record<string, string> = {
+      'january': '01', 'jan': '01',
+      'february': '02', 'feb': '02',
+      'march': '03', 'mar': '03',
+      'april': '04', 'apr': '04',
+      'may': '05',
+      'june': '06', 'jun': '06',
+      'july': '07', 'jul': '07',
+      'august': '08', 'aug': '08',
+      'september': '09', 'sep': '09', 'sept': '09',
+      'october': '10', 'oct': '10',
+      'november': '11', 'nov': '11',
+      'december': '12', 'dec': '12',
+    };
+    
+    const monthMatch = trimmed.match(/^([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+    if (monthMatch) {
+      const [, monthStr, day, year] = monthMatch;
+      const monthNum = monthNames[monthStr.toLowerCase()];
+      if (monthNum) {
+        const formatted = `${year}-${monthNum}-${day.padStart(2, '0')}`;
+        console.log(`[safeDate] Parsed Month D, YYYY: ${trimmed} -> ${formatted}`);
+        return formatted;
+      }
+    }
+    
+    // Try JavaScript Date parsing as last resort
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) {
+      const year = parsed.getFullYear();
+      const month = String(parsed.getMonth() + 1).padStart(2, '0');
+      const day = String(parsed.getDate()).padStart(2, '0');
+      // Only accept if year is reasonable (1900-2100)
+      if (year >= 1900 && year <= 2100) {
+        const formatted = `${year}-${month}-${day}`;
+        console.log(`[safeDate] Parsed via Date(): ${trimmed} -> ${formatted}`);
+        return formatted;
+      }
+    }
+  } catch (e) {
+    console.log(`[safeDate] Parse error for: ${trimmed}`, e);
+  }
+  
+  console.log(`[safeDate] Could not parse, returning null: ${trimmed}`);
+  return null;
+}
+
 async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
   console.log('[Azure DI] Starting document analysis...');
   
@@ -340,8 +431,8 @@ serve(async (req) => {
         status: 'Review',
         landlord_name: leaseData.landlord_name,
         tenant_name: leaseData.tenant_name,
-        lease_start: leaseData.lease_start,
-        lease_end: leaseData.lease_end,
+        lease_start: safeDate(leaseData.lease_start),
+        lease_end: safeDate(leaseData.lease_end),
         base_rent_amount: leaseData.base_rent_amount,
         base_rent_frequency: leaseData.base_rent_frequency,
         extracted_json: leaseData,
