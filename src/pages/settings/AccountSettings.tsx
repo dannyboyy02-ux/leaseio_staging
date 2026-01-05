@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { User, Lock, Bell, Shield, Download, Trash2, Save, Eye, EyeOff } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Lock, Bell, Shield, Download, Trash2, Save, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -27,6 +27,9 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -36,13 +39,15 @@ const timezones = [
 ];
 
 export default function AccountSettings() {
-  const { user } = useApp();
-  const [firstName, setFirstName] = useState(user?.firstName || '');
-  const [lastName, setLastName] = useState(user?.lastName || '');
-  const [email, setEmail] = useState(user?.email || '');
-  const [phone, setPhone] = useState(user?.phone || '');
-  const [companyName, setCompanyName] = useState(user?.companyName || '');
-  const [timezone, setTimezone] = useState(user?.timezone || 'America/New_York');
+  const { user, refreshProfile } = useApp();
+  const { user: authUser } = useAuth();
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [timezone, setTimezone] = useState('America/New_York');
+  const [isSaving, setIsSaving] = useState(false);
   
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -52,6 +57,47 @@ export default function AccountSettings() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(true);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
+
+  // Sync form with user data when it loads
+  useEffect(() => {
+    if (user) {
+      setFirstName(user.firstName || '');
+      setLastName(user.lastName || '');
+      setEmail(user.email || '');
+      setCompanyName(user.companyName || '');
+      setTimezone(user.timezone || 'America/New_York');
+    }
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    if (!authUser) {
+      toast.error('You must be logged in to save changes');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          company_name: companyName.trim(),
+          timezone: timezone,
+        })
+        .eq('id', authUser.id);
+
+      if (error) throw error;
+
+      await refreshProfile();
+      toast.success('Profile updated successfully!');
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      toast.error('Failed to save profile');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <AppLayout>
@@ -146,9 +192,13 @@ export default function AccountSettings() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button variant="accent">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
+                <Button variant="accent" onClick={handleSaveProfile} disabled={isSaving}>
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
               </CardContent>
             </Card>
