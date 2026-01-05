@@ -12,7 +12,8 @@ import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-type LeaseStatus = 'processing' | 'review' | 'final' | 'error' | 'all';
+// Database status values: 'Uploaded' | 'Processing' | 'Ready' | 'Failed'
+type LeaseStatus = 'Uploaded' | 'Processing' | 'Ready' | 'Failed' | 'all';
 
 interface LeaseRow {
   id: string;
@@ -31,10 +32,9 @@ interface LeaseRow {
 
 const statusFilters: { value: LeaseStatus; label: string }[] = [
   { value: 'all', label: 'All Leases' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'review', label: 'Needs Review' },
-  { value: 'final', label: 'Finalized' },
-  { value: 'error', label: 'Errors' },
+  { value: 'Processing', label: 'Processing' },
+  { value: 'Ready', label: 'Ready' },
+  { value: 'Failed', label: 'Failed' },
 ];
 
 export default function Leases() {
@@ -67,7 +67,19 @@ export default function Leases() {
 
   useEffect(() => {
     fetchLeases();
-  }, []);
+
+    // Poll for updates when any lease is in Processing or Uploaded status
+    const interval = setInterval(() => {
+      const hasProcessing = leases.some(
+        (l) => l.status === 'Processing' || l.status === 'Uploaded'
+      );
+      if (hasProcessing) {
+        fetchLeases();
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [leases]);
 
   // Open upload modal if action=upload in URL
   useEffect(() => {
@@ -96,12 +108,27 @@ export default function Leases() {
 
   const isEmpty = leases.length === 0;
 
+  // Map DB status to LeaseCard status
+  const mapStatus = (dbStatus: string): 'draft' | 'processing' | 'review' | 'final' | 'archived' => {
+    switch (dbStatus) {
+      case 'Uploaded':
+      case 'Processing':
+        return 'processing';
+      case 'Ready':
+        return 'final';
+      case 'Failed':
+        return 'review'; // Show as review so user can see the error
+      default:
+        return 'draft';
+    }
+  };
+
   // Transform DB row to Lease type for LeaseCard
   const transformToLease = (row: LeaseRow) => ({
     id: row.id,
     workspaceId: '1', // Will be from context in real app
     type: 'master' as const,
-    status: row.status as 'draft' | 'processing' | 'review' | 'final' | 'archived',
+    status: mapStatus(row.status),
     documentUrl: '',
     documentName: row.filename,
     lessor: row.landlord_name || undefined,
