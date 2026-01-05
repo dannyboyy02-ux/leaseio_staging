@@ -1,1 +1,4 @@
 project_id = "wwkwoxxcprnjjufkbzac"
+
+[functions.process_lease]
+verify_jwt = false

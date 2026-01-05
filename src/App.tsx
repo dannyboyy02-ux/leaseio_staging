@@ -20,6 +20,7 @@ import ResetPassword from "./pages/ResetPassword";
 
 // App pages (protected)
 import Onboarding from "./pages/app/Onboarding";
+import LeaseReview from "./pages/app/LeaseReview";
 import Dashboard from "./pages/Dashboard";
 import Leases from "./pages/Leases";
 import Notifications from "./pages/Notifications";
@@ -74,6 +75,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Leases />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/app/leases/:leaseId"
+                element={
+                  <ProtectedRoute>
+                    <LeaseReview />
                   </ProtectedRoute>
                 }
               />

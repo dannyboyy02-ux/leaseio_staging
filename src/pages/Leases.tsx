@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Filter, Grid3X3, List } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Plus, Search, Filter, Grid3X3, List, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -9,91 +9,65 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { LeaseCard } from '@/components/leases/LeaseCard';
 import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
-import { Lease, LeaseStatus } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
-// Mock data
-const mockLeases: Lease[] = [
-  {
-    id: '1',
-    workspaceId: '1',
-    type: 'master',
-    status: 'final',
-    documentUrl: '/docs/lease1.pdf',
-    documentName: 'Suite 100 Office Lease.pdf',
-    lessor: 'Main Street Properties LLC',
-    lessee: 'Acme Corporation',
-    propertyAddress: '123 Main Street, Suite 100, New York, NY 10001',
-    commencementDate: '2024-01-01',
-    expirationDate: '2027-12-31',
-    rentAmount: 5500,
-    rentFrequency: 'monthly',
-    createdBy: '1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    finalizedAt: new Date().toISOString(),
-    finalizedBy: '1',
-  },
-  {
-    id: '2',
-    workspaceId: '1',
-    type: 'master',
-    status: 'review',
-    documentUrl: '/docs/lease2.pdf',
-    documentName: 'Oak Avenue Retail Space.pdf',
-    lessor: 'Oak Plaza Investments',
-    lessee: 'Acme Corporation',
-    propertyAddress: '456 Oak Avenue, Unit 2B, Brooklyn, NY 11201',
-    commencementDate: '2024-03-01',
-    expirationDate: '2026-02-28',
-    rentAmount: 3200,
-    rentFrequency: 'monthly',
-    createdBy: '1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: '3',
-    workspaceId: '1',
-    type: 'amendment',
-    parentLeaseId: '1',
-    status: 'draft',
-    documentUrl: '/docs/lease3.pdf',
-    documentName: 'Suite 100 Amendment 1.pdf',
-    lessor: 'Main Street Properties LLC',
-    lessee: 'Acme Corporation',
-    propertyAddress: '123 Main Street, Suite 100, New York, NY 10001',
-    createdBy: '1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: '4',
-    workspaceId: '1',
-    type: 'master',
-    status: 'processing',
-    documentUrl: '/docs/lease4.pdf',
-    documentName: 'Pine Boulevard Warehouse.pdf',
-    createdBy: '1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+type LeaseStatus = 'processing' | 'review' | 'final' | 'error' | 'all';
 
-const statusFilters: { value: LeaseStatus | 'all'; label: string }[] = [
+interface LeaseRow {
+  id: string;
+  filename: string;
+  status: string;
+  landlord_name: string | null;
+  tenant_name: string | null;
+  lease_start: string | null;
+  lease_end: string | null;
+  base_rent_amount: string | null;
+  base_rent_frequency: string | null;
+  uploaded_at: string;
+  processed_at: string | null;
+  error_message: string | null;
+}
+
+const statusFilters: { value: LeaseStatus; label: string }[] = [
   { value: 'all', label: 'All Leases' },
-  { value: 'draft', label: 'Drafts' },
   { value: 'processing', label: 'Processing' },
   { value: 'review', label: 'Needs Review' },
   { value: 'final', label: 'Finalized' },
-  { value: 'archived', label: 'Archived' },
+  { value: 'error', label: 'Errors' },
 ];
 
 export default function Leases() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<LeaseStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<LeaseStatus>('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [leases, setLeases] = useState<LeaseRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch leases from Supabase
+  const fetchLeases = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('leases')
+        .select('*')
+        .order('uploaded_at', { ascending: false });
+
+      if (error) throw error;
+      setLeases(data || []);
+    } catch (error) {
+      console.error('Error fetching leases:', error);
+      toast.error('Failed to load leases');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeases();
+  }, []);
 
   // Open upload modal if action=upload in URL
   useEffect(() => {
@@ -103,26 +77,50 @@ export default function Leases() {
     }
   }, [searchParams, setSearchParams]);
 
-  const filteredLeases = mockLeases.filter((lease) => {
+  // Handle successful upload
+  const handleUploadSuccess = (leaseId: string) => {
+    fetchLeases(); // Refresh the list
+  };
+
+  const filteredLeases = leases.filter((lease) => {
     const matchesSearch =
       !searchQuery ||
-      lease.documentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lease.propertyAddress?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lease.lessor?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lease.lessee?.toLowerCase().includes(searchQuery.toLowerCase());
+      lease.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lease.landlord_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lease.tenant_name?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || lease.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
 
-  const isEmpty = mockLeases.length === 0;
+  const isEmpty = leases.length === 0;
+
+  // Transform DB row to Lease type for LeaseCard
+  const transformToLease = (row: LeaseRow) => ({
+    id: row.id,
+    workspaceId: '1', // Will be from context in real app
+    type: 'master' as const,
+    status: row.status as 'draft' | 'processing' | 'review' | 'final' | 'archived',
+    documentUrl: '',
+    documentName: row.filename,
+    lessor: row.landlord_name || undefined,
+    lessee: row.tenant_name || undefined,
+    propertyAddress: undefined,
+    commencementDate: row.lease_start || undefined,
+    expirationDate: row.lease_end || undefined,
+    rentAmount: row.base_rent_amount ? parseFloat(row.base_rent_amount.replace(/[^0-9.]/g, '')) : undefined,
+    rentFrequency: row.base_rent_frequency as 'monthly' | 'quarterly' | 'annually' | undefined,
+    createdBy: '1',
+    createdAt: row.uploaded_at,
+    updatedAt: row.uploaded_at,
+  });
 
   return (
     <AppLayout>
       <AppHeader
         title="Leases"
-        subtitle={`${mockLeases.length} total documents`}
+        subtitle={`${leases.length} total documents`}
         actions={
           <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -132,7 +130,11 @@ export default function Leases() {
       />
 
       <div className="p-6">
-        {isEmpty ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-[40vh]">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : isEmpty ? (
           <EmptyLeaseState onUpload={() => setUploadModalOpen(true)} />
         ) : (
           <div className="space-y-6">
@@ -155,7 +157,7 @@ export default function Leases() {
               <div className="flex items-center gap-3">
                 <Tabs
                   value={statusFilter}
-                  onValueChange={(v) => setStatusFilter(v as LeaseStatus | 'all')}
+                  onValueChange={(v) => setStatusFilter(v as LeaseStatus)}
                 >
                   <TabsList>
                     {statusFilters.slice(0, 4).map((filter) => (
@@ -192,7 +194,13 @@ export default function Leases() {
             ) : (
               <div className={viewMode === 'grid' ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-3'}>
                 {filteredLeases.map((lease, index) => (
-                  <LeaseCard key={lease.id} lease={lease} index={index} />
+                  <div 
+                    key={lease.id} 
+                    onClick={() => navigate(`/app/leases/${lease.id}`)}
+                    className="cursor-pointer"
+                  >
+                    <LeaseCard lease={transformToLease(lease)} index={index} />
+                  </div>
                 ))}
               </div>
             )}
@@ -200,7 +208,11 @@ export default function Leases() {
         )}
       </div>
 
-      <LeaseUploadModal open={uploadModalOpen} onOpenChange={setUploadModalOpen} />
+      <LeaseUploadModal 
+        open={uploadModalOpen} 
+        onOpenChange={setUploadModalOpen}
+        onSuccess={handleUploadSuccess}
+      />
     </AppLayout>
   );
 }
