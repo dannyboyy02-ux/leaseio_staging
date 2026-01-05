@@ -18,8 +18,8 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <AppHeader
-        title={`Welcome back, ${user?.firstName}`}
-        subtitle={workspace?.name}
+        title={`Welcome back${user?.firstName ? `, ${user.firstName}` : ''}`}
+        subtitle={workspace?.name || user?.companyName}
         actions={
           <Button variant="accent" asChild>
             <Link to="/app/leases?action=upload">
