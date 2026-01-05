@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, X, ChevronRight, HelpCircle, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
@@ -62,6 +62,57 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
   });
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [resultLeaseId, setResultLeaseId] = useState<string>('');
+  const [pendingLeaseId, setPendingLeaseId] = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Polling for lease status updates
+  useEffect(() => {
+    if (!pendingLeaseId || step !== 'processing') {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    const pollStatus = async () => {
+      try {
+        const { data: lease, error } = await supabase
+          .from('leases')
+          .select('status, error_message')
+          .eq('id', pendingLeaseId)
+          .single();
+
+        if (error) return;
+
+        if (lease.status === 'Processed' || lease.status === 'Review') {
+          setProcessingStatus({ stage: 'saving', message: 'Processing complete!' });
+          setResultLeaseId(pendingLeaseId);
+          setStep('success');
+          toast.success('Lease processed successfully!');
+          setPendingLeaseId(null);
+        } else if (lease.status === 'Error') {
+          setErrorMessage(lease.error_message || 'Processing failed');
+          setStep('error');
+          toast.error('Failed to process lease');
+          setPendingLeaseId(null);
+        } else if (lease.status === 'Processing') {
+          setProcessingStatus({ stage: 'extracting', message: 'Extracting lease data...' });
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    };
+
+    pollingRef.current = setInterval(pollStatus, 2000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [pendingLeaseId, step]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -120,17 +171,23 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         throw new Error(result.error || 'Failed to process lease');
       }
 
-      setProcessingStatus({ stage: 'saving', message: 'Saving extracted data...' });
-      
-      // Short delay to show the saving state
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      setResultLeaseId(result.leaseId);
-      setStep('success');
-      toast.success('Lease processed successfully!');
-      
-      if (onSuccess) {
-        onSuccess(result.leaseId);
+      // If the edge function returns a leaseId, start polling for status updates
+      if (result.leaseId) {
+        setPendingLeaseId(result.leaseId);
+        setProcessingStatus({ stage: 'extracting', message: 'Extracting lease data...' });
+        
+        // The polling effect will handle success/error states
+        // But if result indicates completion, handle it immediately
+        if (result.status === 'Processed' || result.status === 'Review') {
+          setResultLeaseId(result.leaseId);
+          setStep('success');
+          toast.success('Lease processed successfully!');
+          setPendingLeaseId(null);
+          
+          if (onSuccess) {
+            onSuccess(result.leaseId);
+          }
+        }
       }
 
     } catch (error) {
@@ -145,12 +202,17 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
 
   const handleClose = () => {
     if (!isUploading) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
       setStep('upload');
       setFile(null);
       setLeaseType('master');
       setParentLeaseId('');
       setErrorMessage('');
       setResultLeaseId('');
+      setPendingLeaseId(null);
       onOpenChange(false);
     }
   };
