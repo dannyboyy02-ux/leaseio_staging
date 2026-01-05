@@ -4,7 +4,7 @@ const steps = [
   {
     icon: Upload,
     title: 'Upload',
-    description: 'Drop your lease PDF into LeaseAbstract Pro. Master leases and amendments supported.',
+    description: 'Drop your lease PDF into LeaseIO. Master leases and amendments supported.',
   },
   {
     icon: Sparkles,

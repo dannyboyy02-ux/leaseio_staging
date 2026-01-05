@@ -49,7 +49,7 @@ export function FAQSection() {
             Frequently asked questions
           </h2>
           <p className="text-lg text-muted-foreground">
-            Everything you need to know about LeaseAbstract Pro.
+            Everything you need to know about LeaseIO.
           </p>
         </div>
 

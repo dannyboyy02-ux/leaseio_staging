@@ -131,7 +131,7 @@ export default function Signup() {
             <FileText className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="font-display font-bold text-2xl text-foreground">
-            LeaseAbstract<span className="text-primary">Pro</span>
+            Lease<span className="text-primary">IO</span>
           </span>
         </Link>
 

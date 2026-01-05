@@ -13,7 +13,7 @@ export function FooterSection() {
                 <FileText className="h-4 w-4 text-primary-foreground" />
               </div>
               <span className="font-display font-bold text-lg text-foreground">
-                LeaseAbstract<span className="text-primary">Pro</span>
+                Lease<span className="text-primary">IO</span>
               </span>
             </Link>
             <p className="text-sm text-muted-foreground">
@@ -70,7 +70,7 @@ export function FooterSection() {
             <h4 className="font-semibold text-foreground mb-4">Support</h4>
             <ul className="space-y-2">
               <li>
-                <a href="mailto:support@leaseabstract.pro" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <a href="mailto:support@leaseio.com" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Contact
                 </a>
               </li>
@@ -85,7 +85,7 @@ export function FooterSection() {
 
         <div className="pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} LeaseAbstract Pro. All rights reserved.
+            © {new Date().getFullYear()} LeaseIO. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
