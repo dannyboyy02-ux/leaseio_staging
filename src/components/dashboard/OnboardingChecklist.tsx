@@ -22,7 +22,7 @@ const steps: OnboardingStep[] = [
     description: 'Get started by uploading a PDF lease document',
     icon: Upload,
     completed: false,
-    href: '/leases?action=upload',
+    href: '/app/leases?action=upload',
   },
   {
     id: 'team',
@@ -30,7 +30,7 @@ const steps: OnboardingStep[] = [
     description: 'Add colleagues to collaborate on lease management',
     icon: Users,
     completed: false,
-    href: '/settings/workspace?tab=members',
+    href: '/app/settings/workspace?tab=members',
   },
   {
     id: 'notifications',
@@ -38,7 +38,7 @@ const steps: OnboardingStep[] = [
     description: 'Set up email and SMS alerts for key dates',
     icon: Bell,
     completed: true,
-    href: '/settings/workspace?tab=notifications',
+    href: '/app/settings/workspace?tab=notifications',
   },
   {
     id: 'integrations',
@@ -46,7 +46,7 @@ const steps: OnboardingStep[] = [
     description: 'Sync lease data with your accounting system',
     icon: Link2,
     completed: false,
-    href: '/integrations',
+    href: '/app/integrations',
   },
 ];
 

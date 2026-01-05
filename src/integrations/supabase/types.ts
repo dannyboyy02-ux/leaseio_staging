@@ -78,37 +78,49 @@ export type Database = {
       }
       profiles: {
         Row: {
+          company_name: string | null
           created_at: string
           email: string | null
+          first_name: string | null
           id: string
+          last_name: string | null
           plan: string
           processed_count: number
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_period_end: string | null
           subscription_status: string | null
+          timezone: string | null
         }
         Insert: {
+          company_name?: string | null
           created_at?: string
           email?: string | null
+          first_name?: string | null
           id: string
+          last_name?: string | null
           plan?: string
           processed_count?: number
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_period_end?: string | null
           subscription_status?: string | null
+          timezone?: string | null
         }
         Update: {
+          company_name?: string | null
           created_at?: string
           email?: string | null
+          first_name?: string | null
           id?: string
+          last_name?: string | null
           plan?: string
           processed_count?: number
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_period_end?: string | null
           subscription_status?: string | null
+          timezone?: string | null
         }
         Relationships: []
       }
@@ -150,12 +162,90 @@ export type Database = {
           },
         ]
       }
+      workspace_members: {
+        Row: {
+          created_at: string
+          id: string
+          role: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspaces: {
+        Row: {
+          created_at: string
+          default_notification_days: number
+          document_limit: number
+          documents_used: number
+          id: string
+          name: string
+          owner_id: string
+          plan: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          default_notification_days?: number
+          document_limit?: number
+          documents_used?: number
+          id?: string
+          name: string
+          owner_id: string
+          plan?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          default_notification_days?: number
+          document_limit?: number
+          documents_used?: number
+          id?: string
+          name?: string
+          owner_id?: string
+          plan?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_workspace_member: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
+      }
+      is_workspace_owner: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
