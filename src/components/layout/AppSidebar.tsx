@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -29,22 +30,24 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const mainNavItems = [
-  { title: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { title: 'Leases', href: '/leases', icon: FileText },
-  { title: 'Reports', href: '/reports', icon: BarChart3, requiresBusiness: true },
-  { title: 'Notifications', href: '/notifications', icon: Bell },
-  { title: 'Integrations', href: '/integrations', icon: Plug },
+  { title: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
+  { title: 'Leases', href: '/app/leases', icon: FileText },
+  { title: 'Reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
+  { title: 'Notifications', href: '/app/notifications', icon: Bell },
+  { title: 'Integrations', href: '/app/integrations', icon: Plug },
 ];
 
 const settingsNavItems = [
-  { title: 'Workspace', href: '/settings/workspace', icon: Building2 },
-  { title: 'Account', href: '/settings/account', icon: User },
-  { title: 'Billing', href: '/settings/billing', icon: CreditCard },
+  { title: 'Workspace', href: '/app/settings/workspace', icon: Building2 },
+  { title: 'Account', href: '/app/settings/account', icon: User },
+  { title: 'Billing', href: '/app/settings/billing', icon: CreditCard },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, workspace, canAccessFeature } = useApp();
+  const { signOut, user: authUser } = useAuth();
 
   const usagePercent = workspace 
     ? (workspace.documentsUsed / workspace.documentLimit) * 100 
@@ -56,6 +59,18 @@ export function AppSidebar() {
     return 'accent';
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  // Get user display info from auth or app context
+  const displayUser = {
+    firstName: authUser?.user_metadata?.first_name || user?.firstName || '',
+    lastName: authUser?.user_metadata?.last_name || user?.lastName || '',
+    email: authUser?.email || user?.email || '',
+  };
+
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground flex flex-col">
       {/* Logo */}
@@ -63,7 +78,9 @@ export function AppSidebar() {
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
           <FileText className="h-5 w-5" />
         </div>
-        <span className="font-display text-lg font-bold text-sidebar-foreground">LeaseOS</span>
+        <span className="font-display text-lg font-bold text-sidebar-foreground">
+          LeaseAbstract<span className="text-primary">Pro</span>
+        </span>
       </div>
 
       {/* Main Navigation */}
@@ -137,7 +154,7 @@ export function AppSidebar() {
           <Progress value={usagePercent} variant={getUsageVariant()} className="h-1.5" />
           {usagePercent >= 75 && (
             <Link 
-              to="/settings/billing" 
+              to="/app/settings/billing" 
               className="mt-2 flex items-center gap-1 text-xs text-sidebar-primary hover:underline"
             >
               Upgrade for more <ChevronRight className="h-3 w-3" />
@@ -155,17 +172,16 @@ export function AppSidebar() {
               className="w-full justify-start gap-3 px-3 h-auto py-2 text-sidebar-foreground hover:bg-sidebar-accent"
             >
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.avatarUrl} />
                 <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                  {user?.firstName?.[0]}{user?.lastName?.[0]}
+                  {displayUser.firstName?.[0]}{displayUser.lastName?.[0]}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left">
                 <p className="text-sm font-medium truncate">
-                  {user?.firstName} {user?.lastName}
+                  {displayUser.firstName} {displayUser.lastName}
                 </p>
                 <p className="text-xs text-sidebar-foreground/60 truncate">
-                  {workspace?.name}
+                  {workspace?.name || displayUser.email}
                 </p>
               </div>
               <ChevronRight className="h-4 w-4 text-sidebar-foreground/40" />
@@ -173,19 +189,22 @@ export function AppSidebar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuItem asChild>
-              <Link to="/settings/account" className="flex items-center gap-2">
+              <Link to="/app/settings/account" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
                 Account Settings
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to="/help" className="flex items-center gap-2">
+              <Link to="#" className="flex items-center gap-2">
                 <HelpCircle className="h-4 w-4" />
                 Help & Support
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">
+            <DropdownMenuItem 
+              className="text-destructive focus:text-destructive cursor-pointer"
+              onClick={handleLogout}
+            >
               <LogOut className="h-4 w-4 mr-2" />
               Log Out
             </DropdownMenuItem>

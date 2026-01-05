@@ -73,7 +73,7 @@ export function UpcomingEvents() {
             Upcoming Events
           </CardTitle>
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/notifications">
+            <Link to="/app/notifications">
               View all <ChevronRight className="h-4 w-4 ml-1" />
             </Link>
           </Button>
@@ -94,7 +94,7 @@ export function UpcomingEvents() {
               return (
                 <Link
                   key={event.id}
-                  to={`/leases/${event.leaseId}`}
+                  to={`/app/leases/${event.leaseId}`}
                   className={cn(
                     'flex items-start gap-4 p-3 rounded-lg transition-all hover:bg-muted/50 animate-fade-up'
                   )}

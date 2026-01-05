@@ -86,7 +86,7 @@ export function UsageMeter() {
             </div>
             {(isNearLimit || isAtLimit) && (
               <Button variant="accent" size="sm" asChild>
-                <Link to="/settings/billing">
+                <Link to="/app/settings/billing">
                   Upgrade <ArrowRight className="h-4 w-4 ml-1" />
                 </Link>
               </Button>

@@ -22,7 +22,7 @@ export default function Dashboard() {
         subtitle={workspace?.name}
         actions={
           <Button variant="accent" asChild>
-            <Link to="/leases?action=upload">
+            <Link to="/app/leases?action=upload">
               <Plus className="h-4 w-4 mr-2" />
               Upload Lease
             </Link>
@@ -60,7 +60,7 @@ export default function Dashboard() {
                     className="shrink-0 ml-4" 
                     asChild
                   >
-                    <Link to="/leases?action=upload">
+                    <Link to="/app/leases?action=upload">
                       Get Started <ArrowRight className="h-4 w-4 ml-2" />
                     </Link>
                   </Button>
