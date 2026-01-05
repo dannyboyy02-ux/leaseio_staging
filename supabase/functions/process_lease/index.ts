@@ -386,7 +386,7 @@ serve(async (req) => {
     if (uploadError) {
       console.error('[process_lease] Upload error:', uploadError);
       await supabaseAdmin.from('leases').update({ 
-        status: 'Error', 
+        status: 'Failed', 
         error_message: `Upload failed: ${uploadError.message}` 
       }).eq('id', leaseId);
       throw new Error(`Failed to upload file: ${uploadError.message}`);
@@ -403,7 +403,7 @@ serve(async (req) => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[process_lease] Azure DI error:', error);
       await supabaseAdmin.from('leases').update({ 
-        status: 'Error', 
+        status: 'Failed', 
         error_message: `Document analysis failed: ${errorMessage}` 
       }).eq('id', leaseId);
       throw error;
@@ -418,7 +418,7 @@ serve(async (req) => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[process_lease] OpenAI error:', error);
       await supabaseAdmin.from('leases').update({ 
-        status: 'Error', 
+        status: 'Failed', 
         error_message: `AI extraction failed: ${errorMessage}` 
       }).eq('id', leaseId);
       throw error;
@@ -428,7 +428,7 @@ serve(async (req) => {
     const { error: updateError } = await supabaseAdmin
       .from('leases')
       .update({
-        status: 'Review',
+        status: 'Ready',
         landlord_name: leaseData.landlord_name,
         tenant_name: leaseData.tenant_name,
         lease_start: safeDate(leaseData.lease_start),
