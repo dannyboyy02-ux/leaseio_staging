@@ -4,9 +4,10 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
-import { UsageMeter } from '@/components/dashboard/UsageMeter';
 import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
 import { QuickStats } from '@/components/dashboard/QuickStats';
+import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
+import { LeaseQuickView } from '@/components/dashboard/LeaseQuickView';
 import { useApp } from '@/contexts/AppContext';
 
 export default function Dashboard() {
@@ -31,6 +32,9 @@ export default function Dashboard() {
       />
 
       <div className="p-6 space-y-6">
+        {/* Financial Summary - Top Priority */}
+        <FinancialSummary />
+
         {/* Quick Stats */}
         <QuickStats />
 
@@ -70,40 +74,28 @@ export default function Dashboard() {
 
             {/* Upcoming Events */}
             <UpcomingEvents />
+
+            {/* My Leases Quick View */}
+            <LeaseQuickView />
           </div>
 
-          {/* Right Column - Sidebar */}
-          <div className="space-y-6">
-            {/* Usage Meter */}
-            <UsageMeter />
-
-            {/* System Status */}
-            <div className="rounded-xl border border-border bg-card p-4">
-              <h3 className="text-sm font-medium mb-3">System Status</h3>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">AI Processing</span>
-                  <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                    Operational
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Notifications</span>
-                  <span className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-success" />
-                    Active
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">QuickBooks Sync</span>
-                  <span className="flex items-center gap-2 text-muted-foreground">
-                    Not connected
-                  </span>
-                </div>
+          {/* Right Column - Sidebar (only show for new users) */}
+          {isNewUser && (
+            <div className="space-y-6">
+              <div className="rounded-xl border border-border bg-card p-5">
+                <h3 className="text-sm font-medium mb-3">Getting Started</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Upload your first lease document to see your financial summary populate automatically.
+                </p>
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <Link to="/app/leases?action=upload">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Upload Lease
+                  </Link>
+                </Button>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </AppLayout>
