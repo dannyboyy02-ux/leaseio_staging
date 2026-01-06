@@ -42,7 +42,6 @@ const mainNavItems = [
 const settingsNavItems = [
   { title: 'Workspace', href: '/app/settings/workspace', icon: Building2 },
   { title: 'Account', href: '/app/settings/account', icon: User },
-  { title: 'Billing', href: '/app/settings/billing', icon: CreditCard },
 ];
 
 export function AppSidebar() {
@@ -156,7 +155,7 @@ export function AppSidebar() {
           <Progress value={usagePercent} variant={getUsageVariant()} className="h-1.5" />
           {usagePercent >= 75 && (
             <Link 
-              to="/app/settings/billing" 
+              to="/app/upgrade" 
               className="mt-2 flex items-center gap-1 text-xs text-sidebar-primary hover:underline"
             >
               Upgrade for more <ChevronRight className="h-3 w-3" />

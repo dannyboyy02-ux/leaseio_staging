@@ -109,7 +109,7 @@ export default function Integrations() {
 
                   {isLocked ? (
                     <Button variant="outline" className="w-full" asChild>
-                      <Link to="/settings/billing">
+                      <Link to="/app/upgrade?feature=integrations">
                         <Lock className="h-4 w-4 mr-2" />
                         Upgrade to Business
                         <ArrowRight className="h-4 w-4 ml-auto" />

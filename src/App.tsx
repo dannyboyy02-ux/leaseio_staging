@@ -22,6 +22,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/app/Onboarding";
 import LeaseReview from "./pages/app/LeaseReview";
 import ImportHistory from "./pages/app/ImportHistory";
+import Upgrade from "./pages/app/Upgrade";
 import Dashboard from "./pages/Dashboard";
 import Leases from "./pages/Leases";
 import Notifications from "./pages/Notifications";
@@ -29,7 +30,6 @@ import Integrations from "./pages/Integrations";
 import Reports from "./pages/Reports";
 import WorkspaceSettings from "./pages/settings/WorkspaceSettings";
 import AccountSettings from "./pages/settings/AccountSettings";
-import BillingSettings from "./pages/settings/BillingSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -136,16 +136,17 @@ const App = () => (
                 }
               />
               <Route
-                path="/app/settings/billing"
+                path="/app/upgrade"
                 element={
                   <ProtectedRoute>
-                    <BillingSettings />
+                    <Upgrade />
                   </ProtectedRoute>
                 }
               />
 
               {/* Legacy route redirects */}
               <Route path="/auth" element={<Navigate to="/login" replace />} />
+              <Route path="/app/settings/billing" element={<Navigate to="/app/settings/account" replace />} />
 
               {/* 404 */}
               <Route path="*" element={<NotFound />} />
