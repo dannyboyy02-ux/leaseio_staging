@@ -1,0 +1,186 @@
+import { useState } from 'react';
+import { Download, Loader2, FileSpreadsheet } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+
+interface LeaseData {
+  id: string;
+  filename: string;
+  landlord_name: string | null;
+  tenant_name: string | null;
+  lease_start: string | null;
+  lease_end: string | null;
+  current_monthly_rent: number | null;
+  base_rent_amount: string | null;
+  base_rent_frequency: string | null;
+  rent_escalation_type: string | null;
+  extracted_json: Record<string, unknown> | null;
+}
+
+export function RentRollExport() {
+  const [isExporting, setIsExporting] = useState(false);
+
+  const formatCurrency = (amount: number | string | null): string => {
+    if (!amount) return '';
+    const num = typeof amount === 'string' ? parseFloat(amount.replace(/[^0-9.-]/g, '')) : amount;
+    if (isNaN(num)) return '';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+    }).format(num);
+  };
+
+  const formatDate = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    try {
+      return format(new Date(dateStr), 'MM/dd/yyyy');
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const getPropertyAddress = (lease: LeaseData): string => {
+    if (lease.extracted_json?.property_address) {
+      return lease.extracted_json.property_address as string;
+    }
+    return lease.filename || 'Unknown';
+  };
+
+  const calculateDaysRemaining = (endDate: string | null): number | null => {
+    if (!endDate) return null;
+    const end = new Date(endDate);
+    const today = new Date();
+    const diffTime = end.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const exportToCSV = async () => {
+    setIsExporting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Fetch all active leases
+      const { data: leases, error } = await supabase
+        .from('leases')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('status', ['Ready', 'final', 'review'])
+        .order('lease_end', { ascending: true });
+
+      if (error) throw error;
+
+      if (!leases || leases.length === 0) {
+        toast.error('No leases to export');
+        return;
+      }
+
+      // Calculate totals
+      const totalMonthly = leases.reduce((sum, l) => sum + (l.current_monthly_rent || 0), 0);
+      const totalAnnual = totalMonthly * 12;
+
+      // Build CSV content
+      const headers = [
+        'Property Address',
+        'Tenant',
+        'Landlord',
+        'Lease Start',
+        'Lease End',
+        'Days Remaining',
+        'Monthly Rent',
+        'Annual Rent',
+        'Rent Frequency',
+        'Escalation Type',
+      ];
+
+      const rows = leases.map((lease) => {
+        const monthly = lease.current_monthly_rent || 0;
+        const extractedJson = lease.extracted_json as Record<string, unknown> | null;
+        const propertyAddress = extractedJson?.property_address as string || lease.filename || 'Unknown';
+        return [
+          propertyAddress,
+          lease.tenant_name || '',
+          lease.landlord_name || '',
+          formatDate(lease.lease_start),
+          formatDate(lease.lease_end),
+          calculateDaysRemaining(lease.lease_end) ?? '',
+          formatCurrency(monthly),
+          formatCurrency(monthly * 12),
+          lease.base_rent_frequency || 'Monthly',
+          lease.rent_escalation_type || '',
+        ];
+      });
+
+      // Add summary rows
+      rows.push([]);
+      rows.push(['PORTFOLIO SUMMARY', '', '', '', '', '', '', '', '', '']);
+      rows.push(['Total Active Leases', String(leases.length), '', '', '', '', '', '', '', '']);
+      rows.push(['Total Monthly Rent', formatCurrency(totalMonthly), '', '', '', '', '', '', '', '']);
+      rows.push(['Total Annual Obligation', formatCurrency(totalAnnual), '', '', '', '', '', '', '', '']);
+
+      // Convert to CSV string
+      const escapeCSV = (val: string | number) => {
+        const str = String(val);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      };
+
+      const csvContent = [
+        headers.map(escapeCSV).join(','),
+        ...rows.map(row => row.map(escapeCSV).join(',')),
+      ].join('\n');
+
+      // Download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `rent-roll-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${leases.length} leases to CSV`);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export rent roll');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileSpreadsheet className="h-5 w-5" />
+          Rent Roll Export
+        </CardTitle>
+        <CardDescription>
+          Download a complete rent roll of your portfolio as a CSV file
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground mb-4">
+          Includes property details, tenant information, rent amounts, lease dates, 
+          and a portfolio summary. Compatible with Excel and Google Sheets.
+        </p>
+        <Button onClick={exportToCSV} disabled={isExporting}>
+          {isExporting ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4 mr-2" />
+          )}
+          {isExporting ? 'Generating...' : 'Download Rent Roll'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

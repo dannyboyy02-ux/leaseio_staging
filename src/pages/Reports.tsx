@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
 import { Link } from 'react-router-dom';
+import { RentRollExport } from '@/components/reports/RentRollExport';
 
 const reports = [
   {
@@ -44,13 +45,18 @@ export default function Reports() {
         <AppHeader title="Reports" subtitle="Portfolio analytics and insights" />
 
         <div className="p-6">
+          {/* Rent Roll Export is available to all users */}
+          <div className="mb-8">
+            <RentRollExport />
+          </div>
+
           <Card variant="ghost" className="border-2 border-dashed border-border">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-6">
                 <Lock className="h-8 w-8 text-muted-foreground" />
               </div>
               <Badge variant="business" className="mb-4">Business Plan</Badge>
-              <h3 className="text-lg font-semibold mb-2">Unlock Reporting</h3>
+              <h3 className="text-lg font-semibold mb-2">Unlock Advanced Reports</h3>
               <p className="text-sm text-muted-foreground max-w-md mb-6">
                 Upgrade to the Business plan to access portfolio analytics, renewal pipelines, 
                 escalation calendars, and rent projections.
@@ -81,6 +87,11 @@ export default function Reports() {
       />
 
       <div className="p-6">
+        {/* Rent Roll Export */}
+        <div className="mb-8">
+          <RentRollExport />
+        </div>
+
         <div className="grid gap-6 md:grid-cols-2">
           {reports.map((report, index) => (
             <Card
