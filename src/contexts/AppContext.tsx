@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, Workspace, WorkspaceMember, SubscriptionPlan } from '@/types';
+import { User, Workspace, WorkspaceRole, SubscriptionPlan } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 
@@ -8,8 +8,8 @@ interface AppContextType {
   setUser: (user: User | null) => void;
   workspace: Workspace | null;
   setWorkspace: (workspace: Workspace | null) => void;
-  userRole: WorkspaceMember['role'] | null;
-  setUserRole: (role: WorkspaceMember['role'] | null) => void;
+  userRole: WorkspaceRole | 'owner' | null;
+  setUserRole: (role: WorkspaceRole | 'owner' | null) => void;
   isAuthenticated: boolean;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
@@ -26,7 +26,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { user: authUser, isLoading: authLoading } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [userRole, setUserRole] = useState<WorkspaceMember['role'] | null>('owner');
+  const [userRole, setUserRole] = useState<WorkspaceRole | 'owner' | null>('owner');
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!authUser;
@@ -106,12 +106,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const hasPermission = (permission: 'billing' | 'integrations' | 'members' | 'leases' | 'export'): boolean => {
     if (!userRole) return false;
     
-    const permissions: Record<WorkspaceMember['role'], string[]> = {
+    const permissions: Record<WorkspaceRole | 'owner', string[]> = {
       owner: ['billing', 'integrations', 'members', 'leases', 'export'],
       admin: ['billing', 'integrations', 'members', 'leases', 'export'],
-      manager: ['leases', 'export'],
-      reviewer: ['leases'],
-      readonly: [],
+      editor: ['leases', 'export'],
+      viewer: [],
     };
     
     return permissions[userRole].includes(permission);

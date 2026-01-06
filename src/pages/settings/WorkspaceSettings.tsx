@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Bell, Shield, Save, Loader2, UserPlus } from 'lucide-react';
+import { Building2, Users, Bell, Shield, Save, Loader2, UserPlus, Trash2, Crown } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -15,13 +15,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
+import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
+import { MemberRoleSelect } from '@/components/workspace/MemberRoleSelect';
+import { WorkspaceRole } from '@/types';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -31,15 +35,14 @@ const timezones = [
 ];
 
 const roleLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
-  owner: { label: 'Owner', variant: 'default' },
-  admin: { label: 'Admin', variant: 'secondary' },
-  manager: { label: 'Manager', variant: 'secondary' },
-  reviewer: { label: 'Reviewer', variant: 'outline' },
-  readonly: { label: 'Read-only', variant: 'outline' },
+  admin: { label: 'Admin', variant: 'default' },
+  editor: { label: 'Editor', variant: 'secondary' },
+  viewer: { label: 'Viewer', variant: 'outline' },
 };
 
 export default function WorkspaceSettings() {
   const { workspace, refreshProfile } = useApp();
+  const { user: authUser } = useAuth();
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
   const [timezone, setTimezone] = useState(workspace?.timezone || 'America/New_York');
   const [notificationDays, setNotificationDays] = useState(
@@ -47,6 +50,9 @@ export default function WorkspaceSettings() {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+
+  const isOwner = workspace?.ownerId === authUser?.id;
 
   // Sync form with workspace data when it loads
   useEffect(() => {
@@ -157,8 +163,20 @@ export default function WorkspaceSettings() {
     }
   };
 
-  const handleInviteMember = () => {
-    toast.info('Member invitations coming soon!');
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      const { error } = await supabase
+        .from('workspace_members')
+        .delete()
+        .eq('id', memberId);
+
+      if (error) throw error;
+      toast.success('Member removed');
+      refetchMembers();
+    } catch (error) {
+      console.error('Error removing member:', error);
+      toast.error('Failed to remove member');
+    }
   };
 
   return (
@@ -241,10 +259,12 @@ export default function WorkspaceSettings() {
                     <CardTitle>Team Members</CardTitle>
                     <CardDescription>Manage who has access to this workspace</CardDescription>
                   </div>
-                  <Button variant="accent" onClick={handleInviteMember}>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Invite Member
-                  </Button>
+                  {isOwner && (
+                    <Button variant="accent" onClick={() => setInviteDialogOpen(true)}>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Invite Member
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -293,13 +313,31 @@ export default function WorkspaceSettings() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Badge variant={roleLabels[member.role]?.variant || 'outline'}>
-                            {roleLabels[member.role]?.label || member.role}
-                          </Badge>
-                          {member.role !== 'owner' && (
-                            <Button variant="ghost" size="sm">
-                              Edit
-                            </Button>
+                          {member.user_id === workspace?.ownerId ? (
+                            <Badge variant="default" className="flex items-center gap-1">
+                              <Crown className="h-3 w-3" />
+                              Owner
+                            </Badge>
+                          ) : isOwner ? (
+                            <>
+                              <MemberRoleSelect
+                                memberId={member.id}
+                                currentRole={member.role as WorkspaceRole}
+                                onRoleChanged={() => refetchMembers()}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveMember(member.id)}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          ) : (
+                            <Badge variant={roleLabels[member.role]?.variant || 'outline'}>
+                              {roleLabels[member.role]?.label || member.role}
+                            </Badge>
                           )}
                         </div>
                       </div>
@@ -365,6 +403,15 @@ export default function WorkspaceSettings() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {workspace && (
+        <InviteMemberDialog
+          open={inviteDialogOpen}
+          onOpenChange={setInviteDialogOpen}
+          workspaceId={workspace.id}
+          onInviteSent={() => refetchMembers()}
+        />
+      )}
     </AppLayout>
   );
 }

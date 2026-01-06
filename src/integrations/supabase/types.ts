@@ -83,6 +83,7 @@ export type Database = {
           tenant_name: string | null
           uploaded_at: string
           user_id: string
+          workspace_id: string | null
         }
         Insert: {
           base_rent_amount?: string | null
@@ -102,6 +103,7 @@ export type Database = {
           tenant_name?: string | null
           uploaded_at?: string
           user_id: string
+          workspace_id?: string | null
         }
         Update: {
           base_rent_amount?: string | null
@@ -121,6 +123,7 @@ export type Database = {
           tenant_name?: string | null
           uploaded_at?: string
           user_id?: string
+          workspace_id?: string | null
         }
         Relationships: [
           {
@@ -128,6 +131,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -264,23 +274,32 @@ export type Database = {
       }
       workspace_members: {
         Row: {
+          accepted_at: string | null
           created_at: string
           id: string
-          role: string
+          invited_at: string | null
+          invited_email: string | null
+          role: Database["public"]["Enums"]["workspace_role"]
           user_id: string
           workspace_id: string
         }
         Insert: {
+          accepted_at?: string | null
           created_at?: string
           id?: string
-          role?: string
+          invited_at?: string | null
+          invited_email?: string | null
+          role?: Database["public"]["Enums"]["workspace_role"]
           user_id: string
           workspace_id: string
         }
         Update: {
+          accepted_at?: string | null
           created_at?: string
           id?: string
-          role?: string
+          invited_at?: string | null
+          invited_email?: string | null
+          role?: Database["public"]["Enums"]["workspace_role"]
           user_id?: string
           workspace_id?: string
         }
@@ -338,6 +357,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_workspace_role: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: Database["public"]["Enums"]["workspace_role"]
+      }
+      has_workspace_permission: {
+        Args: {
+          _min_role: Database["public"]["Enums"]["workspace_role"]
+          _user_id: string
+          _workspace_id: string
+        }
+        Returns: boolean
+      }
       is_workspace_member: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
@@ -348,7 +379,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      workspace_role: "admin" | "editor" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -475,6 +506,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      workspace_role: ["admin", "editor", "viewer"],
+    },
   },
 } as const
