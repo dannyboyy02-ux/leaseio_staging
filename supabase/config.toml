@@ -2,3 +2,6 @@ project_id = "wwkwoxxcprnjjufkbzac"
 
 [functions.process_lease]
 verify_jwt = false
+
+[functions.retry_lease]
+verify_jwt = false

@@ -1,0 +1,385 @@
+import { useState, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { 
+  Plus, 
+  Search, 
+  Loader2, 
+  Eye, 
+  RotateCcw, 
+  Trash2, 
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Upload as UploadIcon
+} from 'lucide-react';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { AppHeader } from '@/components/layout/AppHeader';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
+import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { format } from 'date-fns';
+
+interface ImportRow {
+  id: string;
+  filename: string;
+  status: string;
+  uploaded_at: string;
+  processed_at: string | null;
+  error_message: string | null;
+  storage_path: string | null;
+}
+
+const statusConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  'Uploaded': { label: 'Uploaded', icon: UploadIcon, variant: 'secondary' },
+  'Processing': { label: 'Processing', icon: Loader2, variant: 'default' },
+  'Ready': { label: 'Ready', icon: CheckCircle2, variant: 'outline' },
+  'Failed': { label: 'Failed', icon: AlertCircle, variant: 'destructive' },
+};
+
+export default function ImportHistory() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedLease, setSelectedLease] = useState<ImportRow | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [imports, setImports] = useState<ImportRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  const fetchImports = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('leases')
+        .select('id, filename, status, uploaded_at, processed_at, error_message, storage_path')
+        .order('uploaded_at', { ascending: false });
+
+      if (error) throw error;
+      setImports(data || []);
+    } catch (error) {
+      console.error('Error fetching imports:', error);
+      toast.error('Failed to load import history');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchImports();
+
+    // Poll for updates when any import is in Processing or Uploaded status
+    const interval = setInterval(() => {
+      const hasProcessing = imports.some(
+        (i) => i.status === 'Processing' || i.status === 'Uploaded'
+      );
+      if (hasProcessing) {
+        fetchImports();
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [imports]);
+
+  // Open upload modal if action=upload in URL
+  useEffect(() => {
+    if (searchParams.get('action') === 'upload') {
+      setUploadModalOpen(true);
+      setSearchParams({});
+    }
+  }, [searchParams, setSearchParams]);
+
+  const handleUploadSuccess = () => {
+    fetchImports();
+  };
+
+  const handleRetry = async (importRow: ImportRow) => {
+    if (!importRow.storage_path) {
+      toast.error('Cannot retry: file not found in storage');
+      return;
+    }
+
+    setRetryingId(importRow.id);
+
+    try {
+      // Call the retry edge function
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please log in to retry');
+        return;
+      }
+
+      const response = await supabase.functions.invoke('retry_lease', {
+        body: { leaseId: importRow.id },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      toast.success('Re-processing started');
+      fetchImports();
+    } catch (error) {
+      console.error('Retry error:', error);
+      toast.error('Failed to retry processing');
+    } finally {
+      setRetryingId(null);
+    }
+  };
+
+  const handleDeleteClick = (importRow: ImportRow) => {
+    setSelectedLease(importRow);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedLease) return;
+
+    try {
+      // Delete from storage first if exists
+      if (selectedLease.storage_path) {
+        const { error: storageError } = await supabase.storage
+          .from('leases')
+          .remove([selectedLease.storage_path]);
+        
+        if (storageError) {
+          console.warn('Storage delete warning:', storageError);
+        }
+      }
+
+      // Delete risks first (foreign key constraint)
+      const { error: risksError } = await supabase
+        .from('risks')
+        .delete()
+        .eq('lease_id', selectedLease.id);
+
+      if (risksError) {
+        console.warn('Risks delete warning:', risksError);
+      }
+
+      // Delete the lease record
+      const { error: leaseError } = await supabase
+        .from('leases')
+        .delete()
+        .eq('id', selectedLease.id);
+
+      if (leaseError) throw leaseError;
+
+      toast.success('Lease deleted successfully');
+      setDeleteDialogOpen(false);
+      setSelectedLease(null);
+      fetchImports();
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Failed to delete lease');
+    }
+  };
+
+  const filteredImports = imports.filter((imp) =>
+    !searchQuery || imp.filename.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const renderStatusBadge = (status: string) => {
+    const config = statusConfig[status] || statusConfig['Uploaded'];
+    const Icon = config.icon;
+    const isProcessing = status === 'Processing' || status === 'Uploaded';
+
+    return (
+      <Badge variant={config.variant} className="gap-1.5">
+        <Icon className={`h-3 w-3 ${isProcessing ? 'animate-spin' : ''}`} />
+        {config.label}
+      </Badge>
+    );
+  };
+
+  return (
+    <AppLayout>
+      <AppHeader
+        title="Import History"
+        subtitle={`${imports.length} documents imported`}
+        actions={
+          <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Upload Lease
+          </Button>
+        }
+      />
+
+      <div className="p-6">
+        {loading ? (
+          <div className="flex items-center justify-center h-[40vh]">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : imports.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[40vh] text-center">
+            <div className="rounded-full bg-muted p-4 mb-4">
+              <FileText className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">No imports yet</h3>
+            <p className="text-muted-foreground mb-4">
+              Upload your first lease document to get started
+            </p>
+            <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Upload Lease
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Search */}
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by filename..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            {/* Table */}
+            <div className="rounded-lg border border-border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Filename</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Uploaded</TableHead>
+                    <TableHead>Processed</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredImports.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        No imports match your search
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredImports.map((imp) => (
+                      <TableRow key={imp.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="truncate max-w-[200px]">{imp.filename}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            {renderStatusBadge(imp.status)}
+                            {imp.status === 'Failed' && imp.error_message && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs text-destructive truncate max-w-[150px] cursor-help">
+                                    {imp.error_message}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="max-w-sm">
+                                  <p>{imp.error_message}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {format(new Date(imp.uploaded_at), 'MMM d, yyyy h:mm a')}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {imp.processed_at 
+                            ? format(new Date(imp.processed_at), 'MMM d, yyyy h:mm a')
+                            : '—'
+                          }
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {imp.status === 'Ready' && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => navigate(`/app/leases/${imp.id}`)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>View lease</TooltipContent>
+                              </Tooltip>
+                            )}
+                            {imp.status === 'Failed' && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => handleRetry(imp)}
+                                    disabled={retryingId === imp.id}
+                                  >
+                                    {retryingId === imp.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <RotateCcw className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Retry processing</TooltipContent>
+                              </Tooltip>
+                            )}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => handleDeleteClick(imp)}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <LeaseUploadModal 
+        open={uploadModalOpen} 
+        onOpenChange={setUploadModalOpen}
+        onSuccess={handleUploadSuccess}
+      />
+
+      <DeleteLeaseDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        leaseName={selectedLease?.filename || ''}
+        onConfirm={handleDeleteConfirm}
+      />
+    </AppLayout>
+  );
+}
