@@ -56,7 +56,7 @@ export default function Reports() {
                 escalation calendars, and rent projections.
               </p>
               <Button variant="accent" size="lg" asChild>
-                <Link to="/settings/billing">
+                <Link to="/app/upgrade?feature=reports">
                   Upgrade to Business
                 </Link>
               </Button>
