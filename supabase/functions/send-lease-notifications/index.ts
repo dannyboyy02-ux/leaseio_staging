@@ -9,15 +9,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface LeaseNotification {
-  type: "expiration" | "escalation" | "renewal_window";
+interface LeaseNotificationRecord {
+  id: string;
   lease_id: string;
-  property_address: string;
-  user_email: string;
+  event_type: string;
   event_date: string;
-  current_rent?: number;
-  new_rent?: number;
-  days_until_event: number;
+  event_description: string | null;
+  notify_days_before: number[];
+  notify_email: boolean;
+  is_confirmed: boolean;
+  last_notified_at: string | null;
+}
+
+interface LeaseWithProfile {
+  id: string;
+  filename: string;
+  extracted_json: { property_address?: string } | null;
+  user_id: string;
+  profiles: { email: string } | null;
 }
 
 serve(async (req) => {
@@ -32,144 +41,148 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const today = new Date();
-    const notificationWindows = [90, 60, 30, 14, 7]; // Days before event to notify
-    const notifications: LeaseNotification[] = [];
+    today.setHours(0, 0, 0, 0);
+    
+    console.log("Starting user-approved lease notification scan...");
+    console.log(`Today's date: ${today.toISOString()}`);
 
-    console.log("Starting lease notification scan...");
-
-    // Fetch all active leases with their workspace owner emails
-    const { data: leases, error: leasesError } = await supabase
-      .from("leases")
+    // Fetch all CONFIRMED notifications with email enabled
+    const { data: notifications, error: notifError } = await supabase
+      .from("lease_notifications")
       .select(`
         id,
-        filename,
-        lease_end,
-        extracted_json,
-        workspace_id,
-        workspaces!inner (
-          owner_id,
-          profiles!inner (
-            email
-          )
-        )
+        lease_id,
+        event_type,
+        event_date,
+        event_description,
+        notify_days_before,
+        notify_email,
+        is_confirmed,
+        last_notified_at
       `)
-      .in("status", ["Ready", "Review"])
-      .not("lease_end", "is", null);
+      .eq("is_confirmed", true)
+      .eq("notify_email", true);
 
-    if (leasesError) {
-      console.error("Error fetching leases:", leasesError);
-      throw leasesError;
+    if (notifError) {
+      console.error("Error fetching notifications:", notifError);
+      throw notifError;
     }
 
-    console.log(`Found ${leases?.length || 0} active leases to check`);
+    console.log(`Found ${notifications?.length || 0} confirmed notifications with email enabled`);
 
-    // Check each lease for upcoming events
-    for (const lease of leases || []) {
-      const userEmail = (lease.workspaces as any)?.profiles?.email;
-      if (!userEmail) continue;
+    const emailsToSend: Array<{
+      notification: LeaseNotificationRecord;
+      lease: LeaseWithProfile;
+      daysUntilEvent: number;
+    }> = [];
 
-      const propertyAddress = 
-        (lease.extracted_json as any)?.property_address || 
-        lease.filename || 
-        "Unknown Property";
+    // Check each notification to see if it matches a notification window
+    for (const notification of (notifications || []) as LeaseNotificationRecord[]) {
+      const eventDate = new Date(notification.event_date);
+      eventDate.setHours(0, 0, 0, 0);
+      
+      const daysUntilEvent = Math.ceil(
+        (eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
 
-      // Check lease expiration
-      if (lease.lease_end) {
-        const endDate = new Date(lease.lease_end);
-        const daysUntilExpiration = Math.ceil(
-          (endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-        );
+      console.log(`Notification ${notification.id}: ${notification.event_type} on ${notification.event_date}, ${daysUntilEvent} days away`);
 
-        if (notificationWindows.includes(daysUntilExpiration)) {
-          notifications.push({
-            type: "expiration",
-            lease_id: lease.id,
-            property_address: propertyAddress,
-            user_email: userEmail,
-            event_date: lease.lease_end,
-            days_until_event: daysUntilExpiration,
-          });
-        }
-
-        // Check renewal window (typically 90-120 days before expiration)
-        if (daysUntilExpiration >= 90 && daysUntilExpiration <= 120) {
-          const renewalWindowDays = [120, 90];
-          if (renewalWindowDays.includes(daysUntilExpiration)) {
-            notifications.push({
-              type: "renewal_window",
-              lease_id: lease.id,
-              property_address: propertyAddress,
-              user_email: userEmail,
-              event_date: lease.lease_end,
-              days_until_event: daysUntilExpiration,
-            });
-          }
-        }
-      }
-
-      // Check rent escalations from rent_schedules
-      const { data: rentSchedules } = await supabase
-        .from("rent_schedules")
-        .select("*")
-        .eq("lease_id", lease.id)
-        .order("period_start", { ascending: true });
-
-      if (rentSchedules && rentSchedules.length > 0) {
-        for (let i = 1; i < rentSchedules.length; i++) {
-          const schedule = rentSchedules[i];
-          const previousSchedule = rentSchedules[i - 1];
+      // Check if today matches one of the notification windows
+      if (notification.notify_days_before.includes(daysUntilEvent)) {
+        // Check if we already notified for this window
+        if (notification.last_notified_at) {
+          const lastNotified = new Date(notification.last_notified_at);
+          const daysSinceLastNotification = Math.ceil(
+            (today.getTime() - lastNotified.getTime()) / (1000 * 60 * 60 * 24)
+          );
           
-          if (schedule.period_start) {
-            const escalationDate = new Date(schedule.period_start);
-            const daysUntilEscalation = Math.ceil(
-              (escalationDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-            );
-
-            if (notificationWindows.includes(daysUntilEscalation)) {
-              notifications.push({
-                type: "escalation",
-                lease_id: lease.id,
-                property_address: propertyAddress,
-                user_email: userEmail,
-                event_date: schedule.period_start,
-                current_rent: previousSchedule.monthly_rent,
-                new_rent: schedule.monthly_rent,
-                days_until_event: daysUntilEscalation,
-              });
-            }
+          // Don't notify again if we notified within the last day
+          if (daysSinceLastNotification < 1) {
+            console.log(`Skipping ${notification.id}: already notified today`);
+            continue;
           }
         }
+
+        // Fetch lease and user details
+        const { data: lease, error: leaseError } = await supabase
+          .from("leases")
+          .select(`
+            id,
+            filename,
+            extracted_json,
+            user_id,
+            profiles!leases_user_id_fkey (
+              email
+            )
+          `)
+          .eq("id", notification.lease_id)
+          .single();
+
+        if (leaseError || !lease) {
+          console.error(`Error fetching lease ${notification.lease_id}:`, leaseError);
+          continue;
+        }
+
+        const typedLease = lease as unknown as LeaseWithProfile;
+        if (!typedLease.profiles?.email) {
+          console.log(`Skipping ${notification.id}: no user email found`);
+          continue;
+        }
+
+        emailsToSend.push({
+          notification,
+          lease: typedLease,
+          daysUntilEvent,
+        });
       }
     }
 
-    console.log(`Found ${notifications.length} notifications to send`);
+    console.log(`Found ${emailsToSend.length} notifications to send today`);
 
-    // Send emails for each notification
+    // Send emails
     const emailResults = [];
-    for (const notification of notifications) {
-      const emailHtml = generateEmailHtml(notification);
-      const subject = generateSubject(notification);
+    for (const { notification, lease, daysUntilEvent } of emailsToSend) {
+      const propertyAddress =
+        (lease.extracted_json as any)?.property_address ||
+        lease.filename ||
+        "Your Property";
+
+      const subject = generateSubject(notification.event_type, daysUntilEvent, propertyAddress);
+      const html = generateEmailHtml(
+        notification.event_type,
+        notification.event_description,
+        notification.event_date,
+        daysUntilEvent,
+        propertyAddress
+      );
 
       try {
         const result = await resend.emails.send({
           from: "LeaseIO <notifications@resend.dev>",
-          to: [notification.user_email],
-          subject: subject,
-          html: emailHtml,
+          to: [lease.profiles!.email],
+          subject,
+          html,
         });
-        
-        console.log(`Email sent to ${notification.user_email}:`, result);
-        emailResults.push({ success: true, notification, result });
+
+        console.log(`Email sent to ${lease.profiles!.email}:`, result);
+
+        // Update last_notified_at
+        await supabase
+          .from("lease_notifications")
+          .update({ last_notified_at: new Date().toISOString() })
+          .eq("id", notification.id);
+
+        emailResults.push({ success: true, notificationId: notification.id, result });
       } catch (emailError) {
-        console.error(`Failed to send email to ${notification.user_email}:`, emailError);
-        emailResults.push({ success: false, notification, error: emailError });
+        console.error(`Failed to send email for notification ${notification.id}:`, emailError);
+        emailResults.push({ success: false, notificationId: notification.id, error: emailError });
       }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        notificationsProcessed: notifications.length,
+        notificationsProcessed: emailsToSend.length,
         results: emailResults,
       }),
       {
@@ -189,78 +202,72 @@ serve(async (req) => {
   }
 });
 
-function generateSubject(notification: LeaseNotification): string {
-  switch (notification.type) {
+function generateSubject(eventType: string, daysUntil: number, property: string): string {
+  switch (eventType) {
     case "expiration":
-      return `⚠️ Lease Expiring in ${notification.days_until_event} Days - ${notification.property_address}`;
+      return `⚠️ Lease Expiring in ${daysUntil} Days - ${property}`;
     case "escalation":
-      return `📈 Rent Escalation in ${notification.days_until_event} Days - ${notification.property_address}`;
+      return `📈 Rent Escalation in ${daysUntil} Days - ${property}`;
     case "renewal_window":
-      return `🔄 Renewal Window Open - ${notification.property_address}`;
+      return `🔄 Renewal Window Reminder - ${property}`;
+    case "commencement":
+      return `📅 Lease Commencement in ${daysUntil} Days - ${property}`;
+    case "custom":
+      return `📌 Reminder: ${property} - ${daysUntil} Days`;
     default:
-      return `Lease Notification - ${notification.property_address}`;
+      return `Lease Notification - ${property}`;
   }
 }
 
-function generateEmailHtml(notification: LeaseNotification): string {
-  const baseStyles = `
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    line-height: 1.6;
-    color: #333;
-  `;
-
-  let content = "";
-  const eventDate = new Date(notification.event_date).toLocaleDateString("en-US", {
+function generateEmailHtml(
+  eventType: string,
+  description: string | null,
+  eventDate: string,
+  daysUntil: number,
+  property: string
+): string {
+  const formattedDate = new Date(eventDate).toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
 
-  switch (notification.type) {
+  const baseStyles = `
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+  `;
+
+  let headerColor = "#2563eb";
+  let icon = "📅";
+  let title = "Lease Notification";
+
+  switch (eventType) {
     case "expiration":
-      content = `
-        <h2 style="color: #dc2626;">⚠️ Lease Expiration Alert</h2>
-        <p>Your lease for <strong>${notification.property_address}</strong> is expiring in <strong>${notification.days_until_event} days</strong>.</p>
-        <p><strong>Expiration Date:</strong> ${eventDate}</p>
-        <p>Please review your lease and take action to renew or prepare for the end of your lease term.</p>
-      `;
+      headerColor = "#dc2626";
+      icon = "⚠️";
+      title = "Lease Expiration Alert";
       break;
     case "escalation":
-      const rentIncrease = notification.new_rent && notification.current_rent 
-        ? notification.new_rent - notification.current_rent 
-        : 0;
-      const percentIncrease = notification.current_rent && rentIncrease
-        ? ((rentIncrease / notification.current_rent) * 100).toFixed(1)
-        : 0;
-      content = `
-        <h2 style="color: #2563eb;">📈 Rent Escalation Notice</h2>
-        <p>A rent escalation is scheduled for <strong>${notification.property_address}</strong> in <strong>${notification.days_until_event} days</strong>.</p>
-        <p><strong>Effective Date:</strong> ${eventDate}</p>
-        <table style="border-collapse: collapse; margin: 16px 0;">
-          <tr>
-            <td style="padding: 8px 16px; border: 1px solid #e5e7eb;">Current Rent:</td>
-            <td style="padding: 8px 16px; border: 1px solid #e5e7eb;"><strong>$${notification.current_rent?.toLocaleString() || 'N/A'}</strong></td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 16px; border: 1px solid #e5e7eb;">New Rent:</td>
-            <td style="padding: 8px 16px; border: 1px solid #e5e7eb;"><strong>$${notification.new_rent?.toLocaleString() || 'N/A'}</strong></td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 16px; border: 1px solid #e5e7eb;">Increase:</td>
-            <td style="padding: 8px 16px; border: 1px solid #e5e7eb;"><strong>$${rentIncrease.toLocaleString()} (${percentIncrease}%)</strong></td>
-          </tr>
-        </table>
-      `;
+      headerColor = "#2563eb";
+      icon = "📈";
+      title = "Rent Escalation Notice";
       break;
     case "renewal_window":
-      content = `
-        <h2 style="color: #059669;">🔄 Renewal Window Now Open</h2>
-        <p>The renewal window for <strong>${notification.property_address}</strong> is now open.</p>
-        <p><strong>Lease Expires:</strong> ${eventDate}</p>
-        <p><strong>Days Remaining:</strong> ${notification.days_until_event} days</p>
-        <p>Now is a good time to begin renewal negotiations with your landlord.</p>
-      `;
+      headerColor = "#059669";
+      icon = "🔄";
+      title = "Renewal Window Reminder";
+      break;
+    case "commencement":
+      headerColor = "#7c3aed";
+      icon = "📅";
+      title = "Lease Commencement Reminder";
+      break;
+    case "custom":
+      headerColor = "#6b7280";
+      icon = "📌";
+      title = "Custom Reminder";
       break;
   }
 
@@ -273,10 +280,17 @@ function generateEmailHtml(notification: LeaseNotification): string {
     </head>
     <body style="${baseStyles} background-color: #f9fafb; padding: 20px;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        ${content}
+        <h2 style="color: ${headerColor};">${icon} ${title}</h2>
+        <p><strong>Property:</strong> ${property}</p>
+        <p><strong>Date:</strong> ${formattedDate}</p>
+        <p><strong>Days Remaining:</strong> ${daysUntil} days</p>
+        ${description ? `<p><strong>Details:</strong> ${description}</p>` : ""}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
         <p style="color: #6b7280; font-size: 14px;">
-          This notification was sent by LeaseIO to help you manage your lease obligations.
+          This notification was sent because you confirmed this date and enabled email notifications in LeaseIO.
+        </p>
+        <p style="color: #6b7280; font-size: 14px;">
+          You can manage your notification preferences from your lease review page.
         </p>
         <p style="color: #6b7280; font-size: 14px;">
           <a href="https://leaseio.app" style="color: #2563eb;">View in LeaseIO</a>

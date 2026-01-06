@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      lease_notifications: {
+        Row: {
+          created_at: string
+          event_date: string
+          event_description: string | null
+          event_type: string
+          id: string
+          is_confirmed: boolean
+          last_notified_at: string | null
+          lease_id: string
+          notify_days_before: number[]
+          notify_email: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_date: string
+          event_description?: string | null
+          event_type: string
+          id?: string
+          is_confirmed?: boolean
+          last_notified_at?: string | null
+          lease_id: string
+          notify_days_before?: number[]
+          notify_email?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_date?: string
+          event_description?: string | null
+          event_type?: string
+          id?: string
+          is_confirmed?: boolean
+          last_notified_at?: string | null
+          lease_id?: string
+          notify_days_before?: number[]
+          notify_email?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leases: {
         Row: {
           base_rent_amount: string | null

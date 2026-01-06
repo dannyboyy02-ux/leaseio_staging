@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Bell, Calendar, TrendingUp, AlertCircle, Check, MoreHorizontal, Filter } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bell, Calendar, TrendingUp, AlertCircle, Check, MoreHorizontal, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -13,58 +13,28 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
-interface NotificationItem {
+interface NotificationWithLease {
   id: string;
-  type: 'renewal' | 'escalation' | 'expiration';
-  title: string;
-  message: string;
-  property: string;
-  leaseId: string;
-  scheduledFor: string;
-  status: 'scheduled' | 'sent' | 'failed';
-  channels: ('email' | 'sms')[];
+  lease_id: string;
+  event_type: 'renewal_window' | 'escalation' | 'expiration' | 'commencement' | 'custom';
+  event_date: string;
+  event_description: string | null;
+  notify_days_before: number[];
+  notify_email: boolean;
+  is_confirmed: boolean;
+  last_notified_at: string | null;
+  leases: {
+    filename: string;
+    extracted_json: { property_address?: string } | null;
+  } | null;
 }
 
-const mockNotifications: NotificationItem[] = [
-  {
-    id: '1',
-    type: 'renewal',
-    title: 'Lease renewal window opens',
-    message: 'The renewal window for Suite 100 opens in 90 days. Consider reviewing terms.',
-    property: 'Suite 100, 123 Main St',
-    leaseId: '1',
-    scheduledFor: '2025-02-15T09:00:00Z',
-    status: 'scheduled',
-    channels: ['email', 'sms'],
-  },
-  {
-    id: '2',
-    type: 'escalation',
-    title: 'Annual rent escalation',
-    message: 'Rent for 456 Oak Avenue will increase by 3% on the anniversary date.',
-    property: '456 Oak Avenue, Unit 2B',
-    leaseId: '2',
-    scheduledFor: '2025-02-01T09:00:00Z',
-    status: 'scheduled',
-    channels: ['email'],
-  },
-  {
-    id: '3',
-    type: 'expiration',
-    title: 'Lease expiring soon',
-    message: 'The lease for 789 Pine Boulevard expires in 30 days.',
-    property: '789 Pine Boulevard',
-    leaseId: '3',
-    scheduledFor: '2025-04-01T09:00:00Z',
-    status: 'sent',
-    channels: ['email', 'sms'],
-  },
-];
-
 const notificationConfig = {
-  renewal: {
+  renewal_window: {
     icon: Calendar,
     variant: 'info' as const,
     label: 'Renewal',
@@ -79,14 +49,74 @@ const notificationConfig = {
     variant: 'destructive' as const,
     label: 'Expiration',
   },
+  commencement: {
+    icon: Calendar,
+    variant: 'default' as const,
+    label: 'Commencement',
+  },
+  custom: {
+    icon: Bell,
+    variant: 'secondary' as const,
+    label: 'Custom',
+  },
 };
 
 export default function Notifications() {
-  const [filter, setFilter] = useState<'all' | 'scheduled' | 'sent'>('all');
+  const navigate = useNavigate();
+  const [filter, setFilter] = useState<'all' | 'upcoming' | 'sent'>('all');
+  const [notifications, setNotifications] = useState<NotificationWithLease[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredNotifications = mockNotifications.filter((n) => {
+  useEffect(() => {
+    async function fetchNotifications() {
+      try {
+        const { data, error } = await supabase
+          .from('lease_notifications')
+          .select(`
+            id,
+            lease_id,
+            event_type,
+            event_date,
+            event_description,
+            notify_days_before,
+            notify_email,
+            is_confirmed,
+            last_notified_at,
+            leases (
+              filename,
+              extracted_json
+            )
+          `)
+          .eq('is_confirmed', true)
+          .order('event_date', { ascending: true });
+
+        if (error) throw error;
+
+        setNotifications((data || []) as unknown as NotificationWithLease[]);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+        toast.error('Failed to load notifications');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchNotifications();
+  }, []);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const filteredNotifications = notifications.filter((n) => {
+    const eventDate = new Date(n.event_date);
+    eventDate.setHours(0, 0, 0, 0);
+    const isPast = eventDate < today;
+    const wasSent = n.last_notified_at !== null;
+
     if (filter === 'all') return true;
-    return n.status === filter;
+    if (filter === 'upcoming') return !isPast && n.notify_email;
+    if (filter === 'sent') return wasSent;
+    return true;
   });
 
   const formatDate = (dateString: string) => {
@@ -94,30 +124,58 @@ export default function Notifications() {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
     });
   };
+
+  const getDaysUntil = (dateString: string) => {
+    const eventDate = new Date(dateString);
+    eventDate.setHours(0, 0, 0, 0);
+    return Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const handleCancelNotification = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('lease_notifications')
+        .update({ notify_email: false })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, notify_email: false } : n))
+      );
+      toast.success('Notification disabled');
+    } catch (error) {
+      console.error('Error canceling notification:', error);
+      toast.error('Failed to cancel notification');
+    }
+  };
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <AppHeader title="Notifications" subtitle="Manage lease alerts and reminders" />
+        <div className="flex items-center justify-center h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
       <AppHeader
         title="Notifications"
-        subtitle="Manage lease alerts and reminders"
-        actions={
-          <Button variant="outline">
-            <Filter className="h-4 w-4 mr-2" />
-            Configure Defaults
-          </Button>
-        }
+        subtitle="View and manage your confirmed lease alerts"
       />
 
       <div className="p-6">
-        <Tabs defaultValue="all" onValueChange={(v) => setFilter(v as 'all' | 'scheduled' | 'sent')}>
+        <Tabs defaultValue="all" onValueChange={(v) => setFilter(v as 'all' | 'upcoming' | 'sent')}>
           <TabsList className="mb-6">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
-            <TabsTrigger value="sent">Sent</TabsTrigger>
+            <TabsTrigger value="all">All Confirmed</TabsTrigger>
+            <TabsTrigger value="upcoming">Upcoming Alerts</TabsTrigger>
+            <TabsTrigger value="sent">Already Sent</TabsTrigger>
           </TabsList>
 
           <TabsContent value={filter} className="mt-0">
@@ -128,16 +186,30 @@ export default function Notifications() {
                     <Bell className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <h3 className="text-lg font-semibold mb-2">No notifications</h3>
-                  <p className="text-sm text-muted-foreground max-w-md">
-                    Notifications will appear here once you have finalized leases with upcoming events.
+                  <p className="text-sm text-muted-foreground max-w-md mb-4">
+                    {filter === 'all'
+                      ? 'Confirm dates and enable notifications from your lease review pages to see them here.'
+                      : filter === 'upcoming'
+                      ? 'No upcoming notifications scheduled.'
+                      : 'No notifications have been sent yet.'}
                   </p>
+                  <Button variant="outline" onClick={() => navigate('/app/leases')}>
+                    View Leases
+                  </Button>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-3">
                 {filteredNotifications.map((notification, index) => {
-                  const config = notificationConfig[notification.type];
+                  const config = notificationConfig[notification.event_type] || notificationConfig.custom;
                   const NotificationIcon = config.icon;
+                  const daysUntil = getDaysUntil(notification.event_date);
+                  const isPast = daysUntil < 0;
+                  const wasSent = notification.last_notified_at !== null;
+                  const property =
+                    (notification.leases?.extracted_json as any)?.property_address ||
+                    notification.leases?.filename ||
+                    'Unknown Property';
 
                   return (
                     <Card
@@ -153,40 +225,72 @@ export default function Notifications() {
                               'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
                               config.variant === 'info' && 'bg-info/10 text-info',
                               config.variant === 'warning' && 'bg-warning/10 text-warning',
-                              config.variant === 'destructive' && 'bg-destructive/10 text-destructive'
+                              config.variant === 'destructive' && 'bg-destructive/10 text-destructive',
+                              config.variant === 'default' && 'bg-primary/10 text-primary',
+                              config.variant === 'secondary' && 'bg-muted text-muted-foreground'
                             )}
                           >
                             <NotificationIcon className="h-5 w-5" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <Badge variant={config.variant} className="text-[10px]">
                                 {config.label}
                               </Badge>
-                              <Badge
-                                variant={notification.status === 'sent' ? 'success' : 'muted'}
-                                className="text-[10px]"
-                              >
-                                {notification.status === 'sent' ? 'Sent' : 'Scheduled'}
-                              </Badge>
+                              {wasSent && (
+                                <Badge variant="success" className="text-[10px]">
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Sent
+                                </Badge>
+                              )}
+                              {!wasSent && notification.notify_email && !isPast && (
+                                <Badge variant="muted" className="text-[10px]">
+                                  Scheduled
+                                </Badge>
+                              )}
+                              {isPast && !wasSent && (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Past
+                                </Badge>
+                              )}
+                              {!notification.notify_email && (
+                                <Badge variant="outline" className="text-[10px]">
+                                  Email Off
+                                </Badge>
+                              )}
                             </div>
-                            <h3 className="font-medium mb-1">{notification.title}</h3>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {notification.message}
-                            </p>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <h3 className="font-medium mb-1">
+                              {notification.event_description || `${config.label} Event`}
+                            </h3>
+                            <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                               <Link
-                                to={`/leases/${notification.leaseId}`}
+                                to={`/app/leases/${notification.lease_id}/review`}
                                 className="hover:text-accent hover:underline"
                               >
-                                {notification.property}
+                                {property}
                               </Link>
                               <span>•</span>
-                              <span>{formatDate(notification.scheduledFor)}</span>
-                              <span>•</span>
-                              <span className="capitalize">
-                                {notification.channels.join(' & ')}
-                              </span>
+                              <span>{formatDate(notification.event_date)}</span>
+                              {!isPast && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-medium">
+                                    {daysUntil === 0
+                                      ? 'Today'
+                                      : daysUntil === 1
+                                      ? 'Tomorrow'
+                                      : `${daysUntil} days`}
+                                  </span>
+                                </>
+                              )}
+                              {notification.notify_email && (
+                                <>
+                                  <span>•</span>
+                                  <span>
+                                    Alerts: {notification.notify_days_before.sort((a, b) => b - a).join(', ')} days before
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                           <DropdownMenu>
@@ -196,11 +300,19 @@ export default function Notifications() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>View Lease</DropdownMenuItem>
-                              <DropdownMenuItem>Edit Notification</DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">
-                                Cancel Notification
+                              <DropdownMenuItem
+                                onClick={() => navigate(`/app/leases/${notification.lease_id}/review`)}
+                              >
+                                View Lease
                               </DropdownMenuItem>
+                              {notification.notify_email && !isPast && (
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => handleCancelNotification(notification.id)}
+                                >
+                                  Disable Notifications
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
