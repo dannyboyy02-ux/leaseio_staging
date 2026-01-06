@@ -19,12 +19,26 @@ const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+interface RentPeriod {
+  period_start: string | null;
+  period_end: string | null;
+  monthly_amount: number | null;
+  annual_amount: number | null;
+  notes: string | null;
+}
+
 interface LeaseExtractionResult {
   landlord_name: string | null;
   tenant_name: string | null;
   property_address: string | null;
   lease_start: string | null;
   lease_end: string | null;
+  // New rent schedule fields
+  current_monthly_rent: number | null;
+  rent_escalation_type: string | null;
+  rent_schedule: RentPeriod[];
+  rent_commencement_date: string | null;
+  // Legacy fields for backwards compatibility
   base_rent_amount: string | null;
   base_rent_frequency: string | null;
   security_deposit: string | null;
@@ -228,7 +242,7 @@ async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
 async function extractLeaseDataWithOpenAI(documentText: string): Promise<LeaseExtractionResult> {
   console.log('[OpenAI] Extracting lease data...');
   
-  const systemPrompt = `You are an expert commercial lease analyst. Your task is to extract key information from lease documents and identify potential risks.
+  const systemPrompt = `You are an expert commercial lease analyst. Your task is to extract key information from lease documents following industry-standard lease abstraction practices.
 
 Extract the following information and return as JSON:
 - landlord_name: The landlord/lessor name
@@ -236,11 +250,27 @@ Extract the following information and return as JSON:
 - property_address: Full property address
 - lease_start: Lease commencement date (ISO format YYYY-MM-DD if possible)
 - lease_end: Lease expiration date (ISO format YYYY-MM-DD if possible)
-- base_rent_amount: Monthly/annual rent amount (as string with currency)
+
+RENT SCHEDULE (CRITICAL - extract complete rent history):
+- current_monthly_rent: The current monthly rent amount as of today (number only, no currency symbol)
+- rent_escalation_type: How rent increases over time. Examples: "3% annual increase", "CPI adjustment", "Fixed schedule", "Step increases", "None"
+- rent_commencement_date: When rent payments begin (may differ from lease start)
+- rent_schedule: Array of ALL rent periods found in the document. For each period:
+  - period_start: Start date of this rent period (YYYY-MM-DD)
+  - period_end: End date of this rent period (YYYY-MM-DD), null if ongoing
+  - monthly_amount: Monthly rent for this period (number only)
+  - annual_amount: Annual rent for this period (number only)
+  - notes: Any special notes about this period (e.g., "Year 1", "After CPI adjustment")
+
+For leases with escalations, extract EACH rent period separately. For example:
+Year 1: $5,000/month -> { period_start: "2024-01-01", period_end: "2024-12-31", monthly_amount: 5000 }
+Year 2: $5,150/month -> { period_start: "2025-01-01", period_end: "2025-12-31", monthly_amount: 5150 }
+
+- base_rent_amount: Initial base rent (legacy field, use current_monthly_rent for new logic)
 - base_rent_frequency: "monthly", "quarterly", or "annually"
 - security_deposit: Security deposit amount
 - renewal_options: Summary of renewal options
-- escalation_clauses: Summary of rent escalation terms
+- escalation_clauses: Summary of rent escalation terms (text description)
 - termination_clauses: Summary of termination provisions
 - key_dates: Array of important dates [{date, description}]
 - risks: Array of identified risks [{title, severity (low/medium/high), explanation, citation_snippet, citation_page}]
@@ -248,10 +278,11 @@ Extract the following information and return as JSON:
 For risks, look for:
 - Unfavorable termination clauses
 - Automatic renewal without notice
-- Excessive rent escalations
+- Excessive rent escalations (flag if >5% annual)
 - Limited assignment/subletting rights
 - Personal guarantee requirements
 - Missing or unclear provisions
+- Unclear rent escalation methodology
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
@@ -435,6 +466,8 @@ serve(async (req) => {
         lease_end: safeDate(leaseData.lease_end),
         base_rent_amount: leaseData.base_rent_amount,
         base_rent_frequency: leaseData.base_rent_frequency,
+        current_monthly_rent: leaseData.current_monthly_rent,
+        rent_escalation_type: leaseData.rent_escalation_type,
         extracted_json: leaseData,
         processed_at: new Date().toISOString(),
       })
@@ -443,6 +476,33 @@ serve(async (req) => {
     if (updateError) {
       console.error('[process_lease] Update error:', updateError);
       throw new Error(`Failed to update lease: ${updateError.message}`);
+    }
+
+    // Step 3.5: Insert rent schedule entries
+    if (leaseData.rent_schedule && leaseData.rent_schedule.length > 0) {
+      const rentScheduleToInsert = leaseData.rent_schedule
+        .filter(period => period.period_start) // Only insert periods with a start date
+        .map(period => ({
+          lease_id: leaseId,
+          period_start: safeDate(period.period_start),
+          period_end: safeDate(period.period_end),
+          monthly_amount: period.monthly_amount,
+          annual_amount: period.annual_amount,
+          notes: period.notes,
+        }));
+
+      if (rentScheduleToInsert.length > 0) {
+        const { error: rentError } = await supabaseAdmin
+          .from('rent_schedules')
+          .insert(rentScheduleToInsert);
+
+        if (rentError) {
+          console.error('[process_lease] Rent schedule insert error:', rentError);
+          // Don't fail the whole operation for rent schedule
+        } else {
+          console.log(`[process_lease] Inserted ${rentScheduleToInsert.length} rent schedule entries`);
+        }
+      }
     }
 
     // Step 4: Insert risks

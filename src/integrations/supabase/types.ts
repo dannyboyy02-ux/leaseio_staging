@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           base_rent_amount: string | null
           base_rent_frequency: string | null
+          current_monthly_rent: number | null
           error_message: string | null
           extracted_json: Json | null
           filename: string
@@ -26,6 +27,7 @@ export type Database = {
           lease_end: string | null
           lease_start: string | null
           processed_at: string | null
+          rent_escalation_type: string | null
           status: string
           storage_path: string | null
           tenant_name: string | null
@@ -35,6 +37,7 @@ export type Database = {
         Insert: {
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
+          current_monthly_rent?: number | null
           error_message?: string | null
           extracted_json?: Json | null
           filename: string
@@ -43,6 +46,7 @@ export type Database = {
           lease_end?: string | null
           lease_start?: string | null
           processed_at?: string | null
+          rent_escalation_type?: string | null
           status?: string
           storage_path?: string | null
           tenant_name?: string | null
@@ -52,6 +56,7 @@ export type Database = {
         Update: {
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
+          current_monthly_rent?: number | null
           error_message?: string | null
           extracted_json?: Json | null
           filename?: string
@@ -60,6 +65,7 @@ export type Database = {
           lease_end?: string | null
           lease_start?: string | null
           processed_at?: string | null
+          rent_escalation_type?: string | null
           status?: string
           storage_path?: string | null
           tenant_name?: string | null
@@ -123,6 +129,50 @@ export type Database = {
           timezone?: string | null
         }
         Relationships: []
+      }
+      rent_schedules: {
+        Row: {
+          annual_amount: number | null
+          created_at: string
+          id: string
+          lease_id: string
+          monthly_amount: number | null
+          notes: string | null
+          period_end: string | null
+          period_start: string
+          updated_at: string
+        }
+        Insert: {
+          annual_amount?: number | null
+          created_at?: string
+          id?: string
+          lease_id: string
+          monthly_amount?: number | null
+          notes?: string | null
+          period_end?: string | null
+          period_start: string
+          updated_at?: string
+        }
+        Update: {
+          annual_amount?: number | null
+          created_at?: string
+          id?: string
+          lease_id?: string
+          monthly_amount?: number | null
+          notes?: string | null
+          period_end?: string | null
+          period_start?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rent_schedules_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       risks: {
         Row: {
