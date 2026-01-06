@@ -1,4 +1,4 @@
-// Core Types for LeaseOS
+// Core Types for LeaseIO
 
 export type SubscriptionPlan = 'pro' | 'business';
 

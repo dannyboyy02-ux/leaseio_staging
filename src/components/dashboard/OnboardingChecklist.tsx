@@ -65,7 +65,7 @@ export function OnboardingChecklist() {
           <div>
             <CardTitle className="text-lg">Getting Started</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Complete these steps to get the most out of LeaseOS
+              Complete these steps to get the most out of LeaseIO
             </p>
           </div>
           <Button 
