@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Building2, Users, Bell, Shield, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Building2, Users, Bell, Shield, Save, Loader2, UserPlus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -18,18 +18,16 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
   { value: 'America/Chicago', label: 'Central Time (CT)' },
   { value: 'America/Denver', label: 'Mountain Time (MT)' },
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
-];
-
-const mockMembers = [
-  { id: '1', email: 'alex@acme.com', name: 'Alex Morgan', role: 'owner', avatarUrl: null },
-  { id: '2', email: 'jamie@acme.com', name: 'Jamie Chen', role: 'admin', avatarUrl: null },
-  { id: '3', email: 'sam@acme.com', name: 'Sam Wilson', role: 'manager', avatarUrl: null },
 ];
 
 const roleLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
@@ -41,12 +39,127 @@ const roleLabels: Record<string, { label: string; variant: 'default' | 'secondar
 };
 
 export default function WorkspaceSettings() {
-  const { workspace } = useApp();
+  const { workspace, refreshProfile } = useApp();
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
   const [timezone, setTimezone] = useState(workspace?.timezone || 'America/New_York');
   const [notificationDays, setNotificationDays] = useState(
     String(workspace?.defaultNotificationDays || 90)
   );
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+  // Sync form with workspace data when it loads
+  useEffect(() => {
+    if (workspace) {
+      setWorkspaceName(workspace.name || '');
+      setTimezone(workspace.timezone || 'America/New_York');
+      setNotificationDays(String(workspace.defaultNotificationDays || 90));
+    }
+  }, [workspace]);
+
+  // Fetch workspace members
+  const { data: members, isLoading: membersLoading, refetch: refetchMembers } = useQuery({
+    queryKey: ['workspace-members', workspace?.id],
+    queryFn: async () => {
+      if (!workspace?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('workspace_members')
+        .select(`
+          id,
+          role,
+          user_id,
+          created_at
+        `)
+        .eq('workspace_id', workspace.id);
+
+      if (error) throw error;
+
+      // Fetch profiles for each member
+      const memberIds = data?.map(m => m.user_id) || [];
+      if (memberIds.length === 0) return [];
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, email, first_name, last_name')
+        .in('id', memberIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combine members with profiles
+      return data?.map(member => {
+        const profile = profiles?.find(p => p.id === member.user_id);
+        return {
+          ...member,
+          email: profile?.email || 'Unknown',
+          name: profile?.first_name && profile?.last_name 
+            ? `${profile.first_name} ${profile.last_name}` 
+            : profile?.email || 'Unknown User',
+        };
+      }) || [];
+    },
+    enabled: !!workspace?.id,
+  });
+
+  const handleSaveGeneral = async () => {
+    if (!workspace?.id) {
+      toast.error('No workspace found');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('workspaces')
+        .update({
+          name: workspaceName.trim(),
+          timezone: timezone,
+        })
+        .eq('id', workspace.id);
+
+      if (error) throw error;
+
+      if (refreshProfile) await refreshProfile();
+      toast.success('Workspace settings saved!');
+    } catch (error) {
+      console.error('Error saving workspace:', error);
+      toast.error('Failed to save workspace settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveNotifications = async () => {
+    if (!workspace?.id) {
+      toast.error('No workspace found');
+      return;
+    }
+
+    setIsSavingNotifications(true);
+    try {
+      const days = parseInt(notificationDays) || 90;
+      const { error } = await supabase
+        .from('workspaces')
+        .update({
+          default_notification_days: days,
+        })
+        .eq('id', workspace.id);
+
+      if (error) throw error;
+
+      if (refreshProfile) await refreshProfile();
+      toast.success('Notification settings saved!');
+    } catch (error) {
+      console.error('Error saving notifications:', error);
+      toast.error('Failed to save notification settings');
+    } finally {
+      setIsSavingNotifications(false);
+    }
+  };
+
+  const handleInviteMember = () => {
+    toast.info('Member invitations coming soon!');
+  };
 
   return (
     <AppLayout>
@@ -107,9 +220,13 @@ export default function WorkspaceSettings() {
                     Used for scheduling notifications and displaying dates
                   </p>
                 </div>
-                <Button variant="accent">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
+                <Button variant="accent" onClick={handleSaveGeneral} disabled={isSaving}>
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  {isSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
               </CardContent>
             </Card>
@@ -124,48 +241,71 @@ export default function WorkspaceSettings() {
                     <CardTitle>Team Members</CardTitle>
                     <CardDescription>Manage who has access to this workspace</CardDescription>
                   </div>
-                  <Button variant="accent">Invite Member</Button>
+                  <Button variant="accent" onClick={handleInviteMember}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Invite Member
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="divide-y divide-border">
-                  {mockMembers.map((member, index) => (
-                    <div
-                      key={member.id}
-                      className={cn(
-                        'flex items-center justify-between py-4 animate-fade-up',
-                        index === 0 && 'pt-0'
-                      )}
-                      style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={member.avatarUrl || undefined} />
-                          <AvatarFallback>
-                            {member.name
-                              .split(' ')
-                              .map((n) => n[0])
-                              .join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{member.name}</p>
-                          <p className="text-sm text-muted-foreground">{member.email}</p>
+                {membersLoading ? (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-48" />
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <Badge variant={roleLabels[member.role].variant}>
-                          {roleLabels[member.role].label}
-                        </Badge>
-                        {member.role !== 'owner' && (
-                          <Button variant="ghost" size="sm">
-                            Edit
-                          </Button>
+                    ))}
+                  </div>
+                ) : !members || members.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No team members yet</p>
+                    <p className="text-sm">You're the only one with access to this workspace</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {members.map((member, index) => (
+                      <div
+                        key={member.id}
+                        className={cn(
+                          'flex items-center justify-between py-4 animate-fade-up',
+                          index === 0 && 'pt-0'
                         )}
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarFallback>
+                              {member.name
+                                .split(' ')
+                                .map((n: string) => n[0])
+                                .join('')
+                                .slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{member.name}</p>
+                            <p className="text-sm text-muted-foreground">{member.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge variant={roleLabels[member.role]?.variant || 'outline'}>
+                            {roleLabels[member.role]?.label || member.role}
+                          </Badge>
+                          {member.role !== 'owner' && (
+                            <Button variant="ghost" size="sm">
+                              Edit
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -194,9 +334,13 @@ export default function WorkspaceSettings() {
                     How many days before an event to send the first notification
                   </p>
                 </div>
-                <Button variant="accent">
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
+                <Button variant="accent" onClick={handleSaveNotifications} disabled={isSavingNotifications}>
+                  {isSavingNotifications ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  {isSavingNotifications ? 'Saving...' : 'Save Changes'}
                 </Button>
               </CardContent>
             </Card>

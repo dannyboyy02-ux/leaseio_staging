@@ -87,7 +87,7 @@ export default function Leases() {
       const { data, error } = await supabase
         .from('leases')
         .select('*')
-        .eq('status', 'Ready')
+        .in('status', ['Ready', 'final', 'review'])
         .order('uploaded_at', { ascending: false });
 
       if (error) throw error;

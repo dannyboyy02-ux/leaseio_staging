@@ -38,7 +38,7 @@ export function FinancialSummary() {
         .from('leases')
         .select('id, filename, current_monthly_rent, lease_start, lease_end, status, extracted_json')
         .eq('user_id', user.id)
-        .in('status', ['final', 'review']);
+        .in('status', ['Ready', 'final', 'review']);
 
       if (error) throw error;
 

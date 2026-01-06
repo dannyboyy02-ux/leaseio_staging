@@ -39,13 +39,13 @@ export function QuickStats() {
       const allLeases = leases || [];
       const now = new Date();
 
-      // Calculate stats
+      // Calculate stats - support both old and new status values
       const activeLeases = allLeases.filter(l => 
-        l.status === 'final' || l.status === 'review'
+        l.status === 'Ready' || l.status === 'final' || l.status === 'review'
       ).length;
 
       const pendingReview = allLeases.filter(l => 
-        l.status === 'review' || l.status === 'processing'
+        l.status === 'review' || l.status === 'processing' || l.status === 'Processing'
       ).length;
 
       const expiringIn90Days = allLeases.filter(l => {
@@ -55,7 +55,7 @@ export function QuickStats() {
         return days >= 0 && days <= 90;
       }).length;
 
-      const finalized = allLeases.filter(l => l.status === 'final').length;
+      const finalized = allLeases.filter(l => l.status === 'final' || l.status === 'Ready').length;
 
       return {
         activeLeases,
