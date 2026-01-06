@@ -81,7 +81,7 @@ export function AppSidebar() {
           <FileText className="h-5 w-5" />
         </div>
         <span className="font-display text-lg font-bold text-sidebar-foreground">
-          Lease<span className="text-primary">IO</span>
+          Lease<span className="text-sidebar-primary">IO</span>
         </span>
       </Link>
 
