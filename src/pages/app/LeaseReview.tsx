@@ -28,6 +28,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/RentScheduleTable';
+import { NotificationConfigurator } from '@/components/leases/NotificationConfigurator';
 
 interface ExtractedJson {
   property_address?: string;
@@ -522,28 +523,16 @@ export default function LeaseReview() {
               </CardContent>
             </Card>
 
-            {/* Key Dates */}
-            {keyDates.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Key Dates</CardTitle>
-                  <CardDescription>Important dates extracted from the lease</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {keyDates.map((item, index) => (
-                      <div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium text-sm">{item.date}</p>
-                          <p className="text-sm text-muted-foreground">{item.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Key Dates & Notifications */}
+            <NotificationConfigurator
+              leaseId={lease.id}
+              leaseStart={editableFields.lease_start}
+              leaseEnd={editableFields.lease_end}
+              rentSchedule={rentSchedule.map(rs => ({
+                period_start: rs.period_start,
+                monthly_amount: rs.monthly_amount
+              }))}
+            />
           </div>
 
           {/* Sidebar */}
