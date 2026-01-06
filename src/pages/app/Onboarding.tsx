@@ -80,13 +80,13 @@ export default function Onboarding() {
 
       if (workspaceError) throw workspaceError;
 
-      // Add owner as a member
+      // Add owner as admin (owner is tracked via workspaces.owner_id)
       const { error: memberError } = await supabase
         .from('workspace_members')
         .insert({
           workspace_id: workspace.id,
           user_id: user.id,
-          role: 'owner',
+          role: 'admin',
         });
 
       if (memberError) throw memberError;

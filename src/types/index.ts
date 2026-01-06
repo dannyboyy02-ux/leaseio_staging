@@ -2,7 +2,7 @@
 
 export type SubscriptionPlan = 'pro' | 'business';
 
-export type UserRole = 'owner' | 'admin' | 'manager' | 'reviewer' | 'readonly';
+export type WorkspaceRole = 'admin' | 'editor' | 'viewer';
 
 export type LeaseType = 'master' | 'amendment';
 
@@ -42,8 +42,11 @@ export interface WorkspaceMember {
   id: string;
   workspaceId: string;
   userId: string;
-  role: UserRole;
+  role: WorkspaceRole;
   user?: User;
+  invitedEmail?: string;
+  invitedAt?: string;
+  acceptedAt?: string;
   joinedAt: string;
 }
 
