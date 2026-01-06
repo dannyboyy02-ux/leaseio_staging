@@ -12,7 +12,8 @@ import {
   LogOut,
   Building2,
   HelpCircle,
-  Lock
+  Lock,
+  Upload
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
@@ -32,6 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 const mainNavItems = [
   { title: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
   { title: 'Leases', href: '/app/leases', icon: FileText },
+  { title: 'Imports', href: '/app/imports', icon: Upload },
   { title: 'Reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
   { title: 'Notifications', href: '/app/notifications', icon: Bell },
   { title: 'Integrations', href: '/app/integrations', icon: Plug },
