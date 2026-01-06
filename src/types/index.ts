@@ -1,6 +1,8 @@
 // Core Types for LeaseIO
 
-export type SubscriptionPlan = 'pro' | 'business';
+export type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'business';
+
+export type BillingInterval = 'monthly' | 'annual';
 
 export type WorkspaceRole = 'admin' | 'editor' | 'viewer';
 

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, Workspace, WorkspaceRole, SubscriptionPlan } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
+import { PLANS, getPlanIndex } from '@/config/pricing';
 
 interface AppContextType {
   user: User | null;
@@ -65,13 +66,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           updatedAt: profile.created_at,
         });
 
+        // Get document limit from centralized pricing config
+        const plan = (profile.plan as SubscriptionPlan) || 'free';
+        const planConfig = PLANS[plan];
+
         // Create a workspace from profile data for now
         setWorkspace({
           id: profile.id,
           name: profile.company_name || 'My Workspace',
           ownerId: profile.id,
-          plan: profile.plan as SubscriptionPlan || 'pro',
-          documentLimit: profile.plan === 'business' ? 50 : profile.plan === 'pro' ? 20 : 3,
+          plan: plan,
+          documentLimit: planConfig?.documentLimit || 1,
           documentsUsed: profile.processed_count || 0,
           timezone: profile.timezone || 'America/New_York',
           defaultNotificationDays: 90,
@@ -97,10 +102,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [authUser, authLoading]);
 
+  // Check if user can access a feature based on their plan level
   const canAccessFeature = (requiredPlan: SubscriptionPlan): boolean => {
     if (!workspace) return false;
-    if (requiredPlan === 'pro') return true;
-    return workspace.plan === 'business';
+    const currentPlanIndex = getPlanIndex(workspace.plan);
+    const requiredPlanIndex = getPlanIndex(requiredPlan);
+    return currentPlanIndex >= requiredPlanIndex;
   };
 
   const hasPermission = (permission: 'billing' | 'integrations' | 'members' | 'leases' | 'export'): boolean => {

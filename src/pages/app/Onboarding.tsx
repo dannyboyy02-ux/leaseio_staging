@@ -8,29 +8,14 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { FileText, Loader2, Check, Building2, CreditCard, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-
-const plans = [
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: '$49/mo',
-    documents: '3 documents',
-    features: ['AI lease abstraction', 'Email & SMS notifications', 'Renewal tracking'],
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    price: '$149/mo',
-    documents: '20 documents',
-    features: ['Everything in Pro', 'CSV/Excel export', 'QuickBooks integration', 'Advanced reporting'],
-    popular: true,
-  },
-];
+import { PLANS, PLAN_ORDER } from '@/config/pricing';
+import type { SubscriptionPlan } from '@/types';
+import { cn } from '@/lib/utils';
 
 export default function Onboarding() {
   const [step, setStep] = useState(1);
   const [workspaceName, setWorkspaceName] = useState('');
-  const [selectedPlan, setSelectedPlan] = useState('pro');
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('starter');
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -66,6 +51,8 @@ export default function Onboarding() {
     setIsLoading(true);
 
     try {
+      const planConfig = PLANS[selectedPlan];
+      
       // Create workspace
       const { data: workspace, error: workspaceError } = await supabase
         .from('workspaces')
@@ -73,7 +60,7 @@ export default function Onboarding() {
           name: workspaceName.trim(),
           owner_id: user.id,
           plan: selectedPlan,
-          document_limit: selectedPlan === 'business' ? 20 : 3,
+          document_limit: planConfig.documentLimit,
         })
         .select()
         .single();
@@ -108,9 +95,11 @@ export default function Onboarding() {
     }
   };
 
+  const selectedPlanConfig = PLANS[selectedPlan];
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-3xl">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
@@ -126,17 +115,18 @@ export default function Onboarding() {
           {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center">
               <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                className={cn(
+                  "h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium",
                   s < step
                     ? 'bg-accent text-accent-foreground'
                     : s === step
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground'
-                }`}
+                )}
               >
                 {s < step ? <Check className="h-4 w-4" /> : s}
               </div>
-              {s < 3 && <div className={`w-12 h-0.5 ${s < step ? 'bg-accent' : 'bg-muted'}`} />}
+              {s < 3 && <div className={cn("w-12 h-0.5", s < step ? 'bg-accent' : 'bg-muted')} />}
             </div>
           ))}
         </div>
@@ -182,37 +172,45 @@ export default function Onboarding() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {plans.map((plan) => (
-                    <button
-                      key={plan.id}
-                      onClick={() => setSelectedPlan(plan.id)}
-                      className={`relative text-left p-4 rounded-xl border-2 transition-all ${
-                        selectedPlan === plan.id
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      {plan.popular && (
-                        <div className="absolute -top-2 left-4 px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium">
-                          Popular
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {PLAN_ORDER.map((planId) => {
+                    const plan = PLANS[planId];
+                    return (
+                      <button
+                        key={plan.id}
+                        onClick={() => setSelectedPlan(planId)}
+                        className={cn(
+                          "relative text-left p-4 rounded-xl border-2 transition-all",
+                          selectedPlan === planId
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border hover:border-primary/50'
+                        )}
+                      >
+                        {plan.popular && (
+                          <div className="absolute -top-2 left-4 px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium">
+                            Popular
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-semibold text-foreground">{plan.name}</span>
                         </div>
-                      )}
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-foreground">{plan.name}</span>
-                        <span className="text-sm text-muted-foreground">{plan.price}</span>
-                      </div>
-                      <div className="text-sm text-primary font-medium mb-3">{plan.documents}</div>
-                      <ul className="space-y-1">
-                        {plan.features.map((feature) => (
-                          <li key={feature} className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Check className="h-3 w-3 text-accent" />
-                            {feature}
-                          </li>
-                        ))}
-                      </ul>
-                    </button>
-                  ))}
+                        <div className="text-lg font-bold text-foreground mb-1">
+                          {plan.price.monthly === 0 ? 'Free' : `$${plan.price.monthly}/mo`}
+                        </div>
+                        <div className="text-sm text-primary font-medium mb-3">
+                          {plan.documentLimit} {plan.documentLimit === 1 ? 'lease' : 'leases'}
+                        </div>
+                        <ul className="space-y-1">
+                          {plan.features.slice(0, 3).map((feature) => (
+                            <li key={feature} className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Check className="h-3 w-3 text-accent shrink-0" />
+                              <span className="truncate">{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
@@ -234,23 +232,29 @@ export default function Onboarding() {
                 </div>
                 <h1 className="font-display text-2xl font-bold text-foreground">You're all set!</h1>
                 <p className="text-muted-foreground">
-                  Your workspace "{workspaceName}" is ready with the {selectedPlan === 'business' ? 'Business' : 'Pro'} plan.
+                  Your workspace "{workspaceName}" is ready with the {selectedPlanConfig.name} plan.
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="bg-muted/50 rounded-lg p-4 space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Document limit</span>
-                    <span className="font-medium text-foreground">
-                      {selectedPlan === 'business' ? '20' : '3'} documents
-                    </span>
+                    <span className="text-muted-foreground">Plan</span>
+                    <span className="font-medium text-foreground">{selectedPlanConfig.name}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Trial ends</span>
+                    <span className="text-muted-foreground">Document limit</span>
                     <span className="font-medium text-foreground">
-                      {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                      {selectedPlanConfig.documentLimit} {selectedPlanConfig.documentLimit === 1 ? 'lease' : 'leases'}
                     </span>
                   </div>
+                  {selectedPlanConfig.price.monthly > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Trial ends</span>
+                      <span className="font-medium text-foreground">
+                        {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
