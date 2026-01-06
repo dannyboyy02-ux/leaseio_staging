@@ -83,7 +83,8 @@ export default function AccountSettings() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(true);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
-
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   // Sync form with user data when it loads
   useEffect(() => {
     if (user) {
@@ -123,6 +124,82 @@ export default function AccountSettings() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword || !confirmPassword) {
+      toast.error('Please enter a new password');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      toast.success('Password updated successfully!');
+    } catch (error) {
+      console.error('Error changing password:', error);
+      toast.error('Failed to change password');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const handleExportData = async () => {
+    setIsExporting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Fetch all user data
+      const [leasesRes, profileRes] = await Promise.all([
+        supabase.from('leases').select('*').eq('user_id', user.id),
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+      ]);
+
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        profile: profileRes.data,
+        leases: leasesRes.data,
+      };
+
+      // Create and download JSON file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leaseio-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success('Data exported successfully!');
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      toast.error('Failed to export data');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    toast.error('Please contact support to delete your account');
   };
 
   return (
@@ -280,7 +357,12 @@ export default function AccountSettings() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
                 </div>
-                <Button variant="accent">Update Password</Button>
+                <Button variant="accent" onClick={handleChangePassword} disabled={isChangingPassword}>
+                  {isChangingPassword ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : null}
+                  {isChangingPassword ? 'Updating...' : 'Update Password'}
+                </Button>
               </CardContent>
             </Card>
 
@@ -380,9 +462,13 @@ export default function AccountSettings() {
                   This will create a downloadable archive containing all your leases, 
                   extracted data, and account information.
                 </p>
-                <Button variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
-                  Request Data Export
+                <Button variant="outline" onClick={handleExportData} disabled={isExporting}>
+                  {isExporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  {isExporting ? 'Exporting...' : 'Export Data'}
                 </Button>
               </CardContent>
             </Card>
@@ -416,7 +502,10 @@ export default function AccountSettings() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      <AlertDialogAction 
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={handleDeleteAccount}
+                      >
                         Delete Account
                       </AlertDialogAction>
                     </AlertDialogFooter>

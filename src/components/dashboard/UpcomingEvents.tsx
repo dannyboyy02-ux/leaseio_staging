@@ -68,7 +68,7 @@ export function UpcomingEvents() {
         .from('leases')
         .select('id, filename, lease_end, current_monthly_rent, status, extracted_json')
         .eq('user_id', user.id)
-        .in('status', ['final', 'review']);
+        .in('status', ['Ready', 'final', 'review']);
 
       if (error) throw error;
 
