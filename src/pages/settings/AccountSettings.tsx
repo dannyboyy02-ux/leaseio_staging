@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Bell, Shield, Download, Trash2, Save, Eye, EyeOff, Loader2, CreditCard, Check, Zap, Building2 } from 'lucide-react';
+import { User, Lock, Bell, Shield, Download, Trash2, Save, Eye, EyeOff, Loader2, CreditCard, Check } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -34,6 +34,8 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { PLANS, PLAN_ORDER, isUpgrade } from '@/config/pricing';
+import type { SubscriptionPlan } from '@/types';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -42,26 +44,10 @@ const timezones = [
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
 ];
 
-const plans = [
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: 49,
-    features: ['3 documents total', 'AI-powered extraction', 'Email & SMS notifications'],
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    price: 149,
-    features: ['20 documents included', 'Reporting dashboards', 'QuickBooks integration'],
-    popular: true,
-  },
-];
-
 const invoices = [
-  { id: '1', date: '2025-01-01', amount: 149, status: 'paid' },
-  { id: '2', date: '2024-12-01', amount: 149, status: 'paid' },
-  { id: '3', date: '2024-11-01', amount: 149, status: 'paid' },
+  { id: '1', date: '2025-01-01', amount: 79, status: 'paid' },
+  { id: '2', date: '2024-12-01', amount: 79, status: 'paid' },
+  { id: '3', date: '2024-11-01', amount: 79, status: 'paid' },
 ];
 
 export default function AccountSettings() {
@@ -523,8 +509,12 @@ export default function AccountSettings() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     Current Plan
-                    <Badge variant={workspace?.plan === 'business' ? 'business' : 'pro'}>
-                      {workspace?.plan === 'business' ? 'Business' : 'Pro'}
+                    <Badge variant={
+                      workspace?.plan === 'business' ? 'business' : 
+                      workspace?.plan === 'pro' ? 'pro' : 
+                      'secondary'
+                    }>
+                      {PLANS[workspace?.plan as SubscriptionPlan]?.name || workspace?.plan}
                     </Badge>
                   </CardTitle>
                   <CardDescription>
@@ -546,7 +536,7 @@ export default function AccountSettings() {
                         </span>
                       </div>
                       <Progress
-                        value={workspace ? (workspace.documentsUsed / workspace.documentLimit) * 100 : 0}
+                        value={workspace ? Math.min((workspace.documentsUsed / workspace.documentLimit) * 100, 100) : 0}
                         variant={
                           workspace && (workspace.documentsUsed / workspace.documentLimit) >= 0.9
                             ? 'destructive'
@@ -587,59 +577,68 @@ export default function AccountSettings() {
             {/* Plans */}
             <div>
               <h2 className="text-lg font-semibold mb-4">Available Plans</h2>
-              <div className="grid gap-6 lg:grid-cols-2">
-                {plans.map((plan, index) => {
-                  const isCurrent = workspace?.plan === plan.id;
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {PLAN_ORDER.map((planId, index) => {
+                  const plan = PLANS[planId];
+                  const currentPlan = (workspace?.plan || 'free') as SubscriptionPlan;
+                  const isCurrent = currentPlan === planId;
+                  const isUpgradeOption = isUpgrade(currentPlan, planId);
 
                   return (
                     <Card
                       key={plan.id}
                       variant={plan.popular ? 'feature' : 'default'}
                       className={cn(
-                        'relative animate-fade-up',
+                        'relative animate-fade-up flex flex-col',
                         isCurrent && 'ring-2 ring-accent'
                       )}
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
                       {plan.popular && (
-                        <div className="absolute -top-3 left-6">
-                          <Badge variant="business">Most Popular</Badge>
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                          <Badge variant="pro">Popular</Badge>
                         </div>
                       )}
-                      <CardHeader>
-                        <div className="flex items-center gap-2">
-                          {plan.id === 'pro' ? (
-                            <Zap className="h-5 w-5 text-primary" />
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">{plan.name}</CardTitle>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          {plan.price.monthly === 0 ? (
+                            <span className="text-2xl font-bold">Free</span>
                           ) : (
-                            <Building2 className="h-5 w-5 text-accent" />
+                            <>
+                              <span className="text-2xl font-bold">${plan.price.monthly}</span>
+                              <span className="text-muted-foreground text-sm">/mo</span>
+                            </>
                           )}
-                          <CardTitle>{plan.name}</CardTitle>
                         </div>
-                        <div className="flex items-baseline gap-1 mt-2">
-                          <span className="text-3xl font-bold">${plan.price}</span>
-                          <span className="text-muted-foreground">/month</span>
-                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {plan.documentLimit} {plan.documentLimit === 1 ? 'lease' : 'leases'}
+                        </p>
                       </CardHeader>
-                      <CardContent>
-                        <ul className="space-y-2 mb-6">
-                          {plan.features.map((feature) => (
-                            <li key={feature} className="flex items-center gap-2 text-sm">
-                              <Check className="h-4 w-4 text-success shrink-0" />
-                              {feature}
+                      <CardContent className="flex-1 flex flex-col">
+                        <ul className="space-y-1.5 mb-4 flex-1">
+                          {plan.features.slice(0, 4).map((feature) => (
+                            <li key={feature} className="flex items-start gap-2 text-xs">
+                              <Check className="h-3 w-3 text-success shrink-0 mt-0.5" />
+                              <span className="text-muted-foreground">{feature}</span>
                             </li>
                           ))}
                         </ul>
                         {isCurrent ? (
-                          <Button variant="secondary" className="w-full" disabled>
-                            Current Plan
+                          <Button variant="secondary" size="sm" className="w-full" disabled>
+                            Current
                           </Button>
-                        ) : plan.id === 'business' ? (
-                          <Button variant="accent" className="w-full" asChild>
-                            <Link to="/app/upgrade">Upgrade to Business</Link>
+                        ) : isUpgradeOption ? (
+                          <Button variant="accent" size="sm" className="w-full" asChild>
+                            <Link to="/app/upgrade">Upgrade</Link>
+                          </Button>
+                        ) : planId !== 'free' ? (
+                          <Button variant="outline" size="sm" className="w-full">
+                            Downgrade
                           </Button>
                         ) : (
-                          <Button variant="outline" className="w-full">
-                            Downgrade to Pro
+                          <Button variant="ghost" size="sm" className="w-full" disabled>
+                            Free Tier
                           </Button>
                         )}
                       </CardContent>

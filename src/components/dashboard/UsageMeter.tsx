@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
+import { PLANS, PLAN_ORDER, getPlanIndex } from '@/config/pricing';
+import type { SubscriptionPlan } from '@/types';
 
 export function UsageMeter() {
   const { workspace } = useApp();
@@ -28,6 +30,21 @@ export function UsageMeter() {
     year: 'numeric',
   });
 
+  // Get the next tier for upgrade messaging
+  const currentPlanIndex = getPlanIndex(workspace.plan);
+  const nextTier = currentPlanIndex < PLAN_ORDER.length - 1 
+    ? PLANS[PLAN_ORDER[currentPlanIndex + 1] as SubscriptionPlan]
+    : null;
+
+  const getPlanBadgeVariant = (plan: SubscriptionPlan) => {
+    switch (plan) {
+      case 'business': return 'business';
+      case 'pro': return 'pro';
+      case 'starter': return 'secondary';
+      default: return 'outline';
+    }
+  };
+
   return (
     <Card className={cn(isAtLimit && 'border-destructive/50')}>
       <CardHeader className="pb-2">
@@ -36,8 +53,8 @@ export function UsageMeter() {
             <FileText className="h-4 w-4" />
             Document Usage
           </CardTitle>
-          <Badge variant={workspace.plan === 'business' ? 'business' : 'pro'}>
-            {workspace.plan === 'business' ? 'Business' : 'Pro'}
+          <Badge variant={getPlanBadgeVariant(workspace.plan)}>
+            {PLANS[workspace.plan]?.name || workspace.plan}
           </Badge>
         </div>
       </CardHeader>
@@ -52,28 +69,40 @@ export function UsageMeter() {
                 of {workspace.documentLimit} documents
               </span>
             </div>
-            <Progress value={usagePercent} variant={getVariant()} className="h-2" />
+            <Progress value={Math.min(usagePercent, 100)} variant={getVariant()} className="h-2" />
           </div>
 
-          {isNearLimit && !isAtLimit && (
+          {isNearLimit && !isAtLimit && nextTier && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-warning/10 text-warning">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <div className="text-sm">
                 <p className="font-medium">Approaching limit</p>
                 <p className="text-warning/80">
-                  Upgrade to Business for more documents
+                  Upgrade to {nextTier.name} for {nextTier.documentLimit} documents
                 </p>
               </div>
             </div>
           )}
 
-          {isAtLimit && (
+          {isAtLimit && nextTier && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <div className="text-sm">
                 <p className="font-medium">Document limit reached</p>
                 <p className="text-destructive/80">
-                  Upgrade now to continue uploading
+                  Upgrade to {nextTier.name} to continue uploading
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isAtLimit && !nextTier && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium">Document limit reached</p>
+                <p className="text-destructive/80">
+                  Contact us for enterprise pricing
                 </p>
               </div>
             </div>
@@ -84,9 +113,9 @@ export function UsageMeter() {
               <span>Resets: </span>
               <span className="font-medium text-foreground">{renewalDate}</span>
             </div>
-            {(isNearLimit || isAtLimit) && (
+            {(isNearLimit || isAtLimit) && nextTier && (
               <Button variant="accent" size="sm" asChild>
-                <Link to="/app/settings/billing">
+                <Link to="/app/upgrade">
                   Upgrade <ArrowRight className="h-4 w-4 ml-1" />
                 </Link>
               </Button>

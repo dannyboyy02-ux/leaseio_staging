@@ -144,6 +144,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          billing_interval: string
           company_name: string | null
           created_at: string
           email: string | null
@@ -157,8 +158,10 @@ export type Database = {
           subscription_period_end: string | null
           subscription_status: string | null
           timezone: string | null
+          trial_ends_at: string | null
         }
         Insert: {
+          billing_interval?: string
           company_name?: string | null
           created_at?: string
           email?: string | null
@@ -172,8 +175,10 @@ export type Database = {
           subscription_period_end?: string | null
           subscription_status?: string | null
           timezone?: string | null
+          trial_ends_at?: string | null
         }
         Update: {
+          billing_interval?: string
           company_name?: string | null
           created_at?: string
           email?: string | null
@@ -187,6 +192,7 @@ export type Database = {
           subscription_period_end?: string | null
           subscription_status?: string | null
           timezone?: string | null
+          trial_ends_at?: string | null
         }
         Relationships: []
       }
@@ -315,6 +321,7 @@ export type Database = {
       }
       workspaces: {
         Row: {
+          billing_interval: string
           created_at: string
           default_notification_days: number
           document_limit: number
@@ -327,6 +334,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          billing_interval?: string
           created_at?: string
           default_notification_days?: number
           document_limit?: number
@@ -339,6 +347,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          billing_interval?: string
           created_at?: string
           default_notification_days?: number
           document_limit?: number
@@ -379,6 +388,7 @@ export type Database = {
       }
     }
     Enums: {
+      subscription_plan: "free" | "starter" | "pro" | "business"
       workspace_role: "admin" | "editor" | "viewer"
     }
     CompositeTypes: {
@@ -507,6 +517,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      subscription_plan: ["free", "starter", "pro", "business"],
       workspace_role: ["admin", "editor", "viewer"],
     },
   },
