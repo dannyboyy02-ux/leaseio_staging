@@ -61,7 +61,7 @@ export default function Integrations() {
     <AppLayout>
       <AppHeader
         title="Integrations"
-        subtitle="Connect LeaseOS with your other tools"
+        subtitle="Connect LeaseIO with your other tools"
       />
 
       <div className="p-6">
@@ -156,7 +156,7 @@ export default function Integrations() {
               <div className="p-4 rounded-lg bg-muted/50">
                 <h4 className="font-medium mb-2">2. Configure Settings</h4>
                 <p className="text-sm text-muted-foreground">
-                  Choose how data should flow between LeaseOS and your connected services.
+                  Choose how data should flow between LeaseIO and your connected services.
                 </p>
               </div>
               <div className="p-4 rounded-lg bg-muted/50">

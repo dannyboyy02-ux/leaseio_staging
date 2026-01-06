@@ -50,7 +50,7 @@ export default function Auth() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <FileText className="h-5 w-5" />
             </div>
-            <span className="font-display text-xl font-bold">LeaseOS</span>
+            <span className="font-display text-xl font-bold">LeaseIO</span>
           </Link>
 
           <Card>
@@ -258,7 +258,7 @@ export default function Auth() {
           </h1>
           <p className="text-primary-foreground/80 mb-8">
             Extract key terms, automate notifications, and sync with your accounting system. 
-            LeaseOS handles the complexity so you can focus on your business.
+            LeaseIO handles the complexity so you can focus on your business.
           </p>
           <div className="space-y-4">
             <div className="flex items-center gap-3">
