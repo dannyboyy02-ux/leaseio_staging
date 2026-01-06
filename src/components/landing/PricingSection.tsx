@@ -9,34 +9,33 @@ const plans = [
     price: '$49',
     period: '/month',
     description: 'Perfect for small portfolios and getting started.',
-    documents: '3 documents',
+    documents: '3 leases',
     features: [
-      'AI lease abstraction',
-      'Human review workflow',
-      'Email & SMS notifications',
-      'Renewal tracking',
-      'Escalation alerts',
-      'Basic reporting',
+      'AI lease extraction',
+      'Rent schedule tracking',
+      'Email notifications',
+      'Renewal & expiration alerts',
+      'One-click rent roll export',
+      'Document storage',
     ],
-    cta: 'Choose Pro',
+    cta: 'Start Free Trial',
     popular: false,
   },
   {
     name: 'Business',
     price: '$149',
     period: '/month',
-    description: 'For growing teams with larger portfolios.',
-    documents: 'Up to 20 documents',
+    description: 'For growing portfolios that need more.',
+    documents: 'Up to 20 leases',
     features: [
       'Everything in Pro',
-      'CSV & Excel export',
-      'Advanced reporting dashboards',
-      'QuickBooks Online integration',
-      'Ownership transfer',
+      'Advanced reporting',
+      'Portfolio analytics',
       'Priority support',
-      'Audit log access',
+      'Team access (coming soon)',
+      'QuickBooks sync (coming soon)',
     ],
-    cta: 'Choose Business',
+    cta: 'Start Free Trial',
     popular: true,
   },
 ];
@@ -47,10 +46,10 @@ export function PricingSection() {
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            Simple, transparent pricing
+            Simple pricing, no surprises
           </h2>
           <p className="text-lg text-muted-foreground">
-            Start with Pro and upgrade as your portfolio grows. No hidden fees.
+            Start with a 14-day free trial. No credit card required. Upgrade as your portfolio grows.
           </p>
         </div>
 
@@ -98,7 +97,7 @@ export function PricingSection() {
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-8">
-          All plans include a 14-day free trial. Cancel anytime.
+          Questions? <Link to="mailto:support@leaseio.app" className="underline">Contact us</Link> for custom enterprise pricing.
         </p>
       </div>
     </section>
