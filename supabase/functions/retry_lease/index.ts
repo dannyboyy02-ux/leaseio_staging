@@ -19,12 +19,24 @@ const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+interface RentPeriod {
+  period_start: string | null;
+  period_end: string | null;
+  monthly_amount: number | null;
+  annual_amount: number | null;
+  notes: string | null;
+}
+
 interface LeaseExtractionResult {
   landlord_name: string | null;
   tenant_name: string | null;
   property_address: string | null;
   lease_start: string | null;
   lease_end: string | null;
+  current_monthly_rent: number | null;
+  rent_escalation_type: string | null;
+  rent_schedule: RentPeriod[];
+  rent_commencement_date: string | null;
   base_rent_amount: string | null;
   base_rent_frequency: string | null;
   security_deposit: string | null;
@@ -164,17 +176,32 @@ async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
 }
 
 async function extractLeaseDataWithOpenAI(documentText: string): Promise<LeaseExtractionResult> {
-  const systemPrompt = `You are an expert commercial lease analyst. Extract key information from lease documents and identify potential risks.
+  const systemPrompt = `You are an expert commercial lease analyst. Extract key information following industry-standard lease abstraction.
 
-Extract the following and return as JSON:
+Extract and return as JSON:
 - landlord_name, tenant_name, property_address
 - lease_start, lease_end (ISO format YYYY-MM-DD)
+
+RENT SCHEDULE (extract complete rent history):
+- current_monthly_rent: Current monthly rent (number only)
+- rent_escalation_type: How rent increases (e.g., "3% annual", "CPI", "Step increases", "None")
+- rent_commencement_date: When rent payments begin (YYYY-MM-DD)
+- rent_schedule: Array of ALL rent periods [{
+    period_start: YYYY-MM-DD,
+    period_end: YYYY-MM-DD or null,
+    monthly_amount: number,
+    annual_amount: number,
+    notes: string
+  }]
+
+For leases with escalations, extract EACH rent period separately.
+
 - base_rent_amount (string with currency), base_rent_frequency
 - security_deposit, renewal_options, escalation_clauses, termination_clauses
 - key_dates: Array of [{date, description}]
 - risks: Array of [{title, severity (low/medium/high), explanation, citation_snippet, citation_page}]
 
-For risks, look for: unfavorable termination clauses, automatic renewals, excessive escalations, limited subletting rights, personal guarantees, missing provisions.
+For risks, look for: unfavorable termination clauses, automatic renewals, excessive escalations (>5% annual), limited subletting rights, personal guarantees, missing provisions.
 
 Return ONLY valid JSON, no markdown.`;
 
@@ -332,6 +359,9 @@ serve(async (req) => {
       throw error;
     }
 
+    // Delete existing rent schedules before re-inserting
+    await supabaseAdmin.from('rent_schedules').delete().eq('lease_id', leaseId);
+
     // Update lease record
     await supabaseAdmin
       .from('leases')
@@ -343,11 +373,32 @@ serve(async (req) => {
         lease_end: safeDate(leaseData.lease_end),
         base_rent_amount: leaseData.base_rent_amount,
         base_rent_frequency: leaseData.base_rent_frequency,
+        current_monthly_rent: leaseData.current_monthly_rent,
+        rent_escalation_type: leaseData.rent_escalation_type,
         extracted_json: leaseData,
         processed_at: new Date().toISOString(),
         error_message: null,
       })
       .eq('id', leaseId);
+
+    // Insert rent schedule entries
+    if (leaseData.rent_schedule && leaseData.rent_schedule.length > 0) {
+      const rentScheduleToInsert = leaseData.rent_schedule
+        .filter(period => period.period_start)
+        .map(period => ({
+          lease_id: leaseId,
+          period_start: safeDate(period.period_start),
+          period_end: safeDate(period.period_end),
+          monthly_amount: period.monthly_amount,
+          annual_amount: period.annual_amount,
+          notes: period.notes,
+        }));
+
+      if (rentScheduleToInsert.length > 0) {
+        await supabaseAdmin.from('rent_schedules').insert(rentScheduleToInsert);
+        console.log(`[retry_lease] Inserted ${rentScheduleToInsert.length} rent schedule entries`);
+      }
+    }
 
     // Insert risks
     if (leaseData.risks && leaseData.risks.length > 0) {

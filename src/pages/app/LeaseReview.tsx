@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/RentScheduleTable';
 
 interface ExtractedJson {
   property_address?: string;
@@ -35,6 +36,15 @@ interface ExtractedJson {
   escalation_clauses?: string;
   termination_clauses?: string;
   key_dates?: { date: string; description: string }[];
+  current_monthly_rent?: number;
+  rent_escalation_type?: string;
+  rent_schedule?: Array<{
+    period_start: string;
+    period_end: string | null;
+    monthly_amount: number | null;
+    annual_amount: number | null;
+    notes: string | null;
+  }>;
 }
 
 interface LeaseData {
@@ -47,6 +57,8 @@ interface LeaseData {
   lease_end: string | null;
   base_rent_amount: string | null;
   base_rent_frequency: string | null;
+  current_monthly_rent: number | null;
+  rent_escalation_type: string | null;
   extracted_json: ExtractedJson | null;
   uploaded_at: string;
   processed_at: string | null;
@@ -80,6 +92,7 @@ export default function LeaseReview() {
   const navigate = useNavigate();
   const [lease, setLease] = useState<LeaseData | null>(null);
   const [risks, setRisks] = useState<Risk[]>([]);
+  const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editableFields, setEditableFields] = useState<EditableFields>({
@@ -101,6 +114,7 @@ export default function LeaseReview() {
       if (!leaseId) return;
 
       try {
+        // Fetch lease data
         const { data: leaseData, error: leaseError } = await supabase
           .from('leases')
           .select('*')
@@ -111,7 +125,9 @@ export default function LeaseReview() {
         
         const typedLease: LeaseData = {
           ...leaseData,
-          extracted_json: leaseData.extracted_json as ExtractedJson | null
+          extracted_json: leaseData.extracted_json as ExtractedJson | null,
+          current_monthly_rent: leaseData.current_monthly_rent as number | null,
+          rent_escalation_type: leaseData.rent_escalation_type as string | null,
         };
         setLease(typedLease);
 
@@ -131,6 +147,7 @@ export default function LeaseReview() {
           termination_clauses: extracted.termination_clauses || '',
         });
 
+        // Fetch risks
         const { data: risksData, error: risksError } = await supabase
           .from('risks')
           .select('*')
@@ -138,6 +155,19 @@ export default function LeaseReview() {
 
         if (risksError) throw risksError;
         setRisks(risksData || []);
+
+        // Fetch rent schedule from database
+        const { data: rentScheduleData, error: rentScheduleError } = await supabase
+          .from('rent_schedules')
+          .select('*')
+          .eq('lease_id', leaseId)
+          .order('period_start', { ascending: true });
+
+        if (rentScheduleError) {
+          console.error('Error fetching rent schedule:', rentScheduleError);
+        } else {
+          setRentSchedule(rentScheduleData || []);
+        }
       } catch (error) {
         console.error('Error fetching lease:', error);
         toast.error('Failed to load lease');
@@ -407,17 +437,24 @@ export default function LeaseReview() {
               </CardContent>
             </Card>
 
-            {/* Financial Terms */}
+            {/* Rent Schedule - Industry Standard */}
+            <RentScheduleTable
+              rentSchedule={rentSchedule}
+              currentMonthlyRent={lease.current_monthly_rent}
+              rentEscalationType={lease.rent_escalation_type}
+            />
+
+            {/* Additional Financial Terms */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <DollarSign className="h-5 w-5" />
-                  Financial Terms
+                  Additional Financial Terms
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="base_rent_amount">Base Rent Amount</Label>
+                  <Label htmlFor="base_rent_amount">Base Rent (Legacy)</Label>
                   <Input
                     id="base_rent_amount"
                     value={editableFields.base_rent_amount}
@@ -444,7 +481,7 @@ export default function LeaseReview() {
                   />
                 </div>
                 <div className="sm:col-span-2 space-y-2">
-                  <Label htmlFor="escalation_clauses">Escalation Clauses</Label>
+                  <Label htmlFor="escalation_clauses">Escalation Clauses (Description)</Label>
                   <Textarea
                     id="escalation_clauses"
                     value={editableFields.escalation_clauses}
