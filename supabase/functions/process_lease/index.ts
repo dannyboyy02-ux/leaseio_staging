@@ -18,6 +18,15 @@ const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
 // Supabase
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+// Constants for validation
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const ALLOWED_LEASE_TYPES = ['master', 'amendment'] as const;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// PDF magic bytes: %PDF (0x25 0x50 0x44 0x46)
+const PDF_MAGIC_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
 
 interface RentPeriod {
   period_start: string | null;
@@ -47,6 +56,34 @@ interface LeaseExtractionResult {
   termination_clauses: string | null;
   key_dates: { date: string; description: string }[];
   risks: { title: string; severity: 'low' | 'medium' | 'high'; explanation: string; citation_snippet?: string; citation_page?: number }[];
+}
+
+// Validate UUID format
+function isValidUUID(id: string): boolean {
+  return UUID_REGEX.test(id);
+}
+
+// Check if file is a PDF by examining magic bytes
+function isPdfFile(bytes: ArrayBuffer): boolean {
+  const header = new Uint8Array(bytes.slice(0, 4));
+  return header.every((byte, index) => byte === PDF_MAGIC_BYTES[index]);
+}
+
+// Sanitize filename to prevent path traversal
+function sanitizeFilename(filename: string): string {
+  // Remove path components and dangerous characters
+  const sanitized = filename
+    .replace(/[\/\\]/g, '_')  // Replace path separators
+    .replace(/\.\./g, '_')     // Remove parent directory references
+    .replace(/[<>:"|?*\x00-\x1f]/g, '_')  // Remove invalid chars
+    .trim();
+  
+  // Ensure it's not empty and has reasonable length
+  if (!sanitized || sanitized.length > 255) {
+    return `lease_${Date.now()}.pdf`;
+  }
+  
+  return sanitized;
 }
 
 // Helper to sanitize date strings before inserting into Postgres DATE columns
@@ -352,7 +389,6 @@ serve(async (req) => {
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     // Create Supabase client with user token to verify auth
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3a3dveHhjcHJuamp1ZmtiemFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMjIzNzAsImV4cCI6MjA4Mjg5ODM3MH0.6ymyHJ5yDoLxnEHupdhcLUnile__H8HxN3bZ5x77jto';
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } }
     });
@@ -375,6 +411,7 @@ serve(async (req) => {
     const leaseType = formData.get('leaseType') as string || 'master';
     const parentLeaseId = formData.get('parentLeaseId') as string | null;
     
+    // Validate file exists
     if (!file) {
       return new Response(JSON.stringify({ error: 'No file provided' }), {
         status: 400,
@@ -382,18 +419,59 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[process_lease] Processing file: ${file.name}, size: ${file.size}`);
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      console.log(`[process_lease] File too large: ${file.size} bytes`);
+      return new Response(JSON.stringify({ error: 'File too large. Maximum size is 50MB.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Read file bytes for validation
+    const fileBytes = await file.arrayBuffer();
+    
+    // Validate file is actually a PDF using magic bytes
+    if (!isPdfFile(fileBytes)) {
+      console.log('[process_lease] File is not a valid PDF');
+      return new Response(JSON.stringify({ error: 'Invalid file type. Only PDF files are allowed.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate lease type
+    if (!ALLOWED_LEASE_TYPES.includes(leaseType as typeof ALLOWED_LEASE_TYPES[number])) {
+      console.log(`[process_lease] Invalid lease type: ${leaseType}`);
+      return new Response(JSON.stringify({ error: 'Invalid lease type. Must be "master" or "amendment".' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate parentLeaseId if provided
+    if (parentLeaseId && !isValidUUID(parentLeaseId)) {
+      console.log(`[process_lease] Invalid parentLeaseId format: ${parentLeaseId}`);
+      return new Response(JSON.stringify({ error: 'Invalid parent lease ID format.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Sanitize filename
+    const sanitizedFilename = sanitizeFilename(file.name);
+    console.log(`[process_lease] Processing file: ${sanitizedFilename}, size: ${file.size}`);
 
     // Create initial lease record
     const leaseId = crypto.randomUUID();
-    const storagePath = `${user.id}/${leaseId}/${file.name}`;
+    const storagePath = `${user.id}/${leaseId}/${sanitizedFilename}`;
     
     const { error: insertError } = await supabaseAdmin
       .from('leases')
       .insert({
         id: leaseId,
         user_id: user.id,
-        filename: file.name,
+        filename: sanitizedFilename,
         storage_path: storagePath,
         status: 'Processing',
       });
@@ -406,7 +484,6 @@ serve(async (req) => {
     console.log(`[process_lease] Created lease record: ${leaseId}`);
 
     // Upload file to storage
-    const fileBytes = await file.arrayBuffer();
     const { error: uploadError } = await supabaseAdmin.storage
       .from('leases')
       .upload(storagePath, fileBytes, {

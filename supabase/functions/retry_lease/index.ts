@@ -18,6 +18,10 @@ const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
 // Supabase
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface RentPeriod {
   period_start: string | null;
@@ -45,6 +49,11 @@ interface LeaseExtractionResult {
   termination_clauses: string | null;
   key_dates: { date: string; description: string }[];
   risks: { title: string; severity: 'low' | 'medium' | 'high'; explanation: string; citation_snippet?: string; citation_page?: number }[];
+}
+
+// Validate UUID format
+function isValidUUID(id: string): boolean {
+  return UUID_REGEX.test(id);
 }
 
 function safeDate(input: string | null | undefined): string | null {
@@ -257,7 +266,6 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3a3dveHhjcHJuamp1ZmtiemFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczMjIzNzAsImV4cCI6MjA4Mjg5ODM3MH0.6ymyHJ5yDoLxnEHupdhcLUnile__H8HxN3bZ5x77jto';
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } }
     });
@@ -272,11 +280,47 @@ serve(async (req) => {
     
     console.log(`[retry_lease] User authenticated: ${user.id}`);
 
-    const body = await req.json();
-    const { leaseId } = body;
+    // Parse and validate request body
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate body structure
+    if (!body || typeof body !== 'object') {
+      return new Response(JSON.stringify({ error: 'Request body must be an object' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { leaseId } = body as { leaseId?: unknown };
     
+    // Validate leaseId exists
     if (!leaseId) {
       return new Response(JSON.stringify({ error: 'Missing leaseId' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate leaseId is a string
+    if (typeof leaseId !== 'string') {
+      return new Response(JSON.stringify({ error: 'leaseId must be a string' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate leaseId is a valid UUID format
+    if (!isValidUUID(leaseId)) {
+      console.log(`[retry_lease] Invalid leaseId format: ${leaseId}`);
+      return new Response(JSON.stringify({ error: 'Invalid leaseId format. Must be a valid UUID.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
