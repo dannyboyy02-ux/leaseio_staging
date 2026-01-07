@@ -3,7 +3,6 @@ import { Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
-import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
 import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
 import { QuickStats } from '@/components/dashboard/QuickStats';
 import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
@@ -11,9 +10,6 @@ import { useApp } from '@/contexts/AppContext';
 
 export default function Dashboard() {
   const { user, workspace } = useApp();
-
-  // Determine if user is new (for onboarding display)
-  const isNewUser = workspace?.documentsUsed === 0;
 
   return (
     <AppLayout>
@@ -36,9 +32,6 @@ export default function Dashboard() {
 
         {/* Quick Stats */}
         <QuickStats />
-
-        {/* Onboarding - Show for new users */}
-        {isNewUser && <OnboardingChecklist />}
 
         {/* Upcoming Events */}
         <UpcomingEvents />
