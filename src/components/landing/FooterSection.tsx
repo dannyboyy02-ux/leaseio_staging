@@ -70,13 +70,8 @@ export function FooterSection() {
             <h4 className="font-semibold text-foreground mb-4">Support</h4>
             <ul className="space-y-2">
               <li>
-                <a href="mailto:support@leaseio.com" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <a href="mailto:support@leaseio.app" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Contact
-                </a>
-              </li>
-              <li>
-                <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Status
                 </a>
               </li>
             </ul>
@@ -87,14 +82,6 @@ export function FooterSection() {
           <p className="text-sm text-muted-foreground">
             © {new Date().getFullYear()} LeaseIO. All rights reserved.
           </p>
-          <div className="flex items-center gap-4">
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Twitter
-            </a>
-            <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              LinkedIn
-            </a>
-          </div>
         </div>
       </div>
     </footer>
