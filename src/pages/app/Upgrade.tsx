@@ -11,6 +11,7 @@ import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { PLANS, PLAN_ORDER, ANNUAL_DISCOUNT_PERCENT, isUpgrade, type BillingInterval } from '@/config/pricing';
 import type { SubscriptionPlan } from '@/types';
+import { useToast } from '@/hooks/use-toast';
 
 const featureHighlights: Record<string, { title: string; description: string }> = {
   reports: {
@@ -33,6 +34,14 @@ export default function Upgrade() {
   const { workspace } = useApp();
   const currentPlan = (workspace?.plan || 'free') as SubscriptionPlan;
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
+  const { toast } = useToast();
+
+  const handlePlanAction = (planId: string, action: 'upgrade' | 'downgrade') => {
+    toast({
+      title: `${action === 'upgrade' ? 'Upgrade' : 'Downgrade'} to ${PLANS[planId as SubscriptionPlan].name}`,
+      description: 'Payment integration coming soon. Contact support@leaseio.app to change your plan.',
+    });
+  };
 
   const highlight = feature ? featureHighlights[feature] : null;
 
@@ -97,9 +106,12 @@ export default function Upgrade() {
             const isCurrent = currentPlan === planId;
             const isUpgradeOption = isUpgrade(currentPlan, planId);
             const isDowngradeOption = !isCurrent && !isUpgradeOption;
-            const price = billingInterval === 'annual' 
-              ? Math.round(plan.price.annual / 12) 
-              : plan.price.monthly;
+            const monthlyPrice = plan.price.monthly;
+            const annualTotal = plan.price.annual;
+            const annualMonthly = Math.round(annualTotal / 12);
+            const annualSavings = (monthlyPrice * 12) - annualTotal;
+            const isAnnual = billingInterval === 'annual';
+            const displayPrice = isAnnual ? annualMonthly : monthlyPrice;
 
             return (
               <Card
@@ -124,14 +136,21 @@ export default function Upgrade() {
                 )}
                 <CardHeader className="pt-8 pb-4">
                   <CardTitle className="text-lg">{plan.name}</CardTitle>
-                  <div className="flex items-baseline gap-1 mt-2">
-                    {price === 0 ? (
+                  <div className="mt-2">
+                    {displayPrice === 0 ? (
                       <span className="text-3xl font-bold">Free</span>
                     ) : (
-                      <>
-                        <span className="text-3xl font-bold">${price}</span>
-                        <span className="text-muted-foreground">/mo</span>
-                      </>
+                      <div className="space-y-1">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-bold">${displayPrice}</span>
+                          <span className="text-muted-foreground">/mo</span>
+                        </div>
+                        {isAnnual && (
+                          <div className="text-xs text-muted-foreground">
+                            ${annualTotal}/year · Save ${annualSavings}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                   <CardDescription className="mt-2">{plan.description}</CardDescription>
@@ -153,11 +172,11 @@ export default function Upgrade() {
                       Current Plan
                     </Button>
                   ) : isUpgradeOption ? (
-                    <Button variant="accent" className="w-full">
+                    <Button variant="accent" className="w-full" onClick={() => handlePlanAction(planId, 'upgrade')}>
                       Upgrade to {plan.name}
                     </Button>
                   ) : isDowngradeOption && planId !== 'free' ? (
-                    <Button variant="outline" className="w-full">
+                    <Button variant="outline" className="w-full" onClick={() => handlePlanAction(planId, 'downgrade')}>
                       Downgrade to {plan.name}
                     </Button>
                   ) : planId === 'free' ? (
@@ -165,7 +184,7 @@ export default function Upgrade() {
                       Free Tier
                     </Button>
                   ) : (
-                    <Button variant="outline" className="w-full">
+                    <Button variant="outline" className="w-full" onClick={() => handlePlanAction(planId, 'upgrade')}>
                       Select Plan
                     </Button>
                   )}

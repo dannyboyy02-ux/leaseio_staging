@@ -1,10 +1,11 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { FileText, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 
 export function LandingNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   const navLinks = [
     { href: '#features', label: 'Product' },
@@ -12,6 +13,22 @@ export function LandingNav() {
     { href: '#security', label: 'Security' },
     { href: '#faq', label: 'FAQ' },
   ];
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    // If we're not on the landing page, navigate there first
+    if (location.pathname !== '/') {
+      e.preventDefault();
+      window.location.href = '/' + href;
+      return;
+    }
+    
+    // If on landing page, smooth scroll to section
+    e.preventDefault();
+    const element = document.querySelector(href);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
@@ -33,6 +50,7 @@ export function LandingNav() {
               <a
                 key={link.href}
                 href={link.href}
+                onClick={(e) => handleNavClick(e, link.href)}
                 className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 {link.label}
@@ -69,7 +87,10 @@ export function LandingNav() {
                 key={link.href}
                 href={link.href}
                 className="block text-sm font-medium text-muted-foreground hover:text-foreground"
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={(e) => {
+                  handleNavClick(e, link.href);
+                  setMobileMenuOpen(false);
+                }}
               >
                 {link.label}
               </a>

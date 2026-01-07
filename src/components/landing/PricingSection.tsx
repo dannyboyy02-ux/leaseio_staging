@@ -48,9 +48,12 @@ export function PricingSection() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
           {PLAN_ORDER.map((planId) => {
             const plan = PLANS[planId];
-            const price = billingInterval === 'annual' 
-              ? Math.round(plan.price.annual / 12) 
-              : plan.price.monthly;
+            const monthlyPrice = plan.price.monthly;
+            const annualTotal = plan.price.annual;
+            const annualMonthly = Math.round(annualTotal / 12);
+            const annualSavings = (monthlyPrice * 12) - annualTotal;
+            const isAnnual = billingInterval === 'annual';
+            const displayPrice = isAnnual ? annualMonthly : monthlyPrice;
             
             return (
               <Card 
@@ -68,13 +71,20 @@ export function PricingSection() {
                 <CardHeader className="text-center pb-2 pt-6">
                   <h3 className="font-display text-xl font-bold text-foreground">{plan.name}</h3>
                   <div className="mt-3">
-                    {price === 0 ? (
+                    {displayPrice === 0 ? (
                       <span className="text-3xl font-bold text-foreground">Free</span>
                     ) : (
-                      <>
-                        <span className="text-3xl font-bold text-foreground">${price}</span>
-                        <span className="text-muted-foreground">/mo</span>
-                      </>
+                      <div className="space-y-1">
+                        <div>
+                          <span className="text-3xl font-bold text-foreground">${displayPrice}</span>
+                          <span className="text-muted-foreground">/mo</span>
+                        </div>
+                        {isAnnual && (
+                          <div className="text-xs text-muted-foreground">
+                            ${annualTotal}/year · Save ${annualSavings}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">{plan.description}</p>

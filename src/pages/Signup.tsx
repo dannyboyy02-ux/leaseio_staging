@@ -25,9 +25,17 @@ const timezones = [
   { value: 'Australia/Sydney', label: 'Sydney (AEST)' },
 ];
 
+const PLAN_DISPLAY_NAMES: Record<string, string> = {
+  free: 'Free',
+  starter: 'Starter',
+  pro: 'Pro',
+  business: 'Business',
+};
+
 export default function Signup() {
   const [searchParams] = useSearchParams();
-  const preselectedPlan = searchParams.get('plan') || 'pro';
+  const preselectedPlan = searchParams.get('plan') || 'free';
+  const planDisplayName = PLAN_DISPLAY_NAMES[preselectedPlan] || 'Free';
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -139,7 +147,7 @@ export default function Signup() {
           <CardHeader className="text-center pb-2">
             <h1 className="font-display text-2xl font-bold text-foreground">Create your account</h1>
             <p className="text-muted-foreground">
-              Start with the {preselectedPlan === 'business' ? 'Business' : 'Pro'} plan
+              Start with the {planDisplayName} plan
             </p>
           </CardHeader>
           <CardContent>
