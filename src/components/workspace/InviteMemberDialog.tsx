@@ -36,13 +36,13 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
 
   const handleInvite = async () => {
     if (!email.trim()) {
-      toast.error("Please enter a valid email address.");
+      toast.error("notifications@theleaseio.com");
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      toast.error("Please enter a valid email address.");
+      toast.error("notifications@theleaseio.com");
       return;
     }
 
