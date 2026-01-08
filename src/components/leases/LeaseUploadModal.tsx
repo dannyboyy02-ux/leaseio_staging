@@ -85,13 +85,16 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
 
         if (error) return;
 
-        if (lease.status === 'Processed' || lease.status === 'Review') {
+        if (lease.status === 'Ready') {
           setProcessingStatus({ stage: 'saving', message: 'Processing complete!' });
           setResultLeaseId(pendingLeaseId);
           setStep('success');
           toast.success('Lease processed successfully!');
           setPendingLeaseId(null);
-        } else if (lease.status === 'Error') {
+          if (onSuccess) {
+            onSuccess(pendingLeaseId);
+          }
+        } else if (lease.status === 'Failed') {
           setErrorMessage(lease.error_message || 'Processing failed');
           setStep('error');
           toast.error('Failed to process lease');
@@ -178,9 +181,8 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         setPendingLeaseId(result.leaseId);
         setProcessingStatus({ stage: 'extracting', message: 'Extracting lease data...' });
         
-        // The polling effect will handle success/error states
-        // But if result indicates completion, handle it immediately
-        if (result.status === 'Processed' || result.status === 'Review') {
+        // If result.success is true, the processing completed synchronously
+        if (result.success) {
           setResultLeaseId(result.leaseId);
           setStep('success');
           toast.success('Lease processed successfully!');
@@ -190,6 +192,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
             onSuccess(result.leaseId);
           }
         }
+        // Otherwise polling will handle success/error states
       }
 
     } catch (error) {
@@ -455,16 +458,28 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
             <p className="text-sm font-medium mb-2">Lease Extracted Successfully!</p>
-            <p className="text-xs text-muted-foreground text-center max-w-xs mb-6">
-              Your lease document has been analyzed and the key information has been extracted. 
-              Review the details to ensure accuracy.
+            <p className="text-xs text-muted-foreground text-center max-w-xs mb-4">
+              Your lease document has been analyzed and the key information has been extracted.
             </p>
+            <p className="text-sm font-medium mb-4">Would you like to upload another lease?</p>
             <div className="flex gap-3 w-full">
-              <Button variant="outline" onClick={handleClose} className="flex-1">
-                Upload Another
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  // Reset state for another upload
+                  setFile(null);
+                  setLeaseType('master');
+                  setParentLeaseId('');
+                  setErrorMessage('');
+                  setResultLeaseId('');
+                  setStep('upload');
+                }} 
+                className="flex-1"
+              >
+                Yes, Upload Another
               </Button>
               <Button variant="accent" onClick={handleViewLease} className="flex-1">
-                Review Lease
+                No, Review Lease
               </Button>
             </div>
           </div>
