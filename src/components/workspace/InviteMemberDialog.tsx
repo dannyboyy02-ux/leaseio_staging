@@ -36,13 +36,13 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
 
   const handleInvite = async () => {
     if (!email.trim()) {
-      toast.error("notifications@theleaseio.com");
+      toast.error("Please enter a valid email address.");
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      toast.error("notifications@theleaseio.com");
+      toast.error("Please enter a valid email address.");
       return;
     }
 
@@ -97,15 +97,16 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
       } else {
         // Create pending invite - user_id will be set when they sign up
         // For now, create with a placeholder that will be updated
-        const { error } = await supabase.from("workspace_members").insert({
-          workspace_id: workspaceId,
-          user_id: workspaceId, // Temporary: will be workspace owner's ID for RLS
-          role: role,
-          invited_email: email.toLowerCase().trim(),
-          invited_at: new Date().toISOString(),
+        const { data, error } = await supabase.functions.invoke("invite_member", {
+          body: {
+            workspaceId,
+            email: email.toLowerCase().trim(),
+            role,
+          },
         });
 
         if (error) throw error;
+
         toast.success(`Invitation sent to ${email}`);
       }
 
