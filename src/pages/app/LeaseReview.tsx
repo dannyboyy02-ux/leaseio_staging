@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
-import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -431,7 +430,6 @@ export default function LeaseReview() {
         subtitle={lease.filename}
         actions={
           <div className="flex items-center gap-2">
-            <LanguageToggle />
             <Button variant="outline" onClick={() => navigate('/app/leases')}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               {t('lease.back')}
