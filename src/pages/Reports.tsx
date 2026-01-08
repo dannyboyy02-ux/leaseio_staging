@@ -5,44 +5,46 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Link } from 'react-router-dom';
 import { RentRollExport } from '@/components/reports/RentRollExport';
 
 const reports = [
   {
     id: 'portfolio',
-    title: 'Portfolio Overview',
-    description: 'High-level summary of all active leases, total committed rent, and key metrics.',
+    titleKey: 'reports.portfolio_overview',
+    descKey: 'reports.portfolio_overview_desc',
     icon: PieChart,
   },
   {
     id: 'renewals',
-    title: 'Renewal Pipeline',
-    description: 'Track upcoming renewals with projected impact and action recommendations.',
+    titleKey: 'reports.renewal_pipeline',
+    descKey: 'reports.renewal_pipeline_desc',
     icon: Calendar,
   },
   {
     id: 'escalations',
-    title: 'Escalation Calendar',
-    description: 'View all scheduled rent escalations with projected increases.',
+    titleKey: 'reports.escalation_calendar',
+    descKey: 'reports.escalation_calendar_desc',
     icon: TrendingUp,
   },
   {
     id: 'projections',
-    title: 'Rent Projections',
-    description: 'Forecast future rent obligations based on current lease terms and escalations.',
+    titleKey: 'reports.rent_projections',
+    descKey: 'reports.rent_projections_desc',
     icon: BarChart3,
   },
 ];
 
 export default function Reports() {
   const { canAccessFeature } = useApp();
+  const { t } = useLanguage();
   const hasAccess = canAccessFeature('business');
 
   if (!hasAccess) {
     return (
       <AppLayout>
-        <AppHeader title="Reports" subtitle="Portfolio analytics and insights" />
+        <AppHeader title={t('reports.title')} subtitle={t('reports.subtitle')} />
 
         <div className="p-6">
           {/* Rent Roll Export is available to all users */}
@@ -55,15 +57,14 @@ export default function Reports() {
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-6">
                 <Lock className="h-8 w-8 text-muted-foreground" />
               </div>
-              <Badge variant="business" className="mb-4">Business Plan</Badge>
-              <h3 className="text-lg font-semibold mb-2">Unlock Advanced Reports</h3>
+              <Badge variant="business" className="mb-4">{t('common.business_plan')}</Badge>
+              <h3 className="text-lg font-semibold mb-2">{t('reports.unlock_advanced')}</h3>
               <p className="text-sm text-muted-foreground max-w-md mb-6">
-                Upgrade to the Business plan to access portfolio analytics, renewal pipelines, 
-                escalation calendars, and rent projections.
+                {t('reports.unlock_desc')}
               </p>
               <Button variant="accent" size="lg" asChild>
                 <Link to="/app/upgrade?feature=reports">
-                  Upgrade to Business
+                  {t('integrations.upgrade_business')}
                 </Link>
               </Button>
             </CardContent>
@@ -76,12 +77,12 @@ export default function Reports() {
   return (
     <AppLayout>
       <AppHeader
-        title="Reports"
-        subtitle="Portfolio analytics and insights"
+        title={t('reports.title')}
+        subtitle={t('reports.subtitle')}
         actions={
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
-            Export All
+            {t('reports.export_all')}
           </Button>
         }
       />
@@ -106,15 +107,15 @@ export default function Reports() {
                     <report.icon className="h-5 w-5" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">{report.title}</CardTitle>
+                    <CardTitle className="text-base">{t(report.titleKey)}</CardTitle>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <CardDescription className="mb-4">{report.description}</CardDescription>
+                <CardDescription className="mb-4">{t(report.descKey)}</CardDescription>
                 <div className="flex gap-2">
                   <Button variant="secondary" className="flex-1">
-                    View Report
+                    {t('reports.view_report')}
                   </Button>
                   <Button variant="ghost" size="icon">
                     <Download className="h-4 w-4" />
@@ -128,15 +129,15 @@ export default function Reports() {
         {/* Sample Chart Placeholder */}
         <Card className="mt-8">
           <CardHeader>
-            <CardTitle>Monthly Rent Overview</CardTitle>
-            <CardDescription>Total committed rent across all active leases</CardDescription>
+            <CardTitle>{t('reports.monthly_overview')}</CardTitle>
+            <CardDescription>{t('reports.monthly_overview_desc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-64 flex items-center justify-center bg-muted/30 rounded-lg border border-dashed border-border">
               <div className="text-center">
                 <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
                 <p className="text-sm text-muted-foreground">
-                  Charts will appear once you have finalized leases
+                  {t('reports.charts_appear')}
                 </p>
               </div>
             </div>

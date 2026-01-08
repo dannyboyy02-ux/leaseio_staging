@@ -28,6 +28,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -53,6 +54,7 @@ const invoices = [
 export default function AccountSettings() {
   const { user, workspace, refreshProfile } = useApp();
   const { user: authUser } = useAuth();
+  const { t } = useLanguage();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -71,7 +73,7 @@ export default function AccountSettings() {
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  // Sync form with user data when it loads
+
   useEffect(() => {
     if (user) {
       setFirstName(user.firstName || '');
@@ -152,7 +154,6 @@ export default function AccountSettings() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Fetch all user data
       const [leasesRes, profileRes] = await Promise.all([
         supabase.from('leases').select('*').eq('user_id', user.id),
         supabase.from('profiles').select('*').eq('id', user.id).single(),
@@ -164,7 +165,6 @@ export default function AccountSettings() {
         leases: leasesRes.data,
       };
 
-      // Create and download JSON file
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -190,30 +190,30 @@ export default function AccountSettings() {
 
   return (
     <AppLayout>
-      <AppHeader title="Account Settings" subtitle="Manage your personal account" />
+      <AppHeader title={t('account.title')} subtitle={t('account.subtitle')} />
 
       <div className="p-6">
         <Tabs defaultValue="profile">
           <TabsList className="mb-6">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
-              Profile
+              {t('account.profile')}
             </TabsTrigger>
             <TabsTrigger value="security" className="gap-2">
               <Lock className="h-4 w-4" />
-              Security
+              {t('account.security')}
             </TabsTrigger>
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
-              Notifications
+              {t('account.notifications')}
             </TabsTrigger>
             <TabsTrigger value="data" className="gap-2">
               <Shield className="h-4 w-4" />
-              Data & Privacy
+              {t('account.data_privacy')}
             </TabsTrigger>
             <TabsTrigger value="subscription" className="gap-2">
               <CreditCard className="h-4 w-4" />
-              Subscription
+              {t('account.subscription')}
             </TabsTrigger>
           </TabsList>
 
@@ -221,13 +221,13 @@ export default function AccountSettings() {
           <TabsContent value="profile" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Personal Information</CardTitle>
-                <CardDescription>Update your personal details</CardDescription>
+                <CardTitle>{t('account.personal_info')}</CardTitle>
+                <CardDescription>{t('account.update_details')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="first-name">First Name</Label>
+                    <Label htmlFor="first-name">{t('account.first_name')}</Label>
                     <Input
                       id="first-name"
                       value={firstName}
@@ -235,7 +235,7 @@ export default function AccountSettings() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="last-name">Last Name</Label>
+                    <Label htmlFor="last-name">{t('account.last_name')}</Label>
                     <Input
                       id="last-name"
                       value={lastName}
@@ -244,7 +244,7 @@ export default function AccountSettings() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t('account.email')}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -253,7 +253,7 @@ export default function AccountSettings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone (for SMS notifications)</Label>
+                  <Label htmlFor="phone">{t('account.phone')}</Label>
                   <Input
                     id="phone"
                     type="tel"
@@ -263,7 +263,7 @@ export default function AccountSettings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="company">Company Name</Label>
+                  <Label htmlFor="company">{t('account.company')}</Label>
                   <Input
                     id="company"
                     value={companyName}
@@ -271,7 +271,7 @@ export default function AccountSettings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="user-timezone">Timezone</Label>
+                  <Label htmlFor="user-timezone">{t('account.timezone')}</Label>
                   <Select value={timezone} onValueChange={setTimezone}>
                     <SelectTrigger id="user-timezone">
                       <SelectValue placeholder="Select timezone" />
@@ -291,7 +291,7 @@ export default function AccountSettings() {
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  {isSaving ? 'Saving...' : 'Save Changes'}
+                  {isSaving ? t('account.saving') : t('account.save_changes')}
                 </Button>
               </CardContent>
             </Card>
@@ -301,12 +301,12 @@ export default function AccountSettings() {
           <TabsContent value="security" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Change Password</CardTitle>
-                <CardDescription>Update your account password</CardDescription>
+                <CardTitle>{t('account.change_password')}</CardTitle>
+                <CardDescription>{t('account.update_password')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="current-password">Current Password</Label>
+                  <Label htmlFor="current-password">{t('account.current_password')}</Label>
                   <div className="relative">
                     <Input
                       id="current-password"
@@ -326,7 +326,7 @@ export default function AccountSettings() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
+                  <Label htmlFor="new-password">{t('account.new_password')}</Label>
                   <Input
                     id="new-password"
                     type={showPassword ? 'text' : 'password'}
@@ -335,7 +335,7 @@ export default function AccountSettings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <Label htmlFor="confirm-password">{t('account.confirm_password')}</Label>
                   <Input
                     id="confirm-password"
                     type={showPassword ? 'text' : 'password'}
@@ -347,15 +347,15 @@ export default function AccountSettings() {
                   {isChangingPassword ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : null}
-                  {isChangingPassword ? 'Updating...' : 'Update Password'}
+                  {isChangingPassword ? t('account.updating') : t('account.update_password_btn')}
                 </Button>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Recent Security Activity</CardTitle>
-                <CardDescription>Review recent logins and security events</CardDescription>
+                <CardTitle>{t('account.security_activity')}</CardTitle>
+                <CardDescription>{t('account.review_logins')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -364,7 +364,7 @@ export default function AccountSettings() {
                       <p className="text-sm font-medium">Login from Chrome on macOS</p>
                       <p className="text-xs text-muted-foreground">New York, NY • 2 hours ago</p>
                     </div>
-                    <span className="text-xs text-success">Current session</span>
+                    <span className="text-xs text-success">{t('account.current_session')}</span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-border">
                     <div>
@@ -374,13 +374,13 @@ export default function AccountSettings() {
                   </div>
                   <div className="flex items-center justify-between py-2">
                     <div>
-                      <p className="text-sm font-medium">Password changed</p>
+                      <p className="text-sm font-medium">{t('account.password_changed')}</p>
                       <p className="text-xs text-muted-foreground">30 days ago</p>
                     </div>
                   </div>
                 </div>
                 <Button variant="outline" className="w-full mt-4">
-                  Log out of other sessions
+                  {t('account.logout_other')}
                 </Button>
               </CardContent>
             </Card>
@@ -390,15 +390,15 @@ export default function AccountSettings() {
           <TabsContent value="notifications" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Notification Preferences</CardTitle>
-                <CardDescription>Choose how you want to receive alerts</CardDescription>
+                <CardTitle>{t('account.notification_prefs')}</CardTitle>
+                <CardDescription>{t('account.choose_alerts')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium">Email Notifications</p>
+                    <p className="font-medium">{t('account.email_notifications')}</p>
                     <p className="text-sm text-muted-foreground">
-                      Receive lease alerts via email
+                      {t('account.email_notifications_desc')}
                     </p>
                   </div>
                   <Switch
@@ -408,9 +408,9 @@ export default function AccountSettings() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium">SMS Notifications</p>
+                    <p className="font-medium">{t('account.sms_notifications')}</p>
                     <p className="text-sm text-muted-foreground">
-                      Receive critical alerts via SMS
+                      {t('account.sms_notifications_desc')}
                     </p>
                   </div>
                   <Switch
@@ -420,9 +420,9 @@ export default function AccountSettings() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium">Quiet Hours</p>
+                    <p className="font-medium">{t('account.quiet_hours')}</p>
                     <p className="text-sm text-muted-foreground">
-                      Don't send notifications between 10 PM - 7 AM
+                      {t('account.quiet_hours_desc')}
                     </p>
                   </div>
                   <Switch
@@ -438,15 +438,14 @@ export default function AccountSettings() {
           <TabsContent value="data" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Export Your Data</CardTitle>
+                <CardTitle>{t('account.export_data')}</CardTitle>
                 <CardDescription>
-                  Download a copy of all your data in this workspace
+                  {t('account.export_data_desc')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  This will create a downloadable archive containing all your leases, 
-                  extracted data, and account information.
+                  {t('account.export_archive')}
                 </p>
                 <Button variant="outline" onClick={handleExportData} disabled={isExporting}>
                   {isExporting ? (
@@ -454,45 +453,43 @@ export default function AccountSettings() {
                   ) : (
                     <Download className="h-4 w-4 mr-2" />
                   )}
-                  {isExporting ? 'Exporting...' : 'Export Data'}
+                  {isExporting ? t('account.exporting') : t('account.export_btn')}
                 </Button>
               </CardContent>
             </Card>
 
             <Card className="border-destructive/50">
               <CardHeader>
-                <CardTitle className="text-destructive">Delete Account</CardTitle>
+                <CardTitle className="text-destructive">{t('account.delete_account')}</CardTitle>
                 <CardDescription>
-                  Permanently delete your account and all associated data
+                  {t('account.delete_account_desc')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  This action cannot be undone. All your data, including leases, 
-                  extracted information, and workspace settings will be permanently deleted.
+                  {t('account.delete_warning')}
                 </p>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive">
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Account
+                      {t('account.delete_account')}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogTitle>{t('account.delete_confirm')}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete your 
-                        account and remove all your data from our servers.
+                        {t('account.delete_confirm_desc')}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
                       <AlertDialogAction 
                         className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         onClick={handleDeleteAccount}
                       >
-                        Delete Account
+                        {t('account.delete_account')}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -508,7 +505,7 @@ export default function AccountSettings() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    Current Plan
+                    {t('account.current_plan')}
                     <Badge variant={
                       workspace?.plan === 'business' ? 'business' : 
                       workspace?.plan === 'pro' ? 'pro' : 
@@ -518,7 +515,7 @@ export default function AccountSettings() {
                     </Badge>
                   </CardTitle>
                   <CardDescription>
-                    Your subscription renews on{' '}
+                    {t('account.renews_on')}{' '}
                     {new Date(workspace?.renewalDate || '').toLocaleDateString('en-US', {
                       month: 'long',
                       day: 'numeric',
@@ -530,7 +527,7 @@ export default function AccountSettings() {
                   <div className="space-y-4">
                     <div>
                       <div className="flex items-baseline justify-between mb-2">
-                        <span className="text-sm font-medium">Document Usage</span>
+                        <span className="text-sm font-medium">{t('account.document_usage')}</span>
                         <span className="text-sm text-muted-foreground">
                           {workspace?.documentsUsed} / {workspace?.documentLimit}
                         </span>
@@ -549,7 +546,7 @@ export default function AccountSettings() {
                     </div>
                     <Button variant="outline" className="w-full">
                       <CreditCard className="h-4 w-4 mr-2" />
-                      Manage Payment Method
+                      {t('account.manage_payment')}
                     </Button>
                   </div>
                 </CardContent>
@@ -557,8 +554,8 @@ export default function AccountSettings() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Billing Contact</CardTitle>
-                  <CardDescription>Invoices are sent to this email</CardDescription>
+                  <CardTitle>{t('account.billing_contact')}</CardTitle>
+                  <CardDescription>{t('account.invoices_sent')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -567,7 +564,7 @@ export default function AccountSettings() {
                       <p className="text-sm text-muted-foreground">{user?.email || 'billing@example.com'}</p>
                     </div>
                     <Button variant="outline" size="sm">
-                      Update Billing Contact
+                      {t('account.update_billing')}
                     </Button>
                   </div>
                 </CardContent>
@@ -576,7 +573,7 @@ export default function AccountSettings() {
 
             {/* Plans */}
             <div>
-              <h2 className="text-lg font-semibold mb-4">Available Plans</h2>
+              <h2 className="text-lg font-semibold mb-4">{t('account.available_plans')}</h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {PLAN_ORDER.map((planId, index) => {
                   const plan = PLANS[planId];
@@ -603,7 +600,7 @@ export default function AccountSettings() {
                         <CardTitle className="text-base">{plan.name}</CardTitle>
                         <div className="flex items-baseline gap-1 mt-1">
                           {plan.price.monthly === 0 ? (
-                            <span className="text-2xl font-bold">Free</span>
+                            <span className="text-2xl font-bold">{t('account.free')}</span>
                           ) : (
                             <>
                               <span className="text-2xl font-bold">${plan.price.monthly}</span>
@@ -612,7 +609,7 @@ export default function AccountSettings() {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {plan.documentLimit} {plan.documentLimit === 1 ? 'lease' : 'leases'}
+                          {plan.documentLimit} {plan.documentLimit === 1 ? t('account.lease') : t('account.leases')}
                         </p>
                       </CardHeader>
                       <CardContent className="flex-1 flex flex-col">
@@ -626,19 +623,19 @@ export default function AccountSettings() {
                         </ul>
                         {isCurrent ? (
                           <Button variant="secondary" size="sm" className="w-full" disabled>
-                            Current
+                            {t('account.current')}
                           </Button>
                         ) : isUpgradeOption ? (
                           <Button variant="accent" size="sm" className="w-full" asChild>
-                            <Link to="/app/upgrade">Upgrade</Link>
+                            <Link to="/app/upgrade">{t('common.upgrade')}</Link>
                           </Button>
                         ) : planId !== 'free' ? (
                           <Button variant="outline" size="sm" className="w-full">
-                            Downgrade
+                            {t('account.downgrade')}
                           </Button>
                         ) : (
                           <Button variant="ghost" size="sm" className="w-full" disabled>
-                            Free Tier
+                            {t('account.free_tier')}
                           </Button>
                         )}
                       </CardContent>
@@ -651,8 +648,8 @@ export default function AccountSettings() {
             {/* Invoices */}
             <Card>
               <CardHeader>
-                <CardTitle>Invoice History</CardTitle>
-                <CardDescription>Download past invoices for your records</CardDescription>
+                <CardTitle>{t('account.invoice_history')}</CardTitle>
+                <CardDescription>{t('account.download_invoices')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="divide-y divide-border">
@@ -687,34 +684,32 @@ export default function AccountSettings() {
             {/* Cancel Subscription */}
             <Card className="border-destructive/50">
               <CardHeader>
-                <CardTitle className="text-destructive">Cancel Subscription</CardTitle>
+                <CardTitle className="text-destructive">{t('account.cancel_subscription')}</CardTitle>
                 <CardDescription>
-                  Cancel your subscription at the end of the current billing period
+                  {t('account.cancel_subscription_desc')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Your subscription will remain active until the end of your current billing period.
-                  You can reactivate anytime before then.
+                  {t('account.cancel_warning')}
                 </p>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive">
-                      Cancel Subscription
+                      {t('account.cancel_subscription')}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Cancel your subscription?</AlertDialogTitle>
+                      <AlertDialogTitle>{t('account.cancel_confirm')}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Your subscription will remain active until the end of your current billing period.
-                        After that, you'll lose access to premium features.
+                        {t('account.cancel_confirm_desc')}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Keep Subscription</AlertDialogCancel>
+                      <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
                       <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        Cancel Subscription
+                        {t('account.cancel_subscription')}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
