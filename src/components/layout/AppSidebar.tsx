@@ -13,11 +13,13 @@ import {
   Building2,
   HelpCircle,
   Lock,
-  Upload
+  Upload,
+  Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
@@ -31,17 +33,17 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const mainNavItems = [
-  { title: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
-  { title: 'Leases', href: '/app/leases', icon: FileText },
-  { title: 'Imports', href: '/app/imports', icon: Upload },
-  { title: 'Reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
-  { title: 'Notifications', href: '/app/notifications', icon: Bell },
-  { title: 'Integrations', href: '/app/integrations', icon: Plug },
+  { title: 'nav.dashboard', href: '/app/dashboard', icon: LayoutDashboard },
+  { title: 'nav.leases', href: '/app/leases', icon: FileText },
+  { title: 'nav.imports', href: '/app/imports', icon: Upload },
+  { title: 'nav.reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
+  { title: 'nav.notifications', href: '/app/notifications', icon: Bell },
+  { title: 'nav.integrations', href: '/app/integrations', icon: Plug },
 ];
 
 const settingsNavItems = [
-  { title: 'Workspace', href: '/app/settings/workspace', icon: Building2 },
-  { title: 'Account', href: '/app/settings/account', icon: User },
+  { title: 'nav.workspace', href: '/app/settings/workspace', icon: Building2 },
+  { title: 'nav.account', href: '/app/settings/account', icon: User },
 ];
 
 export function AppSidebar() {
@@ -49,6 +51,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { user, workspace, canAccessFeature } = useApp();
   const { signOut, user: authUser } = useAuth();
+  const { t } = useLanguage();
 
   const usagePercent = workspace 
     ? (workspace.documentsUsed / workspace.documentLimit) * 100 
@@ -65,11 +68,26 @@ export function AppSidebar() {
     navigate('/');
   };
 
-  // Get user display info from auth or app context
   const displayUser = {
     firstName: authUser?.user_metadata?.first_name || user?.firstName || '',
     lastName: authUser?.user_metadata?.last_name || user?.lastName || '',
     email: authUser?.email || user?.email || '',
+  };
+
+  const currentPlan = workspace?.plan || 'free';
+  const planLabel = t(`plan.${currentPlan}`);
+
+  const getPlanBadgeVariant = () => {
+    switch (currentPlan) {
+      case 'business':
+        return 'business';
+      case 'pro':
+        return 'default';
+      case 'starter':
+        return 'secondary';
+      default:
+        return 'outline';
+    }
   };
 
   return (
@@ -90,6 +108,7 @@ export function AppSidebar() {
           {mainNavItems.map((item) => {
             const isActive = location.pathname === item.href;
             const isLocked = item.requiresBusiness && !canAccessFeature('business');
+            const translatedTitle = t(item.title);
             
             return (
               <Link
@@ -105,7 +124,7 @@ export function AppSidebar() {
                 onClick={(e) => isLocked && e.preventDefault()}
               >
                 <item.icon className="h-5 w-5" />
-                <span className="flex-1">{item.title}</span>
+                <span className="flex-1">{translatedTitle}</span>
                 {isLocked && <Lock className="h-4 w-4" />}
                 {item.requiresBusiness && !isLocked && (
                   <Badge variant="business" className="text-[10px] px-1.5">Business</Badge>
@@ -117,11 +136,12 @@ export function AppSidebar() {
 
         <div className="mt-8">
           <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
-            Settings
+            {t('nav.settings')}
           </p>
           <div className="space-y-1">
             {settingsNavItems.map((item) => {
               const isActive = location.pathname === item.href;
+              const translatedTitle = t(item.title);
               
               return (
                 <Link
@@ -135,10 +155,22 @@ export function AppSidebar() {
                   )}
                 >
                   <item.icon className="h-5 w-5" />
-                  <span>{item.title}</span>
+                  <span>{translatedTitle}</span>
                 </Link>
               );
             })}
+            
+            {/* Plan indicator below Account */}
+            <Link
+              to="/app/upgrade"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+            >
+              <Sparkles className="h-5 w-5" />
+              <span className="flex-1">{planLabel} Plan</span>
+              <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5">
+                {currentPlan === 'free' ? 'Upgrade' : planLabel}
+              </Badge>
+            </Link>
           </div>
         </div>
       </nav>
@@ -147,7 +179,7 @@ export function AppSidebar() {
       <div className="px-4 py-4 border-t border-sidebar-border">
         <div className="rounded-lg bg-sidebar-accent/50 p-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-sidebar-foreground/80">Documents</span>
+            <span className="text-xs font-medium text-sidebar-foreground/80">{t('nav.documents')}</span>
             <span className="text-xs text-sidebar-foreground/60">
               {workspace?.documentsUsed} / {workspace?.documentLimit}
             </span>
@@ -158,7 +190,7 @@ export function AppSidebar() {
               to="/app/upgrade" 
               className="mt-2 flex items-center gap-1 text-xs text-sidebar-primary hover:underline"
             >
-              Upgrade for more <ChevronRight className="h-3 w-3" />
+              {t('nav.upgrade_for_more')} <ChevronRight className="h-3 w-3" />
             </Link>
           )}
         </div>
@@ -192,13 +224,13 @@ export function AppSidebar() {
             <DropdownMenuItem asChild>
               <Link to="/app/settings/account" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                Account Settings
+                {t('nav.account_settings')}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to="#" className="flex items-center gap-2">
                 <HelpCircle className="h-4 w-4" />
-                Help & Support
+                {t('nav.help_support')}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -207,7 +239,7 @@ export function AppSidebar() {
               onClick={handleLogout}
             >
               <LogOut className="h-4 w-4 mr-2" />
-              Log Out
+              {t('nav.log_out')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

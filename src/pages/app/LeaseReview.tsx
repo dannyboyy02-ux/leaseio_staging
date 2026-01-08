@@ -13,10 +13,14 @@ import {
   User,
   Download,
   Save,
-  Loader2
+  Loader2,
+  Pencil,
+  Check,
+  X
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +33,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/RentScheduleTable';
 import { NotificationConfigurator } from '@/components/leases/NotificationConfigurator';
+import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface ExtractedJson {
   property_address?: string;
@@ -63,6 +69,7 @@ interface LeaseData {
   extracted_json: ExtractedJson | null;
   uploaded_at: string;
   processed_at: string | null;
+  storage_path: string | null;
 }
 
 interface Risk {
@@ -75,6 +82,7 @@ interface Risk {
 }
 
 interface EditableFields {
+  filename: string;
   landlord_name: string;
   tenant_name: string;
   property_address: string;
@@ -88,15 +96,28 @@ interface EditableFields {
   termination_clauses: string;
 }
 
+type SectionKey = 'parties' | 'property' | 'rent' | 'financial' | 'additional' | 'document';
+
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
+  const { hasPermission } = useApp();
+  const { t } = useLanguage();
+  
   const [lease, setLease] = useState<LeaseData | null>(null);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  
+  const [confirmedSections, setConfirmedSections] = useState<Set<SectionKey>>(new Set());
+  const [editingSections, setEditingSections] = useState<Set<SectionKey>>(new Set());
+  const [editingFilename, setEditingFilename] = useState(false);
+  
   const [editableFields, setEditableFields] = useState<EditableFields>({
+    filename: '',
     landlord_name: '',
     tenant_name: '',
     property_address: '',
@@ -110,12 +131,15 @@ export default function LeaseReview() {
     termination_clauses: '',
   });
 
+  const canEdit = hasPermission('leases');
+  const isNeedsReview = lease?.status === 'Ready' || lease?.status === 'review';
+  const isApproved = lease?.status === 'Approved';
+
   useEffect(() => {
     async function fetchLease() {
       if (!leaseId) return;
 
       try {
-        // Fetch lease data
         const { data: leaseData, error: leaseError } = await supabase
           .from('leases')
           .select('*')
@@ -132,9 +156,9 @@ export default function LeaseReview() {
         };
         setLease(typedLease);
 
-        // Populate editable fields
         const extracted = typedLease.extracted_json || {};
         setEditableFields({
+          filename: typedLease.filename || '',
           landlord_name: typedLease.landlord_name || '',
           tenant_name: typedLease.tenant_name || '',
           property_address: extracted.property_address || '',
@@ -148,7 +172,6 @@ export default function LeaseReview() {
           termination_clauses: extracted.termination_clauses || '',
         });
 
-        // Fetch risks
         const { data: risksData, error: risksError } = await supabase
           .from('risks')
           .select('*')
@@ -157,7 +180,6 @@ export default function LeaseReview() {
         if (risksError) throw risksError;
         setRisks(risksData || []);
 
-        // Fetch rent schedule from database
         const { data: rentScheduleData, error: rentScheduleError } = await supabase
           .from('rent_schedules')
           .select('*')
@@ -184,6 +206,22 @@ export default function LeaseReview() {
     setEditableFields(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleConfirmSection = (section: SectionKey) => {
+    setConfirmedSections(prev => new Set([...prev, section]));
+  };
+
+  const toggleEditSection = (section: SectionKey) => {
+    setEditingSections(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(section)) {
+        newSet.delete(section);
+      } else {
+        newSet.add(section);
+      }
+      return newSet;
+    });
+  };
+
   const handleSave = async () => {
     if (!lease) return;
 
@@ -201,6 +239,7 @@ export default function LeaseReview() {
       const { error } = await supabase
         .from('leases')
         .update({
+          filename: editableFields.filename || lease.filename,
           landlord_name: editableFields.landlord_name || null,
           tenant_name: editableFields.tenant_name || null,
           lease_start: editableFields.lease_start || null,
@@ -215,6 +254,7 @@ export default function LeaseReview() {
 
       setLease({
         ...lease,
+        filename: editableFields.filename || lease.filename,
         landlord_name: editableFields.landlord_name || null,
         tenant_name: editableFields.tenant_name || null,
         lease_start: editableFields.lease_start || null,
@@ -224,6 +264,8 @@ export default function LeaseReview() {
         extracted_json: updatedExtractedJson,
       });
 
+      setEditingSections(new Set());
+      setEditingFilename(false);
       toast.success('Lease saved successfully');
     } catch (error) {
       console.error('Error saving lease:', error);
@@ -233,22 +275,57 @@ export default function LeaseReview() {
     }
   };
 
-  const handleFinalize = async () => {
+  const handleApprove = async () => {
     if (!lease) return;
 
+    setApproving(true);
     try {
       const { error } = await supabase
         .from('leases')
-        .update({ status: 'final' })
+        .update({ status: 'Approved' })
         .eq('id', lease.id);
 
       if (error) throw error;
 
-      setLease({ ...lease, status: 'final' });
-      toast.success('Lease finalized successfully');
+      setLease({ ...lease, status: 'Approved' });
+      toast.success('Lease approved and activated');
     } catch (error) {
-      console.error('Error finalizing lease:', error);
-      toast.error('Failed to finalize lease');
+      console.error('Error approving lease:', error);
+      toast.error('Failed to approve lease');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleDownloadOriginal = async () => {
+    if (!lease?.storage_path) {
+      toast.error('Original file not available');
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from('leases')
+        .download(lease.storage_path);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = lease.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Download started');
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      toast.error('Failed to download file');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -276,6 +353,53 @@ export default function LeaseReview() {
     }
   };
 
+  const renderSectionHeader = (title: string, icon: React.ReactNode, section: SectionKey) => {
+    const isEditing = editingSections.has(section);
+    const isConfirmed = confirmedSections.has(section);
+    const showConfirmButton = isNeedsReview && !isConfirmed;
+
+    return (
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-lg flex items-center gap-2">
+          {icon}
+          {title}
+        </CardTitle>
+        <div className="flex items-center gap-2">
+          {showConfirmButton && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleConfirmSection(section)}
+              className="text-green-600 border-green-600/30 hover:bg-green-600/10"
+            >
+              <Check className="h-4 w-4 mr-1" />
+              {t('lease.confirm')}
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => toggleEditSection(section)}
+            >
+              {isEditing ? (
+                <>
+                  <X className="h-4 w-4 mr-1" />
+                  {t('common.cancel')}
+                </>
+              ) : (
+                <>
+                  <Pencil className="h-4 w-4 mr-1" />
+                  {t('lease.edit')}
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+    );
+  };
+
   if (loading) {
     return (
       <AppLayout>
@@ -293,25 +417,24 @@ export default function LeaseReview() {
           <FileText className="h-12 w-12 text-muted-foreground" />
           <p className="text-muted-foreground">Lease not found</p>
           <Button variant="outline" onClick={() => navigate('/app/leases')}>
-            Back to Leases
+            {t('lease.back')} to Leases
           </Button>
         </div>
       </AppLayout>
     );
   }
 
-  const keyDates = lease.extracted_json?.key_dates || [];
-
   return (
     <AppLayout>
       <AppHeader
-        title="Review Lease"
+        title={t('lease.review')}
         subtitle={lease.filename}
         actions={
           <div className="flex items-center gap-2">
+            <LanguageToggle />
             <Button variant="outline" onClick={() => navigate('/app/leases')}>
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
+              {t('lease.back')}
             </Button>
             <Button variant="outline" onClick={handleSave} disabled={saving}>
               {saving ? (
@@ -319,39 +442,33 @@ export default function LeaseReview() {
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              Save
+              {t('lease.save')}
             </Button>
-            {lease.status === 'review' && (
-              <Button variant="accent" onClick={handleFinalize}>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Finalize
-              </Button>
-            )}
           </div>
         }
       />
 
       <div className="p-6 space-y-6">
         {/* Status Banner */}
-        {lease.status === 'review' && (
+        {isNeedsReview && (
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 flex items-start gap-3">
             <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
             <div>
-              <p className="font-medium text-yellow-600">Review Required</p>
+              <p className="font-medium text-yellow-600">{t('lease.review_required')}</p>
               <p className="text-sm text-muted-foreground">
-                Review and edit the extracted information below, then save your changes before finalizing.
+                {t('lease.review_edit_info')}
               </p>
             </div>
           </div>
         )}
 
-        {lease.status === 'final' && (
+        {isApproved && (
           <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4 flex items-start gap-3">
             <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
             <div>
-              <p className="font-medium text-green-600">Finalized</p>
+              <p className="font-medium text-green-600">{t('lease.approved')} - {t('lease.active')}</p>
               <p className="text-sm text-muted-foreground">
-                This lease has been reviewed and finalized.
+                {t('lease.approved_info')}
               </p>
             </div>
           </div>
@@ -362,50 +479,43 @@ export default function LeaseReview() {
           <div className="lg:col-span-2 space-y-6">
             {/* Parties */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Parties
-                </CardTitle>
-              </CardHeader>
+              {renderSectionHeader(t('lease.parties'), <User className="h-5 w-5" />, 'parties')}
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="landlord_name">Landlord</Label>
+                  <Label htmlFor="landlord_name">{t('lease.landlord')}</Label>
                   <Input
                     id="landlord_name"
                     value={editableFields.landlord_name}
                     onChange={(e) => handleFieldChange('landlord_name', e.target.value)}
                     placeholder="Landlord name"
+                    disabled={!editingSections.has('parties')}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="tenant_name">Tenant</Label>
+                  <Label htmlFor="tenant_name">{t('lease.tenant')}</Label>
                   <Input
                     id="tenant_name"
                     value={editableFields.tenant_name}
                     onChange={(e) => handleFieldChange('tenant_name', e.target.value)}
                     placeholder="Tenant name"
+                    disabled={!editingSections.has('parties')}
                   />
                 </div>
               </CardContent>
             </Card>
 
-            {/* Property & Dates */}
+            {/* Property & Term */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  Property & Term
-                </CardTitle>
-              </CardHeader>
+              {renderSectionHeader(t('lease.property_term'), <Building2 className="h-5 w-5" />, 'property')}
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="property_address">Property Address</Label>
+                  <Label htmlFor="property_address">{t('lease.property_address')}</Label>
                   <Input
                     id="property_address"
                     value={editableFields.property_address}
                     onChange={(e) => handleFieldChange('property_address', e.target.value)}
                     placeholder="Full property address"
+                    disabled={!editingSections.has('property')}
                   />
                 </div>
                 <Separator />
@@ -413,32 +523,34 @@ export default function LeaseReview() {
                   <div className="space-y-2">
                     <Label htmlFor="lease_start" className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      Commencement Date
+                      {t('lease.commencement_date')}
                     </Label>
                     <Input
                       id="lease_start"
                       type="date"
                       value={editableFields.lease_start}
                       onChange={(e) => handleFieldChange('lease_start', e.target.value)}
+                      disabled={!editingSections.has('property')}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lease_end" className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      Expiration Date
+                      {t('lease.expiration_date')}
                     </Label>
                     <Input
                       id="lease_end"
                       type="date"
                       value={editableFields.lease_end}
                       onChange={(e) => handleFieldChange('lease_end', e.target.value)}
+                      disabled={!editingSections.has('property')}
                     />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Rent Schedule - Industry Standard */}
+            {/* Rent Schedule */}
             <RentScheduleTable
               rentSchedule={rentSchedule}
               currentMonthlyRent={lease.current_monthly_rent}
@@ -447,48 +559,47 @@ export default function LeaseReview() {
 
             {/* Additional Financial Terms */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Additional Financial Terms
-                </CardTitle>
-              </CardHeader>
+              {renderSectionHeader(t('lease.financial_terms'), <DollarSign className="h-5 w-5" />, 'financial')}
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="base_rent_amount">Base Rent (Legacy)</Label>
+                  <Label htmlFor="base_rent_amount">{t('lease.base_rent')}</Label>
                   <Input
                     id="base_rent_amount"
                     value={editableFields.base_rent_amount}
                     onChange={(e) => handleFieldChange('base_rent_amount', e.target.value)}
                     placeholder="e.g., $5,000"
+                    disabled={!editingSections.has('financial')}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="base_rent_frequency">Rent Frequency</Label>
+                  <Label htmlFor="base_rent_frequency">{t('lease.rent_frequency')}</Label>
                   <Input
                     id="base_rent_frequency"
                     value={editableFields.base_rent_frequency}
                     onChange={(e) => handleFieldChange('base_rent_frequency', e.target.value)}
                     placeholder="e.g., monthly, annually"
+                    disabled={!editingSections.has('financial')}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="security_deposit">Security Deposit</Label>
+                  <Label htmlFor="security_deposit">{t('lease.security_deposit')}</Label>
                   <Input
                     id="security_deposit"
                     value={editableFields.security_deposit}
                     onChange={(e) => handleFieldChange('security_deposit', e.target.value)}
                     placeholder="e.g., $10,000"
+                    disabled={!editingSections.has('financial')}
                   />
                 </div>
                 <div className="sm:col-span-2 space-y-2">
-                  <Label htmlFor="escalation_clauses">Escalation Clauses (Description)</Label>
+                  <Label htmlFor="escalation_clauses">{t('lease.escalation_clauses')}</Label>
                   <Textarea
                     id="escalation_clauses"
                     value={editableFields.escalation_clauses}
                     onChange={(e) => handleFieldChange('escalation_clauses', e.target.value)}
                     placeholder="Summary of rent escalation terms"
                     rows={3}
+                    disabled={!editingSections.has('financial')}
                   />
                 </div>
               </CardContent>
@@ -496,34 +607,34 @@ export default function LeaseReview() {
 
             {/* Additional Terms */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Additional Terms</CardTitle>
-              </CardHeader>
+              {renderSectionHeader(t('lease.additional_terms'), null, 'additional')}
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="renewal_options">Renewal Options</Label>
+                  <Label htmlFor="renewal_options">{t('lease.renewal_options')}</Label>
                   <Textarea
                     id="renewal_options"
                     value={editableFields.renewal_options}
                     onChange={(e) => handleFieldChange('renewal_options', e.target.value)}
                     placeholder="Summary of renewal options"
                     rows={3}
+                    disabled={!editingSections.has('additional')}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="termination_clauses">Termination Clauses</Label>
+                  <Label htmlFor="termination_clauses">{t('lease.termination_clauses')}</Label>
                   <Textarea
                     id="termination_clauses"
                     value={editableFields.termination_clauses}
                     onChange={(e) => handleFieldChange('termination_clauses', e.target.value)}
                     placeholder="Summary of termination provisions"
                     rows={3}
+                    disabled={!editingSections.has('additional')}
                   />
                 </div>
               </CardContent>
             </Card>
 
-            {/* Key Dates & Notifications */}
+            {/* Key Dates & Notifications - removed confirmation from here */}
             <NotificationConfigurator
               leaseId={lease.id}
               leaseStart={editableFields.lease_start}
@@ -533,28 +644,65 @@ export default function LeaseReview() {
                 monthly_amount: rs.monthly_amount
               }))}
             />
+
+            {/* Approve Button */}
+            {isNeedsReview && canEdit && (
+              <div className="pt-4">
+                <Button 
+                  variant="accent" 
+                  size="lg" 
+                  className="w-full"
+                  onClick={handleApprove}
+                  disabled={approving}
+                >
+                  {approving ? (
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                  )}
+                  {t('lease.approve')}
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Document Info */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Document</CardTitle>
-              </CardHeader>
+              {renderSectionHeader(t('lease.document'), null, 'document')}
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                   <FileText className="h-8 w-8 text-primary" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{lease.filename}</p>
+                    {editingFilename || editingSections.has('document') ? (
+                      <Input
+                        value={editableFields.filename}
+                        onChange={(e) => handleFieldChange('filename', e.target.value)}
+                        className="text-sm font-medium"
+                        placeholder="Filename"
+                      />
+                    ) : (
+                      <p className="text-sm font-medium truncate">{lease.filename}</p>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       Uploaded {format(new Date(lease.uploaded_at), 'MMM d, yyyy')}
                     </p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" className="w-full">
-                  <Download className="h-4 w-4 mr-1" />
-                  Download Original
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={handleDownloadOriginal}
+                  disabled={downloading || !lease.storage_path}
+                >
+                  {downloading ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-1" />
+                  )}
+                  {t('lease.download_original')}
                 </Button>
               </CardContent>
             </Card>
@@ -563,18 +711,18 @@ export default function LeaseReview() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between">
-                  <span>Identified Risks</span>
+                  <span>{t('lease.identified_risks')}</span>
                   <Badge variant="outline">{risks.length}</Badge>
                 </CardTitle>
                 <CardDescription>
-                  AI-identified potential issues in this lease
+                  {t('lease.ai_risks_desc')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {risks.length === 0 ? (
                   <div className="text-center py-6">
                     <CheckCircle className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">No risks identified</p>
+                    <p className="text-sm text-muted-foreground">{t('lease.no_risks')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -595,7 +743,7 @@ export default function LeaseReview() {
                             )}
                             {risk.citation_page && (
                               <p className="text-xs mt-1 opacity-60">
-                                Page {risk.citation_page}
+                                {t('common.page')} {risk.citation_page}
                               </p>
                             )}
                           </div>
@@ -610,14 +758,14 @@ export default function LeaseReview() {
             {/* Status */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Status</CardTitle>
+                <CardTitle className="text-lg">{t('lease.status')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <Badge
-                  variant={lease.status === 'final' ? 'default' : 'secondary'}
+                  variant={isApproved ? 'default' : 'secondary'}
                   className="capitalize"
                 >
-                  {lease.status}
+                  {isApproved ? t('lease.active') : lease.status}
                 </Badge>
                 {lease.processed_at && (
                   <p className="text-xs text-muted-foreground mt-2">
