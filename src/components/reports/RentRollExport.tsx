@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface LeaseData {
   id: string;
@@ -22,6 +23,7 @@ interface LeaseData {
 
 export function RentRollExport() {
   const [isExporting, setIsExporting] = useState(false);
+  const { t } = useLanguage();
 
   const formatCurrency = (amount: number | string | null): string => {
     if (!amount) return '';
@@ -43,13 +45,6 @@ export function RentRollExport() {
     }
   };
 
-  const getPropertyAddress = (lease: LeaseData): string => {
-    if (lease.extracted_json?.property_address) {
-      return lease.extracted_json.property_address as string;
-    }
-    return lease.filename || 'Unknown';
-  };
-
   const calculateDaysRemaining = (endDate: string | null): number | null => {
     if (!endDate) return null;
     const end = new Date(endDate);
@@ -64,7 +59,6 @@ export function RentRollExport() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Fetch all active leases
       const { data: leases, error } = await supabase
         .from('leases')
         .select('*')
@@ -79,11 +73,9 @@ export function RentRollExport() {
         return;
       }
 
-      // Calculate totals
       const totalMonthly = leases.reduce((sum, l) => sum + (l.current_monthly_rent || 0), 0);
       const totalAnnual = totalMonthly * 12;
 
-      // Build CSV content
       const headers = [
         'Property Address',
         'Tenant',
@@ -115,14 +107,12 @@ export function RentRollExport() {
         ];
       });
 
-      // Add summary rows
       rows.push([]);
       rows.push(['PORTFOLIO SUMMARY', '', '', '', '', '', '', '', '', '']);
       rows.push(['Total Active Leases', String(leases.length), '', '', '', '', '', '', '', '']);
       rows.push(['Total Monthly Rent', formatCurrency(totalMonthly), '', '', '', '', '', '', '', '']);
       rows.push(['Total Annual Obligation', formatCurrency(totalAnnual), '', '', '', '', '', '', '', '']);
 
-      // Convert to CSV string
       const escapeCSV = (val: string | number) => {
         const str = String(val);
         if (str.includes(',') || str.includes('"') || str.includes('\n')) {
@@ -136,7 +126,6 @@ export function RentRollExport() {
         ...rows.map(row => row.map(escapeCSV).join(',')),
       ].join('\n');
 
-      // Download file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -161,16 +150,15 @@ export function RentRollExport() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileSpreadsheet className="h-5 w-5" />
-          Rent Roll Export
+          {t('reports.rent_roll')}
         </CardTitle>
         <CardDescription>
-          Download a complete rent roll of your portfolio as a CSV file
+          {t('reports.rent_roll_desc')}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground mb-4">
-          Includes property details, tenant information, rent amounts, lease dates, 
-          and a portfolio summary. Compatible with Excel and Google Sheets.
+          {t('reports.rent_roll_details')}
         </p>
         <Button onClick={exportToCSV} disabled={isExporting}>
           {isExporting ? (
@@ -178,7 +166,7 @@ export function RentRollExport() {
           ) : (
             <Download className="h-4 w-4 mr-2" />
           )}
-          {isExporting ? 'Generating...' : 'Download Rent Roll'}
+          {isExporting ? t('reports.generating') : t('reports.download_rent_roll')}
         </Button>
       </CardContent>
     </Card>

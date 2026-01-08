@@ -14,7 +14,6 @@ import {
   Building2,
   User,
   DollarSign,
-  AlertTriangle
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -67,7 +66,7 @@ type SortDirection = 'asc' | 'desc';
 
 export default function Leases() {
   const navigate = useNavigate();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<LeaseRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,10 +113,8 @@ export default function Leases() {
     if (!selectedLease) return;
 
     try {
-      // Delete risks first
       await supabase.from('risks').delete().eq('lease_id', selectedLease.id);
 
-      // Delete the lease
       const { error } = await supabase
         .from('leases')
         .delete()
@@ -168,18 +165,18 @@ export default function Leases() {
   const getExpirationBadge = (days: number | null) => {
     if (days === null) return null;
     if (days < 0) {
-      return <Badge variant="destructive">Expired</Badge>;
+      return <Badge variant="destructive">{t('leases.expired')}</Badge>;
     }
     if (days <= 30) {
-      return <Badge variant="destructive">{days} days</Badge>;
+      return <Badge variant="destructive">{days} {t('dashboard.days')}</Badge>;
     }
     if (days <= 60) {
-      return <Badge variant="warning">{days} days</Badge>;
+      return <Badge variant="warning">{days} {t('dashboard.days')}</Badge>;
     }
     if (days <= 90) {
-      return <Badge variant="secondary">{days} days</Badge>;
+      return <Badge variant="secondary">{days} {t('dashboard.days')}</Badge>;
     }
-    return <span className="text-muted-foreground">{days} days</span>;
+    return <span className="text-muted-foreground">{days} {t('dashboard.days')}</span>;
   };
 
   const parseRentAmount = (amount: string | null): number => {
@@ -190,14 +187,12 @@ export default function Leases() {
 
   const filteredAndSortedLeases = useMemo(() => {
     let result = leases.filter((lease) => {
-      // Search filter
       const searchLower = searchQuery.toLowerCase();
       const matchesSearch = !searchQuery || 
         getPropertyAddress(lease).toLowerCase().includes(searchLower) ||
         lease.tenant_name?.toLowerCase().includes(searchLower) ||
         lease.landlord_name?.toLowerCase().includes(searchLower);
 
-      // Expiration filter
       let matchesExpiration = true;
       if (expirationFilter !== 'all') {
         const days = getDaysUntilExpiration(lease.lease_end);
@@ -208,7 +203,6 @@ export default function Leases() {
       return matchesSearch && matchesExpiration;
     });
 
-    // Sort
     result.sort((a, b) => {
       let aVal: string | number = '';
       let bVal: string | number = '';
@@ -267,7 +261,7 @@ export default function Leases() {
     <AppLayout>
       <AppHeader
         title={t('leases.title')}
-        subtitle={`${leases.length} ${language === 'es' ? 'arrendamientos activos' : 'active leases'}`}
+        subtitle={`${leases.length} ${t('leases.active_leases')}`}
         actions={
           <Button variant="accent" onClick={() => navigate('/app/imports?action=upload')}>
             <Plus className="h-4 w-4 mr-2" />
@@ -335,7 +329,7 @@ export default function Leases() {
                         onClick={() => handleSort('property')}
                       >
                         <Building2 className="mr-2 h-4 w-4" />
-                        Property
+                        {t('leases.property')}
                         {getSortIcon('property')}
                       </Button>
                     </TableHead>
@@ -347,7 +341,7 @@ export default function Leases() {
                         onClick={() => handleSort('tenant')}
                       >
                         <User className="mr-2 h-4 w-4" />
-                        Tenant
+                        {t('leases.tenant')}
                         {getSortIcon('tenant')}
                       </Button>
                     </TableHead>
@@ -358,7 +352,7 @@ export default function Leases() {
                         className="-ml-3 h-8"
                         onClick={() => handleSort('landlord')}
                       >
-                        Landlord
+                        {t('leases.landlord')}
                         {getSortIcon('landlord')}
                       </Button>
                     </TableHead>
@@ -370,7 +364,7 @@ export default function Leases() {
                         onClick={() => handleSort('lease_start')}
                       >
                         <Calendar className="mr-2 h-4 w-4" />
-                        Start
+                        {t('leases.start')}
                         {getSortIcon('lease_start')}
                       </Button>
                     </TableHead>
@@ -382,7 +376,7 @@ export default function Leases() {
                         onClick={() => handleSort('lease_end')}
                       >
                         <Calendar className="mr-2 h-4 w-4" />
-                        End
+                        {t('leases.end')}
                         {getSortIcon('lease_end')}
                       </Button>
                     </TableHead>
@@ -394,18 +388,18 @@ export default function Leases() {
                         onClick={() => handleSort('rent')}
                       >
                         <DollarSign className="mr-2 h-4 w-4" />
-                        Rent
+                        {t('leases.rent')}
                         {getSortIcon('rent')}
                       </Button>
                     </TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-right">{t('leases.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAndSortedLeases.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        No leases match your filters
+                        {t('leases.no_match')}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -459,7 +453,7 @@ export default function Leases() {
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>View details</TooltipContent>
+                                <TooltipContent>{t('leases.view_details')}</TooltipContent>
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -472,7 +466,7 @@ export default function Leases() {
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>Delete</TooltipContent>
+                                <TooltipContent>{t('leases.delete')}</TooltipContent>
                               </Tooltip>
                             </div>
                           </TableCell>
@@ -490,8 +484,8 @@ export default function Leases() {
       <DeleteLeaseDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        leaseName={selectedLease?.filename || ''}
         onConfirm={handleDeleteConfirm}
+        leaseName={selectedLease?.filename || ''}
       />
     </AppLayout>
   );

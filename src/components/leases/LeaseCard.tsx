@@ -4,21 +4,24 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Lease, LeaseStatus } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface LeaseCardProps {
   lease: Lease;
   index?: number;
 }
 
-const statusConfig: Record<LeaseStatus, { label: string; variant: 'default' | 'warning' | 'info' | 'success' | 'muted'; icon: React.ComponentType<{ className?: string }> }> = {
-  draft: { label: 'Draft', variant: 'muted', icon: FileText },
-  processing: { label: 'Processing', variant: 'info', icon: Clock },
-  review: { label: 'Needs Review', variant: 'warning', icon: AlertCircle },
-  final: { label: 'Finalized', variant: 'success', icon: CheckCircle2 },
-  archived: { label: 'Archived', variant: 'muted', icon: FileText },
-};
-
 export function LeaseCard({ lease, index = 0 }: LeaseCardProps) {
+  const { t } = useLanguage();
+  
+  const statusConfig: Record<LeaseStatus, { labelKey: string; variant: 'default' | 'warning' | 'info' | 'success' | 'muted'; icon: React.ComponentType<{ className?: string }> }> = {
+    draft: { labelKey: 'lease.draft', variant: 'muted', icon: FileText },
+    processing: { labelKey: 'lease.processing', variant: 'info', icon: Clock },
+    review: { labelKey: 'lease.needs_review', variant: 'warning', icon: AlertCircle },
+    final: { labelKey: 'lease.finalized', variant: 'success', icon: CheckCircle2 },
+    archived: { labelKey: 'lease.archived', variant: 'muted', icon: FileText },
+  };
+
   const status = statusConfig[lease.status];
   const StatusIcon = status.icon;
 
@@ -49,13 +52,13 @@ export function LeaseCard({ lease, index = 0 }: LeaseCardProps) {
                   <h3 className="font-medium truncate">{lease.documentName}</h3>
                   {lease.type === 'amendment' && (
                     <Badge variant="outline" className="text-[10px] shrink-0">
-                      Amendment
+                      {t('lease.amendment')}
                     </Badge>
                   )}
                 </div>
                 <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
                   <MapPin className="h-3.5 w-3.5" />
-                  <span className="truncate">{lease.propertyAddress || 'Address pending'}</span>
+                  <span className="truncate">{lease.propertyAddress || t('lease.address_pending')}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                   <div className="flex items-center gap-1">
@@ -73,7 +76,7 @@ export function LeaseCard({ lease, index = 0 }: LeaseCardProps) {
             <div className="flex items-center gap-3 shrink-0">
               <Badge variant={status.variant} className="gap-1">
                 <StatusIcon className="h-3 w-3" />
-                {status.label}
+                {t(status.labelKey)}
               </Badge>
               <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>

@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -34,15 +35,10 @@ const timezones = [
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
 ];
 
-const roleLabels: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
-  admin: { label: 'Admin', variant: 'default' },
-  editor: { label: 'Editor', variant: 'secondary' },
-  viewer: { label: 'Viewer', variant: 'outline' },
-};
-
 export default function WorkspaceSettings() {
   const { workspace, refreshProfile } = useApp();
   const { user: authUser } = useAuth();
+  const { t } = useLanguage();
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
   const [timezone, setTimezone] = useState(workspace?.timezone || 'America/New_York');
   const [notificationDays, setNotificationDays] = useState(
@@ -54,7 +50,6 @@ export default function WorkspaceSettings() {
 
   const isOwner = workspace?.ownerId === authUser?.id;
 
-  // Sync form with workspace data when it loads
   useEffect(() => {
     if (workspace) {
       setWorkspaceName(workspace.name || '');
@@ -63,7 +58,6 @@ export default function WorkspaceSettings() {
     }
   }, [workspace]);
 
-  // Fetch workspace members
   const { data: members, isLoading: membersLoading, refetch: refetchMembers } = useQuery({
     queryKey: ['workspace-members', workspace?.id],
     queryFn: async () => {
@@ -81,7 +75,6 @@ export default function WorkspaceSettings() {
 
       if (error) throw error;
 
-      // Fetch profiles for each member
       const memberIds = data?.map(m => m.user_id) || [];
       if (memberIds.length === 0) return [];
 
@@ -92,7 +85,6 @@ export default function WorkspaceSettings() {
 
       if (profilesError) throw profilesError;
 
-      // Combine members with profiles
       return data?.map(member => {
         const profile = profiles?.find(p => p.id === member.user_id);
         return {
@@ -179,28 +171,37 @@ export default function WorkspaceSettings() {
     }
   };
 
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'admin': return t('workspace.admin');
+      case 'editor': return t('workspace.editor');
+      case 'viewer': return t('workspace.viewer');
+      default: return role;
+    }
+  };
+
   return (
     <AppLayout>
-      <AppHeader title="Workspace Settings" subtitle="Manage your workspace configuration" />
+      <AppHeader title={t('workspace.title')} subtitle={t('workspace.subtitle')} />
 
       <div className="p-6">
         <Tabs defaultValue="general">
           <TabsList className="mb-6">
             <TabsTrigger value="general" className="gap-2">
               <Building2 className="h-4 w-4" />
-              General
+              {t('workspace.general')}
             </TabsTrigger>
             <TabsTrigger value="members" className="gap-2">
               <Users className="h-4 w-4" />
-              Members
+              {t('workspace.members')}
             </TabsTrigger>
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
-              Notifications
+              {t('workspace.notifications')}
             </TabsTrigger>
             <TabsTrigger value="security" className="gap-2">
               <Shield className="h-4 w-4" />
-              Security
+              {t('workspace.security')}
             </TabsTrigger>
           </TabsList>
 
@@ -208,12 +209,12 @@ export default function WorkspaceSettings() {
           <TabsContent value="general" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Workspace Details</CardTitle>
-                <CardDescription>Basic information about your workspace</CardDescription>
+                <CardTitle>{t('workspace.details')}</CardTitle>
+                <CardDescription>{t('workspace.basic_info')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="workspace-name">Workspace Name</Label>
+                  <Label htmlFor="workspace-name">{t('workspace.name')}</Label>
                   <Input
                     id="workspace-name"
                     value={workspaceName}
@@ -221,7 +222,7 @@ export default function WorkspaceSettings() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="timezone">Default Timezone</Label>
+                  <Label htmlFor="timezone">{t('workspace.default_timezone')}</Label>
                   <Select value={timezone} onValueChange={setTimezone}>
                     <SelectTrigger id="timezone">
                       <SelectValue placeholder="Select timezone" />
@@ -235,7 +236,7 @@ export default function WorkspaceSettings() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Used for scheduling notifications and displaying dates
+                    {t('workspace.timezone_desc')}
                   </p>
                 </div>
                 <Button variant="accent" onClick={handleSaveGeneral} disabled={isSaving}>
@@ -244,7 +245,7 @@ export default function WorkspaceSettings() {
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  {isSaving ? 'Saving...' : 'Save Changes'}
+                  {isSaving ? t('workspace.saving') : t('workspace.save_changes')}
                 </Button>
               </CardContent>
             </Card>
@@ -256,13 +257,13 @@ export default function WorkspaceSettings() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Team Members</CardTitle>
-                    <CardDescription>Manage who has access to this workspace</CardDescription>
+                    <CardTitle>{t('workspace.team_members')}</CardTitle>
+                    <CardDescription>{t('workspace.manage_access')}</CardDescription>
                   </div>
                   {isOwner && (
                     <Button variant="accent" onClick={() => setInviteDialogOpen(true)}>
                       <UserPlus className="h-4 w-4 mr-2" />
-                      Invite Member
+                      {t('workspace.invite_member')}
                     </Button>
                   )}
                 </div>
@@ -283,8 +284,8 @@ export default function WorkspaceSettings() {
                 ) : !members || members.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No team members yet</p>
-                    <p className="text-sm">You're the only one with access to this workspace</p>
+                    <p>{t('workspace.no_members')}</p>
+                    <p className="text-sm">{t('workspace.only_one')}</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-border">
@@ -316,7 +317,7 @@ export default function WorkspaceSettings() {
                           {member.user_id === workspace?.ownerId ? (
                             <Badge variant="default" className="flex items-center gap-1">
                               <Crown className="h-3 w-3" />
-                              Owner
+                              {t('workspace.owner')}
                             </Badge>
                           ) : isOwner ? (
                             <>
@@ -335,8 +336,8 @@ export default function WorkspaceSettings() {
                               </Button>
                             </>
                           ) : (
-                            <Badge variant={roleLabels[member.role]?.variant || 'outline'}>
-                              {roleLabels[member.role]?.label || member.role}
+                            <Badge variant="outline">
+                              {getRoleLabel(member.role)}
                             </Badge>
                           )}
                         </div>
@@ -352,14 +353,14 @@ export default function WorkspaceSettings() {
           <TabsContent value="notifications" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Default Notification Settings</CardTitle>
+                <CardTitle>{t('workspace.notification_settings')}</CardTitle>
                 <CardDescription>
-                  Configure default timing for lease notifications
+                  {t('workspace.notification_timing')}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="notification-days">Default Reminder (days before)</Label>
+                  <Label htmlFor="notification-days">{t('workspace.reminder_days')}</Label>
                   <Input
                     id="notification-days"
                     type="number"
@@ -369,7 +370,7 @@ export default function WorkspaceSettings() {
                     max="365"
                   />
                   <p className="text-xs text-muted-foreground">
-                    How many days before an event to send the first notification
+                    {t('workspace.reminder_desc')}
                   </p>
                 </div>
                 <Button variant="accent" onClick={handleSaveNotifications} disabled={isSavingNotifications}>
@@ -378,7 +379,7 @@ export default function WorkspaceSettings() {
                   ) : (
                     <Save className="h-4 w-4 mr-2" />
                   )}
-                  {isSavingNotifications ? 'Saving...' : 'Save Changes'}
+                  {isSavingNotifications ? t('workspace.saving') : t('workspace.save_changes')}
                 </Button>
               </CardContent>
             </Card>
@@ -388,15 +389,15 @@ export default function WorkspaceSettings() {
           <TabsContent value="security" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Audit Log</CardTitle>
+                <CardTitle>{t('workspace.audit_log')}</CardTitle>
                 <CardDescription>
-                  View recent activity in your workspace
+                  {t('workspace.view_activity')}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="text-center py-8 text-muted-foreground">
                   <Shield className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">Audit logs will appear here</p>
+                  <p className="text-sm">{t('workspace.logs_appear')}</p>
                 </div>
               </CardContent>
             </Card>

@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 
 interface Integration {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descKey: string;
   icon: string;
   status: 'connected' | 'disconnected' | 'locked';
   requiresPlan: 'pro' | 'business';
@@ -21,16 +22,16 @@ interface Integration {
 const integrations: Integration[] = [
   {
     id: 'quickbooks',
-    name: 'QuickBooks Online',
-    description: 'Sync lease payments and receivables with your accounting system. Automate invoice creation and bill tracking.',
+    nameKey: 'integrations.quickbooks',
+    descKey: 'integrations.quickbooks_desc',
     icon: '📊',
     status: 'disconnected',
     requiresPlan: 'business',
   },
   {
     id: 'email',
-    name: 'Email Notifications',
-    description: 'Send automated email alerts for renewals, escalations, and expirations.',
+    nameKey: 'integrations.email',
+    descKey: 'integrations.email_desc',
     icon: '📧',
     status: 'connected',
     requiresPlan: 'pro',
@@ -38,8 +39,8 @@ const integrations: Integration[] = [
   },
   {
     id: 'sms',
-    name: 'SMS Notifications',
-    description: 'Receive critical lease alerts via SMS for time-sensitive events.',
+    nameKey: 'integrations.sms',
+    descKey: 'integrations.sms_desc',
     icon: '📱',
     status: 'connected',
     requiresPlan: 'pro',
@@ -49,6 +50,7 @@ const integrations: Integration[] = [
 
 export default function Integrations() {
   const { canAccessFeature } = useApp();
+  const { t } = useLanguage();
 
   const getIntegrationStatus = (integration: Integration) => {
     if (!canAccessFeature(integration.requiresPlan)) {
@@ -60,8 +62,8 @@ export default function Integrations() {
   return (
     <AppLayout>
       <AppHeader
-        title="Integrations"
-        subtitle="Connect LeaseIO with your other tools"
+        title={t('integrations.title')}
+        subtitle={t('integrations.subtitle')}
       />
 
       <div className="p-6">
@@ -83,7 +85,7 @@ export default function Integrations() {
               >
                 {integration.requiresPlan === 'business' && (
                   <div className="absolute top-4 right-4">
-                    <Badge variant="business">Business</Badge>
+                    <Badge variant="business">{t('plan.business')}</Badge>
                   </div>
                 )}
                 <CardHeader>
@@ -92,11 +94,11 @@ export default function Integrations() {
                       {integration.icon}
                     </div>
                     <div>
-                      <CardTitle className="text-base">{integration.name}</CardTitle>
+                      <CardTitle className="text-base">{t(integration.nameKey)}</CardTitle>
                       {isConnected && integration.lastSync && (
                         <p className="text-xs text-success flex items-center gap-1 mt-1">
                           <Check className="h-3 w-3" />
-                          Connected
+                          {t('integrations.connected')}
                         </p>
                       )}
                     </div>
@@ -104,30 +106,30 @@ export default function Integrations() {
                 </CardHeader>
                 <CardContent>
                   <CardDescription className="mb-4">
-                    {integration.description}
+                    {t(integration.descKey)}
                   </CardDescription>
 
                   {isLocked ? (
                     <Button variant="outline" className="w-full" asChild>
                       <Link to="/app/upgrade?feature=integrations">
                         <Lock className="h-4 w-4 mr-2" />
-                        Upgrade to Business
+                        {t('integrations.upgrade_business')}
                         <ArrowRight className="h-4 w-4 ml-auto" />
                       </Link>
                     </Button>
                   ) : isConnected ? (
                     <div className="flex gap-2">
                       <Button variant="outline" className="flex-1">
-                        Configure
+                        {t('integrations.configure')}
                       </Button>
                       <Button variant="ghost" className="text-destructive hover:text-destructive">
-                        Disconnect
+                        {t('integrations.disconnect')}
                       </Button>
                     </div>
                   ) : (
                     <Button variant="accent" className="w-full">
                       <Link2 className="h-4 w-4 mr-2" />
-                      Connect
+                      {t('integrations.connect')}
                       <ExternalLink className="h-4 w-4 ml-auto" />
                     </Button>
                   )}
@@ -140,29 +142,29 @@ export default function Integrations() {
         {/* Integration Guide */}
         <Card variant="feature" className="mt-8">
           <CardHeader>
-            <CardTitle>Integration Guide</CardTitle>
+            <CardTitle>{t('integrations.guide')}</CardTitle>
             <CardDescription>
-              Learn how to get the most out of your integrations
+              {t('integrations.guide_desc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="p-4 rounded-lg bg-muted/50">
-                <h4 className="font-medium mb-2">1. Connect Your Account</h4>
+                <h4 className="font-medium mb-2">{t('integrations.step1')}</h4>
                 <p className="text-sm text-muted-foreground">
-                  Use OAuth to securely connect your external accounts without sharing passwords.
+                  {t('integrations.step1_desc')}
                 </p>
               </div>
               <div className="p-4 rounded-lg bg-muted/50">
-                <h4 className="font-medium mb-2">2. Configure Settings</h4>
+                <h4 className="font-medium mb-2">{t('integrations.step2')}</h4>
                 <p className="text-sm text-muted-foreground">
-                  Choose how data should flow between LeaseIO and your connected services.
+                  {t('integrations.step2_desc')}
                 </p>
               </div>
               <div className="p-4 rounded-lg bg-muted/50">
-                <h4 className="font-medium mb-2">3. Monitor Activity</h4>
+                <h4 className="font-medium mb-2">{t('integrations.step3')}</h4>
                 <p className="text-sm text-muted-foreground">
-                  Review sync logs and troubleshoot any issues from the integration dashboard.
+                  {t('integrations.step3_desc')}
                 </p>
               </div>
             </div>
