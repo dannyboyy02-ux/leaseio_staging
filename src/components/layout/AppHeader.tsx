@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { LanguageToggle } from '@/components/layout/LanguageToggle';
 
 interface AppHeaderProps {
   title: string;
@@ -29,6 +30,9 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Language Toggle */}
+        <LanguageToggle />
+
         {/* Global Search */}
         <div className="relative">
           {searchOpen ? (

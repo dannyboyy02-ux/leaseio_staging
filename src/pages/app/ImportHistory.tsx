@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
-import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -215,13 +214,10 @@ export default function ImportHistory() {
         title={t('import.history')}
         subtitle={`${imports.length} ${t('import.documents_imported')}`}
         actions={
-          <div className="flex items-center gap-2">
-            <LanguageToggle />
-            <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('import.upload_lease')}
-            </Button>
-          </div>
+          <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            {t('import.upload_lease')}
+          </Button>
         }
       />
 
