@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, differenceInDays } from 'date-fns';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface FinancialData {
   totalMonthlyRent: number;
@@ -17,8 +18,8 @@ interface FinancialData {
   activeLeaseCount: number;
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
+function formatCurrency(amount: number, language: string): string {
+  return new Intl.NumberFormat(language === 'es' ? 'es-MX' : 'en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: 0,
@@ -27,18 +28,19 @@ function formatCurrency(amount: number): string {
 }
 
 export function FinancialSummary() {
+  const { t, language } = useLanguage();
+  
   const { data, isLoading } = useQuery({
     queryKey: ['financial-summary'],
     queryFn: async (): Promise<FinancialData> => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get active leases with their rent info
       const { data: leases, error } = await supabase
         .from('leases')
         .select('id, filename, current_monthly_rent, lease_start, lease_end, status, extracted_json')
         .eq('user_id', user.id)
-        .in('status', ['Ready', 'final', 'review']);
+        .in('status', ['Ready', 'final', 'review', 'Approved']);
 
       if (error) throw error;
 
@@ -49,19 +51,16 @@ export function FinancialSummary() {
       );
       const annualObligation = totalMonthlyRent * 12;
 
-      // Find the next payment due (first of next month for the lease with earliest start)
       let nextPayment: FinancialData['nextPayment'] = null;
       if (activeLeases.length > 0 && totalMonthlyRent > 0) {
         const now = new Date();
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const daysUntil = differenceInDays(nextMonth, now);
         
-        // Find the lease with highest rent for "next payment" display
         const highestRentLease = activeLeases.reduce((max, lease) => 
           (Number(lease.current_monthly_rent) || 0) > (Number(max.current_monthly_rent) || 0) ? lease : max
         , activeLeases[0]);
 
-        // Get property address from extracted_json or fall back to filename
         const propertyAddress = highestRentLease.extracted_json 
           ? (highestRentLease.extracted_json as Record<string, unknown>)?.property_address as string
           : null;
@@ -70,7 +69,7 @@ export function FinancialSummary() {
           amount: totalMonthlyRent,
           property: activeLeases.length === 1 
             ? (propertyAddress || highestRentLease.filename || 'Property')
-            : `${activeLeases.length} properties`,
+            : `${activeLeases.length} ${t('dashboard.properties')}`,
           dueDate: nextMonth,
           daysUntil,
         };
@@ -102,35 +101,40 @@ export function FinancialSummary() {
     );
   }
 
+  const leaseCount = data?.activeLeaseCount || 0;
+  const leaseLabel = leaseCount === 1 
+    ? t('dashboard.active_lease') 
+    : t('dashboard.active_leases_count');
+
   const stats = [
     {
-      label: 'Total Monthly Rent',
-      value: formatCurrency(data?.totalMonthlyRent || 0),
+      label: t('dashboard.total_monthly_rent'),
+      value: formatCurrency(data?.totalMonthlyRent || 0, language),
       icon: DollarSign,
-      description: `${data?.activeLeaseCount || 0} active lease${(data?.activeLeaseCount || 0) !== 1 ? 's' : ''}`,
+      description: `${leaseCount} ${leaseLabel}`,
     },
     {
-      label: 'Annual Obligation',
-      value: formatCurrency(data?.annualObligation || 0),
+      label: t('dashboard.annual_obligation'),
+      value: formatCurrency(data?.annualObligation || 0, language),
       icon: TrendingUp,
-      description: 'Total for the year',
+      description: t('dashboard.total_for_year'),
     },
     {
-      label: 'Next Payment Due',
-      value: data?.nextPayment ? formatCurrency(data.nextPayment.amount) : '—',
+      label: t('dashboard.next_payment_due'),
+      value: data?.nextPayment ? formatCurrency(data.nextPayment.amount, language) : '—',
       icon: CalendarClock,
       description: data?.nextPayment
-        ? `${format(data.nextPayment.dueDate, 'MMM d')} · ${data.nextPayment.daysUntil} days`
-        : 'No upcoming payments',
+        ? `${format(data.nextPayment.dueDate, 'MMM d')} · ${data.nextPayment.daysUntil} ${t('dashboard.days')}`
+        : t('dashboard.no_upcoming_payments'),
       highlight: data?.nextPayment && data.nextPayment.daysUntil <= 7,
     },
     {
-      label: 'Rent Per Lease',
+      label: t('dashboard.rent_per_lease'),
       value: data?.activeLeaseCount 
-        ? formatCurrency((data?.totalMonthlyRent || 0) / data.activeLeaseCount)
+        ? formatCurrency((data?.totalMonthlyRent || 0) / data.activeLeaseCount, language)
         : '—',
       icon: Wallet,
-      description: 'Average monthly',
+      description: t('dashboard.average_monthly'),
     },
   ];
 
