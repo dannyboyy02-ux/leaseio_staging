@@ -7,20 +7,22 @@ import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
 import { QuickStats } from '@/components/dashboard/QuickStats';
 import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function Dashboard() {
   const { user, workspace } = useApp();
+  const { t } = useLanguage();
 
   return (
     <AppLayout>
       <AppHeader
-        title={`Welcome back${user?.firstName ? `, ${user.firstName}` : ''}`}
+        title={`${t('dashboard.welcome_back')}${user?.firstName ? `, ${user.firstName}` : ''}`}
         subtitle={workspace?.name || user?.companyName}
         actions={
           <Button variant="accent" asChild>
             <Link to="/app/leases?action=upload">
               <Plus className="h-4 w-4 mr-2" />
-              Upload Lease
+              {t('dashboard.upload_lease')}
             </Link>
           </Button>
         }

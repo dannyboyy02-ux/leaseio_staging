@@ -6,9 +6,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { differenceInDays } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface StatCard {
-  title: string;
+  titleKey: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   variant: 'default' | 'accent' | 'warning' | 'success';
@@ -23,6 +24,8 @@ const variantStyles = {
 };
 
 export function QuickStats() {
+  const { t } = useLanguage();
+  
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
@@ -39,13 +42,12 @@ export function QuickStats() {
       const allLeases = leases || [];
       const now = new Date();
 
-      // Calculate stats - support both old and new status values
       const activeLeases = allLeases.filter(l => 
-        l.status === 'Ready' || l.status === 'final' || l.status === 'review'
+        l.status === 'Ready' || l.status === 'final' || l.status === 'review' || l.status === 'Approved'
       ).length;
 
       const pendingReview = allLeases.filter(l => 
-        l.status === 'review' || l.status === 'processing' || l.status === 'Processing'
+        l.status === 'review' || l.status === 'processing' || l.status === 'Processing' || l.status === 'Ready'
       ).length;
 
       const expiringIn90Days = allLeases.filter(l => {
@@ -55,7 +57,7 @@ export function QuickStats() {
         return days >= 0 && days <= 90;
       }).length;
 
-      const finalized = allLeases.filter(l => l.status === 'final' || l.status === 'Ready').length;
+      const finalized = allLeases.filter(l => l.status === 'final' || l.status === 'Approved').length;
 
       return {
         activeLeases,
@@ -88,28 +90,28 @@ export function QuickStats() {
 
   const stats: StatCard[] = [
     {
-      title: 'Active Leases',
+      titleKey: 'dashboard.active_leases',
       value: data?.activeLeases ?? 0,
       icon: FileText,
       variant: 'default',
       href: '/app/leases',
     },
     {
-      title: 'Action Required',
+      titleKey: 'dashboard.action_required',
       value: data?.pendingReview ?? 0,
       icon: Clock,
       variant: 'accent',
       href: '/app/leases?status=review',
     },
     {
-      title: 'Expiring in 90 Days',
+      titleKey: 'dashboard.expiring_90_days',
       value: data?.expiringIn90Days ?? 0,
       icon: AlertTriangle,
       variant: 'warning',
       href: '/app/leases?expiring=90',
     },
     {
-      title: 'Finalized',
+      titleKey: 'dashboard.finalized',
       value: data?.finalized ?? 0,
       icon: CheckCircle2,
       variant: 'success',
@@ -139,7 +141,7 @@ export function QuickStats() {
               </div>
               <div className="mt-4">
                 <p className="text-2xl font-bold font-display">{stat.value}</p>
-                <p className="text-sm text-muted-foreground">{stat.title}</p>
+                <p className="text-sm text-muted-foreground">{t(stat.titleKey)}</p>
               </div>
             </CardContent>
           </Card>
@@ -147,13 +149,13 @@ export function QuickStats() {
 
         if (stat.href) {
           return (
-            <Link key={stat.title} to={stat.href} className="block">
+            <Link key={stat.titleKey} to={stat.href} className="block">
               {content}
             </Link>
           );
         }
 
-        return <div key={stat.title}>{content}</div>;
+        return <div key={stat.titleKey}>{content}</div>;
       })}
     </div>
   );

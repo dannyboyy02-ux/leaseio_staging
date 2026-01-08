@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 type Language = 'en' | 'es';
 
@@ -25,6 +25,38 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.account_settings': 'Account Settings',
     'nav.help_support': 'Help & Support',
     'nav.log_out': 'Log Out',
+    
+    // Dashboard
+    'dashboard.welcome_back': 'Welcome back',
+    'dashboard.upload_lease': 'Upload Lease',
+    'dashboard.active_leases': 'Active Leases',
+    'dashboard.action_required': 'Action Required',
+    'dashboard.expiring_90_days': 'Expiring in 90 Days',
+    'dashboard.finalized': 'Finalized',
+    'dashboard.total_monthly_rent': 'Total Monthly Rent',
+    'dashboard.annual_obligation': 'Annual Obligation',
+    'dashboard.next_payment_due': 'Next Payment Due',
+    'dashboard.rent_per_lease': 'Rent Per Lease',
+    'dashboard.active_lease': 'active lease',
+    'dashboard.active_leases_count': 'active leases',
+    'dashboard.total_for_year': 'Total for the year',
+    'dashboard.no_upcoming_payments': 'No upcoming payments',
+    'dashboard.average_monthly': 'Average monthly',
+    'dashboard.days': 'days',
+    'dashboard.upcoming_events': 'Upcoming Events',
+    'dashboard.view_all': 'View all',
+    'dashboard.no_upcoming_events': 'No upcoming events',
+    'dashboard.events_appear_here': 'Events will appear here as your leases approach key dates',
+    'dashboard.today': 'Today',
+    'dashboard.tomorrow': 'Tomorrow',
+    'dashboard.renewal': 'Renewal',
+    'dashboard.escalation': 'Escalation',
+    'dashboard.expiration': 'Expiration',
+    'dashboard.payment': 'Payment',
+    'dashboard.lease_expires': 'Lease expires',
+    'dashboard.renewal_window_opens': 'Renewal window opens',
+    'dashboard.rent_payment_due': 'Rent payment due',
+    'dashboard.properties': 'properties',
     
     // Lease Review
     'lease.review': 'Review Lease',
@@ -68,6 +100,26 @@ const translations: Record<Language, Record<string, string>> = {
     'lease.ready': 'Ready',
     'lease.failed': 'Failed',
     'lease.ai_risks_desc': 'AI-identified potential issues in this lease',
+    'lease.not_found': 'Lease not found',
+    'lease.back_to_leases': 'Back to Leases',
+    
+    // Leases Page
+    'leases.title': 'Leases',
+    'leases.portfolio': 'Your lease portfolio',
+    'leases.search': 'Search leases...',
+    'leases.filter_expiration': 'Filter by expiration',
+    'leases.all_leases': 'All leases',
+    'leases.expiring_30': 'Expiring in 30 days',
+    'leases.expiring_90': 'Expiring in 90 days',
+    'leases.expiring_year': 'Expiring this year',
+    'leases.property': 'Property',
+    'leases.tenant': 'Tenant',
+    'leases.landlord': 'Landlord',
+    'leases.dates': 'Dates',
+    'leases.rent': 'Rent',
+    'leases.actions': 'Actions',
+    'leases.no_leases': 'No leases yet',
+    'leases.upload_first': 'Upload your first lease to get started',
     
     // Import History
     'import.history': 'Import History',
@@ -84,6 +136,25 @@ const translations: Record<Language, Record<string, string>> = {
     'import.view': 'View lease',
     'import.delete': 'Delete',
     
+    // Notifications
+    'notifications.title': 'Notifications',
+    'notifications.subtitle': 'Stay on top of important dates',
+    'notifications.no_notifications': 'No notifications',
+    'notifications.all_caught_up': "You're all caught up!",
+    
+    // Settings
+    'settings.workspace': 'Workspace Settings',
+    'settings.account': 'Account Settings',
+    'settings.profile': 'Profile',
+    'settings.preferences': 'Preferences',
+    'settings.billing': 'Billing',
+    'settings.save_changes': 'Save Changes',
+    'settings.first_name': 'First Name',
+    'settings.last_name': 'Last Name',
+    'settings.email': 'Email',
+    'settings.company': 'Company Name',
+    'settings.timezone': 'Timezone',
+    
     // Common
     'common.confirm': 'Confirm',
     'common.cancel': 'Cancel',
@@ -97,12 +168,16 @@ const translations: Record<Language, Record<string, string>> = {
     'common.processing': 'Processing',
     'common.loading': 'Loading...',
     'common.page': 'Page',
+    'common.search': 'Search',
+    'common.view': 'View',
     
     // Plan labels
     'plan.free': 'Free',
     'plan.starter': 'Starter',
     'plan.pro': 'Pro',
     'plan.business': 'Business',
+    'plan.plan': 'Plan',
+    'plan.upgrade': 'Upgrade',
   },
   es: {
     // Navigation
@@ -120,6 +195,38 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.account_settings': 'Configuración de Cuenta',
     'nav.help_support': 'Ayuda y Soporte',
     'nav.log_out': 'Cerrar Sesión',
+    
+    // Dashboard
+    'dashboard.welcome_back': 'Bienvenido de nuevo',
+    'dashboard.upload_lease': 'Subir Arrendamiento',
+    'dashboard.active_leases': 'Arrendamientos Activos',
+    'dashboard.action_required': 'Acción Requerida',
+    'dashboard.expiring_90_days': 'Vencen en 90 Días',
+    'dashboard.finalized': 'Finalizados',
+    'dashboard.total_monthly_rent': 'Renta Mensual Total',
+    'dashboard.annual_obligation': 'Obligación Anual',
+    'dashboard.next_payment_due': 'Próximo Pago',
+    'dashboard.rent_per_lease': 'Renta por Arrendamiento',
+    'dashboard.active_lease': 'arrendamiento activo',
+    'dashboard.active_leases_count': 'arrendamientos activos',
+    'dashboard.total_for_year': 'Total del año',
+    'dashboard.no_upcoming_payments': 'Sin pagos pendientes',
+    'dashboard.average_monthly': 'Promedio mensual',
+    'dashboard.days': 'días',
+    'dashboard.upcoming_events': 'Próximos Eventos',
+    'dashboard.view_all': 'Ver todos',
+    'dashboard.no_upcoming_events': 'Sin eventos próximos',
+    'dashboard.events_appear_here': 'Los eventos aparecerán aquí cuando sus arrendamientos se acerquen a fechas clave',
+    'dashboard.today': 'Hoy',
+    'dashboard.tomorrow': 'Mañana',
+    'dashboard.renewal': 'Renovación',
+    'dashboard.escalation': 'Escalación',
+    'dashboard.expiration': 'Vencimiento',
+    'dashboard.payment': 'Pago',
+    'dashboard.lease_expires': 'Arrendamiento vence',
+    'dashboard.renewal_window_opens': 'Ventana de renovación abre',
+    'dashboard.rent_payment_due': 'Pago de renta pendiente',
+    'dashboard.properties': 'propiedades',
     
     // Lease Review
     'lease.review': 'Revisar Arrendamiento',
@@ -163,6 +270,26 @@ const translations: Record<Language, Record<string, string>> = {
     'lease.ready': 'Listo',
     'lease.failed': 'Fallido',
     'lease.ai_risks_desc': 'Problemas potenciales identificados por IA en este arrendamiento',
+    'lease.not_found': 'Arrendamiento no encontrado',
+    'lease.back_to_leases': 'Volver a Arrendamientos',
+    
+    // Leases Page
+    'leases.title': 'Arrendamientos',
+    'leases.portfolio': 'Su portafolio de arrendamientos',
+    'leases.search': 'Buscar arrendamientos...',
+    'leases.filter_expiration': 'Filtrar por vencimiento',
+    'leases.all_leases': 'Todos los arrendamientos',
+    'leases.expiring_30': 'Vencen en 30 días',
+    'leases.expiring_90': 'Vencen en 90 días',
+    'leases.expiring_year': 'Vencen este año',
+    'leases.property': 'Propiedad',
+    'leases.tenant': 'Arrendatario',
+    'leases.landlord': 'Arrendador',
+    'leases.dates': 'Fechas',
+    'leases.rent': 'Renta',
+    'leases.actions': 'Acciones',
+    'leases.no_leases': 'Sin arrendamientos',
+    'leases.upload_first': 'Suba su primer arrendamiento para comenzar',
     
     // Import History
     'import.history': 'Historial de Importaciones',
@@ -179,6 +306,25 @@ const translations: Record<Language, Record<string, string>> = {
     'import.view': 'Ver arrendamiento',
     'import.delete': 'Eliminar',
     
+    // Notifications
+    'notifications.title': 'Notificaciones',
+    'notifications.subtitle': 'Manténgase al día con fechas importantes',
+    'notifications.no_notifications': 'Sin notificaciones',
+    'notifications.all_caught_up': '¡Está al día!',
+    
+    // Settings
+    'settings.workspace': 'Configuración del Espacio de Trabajo',
+    'settings.account': 'Configuración de Cuenta',
+    'settings.profile': 'Perfil',
+    'settings.preferences': 'Preferencias',
+    'settings.billing': 'Facturación',
+    'settings.save_changes': 'Guardar Cambios',
+    'settings.first_name': 'Nombre',
+    'settings.last_name': 'Apellido',
+    'settings.email': 'Correo Electrónico',
+    'settings.company': 'Nombre de la Empresa',
+    'settings.timezone': 'Zona Horaria',
+    
     // Common
     'common.confirm': 'Confirmar',
     'common.cancel': 'Cancelar',
@@ -192,12 +338,16 @@ const translations: Record<Language, Record<string, string>> = {
     'common.processing': 'Procesando',
     'common.loading': 'Cargando...',
     'common.page': 'Página',
+    'common.search': 'Buscar',
+    'common.view': 'Ver',
     
     // Plan labels
     'plan.free': 'Gratis',
     'plan.starter': 'Inicial',
     'plan.pro': 'Pro',
     'plan.business': 'Empresarial',
+    'plan.plan': 'Plan',
+    'plan.upgrade': 'Actualizar',
   },
 };
 

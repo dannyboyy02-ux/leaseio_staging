@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   Table,
   TableBody,
@@ -64,15 +65,9 @@ interface LeaseRow {
 type SortField = 'property' | 'tenant' | 'landlord' | 'lease_start' | 'lease_end' | 'rent';
 type SortDirection = 'asc' | 'desc';
 
-const expirationFilters = [
-  { value: 'all', label: 'All leases' },
-  { value: '30', label: 'Expiring in 30 days' },
-  { value: '60', label: 'Expiring in 60 days' },
-  { value: '90', label: 'Expiring in 90 days' },
-];
-
 export default function Leases() {
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<LeaseRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,6 +76,12 @@ export default function Leases() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [leases, setLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const expirationFilters = [
+    { value: 'all', label: t('leases.all_leases') },
+    { value: '30', label: t('leases.expiring_30') },
+    { value: '90', label: t('leases.expiring_90') },
+  ];
 
   const fetchLeases = async () => {
     try {
@@ -265,12 +266,12 @@ export default function Leases() {
   return (
     <AppLayout>
       <AppHeader
-        title="Lease Portfolio"
-        subtitle={`${leases.length} active leases`}
+        title={t('leases.title')}
+        subtitle={`${leases.length} ${language === 'es' ? 'arrendamientos activos' : 'active leases'}`}
         actions={
           <Button variant="accent" onClick={() => navigate('/app/imports?action=upload')}>
             <Plus className="h-4 w-4 mr-2" />
-            Upload Lease
+            {t('dashboard.upload_lease')}
           </Button>
         }
       />
@@ -285,13 +286,13 @@ export default function Leases() {
             <div className="rounded-full bg-muted p-4 mb-4">
               <FileText className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No leases yet</h3>
+            <h3 className="text-lg font-semibold mb-2">{t('leases.no_leases')}</h3>
             <p className="text-muted-foreground mb-4">
-              Upload and process your first lease to see it here
+              {t('leases.upload_first')}
             </p>
             <Button variant="accent" onClick={() => navigate('/app/imports?action=upload')}>
               <Plus className="h-4 w-4 mr-2" />
-              Upload Lease
+              {t('dashboard.upload_lease')}
             </Button>
           </div>
         ) : (
@@ -301,7 +302,7 @@ export default function Leases() {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by property, tenant, or landlord..."
+                  placeholder={t('leases.search')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"

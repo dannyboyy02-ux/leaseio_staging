@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface NotificationWithLease {
   id: string;
@@ -33,39 +34,40 @@ interface NotificationWithLease {
   } | null;
 }
 
-const notificationConfig = {
-  renewal_window: {
-    icon: Calendar,
-    variant: 'info' as const,
-    label: 'Renewal',
-  },
-  escalation: {
-    icon: TrendingUp,
-    variant: 'warning' as const,
-    label: 'Escalation',
-  },
-  expiration: {
-    icon: AlertCircle,
-    variant: 'destructive' as const,
-    label: 'Expiration',
-  },
-  commencement: {
-    icon: Calendar,
-    variant: 'default' as const,
-    label: 'Commencement',
-  },
-  custom: {
-    icon: Bell,
-    variant: 'secondary' as const,
-    label: 'Custom',
-  },
-};
-
 export default function Notifications() {
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'sent'>('all');
   const [notifications, setNotifications] = useState<NotificationWithLease[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const notificationConfig = {
+    renewal_window: {
+      icon: Calendar,
+      variant: 'info' as const,
+      labelKey: 'dashboard.renewal',
+    },
+    escalation: {
+      icon: TrendingUp,
+      variant: 'warning' as const,
+      labelKey: 'dashboard.escalation',
+    },
+    expiration: {
+      icon: AlertCircle,
+      variant: 'destructive' as const,
+      labelKey: 'dashboard.expiration',
+    },
+    commencement: {
+      icon: Calendar,
+      variant: 'default' as const,
+      labelKey: 'lease.commencement_date',
+    },
+    custom: {
+      icon: Bell,
+      variant: 'secondary' as const,
+      labelKey: 'notifications.custom',
+    },
+  };
 
   useEffect(() => {
     async function fetchNotifications() {
@@ -120,7 +122,7 @@ export default function Notifications() {
   });
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString(language === 'es' ? 'es-MX' : 'en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -131,6 +133,12 @@ export default function Notifications() {
     const eventDate = new Date(dateString);
     eventDate.setHours(0, 0, 0, 0);
     return Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const getDaysLabel = (days: number) => {
+    if (days === 0) return t('dashboard.today');
+    if (days === 1) return t('dashboard.tomorrow');
+    return `${days} ${t('dashboard.days')}`;
   };
 
   const handleCancelNotification = async (id: string) => {
@@ -152,10 +160,17 @@ export default function Notifications() {
     }
   };
 
+  // Translation labels
+  const tabLabels = {
+    all: language === 'es' ? 'Todas Confirmadas' : 'All Confirmed',
+    upcoming: language === 'es' ? 'Alertas Próximas' : 'Upcoming Alerts',
+    sent: language === 'es' ? 'Ya Enviadas' : 'Already Sent',
+  };
+
   if (loading) {
     return (
       <AppLayout>
-        <AppHeader title="Notifications" subtitle="Manage lease alerts and reminders" />
+        <AppHeader title={t('notifications.title')} subtitle={t('notifications.subtitle')} />
         <div className="flex items-center justify-center h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -166,16 +181,16 @@ export default function Notifications() {
   return (
     <AppLayout>
       <AppHeader
-        title="Notifications"
-        subtitle="View and manage your confirmed lease alerts"
+        title={t('notifications.title')}
+        subtitle={t('notifications.subtitle')}
       />
 
       <div className="p-6">
         <Tabs defaultValue="all" onValueChange={(v) => setFilter(v as 'all' | 'upcoming' | 'sent')}>
           <TabsList className="mb-6">
-            <TabsTrigger value="all">All Confirmed</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming Alerts</TabsTrigger>
-            <TabsTrigger value="sent">Already Sent</TabsTrigger>
+            <TabsTrigger value="all">{tabLabels.all}</TabsTrigger>
+            <TabsTrigger value="upcoming">{tabLabels.upcoming}</TabsTrigger>
+            <TabsTrigger value="sent">{tabLabels.sent}</TabsTrigger>
           </TabsList>
 
           <TabsContent value={filter} className="mt-0">
@@ -185,16 +200,12 @@ export default function Notifications() {
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-6">
                     <Bell className="h-8 w-8 text-muted-foreground" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">No notifications</h3>
+                  <h3 className="text-lg font-semibold mb-2">{t('notifications.no_notifications')}</h3>
                   <p className="text-sm text-muted-foreground max-w-md mb-4">
-                    {filter === 'all'
-                      ? 'Confirm dates and enable notifications from your lease review pages to see them here.'
-                      : filter === 'upcoming'
-                      ? 'No upcoming notifications scheduled.'
-                      : 'No notifications have been sent yet.'}
+                    {t('notifications.all_caught_up')}
                   </p>
                   <Button variant="outline" onClick={() => navigate('/app/leases')}>
-                    View Leases
+                    {language === 'es' ? 'Ver Arrendamientos' : 'View Leases'}
                   </Button>
                 </CardContent>
               </Card>
@@ -209,7 +220,7 @@ export default function Notifications() {
                   const property =
                     (notification.leases?.extracted_json as any)?.property_address ||
                     notification.leases?.filename ||
-                    'Unknown Property';
+                    (language === 'es' ? 'Propiedad Desconocida' : 'Unknown Property');
 
                   return (
                     <Card
@@ -235,36 +246,36 @@ export default function Notifications() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
                               <Badge variant={config.variant} className="text-[10px]">
-                                {config.label}
+                                {t(config.labelKey)}
                               </Badge>
                               {wasSent && (
                                 <Badge variant="success" className="text-[10px]">
                                   <Check className="h-3 w-3 mr-1" />
-                                  Sent
+                                  {language === 'es' ? 'Enviado' : 'Sent'}
                                 </Badge>
                               )}
                               {!wasSent && notification.notify_email && !isPast && (
                                 <Badge variant="muted" className="text-[10px]">
-                                  Scheduled
+                                  {language === 'es' ? 'Programado' : 'Scheduled'}
                                 </Badge>
                               )}
                               {isPast && !wasSent && (
                                 <Badge variant="secondary" className="text-[10px]">
-                                  Past
+                                  {language === 'es' ? 'Pasado' : 'Past'}
                                 </Badge>
                               )}
                               {!notification.notify_email && (
                                 <Badge variant="outline" className="text-[10px]">
-                                  Email Off
+                                  {language === 'es' ? 'Email Desactivado' : 'Email Off'}
                                 </Badge>
                               )}
                             </div>
                             <h3 className="font-medium mb-1">
-                              {notification.event_description || `${config.label} Event`}
+                              {notification.event_description || t(config.labelKey)}
                             </h3>
                             <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                               <Link
-                                to={`/app/leases/${notification.lease_id}/review`}
+                                to={`/app/leases/${notification.lease_id}`}
                                 className="hover:text-accent hover:underline"
                               >
                                 {property}
@@ -275,11 +286,7 @@ export default function Notifications() {
                                 <>
                                   <span>•</span>
                                   <span className="font-medium">
-                                    {daysUntil === 0
-                                      ? 'Today'
-                                      : daysUntil === 1
-                                      ? 'Tomorrow'
-                                      : `${daysUntil} days`}
+                                    {getDaysLabel(daysUntil)}
                                   </span>
                                 </>
                               )}
@@ -287,7 +294,7 @@ export default function Notifications() {
                                 <>
                                   <span>•</span>
                                   <span>
-                                    Alerts: {notification.notify_days_before.sort((a, b) => b - a).join(', ')} days before
+                                    {language === 'es' ? 'Alertas' : 'Alerts'}: {notification.notify_days_before.sort((a, b) => b - a).join(', ')} {language === 'es' ? 'días antes' : 'days before'}
                                   </span>
                                 </>
                               )}
@@ -301,16 +308,16 @@ export default function Notifications() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => navigate(`/app/leases/${notification.lease_id}/review`)}
+                                onClick={() => navigate(`/app/leases/${notification.lease_id}`)}
                               >
-                                View Lease
+                                {language === 'es' ? 'Ver Arrendamiento' : 'View Lease'}
                               </DropdownMenuItem>
                               {notification.notify_email && !isPast && (
                                 <DropdownMenuItem
                                   className="text-destructive"
                                   onClick={() => handleCancelNotification(notification.id)}
                                 >
-                                  Disable Notifications
+                                  {language === 'es' ? 'Desactivar Notificaciones' : 'Disable Notifications'}
                                 </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
