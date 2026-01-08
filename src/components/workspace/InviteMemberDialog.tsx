@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Loader2, Mail, UserPlus } from 'lucide-react';
+import { useState } from "react";
+import { Loader2, Mail, UserPlus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -7,20 +7,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { WorkspaceRole } from '@/types';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { WorkspaceRole } from "@/types";
 
 interface InviteMemberDialogProps {
   open: boolean;
@@ -30,30 +24,25 @@ interface InviteMemberDialogProps {
 }
 
 const roleDescriptions: Record<WorkspaceRole, string> = {
-  admin: 'Full access including billing & member management',
-  editor: 'Upload, edit, export leases. No billing or member access',
-  viewer: 'Read-only access to view leases and reports',
+  admin: "Full access including billing & member management",
+  editor: "Upload, edit, export leases. No billing or member access",
+  viewer: "Read-only access to view leases and reports",
 };
 
-export function InviteMemberDialog({
-  open,
-  onOpenChange,
-  workspaceId,
-  onInviteSent,
-}: InviteMemberDialogProps) {
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<WorkspaceRole>('editor');
+export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSent }: InviteMemberDialogProps) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<WorkspaceRole>("editor");
   const [isInviting, setIsInviting] = useState(false);
 
   const handleInvite = async () => {
     if (!email.trim()) {
-      toast.error('Please enter an email address');
+      toast.error("notifications@theleaseio.com");
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      toast.error('Please enter a valid email address');
+      toast.error("notifications@theleaseio.com");
       return;
     }
 
@@ -61,40 +50,40 @@ export function InviteMemberDialog({
     try {
       // Check if user already exists
       const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', email.toLowerCase().trim())
+        .from("profiles")
+        .select("id")
+        .eq("email", email.toLowerCase().trim())
         .maybeSingle();
 
       // Check if already a member
       const { data: existingMember } = await supabase
-        .from('workspace_members')
-        .select('id')
-        .eq('workspace_id', workspaceId)
-        .eq('invited_email', email.toLowerCase().trim())
+        .from("workspace_members")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .eq("invited_email", email.toLowerCase().trim())
         .maybeSingle();
 
       if (existingMember) {
-        toast.error('This email has already been invited');
+        toast.error("This email has already been invited");
         return;
       }
 
       if (existingProfile) {
         // Check if already a member by user_id
         const { data: memberByUserId } = await supabase
-          .from('workspace_members')
-          .select('id')
-          .eq('workspace_id', workspaceId)
-          .eq('user_id', existingProfile.id)
+          .from("workspace_members")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("user_id", existingProfile.id)
           .maybeSingle();
 
         if (memberByUserId) {
-          toast.error('This user is already a member of this workspace');
+          toast.error("This user is already a member of this workspace");
           return;
         }
 
         // Add them directly as a member
-        const { error } = await supabase.from('workspace_members').insert({
+        const { error } = await supabase.from("workspace_members").insert({
           workspace_id: workspaceId,
           user_id: existingProfile.id,
           role: role,
@@ -108,7 +97,7 @@ export function InviteMemberDialog({
       } else {
         // Create pending invite - user_id will be set when they sign up
         // For now, create with a placeholder that will be updated
-        const { error } = await supabase.from('workspace_members').insert({
+        const { error } = await supabase.from("workspace_members").insert({
           workspace_id: workspaceId,
           user_id: workspaceId, // Temporary: will be workspace owner's ID for RLS
           role: role,
@@ -120,13 +109,13 @@ export function InviteMemberDialog({
         toast.success(`Invitation sent to ${email}`);
       }
 
-      setEmail('');
-      setRole('editor');
+      setEmail("");
+      setRole("editor");
       onOpenChange(false);
       onInviteSent();
     } catch (error) {
-      console.error('Error inviting member:', error);
-      toast.error('Failed to send invitation');
+      console.error("Error inviting member:", error);
+      toast.error("Failed to send invitation");
     } finally {
       setIsInviting(false);
     }
