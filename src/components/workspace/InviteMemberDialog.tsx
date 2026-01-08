@@ -97,16 +97,15 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
       } else {
         // Create pending invite - user_id will be set when they sign up
         // For now, create with a placeholder that will be updated
-        const { data, error } = await supabase.functions.invoke("invite_member", {
-          body: {
-            workspaceId,
-            email: email.toLowerCase().trim(),
-            role,
-          },
+        const { error } = await supabase.from("workspace_members").insert({
+          workspace_id: workspaceId,
+
+          role: role,
+          invited_email: email.toLowerCase().trim(),
+          invited_at: new Date().toISOString(),
         });
 
         if (error) throw error;
-
         toast.success(`Invitation sent to ${email}`);
       }
 
