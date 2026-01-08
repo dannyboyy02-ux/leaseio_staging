@@ -11,10 +11,12 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  XCircle
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +24,7 @@ import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   Table,
   TableBody,
@@ -47,16 +50,18 @@ interface ImportRow {
   storage_path: string | null;
 }
 
-const statusConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  'Uploaded': { label: 'Uploaded', icon: UploadIcon, variant: 'secondary' },
-  'Processing': { label: 'Processing', icon: Loader2, variant: 'default' },
-  'Ready': { label: 'Ready', icon: CheckCircle2, variant: 'outline' },
-  'Failed': { label: 'Failed', icon: AlertCircle, variant: 'destructive' },
+const statusConfig: Record<string, { label: string; labelEs: string; icon: React.ComponentType<{ className?: string }>; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  'Uploaded': { label: 'Processing', labelEs: 'Procesando', icon: Loader2, variant: 'secondary' },
+  'Processing': { label: 'Processing', labelEs: 'Procesando', icon: Loader2, variant: 'default' },
+  'Ready': { label: 'Ready', labelEs: 'Listo', icon: CheckCircle2, variant: 'outline' },
+  'Approved': { label: 'Active', labelEs: 'Activo', icon: CheckCircle2, variant: 'default' },
+  'Failed': { label: 'Failed', labelEs: 'Fallido', icon: XCircle, variant: 'destructive' },
 };
 
 export default function ImportHistory() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<ImportRow | null>(null);
@@ -85,7 +90,6 @@ export default function ImportHistory() {
   useEffect(() => {
     fetchImports();
 
-    // Poll for updates when any import is in Processing or Uploaded status
     const interval = setInterval(() => {
       const hasProcessing = imports.some(
         (i) => i.status === 'Processing' || i.status === 'Uploaded'
@@ -98,7 +102,6 @@ export default function ImportHistory() {
     return () => clearInterval(interval);
   }, [imports]);
 
-  // Open upload modal if action=upload in URL
   useEffect(() => {
     if (searchParams.get('action') === 'upload') {
       setUploadModalOpen(true);
@@ -119,7 +122,6 @@ export default function ImportHistory() {
     setRetryingId(importRow.id);
 
     try {
-      // Call the retry edge function
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error('Please log in to retry');
@@ -153,7 +155,6 @@ export default function ImportHistory() {
     if (!selectedLease) return;
 
     try {
-      // Delete from storage first if exists
       if (selectedLease.storage_path) {
         const { error: storageError } = await supabase.storage
           .from('leases')
@@ -164,7 +165,6 @@ export default function ImportHistory() {
         }
       }
 
-      // Delete risks first (foreign key constraint)
       const { error: risksError } = await supabase
         .from('risks')
         .delete()
@@ -174,7 +174,6 @@ export default function ImportHistory() {
         console.warn('Risks delete warning:', risksError);
       }
 
-      // Delete the lease record
       const { error: leaseError } = await supabase
         .from('leases')
         .delete()
@@ -200,11 +199,12 @@ export default function ImportHistory() {
     const config = statusConfig[status] || statusConfig['Uploaded'];
     const Icon = config.icon;
     const isProcessing = status === 'Processing' || status === 'Uploaded';
+    const label = language === 'es' ? config.labelEs : config.label;
 
     return (
       <Badge variant={config.variant} className="gap-1.5">
         <Icon className={`h-3 w-3 ${isProcessing ? 'animate-spin' : ''}`} />
-        {config.label}
+        {label}
       </Badge>
     );
   };
@@ -212,13 +212,16 @@ export default function ImportHistory() {
   return (
     <AppLayout>
       <AppHeader
-        title="Import History"
-        subtitle={`${imports.length} documents imported`}
+        title={t('import.history')}
+        subtitle={`${imports.length} ${t('import.documents_imported')}`}
         actions={
-          <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Upload Lease
-          </Button>
+          <div className="flex items-center gap-2">
+            <LanguageToggle />
+            <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t('import.upload_lease')}
+            </Button>
+          </div>
         }
       />
 
@@ -232,13 +235,13 @@ export default function ImportHistory() {
             <div className="rounded-full bg-muted p-4 mb-4">
               <FileText className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No imports yet</h3>
+            <h3 className="text-lg font-semibold mb-2">{t('import.no_imports')}</h3>
             <p className="text-muted-foreground mb-4">
-              Upload your first lease document to get started
+              {t('import.upload_first')}
             </p>
             <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Upload Lease
+              {t('import.upload_lease')}
             </Button>
           </div>
         ) : (
@@ -247,7 +250,7 @@ export default function ImportHistory() {
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by filename..."
+                placeholder={t('import.search_filename')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -259,11 +262,11 @@ export default function ImportHistory() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Filename</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Uploaded</TableHead>
-                    <TableHead>Processed</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t('import.filename')}</TableHead>
+                    <TableHead>{t('lease.status')}</TableHead>
+                    <TableHead>{t('import.uploaded')}</TableHead>
+                    <TableHead>{t('import.processed')}</TableHead>
+                    <TableHead className="text-right">{t('import.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -303,14 +306,30 @@ export default function ImportHistory() {
                           {format(new Date(imp.uploaded_at), 'MMM d, yyyy h:mm a')}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {imp.processed_at 
-                            ? format(new Date(imp.processed_at), 'MMM d, yyyy h:mm a')
-                            : '—'
-                          }
+                          {imp.status === 'Failed' ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRetry(imp)}
+                              disabled={retryingId === imp.id}
+                              className="text-primary hover:text-primary"
+                            >
+                              {retryingId === imp.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                              ) : (
+                                <RotateCcw className="h-4 w-4 mr-1" />
+                              )}
+                              {t('import.retry')}
+                            </Button>
+                          ) : imp.processed_at ? (
+                            format(new Date(imp.processed_at), 'MMM d, yyyy h:mm a')
+                          ) : (
+                            '—'
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {imp.status === 'Ready' && (
+                            {(imp.status === 'Ready' || imp.status === 'Approved') && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
@@ -321,26 +340,7 @@ export default function ImportHistory() {
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
-                                <TooltipContent>View lease</TooltipContent>
-                              </Tooltip>
-                            )}
-                            {imp.status === 'Failed' && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => handleRetry(imp)}
-                                    disabled={retryingId === imp.id}
-                                  >
-                                    {retryingId === imp.id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <RotateCcw className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Retry processing</TooltipContent>
+                                <TooltipContent>{t('import.view')}</TooltipContent>
                               </Tooltip>
                             )}
                             <Tooltip>
@@ -354,7 +354,7 @@ export default function ImportHistory() {
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Delete</TooltipContent>
+                              <TooltipContent>{t('import.delete')}</TooltipContent>
                             </Tooltip>
                           </div>
                         </TableCell>

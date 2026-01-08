@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 // Public pages
@@ -38,8 +39,9 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <AppProvider>
-        <TooltipProvider>
-          <Toaster />
+        <LanguageProvider>
+          <TooltipProvider>
+            <Toaster />
           <Sonner />
           <BrowserRouter>
             <Routes>
@@ -152,7 +154,8 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
-        </TooltipProvider>
+          </TooltipProvider>
+        </LanguageProvider>
       </AppProvider>
     </AuthProvider>
   </QueryClientProvider>
