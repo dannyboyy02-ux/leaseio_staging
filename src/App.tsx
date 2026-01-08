@@ -42,118 +42,118 @@ const App = () => (
         <LanguageProvider>
           <TooltipProvider>
             <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/" element={<Landing />} />
-              <Route path="/privacy" element={<Privacy />} />
-              <Route path="/terms" element={<Terms />} />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/" element={<Landing />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
 
-              {/* Auth routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
+                {/* Auth routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
 
-              {/* Protected app routes */}
-              <Route
-                path="/app/onboarding"
-                element={
-                  <ProtectedRoute>
-                    <Onboarding />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/leases"
-                element={
-                  <ProtectedRoute>
-                    <Leases />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/leases/:leaseId"
-                element={
-                  <ProtectedRoute>
-                    <LeaseReview />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/imports"
-                element={
-                  <ProtectedRoute>
-                    <ImportHistory />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/notifications"
-                element={
-                  <ProtectedRoute>
-                    <Notifications />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/integrations"
-                element={
-                  <ProtectedRoute>
-                    <Integrations />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/reports"
-                element={
-                  <ProtectedRoute>
-                    <Reports />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/settings/workspace"
-                element={
-                  <ProtectedRoute>
-                    <WorkspaceSettings />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/settings/account"
-                element={
-                  <ProtectedRoute>
-                    <AccountSettings />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/app/upgrade"
-                element={
-                  <ProtectedRoute>
-                    <Upgrade />
-                  </ProtectedRoute>
-                }
-              />
+                {/* Protected app routes */}
+                <Route
+                  path="/app/onboarding"
+                  element={
+                    <ProtectedRoute>
+                      <Onboarding />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/leases"
+                  element={
+                    <ProtectedRoute>
+                      <Leases />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/leases/:leaseId"
+                  element={
+                    <ProtectedRoute>
+                      <LeaseReview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/imports"
+                  element={
+                    <ProtectedRoute>
+                      <ImportHistory />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/notifications"
+                  element={
+                    <ProtectedRoute>
+                      <Notifications />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/integrations"
+                  element={
+                    <ProtectedRoute>
+                      <Integrations />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/reports"
+                  element={
+                    <ProtectedRoute>
+                      <Reports />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/settings/workspace"
+                  element={
+                    <ProtectedRoute>
+                      <WorkspaceSettings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/settings/account"
+                  element={
+                    <ProtectedRoute>
+                      <AccountSettings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/upgrade"
+                  element={
+                    <ProtectedRoute>
+                      <Upgrade />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* Legacy route redirects */}
-              <Route path="/auth" element={<Navigate to="/login" replace />} />
-              <Route path="/app/settings/billing" element={<Navigate to="/app/settings/account" replace />} />
+                {/* Legacy route redirects */}
+                <Route path="/auth" element={<Navigate to="/login" replace />} />
+                <Route path="/app/settings/billing" element={<Navigate to="/app/settings/account" replace />} />
 
-              {/* 404 */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+                {/* 404 */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
           </TooltipProvider>
         </LanguageProvider>
       </AppProvider>
