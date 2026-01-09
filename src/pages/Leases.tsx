@@ -13,7 +13,7 @@ import {
   Calendar,
   Building2,
   User,
-  DollarSign,
+  Ruler,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -54,14 +54,13 @@ interface LeaseRow {
   tenant_name: string | null;
   lease_start: string | null;
   lease_end: string | null;
-  base_rent_amount: string | null;
-  base_rent_frequency: string | null;
+  square_footage: number | null;
   uploaded_at: string;
   processed_at: string | null;
   extracted_json: Record<string, unknown> | null;
 }
 
-type SortField = 'property' | 'tenant' | 'landlord' | 'lease_start' | 'lease_end' | 'rent';
+type SortField = 'property' | 'tenant' | 'landlord' | 'lease_start' | 'lease_end' | 'sqft';
 type SortDirection = 'asc' | 'desc';
 
 export default function Leases() {
@@ -179,10 +178,9 @@ export default function Leases() {
     return <span className="text-muted-foreground">{days} {t('dashboard.days')}</span>;
   };
 
-  const parseRentAmount = (amount: string | null): number => {
-    if (!amount) return 0;
-    const cleaned = amount.replace(/[^0-9.]/g, '');
-    return parseFloat(cleaned) || 0;
+  const formatSqFt = (sqft: number | null) => {
+    if (!sqft) return '—';
+    return `${sqft.toLocaleString()} SF`;
   };
 
   const filteredAndSortedLeases = useMemo(() => {
@@ -228,9 +226,9 @@ export default function Leases() {
           aVal = a.lease_end || '';
           bVal = b.lease_end || '';
           break;
-        case 'rent':
-          aVal = parseRentAmount(a.base_rent_amount);
-          bVal = parseRentAmount(b.base_rent_amount);
+        case 'sqft':
+          aVal = a.square_footage || 0;
+          bVal = b.square_footage || 0;
           break;
       }
 
@@ -251,11 +249,6 @@ export default function Leases() {
     }
   };
 
-  const formatRent = (amount: string | null, frequency: string | null) => {
-    if (!amount) return '—';
-    const freq = frequency ? `/${frequency.replace('ly', '')}` : '';
-    return `${amount}${freq}`;
-  };
 
   return (
     <AppLayout>
@@ -385,11 +378,11 @@ export default function Leases() {
                         variant="ghost"
                         size="sm"
                         className="-ml-3 h-8"
-                        onClick={() => handleSort('rent')}
+                        onClick={() => handleSort('sqft')}
                       >
-                        <DollarSign className="mr-2 h-4 w-4" />
-                        {t('leases.rent')}
-                        {getSortIcon('rent')}
+                        <Ruler className="mr-2 h-4 w-4" />
+                        {t('leases.sqft')}
+                        {getSortIcon('sqft')}
                       </Button>
                     </TableHead>
                     <TableHead className="text-right">{t('leases.actions')}</TableHead>
@@ -439,7 +432,7 @@ export default function Leases() {
                             </div>
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
-                            {formatRent(lease.base_rent_amount, lease.base_rent_frequency)}
+                            {formatSqFt(lease.square_footage)}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>

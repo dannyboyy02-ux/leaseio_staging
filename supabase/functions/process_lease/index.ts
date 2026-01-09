@@ -42,6 +42,8 @@ interface LeaseExtractionResult {
   property_address: string | null;
   lease_start: string | null;
   lease_end: string | null;
+  // Square footage
+  square_footage: number | null;
   // New rent schedule fields
   current_monthly_rent: number | null;
   rent_escalation_type: string | null;
@@ -287,6 +289,7 @@ Extract the following information and return as JSON:
 - property_address: Full property address
 - lease_start: Lease commencement date (ISO format YYYY-MM-DD if possible)
 - lease_end: Lease expiration date (ISO format YYYY-MM-DD if possible)
+- square_footage: The rentable or usable square footage of the premises (number only, no units). Look for "rentable square feet", "RSF", "usable square feet", "premises size", etc.
 
 RENT SCHEDULE (CRITICAL - extract complete rent history):
 - current_monthly_rent: The current monthly rent amount as of today (number only, no currency symbol)
@@ -545,6 +548,7 @@ serve(async (req) => {
         base_rent_frequency: leaseData.base_rent_frequency,
         current_monthly_rent: leaseData.current_monthly_rent,
         rent_escalation_type: leaseData.rent_escalation_type,
+        square_footage: leaseData.square_footage,
         extracted_json: leaseData,
         processed_at: new Date().toISOString(),
       })
