@@ -78,6 +78,7 @@ export type Database = {
           lease_start: string | null
           processed_at: string | null
           rent_escalation_type: string | null
+          square_footage: number | null
           status: string
           storage_path: string | null
           tenant_name: string | null
@@ -98,6 +99,7 @@ export type Database = {
           lease_start?: string | null
           processed_at?: string | null
           rent_escalation_type?: string | null
+          square_footage?: number | null
           status?: string
           storage_path?: string | null
           tenant_name?: string | null
@@ -118,6 +120,7 @@ export type Database = {
           lease_start?: string | null
           processed_at?: string | null
           rent_escalation_type?: string | null
+          square_footage?: number | null
           status?: string
           storage_path?: string | null
           tenant_name?: string | null
@@ -286,7 +289,7 @@ export type Database = {
           invited_at: string | null
           invited_email: string | null
           role: Database["public"]["Enums"]["workspace_role"]
-          user_id: string
+          user_id: string | null
           workspace_id: string
         }
         Insert: {
@@ -296,7 +299,7 @@ export type Database = {
           invited_at?: string | null
           invited_email?: string | null
           role?: Database["public"]["Enums"]["workspace_role"]
-          user_id: string
+          user_id?: string | null
           workspace_id: string
         }
         Update: {
@@ -306,7 +309,7 @@ export type Database = {
           invited_at?: string | null
           invited_email?: string | null
           role?: Database["public"]["Enums"]["workspace_role"]
-          user_id?: string
+          user_id?: string | null
           workspace_id?: string
         }
         Relationships: [
