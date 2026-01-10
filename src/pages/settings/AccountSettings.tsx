@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Bell, Shield, Download, Trash2, Save, Eye, EyeOff, Loader2, CreditCard, Check } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -45,16 +45,13 @@ const timezones = [
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
 ];
 
-const invoices = [
-  { id: '1', date: '2025-01-01', amount: 79, status: 'paid' },
-  { id: '2', date: '2024-12-01', amount: 79, status: 'paid' },
-  { id: '3', date: '2024-11-01', amount: 79, status: 'paid' },
-];
-
 export default function AccountSettings() {
   const { user, workspace, refreshProfile } = useApp();
-  const { user: authUser } = useAuth();
-  const { t } = useLanguage();
+  const { user: authUser, signOut } = useAuth();
+  const { t, language } = useLanguage();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -69,10 +66,28 @@ export default function AccountSettings() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [emailNotifications, setEmailNotifications] = useState(true);
-  const [smsNotifications, setSmsNotifications] = useState(true);
-  const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
+  const [smsNotifications, setSmsNotifications] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isLoggingOutOthers, setIsLoggingOutOthers] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState<string | null>(null);
+  const [isManagingPayment, setIsManagingPayment] = useState(false);
+  const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('profile');
+
+  // Handle URL params for tab switching
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) setActiveTab(tab);
+    
+    const checkout = searchParams.get('checkout');
+    if (checkout === 'success') {
+      toast.success('Subscription activated successfully!');
+      refreshProfile();
+    } else if (checkout === 'canceled') {
+      toast.info('Checkout was canceled');
+    }
+  }, [searchParams, refreshProfile]);
 
   useEffect(() => {
     if (user) {
@@ -83,6 +98,23 @@ export default function AccountSettings() {
       setTimezone(user.timezone || 'America/New_York');
     }
   }, [user]);
+
+  // Load notification preferences
+  useEffect(() => {
+    async function loadPrefs() {
+      if (!authUser?.id) return;
+      const { data } = await supabase
+        .from('profiles')
+        .select('email_notifications_enabled, sms_notifications_enabled')
+        .eq('id', authUser.id)
+        .single();
+      if (data) {
+        setEmailNotifications(data.email_notifications_enabled ?? true);
+        setSmsNotifications(data.sms_notifications_enabled ?? false);
+      }
+    }
+    loadPrefs();
+  }, [authUser?.id]);
 
   const handleSaveProfile = async () => {
     if (!authUser) {
@@ -148,52 +180,119 @@ export default function AccountSettings() {
     }
   };
 
-  const handleExportData = async () => {
-    setIsExporting(true);
+  const handleSaveNotificationPrefs = async () => {
+    if (!authUser?.id) return;
+    
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          email_notifications_enabled: emailNotifications,
+          sms_notifications_enabled: smsNotifications,
+        })
+        .eq('id', authUser.id);
 
-      const [leasesRes, profileRes] = await Promise.all([
-        supabase.from('leases').select('*').eq('user_id', user.id),
-        supabase.from('profiles').select('*').eq('id', user.id).single(),
-      ]);
-
-      const exportData = {
-        exportDate: new Date().toISOString(),
-        profile: profileRes.data,
-        leases: leasesRes.data,
-      };
-
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `leaseio-export-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast.success('Data exported successfully!');
+      if (error) throw error;
+      toast.success('Notification preferences saved!');
     } catch (error) {
-      console.error('Error exporting data:', error);
-      toast.error('Failed to export data');
-    } finally {
-      setIsExporting(false);
+      console.error('Error saving notification prefs:', error);
+      toast.error('Failed to save preferences');
     }
   };
 
   const handleDeleteAccount = async () => {
-    toast.error('Please contact support to delete your account');
+    setIsDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-account');
+      
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('Account deleted successfully');
+      await signOut();
+      navigate('/');
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error('Failed to delete account. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
+
+  const handleLogoutOtherSessions = async () => {
+    setIsLoggingOutOthers(true);
+    try {
+      // Supabase doesn't have a direct "logout other sessions" - we use signOut with scope
+      const { error } = await supabase.auth.signOut({ scope: 'others' });
+      if (error) throw error;
+      toast.success('All other sessions have been logged out');
+    } catch (error) {
+      console.error('Error logging out other sessions:', error);
+      toast.error('Failed to log out other sessions');
+    } finally {
+      setIsLoggingOutOthers(false);
+    }
+  };
+
+  const handleUpgrade = async (planId: string) => {
+    // If already subscribed, show confirmation first
+    const currentPlan = (workspace?.plan || 'free') as SubscriptionPlan;
+    if (currentPlan !== 'free' && isUpgrade(currentPlan, planId as SubscriptionPlan)) {
+      setConfirmUpgradePlan(planId);
+      return;
+    }
+    
+    await proceedWithCheckout(planId);
+  };
+
+  const proceedWithCheckout = async (planId: string) => {
+    setIsUpgrading(planId);
+    setConfirmUpgradePlan(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { planId },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error) {
+      console.error('Error creating checkout:', error);
+      toast.error('Failed to start checkout. Please try again.');
+    } finally {
+      setIsUpgrading(null);
+    }
+  };
+
+  const handleManagePayment = async () => {
+    setIsManagingPayment(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('customer-portal');
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.url) {
+        window.open(data.url, '_blank');
+      }
+    } catch (error) {
+      console.error('Error opening customer portal:', error);
+      toast.error('Failed to open billing portal. You may need an active subscription first.');
+    } finally {
+      setIsManagingPayment(false);
+    }
+  };
+
+  const currentPlan = (workspace?.plan || 'free') as SubscriptionPlan;
 
   return (
     <AppLayout>
       <AppHeader title={t('account.title')} subtitle={t('account.subtitle')} />
 
       <div className="p-6">
-        <Tabs defaultValue="profile">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
             <TabsTrigger value="profile" className="gap-2">
               <User className="h-4 w-4" />
@@ -206,10 +305,6 @@ export default function AccountSettings() {
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
               {t('account.notifications')}
-            </TabsTrigger>
-            <TabsTrigger value="data" className="gap-2">
-              <Shield className="h-4 w-4" />
-              {t('account.data_privacy')}
             </TabsTrigger>
             <TabsTrigger value="subscription" className="gap-2">
               <CreditCard className="h-4 w-4" />
@@ -249,7 +344,8 @@ export default function AccountSettings() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    disabled
+                    className="bg-muted"
                   />
                 </div>
                 <div className="space-y-2">
@@ -293,6 +389,50 @@ export default function AccountSettings() {
                   )}
                   {isSaving ? t('account.saving') : t('account.save_changes')}
                 </Button>
+              </CardContent>
+            </Card>
+
+            {/* Danger Zone - Delete Account */}
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="text-destructive">{t('account.delete_account')}</CardTitle>
+                <CardDescription>
+                  {t('account.delete_account_desc')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {t('account.delete_warning')}
+                </p>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" disabled={isDeleting}>
+                      {isDeleting ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-2" />
+                      )}
+                      {t('account.delete_account')}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t('account.delete_confirm')}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t('account.delete_confirm_desc')}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                      <AlertDialogAction 
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={handleDeleteAccount}
+                      >
+                        {t('account.delete_account')}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
             </Card>
           </TabsContent>
@@ -379,7 +519,17 @@ export default function AccountSettings() {
                     </div>
                   </div>
                 </div>
-                <Button variant="outline" className="w-full mt-4">
+                <Button 
+                  variant="outline" 
+                  className="w-full mt-4"
+                  onClick={handleLogoutOtherSessions}
+                  disabled={isLoggingOutOthers}
+                >
+                  {isLoggingOutOthers ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <LogOut className="h-4 w-4 mr-2" />
+                  )}
                   {t('account.logout_other')}
                 </Button>
               </CardContent>
@@ -418,82 +568,10 @@ export default function AccountSettings() {
                     onCheckedChange={setSmsNotifications}
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{t('account.quiet_hours')}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t('account.quiet_hours_desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={quietHoursEnabled}
-                    onCheckedChange={setQuietHoursEnabled}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Data & Privacy */}
-          <TabsContent value="data" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('account.export_data')}</CardTitle>
-                <CardDescription>
-                  {t('account.export_data_desc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {t('account.export_archive')}
-                </p>
-                <Button variant="outline" onClick={handleExportData} disabled={isExporting}>
-                  {isExporting ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 mr-2" />
-                  )}
-                  {isExporting ? t('account.exporting') : t('account.export_btn')}
+                <Button variant="accent" onClick={handleSaveNotificationPrefs}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {t('account.save_changes')}
                 </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="text-destructive">{t('account.delete_account')}</CardTitle>
-                <CardDescription>
-                  {t('account.delete_account_desc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {t('account.delete_warning')}
-                </p>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive">
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      {t('account.delete_account')}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{t('account.delete_confirm')}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t('account.delete_confirm_desc')}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                      <AlertDialogAction 
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        onClick={handleDeleteAccount}
-                      >
-                        {t('account.delete_account')}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
               </CardContent>
             </Card>
           </TabsContent>
@@ -511,17 +589,19 @@ export default function AccountSettings() {
                       workspace?.plan === 'pro' ? 'pro' : 
                       'secondary'
                     }>
-                      {PLANS[workspace?.plan as SubscriptionPlan]?.name || workspace?.plan}
+                      {PLANS[currentPlan]?.name || currentPlan}
                     </Badge>
                   </CardTitle>
-                  <CardDescription>
-                    {t('account.renews_on')}{' '}
-                    {new Date(workspace?.renewalDate || '').toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </CardDescription>
+                  {currentPlan !== 'free' && (
+                    <CardDescription>
+                      {t('account.renews_on')}{' '}
+                      {new Date(workspace?.renewalDate || '').toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </CardDescription>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
@@ -544,8 +624,17 @@ export default function AccountSettings() {
                         className="h-2"
                       />
                     </div>
-                    <Button variant="outline" className="w-full">
-                      <CreditCard className="h-4 w-4 mr-2" />
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={handleManagePayment}
+                      disabled={isManagingPayment}
+                    >
+                      {isManagingPayment ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CreditCard className="h-4 w-4 mr-2" />
+                      )}
                       {t('account.manage_payment')}
                     </Button>
                   </div>
@@ -561,9 +650,14 @@ export default function AccountSettings() {
                   <div className="space-y-3">
                     <div>
                       <p className="text-sm font-medium">{workspace?.name}</p>
-                      <p className="text-sm text-muted-foreground">{user?.email || 'billing@example.com'}</p>
+                      <p className="text-sm text-muted-foreground">{user?.email || ''}</p>
                     </div>
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleManagePayment}
+                      disabled={isManagingPayment}
+                    >
                       {t('account.update_billing')}
                     </Button>
                   </div>
@@ -577,7 +671,6 @@ export default function AccountSettings() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {PLAN_ORDER.map((planId, index) => {
                   const plan = PLANS[planId];
-                  const currentPlan = (workspace?.plan || 'free') as SubscriptionPlan;
                   const isCurrent = currentPlan === planId;
                   const isUpgradeOption = isUpgrade(currentPlan, planId);
 
@@ -591,7 +684,12 @@ export default function AccountSettings() {
                       )}
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
-                      {plan.popular && (
+                      {isCurrent && (
+                        <div className="absolute -top-3 right-3">
+                          <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
+                        </div>
+                      )}
+                      {plan.popular && !isCurrent && (
                         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                           <Badge variant="pro">Popular</Badge>
                         </div>
@@ -623,14 +721,29 @@ export default function AccountSettings() {
                         </ul>
                         {isCurrent ? (
                           <Button variant="secondary" size="sm" className="w-full" disabled>
+                            <Check className="h-4 w-4 mr-1" />
                             {t('account.current')}
                           </Button>
                         ) : isUpgradeOption ? (
-                          <Button variant="accent" size="sm" className="w-full" asChild>
-                            <Link to="/app/upgrade">{t('common.upgrade')}</Link>
+                          <Button 
+                            variant="accent" 
+                            size="sm" 
+                            className="w-full"
+                            onClick={() => handleUpgrade(planId)}
+                            disabled={isUpgrading === planId}
+                          >
+                            {isUpgrading === planId ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : null}
+                            {t('common.upgrade')}
                           </Button>
                         ) : planId !== 'free' ? (
-                          <Button variant="outline" size="sm" className="w-full">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="w-full"
+                            onClick={handleManagePayment}
+                          >
                             {t('account.downgrade')}
                           </Button>
                         ) : (
@@ -645,80 +758,50 @@ export default function AccountSettings() {
               </div>
             </div>
 
-            {/* Invoices */}
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('account.invoice_history')}</CardTitle>
-                <CardDescription>{t('account.download_invoices')}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="divide-y divide-border">
-                  {invoices.map((invoice) => (
-                    <div
-                      key={invoice.id}
-                      className="flex items-center justify-between py-3"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">
-                          {new Date(invoice.date).toLocaleDateString('en-US', {
-                            month: 'long',
-                            year: 'numeric',
-                          })}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          ${invoice.amount}.00
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Badge variant="success">{invoice.status}</Badge>
-                        <Button variant="ghost" size="icon-sm">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Cancel Subscription */}
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="text-destructive">{t('account.cancel_subscription')}</CardTitle>
-                <CardDescription>
-                  {t('account.cancel_subscription_desc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {t('account.cancel_warning')}
-                </p>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive">
-                      {t('account.cancel_subscription')}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{t('account.cancel_confirm')}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t('account.cancel_confirm_desc')}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
-                      <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        {t('account.cancel_subscription')}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </CardContent>
-            </Card>
+            {/* Cancel Subscription - only show if subscribed */}
+            {currentPlan !== 'free' && (
+              <Card className="border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="text-destructive">{t('account.cancel_subscription')}</CardTitle>
+                  <CardDescription>
+                    {t('account.cancel_subscription_desc')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {t('account.cancel_warning')}
+                  </p>
+                  <Button 
+                    variant="destructive"
+                    onClick={handleManagePayment}
+                  >
+                    {t('account.cancel_subscription')}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Upgrade Confirmation Dialog */}
+      <AlertDialog open={!!confirmUpgradePlan} onOpenChange={() => setConfirmUpgradePlan(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Plan Change</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are upgrading from {PLANS[currentPlan]?.name} to {confirmUpgradePlan ? PLANS[confirmUpgradePlan as SubscriptionPlan]?.name : ''}. 
+              You'll be charged the difference prorated for your current billing period.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmUpgradePlan && proceedWithCheckout(confirmUpgradePlan)}>
+              Continue to Checkout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

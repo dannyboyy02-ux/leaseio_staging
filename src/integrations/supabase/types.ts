@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      invite_tokens: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          role: Database["public"]["Enums"]["workspace_role"]
+          token: string
+          workspace_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["workspace_role"]
+          token?: string
+          workspace_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["workspace_role"]
+          token?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_tokens_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lease_notifications: {
         Row: {
           created_at: string
@@ -68,6 +109,7 @@ export type Database = {
         Row: {
           base_rent_amount: string | null
           base_rent_frequency: string | null
+          confirmed_sections: string[]
           current_monthly_rent: number | null
           error_message: string | null
           extracted_json: Json | null
@@ -89,6 +131,7 @@ export type Database = {
         Insert: {
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
+          confirmed_sections?: string[]
           current_monthly_rent?: number | null
           error_message?: string | null
           extracted_json?: Json | null
@@ -110,6 +153,7 @@ export type Database = {
         Update: {
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
+          confirmed_sections?: string[]
           current_monthly_rent?: number | null
           error_message?: string | null
           extracted_json?: Json | null
@@ -151,11 +195,13 @@ export type Database = {
           company_name: string | null
           created_at: string
           email: string | null
+          email_notifications_enabled: boolean
           first_name: string | null
           id: string
           last_name: string | null
           plan: string
           processed_count: number
+          sms_notifications_enabled: boolean
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_period_end: string | null
@@ -168,11 +214,13 @@ export type Database = {
           company_name?: string | null
           created_at?: string
           email?: string | null
+          email_notifications_enabled?: boolean
           first_name?: string | null
           id: string
           last_name?: string | null
           plan?: string
           processed_count?: number
+          sms_notifications_enabled?: boolean
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_period_end?: string | null
@@ -185,11 +233,13 @@ export type Database = {
           company_name?: string | null
           created_at?: string
           email?: string | null
+          email_notifications_enabled?: boolean
           first_name?: string | null
           id?: string
           last_name?: string | null
           plan?: string
           processed_count?: number
+          sms_notifications_enabled?: boolean
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_period_end?: string | null

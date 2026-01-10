@@ -114,6 +114,7 @@ export default function LeaseReview() {
   const [confirmedSections, setConfirmedSections] = useState<Set<SectionKey>>(new Set());
   const [editingSections, setEditingSections] = useState<Set<SectionKey>>(new Set());
   const [editingFilename, setEditingFilename] = useState(false);
+  const [savingFilename, setSavingFilename] = useState(false);
   
   const [editableFields, setEditableFields] = useState<EditableFields>({
     filename: '',
@@ -154,6 +155,10 @@ export default function LeaseReview() {
           rent_escalation_type: leaseData.rent_escalation_type as string | null,
         };
         setLease(typedLease);
+
+        // Load confirmed sections from database
+        const savedConfirmed = (leaseData.confirmed_sections as string[]) || [];
+        setConfirmedSections(new Set(savedConfirmed as SectionKey[]));
 
         const extracted = typedLease.extracted_json || {};
         setEditableFields({
@@ -205,8 +210,50 @@ export default function LeaseReview() {
     setEditableFields(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleConfirmSection = (section: SectionKey) => {
-    setConfirmedSections(prev => new Set([...prev, section]));
+  const handleConfirmSection = async (section: SectionKey) => {
+    if (!lease) return;
+    
+    const newConfirmed = new Set([...confirmedSections, section]);
+    setConfirmedSections(newConfirmed);
+    
+    // Persist to database
+    try {
+      const { error } = await supabase
+        .from('leases')
+        .update({ confirmed_sections: Array.from(newConfirmed) })
+        .eq('id', lease.id);
+      
+      if (error) throw error;
+      toast.success(`${section} confirmed`);
+    } catch (error) {
+      console.error('Error confirming section:', error);
+      toast.error('Failed to save confirmation');
+      // Revert on error
+      setConfirmedSections(confirmedSections);
+    }
+  };
+
+  const handleSaveFilename = async () => {
+    if (!lease || !editableFields.filename.trim()) return;
+    
+    setSavingFilename(true);
+    try {
+      const { error } = await supabase
+        .from('leases')
+        .update({ filename: editableFields.filename.trim() })
+        .eq('id', lease.id);
+      
+      if (error) throw error;
+      
+      setLease({ ...lease, filename: editableFields.filename.trim() });
+      setEditingFilename(false);
+      toast.success('Filename saved');
+    } catch (error) {
+      console.error('Error saving filename:', error);
+      toast.error('Failed to save filename');
+    } finally {
+      setSavingFilename(false);
+    }
   };
 
   const toggleEditSection = (section: SectionKey) => {

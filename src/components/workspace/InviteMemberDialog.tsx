@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Loader2, Mail, UserPlus } from "lucide-react";
+import { useState, KeyboardEvent } from "react";
+import { Loader2, Mail, UserPlus, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { WorkspaceRole } from "@/types";
+import { useApp } from "@/contexts/AppContext";
 
 interface InviteMemberDialogProps {
   open: boolean;
@@ -30,91 +32,92 @@ const roleDescriptions: Record<WorkspaceRole, string> = {
 };
 
 export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSent }: InviteMemberDialogProps) {
-  const [email, setEmail] = useState("");
+  const { workspace } = useApp();
+  const [emailInput, setEmailInput] = useState("");
+  const [emails, setEmails] = useState<string[]>([]);
   const [role, setRole] = useState<WorkspaceRole>("editor");
   const [isInviting, setIsInviting] = useState(false);
 
-  const handleInvite = async () => {
-    if (!email.trim()) {
-      toast.error("notifications@theleaseio.com");
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  const addEmail = (email: string) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return;
+    
+    if (!emailRegex.test(trimmed)) {
+      toast.error(`Invalid email: ${trimmed}`);
       return;
     }
+    
+    if (emails.includes(trimmed)) {
+      toast.error("Email already added");
+      return;
+    }
+    
+    setEmails([...emails, trimmed]);
+    setEmailInput("");
+  };
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      toast.error("notifications@theleaseio.com");
+  const removeEmail = (email: string) => {
+    setEmails(emails.filter(e => e !== email));
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addEmail(emailInput);
+    } else if (e.key === "Backspace" && !emailInput && emails.length > 0) {
+      removeEmail(emails[emails.length - 1]);
+    }
+  };
+
+  const handleBlur = () => {
+    if (emailInput.trim()) {
+      addEmail(emailInput);
+    }
+  };
+
+  const handleInvite = async () => {
+    if (emails.length === 0) {
+      toast.error("Please add at least one email address");
       return;
     }
 
     setIsInviting(true);
     try {
-      // Check if user already exists
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("email", email.toLowerCase().trim())
-        .maybeSingle();
+      const { data, error } = await supabase.functions.invoke("send-invite", {
+        body: {
+          emails,
+          role,
+          workspaceId,
+          workspaceName: workspace?.name || "Workspace",
+        },
+      });
 
-      // Check if already a member
-      const { data: existingMember } = await supabase
-        .from("workspace_members")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .eq("invited_email", email.toLowerCase().trim())
-        .maybeSingle();
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      if (existingMember) {
-        toast.error("This email has already been invited");
-        return;
+      const successCount = data?.results?.filter((r: any) => r.success).length || 0;
+      const failCount = emails.length - successCount;
+
+      if (successCount > 0) {
+        toast.success(`${successCount} invitation${successCount > 1 ? 's' : ''} sent successfully`);
+      }
+      if (failCount > 0) {
+        const failures = data?.results?.filter((r: any) => !r.success) || [];
+        failures.forEach((f: any) => {
+          toast.error(`${f.email}: ${f.error || 'Failed to invite'}`);
+        });
       }
 
-      if (existingProfile) {
-        // Check if already a member by user_id
-        const { data: memberByUserId } = await supabase
-          .from("workspace_members")
-          .select("id")
-          .eq("workspace_id", workspaceId)
-          .eq("user_id", existingProfile.id)
-          .maybeSingle();
-
-        if (memberByUserId) {
-          toast.error("This user is already a member of this workspace");
-          return;
-        }
-
-        // Add them directly as a member
-        const { error } = await supabase.from("workspace_members").insert({
-          workspace_id: workspaceId,
-          user_id: existingProfile.id,
-          role: role,
-          invited_email: email.toLowerCase().trim(),
-          invited_at: new Date().toISOString(),
-          accepted_at: new Date().toISOString(),
-        });
-
-        if (error) throw error;
-        toast.success(`${email} has been added to the workspace`);
-      } else {
-        // Create pending invite - user_id is nullable for pending invites
-        const { error } = await supabase.from("workspace_members").insert({
-          workspace_id: workspaceId,
-          user_id: null,
-          role: role,
-          invited_email: email.toLowerCase().trim(),
-          invited_at: new Date().toISOString(),
-        });
-
-        if (error) throw error;
-        toast.success(`Invitation sent to ${email}`);
-      }
-
-      setEmail("");
+      setEmails([]);
+      setEmailInput("");
       setRole("editor");
       onOpenChange(false);
       onInviteSent();
     } catch (error) {
-      console.error("Error inviting member:", error);
-      toast.error("Failed to send invitation");
+      console.error("Error inviting members:", error);
+      toast.error("Failed to send invitations");
     } finally {
       setIsInviting(false);
     }
@@ -126,27 +129,43 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
-            Invite Team Member
+            Invite Team Members
           </DialogTitle>
           <DialogDescription>
-            Add a new member to your workspace. They'll receive an email invitation.
+            Add team members to your workspace. They'll receive an email invitation.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email Address</Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Label htmlFor="email">Email Addresses</Label>
+            <div className="flex flex-wrap gap-2 p-2 border rounded-md bg-background min-h-[42px]">
+              {emails.map((email) => (
+                <Badge key={email} variant="secondary" className="gap-1 pr-1">
+                  {email}
+                  <button
+                    type="button"
+                    onClick={() => removeEmail(email)}
+                    className="ml-1 hover:bg-muted rounded-full p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
               <Input
                 id="email"
                 type="email"
-                placeholder="colleague@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="pl-10"
+                placeholder={emails.length === 0 ? "colleague@company.com" : "Add another..."}
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={handleBlur}
+                className="flex-1 min-w-[150px] border-0 p-0 h-6 focus-visible:ring-0"
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              Press Enter or comma to add multiple emails
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -157,19 +176,13 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">Admin</span>
-                  </div>
+                  <span className="font-medium">Admin</span>
                 </SelectItem>
                 <SelectItem value="editor">
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">Editor</span>
-                  </div>
+                  <span className="font-medium">Editor</span>
                 </SelectItem>
                 <SelectItem value="viewer">
-                  <div className="flex flex-col items-start">
-                    <span className="font-medium">Viewer</span>
-                  </div>
+                  <span className="font-medium">Viewer</span>
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -181,7 +194,7 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="accent" onClick={handleInvite} disabled={isInviting}>
+          <Button variant="accent" onClick={handleInvite} disabled={isInviting || emails.length === 0}>
             {isInviting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -190,7 +203,7 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
             ) : (
               <>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Send Invitation
+                Send {emails.length > 0 ? `${emails.length} ` : ''}Invitation{emails.length !== 1 ? 's' : ''}
               </>
             )}
           </Button>
