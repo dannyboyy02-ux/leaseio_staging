@@ -2,16 +2,19 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { FileText, Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { LanguageToggle } from '@/components/layout/LanguageToggle';
 
 export function LandingNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const { t } = useLanguage();
 
   const navLinks = [
-    { href: '#features', label: 'Product' },
-    { href: '#pricing', label: 'Pricing' },
-    { href: '#security', label: 'Security' },
-    { href: '#faq', label: 'FAQ' },
+    { href: '#features', labelKey: 'landing.nav.product' },
+    { href: '#pricing', labelKey: 'landing.nav.pricing' },
+    { href: '#security', labelKey: 'landing.nav.security' },
+    { href: '#faq', labelKey: 'landing.nav.faq' },
   ];
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -53,28 +56,32 @@ export function LandingNav() {
                 onClick={(e) => handleNavClick(e, link.href)}
                 className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
-                {link.label}
+                {t(link.labelKey)}
               </a>
             ))}
           </div>
 
           {/* Desktop Auth Buttons */}
           <div className="hidden md:flex items-center gap-3">
+            <LanguageToggle />
             <Button variant="ghost" asChild>
-              <Link to="/login">Sign in</Link>
+              <Link to="/login">{t('landing.nav.sign_in')}</Link>
             </Button>
             <Button asChild>
-              <Link to="/signup">Get Started</Link>
+              <Link to="/signup">{t('landing.nav.get_started')}</Link>
             </Button>
           </div>
 
           {/* Mobile Menu Button */}
-          <button
-            className="md:hidden p-2 text-muted-foreground hover:text-foreground"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
+          <div className="md:hidden flex items-center gap-2">
+            <LanguageToggle />
+            <button
+              className="p-2 text-muted-foreground hover:text-foreground"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -92,15 +99,15 @@ export function LandingNav() {
                   setMobileMenuOpen(false);
                 }}
               >
-                {link.label}
+                {t(link.labelKey)}
               </a>
             ))}
             <div className="pt-4 flex flex-col gap-2">
               <Button variant="outline" asChild className="w-full">
-                <Link to="/login">Sign in</Link>
+                <Link to="/login">{t('landing.nav.sign_in')}</Link>
               </Button>
               <Button asChild className="w-full">
-                <Link to="/signup">Get Started</Link>
+                <Link to="/signup">{t('landing.nav.get_started')}</Link>
               </Button>
             </div>
           </div>

@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Search, Bell, Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,6 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AppHeaderProps {
   title: string;
@@ -17,8 +20,73 @@ interface AppHeaderProps {
   actions?: React.ReactNode;
 }
 
+interface NotificationPreview {
+  id: string;
+  event_type: string;
+  event_description: string | null;
+  event_date: string;
+  lease_id: string;
+}
+
 export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationPreview[]>([]);
+  const navigate = useNavigate();
+  const { t, language } = useLanguage();
+
+  useEffect(() => {
+    async function fetchRecentNotifications() {
+      try {
+        const { data } = await supabase
+          .from('lease_notifications')
+          .select('id, event_type, event_description, event_date, lease_id')
+          .eq('is_confirmed', true)
+          .eq('notify_email', true)
+          .gte('event_date', new Date().toISOString().split('T')[0])
+          .order('event_date', { ascending: true })
+          .limit(5);
+        
+        setNotifications(data || []);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
+    }
+
+    fetchRecentNotifications();
+  }, []);
+
+  const getEventTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      renewal_window: t('notifications.type.renewal_window'),
+      escalation: t('notifications.type.escalation'),
+      expiration: t('notifications.type.expiration'),
+      commencement: t('notifications.type.commencement'),
+      custom: t('notifications.type.custom'),
+    };
+    return labels[type] || type;
+  };
+
+  const getEventTypeBadgeVariant = (type: string) => {
+    const variants: Record<string, 'warning' | 'info' | 'destructive' | 'default' | 'secondary'> = {
+      renewal_window: 'warning',
+      escalation: 'info',
+      expiration: 'destructive',
+      commencement: 'default',
+      custom: 'secondary',
+    };
+    return variants[type] || 'secondary';
+  };
+
+  const formatTimeAgo = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return t('dashboard.today');
+    if (diffDays === 1) return t('dashboard.tomorrow');
+    if (diffDays > 0) return `${diffDays} ${t('dashboard.days')}`;
+    return language === 'es' ? 'Pasado' : 'Past';
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6">
@@ -39,7 +107,7 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
             <div className="animate-scale-in">
               <Input
                 type="search"
-                placeholder="Search leases, parties, properties..."
+                placeholder={t('common.search_placeholder')}
                 className="w-80 pl-10"
                 autoFocus
                 onBlur={() => setSearchOpen(false)}
@@ -63,34 +131,51 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
               <Bell className="h-5 w-5" />
-              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-medium text-accent-foreground">
-                3
-              </span>
+              {notifications.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-medium text-accent-foreground">
+                  {notifications.length}
+                </span>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
             <div className="px-4 py-3 border-b border-border">
-              <p className="font-medium">Notifications</p>
+              <p className="font-medium">{t('notifications.title')}</p>
             </div>
-            <div className="py-2">
-              <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
-                <div className="flex items-center gap-2">
-                  <Badge variant="warning" className="text-[10px]">Renewal</Badge>
-                  <span className="text-xs text-muted-foreground">2 hours ago</span>
+            <div className="py-2 max-h-80 overflow-y-auto">
+              {notifications.length === 0 ? (
+                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  {t('notifications.no_notifications')}
                 </div>
-                <p className="text-sm">Suite 100 lease expires in 90 days</p>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
-                <div className="flex items-center gap-2">
-                  <Badge variant="info" className="text-[10px]">Escalation</Badge>
-                  <span className="text-xs text-muted-foreground">1 day ago</span>
-                </div>
-                <p className="text-sm">Rent escalation due for 123 Main St</p>
-              </DropdownMenuItem>
+              ) : (
+                notifications.map((notification) => (
+                  <DropdownMenuItem 
+                    key={notification.id}
+                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                    onClick={() => navigate(`/app/notifications/${notification.id}`)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Badge variant={getEventTypeBadgeVariant(notification.event_type)} className="text-[10px]">
+                        {getEventTypeLabel(notification.event_type)}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {formatTimeAgo(notification.event_date)}
+                      </span>
+                    </div>
+                    <p className="text-sm line-clamp-1">
+                      {notification.event_description || getEventTypeLabel(notification.event_type)}
+                    </p>
+                  </DropdownMenuItem>
+                ))
+              )}
             </div>
             <div className="border-t border-border p-2">
-              <Button variant="ghost" className="w-full justify-center text-sm">
-                View all notifications
+              <Button 
+                variant="ghost" 
+                className="w-full justify-center text-sm"
+                onClick={() => navigate('/app/notifications')}
+              >
+                {t('notifications.view_all')}
               </Button>
             </div>
           </DropdownMenuContent>

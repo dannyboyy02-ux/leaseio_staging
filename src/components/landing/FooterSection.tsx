@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom';
 import { FileText } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export function FooterSection() {
+  const { t } = useLanguage();
+
   return (
     <footer className="py-12 px-4 sm:px-6 lg:px-8 border-t border-border">
       <div className="max-w-7xl mx-auto">
@@ -17,32 +20,32 @@ export function FooterSection() {
               </span>
             </Link>
             <p className="text-sm text-muted-foreground">
-              AI-powered lease abstraction and operations for modern businesses.
+              {t('landing.footer.description')}
             </p>
           </div>
 
           {/* Product */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Product</h4>
+            <h4 className="font-semibold text-foreground mb-4">{t('landing.footer.product')}</h4>
             <ul className="space-y-2">
               <li>
                 <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Features
+                  {t('landing.footer.features')}
                 </a>
               </li>
               <li>
                 <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Pricing
+                  {t('landing.footer.pricing')}
                 </a>
               </li>
               <li>
                 <a href="#security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Security
+                  {t('landing.footer.security')}
                 </a>
               </li>
               <li>
                 <a href="#faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  FAQ
+                  {t('landing.nav.faq')}
                 </a>
               </li>
             </ul>
@@ -50,16 +53,16 @@ export function FooterSection() {
 
           {/* Legal */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Legal</h4>
+            <h4 className="font-semibold text-foreground mb-4">{t('landing.footer.legal')}</h4>
             <ul className="space-y-2">
               <li>
                 <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Privacy Policy
+                  {t('landing.footer.privacy')}
                 </Link>
               </li>
               <li>
                 <Link to="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Terms of Service
+                  {t('landing.footer.terms')}
                 </Link>
               </li>
             </ul>
@@ -67,11 +70,11 @@ export function FooterSection() {
 
           {/* Support */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Support</h4>
+            <h4 className="font-semibold text-foreground mb-4">{t('landing.footer.support')}</h4>
             <ul className="space-y-2">
               <li>
                 <a href="mailto:support@leaseio.app" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                  Contact
+                  {t('landing.footer.contact')}
                 </a>
               </li>
             </ul>
@@ -80,7 +83,7 @@ export function FooterSection() {
 
         <div className="pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} LeaseIO. All rights reserved.
+            {t('landing.footer.copyright')}
           </p>
         </div>
       </div>

@@ -6,19 +6,49 @@ import { Check } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { PLANS, PLAN_ORDER, ANNUAL_DISCOUNT_PERCENT, type BillingInterval } from '@/config/pricing';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export function PricingSection() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
+  const { t, language } = useLanguage();
+
+  // Feature translations mapping
+  const getTranslatedFeatures = (planId: string, features: string[]) => {
+    const featureTranslations: Record<string, string> = {
+      '1 lease document': t('plan.feature.1_lease'),
+      'AI lease extraction': t('plan.feature.ai_extraction'),
+      'Basic rent tracking': t('plan.feature.basic_tracking'),
+      'Email notifications': t('plan.feature.email_notifications'),
+      '5 lease documents': t('plan.feature.5_leases'),
+      'Rent schedule tracking': t('plan.feature.rent_schedule'),
+      'Rent roll export': t('plan.feature.rent_roll'),
+      'Document storage': t('plan.feature.document_storage'),
+      '15 lease documents': t('plan.feature.15_leases'),
+      'Everything in Starter': t('plan.feature.everything_starter'),
+      'SMS notifications': t('plan.feature.sms'),
+      'Risk analysis': t('plan.feature.risk_analysis'),
+      'Advanced reporting': t('plan.feature.advanced_reports'),
+      'Priority support': t('plan.feature.priority_support'),
+      '50 lease documents': t('plan.feature.50_leases'),
+      'Everything in Pro': t('plan.feature.everything_pro'),
+      'Team access (5 seats)': t('plan.feature.team_access'),
+      'Role-based permissions': t('plan.feature.role_permissions'),
+      'QuickBooks integration': t('plan.feature.quickbooks'),
+      'Custom branding': t('plan.feature.custom_branding'),
+    };
+    
+    return features.map(f => featureTranslations[f] || f);
+  };
 
   return (
     <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 bg-muted/30">
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-12">
           <h2 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            Simple pricing, no surprises
+            {t('landing.pricing.title')}
           </h2>
           <p className="text-lg text-muted-foreground">
-            Start with a 14-day free trial. No credit card required. Upgrade as your portfolio grows.
+            {t('landing.pricing.subtitle')}
           </p>
         </div>
 
@@ -28,7 +58,7 @@ export function PricingSection() {
             "text-sm font-medium transition-colors",
             billingInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground'
           )}>
-            Monthly
+            {t('landing.pricing.monthly')}
           </span>
           <Switch
             checked={billingInterval === 'annual'}
@@ -38,10 +68,10 @@ export function PricingSection() {
             "text-sm font-medium transition-colors",
             billingInterval === 'annual' ? 'text-foreground' : 'text-muted-foreground'
           )}>
-            Annual
+            {t('landing.pricing.annual')}
           </span>
           <span className="ml-2 px-2 py-0.5 rounded-full bg-accent/10 text-accent text-xs font-medium">
-            Save {ANNUAL_DISCOUNT_PERCENT}%
+            {t('landing.pricing.save')} {ANNUAL_DISCOUNT_PERCENT}%
           </span>
         </div>
 
@@ -54,6 +84,7 @@ export function PricingSection() {
             const annualSavings = (monthlyPrice * 12) - annualTotal;
             const isAnnual = billingInterval === 'annual';
             const displayPrice = isAnnual ? annualMonthly : monthlyPrice;
+            const translatedFeatures = getTranslatedFeatures(planId, plan.features);
             
             return (
               <Card 
@@ -65,37 +96,41 @@ export function PricingSection() {
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-primary text-primary-foreground text-xs font-medium">
-                    Most Popular
+                    {t('landing.pricing.most_popular')}
                   </div>
                 )}
                 <CardHeader className="text-center pb-2 pt-6">
-                  <h3 className="font-display text-xl font-bold text-foreground">{plan.name}</h3>
+                  <h3 className="font-display text-xl font-bold text-foreground">
+                    {t(`plan.${plan.id}`)}
+                  </h3>
                   <div className="mt-3">
                     {displayPrice === 0 ? (
-                      <span className="text-3xl font-bold text-foreground">Free</span>
+                      <span className="text-3xl font-bold text-foreground">{t('landing.pricing.free')}</span>
                     ) : (
                       <div className="space-y-1">
                         <div>
                           <span className="text-3xl font-bold text-foreground">${displayPrice}</span>
-                          <span className="text-muted-foreground">/mo</span>
+                          <span className="text-muted-foreground">{t('landing.pricing.per_month')}</span>
                         </div>
                         {isAnnual && (
                           <div className="text-xs text-muted-foreground">
-                            ${annualTotal}/year · Save ${annualSavings}
+                            ${annualTotal}{t('landing.pricing.per_year')} · {t('landing.pricing.save')} ${annualSavings}
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground mt-2">{plan.description}</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {language === 'es' ? plan.description.replace('Try LeaseIO with a single lease', 'Pruebe LeaseIO con un solo arrendamiento').replace('Perfect for small portfolios', 'Perfecto para portafolios pequeños').replace('For growing property managers', 'Para gestores de propiedades en crecimiento').replace('For teams and enterprises', 'Para equipos y empresas') : plan.description}
+                  </p>
                   <div className="mt-3 inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
-                    {plan.documentLimit} {plan.documentLimit === 1 ? 'lease' : 'leases'}
+                    {plan.documentLimit} {plan.documentLimit === 1 ? t('landing.pricing.lease') : t('landing.pricing.leases')}
                   </div>
                 </CardHeader>
                 <CardContent className="pt-4 flex-1 flex flex-col">
                   <ul className="space-y-2.5 mb-6 flex-1">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2">
+                    {translatedFeatures.map((feature, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
                         <Check className="h-4 w-4 text-accent shrink-0 mt-0.5" />
                         <span className="text-sm text-muted-foreground">{feature}</span>
                       </li>
@@ -107,7 +142,7 @@ export function PricingSection() {
                     asChild
                   >
                     <Link to={`/signup?plan=${plan.id}`}>
-                      {plan.id === 'free' ? 'Get Started' : 'Start Free Trial'}
+                      {plan.id === 'free' ? t('landing.pricing.get_started') : t('landing.pricing.start_trial')}
                     </Link>
                   </Button>
                 </CardContent>
@@ -117,7 +152,7 @@ export function PricingSection() {
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-10">
-          Need more? <Link to="mailto:support@leaseio.app" className="underline hover:text-foreground transition-colors">Contact us</Link> for custom enterprise pricing.
+          {t('landing.pricing.custom')} <Link to="mailto:support@leaseio.app" className="underline hover:text-foreground transition-colors">{t('landing.pricing.contact')}</Link> {t('landing.pricing.enterprise')}
         </p>
       </div>
     </section>
