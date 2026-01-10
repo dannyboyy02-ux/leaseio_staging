@@ -721,14 +721,52 @@ export default function LeaseReview() {
                   <FileText className="h-8 w-8 text-primary" />
                   <div className="flex-1 min-w-0">
                     {editingFilename || editingSections.has('document') ? (
-                      <Input
-                        value={editableFields.filename}
-                        onChange={(e) => handleFieldChange('filename', e.target.value)}
-                        className="text-sm font-medium"
-                        placeholder="Filename"
-                      />
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={editableFields.filename}
+                          onChange={(e) => handleFieldChange('filename', e.target.value)}
+                          className="text-sm font-medium flex-1"
+                          placeholder="Filename"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveFilename();
+                            if (e.key === 'Escape') {
+                              setEditableFields(prev => ({ ...prev, filename: lease.filename }));
+                              setEditingFilename(false);
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleSaveFilename}
+                          disabled={savingFilename || !editableFields.filename.trim()}
+                        >
+                          {savingFilename ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Check className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditableFields(prev => ({ ...prev, filename: lease.filename }));
+                            setEditingFilename(false);
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     ) : (
-                      <p className="text-sm font-medium truncate">{lease.filename}</p>
+                      <div 
+                        className="flex items-center gap-2 cursor-pointer group"
+                        onClick={() => canEdit && setEditingFilename(true)}
+                      >
+                        <p className="text-sm font-medium truncate">{lease.filename}</p>
+                        {canEdit && (
+                          <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </div>
                     )}
                     <p className="text-xs text-muted-foreground">
                       Uploaded {format(new Date(lease.uploaded_at), 'MMM d, yyyy')}
