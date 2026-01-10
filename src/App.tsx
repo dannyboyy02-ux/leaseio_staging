@@ -18,6 +18,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import AcceptInvite from "./pages/AcceptInvite";
 
 // App pages (protected)
 import Onboarding from "./pages/app/Onboarding";
@@ -56,6 +57,7 @@ const App = () => (
                 <Route path="/signup" element={<Signup />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/accept-invite" element={<AcceptInvite />} />
 
                 {/* Protected app routes */}
                 <Route
