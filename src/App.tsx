@@ -27,6 +27,7 @@ import Upgrade from "./pages/app/Upgrade";
 import Dashboard from "./pages/Dashboard";
 import Leases from "./pages/Leases";
 import Notifications from "./pages/Notifications";
+import NotificationDetail from "./pages/app/NotificationDetail";
 import Integrations from "./pages/Integrations";
 import Reports from "./pages/Reports";
 import WorkspaceSettings from "./pages/settings/WorkspaceSettings";
@@ -102,6 +103,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Notifications />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/notifications/:notificationId"
+                  element={
+                    <ProtectedRoute>
+                      <NotificationDetail />
                     </ProtectedRoute>
                   }
                 />

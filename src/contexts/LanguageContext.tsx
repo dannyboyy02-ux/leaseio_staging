@@ -5,7 +5,7 @@ type Language = 'en' | 'es';
 interface LanguageContextType {
   language: Language;
   setLanguage: (lang: Language) => void;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }
 
 const translations: Record<Language, Record<string, string>> = {
@@ -25,6 +25,91 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.account_settings': 'Account Settings',
     'nav.help_support': 'Help & Support',
     'nav.log_out': 'Log Out',
+    
+    // Landing Page - Nav
+    'landing.nav.product': 'Product',
+    'landing.nav.pricing': 'Pricing',
+    'landing.nav.security': 'Security',
+    'landing.nav.faq': 'FAQ',
+    'landing.nav.sign_in': 'Sign in',
+    'landing.nav.get_started': 'Get Started',
+    
+    // Landing Page - Hero
+    'landing.hero.badge': 'Simple Lease Management for Growing Businesses',
+    'landing.hero.headline': 'Know what you owe,',
+    'landing.hero.headline_accent': "when it's due",
+    'landing.hero.subheadline': 'LeaseIO extracts key terms from your leases in minutes. Track renewals, manage rent schedules, and never miss a deadline—no accounting complexity required.',
+    'landing.hero.cta_trial': 'Start Free Trial',
+    'landing.hero.cta_signin': 'Sign In',
+    'landing.hero.trust_setup': '5-minute setup',
+    'landing.hero.trust_ai': 'AI-powered extraction',
+    'landing.hero.trust_security': 'Bank-grade security',
+    'landing.hero.demo_coming': 'Interactive Demo Coming Soon',
+    
+    // Landing Page - Features
+    'landing.features.title': 'Everything you need to manage leases',
+    'landing.features.subtitle': 'From extraction to notifications, LeaseIO handles the complexity so you can focus on your business.',
+    
+    // Landing Page - How It Works
+    'landing.how.title': 'How it works',
+    'landing.how.subtitle': 'Get from PDF to actionable insights in four simple steps.',
+    'landing.how.step1.title': 'Upload',
+    'landing.how.step1.desc': 'Drop your lease PDF into LeaseIO. Master leases and amendments supported.',
+    'landing.how.step2.title': 'Extract',
+    'landing.how.step2.desc': 'Our AI reads the document and extracts key terms, dates, rent schedules, and more.',
+    'landing.how.step3.title': 'Review',
+    'landing.how.step3.desc': 'Review extracted data side-by-side with the original PDF. Make corrections if needed.',
+    'landing.how.step4.title': 'Automate',
+    'landing.how.step4.desc': 'Finalize and unlock notifications, escalation tracking, and accounting sync.',
+    
+    // Landing Page - Pricing
+    'landing.pricing.title': 'Simple pricing, no surprises',
+    'landing.pricing.subtitle': 'Start with a 14-day free trial. No credit card required. Upgrade as your portfolio grows.',
+    'landing.pricing.monthly': 'Monthly',
+    'landing.pricing.annual': 'Annual',
+    'landing.pricing.save': 'Save',
+    'landing.pricing.free': 'Free',
+    'landing.pricing.most_popular': 'Most Popular',
+    'landing.pricing.per_month': '/mo',
+    'landing.pricing.per_year': '/year',
+    'landing.pricing.get_started': 'Get Started',
+    'landing.pricing.start_trial': 'Start Free Trial',
+    'landing.pricing.lease': 'lease',
+    'landing.pricing.leases': 'leases',
+    'landing.pricing.custom': 'Need more?',
+    'landing.pricing.contact': 'Contact us',
+    'landing.pricing.enterprise': 'for custom enterprise pricing.',
+    
+    // Landing Page - Security
+    'landing.security.title': 'Enterprise-grade security',
+    'landing.security.subtitle': 'Your lease documents contain sensitive business information. We treat security as a first-class concern, not an afterthought.',
+    'landing.security.encryption.title': 'End-to-end encryption',
+    'landing.security.encryption.desc': 'Your documents are encrypted at rest and in transit using AES-256.',
+    'landing.security.access.title': 'Role-based access',
+    'landing.security.access.desc': 'Control who can view, edit, or manage leases with granular permissions.',
+    'landing.security.audit.title': 'Audit logging',
+    'landing.security.audit.desc': 'Every action is logged for compliance and accountability.',
+    'landing.security.hosting.title': 'SOC 2 compliant hosting',
+    'landing.security.hosting.desc': 'Hosted on enterprise-grade infrastructure with 99.9% uptime.',
+    
+    // Landing Page - FAQ
+    'landing.faq.title': 'Frequently asked questions',
+    'landing.faq.subtitle': 'Everything you need to know about LeaseIO.',
+    
+    // Landing Page - Footer
+    'landing.footer.product': 'Product',
+    'landing.footer.company': 'Company',
+    'landing.footer.legal': 'Legal',
+    'landing.footer.features': 'Features',
+    'landing.footer.pricing': 'Pricing',
+    'landing.footer.security': 'Security',
+    'landing.footer.about': 'About',
+    'landing.footer.blog': 'Blog',
+    'landing.footer.careers': 'Careers',
+    'landing.footer.contact': 'Contact',
+    'landing.footer.privacy': 'Privacy Policy',
+    'landing.footer.terms': 'Terms of Service',
+    'landing.footer.copyright': '© 2024 LeaseIO. All rights reserved.',
     
     // Dashboard
     'dashboard.welcome_back': 'Welcome back',
@@ -108,6 +193,22 @@ const translations: Record<Language, Record<string, string>> = {
     'lease.amendment': 'Amendment',
     'lease.address_pending': 'Address pending',
     
+    // Rent Schedule
+    'rent_schedule.title': 'Rent Schedule',
+    'rent_schedule.description': 'Complete rent history extracted from the lease document',
+    'rent_schedule.current_monthly': 'Current Monthly Rent',
+    'rent_schedule.escalation_type': 'Escalation Type',
+    'rent_schedule.next_increase': 'Next Increase',
+    'rent_schedule.not_specified': 'Not specified',
+    'rent_schedule.period': 'Period',
+    'rent_schedule.monthly': 'Monthly',
+    'rent_schedule.annual': 'Annual',
+    'rent_schedule.notes': 'Notes',
+    'rent_schedule.current': 'Current',
+    'rent_schedule.ongoing': 'Ongoing',
+    'rent_schedule.no_schedule': 'No rent schedule extracted',
+    'rent_schedule.check_base_rent': 'Rent information may be in the base rent fields',
+    
     // Leases Page
     'leases.title': 'Leases',
     'leases.portfolio': 'Your lease portfolio',
@@ -154,6 +255,77 @@ const translations: Record<Language, Record<string, string>> = {
     'notifications.subtitle': 'Stay on top of important dates',
     'notifications.no_notifications': 'No notifications',
     'notifications.all_caught_up': "You're all caught up!",
+    'notifications.view_all': 'View all notifications',
+    'notifications.tab_all': 'All Confirmed',
+    'notifications.tab_upcoming': 'Upcoming Alerts',
+    'notifications.tab_sent': 'Already Sent',
+    'notifications.view_leases': 'View Leases',
+    'notifications.view_lease': 'View Lease',
+    'notifications.disable': 'Disable Notifications',
+    'notifications.type.renewal_window': 'Renewal Window',
+    'notifications.type.escalation': 'Rent Escalation',
+    'notifications.type.expiration': 'Lease Expiration',
+    'notifications.type.commencement': 'Lease Commencement',
+    'notifications.type.custom': 'Custom',
+    'notifications.sent': 'Sent',
+    'notifications.scheduled': 'Scheduled',
+    'notifications.past': 'Past',
+    'notifications.email_off': 'Email Off',
+    'notifications.alerts': 'Alerts',
+    'notifications.days_before': 'days before',
+    'notifications.unknown_property': 'Unknown Property',
+    'notifications.hours_ago': 'hours ago',
+    'notifications.day_ago': 'day ago',
+    'notifications.custom': 'Custom',
+    
+    // Notification Detail
+    'notifications.detail_title': 'Notification Details',
+    'notifications.not_found': 'Notification not found',
+    'notifications.back_to_list': 'Back to Notifications',
+    'notifications.error_loading': 'Failed to load notification',
+    'notifications.error_updating': 'Failed to update notification',
+    'notifications.email_disabled': 'Email notifications disabled',
+    'notifications.email_enabled': 'Email notifications enabled',
+    'notifications.confirmed': 'Confirmed',
+    'notifications.days_ago': '{{count}} days ago',
+    'notifications.days_remaining': '{{count}} days remaining',
+    'notifications.event_passed': 'Event has passed',
+    'notifications.time_remaining': 'Time remaining',
+    'notifications.associated_lease': 'Associated Lease',
+    'notifications.email_settings': 'Email Notifications',
+    'notifications.email_on': 'Email alerts enabled',
+    'notifications.alert_schedule': 'Alert schedule',
+    'notifications.enable': 'Enable',
+    'notifications.last_sent': 'Last notification sent',
+    
+    // Notification Configurator
+    'notifications.config.title': 'Key Dates & Notifications',
+    'notifications.config.description': 'Confirm dates and enable notifications for important events',
+    'notifications.config.confirmed_count': 'confirmed',
+    'notifications.config.active_alerts': 'active alerts',
+    'notifications.config.no_dates': 'No key dates found. Add dates above to set up notifications.',
+    'notifications.config.unconfirmed': 'Unconfirmed',
+    'notifications.config.notify_me': 'Notify me:',
+    'notifications.config.email_enabled': 'Email enabled',
+    'notifications.config.off': 'Off',
+    'notifications.config.unconfirm': 'Unconfirm',
+    'notifications.config.add_custom': 'Add Custom Date',
+    'notifications.config.date': 'Date',
+    'notifications.config.description_label': 'Description',
+    'notifications.config.description_placeholder': 'e.g., Insurance renewal deadline',
+    'notifications.config.add_date': 'Add Date',
+    'notifications.config.save': 'Save Notification Preferences',
+    'notifications.config.days_before': 'days before',
+    'notifications.config.lease_commencement': 'Lease Commencement',
+    'notifications.config.lease_expiration': 'Lease Expiration',
+    'notifications.config.renewal_window': 'Renewal Window',
+    'notifications.config.rent_escalation': 'Rent Escalation',
+    'notifications.config.custom_date': 'Custom Date',
+    'notifications.config.commencement_desc': 'Lease commencement date',
+    'notifications.config.expiration_desc': 'Lease expiration date',
+    'notifications.config.renewal_desc': 'Renewal decision window opens',
+    'notifications.config.escalation_desc': 'Rent escalation to',
+    'notifications.config.per_month': '/month',
     
     // Account Settings
     'account.title': 'Account Settings',
@@ -225,6 +397,7 @@ const translations: Record<Language, Record<string, string>> = {
     'account.free_tier': 'Free Tier',
     'account.leases': 'leases',
     'account.lease': 'lease',
+    'account.paid': 'Paid',
     
     // Workspace Settings
     'workspace.title': 'Workspace Settings',
@@ -328,6 +501,7 @@ const translations: Record<Language, Record<string, string>> = {
     'common.download': 'Download',
     'common.upgrade': 'Upgrade',
     'common.business_plan': 'Business Plan',
+    'common.search_placeholder': 'Search leases, parties, properties...',
     
     // Plan labels
     'plan.free': 'Free',
@@ -336,6 +510,25 @@ const translations: Record<Language, Record<string, string>> = {
     'plan.business': 'Business',
     'plan.plan': 'Plan',
     'plan.upgrade': 'Upgrade',
+    
+    // Plan Features
+    'plan.feature.lease_documents': 'lease documents',
+    'plan.feature.ai_extraction': 'AI lease extraction',
+    'plan.feature.basic_tracking': 'Basic rent tracking',
+    'plan.feature.email_notifications': 'Email notifications',
+    'plan.feature.rent_schedule': 'Rent schedule tracking',
+    'plan.feature.rent_roll': 'Rent roll export',
+    'plan.feature.document_storage': 'Document storage',
+    'plan.feature.sms': 'SMS notifications',
+    'plan.feature.risk_analysis': 'Risk analysis',
+    'plan.feature.advanced_reports': 'Advanced reporting',
+    'plan.feature.priority_support': 'Priority support',
+    'plan.feature.team_access': 'Team access (5 seats)',
+    'plan.feature.role_permissions': 'Role-based permissions',
+    'plan.feature.quickbooks': 'QuickBooks integration',
+    'plan.feature.custom_branding': 'Custom branding',
+    'plan.feature.everything_starter': 'Everything in Starter',
+    'plan.feature.everything_pro': 'Everything in Pro',
   },
   es: {
     // Navigation
@@ -353,6 +546,91 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.account_settings': 'Configuración de Cuenta',
     'nav.help_support': 'Ayuda y Soporte',
     'nav.log_out': 'Cerrar Sesión',
+    
+    // Landing Page - Nav
+    'landing.nav.product': 'Producto',
+    'landing.nav.pricing': 'Precios',
+    'landing.nav.security': 'Seguridad',
+    'landing.nav.faq': 'FAQ',
+    'landing.nav.sign_in': 'Iniciar Sesión',
+    'landing.nav.get_started': 'Comenzar',
+    
+    // Landing Page - Hero
+    'landing.hero.badge': 'Gestión Simple de Arrendamientos para Negocios en Crecimiento',
+    'landing.hero.headline': 'Sepa lo que debe,',
+    'landing.hero.headline_accent': 'cuándo vence',
+    'landing.hero.subheadline': 'LeaseIO extrae términos clave de sus arrendamientos en minutos. Rastree renovaciones, administre calendarios de renta y nunca pierda una fecha límite—sin complejidad contable.',
+    'landing.hero.cta_trial': 'Prueba Gratis',
+    'landing.hero.cta_signin': 'Iniciar Sesión',
+    'landing.hero.trust_setup': 'Configuración en 5 minutos',
+    'landing.hero.trust_ai': 'Extracción con IA',
+    'landing.hero.trust_security': 'Seguridad bancaria',
+    'landing.hero.demo_coming': 'Demo Interactivo Próximamente',
+    
+    // Landing Page - Features
+    'landing.features.title': 'Todo lo que necesita para gestionar arrendamientos',
+    'landing.features.subtitle': 'Desde la extracción hasta las notificaciones, LeaseIO maneja la complejidad para que usted pueda enfocarse en su negocio.',
+    
+    // Landing Page - How It Works
+    'landing.how.title': 'Cómo funciona',
+    'landing.how.subtitle': 'Pase de PDF a información accionable en cuatro simples pasos.',
+    'landing.how.step1.title': 'Subir',
+    'landing.how.step1.desc': 'Suba su PDF de arrendamiento a LeaseIO. Soporta arrendamientos maestros y enmiendas.',
+    'landing.how.step2.title': 'Extraer',
+    'landing.how.step2.desc': 'Nuestra IA lee el documento y extrae términos clave, fechas, calendarios de renta y más.',
+    'landing.how.step3.title': 'Revisar',
+    'landing.how.step3.desc': 'Revise los datos extraídos junto al PDF original. Haga correcciones si es necesario.',
+    'landing.how.step4.title': 'Automatizar',
+    'landing.how.step4.desc': 'Finalice y active notificaciones, seguimiento de escalaciones y sincronización contable.',
+    
+    // Landing Page - Pricing
+    'landing.pricing.title': 'Precios simples, sin sorpresas',
+    'landing.pricing.subtitle': 'Comience con una prueba gratis de 14 días. No requiere tarjeta de crédito. Actualice a medida que crece su portafolio.',
+    'landing.pricing.monthly': 'Mensual',
+    'landing.pricing.annual': 'Anual',
+    'landing.pricing.save': 'Ahorre',
+    'landing.pricing.free': 'Gratis',
+    'landing.pricing.most_popular': 'Más Popular',
+    'landing.pricing.per_month': '/mes',
+    'landing.pricing.per_year': '/año',
+    'landing.pricing.get_started': 'Comenzar',
+    'landing.pricing.start_trial': 'Prueba Gratis',
+    'landing.pricing.lease': 'arrendamiento',
+    'landing.pricing.leases': 'arrendamientos',
+    'landing.pricing.custom': '¿Necesita más?',
+    'landing.pricing.contact': 'Contáctenos',
+    'landing.pricing.enterprise': 'para precios empresariales personalizados.',
+    
+    // Landing Page - Security
+    'landing.security.title': 'Seguridad de nivel empresarial',
+    'landing.security.subtitle': 'Sus documentos de arrendamiento contienen información comercial sensible. Tratamos la seguridad como una prioridad, no como algo secundario.',
+    'landing.security.encryption.title': 'Cifrado de extremo a extremo',
+    'landing.security.encryption.desc': 'Sus documentos están cifrados en reposo y en tránsito usando AES-256.',
+    'landing.security.access.title': 'Acceso basado en roles',
+    'landing.security.access.desc': 'Controle quién puede ver, editar o administrar arrendamientos con permisos granulares.',
+    'landing.security.audit.title': 'Registro de auditoría',
+    'landing.security.audit.desc': 'Cada acción se registra para cumplimiento y responsabilidad.',
+    'landing.security.hosting.title': 'Alojamiento SOC 2',
+    'landing.security.hosting.desc': 'Alojado en infraestructura empresarial con 99.9% de disponibilidad.',
+    
+    // Landing Page - FAQ
+    'landing.faq.title': 'Preguntas frecuentes',
+    'landing.faq.subtitle': 'Todo lo que necesita saber sobre LeaseIO.',
+    
+    // Landing Page - Footer
+    'landing.footer.product': 'Producto',
+    'landing.footer.company': 'Empresa',
+    'landing.footer.legal': 'Legal',
+    'landing.footer.features': 'Características',
+    'landing.footer.pricing': 'Precios',
+    'landing.footer.security': 'Seguridad',
+    'landing.footer.about': 'Acerca de',
+    'landing.footer.blog': 'Blog',
+    'landing.footer.careers': 'Empleos',
+    'landing.footer.contact': 'Contacto',
+    'landing.footer.privacy': 'Política de Privacidad',
+    'landing.footer.terms': 'Términos de Servicio',
+    'landing.footer.copyright': '© 2024 LeaseIO. Todos los derechos reservados.',
     
     // Dashboard
     'dashboard.welcome_back': 'Bienvenido de nuevo',
@@ -436,6 +714,22 @@ const translations: Record<Language, Record<string, string>> = {
     'lease.amendment': 'Enmienda',
     'lease.address_pending': 'Dirección pendiente',
     
+    // Rent Schedule
+    'rent_schedule.title': 'Calendario de Renta',
+    'rent_schedule.description': 'Historial completo de renta extraído del documento de arrendamiento',
+    'rent_schedule.current_monthly': 'Renta Mensual Actual',
+    'rent_schedule.escalation_type': 'Tipo de Escalación',
+    'rent_schedule.next_increase': 'Próximo Aumento',
+    'rent_schedule.not_specified': 'No especificado',
+    'rent_schedule.period': 'Período',
+    'rent_schedule.monthly': 'Mensual',
+    'rent_schedule.annual': 'Anual',
+    'rent_schedule.notes': 'Notas',
+    'rent_schedule.current': 'Actual',
+    'rent_schedule.ongoing': 'En curso',
+    'rent_schedule.no_schedule': 'No se extrajo calendario de renta',
+    'rent_schedule.check_base_rent': 'La información de renta puede estar en los campos de renta base',
+    
     // Leases Page
     'leases.title': 'Arrendamientos',
     'leases.portfolio': 'Su portafolio de arrendamientos',
@@ -482,6 +776,77 @@ const translations: Record<Language, Record<string, string>> = {
     'notifications.subtitle': 'Manténgase al día con fechas importantes',
     'notifications.no_notifications': 'Sin notificaciones',
     'notifications.all_caught_up': '¡Está al día!',
+    'notifications.view_all': 'Ver todas las notificaciones',
+    'notifications.tab_all': 'Todas Confirmadas',
+    'notifications.tab_upcoming': 'Alertas Próximas',
+    'notifications.tab_sent': 'Ya Enviadas',
+    'notifications.view_leases': 'Ver Arrendamientos',
+    'notifications.view_lease': 'Ver Arrendamiento',
+    'notifications.disable': 'Desactivar Notificaciones',
+    'notifications.type.renewal_window': 'Ventana de Renovación',
+    'notifications.type.escalation': 'Escalación de Renta',
+    'notifications.type.expiration': 'Vencimiento del Arrendamiento',
+    'notifications.type.commencement': 'Inicio del Arrendamiento',
+    'notifications.type.custom': 'Personalizada',
+    'notifications.sent': 'Enviado',
+    'notifications.scheduled': 'Programado',
+    'notifications.past': 'Pasado',
+    'notifications.email_off': 'Email Desactivado',
+    'notifications.alerts': 'Alertas',
+    'notifications.days_before': 'días antes',
+    'notifications.unknown_property': 'Propiedad Desconocida',
+    'notifications.hours_ago': 'hace {{count}} horas',
+    'notifications.day_ago': 'hace {{count}} día',
+    'notifications.custom': 'Personalizada',
+    
+    // Notification Detail
+    'notifications.detail_title': 'Detalles de Notificación',
+    'notifications.not_found': 'Notificación no encontrada',
+    'notifications.back_to_list': 'Volver a Notificaciones',
+    'notifications.error_loading': 'Error al cargar notificación',
+    'notifications.error_updating': 'Error al actualizar notificación',
+    'notifications.email_disabled': 'Notificaciones por email desactivadas',
+    'notifications.email_enabled': 'Notificaciones por email activadas',
+    'notifications.confirmed': 'Confirmada',
+    'notifications.days_ago': 'hace {{count}} días',
+    'notifications.days_remaining': '{{count}} días restantes',
+    'notifications.event_passed': 'El evento ya pasó',
+    'notifications.time_remaining': 'Tiempo restante',
+    'notifications.associated_lease': 'Arrendamiento Asociado',
+    'notifications.email_settings': 'Notificaciones por Email',
+    'notifications.email_on': 'Alertas por email activadas',
+    'notifications.alert_schedule': 'Calendario de alertas',
+    'notifications.enable': 'Activar',
+    'notifications.last_sent': 'Última notificación enviada',
+    
+    // Notification Configurator
+    'notifications.config.title': 'Fechas Clave y Notificaciones',
+    'notifications.config.description': 'Confirme fechas y active notificaciones para eventos importantes',
+    'notifications.config.confirmed_count': 'confirmadas',
+    'notifications.config.active_alerts': 'alertas activas',
+    'notifications.config.no_dates': 'No se encontraron fechas clave. Agregue fechas arriba para configurar notificaciones.',
+    'notifications.config.unconfirmed': 'Sin confirmar',
+    'notifications.config.notify_me': 'Notificarme:',
+    'notifications.config.email_enabled': 'Email activado',
+    'notifications.config.off': 'Desactivado',
+    'notifications.config.unconfirm': 'Desconfirmar',
+    'notifications.config.add_custom': 'Agregar Fecha Personalizada',
+    'notifications.config.date': 'Fecha',
+    'notifications.config.description_label': 'Descripción',
+    'notifications.config.description_placeholder': 'ej., Fecha límite de renovación de seguro',
+    'notifications.config.add_date': 'Agregar Fecha',
+    'notifications.config.save': 'Guardar Preferencias de Notificación',
+    'notifications.config.days_before': 'días antes',
+    'notifications.config.lease_commencement': 'Inicio del Arrendamiento',
+    'notifications.config.lease_expiration': 'Vencimiento del Arrendamiento',
+    'notifications.config.renewal_window': 'Ventana de Renovación',
+    'notifications.config.rent_escalation': 'Escalación de Renta',
+    'notifications.config.custom_date': 'Fecha Personalizada',
+    'notifications.config.commencement_desc': 'Fecha de inicio del arrendamiento',
+    'notifications.config.expiration_desc': 'Fecha de vencimiento del arrendamiento',
+    'notifications.config.renewal_desc': 'Ventana de decisión de renovación abre',
+    'notifications.config.escalation_desc': 'Escalación de renta a',
+    'notifications.config.per_month': '/mes',
     
     // Account Settings
     'account.title': 'Configuración de Cuenta',
@@ -553,6 +918,7 @@ const translations: Record<Language, Record<string, string>> = {
     'account.free_tier': 'Nivel Gratis',
     'account.leases': 'arrendamientos',
     'account.lease': 'arrendamiento',
+    'account.paid': 'Pagado',
     
     // Workspace Settings
     'workspace.title': 'Configuración del Espacio de Trabajo',
@@ -656,6 +1022,7 @@ const translations: Record<Language, Record<string, string>> = {
     'common.download': 'Descargar',
     'common.upgrade': 'Actualizar',
     'common.business_plan': 'Plan Empresarial',
+    'common.search_placeholder': 'Buscar arrendamientos, partes, propiedades...',
     
     // Plan labels
     'plan.free': 'Gratis',
@@ -664,6 +1031,25 @@ const translations: Record<Language, Record<string, string>> = {
     'plan.business': 'Empresarial',
     'plan.plan': 'Plan',
     'plan.upgrade': 'Actualizar',
+    
+    // Plan Features
+    'plan.feature.lease_documents': 'documentos de arrendamiento',
+    'plan.feature.ai_extraction': 'Extracción de arrendamientos con IA',
+    'plan.feature.basic_tracking': 'Seguimiento básico de renta',
+    'plan.feature.email_notifications': 'Notificaciones por email',
+    'plan.feature.rent_schedule': 'Seguimiento de calendario de renta',
+    'plan.feature.rent_roll': 'Exportación de rol de rentas',
+    'plan.feature.document_storage': 'Almacenamiento de documentos',
+    'plan.feature.sms': 'Notificaciones SMS',
+    'plan.feature.risk_analysis': 'Análisis de riesgos',
+    'plan.feature.advanced_reports': 'Informes avanzados',
+    'plan.feature.priority_support': 'Soporte prioritario',
+    'plan.feature.team_access': 'Acceso de equipo (5 puestos)',
+    'plan.feature.role_permissions': 'Permisos basados en roles',
+    'plan.feature.quickbooks': 'Integración con QuickBooks',
+    'plan.feature.custom_branding': 'Marca personalizada',
+    'plan.feature.everything_starter': 'Todo en Inicial',
+    'plan.feature.everything_pro': 'Todo en Pro',
   },
 };
 
@@ -680,8 +1066,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('app-language', lang);
   };
 
-  const t = (key: string): string => {
-    return translations[language][key] || key;
+  const t = (key: string, params?: Record<string, string | number>): string => {
+    let text = translations[language][key] || key;
+    
+    // Replace template parameters like {{count}}
+    if (params) {
+      Object.entries(params).forEach(([paramKey, paramValue]) => {
+        text = text.replace(new RegExp(`\\{\\{${paramKey}\\}\\}`, 'g'), String(paramValue));
+      });
+    }
+    
+    return text;
   };
 
   return (
