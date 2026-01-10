@@ -608,8 +608,24 @@ const translations: Record<Language, Record<string, string>> = {
     'landing.hero.demo_coming': 'Demo Interactivo Próximamente',
     
     // Landing Page - Features
-    'landing.features.title': 'Todo lo que necesita para gestionar arrendamientos',
-    'landing.features.subtitle': 'Desde la extracción hasta las notificaciones, LeaseIO maneja la complejidad para que usted pueda enfocarse en su negocio.',
+    'landing.features.title': 'Diseñado para operadores, no contadores',
+    'landing.features.subtitle': 'Sin estándares contables complejos. Sin asientos contables. Solo visibilidad simple y clara de sus obligaciones de arrendamiento.',
+    'landing.features.ai_extraction.title': 'Extracción con IA',
+    'landing.features.ai_extraction.desc': 'Suba un PDF y nuestra IA extrae términos clave, fechas, partes y calendarios de renta en minutos—no horas.',
+    'landing.features.deadline_tracking.title': 'Seguimiento de Fechas',
+    'landing.features.deadline_tracking.desc': 'Nunca pierda una ventana de renovación o fecha de vencimiento. El calendario visual muestra lo que viene en su portafolio.',
+    'landing.features.rent_schedule.title': 'Gestión de Calendario de Renta',
+    'landing.features.rent_schedule.desc': 'Rastree escalaciones, aumentos escalonados y cambios de renta. Sepa exactamente cuánto debe cada mes.',
+    'landing.features.notifications.title': 'Notificaciones Inteligentes',
+    'landing.features.notifications.desc': 'Reciba alertas por email para renovaciones, vencimientos y fechas de pago. Personalice el tiempo según su flujo de trabajo.',
+    'landing.features.rent_roll.title': 'Rol de Rentas con Un Clic',
+    'landing.features.rent_roll.desc': 'Exporte todo su portafolio a CSV con un clic. Renta mensual total, obligaciones anuales y más.',
+    'landing.features.security.title': 'Seguro y Privado',
+    'landing.features.security.desc': 'El cifrado bancario mantiene sus documentos de arrendamiento seguros. Sus datos nunca se comparten ni se usan para entrenamiento.',
+    
+    // Landing Page - Footer
+    'landing.footer.description': 'Abstracción de arrendamientos y operaciones con IA para negocios modernos.',
+    'landing.footer.support': 'Soporte',
     
     // Landing Page - How It Works
     'landing.how.title': 'Cómo funciona',
@@ -656,6 +672,22 @@ const translations: Record<Language, Record<string, string>> = {
     // Landing Page - FAQ
     'landing.faq.title': 'Preguntas frecuentes',
     'landing.faq.subtitle': 'Todo lo que necesita saber sobre LeaseIO.',
+    'landing.faq.document_count.q': '¿Qué cuenta como un documento?',
+    'landing.faq.document_count.a': 'Cada arrendamiento maestro cuenta como un documento. Cada enmienda también cuenta como un documento. Entonces, un arrendamiento maestro con dos enmiendas usaría 3 de su límite de documentos.',
+    'landing.faq.ai_extraction.q': '¿Cómo funciona la extracción con IA?',
+    'landing.faq.ai_extraction.a': 'Nuestra IA lee su documento PDF de arrendamiento y extrae información clave como partes, fechas, montos de renta, calendarios de escalación y cláusulas importantes. Luego usted revisa y confirma los datos extraídos antes de finalizar.',
+    'landing.faq.edit_data.q': '¿Puedo editar los datos extraídos?',
+    'landing.faq.edit_data.a': 'Absolutamente. Después de la extracción con IA, usted revisa todo en una vista lado a lado con el PDF original. Puede editar cualquier campo antes de finalizar el resumen del arrendamiento.',
+    'landing.faq.document_limit.q': '¿Qué sucede si alcanzo mi límite de documentos?',
+    'landing.faq.document_limit.a': 'No podrá subir nuevos documentos hasta que actualice su plan o se reinicie su período de facturación. Los documentos existentes permanecen completamente accesibles.',
+    'landing.faq.quickbooks.q': '¿Cómo funciona la integración con QuickBooks?',
+    'landing.faq.quickbooks.a': 'Disponible en el plan Empresarial, conecta su cuenta de QuickBooks Online via OAuth. Elija si es arrendador (crea facturas) o arrendatario (crea cuentas por pagar), asocie proveedores/clientes, y crearemos automáticamente transacciones basadas en su calendario de renta.',
+    'landing.faq.data_ownership.q': '¿Quién es dueño de mis datos?',
+    'landing.faq.data_ownership.a': 'Usted. Sus documentos y datos extraídos le pertenecen. Puede exportar todo en cualquier momento, y si cierra su cuenta, eliminamos sus datos dentro de 30 días.',
+    'landing.faq.security.q': '¿Están seguros mis datos?',
+    'landing.faq.security.a': 'Sí. Usamos cifrado AES-256 para datos en reposo y TLS 1.3 para datos en tránsito. Nuestra infraestructura cumple con SOC 2, y soportamos controles de acceso basados en roles dentro de su espacio de trabajo.',
+    'landing.faq.multiple_users.q': '¿Puedo tener múltiples usuarios en mi espacio de trabajo?',
+    'landing.faq.multiple_users.a': 'Sí. Puede invitar miembros del equipo con diferentes roles: Propietario, Administrador, Gerente, Revisor, o Solo lectura. Cada rol tiene permisos específicos para facturación, integraciones y gestión de arrendamientos.',
     
     // Landing Page - Footer
     'landing.footer.product': 'Producto',
