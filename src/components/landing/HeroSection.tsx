@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Sparkles, Shield, Clock, DollarSign } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export function HeroSection() {
+  const { t } = useLanguage();
+
   return (
     <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-primary/5 via-background to-background">
       <div className="max-w-7xl mx-auto">
@@ -10,31 +13,30 @@ export function HeroSection() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-8">
             <DollarSign className="h-4 w-4" />
-            Simple Lease Management for Growing Businesses
+            {t('landing.hero.badge')}
           </div>
 
           {/* Headline */}
           <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
-            Know what you owe,{' '}
-            <span className="text-primary">when it's due</span>
+            {t('landing.hero.headline')}{' '}
+            <span className="text-primary">{t('landing.hero.headline_accent')}</span>
           </h1>
 
           {/* Subheadline */}
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-            LeaseIO extracts key terms from your leases in minutes. Track renewals, 
-            manage rent schedules, and never miss a deadline—no accounting complexity required.
+            {t('landing.hero.subheadline')}
           </p>
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Button size="lg" asChild className="w-full sm:w-auto">
               <Link to="/signup">
-                Start Free Trial
+                {t('landing.hero.cta_trial')}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button size="lg" variant="outline" asChild className="w-full sm:w-auto">
-              <Link to="/login">Sign In</Link>
+              <Link to="/login">{t('landing.hero.cta_signin')}</Link>
             </Button>
           </div>
 
@@ -42,15 +44,15 @@ export function HeroSection() {
           <div className="flex flex-wrap items-center justify-center gap-8 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-accent" />
-              <span>5-minute setup</span>
+              <span>{t('landing.hero.trust_setup')}</span>
             </div>
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-accent" />
-              <span>AI-powered extraction</span>
+              <span>{t('landing.hero.trust_ai')}</span>
             </div>
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-accent" />
-              <span>Bank-grade security</span>
+              <span>{t('landing.hero.trust_security')}</span>
             </div>
           </div>
         </div>
@@ -64,7 +66,7 @@ export function HeroSection() {
                 <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
                   <Sparkles className="h-8 w-8 text-primary" />
                 </div>
-                <p className="text-muted-foreground">Interactive Demo Coming Soon</p>
+                <p className="text-muted-foreground">{t('landing.hero.demo_coming')}</p>
               </div>
             </div>
           </div>

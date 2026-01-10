@@ -1,44 +1,47 @@
 import { Upload, Sparkles, CheckCircle, Zap } from 'lucide-react';
-
-const steps = [
-  {
-    icon: Upload,
-    title: 'Upload',
-    description: 'Drop your lease PDF into LeaseIO. Master leases and amendments supported.',
-  },
-  {
-    icon: Sparkles,
-    title: 'Extract',
-    description: 'Our AI reads the document and extracts key terms, dates, rent schedules, and more.',
-  },
-  {
-    icon: CheckCircle,
-    title: 'Review',
-    description: 'Review extracted data side-by-side with the original PDF. Make corrections if needed.',
-  },
-  {
-    icon: Zap,
-    title: 'Automate',
-    description: 'Finalize and unlock notifications, escalation tracking, and accounting sync.',
-  },
-];
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export function HowItWorksSection() {
+  const { t } = useLanguage();
+
+  const steps = [
+    {
+      icon: Upload,
+      titleKey: 'landing.how.step1.title',
+      descKey: 'landing.how.step1.desc',
+    },
+    {
+      icon: Sparkles,
+      titleKey: 'landing.how.step2.title',
+      descKey: 'landing.how.step2.desc',
+    },
+    {
+      icon: CheckCircle,
+      titleKey: 'landing.how.step3.title',
+      descKey: 'landing.how.step3.desc',
+    },
+    {
+      icon: Zap,
+      titleKey: 'landing.how.step4.title',
+      descKey: 'landing.how.step4.desc',
+    },
+  ];
+
   return (
     <section className="py-24 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-4">
-            How it works
+            {t('landing.how.title')}
           </h2>
           <p className="text-lg text-muted-foreground">
-            Get from PDF to actionable insights in four simple steps.
+            {t('landing.how.subtitle')}
           </p>
         </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {steps.map((step, index) => (
-            <div key={step.title} className="relative">
+            <div key={step.titleKey} className="relative">
               {/* Connector Line */}
               {index < steps.length - 1 && (
                 <div className="hidden lg:block absolute top-8 left-[calc(50%+2rem)] w-[calc(100%-4rem)] h-0.5 bg-border" />
@@ -53,8 +56,8 @@ export function HowItWorksSection() {
                     {index + 1}
                   </div>
                 </div>
-                <h3 className="font-semibold text-lg text-foreground mb-2">{step.title}</h3>
-                <p className="text-muted-foreground text-sm">{step.description}</p>
+                <h3 className="font-semibold text-lg text-foreground mb-2">{t(step.titleKey)}</h3>
+                <p className="text-muted-foreground text-sm">{t(step.descKey)}</p>
               </div>
             </div>
           ))}

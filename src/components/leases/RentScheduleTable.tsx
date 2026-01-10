@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import { Calendar, DollarSign, TrendingUp } from 'lucide-react';
 import {
   Table,
@@ -11,6 +10,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate, formatLocalizedCurrency } from '@/lib/dateFormatters';
 
 export interface RentScheduleEntry {
   id: string;
@@ -34,23 +35,14 @@ export function RentScheduleTable({
   rentEscalationType,
   className,
 }: RentScheduleTableProps) {
+  const { t, language } = useLanguage();
+
   const formatCurrency = (amount: number | null) => {
-    if (amount === null || amount === undefined) return '—';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+    return formatLocalizedCurrency(amount, language);
   };
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '—';
-    try {
-      return format(new Date(dateStr), 'MMM d, yyyy');
-    } catch {
-      return dateStr;
-    }
+    return formatLocalizedDate(dateStr, language);
   };
 
   // Determine which period is current
@@ -87,36 +79,36 @@ export function RentScheduleTable({
       <CardHeader>
         <CardTitle className="text-lg flex items-center gap-2">
           <DollarSign className="h-5 w-5" />
-          Rent Schedule
+          {t('rent_schedule.title')}
         </CardTitle>
         <CardDescription>
-          Complete rent history extracted from the lease document
+          {t('rent_schedule.description')}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Summary Stats */}
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="bg-primary/5 rounded-lg p-4 border border-primary/10">
-            <p className="text-sm text-muted-foreground">Current Monthly Rent</p>
+            <p className="text-sm text-muted-foreground">{t('rent_schedule.current_monthly')}</p>
             <p className="text-2xl font-semibold text-primary">
               {formatCurrency(currentMonthlyRent)}
             </p>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 border">
-            <p className="text-sm text-muted-foreground">Escalation Type</p>
+            <p className="text-sm text-muted-foreground">{t('rent_schedule.escalation_type')}</p>
             <p className="text-lg font-medium flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              {rentEscalationType || 'Not specified'}
+              {rentEscalationType || t('rent_schedule.not_specified')}
             </p>
           </div>
           {nextIncrease && (
             <div className="bg-yellow-500/5 rounded-lg p-4 border border-yellow-500/20">
-              <p className="text-sm text-muted-foreground">Next Increase</p>
+              <p className="text-sm text-muted-foreground">{t('rent_schedule.next_increase')}</p>
               <p className="text-lg font-medium">
                 {formatDate(nextIncrease.date)}
               </p>
               <p className="text-sm text-yellow-600">
-                → {formatCurrency(nextIncrease.amount)}/mo
+                → {formatCurrency(nextIncrease.amount)}/{language === 'es' ? 'mes' : 'mo'}
               </p>
             </div>
           )}
@@ -128,10 +120,10 @@ export function RentScheduleTable({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Period</TableHead>
-                  <TableHead className="text-right">Monthly</TableHead>
-                  <TableHead className="text-right">Annual</TableHead>
-                  <TableHead>Notes</TableHead>
+                  <TableHead>{t('rent_schedule.period')}</TableHead>
+                  <TableHead className="text-right">{t('rent_schedule.monthly')}</TableHead>
+                  <TableHead className="text-right">{t('rent_schedule.annual')}</TableHead>
+                  <TableHead>{t('rent_schedule.notes')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -150,11 +142,11 @@ export function RentScheduleTable({
                           <span>
                             {formatDate(period.period_start)}
                             {' – '}
-                            {period.period_end ? formatDate(period.period_end) : 'Ongoing'}
+                            {period.period_end ? formatDate(period.period_end) : t('rent_schedule.ongoing')}
                           </span>
                           {period.id === currentPeriodId && (
                             <Badge variant="secondary" className="ml-2">
-                              Current
+                              {t('rent_schedule.current')}
                             </Badge>
                           )}
                         </div>
@@ -176,8 +168,8 @@ export function RentScheduleTable({
         ) : (
           <div className="text-center py-8 text-muted-foreground">
             <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>No rent schedule extracted</p>
-            <p className="text-sm">Rent information may be in the base rent fields</p>
+            <p>{t('rent_schedule.no_schedule')}</p>
+            <p className="text-sm">{t('rent_schedule.check_base_rent')}</p>
           </div>
         )}
       </CardContent>

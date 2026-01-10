@@ -1,51 +1,53 @@
 import { Shield, Lock, Eye, Server } from 'lucide-react';
-
-const securityFeatures = [
-  {
-    icon: Lock,
-    title: 'End-to-end encryption',
-    description: 'Your documents are encrypted at rest and in transit using AES-256.',
-  },
-  {
-    icon: Shield,
-    title: 'Role-based access',
-    description: 'Control who can view, edit, or manage leases with granular permissions.',
-  },
-  {
-    icon: Eye,
-    title: 'Audit logging',
-    description: 'Every action is logged for compliance and accountability.',
-  },
-  {
-    icon: Server,
-    title: 'SOC 2 compliant hosting',
-    description: 'Hosted on enterprise-grade infrastructure with 99.9% uptime.',
-  },
-];
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export function SecuritySection() {
+  const { t } = useLanguage();
+
+  const securityFeatures = [
+    {
+      icon: Lock,
+      titleKey: 'landing.security.encryption.title',
+      descKey: 'landing.security.encryption.desc',
+    },
+    {
+      icon: Shield,
+      titleKey: 'landing.security.access.title',
+      descKey: 'landing.security.access.desc',
+    },
+    {
+      icon: Eye,
+      titleKey: 'landing.security.audit.title',
+      descKey: 'landing.security.audit.desc',
+    },
+    {
+      icon: Server,
+      titleKey: 'landing.security.hosting.title',
+      descKey: 'landing.security.hosting.desc',
+    },
+  ];
+
   return (
     <section id="security" className="py-24 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           <div>
             <h2 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-4">
-              Enterprise-grade security
+              {t('landing.security.title')}
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Your lease documents contain sensitive business information. 
-              We treat security as a first-class concern, not an afterthought.
+              {t('landing.security.subtitle')}
             </p>
 
             <div className="space-y-6">
               {securityFeatures.map((feature) => (
-                <div key={feature.title} className="flex items-start gap-4">
+                <div key={feature.titleKey} className="flex items-start gap-4">
                   <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     <feature.icon className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground">{feature.title}</h3>
-                    <p className="text-sm text-muted-foreground">{feature.description}</p>
+                    <h3 className="font-semibold text-foreground">{t(feature.titleKey)}</h3>
+                    <p className="text-sm text-muted-foreground">{t(feature.descKey)}</p>
                   </div>
                 </div>
               ))}

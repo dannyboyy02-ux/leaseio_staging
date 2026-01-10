@@ -47,8 +47,48 @@ const translations: Record<Language, Record<string, string>> = {
     'landing.hero.demo_coming': 'Interactive Demo Coming Soon',
     
     // Landing Page - Features
-    'landing.features.title': 'Everything you need to manage leases',
-    'landing.features.subtitle': 'From extraction to notifications, LeaseIO handles the complexity so you can focus on your business.',
+    'landing.features.title': 'Built for operators, not accountants',
+    'landing.features.subtitle': 'No complex accounting standards. No journal entries. Just simple, clear visibility into your lease obligations.',
+    'landing.features.ai_extraction.title': 'AI Lease Extraction',
+    'landing.features.ai_extraction.desc': 'Upload a PDF and our AI extracts key terms, dates, parties, and rent schedules in minutes—not hours.',
+    'landing.features.deadline_tracking.title': 'Deadline Tracking',
+    'landing.features.deadline_tracking.desc': "Never miss a renewal window or expiration date. Visual calendar shows what's coming up across your portfolio.",
+    'landing.features.rent_schedule.title': 'Rent Schedule Management',
+    'landing.features.rent_schedule.desc': 'Track escalations, step increases, and rent changes. Know exactly what you owe each month.',
+    'landing.features.notifications.title': 'Smart Notifications',
+    'landing.features.notifications.desc': 'Get email alerts for renewals, expirations, and payment due dates. Customize timing to match your workflow.',
+    'landing.features.rent_roll.title': 'One-Click Rent Roll',
+    'landing.features.rent_roll.desc': 'Export your entire portfolio to CSV with one click. Total monthly rent, annual obligations, and more.',
+    'landing.features.security.title': 'Secure & Private',
+    'landing.features.security.desc': 'Bank-grade encryption keeps your lease documents safe. Your data is never shared or used for training.',
+    
+    // Landing Page - Footer
+    'landing.footer.description': 'AI-powered lease abstraction and operations for modern businesses.',
+    'landing.footer.support': 'Support',
+    
+    // Landing Page - FAQ
+    'landing.faq.document_count.q': 'What counts as a document?',
+    'landing.faq.document_count.a': 'Each master lease counts as one document. Each amendment to a lease also counts as one document. So a master lease with two amendments would use 3 of your document limit.',
+    'landing.faq.ai_extraction.q': 'How does the AI extraction work?',
+    'landing.faq.ai_extraction.a': 'Our AI reads your PDF lease document and extracts key information like parties, dates, rent amounts, escalation schedules, and important clauses. You then review and confirm the extracted data before finalizing.',
+    'landing.faq.edit_data.q': 'Can I edit the extracted data?',
+    'landing.faq.edit_data.a': 'Absolutely. After AI extraction, you review everything in a side-by-side view with the original PDF. You can edit any field before finalizing the lease abstract.',
+    'landing.faq.document_limit.q': 'What happens if I hit my document limit?',
+    'landing.faq.document_limit.a': "You won't be able to upload new documents until you upgrade your plan or your billing period resets. Existing documents remain fully accessible.",
+    'landing.faq.quickbooks.q': 'How does QuickBooks integration work?',
+    'landing.faq.quickbooks.a': "Available on the Business plan, you connect your QuickBooks Online account via OAuth. Choose whether you're a lessor (creates invoices) or lessee (creates bills), match vendors/customers, and we'll automatically create transactions based on your rent schedule.",
+    'landing.faq.data_ownership.q': 'Who owns my data?',
+    'landing.faq.data_ownership.a': 'You do. Your documents and extracted data belong to you. You can export everything at any time, and if you close your account, we delete your data within 30 days.',
+    'landing.faq.security.q': 'Is my data secure?',
+    'landing.faq.security.a': 'Yes. We use AES-256 encryption for data at rest and TLS 1.3 for data in transit. Our infrastructure is SOC 2 compliant, and we support role-based access controls within your workspace.',
+    'landing.faq.multiple_users.q': 'Can I have multiple users in my workspace?',
+    'landing.faq.multiple_users.a': 'Yes. You can invite team members with different roles: Owner, Admin, Manager, Reviewer, or Read-only. Each role has specific permissions for billing, integrations, and lease management.',
+    
+    // Plan Feature Translations
+    'plan.feature.1_lease': '1 lease document',
+    'plan.feature.5_leases': '5 lease documents',
+    'plan.feature.15_leases': '15 lease documents',
+    'plan.feature.50_leases': '50 lease documents',
     
     // Landing Page - How It Works
     'landing.how.title': 'How it works',

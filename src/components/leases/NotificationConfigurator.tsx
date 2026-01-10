@@ -7,16 +7,11 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDateWithWeekday, formatLocalizedCurrency } from '@/lib/dateFormatters';
 
 interface NotificationEvent {
   id?: string;
@@ -36,22 +31,6 @@ interface NotificationConfiguratorProps {
   onNotificationsChange?: (notifications: NotificationEvent[]) => void;
 }
 
-const EVENT_TYPE_CONFIG = {
-  commencement: { label: 'Lease Commencement', icon: Calendar, color: 'bg-info/10 text-info' },
-  expiration: { label: 'Lease Expiration', icon: AlertCircle, color: 'bg-destructive/10 text-destructive' },
-  renewal_window: { label: 'Renewal Window', icon: Calendar, color: 'bg-warning/10 text-warning' },
-  escalation: { label: 'Rent Escalation', icon: Calendar, color: 'bg-accent/10 text-accent' },
-  custom: { label: 'Custom Date', icon: Calendar, color: 'bg-muted text-muted-foreground' },
-};
-
-const NOTIFICATION_SCHEDULES = [
-  { value: 90, label: '90 days before' },
-  { value: 60, label: '60 days before' },
-  { value: 30, label: '30 days before' },
-  { value: 14, label: '14 days before' },
-  { value: 7, label: '7 days before' },
-];
-
 export function NotificationConfigurator({
   leaseId,
   leaseStart,
@@ -59,12 +38,49 @@ export function NotificationConfigurator({
   rentSchedule,
   onNotificationsChange,
 }: NotificationConfiguratorProps) {
+  const { t, language } = useLanguage();
   const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [customDate, setCustomDate] = useState('');
   const [customDescription, setCustomDescription] = useState('');
+
+  const EVENT_TYPE_CONFIG = {
+    commencement: { 
+      labelKey: 'notifications.config.lease_commencement', 
+      icon: Calendar, 
+      color: 'bg-info/10 text-info' 
+    },
+    expiration: { 
+      labelKey: 'notifications.config.lease_expiration', 
+      icon: AlertCircle, 
+      color: 'bg-destructive/10 text-destructive' 
+    },
+    renewal_window: { 
+      labelKey: 'notifications.config.renewal_window', 
+      icon: Calendar, 
+      color: 'bg-warning/10 text-warning' 
+    },
+    escalation: { 
+      labelKey: 'notifications.config.rent_escalation', 
+      icon: Calendar, 
+      color: 'bg-accent/10 text-accent' 
+    },
+    custom: { 
+      labelKey: 'notifications.config.custom_date', 
+      icon: Calendar, 
+      color: 'bg-muted text-muted-foreground' 
+    },
+  };
+
+  const NOTIFICATION_SCHEDULES = [
+    { value: 90, labelKey: 'notifications.config.90_days' },
+    { value: 60, labelKey: 'notifications.config.60_days' },
+    { value: 30, labelKey: 'notifications.config.30_days' },
+    { value: 14, labelKey: 'notifications.config.14_days' },
+    { value: 7, labelKey: 'notifications.config.7_days' },
+  ];
 
   // Generate initial notifications from lease data
   useEffect(() => {
@@ -98,7 +114,7 @@ export function NotificationConfigurator({
             generated.push({
               event_type: 'commencement',
               event_date: leaseStart,
-              event_description: 'Lease commencement date',
+              event_description: t('notifications.config.commencement_desc'),
               notify_days_before: [30, 14, 7],
               notify_email: false,
               is_confirmed: false,
@@ -109,7 +125,7 @@ export function NotificationConfigurator({
             generated.push({
               event_type: 'expiration',
               event_date: leaseEnd,
-              event_description: 'Lease expiration date',
+              event_description: t('notifications.config.expiration_desc'),
               notify_days_before: [90, 60, 30, 14, 7],
               notify_email: false,
               is_confirmed: false,
@@ -122,7 +138,7 @@ export function NotificationConfigurator({
             generated.push({
               event_type: 'renewal_window',
               event_date: renewalWindow.toISOString().split('T')[0],
-              event_description: 'Renewal decision window opens',
+              event_description: t('notifications.config.renewal_desc'),
               notify_days_before: [14, 7],
               notify_email: false,
               is_confirmed: false,
@@ -134,10 +150,13 @@ export function NotificationConfigurator({
             for (let i = 1; i < rentSchedule.length; i++) {
               const schedule = rentSchedule[i];
               if (schedule.period_start) {
+                const amount = schedule.monthly_amount 
+                  ? formatLocalizedCurrency(schedule.monthly_amount, language)
+                  : 'TBD';
                 generated.push({
                   event_type: 'escalation',
                   event_date: schedule.period_start,
-                  event_description: `Rent escalation to $${schedule.monthly_amount?.toLocaleString() || 'TBD'}/month`,
+                  event_description: `${t('notifications.config.escalation_desc')} ${amount}${t('notifications.config.per_month')}`,
                   notify_days_before: [30, 14, 7],
                   notify_email: false,
                   is_confirmed: false,
@@ -156,7 +175,7 @@ export function NotificationConfigurator({
     }
 
     loadNotifications();
-  }, [leaseId, leaseStart, leaseEnd, rentSchedule]);
+  }, [leaseId, leaseStart, leaseEnd, rentSchedule, t, language]);
 
   // Notify parent of changes
   useEffect(() => {
@@ -189,7 +208,7 @@ export function NotificationConfigurator({
 
   const handleAddCustomDate = () => {
     if (!customDate || !customDescription) {
-      toast.error('Please enter both date and description');
+      toast.error(language === 'es' ? 'Ingrese fecha y descripción' : 'Please enter both date and description');
       return;
     }
 
@@ -235,10 +254,10 @@ export function NotificationConfigurator({
 
       if (error) throw error;
 
-      toast.success('Notification preferences saved');
+      toast.success(language === 'es' ? 'Preferencias guardadas' : 'Notification preferences saved');
     } catch (error) {
       console.error('Error saving notifications:', error);
-      toast.error('Failed to save notification preferences');
+      toast.error(language === 'es' ? 'Error al guardar preferencias' : 'Failed to save notification preferences');
     } finally {
       setSaving(false);
     }
@@ -264,18 +283,18 @@ export function NotificationConfigurator({
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
               <Bell className="h-5 w-5" />
-              Key Dates & Notifications
+              {t('notifications.config.title')}
             </CardTitle>
             <CardDescription>
-              Confirm dates and enable notifications for important events
+              {t('notifications.config.description')}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline">
-              {confirmedCount}/{notifications.length} confirmed
+              {confirmedCount}/{notifications.length} {t('notifications.config.confirmed_count')}
             </Badge>
             <Badge variant={enabledCount > 0 ? 'default' : 'secondary'}>
-              {enabledCount} active alerts
+              {enabledCount} {t('notifications.config.active_alerts')}
             </Badge>
           </div>
         </div>
@@ -284,7 +303,7 @@ export function NotificationConfigurator({
         {notifications.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>No key dates found. Add dates above to set up notifications.</p>
+            <p>{t('notifications.config.no_dates')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -312,33 +331,28 @@ export function NotificationConfigurator({
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium">{config.label}</span>
+                        <span className="font-medium">{t(config.labelKey)}</span>
                         {!notification.is_confirmed && (
                           <Badge variant="warning" className="text-[10px]">
-                            Unconfirmed
+                            {t('notifications.config.unconfirmed')}
                           </Badge>
                         )}
                         {notification.is_confirmed && (
                           <Badge variant="success" className="text-[10px]">
                             <Check className="h-3 w-3 mr-1" />
-                            Confirmed
+                            {t('notifications.confirmed')}
                           </Badge>
                         )}
                         {isPast && (
                           <Badge variant="muted" className="text-[10px]">
-                            Past
+                            {t('notifications.past')}
                           </Badge>
                         )}
                       </div>
 
                       <div className="flex items-center gap-4 text-sm">
                         <span className="text-muted-foreground">
-                          {new Date(notification.event_date).toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })}
+                          {formatLocalizedDateWithWeekday(notification.event_date, language)}
                         </span>
                         {notification.event_description && (
                           <>
@@ -354,14 +368,14 @@ export function NotificationConfigurator({
                       {notification.is_confirmed && !isPast && (
                         <div className="mt-3 pt-3 border-t border-border/50">
                           <div className="flex items-center justify-between mb-2">
-                            <Label className="text-xs font-medium">Notify me:</Label>
+                            <Label className="text-xs font-medium">{t('notifications.config.notify_me')}</Label>
                             <div className="flex items-center gap-2">
                               <Switch
                                 checked={notification.notify_email}
                                 onCheckedChange={() => handleEmailToggle(index)}
                               />
                               <span className="text-xs text-muted-foreground">
-                                {notification.notify_email ? 'Email enabled' : 'Off'}
+                                {notification.notify_email ? t('notifications.config.email_enabled') : t('notifications.config.off')}
                               </span>
                             </div>
                           </div>
@@ -378,7 +392,7 @@ export function NotificationConfigurator({
                                       handleScheduleChange(index, schedule.value, checked as boolean)
                                     }
                                   />
-                                  {schedule.label}
+                                  {schedule.value} {t('notifications.config.days_before')}
                                 </label>
                               ))}
                             </div>
@@ -395,11 +409,11 @@ export function NotificationConfigurator({
                         onClick={() => handleConfirmToggle(index)}
                       >
                         {notification.is_confirmed ? (
-                          <>Unconfirm</>
+                          <>{t('notifications.config.unconfirm')}</>
                         ) : (
                           <>
                             <Check className="h-4 w-4 mr-1" />
-                            Confirm
+                            {t('common.confirm')}
                           </>
                         )}
                       </Button>
@@ -425,7 +439,7 @@ export function NotificationConfigurator({
           <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label htmlFor="custom-date">Date</Label>
+                <Label htmlFor="custom-date">{t('notifications.config.date')}</Label>
                 <Input
                   id="custom-date"
                   type="date"
@@ -434,28 +448,28 @@ export function NotificationConfigurator({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="custom-description">Description</Label>
+                <Label htmlFor="custom-description">{t('notifications.config.description_label')}</Label>
                 <Input
                   id="custom-description"
                   value={customDescription}
                   onChange={(e) => setCustomDescription(e.target.value)}
-                  placeholder="e.g., Insurance renewal deadline"
+                  placeholder={t('notifications.config.description_placeholder')}
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setShowAddCustom(false)}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button size="sm" onClick={handleAddCustomDate}>
-                Add Date
+                {t('notifications.config.add_date')}
               </Button>
             </div>
           </div>
         ) : (
           <Button variant="outline" className="w-full" onClick={() => setShowAddCustom(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Add Custom Date
+            {t('notifications.config.add_custom')}
           </Button>
         )}
 
@@ -467,7 +481,7 @@ export function NotificationConfigurator({
             ) : (
               <Bell className="h-4 w-4 mr-2" />
             )}
-            Save Notification Preferences
+            {t('notifications.config.save')}
           </Button>
         </div>
       </CardContent>

@@ -17,6 +17,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 
 interface NotificationWithLease {
   id: string;
@@ -45,27 +46,27 @@ export default function Notifications() {
     renewal_window: {
       icon: Calendar,
       variant: 'info' as const,
-      labelKey: 'dashboard.renewal',
+      labelKey: 'notifications.type.renewal_window',
     },
     escalation: {
       icon: TrendingUp,
       variant: 'warning' as const,
-      labelKey: 'dashboard.escalation',
+      labelKey: 'notifications.type.escalation',
     },
     expiration: {
       icon: AlertCircle,
       variant: 'destructive' as const,
-      labelKey: 'dashboard.expiration',
+      labelKey: 'notifications.type.expiration',
     },
     commencement: {
       icon: Calendar,
       variant: 'default' as const,
-      labelKey: 'lease.commencement_date',
+      labelKey: 'notifications.type.commencement',
     },
     custom: {
       icon: Bell,
       variant: 'secondary' as const,
-      labelKey: 'notifications.custom',
+      labelKey: 'notifications.type.custom',
     },
   };
 
@@ -97,14 +98,14 @@ export default function Notifications() {
         setNotifications((data || []) as unknown as NotificationWithLease[]);
       } catch (error) {
         console.error('Error fetching notifications:', error);
-        toast.error('Failed to load notifications');
+        toast.error(t('notifications.error_loading'));
       } finally {
         setLoading(false);
       }
     }
 
     fetchNotifications();
-  }, []);
+  }, [t]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -120,14 +121,6 @@ export default function Notifications() {
     if (filter === 'sent') return wasSent;
     return true;
   });
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString(language === 'es' ? 'es-MX' : 'en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
 
   const getDaysUntil = (dateString: string) => {
     const eventDate = new Date(dateString);
@@ -153,18 +146,11 @@ export default function Notifications() {
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, notify_email: false } : n))
       );
-      toast.success('Notification disabled');
+      toast.success(t('notifications.email_disabled'));
     } catch (error) {
       console.error('Error canceling notification:', error);
-      toast.error('Failed to cancel notification');
+      toast.error(t('notifications.error_updating'));
     }
-  };
-
-  // Translation labels
-  const tabLabels = {
-    all: language === 'es' ? 'Todas Confirmadas' : 'All Confirmed',
-    upcoming: language === 'es' ? 'Alertas Próximas' : 'Upcoming Alerts',
-    sent: language === 'es' ? 'Ya Enviadas' : 'Already Sent',
   };
 
   if (loading) {
@@ -188,9 +174,9 @@ export default function Notifications() {
       <div className="p-6">
         <Tabs defaultValue="all" onValueChange={(v) => setFilter(v as 'all' | 'upcoming' | 'sent')}>
           <TabsList className="mb-6">
-            <TabsTrigger value="all">{tabLabels.all}</TabsTrigger>
-            <TabsTrigger value="upcoming">{tabLabels.upcoming}</TabsTrigger>
-            <TabsTrigger value="sent">{tabLabels.sent}</TabsTrigger>
+            <TabsTrigger value="all">{t('notifications.tab_all')}</TabsTrigger>
+            <TabsTrigger value="upcoming">{t('notifications.tab_upcoming')}</TabsTrigger>
+            <TabsTrigger value="sent">{t('notifications.tab_sent')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value={filter} className="mt-0">
@@ -205,7 +191,7 @@ export default function Notifications() {
                     {t('notifications.all_caught_up')}
                   </p>
                   <Button variant="outline" onClick={() => navigate('/app/leases')}>
-                    {language === 'es' ? 'Ver Arrendamientos' : 'View Leases'}
+                    {t('notifications.view_leases')}
                   </Button>
                 </CardContent>
               </Card>
@@ -220,14 +206,15 @@ export default function Notifications() {
                   const property =
                     (notification.leases?.extracted_json as any)?.property_address ||
                     notification.leases?.filename ||
-                    (language === 'es' ? 'Propiedad Desconocida' : 'Unknown Property');
+                    t('notifications.unknown_property');
 
                   return (
                     <Card
                       key={notification.id}
                       variant="interactive"
-                      className={cn('animate-fade-up')}
+                      className={cn('animate-fade-up cursor-pointer')}
                       style={{ animationDelay: `${index * 50}ms` }}
+                      onClick={() => navigate(`/app/notifications/${notification.id}`)}
                     >
                       <CardContent className="p-5">
                         <div className="flex items-start gap-4">
@@ -251,22 +238,22 @@ export default function Notifications() {
                               {wasSent && (
                                 <Badge variant="success" className="text-[10px]">
                                   <Check className="h-3 w-3 mr-1" />
-                                  {language === 'es' ? 'Enviado' : 'Sent'}
+                                  {t('notifications.sent')}
                                 </Badge>
                               )}
                               {!wasSent && notification.notify_email && !isPast && (
                                 <Badge variant="muted" className="text-[10px]">
-                                  {language === 'es' ? 'Programado' : 'Scheduled'}
+                                  {t('notifications.scheduled')}
                                 </Badge>
                               )}
                               {isPast && !wasSent && (
                                 <Badge variant="secondary" className="text-[10px]">
-                                  {language === 'es' ? 'Pasado' : 'Past'}
+                                  {t('notifications.past')}
                                 </Badge>
                               )}
                               {!notification.notify_email && (
                                 <Badge variant="outline" className="text-[10px]">
-                                  {language === 'es' ? 'Email Desactivado' : 'Email Off'}
+                                  {t('notifications.email_off')}
                                 </Badge>
                               )}
                             </div>
@@ -277,11 +264,12 @@ export default function Notifications() {
                               <Link
                                 to={`/app/leases/${notification.lease_id}`}
                                 className="hover:text-accent hover:underline"
+                                onClick={(e) => e.stopPropagation()}
                               >
                                 {property}
                               </Link>
                               <span>•</span>
-                              <span>{formatDate(notification.event_date)}</span>
+                              <span>{formatLocalizedDate(notification.event_date, language)}</span>
                               {!isPast && (
                                 <>
                                   <span>•</span>
@@ -294,30 +282,36 @@ export default function Notifications() {
                                 <>
                                   <span>•</span>
                                   <span>
-                                    {language === 'es' ? 'Alertas' : 'Alerts'}: {notification.notify_days_before.sort((a, b) => b - a).join(', ')} {language === 'es' ? 'días antes' : 'days before'}
+                                    {t('notifications.alerts')}: {notification.notify_days_before.sort((a, b) => b - a).join(', ')} {t('notifications.days_before')}
                                   </span>
                                 </>
                               )}
                             </div>
                           </div>
                           <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                               <Button variant="ghost" size="icon-sm">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => navigate(`/app/leases/${notification.lease_id}`)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/app/leases/${notification.lease_id}`);
+                                }}
                               >
-                                {language === 'es' ? 'Ver Arrendamiento' : 'View Lease'}
+                                {t('notifications.view_lease')}
                               </DropdownMenuItem>
                               {notification.notify_email && !isPast && (
                                 <DropdownMenuItem
                                   className="text-destructive"
-                                  onClick={() => handleCancelNotification(notification.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCancelNotification(notification.id);
+                                  }}
                                 >
-                                  {language === 'es' ? 'Desactivar Notificaciones' : 'Disable Notifications'}
+                                  {t('notifications.disable')}
                                 </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
