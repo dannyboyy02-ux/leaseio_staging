@@ -55,6 +55,120 @@ export type Database = {
           },
         ]
       }
+      lease_activity_log: {
+        Row: {
+          activity_type: string
+          created_at: string
+          details: Json | null
+          from_status: string | null
+          id: string
+          lease_id: string
+          to_status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          activity_type: string
+          created_at?: string
+          details?: Json | null
+          from_status?: string | null
+          id?: string
+          lease_id: string
+          to_status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          activity_type?: string
+          created_at?: string
+          details?: Json | null
+          from_status?: string | null
+          id?: string
+          lease_id?: string
+          to_status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_activity_log_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_approval_actions: {
+        Row: {
+          action: string
+          approval_type: string
+          approver_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          lease_id: string
+        }
+        Insert: {
+          action: string
+          approval_type: string
+          approver_id: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          lease_id: string
+        }
+        Update: {
+          action?: string
+          approval_type?: string
+          approver_id?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          lease_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_approval_actions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_approvers: {
+        Row: {
+          approval_type: string
+          approved_at: string | null
+          approver_id: string
+          created_at: string
+          id: string
+          lease_id: string
+        }
+        Insert: {
+          approval_type: string
+          approved_at?: string | null
+          approver_id: string
+          created_at?: string
+          id?: string
+          lease_id: string
+        }
+        Update: {
+          approval_type?: string
+          approved_at?: string | null
+          approver_id?: string
+          created_at?: string
+          id?: string
+          lease_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_approvers_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lease_notifications: {
         Row: {
           created_at: string
@@ -105,68 +219,145 @@ export type Database = {
           },
         ]
       }
+      lease_nudges: {
+        Row: {
+          channel: string
+          id: string
+          lease_id: string
+          nudge_type: string
+          sent_at: string
+          sent_by: string | null
+        }
+        Insert: {
+          channel: string
+          id?: string
+          lease_id: string
+          nudge_type: string
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Update: {
+          channel?: string
+          id?: string
+          lease_id?: string
+          nudge_type?: string
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_nudges_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leases: {
         Row: {
+          activated_at: string | null
           base_rent_amount: string | null
           base_rent_frequency: string | null
+          business_unit: string | null
+          category: string | null
           confirmed_sections: string[]
           current_monthly_rent: number | null
           error_message: string | null
+          estimated_monthly_cost_max: number | null
+          estimated_monthly_cost_min: number | null
+          estimated_term_max: number | null
+          estimated_term_min: number | null
+          execution_approved_at: string | null
           extracted_json: Json | null
           filename: string
           id: string
+          internal_approved_at: string | null
           landlord_name: string | null
           lease_end: string | null
+          lease_owner_id: string | null
           lease_start: string | null
+          lifecycle_status: string | null
+          notes: string | null
           processed_at: string | null
+          rejection_reason: string | null
           rent_escalation_type: string | null
           square_footage: number | null
           status: string
           storage_path: string | null
+          submitted_for_approval_at: string | null
           tenant_name: string | null
           uploaded_at: string
           user_id: string
           workspace_id: string | null
         }
         Insert: {
+          activated_at?: string | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
+          business_unit?: string | null
+          category?: string | null
           confirmed_sections?: string[]
           current_monthly_rent?: number | null
           error_message?: string | null
+          estimated_monthly_cost_max?: number | null
+          estimated_monthly_cost_min?: number | null
+          estimated_term_max?: number | null
+          estimated_term_min?: number | null
+          execution_approved_at?: string | null
           extracted_json?: Json | null
           filename: string
           id?: string
+          internal_approved_at?: string | null
           landlord_name?: string | null
           lease_end?: string | null
+          lease_owner_id?: string | null
           lease_start?: string | null
+          lifecycle_status?: string | null
+          notes?: string | null
           processed_at?: string | null
+          rejection_reason?: string | null
           rent_escalation_type?: string | null
           square_footage?: number | null
           status?: string
           storage_path?: string | null
+          submitted_for_approval_at?: string | null
           tenant_name?: string | null
           uploaded_at?: string
           user_id: string
           workspace_id?: string | null
         }
         Update: {
+          activated_at?: string | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
+          business_unit?: string | null
+          category?: string | null
           confirmed_sections?: string[]
           current_monthly_rent?: number | null
           error_message?: string | null
+          estimated_monthly_cost_max?: number | null
+          estimated_monthly_cost_min?: number | null
+          estimated_term_max?: number | null
+          estimated_term_min?: number | null
+          execution_approved_at?: string | null
           extracted_json?: Json | null
           filename?: string
           id?: string
+          internal_approved_at?: string | null
           landlord_name?: string | null
           lease_end?: string | null
+          lease_owner_id?: string | null
           lease_start?: string | null
+          lifecycle_status?: string | null
+          notes?: string | null
           processed_at?: string | null
+          rejection_reason?: string | null
           rent_escalation_type?: string | null
           square_footage?: number | null
           status?: string
           storage_path?: string | null
+          submitted_for_approval_at?: string | null
           tenant_name?: string | null
           uploaded_at?: string
           user_id?: string
@@ -327,6 +518,41 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_approvers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_approvers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
