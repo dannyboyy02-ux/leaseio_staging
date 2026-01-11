@@ -15,8 +15,6 @@ interface AppContextType {
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   refreshProfile: () => Promise<void>;
-
-  // Helpers
   canAccessFeature: (requiredPlan: SubscriptionPlan) => boolean;
   hasPermission: (permission: "billing" | "integrations" | "members" | "leases" | "export") => boolean;
 }
@@ -32,16 +30,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const isAuthenticated = !!authUser;
 
-  // Fetch profile from Supabase when auth user changes
   const fetchProfile = async () => {
     if (!authUser) {
       setUser(null);
       setWorkspace(null);
+      setUserRole(null);
       setIsLoading(false);
       return;
     }
 
     try {
+      // IMPORTANT: select current_workspace_id if it exists; if it doesn't, this still works
       const { data: profile, error } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
 
       if (error) {
@@ -50,37 +49,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (profile) {
-        setUser({
-          id: profile.id,
-          email: profile.email || authUser.email || "",
-          firstName: profile.first_name || "",
-          lastName: profile.last_name || "",
-          companyName: profile.company_name || "",
-          timezone: profile.timezone || "America/New_York",
-          createdAt: profile.created_at,
-          updatedAt: profile.created_at,
-        });
-
-        // Get document limit from centralized pricing config
-        const plan = (profile.plan as SubscriptionPlan) || "free";
-        const planConfig = PLANS[plan];
-
-        // Create a workspace from profile data for now
-        setWorkspace({
-          id: profile.id,
-          name: profile.company_name || "My Workspace",
-          ownerId: profile.id,
-          plan: plan,
-          documentLimit: planConfig?.documentLimit || 1,
-          documentsUsed: profile.processed_count || 0,
-          timezone: profile.timezone || "America/New_York",
-          defaultNotificationDays: 90,
-          createdAt: profile.created_at,
-          renewalDate: profile.subscription_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          updatedAt: profile.created_at,
-        });
+      if (!profile) {
+        setIsLoading(false);
+        return;
       }
+
+      setUser({
+        id: profile.id,
+        email: profile.email || authUser.email || "",
+        firstName: profile.first_name || "",
+        lastName: profile.last_name || "",
+        companyName: profile.company_name || "",
+        timezone: profile.timezone || "America/New_York",
+        createdAt: profile.created_at,
+        updatedAt: profile.created_at,
+      });
+
+      const plan = (profile.plan as SubscriptionPlan) || "free";
+      const planConfig = PLANS[plan];
+
+      // ---- NEW: try to load real workspace if profile.current_workspace_id exists ----
+      const currentWorkspaceId = (profile as any).current_workspace_id as string | null | undefined;
+
+      if (currentWorkspaceId) {
+        const { data: ws, error: wsError } = await supabase
+          .from("workspaces")
+          .select("id, name, owner_id, timezone, default_notification_days, created_at, updated_at")
+          .eq("id", currentWorkspaceId)
+          .single();
+
+        if (!wsError && ws) {
+          // Resolve role
+          if (ws.owner_id === authUser.id) {
+            setUserRole("owner");
+          } else {
+            const { data: memberRow } = await supabase
+              .from("workspace_members")
+              .select("role")
+              .eq("workspace_id", ws.id)
+              .eq("user_id", authUser.id)
+              .maybeSingle();
+
+            setUserRole((memberRow?.role as WorkspaceRole) || null);
+          }
+
+          setWorkspace({
+            id: ws.id,
+            name: ws.name || profile.company_name || "My Workspace",
+            ownerId: ws.owner_id,
+            plan,
+            documentLimit: planConfig?.documentLimit || 1,
+            documentsUsed: profile.processed_count || 0,
+            timezone: ws.timezone || profile.timezone || "America/New_York",
+            defaultNotificationDays: ws.default_notification_days ?? 90,
+            createdAt: ws.created_at || profile.created_at,
+            renewalDate:
+              profile.subscription_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            updatedAt: ws.updated_at || ws.created_at || profile.created_at,
+          });
+
+          setIsLoading(false);
+          return;
+        } else {
+          console.warn("Could not load workspaces row for current_workspace_id, falling back:", wsError);
+        }
+      }
+
+      // ---- FALLBACK: original behavior (prevents downtime) ----
+      setUserRole("owner");
+      setWorkspace({
+        id: profile.id,
+        name: profile.company_name || "My Workspace",
+        ownerId: profile.id,
+        plan,
+        documentLimit: planConfig?.documentLimit || 1,
+        documentsUsed: profile.processed_count || 0,
+        timezone: profile.timezone || "America/New_York",
+        defaultNotificationDays: 90,
+        createdAt: profile.created_at,
+        renewalDate: profile.subscription_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        updatedAt: profile.created_at,
+      });
     } catch (err) {
       console.error("Error in fetchProfile:", err);
     } finally {
@@ -98,7 +147,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [authUser, authLoading]);
 
-  // Check if user can access a feature based on their plan level
   const canAccessFeature = (requiredPlan: SubscriptionPlan): boolean => {
     if (!workspace) return false;
     const currentPlanIndex = getPlanIndex(workspace.plan);
