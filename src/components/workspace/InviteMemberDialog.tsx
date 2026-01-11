@@ -43,23 +43,23 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
   const addEmail = (email: string) => {
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
-    
+
     if (!emailRegex.test(trimmed)) {
       toast.error(`Invalid email: ${trimmed}`);
       return;
     }
-    
+
     if (emails.includes(trimmed)) {
       toast.error("Email already added");
       return;
     }
-    
+
     setEmails([...emails, trimmed]);
     setEmailInput("");
   };
 
   const removeEmail = (email: string) => {
-    setEmails(emails.filter(e => e !== email));
+    setEmails(emails.filter((e) => e !== email));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -78,46 +78,83 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
   };
 
   const handleInvite = async () => {
+    if (!workspaceId) {
+      toast.error("Workspace not found. Refresh and try again.");
+      return;
+    }
+
     if (emails.length === 0) {
       toast.error("Please add at least one email address");
       return;
     }
 
     setIsInviting(true);
+
     try {
       const { data, error } = await supabase.functions.invoke("send-invite", {
         body: {
           emails,
           role,
           workspaceId,
-          workspaceName: workspace?.name || "Workspace",
+          workspaceName: workspace?.name ?? "Workspace",
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      // Supabase invoke error (network / auth / 4xx/5xx)
+      if (error) {
+        console.error("send-invite invoke error:", error);
+        toast.error(error.message || "Failed to send invitations");
+        return;
+      }
 
-      const successCount = data?.results?.filter((r: any) => r.success).length || 0;
+      // Edge function returned an application-level error
+      if (!data || typeof data !== "object") {
+        console.error("send-invite unexpected response:", data);
+        toast.error("Invite service returned an unexpected response");
+        return;
+      }
+
+      if ("error" in data && data.error) {
+        console.error("send-invite returned error:", data.error);
+        toast.error(typeof data.error === "string" ? data.error : "Failed to send invitations");
+        return;
+      }
+
+      const resultsRaw = (data as any).results;
+
+      // Normalize results safely
+      const results: Array<{ email: string; success: boolean; error?: string }> = Array.isArray(resultsRaw)
+        ? resultsRaw
+        : [];
+
+      const successCount = results.filter((r) => r?.success).length;
       const failCount = emails.length - successCount;
 
       if (successCount > 0) {
-        toast.success(`${successCount} invitation${successCount > 1 ? 's' : ''} sent successfully`);
-      }
-      if (failCount > 0) {
-        const failures = data?.results?.filter((r: any) => !r.success) || [];
-        failures.forEach((f: any) => {
-          toast.error(`${f.email}: ${f.error || 'Failed to invite'}`);
-        });
+        toast.success(`${successCount} invitation${successCount > 1 ? "s" : ""} sent successfully`);
       }
 
-      setEmails([]);
-      setEmailInput("");
-      setRole("editor");
-      onOpenChange(false);
-      onInviteSent();
-    } catch (error) {
-      console.error("Error inviting members:", error);
-      toast.error("Failed to send invitations");
+      if (failCount > 0) {
+        // If backend gave per-email failures, show them; otherwise show a generic failure
+        const failures = results.filter((r) => !r?.success);
+        if (failures.length > 0) {
+          failures.forEach((f) => toast.error(`${f.email}: ${f.error || "Failed to invite"}`));
+        } else {
+          toast.error(`${failCount} invitation${failCount > 1 ? "s" : ""} failed`);
+        }
+      }
+
+      // Only close dialog if at least one succeeded
+      if (successCount > 0) {
+        setEmails([]);
+        setEmailInput("");
+        setRole("editor");
+        onOpenChange(false);
+        onInviteSent();
+      }
+    } catch (err: any) {
+      console.error("Error inviting members:", err);
+      toast.error(err?.message || "Failed to send invitations");
     } finally {
       setIsInviting(false);
     }
@@ -163,9 +200,7 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
                 className="flex-1 min-w-[150px] border-0 p-0 h-6 focus-visible:ring-0"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Press Enter or comma to add multiple emails
-            </p>
+            <p className="text-xs text-muted-foreground">Press Enter or comma to add multiple emails</p>
           </div>
 
           <div className="space-y-2">
@@ -203,7 +238,7 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
             ) : (
               <>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Send {emails.length > 0 ? `${emails.length} ` : ''}Invitation{emails.length !== 1 ? 's' : ''}
+                Send {emails.length > 0 ? `${emails.length} ` : ""}Invitation{emails.length !== 1 ? "s" : ""}
               </>
             )}
           </Button>
