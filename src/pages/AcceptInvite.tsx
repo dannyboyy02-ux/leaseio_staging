@@ -3,256 +3,126 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Loader2, CheckCircle, XCircle } from "lucide-react";
 
-type InviteStatus = "loading" | "valid" | "expired" | "already_accepted" | "not_found" | "error";
-
-interface InviteData {
-  workspace_id: string;
-  workspace_name: string;
-  role: string;
-  email: string;
-}
+type Status = "loading" | "needs_login" | "accepting" | "success" | "error";
 
 export default function AcceptInvite() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const token = searchParams.get("token");
 
-  const [status, setStatus] = useState<InviteStatus>("loading");
-  const [inviteData, setInviteData] = useState<InviteData | null>(null);
-  const [accepting, setAccepting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const token = searchParams.get("token") || "";
+  const [status, setStatus] = useState<Status>("loading");
+  const [message, setMessage] = useState<string>("Preparing invitation...");
 
   useEffect(() => {
-    if (!token) {
-      setStatus("not_found");
-      return;
-    }
-
-    validateToken();
-  }, [token]);
-
-  const validateToken = async () => {
-    try {
-      // Fetch invite with expiration check
-      const { data: invite, error: inviteError } = await supabase
-        .from("invite_tokens")
-        .select("*, workspaces(name)")
-        .eq("token", token)
-        .maybeSingle();
-
-      if (inviteError) throw inviteError;
-
-      if (!invite) {
-        setStatus("not_found");
+    (async () => {
+      if (!token) {
+        setStatus("error");
+        setMessage("Invitation token missing.");
         return;
       }
 
-      // Check if already accepted
-      if (invite.accepted_at) {
-        setStatus("already_accepted");
-        return;
-      }
-
-      // Enforce expiration check
-      const expiresAt = new Date(invite.expires_at);
-      if (expiresAt < new Date()) {
-        setStatus("expired");
-        return;
-      }
-
-      setInviteData({
-        workspace_id: invite.workspace_id,
-        workspace_name: (invite.workspaces as { name: string })?.name || "Unknown Workspace",
-        role: invite.role,
-        email: invite.email,
-      });
-      setStatus("valid");
-    } catch (err) {
-      console.error("Error validating invite:", err);
-      setError(err instanceof Error ? err.message : "Failed to validate invitation");
-      setStatus("error");
-    }
-  };
-
-  const handleAcceptInvite = async () => {
-    if (!inviteData || !token) return;
-
-    setAccepting(true);
-    setError(null);
-
-    try {
-      // Check if user is logged in
-      const { data: { user } } = await supabase.auth.getUser();
+      // Are we logged in?
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!user) {
-        // Redirect to signup with invite token
-        navigate(`/signup?invite=${token}&email=${encodeURIComponent(inviteData.email)}`);
+        setStatus("needs_login");
+        setMessage("Please log in (or create an account) using the email that received the invite.");
         return;
       }
 
-      // Verify email matches
-      if (user.email?.toLowerCase() !== inviteData.email.toLowerCase()) {
-        setError(`This invitation was sent to ${inviteData.email}. Please log in with that email address.`);
-        setAccepting(false);
+      // Logged in -> accept via Edge Function (trusted path)
+      setStatus("accepting");
+      setMessage("Accepting invitation...");
+
+      const { data, error } = await supabase.functions.invoke("accept-invite", {
+        body: { token },
+      });
+
+      if (error) {
+        setStatus("error");
+        setMessage(error.message || "Failed to accept invitation.");
         return;
       }
 
-      // Re-validate expiration before accepting (double-check)
-      const { data: currentInvite, error: checkError } = await supabase
-        .from("invite_tokens")
-        .select("expires_at, accepted_at")
-        .eq("token", token)
-        .single();
-
-      if (checkError) throw checkError;
-
-      if (currentInvite.accepted_at) {
-        setStatus("already_accepted");
-        setAccepting(false);
+      if (data?.error) {
+        setStatus("error");
+        setMessage(data.error);
         return;
       }
 
-      if (new Date(currentInvite.expires_at) < new Date()) {
-        setStatus("expired");
-        setAccepting(false);
-        return;
-      }
+      setStatus("success");
+      setMessage("Invitation accepted. Redirecting...");
+      setTimeout(() => navigate("/app/dashboard", { replace: true }), 600);
+    })();
+  }, [token, navigate]);
 
-      // Add user as workspace member
-      const { error: memberError } = await supabase
-        .from("workspace_members")
-        .insert({
-          workspace_id: inviteData.workspace_id,
-          user_id: user.id,
-          role: inviteData.role as "admin" | "editor" | "viewer",
-          invited_email: inviteData.email,
-          invited_at: new Date().toISOString(),
-          accepted_at: new Date().toISOString(),
-        });
-
-      if (memberError) {
-        if (memberError.code === "23505") {
-          // Already a member
-          navigate("/app/dashboard");
-          return;
-        }
-        throw memberError;
-      }
-
-      // Mark invite as accepted - use service role via edge function if needed
-      // For now, users can't update invite_tokens, so we'll just proceed
-      // The workspace owner can see the member was added
-
-      navigate("/app/dashboard");
-    } catch (err) {
-      console.error("Error accepting invite:", err);
-      setError(err instanceof Error ? err.message : "Failed to accept invitation");
-      setAccepting(false);
-    }
+  const goToLogin = () => {
+    // preserve the invite token through login
+    navigate(`/auth?next=/accept-invite?token=${encodeURIComponent(token)}`, { replace: true });
   };
 
-  const renderContent = () => {
-    switch (status) {
-      case "loading":
-        return (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Validating invitation...</p>
-          </div>
-        );
-
-      case "expired":
-        return (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <Clock className="h-12 w-12 text-destructive" />
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">Invitation Expired</h3>
-              <p className="text-muted-foreground mt-2">
-                This invitation has expired. Please ask the workspace owner to send a new invitation.
-              </p>
-            </div>
-            <Button onClick={() => navigate("/login")} variant="outline">
-              Go to Login
-            </Button>
-          </div>
-        );
-
-      case "already_accepted":
-        return (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <CheckCircle className="h-12 w-12 text-green-500" />
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">Already Accepted</h3>
-              <p className="text-muted-foreground mt-2">
-                This invitation has already been accepted.
-              </p>
-            </div>
-            <Button onClick={() => navigate("/app/dashboard")}>
-              Go to Dashboard
-            </Button>
-          </div>
-        );
-
-      case "not_found":
-        return (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <XCircle className="h-12 w-12 text-destructive" />
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">Invitation Not Found</h3>
-              <p className="text-muted-foreground mt-2">
-                This invitation link is invalid or has been revoked.
-              </p>
-            </div>
-            <Button onClick={() => navigate("/login")} variant="outline">
-              Go to Login
-            </Button>
-          </div>
-        );
-
-      case "error":
-        return (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <XCircle className="h-12 w-12 text-destructive" />
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">Something Went Wrong</h3>
-              <p className="text-muted-foreground mt-2">{error}</p>
-            </div>
-            <Button onClick={() => navigate("/login")} variant="outline">
-              Go to Login
-            </Button>
-          </div>
-        );
-
-      case "valid":
-        return (
-          <div className="flex flex-col items-center gap-6 py-8">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">You've Been Invited!</h3>
-              <p className="text-muted-foreground mt-2">
-                You've been invited to join <strong>{inviteData?.workspace_name}</strong> as a{" "}
-                <span className="capitalize">{inviteData?.role}</span>.
-              </p>
-            </div>
-
-            {error && (
-              <p className="text-sm text-destructive text-center">{error}</p>
-            )}
-
-            <Button onClick={handleAcceptInvite} disabled={accepting} className="w-full max-w-xs">
-              {accepting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Accepting...
-                </>
-              ) : (
-                "Accept Invitation"
-              )}
-            </Button>
-          </div>
-        );
+  const render = () => {
+    if (status === "loading" || status === "accepting") {
+      return (
+        <div className="flex flex-col items-center gap-4 py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">{message}</p>
+        </div>
+      );
     }
+
+    if (status === "needs_login") {
+      return (
+        <div className="flex flex-col items-center gap-4 py-8">
+          <XCircle className="h-12 w-12 text-muted-foreground" />
+          <div className="text-center">
+            <h3 className="text-lg font-semibold">Login Required</h3>
+            <p className="text-muted-foreground mt-2">{message}</p>
+          </div>
+          <Button onClick={goToLogin} className="w-full max-w-xs">
+            Continue to Login
+          </Button>
+        </div>
+      );
+    }
+
+    if (status === "success") {
+      return (
+        <div className="flex flex-col items-center gap-4 py-8">
+          <CheckCircle className="h-12 w-12 text-green-500" />
+          <div className="text-center">
+            <h3 className="text-lg font-semibold">Accepted</h3>
+            <p className="text-muted-foreground mt-2">{message}</p>
+          </div>
+          <Button onClick={() => navigate("/app/dashboard")} className="w-full max-w-xs">
+            Go to Dashboard
+          </Button>
+        </div>
+      );
+    }
+
+    // error
+    return (
+      <div className="flex flex-col items-center gap-4 py-8">
+        <XCircle className="h-12 w-12 text-destructive" />
+        <div className="text-center">
+          <h3 className="text-lg font-semibold">Invite Failed</h3>
+          <p className="text-muted-foreground mt-2">{message}</p>
+        </div>
+        <div className="flex gap-2 w-full">
+          <Button onClick={goToLogin} variant="outline" className="flex-1">
+            Login
+          </Button>
+          <Button onClick={() => window.location.reload()} className="flex-1">
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -262,7 +132,7 @@ export default function AcceptInvite() {
           <CardTitle>Workspace Invitation</CardTitle>
           <CardDescription>LeaseIO</CardDescription>
         </CardHeader>
-        <CardContent>{renderContent()}</CardContent>
+        <CardContent>{render()}</CardContent>
       </Card>
     </div>
   );
