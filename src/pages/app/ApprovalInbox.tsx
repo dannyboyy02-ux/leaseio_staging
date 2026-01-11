@@ -12,8 +12,16 @@ import { LifecycleStatusBadge } from '@/components/lifecycle/LifecycleStatusBadg
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
-import type { LifecycleStatus, LeaseCategory } from '@/types/lifecycle';
+import type { LifecycleStatus, LeaseCategory, ApprovalType } from '@/types/lifecycle';
 import { CATEGORY_LABELS } from '@/types/lifecycle';
+
+// Validate and map approval_type from database to strict union type
+function parseApprovalType(value: unknown): ApprovalType {
+  if (value === 'internal' || value === 'execution') {
+    return value;
+  }
+  return 'internal'; // Default fallback
+}
 
 interface PendingLease {
   id: string;
@@ -85,7 +93,7 @@ export default function ApprovalInbox() {
             lifecycleStatus: lease.lifecycle_status,
             submittedAt: submittedAt,
             daysWaiting,
-            approvalType: assignment?.approval_type || 'internal',
+            approvalType: parseApprovalType(assignment?.approval_type),
           };
 
           if (lease.lifecycle_status === 'pending_internal_approval') {
