@@ -25,6 +25,8 @@ import Onboarding from "./pages/app/Onboarding";
 import LeaseReview from "./pages/app/LeaseReview";
 import ImportHistory from "./pages/app/ImportHistory";
 import Upgrade from "./pages/app/Upgrade";
+import NewLease from "./pages/app/NewLease";
+import ApprovalInbox from "./pages/app/ApprovalInbox";
 import Dashboard from "./pages/Dashboard";
 import Leases from "./pages/Leases";
 import Notifications from "./pages/Notifications";
@@ -85,10 +87,26 @@ const App = () => (
                   }
                 />
                 <Route
+                  path="/app/leases/new"
+                  element={
+                    <ProtectedRoute>
+                      <NewLease />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/app/leases/:leaseId"
                   element={
                     <ProtectedRoute>
                       <LeaseReview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/approvals"
+                  element={
+                    <ProtectedRoute>
+                      <ApprovalInbox />
                     </ProtectedRoute>
                   }
                 />
