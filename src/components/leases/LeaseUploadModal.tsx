@@ -158,9 +158,10 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
 
       setProcessingStatus({ stage: 'analyzing', message: 'Analyzing document with AI...' });
 
-      // Call the edge function
+      // Call the edge function using the Supabase client's functions URL
+      const supabaseUrl = 'https://wwkwoxxcprnjjufkbzac.supabase.co';
       const response = await fetch(
-        `https://wwkwoxxcprnjjufkbzac.supabase.co/functions/v1/process_lease`,
+        `${supabaseUrl}/functions/v1/process_lease`,
         {
           method: 'POST',
           headers: {
