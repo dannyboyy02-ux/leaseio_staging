@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.send-lease-notifications]
 verify_jwt = false
+
+[functions.accept-invite]
+verify_jwt = false

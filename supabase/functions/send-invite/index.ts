@@ -6,6 +6,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// HTML escape function to prevent XSS in email templates
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -102,11 +114,11 @@ serve(async (req) => {
             body: JSON.stringify({
               from: "LeaseIO <notifications@theleaseio.com>",
               to: [email],
-              subject: `You've been invited to join ${workspaceName} on LeaseIO`,
+              subject: `You've been invited to join ${escapeHtml(workspaceName)} on LeaseIO`,
               html: `
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2>You've been invited to join a workspace</h2>
-                  <p>You've been invited to join <strong>${workspaceName}</strong> on LeaseIO as a ${role}.</p>
+                  <p>You've been invited to join <strong>${escapeHtml(workspaceName)}</strong> on LeaseIO as a ${escapeHtml(role)}.</p>
                   <p style="margin: 24px 0;">
                     <a href="${inviteUrl}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
                       Accept Invitation

@@ -385,6 +385,7 @@ export type Database = {
           billing_interval: string
           company_name: string | null
           created_at: string
+          current_workspace_id: string | null
           email: string | null
           email_notifications_enabled: boolean
           first_name: string | null
@@ -404,6 +405,7 @@ export type Database = {
           billing_interval?: string
           company_name?: string | null
           created_at?: string
+          current_workspace_id?: string | null
           email?: string | null
           email_notifications_enabled?: boolean
           first_name?: string | null
@@ -423,6 +425,7 @@ export type Database = {
           billing_interval?: string
           company_name?: string | null
           created_at?: string
+          current_workspace_id?: string | null
           email?: string | null
           email_notifications_enabled?: boolean
           first_name?: string | null
