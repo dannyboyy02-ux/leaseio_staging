@@ -48,6 +48,26 @@ serve(async (req) => {
       throw new Error("At least one email is required");
     }
 
+    if (!workspaceId) {
+      throw new Error("Workspace ID is required");
+    }
+
+    // SECURITY: Verify the authenticated user is the workspace owner
+    // Only workspace owners should be able to send invitations
+    const { data: workspace, error: wsError } = await supabaseClient
+      .from("workspaces")
+      .select("owner_id")
+      .eq("id", workspaceId)
+      .single();
+
+    if (wsError || !workspace) {
+      throw new Error("Workspace not found");
+    }
+
+    if (workspace.owner_id !== user.id) {
+      throw new Error("Only workspace owners can send invitations");
+    }
+
     const origin = req.headers.get("origin") || "https://leaseio.app";
     const results = [];
 
