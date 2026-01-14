@@ -1,31 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { format, differenceInMonths } from "date-fns";
 import {
-  ArrowLeft,
   FileText,
   CheckCircle,
-  AlertTriangle,
-  Calendar,
   Building2,
   DollarSign,
-  Download,
   Save,
   Loader2,
-  Pencil,
-  Check,
-  X,
-  RefreshCw,
   Target,
   ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  Calculator,
+  ExternalLink,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,15 +31,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
-import { useApp } from "@/contexts/AppContext";
-import { useLanguage } from "@/contexts/LanguageContext";
 
-// --- Types & Interfaces ---
+// --- Interfaces ---
 interface ExtractedField {
   value: any;
   page?: number;
   confidence: "low" | "medium" | "high";
-  verified?: boolean;
 }
 
 interface ExtractedJson {
@@ -53,229 +46,199 @@ interface ExtractedJson {
   lease_start?: ExtractedField;
   lease_end?: ExtractedField;
   base_rent_amount?: ExtractedField;
-  rent_schedule?: Array<{
-    period_start: string;
-    period_end: string | null;
-    monthly_amount: number | null;
-    page?: number;
-    confidence: "low" | "medium" | "high";
-  }>;
+  escalation_type?: ExtractedField;
+  rent_schedule?: Array<any>;
 }
 
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
-  const navigate = useNavigate();
-  const { hasPermission } = useApp();
-  const { t } = useLanguage();
-
   const [lease, setLease] = useState<any | null>(null);
   const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [approving, setApproving] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [basePdfUrl, setBasePdfUrl] = useState<string | null>(null);
+  const [isPdfCollapsed, setIsPdfCollapsed] = useState(false);
   const [verifiedFields, setVerifiedFields] = useState<Set<string>>(new Set());
 
-  const [editableFields, setEditableFields] = useState({
-    filename: "",
+  const [form, setForm] = useState({
     landlord_name: "",
     tenant_name: "",
     property_address: "",
     lease_start: "",
     lease_end: "",
     base_rent_amount: "",
+    escalation_type: "",
   });
 
-  const isApproved = lease?.status === "Approved";
-  const isLocked = isApproved;
-  const canEdit = hasPermission("leases");
+  // --- Analyst Logic: Average Annual Increase ---
+  const derivedInsights = useMemo(() => {
+    if (!rentSchedule.length || !form.base_rent_amount) return null;
 
-  // --- Logic: Jump to Page ---
-  const jumpToPage = (pageNumber?: number) => {
-    if (!pageNumber || !basePdfUrl) return;
-    setPdfUrl(`${basePdfUrl}#page=${pageNumber}`);
-    toast.info(`Jumping to page ${pageNumber}`);
-  };
+    const startRent = parseFloat(form.base_rent_amount.replace(/[^0-9.]/g, ""));
+    const endRent = rentSchedule[rentSchedule.length - 1].monthly_amount || startRent;
+    const years = Math.max(1, new Date(form.lease_end).getFullYear() - new Date(form.lease_start).getFullYear());
 
-  const toggleVerify = (fieldName: string) => {
-    const newVerified = new Set(verifiedFields);
-    if (newVerified.has(fieldName)) newVerified.delete(fieldName);
-    else newVerified.add(fieldName);
-    setVerifiedFields(newVerified);
-  };
+    const totalIncreasePercent = ((endRent - startRent) / startRent) * 100;
+    const avgAnnualIncrease = (totalIncreasePercent / years).toFixed(2);
 
-  // --- Accuracy Badge Component ---
-  const AccuracyBadge = ({ level, field }: { level?: "low" | "medium" | "high"; field: string }) => {
-    if (!level) return null;
-    const isVerified = verifiedFields.has(field);
-
-    return (
-      <div className="flex items-center gap-1">
-        <Badge
-          variant="outline"
-          className={cn(
-            "text-[10px] uppercase px-1 py-0 h-4",
-            isVerified
-              ? "bg-green-100 text-green-700 border-green-200"
-              : level === "low"
-                ? "bg-red-100 text-red-700 border-red-200"
-                : level === "medium"
-                  ? "bg-yellow-100 text-yellow-700 border-yellow-200"
-                  : "bg-blue-100 text-blue-700 border-blue-200",
-          )}
-        >
-          {isVerified ? "Verified" : `${level} Accuracy`}
-        </Badge>
-      </div>
-    );
-  };
+    return {
+      avgIncrease: avgAnnualIncrease,
+      isCalculated: !form.escalation_type,
+    };
+  }, [rentSchedule, form]);
 
   useEffect(() => {
-    async function fetchLease() {
+    async function init() {
       if (!leaseId) return;
-      try {
-        const { data, error } = await supabase.from("leases").select("*").eq("id", leaseId).single();
-        if (error) throw error;
-
-        setLease(data);
-        const ext = (data.extracted_json as ExtractedJson) || {};
-
-        setEditableFields({
-          filename: data.filename || "",
-          landlord_name: data.landlord_name || ext.landlord_name?.value || "",
-          tenant_name: data.tenant_name || ext.tenant_name?.value || "",
-          property_address: ext.property_address?.value || "",
-          lease_start: data.lease_start || ext.lease_start?.value || "",
-          lease_end: data.lease_end || ext.lease_end?.value || "",
-          base_rent_amount: data.base_rent_amount || ext.base_rent_amount?.value || "",
-        });
-
-        const { data: rs } = await supabase
-          .from("rent_schedules")
-          .select("*")
-          .eq("lease_id", leaseId)
-          .order("period_start");
-        setRentSchedule(rs || []);
-
-        // Load PDF
-        if (data.storage_path) {
-          const { data: urlData } = await supabase.storage.from("leases").createSignedUrl(data.storage_path, 3600);
-          setPdfUrl(urlData?.signedUrl || null);
-          setBasePdfUrl(urlData?.signedUrl || null);
-        }
-      } catch (err) {
-        toast.error("Failed to load lease");
-      } finally {
-        setLoading(false);
+      const { data, error } = await supabase.from("leases").select("*").eq("id", leaseId).single();
+      if (error) {
+        toast.error("Lease not found");
+        return;
       }
+
+      setLease(data);
+      const ext = (data.extracted_json as ExtractedJson) || {};
+
+      setForm({
+        landlord_name: data.landlord_name || ext.landlord_name?.value || "",
+        tenant_name: data.tenant_name || ext.tenant_name?.value || "",
+        property_address: ext.property_address?.value || "",
+        lease_start: data.lease_start || ext.lease_start?.value || "",
+        lease_end: data.lease_end || ext.lease_end?.value || "",
+        base_rent_amount: data.base_rent_amount || ext.base_rent_amount?.value || "",
+        escalation_type: ext.escalation_type?.value || "",
+      });
+
+      const { data: rs } = await supabase
+        .from("rent_schedules")
+        .select("*")
+        .eq("lease_id", leaseId)
+        .order("period_start");
+      setRentSchedule(rs || []);
+
+      if (data.storage_path) {
+        const { data: urlData } = await supabase.storage.from("leases").createSignedUrl(data.storage_path, 3600);
+        setPdfUrl(urlData?.signedUrl || null);
+        setBasePdfUrl(urlData?.signedUrl || null);
+      }
+      setLoading(false);
     }
-    fetchLease();
+    init();
   }, [leaseId]);
 
-  const handleSave = async () => {
-    if (isLocked) return;
+  const jumpToPage = (page?: number) => {
+    if (!page || !basePdfUrl) return;
+    setPdfUrl(`${basePdfUrl}#page=${page}`);
+    if (isPdfCollapsed) setIsPdfCollapsed(false);
+    toast.info(`Jumping to page ${page}`);
+  };
+
+  const handleGlobalSave = async () => {
     setSaving(true);
     try {
       const { error } = await supabase
         .from("leases")
         .update({
-          ...editableFields,
-          status: "review",
+          ...form,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", lease.id);
       if (error) throw error;
-      toast.success("Draft Saved");
+      toast.success("Synced with Supabase Storage");
     } catch (err) {
-      toast.error("Save failed");
+      toast.error("Sync failed");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleApprove = async () => {
-    setApproving(true);
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      await supabase
-        .from("leases")
-        .update({
-          status: "Approved",
-          lease_owner_id: user?.id,
-          activated_at: new Date().toISOString(),
-        })
-        .eq("id", lease.id);
-      setLease({ ...lease, status: "Approved" });
-      toast.success("Lease Approved & Locked");
-    } catch (err) {
-      toast.error("Approval failed");
-    } finally {
-      setApproving(false);
-    }
-  };
-
   if (loading)
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="animate-spin" />
-      </div>
-    );
+    return <div className="flex h-screen items-center justify-center font-mono text-sm">LOADING ASSETS...</div>;
 
   return (
     <AppLayout>
-      <AppHeader title="Lease Review" subtitle={editableFields.filename} />
-      <div className="px-6 pb-6 h-[calc(100vh-120px)]">
-        <ResizablePanelGroup direction="horizontal" className="rounded-xl border bg-card">
-          {/* Left: Document View */}
-          <ResizablePanel defaultSize={50}>
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between p-3 border-b bg-muted/20">
-                <span className="text-sm font-medium flex items-center gap-2">
-                  <FileText size={16} /> Source Document
-                </span>
-                <Badge variant={isApproved ? "success" : "outline"}>{lease.status}</Badge>
+      <AppHeader
+        title="Lease Abstraction"
+        subtitle={lease.filename}
+        action={
+          <Button onClick={handleGlobalSave} disabled={saving} className="bg-blue-600 hover:bg-blue-700">
+            {saving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
+            Sync to Supabase
+          </Button>
+        }
+      />
+
+      <div className="px-6 pb-6 h-[calc(100vh-140px)]">
+        <ResizablePanelGroup direction="horizontal" className="rounded-xl border shadow-sm overflow-hidden bg-white">
+          {/* PDF PANEL */}
+          <ResizablePanel
+            defaultSize={50}
+            collapsible={true}
+            minSize={0}
+            onCollapse={() => setIsPdfCollapsed(true)}
+            onExpand={() => setIsPdfCollapsed(false)}
+            className={cn(isPdfCollapsed && "min-w-0")}
+          >
+            <div className="flex h-full flex-col bg-slate-50 relative">
+              <div className="p-3 border-b flex justify-between items-center bg-white">
+                <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Source Evidence</span>
+                <Button variant="ghost" size="icon" onClick={() => setIsPdfCollapsed(true)}>
+                  <ChevronLeft size={18} />
+                </Button>
               </div>
-              {pdfUrl ? (
-                <iframe src={pdfUrl} className="w-full h-full" />
-              ) : (
-                <div className="p-10 text-center">No PDF available</div>
-              )}
+              {pdfUrl && <iframe src={pdfUrl} className="w-full h-full border-none" title="PDF Viewer" />}
             </div>
           </ResizablePanel>
 
           <ResizableHandle withHandle />
 
-          {/* Right: Data Cockpit */}
+          {/* DATA COCKPIT PANEL */}
           <ResizablePanel defaultSize={50}>
             <div className="flex h-full flex-col">
-              <ScrollArea className="flex-1 p-4">
-                <div className="space-y-6">
-                  {/* Property & Parties Card */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-md">Property & Parties</CardTitle>
+              <div className="p-3 border-b flex items-center justify-between bg-white">
+                <div className="flex items-center gap-2">
+                  {isPdfCollapsed && (
+                    <Button variant="ghost" size="icon" onClick={() => setIsPdfCollapsed(false)}>
+                      <ChevronRight size={18} />
+                    </Button>
+                  )}
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Abstraction Cockpit
+                  </span>
+                </div>
+                {derivedInsights && (
+                  <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-100 flex gap-2">
+                    <Calculator size={12} />
+                    Avg Increase: {derivedInsights.avgIncrease}% /yr
+                  </Badge>
+                )}
+              </div>
+
+              <ScrollArea className="flex-1 p-6 bg-slate-50/30">
+                <div className="max-w-2xl mx-auto space-y-6">
+                  {/* Field Mapping */}
+                  <Card className="border-slate-200 shadow-none">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Key Provisions</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       {[
                         { id: "landlord_name", label: "Landlord", icon: Building2 },
-                        { id: "tenant_name", label: "Tenant", icon: Building2 },
-                        { id: "property_address", label: "Address", icon: Building2 },
+                        { id: "property_address", label: "Premises Address", icon: Building2 },
+                        { id: "base_rent_amount", label: "Current Monthly Rent", icon: DollarSign },
+                        { id: "escalation_type", label: "Escalation Type", icon: Calculator },
                       ].map((field) => (
-                        <div key={field.id} className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <Label className="flex items-center gap-2 text-xs font-semibold">
-                              <field.icon size={14} className="text-muted-foreground" />
-                              {field.label}
-                              <AccuracyBadge
-                                field={field.id}
-                                level={
-                                  (lease.extracted_json as ExtractedJson)?.[field.id as keyof ExtractedJson]?.confidence
-                                }
-                              />
+                        <div key={field.id} className="group">
+                          <div className="flex items-center justify-between mb-1">
+                            <Label className="text-[11px] uppercase font-bold text-slate-400 flex items-center gap-2">
+                              <field.icon size={12} /> {field.label}
+                              <Badge variant="outline" className="text-[9px] h-4">
+                                {(lease.extracted_json as ExtractedJson)?.[field.id as keyof ExtractedJson]
+                                  ?.confidence || "Manual"}
+                              </Badge>
                             </Label>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -292,34 +255,38 @@ export default function LeaseReview() {
                                 variant="ghost"
                                 size="icon"
                                 className={cn("h-6 w-6", verifiedFields.has(field.id) && "text-green-600")}
-                                onClick={() => toggleVerify(field.id)}
+                                onClick={() => {
+                                  const next = new Set(verifiedFields);
+                                  next.has(field.id) ? next.delete(field.id) : next.add(field.id);
+                                  setVerifiedFields(next);
+                                }}
                               >
                                 <ShieldCheck size={12} />
                               </Button>
                             </div>
                           </div>
                           <Input
-                            value={(editableFields as any)[field.id]}
-                            onChange={(e) => setEditableFields({ ...editableFields, [field.id]: e.target.value })}
-                            disabled={isLocked}
-                            className={cn(verifiedFields.has(field.id) && "border-green-200 bg-green-50/30")}
+                            value={(form as any)[field.id]}
+                            onChange={(e) => setForm({ ...form, [field.id]: e.target.value })}
+                            placeholder={
+                              field.id === "escalation_type" && derivedInsights?.isCalculated
+                                ? `Derived: ${derivedInsights.avgIncrease}%/yr`
+                                : ""
+                            }
+                            className={cn(
+                              "bg-white text-sm focus-visible:ring-blue-500",
+                              verifiedFields.has(field.id) && "border-green-200 bg-green-50/20",
+                            )}
                           />
                         </div>
                       ))}
                     </CardContent>
                   </Card>
 
-                  {/* Rent Schedule Card */}
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                      <CardTitle className="text-md flex items-center gap-2">
-                        <DollarSign size={16} /> Rent Schedule
-                      </CardTitle>
-                      {!isLocked && (
-                        <Button variant="outline" size="sm" onClick={() => toast.info("Refreshing...")}>
-                          <RefreshCw size={14} className="mr-2" /> Regenerate
-                        </Button>
-                      )}
+                  {/* Schedule */}
+                  <Card className="border-slate-200 shadow-none">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm">Rent Schedule</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <RentScheduleTable rentSchedule={rentSchedule} />
@@ -327,40 +294,6 @@ export default function LeaseReview() {
                   </Card>
                 </div>
               </ScrollArea>
-
-              {/* Action Footer */}
-              <div className="p-4 border-t bg-background flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={editableFields.filename}
-                    onChange={(e) => setEditableFields({ ...editableFields, filename: e.target.value })}
-                    className="w-48 h-8 text-xs"
-                    disabled={isLocked}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleSave} disabled={saving || isLocked}>
-                    {saving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} className="mr-2" />} Save
-                    Draft
-                  </Button>
-                  {!isLocked && (
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700"
-                      onClick={handleApprove}
-                      disabled={approving}
-                    >
-                      {approving ? (
-                        <Loader2 className="animate-spin" size={14} />
-                      ) : (
-                        <CheckCircle size={14} className="mr-2" />
-                      )}{" "}
-                      Approve & Lock
-                    </Button>
-                  )}
-                </div>
-              </div>
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
