@@ -285,6 +285,7 @@ export type Database = {
           lease_type: string | null
           lifecycle_status: string | null
           notes: string | null
+          parent_lease_id: string | null
           processed_at: string | null
           rejection_reason: string | null
           rent_escalation_type: string | null
@@ -327,6 +328,7 @@ export type Database = {
           lease_type?: string | null
           lifecycle_status?: string | null
           notes?: string | null
+          parent_lease_id?: string | null
           processed_at?: string | null
           rejection_reason?: string | null
           rent_escalation_type?: string | null
@@ -369,6 +371,7 @@ export type Database = {
           lease_type?: string | null
           lifecycle_status?: string | null
           notes?: string | null
+          parent_lease_id?: string | null
           processed_at?: string | null
           rejection_reason?: string | null
           rent_escalation_type?: string | null
@@ -382,6 +385,13 @@ export type Database = {
           workspace_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "leases_parent_lease_id_fkey"
+            columns: ["parent_lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "leases_user_id_fkey"
             columns: ["user_id"]

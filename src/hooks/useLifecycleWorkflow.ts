@@ -21,6 +21,10 @@ interface CreateDraftLeaseInput {
   estimatedMonthlyCostMin?: number;
   estimatedMonthlyCostMax?: number;
   notes?: string;
+  // New workflow fields
+  workflowCategory?: 'New Lease' | 'Lease Amendment';
+  workflowLeaseType?: 'Real Estate' | 'Equipment';
+  parentLeaseId?: string;
 }
 
 interface SubmitForApprovalInput {
@@ -54,7 +58,7 @@ export function useLifecycleWorkflow() {
           user_id: user.id,
           workspace_id: workspace.id,
           lifecycle_status: 'draft',
-          category: input.category,
+          category: input.workflowCategory || input.category,
           business_unit: input.businessUnit,
           estimated_term_min: input.estimatedTermMin,
           estimated_term_max: input.estimatedTermMax,
@@ -64,6 +68,8 @@ export function useLifecycleWorkflow() {
           lease_owner_id: user.id,
           filename: `Draft - ${input.businessUnit || input.category}`,
           status: 'draft',
+          lease_type: input.workflowLeaseType,
+          parent_lease_id: input.parentLeaseId,
         })
         .select('id')
         .single();

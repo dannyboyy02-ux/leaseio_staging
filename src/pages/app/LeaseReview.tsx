@@ -12,10 +12,12 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Calculator,
   TrendingUp,
   Calendar,
   AlertTriangle,
+  GitBranch,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -27,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
 import { WorkflowStatusBadge } from "@/components/workflow/WorkflowStatusBadge";
 
@@ -86,6 +89,12 @@ export default function LeaseReview() {
   
   // Low-confidence field interaction tracking
   const [interactedLowConfFields, setInteractedLowConfFields] = useState<Set<string>>(new Set());
+
+  // Parent lease for amendments
+  const [parentLease, setParentLease] = useState<any | null>(null);
+  const [showParentTerms, setShowParentTerms] = useState(true);
+  
+  const isAmendment = !!lease?.parent_lease_id;
 
   const [form, setForm] = useState({
     landlord_name: "",
@@ -180,6 +189,24 @@ export default function LeaseReview() {
     }
     init();
   }, [leaseId]);
+
+  // Fetch parent lease for amendments
+  useEffect(() => {
+    if (!lease?.parent_lease_id) return;
+    
+    const fetchParentLease = async () => {
+      const { data, error } = await supabase
+        .from('leases')
+        .select('*')
+        .eq('id', lease.parent_lease_id)
+        .single();
+      
+      if (!error && data) {
+        setParentLease(data);
+      }
+    };
+    fetchParentLease();
+  }, [lease?.parent_lease_id]);
 
   const jumpToPage = (page?: number) => {
     if (!page || !basePdfUrl) return;
@@ -375,6 +402,53 @@ export default function LeaseReview() {
 
                 <ScrollArea className="flex-1 h-full">
                   <div className="p-6 space-y-6 max-w-2xl mx-auto pb-24">
+                    {/* Amendment: Current Terms Comparison Card */}
+                    {isAmendment && parentLease && (
+                      <Collapsible open={showParentTerms} onOpenChange={setShowParentTerms}>
+                        <Card className="shadow-none border border-blue-200 bg-blue-50/30 overflow-hidden">
+                          <CollapsibleTrigger asChild>
+                            <CardHeader className="cursor-pointer py-3 hover:bg-blue-100/50 transition-colors">
+                              <CardTitle className="text-sm flex items-center justify-between">
+                                <span className="flex items-center gap-2 text-blue-700">
+                                  <GitBranch size={14} />
+                                  Current Terms (Parent Lease)
+                                </span>
+                                <ChevronDown className={cn("h-4 w-4 text-blue-600 transition-transform", showParentTerms && "rotate-180")} />
+                              </CardTitle>
+                            </CardHeader>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <CardContent className="pt-0 pb-4 grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <Label className="text-[10px] uppercase text-blue-600">Landlord</Label>
+                                <p className="font-medium">{parentLease.landlord_name || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-blue-600">Tenant</Label>
+                                <p className="font-medium">{parentLease.tenant_name || 'N/A'}</p>
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-blue-600">Monthly Rent</Label>
+                                <p className="font-medium">
+                                  ${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount || 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase text-blue-600">Lease End</Label>
+                                <p className="font-medium">
+                                  {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}
+                                </p>
+                              </div>
+                              <div className="col-span-2">
+                                <Label className="text-[10px] uppercase text-blue-600">Original Filename</Label>
+                                <p className="font-medium truncate">{parentLease.filename}</p>
+                              </div>
+                            </CardContent>
+                          </CollapsibleContent>
+                        </Card>
+                      </Collapsible>
+                    )}
+
                     {/* Card 1: Key Provisions */}
                     <Card className="shadow-none border overflow-hidden">
                       <CardHeader className="bg-muted/30 border-b pb-4">
@@ -456,6 +530,21 @@ export default function LeaseReview() {
                                   getFieldBorderClass(field.id),
                                 )}
                               />
+                              {/* Show change indicator for amendments */}
+                              {isAmendment && parentLease && (() => {
+                                const parentValue = parentLease[field.id];
+                                const currentValue = (form as any)[field.id];
+                                const hasChanged = parentValue && currentValue && parentValue !== currentValue;
+                                if (!hasChanged) return null;
+                                return (
+                                  <Badge 
+                                    variant="outline" 
+                                    className="mt-1 text-[9px] text-orange-600 border-orange-300 bg-orange-50"
+                                  >
+                                    Changed from: {parentValue}
+                                  </Badge>
+                                );
+                              })()}
                             </div>
                           );
                         })}
