@@ -1,5 +1,7 @@
 export type WorkflowLeaseType = 'Real Estate' | 'Equipment';
 
+export type LeaseCategory = 'New Lease' | 'Lease Amendment';
+
 export type WorkflowStatus = 
   | 'Draft' 
   | 'Pending Approval' 
@@ -22,8 +24,18 @@ export interface AuditEntry {
 
 export interface CreateLeaseFormData {
   leaseType: WorkflowLeaseType;
+  category: LeaseCategory;
   approverEmail: string;
+  parentLeaseId?: string;
   file?: File;
+}
+
+export interface PostedLease {
+  id: string;
+  filename: string;
+  tenant_name: string | null;
+  landlord_name: string | null;
+  lease_end: string | null;
 }
 
 export const WORKFLOW_STATUS_CONFIG: Record<WorkflowStatus, {

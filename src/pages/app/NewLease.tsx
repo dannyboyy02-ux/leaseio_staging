@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FileText, Building2, Truck, Settings, Box, ArrowLeft, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { FileText, Building2, Truck, Settings, Box, ArrowLeft, Loader2, FilePlus, FileEdit, Cpu } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -9,24 +9,48 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { ParentLeaseCombobox } from '@/components/workflow/ParentLeaseCombobox';
 import { useLifecycleWorkflow } from '@/hooks/useLifecycleWorkflow';
 import { useApp } from '@/contexts/AppContext';
-import type { LeaseCategory } from '@/types/lifecycle';
+import { cn } from '@/lib/utils';
+import type { LeaseCategory as LegacyLeaseCategory } from '@/types/lifecycle';
+import type { LeaseCategory, WorkflowLeaseType } from '@/types/workflow';
 import { CATEGORY_LABELS } from '@/types/lifecycle';
 
-const CATEGORY_ICONS: Record<LeaseCategory, typeof Building2> = {
+const ASSET_CATEGORY_ICONS: Record<LegacyLeaseCategory, typeof Building2> = {
   property: Building2,
   equipment: Settings,
   vehicle: Truck,
   other: Box,
 };
 
+interface NavigationState {
+  workflowCategory?: LeaseCategory;
+  workflowLeaseType?: WorkflowLeaseType;
+  parentLeaseId?: string;
+}
+
 export default function NewLease() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { workspace } = useApp();
   const { isBusinessPlan, isLoading, createDraftLease } = useLifecycleWorkflow();
 
-  const [category, setCategory] = useState<LeaseCategory>('property');
+  const navigationState = location.state as NavigationState | null;
+
+  // Workflow fields (from drawer)
+  const [workflowCategory, setWorkflowCategory] = useState<LeaseCategory>(
+    navigationState?.workflowCategory || 'New Lease'
+  );
+  const [workflowLeaseType, setWorkflowLeaseType] = useState<WorkflowLeaseType>(
+    navigationState?.workflowLeaseType || 'Real Estate'
+  );
+  const [parentLeaseId, setParentLeaseId] = useState<string | undefined>(
+    navigationState?.parentLeaseId
+  );
+
+  // Legacy fields
+  const [assetCategory, setAssetCategory] = useState<LegacyLeaseCategory>('property');
   const [businessUnit, setBusinessUnit] = useState('');
   const [estimatedTermMin, setEstimatedTermMin] = useState('');
   const [estimatedTermMax, setEstimatedTermMax] = useState('');
@@ -45,13 +69,17 @@ export default function NewLease() {
     const termMax = parseInt(estimatedTermMax) || termMin;
 
     const leaseId = await createDraftLease({
-      category,
+      category: assetCategory,
       businessUnit: businessUnit.trim(),
       estimatedTermMin: termMin,
       estimatedTermMax: termMax,
       estimatedMonthlyCostMin: estimatedCostMin ? parseFloat(estimatedCostMin) : undefined,
       estimatedMonthlyCostMax: estimatedCostMax ? parseFloat(estimatedCostMax) : undefined,
       notes: notes.trim() || undefined,
+      // New workflow fields
+      workflowCategory,
+      workflowLeaseType,
+      parentLeaseId: workflowCategory === 'Lease Amendment' ? parentLeaseId : undefined,
     });
 
     if (leaseId) {
@@ -92,20 +120,111 @@ export default function NewLease() {
 
       <div className="p-6 max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Category Selection */}
+          {/* Workflow Category (New vs Amendment) */}
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Lease Category</CardTitle>
-              <CardDescription>What type of asset are you leasing?</CardDescription>
+              <CardDescription>Is this a new lease or an amendment to an existing lease?</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <Button
+                  type="button"
+                  variant={workflowCategory === 'New Lease' ? 'default' : 'outline'}
+                  className={cn(
+                    'h-20 flex flex-col gap-2',
+                    workflowCategory === 'New Lease' && 'ring-2 ring-primary ring-offset-2'
+                  )}
+                  onClick={() => {
+                    setWorkflowCategory('New Lease');
+                    setParentLeaseId(undefined);
+                  }}
+                >
+                  <FilePlus className="h-6 w-6" />
+                  <span>New Lease</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant={workflowCategory === 'Lease Amendment' ? 'default' : 'outline'}
+                  className={cn(
+                    'h-20 flex flex-col gap-2',
+                    workflowCategory === 'Lease Amendment' && 'ring-2 ring-primary ring-offset-2'
+                  )}
+                  onClick={() => setWorkflowCategory('Lease Amendment')}
+                >
+                  <FileEdit className="h-6 w-6" />
+                  <span>Amendment</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Parent Lease Selection (for amendments) */}
+          {workflowCategory === 'Lease Amendment' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Parent Lease</CardTitle>
+                <CardDescription>Select the original lease being amended</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ParentLeaseCombobox
+                  value={parentLeaseId}
+                  onValueChange={setParentLeaseId}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Lease Type (Real Estate vs Equipment) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Lease Type</CardTitle>
+              <CardDescription>What type of asset is being leased?</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <Button
+                  type="button"
+                  variant={workflowLeaseType === 'Real Estate' ? 'default' : 'outline'}
+                  className={cn(
+                    'h-20 flex flex-col gap-2',
+                    workflowLeaseType === 'Real Estate' && 'ring-2 ring-primary ring-offset-2'
+                  )}
+                  onClick={() => setWorkflowLeaseType('Real Estate')}
+                >
+                  <Building2 className="h-6 w-6" />
+                  <span>Real Estate</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant={workflowLeaseType === 'Equipment' ? 'default' : 'outline'}
+                  className={cn(
+                    'h-20 flex flex-col gap-2',
+                    workflowLeaseType === 'Equipment' && 'ring-2 ring-primary ring-offset-2'
+                  )}
+                  onClick={() => setWorkflowLeaseType('Equipment')}
+                >
+                  <Cpu className="h-6 w-6" />
+                  <span>Equipment</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Asset Category Selection */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Asset Category</CardTitle>
+              <CardDescription>More specific categorization for reporting</CardDescription>
             </CardHeader>
             <CardContent>
               <RadioGroup
-                value={category}
-                onValueChange={(v) => setCategory(v as LeaseCategory)}
+                value={assetCategory}
+                onValueChange={(v) => setAssetCategory(v as LegacyLeaseCategory)}
                 className="grid grid-cols-2 gap-4"
               >
-                {(Object.keys(CATEGORY_LABELS) as LeaseCategory[]).map((cat) => {
-                  const Icon = CATEGORY_ICONS[cat];
+                {(Object.keys(CATEGORY_LABELS) as LegacyLeaseCategory[]).map((cat) => {
+                  const Icon = ASSET_CATEGORY_ICONS[cat];
                   return (
                     <div key={cat}>
                       <RadioGroupItem
@@ -250,7 +369,10 @@ export default function NewLease() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || !businessUnit.trim()}>
+            <Button 
+              type="submit" 
+              disabled={isLoading || !businessUnit.trim() || (workflowCategory === 'Lease Amendment' && !parentLeaseId)}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
