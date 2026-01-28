@@ -1,486 +1,418 @@
 
-# Workspace Lifecycle Implementation Plan for LeaseIO
+# Lease Amendment Workflow Enhancement Plan
 
 ## Overview
-This plan implements a complete lease workflow system with a simplified 6-stage status flow, Vaul drawer for creation, nudge/rejection logic, side-by-side AI review with confidence UI, and audit tracking.
+This plan enhances the existing CreateLeaseDrawer to support both New Leases and Lease Amendments with a multi-step flow, parent lease selection, and contextual comparison in the review interface.
 
 ## Architecture Flow
 
 ```text
-+------------------+      +-------------------+      +------------------+
-|   Initializer    |      |     Supabase      |      |    Approver      |
-|   (Dashboard)    |      |                   |      |    (Inbox)       |
-+--------+---------+      +---------+---------+      +--------+---------+
-         |                          |                         |
-   1. "Create New Lease"            |                         |
-   Opens Vaul Drawer                |                         |
-         |                          |                         |
-   2. Fill form:                    |                         |
-   - Toggle: Real Estate/Equipment  |                         |
-   - Approver Email                 |                         |
-   - Upload PDF (dropzone)          |                         |
-         |                          |                         |
-   3. Submit -----> INSERT lease    |                         |
-         |          status: "Pending Approval"                |
-         |                          |                         |
-         |          Nudge Button    |                         |
-         |          (60s cooldown)  |                         |
-         +------------------------->|<------------------------+
-                                    |  Query pending approvals
-                                    |
-                     +----- Approve | Reject -----+
-                     |                            |
-              "Abstracting"                 "Rejected"
-              (5s mock process)             + rejection_comment
-                     |                            |
-              "Review Required"             Red Callout + Edit
-                     |                       (re-submit)
-         +-----------+                            |
-         |                                        |
-   4. Side-by-Side Review                         |
-   - Left: PDF viewer                             |
-   - Right: AI fields with                        |
-     confidence borders                           |
-   - Audit log tracks edits                       |
-         |                                        |
-   5. "Post Lease" button                         |
-   (enabled after low-conf                        |
-    fields interacted)                            |
-         |                                        |
-   6. status: "Posted" --------------------------->
-      + Success notification
++------------------------+
+|  CreateLeaseDrawer     |
++------------------------+
+           |
+           v
++------------------------+
+| Step 1: Lease Type     |
+| [Real Estate][Equipment]|
++------------------------+
+           |
+           v
++------------------------+
+| Step 2: Category       |
+| [New Lease][Amendment] |
++------------------------+
+           |
+     +-----+-----+
+     |           |
+     v           v
+[New Lease]  [Amendment]
+     |           |
+     |           v
+     |    +------------------------+
+     |    | Step 3: Parent Select  |
+     |    | (Searchable Combobox)  |
+     |    | Shows only "Posted"    |
+     |    +------------------------+
+     |           |
+     +-----+-----+
+           |
+           v
++------------------------+
+| Approver Email         |
+| PDF Dropzone           |
++------------------------+
+           |
+           v
++------------------------+
+| [Manual Entry] ghost   |
+| [Submit for Approval]  |
++------------------------+
 ```
 
----
+## Phase 1: Database Schema Update
 
-## Phase 1: Database Schema Updates
+### Add parent_lease_id Column
+A migration is required to add the `parent_lease_id` column and `category` enum support:
 
-### Update `leases` Table
-Add the following columns to the existing `leases` table:
-
-| Column | Type | Default | Description |
-|--------|------|---------|-------------|
-| lease_type | text | NULL | 'Real Estate' or 'Equipment' |
-| approver_email | text | NULL | Email of assigned approver |
-| initializer_id | uuid | NULL | User who created the lease (FK to auth.users) |
-| confidence_scores | jsonb | '{}' | AI confidence per field |
-| rejection_comment | text | NULL | Required when rejected |
-| audit_log | jsonb | '[]' | Array of audit entries |
-| last_nudged_at | timestamptz | NULL | Last nudge timestamp |
-
-### Update Status Values
-Replace existing lifecycle statuses with the new simplified flow:
-- Draft
-- Pending Approval
-- Rejected
-- Abstracting
-- Review Required
-- Posted
-
-### Migration SQL
 ```sql
--- Add new columns to leases table
 ALTER TABLE public.leases 
-ADD COLUMN IF NOT EXISTS lease_type text,
-ADD COLUMN IF NOT EXISTS approver_email text,
-ADD COLUMN IF NOT EXISTS initializer_id uuid REFERENCES auth.users(id),
-ADD COLUMN IF NOT EXISTS confidence_scores jsonb DEFAULT '{}'::jsonb,
-ADD COLUMN IF NOT EXISTS rejection_comment text,
-ADD COLUMN IF NOT EXISTS audit_log jsonb DEFAULT '[]'::jsonb,
-ADD COLUMN IF NOT EXISTS last_nudged_at timestamptz;
+ADD COLUMN IF NOT EXISTS parent_lease_id uuid REFERENCES public.leases(id);
 
--- Add constraint for lease_type
-ALTER TABLE public.leases 
-ADD CONSTRAINT leases_type_check 
-CHECK (lease_type IS NULL OR lease_type IN ('Real Estate', 'Equipment'));
+-- Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_leases_parent_lease_id 
+ON public.leases(parent_lease_id) 
+WHERE parent_lease_id IS NOT NULL;
 ```
 
 ---
 
-## Phase 2: Fix Existing Build Errors
+## Phase 2: Type Definitions Update
 
-Before implementing new features, fix the three build errors in `LeaseReview.tsx`:
+### Update `src/types/workflow.ts`
 
-1. **Line 102**: Change `data.property_address` to `ext.property_address?.value`
-2. **Line 159**: Change `action=` prop to `actions=`
-3. **Line 338**: Add missing props to `RentScheduleTable`:
-   - `currentMonthlyRent={derivedInsights.currentRent}`
-   - `rentEscalationType={form.escalation_type || null}`
-
----
-
-## Phase 3: Type Definitions
-
-### Create `src/types/workflow.ts`
+Add new types for lease categories:
 
 ```typescript
-export type WorkflowLeaseType = 'Real Estate' | 'Equipment';
-
-export type WorkflowStatus = 
-  | 'Draft' 
-  | 'Pending Approval' 
-  | 'Rejected' 
-  | 'Abstracting' 
-  | 'Review Required' 
-  | 'Posted';
-
-export interface ConfidenceScores {
-  [field: string]: number; // 0-100
-}
-
-export interface AuditEntry {
-  field: string;
-  oldValue: string;
-  newValue: string;
-  userId: string;
-  timestamp: string;
-}
+export type LeaseCategory = 'New Lease' | 'Lease Amendment';
 
 export interface CreateLeaseFormData {
   leaseType: WorkflowLeaseType;
+  category: LeaseCategory;
   approverEmail: string;
+  parentLeaseId?: string; // Required when category = 'Lease Amendment'
   file?: File;
 }
-
-export const WORKFLOW_STATUS_CONFIG: Record<WorkflowStatus, {
-  label: string;
-  color: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning';
-  bgClass: string;
-}> = {
-  'Draft': { label: 'Draft', color: 'secondary', bgClass: 'bg-muted' },
-  'Pending Approval': { label: 'Pending', color: 'warning', bgClass: 'bg-yellow-100' },
-  'Rejected': { label: 'Rejected', color: 'destructive', bgClass: 'bg-red-100' },
-  'Abstracting': { label: 'Processing', color: 'outline', bgClass: 'bg-blue-100' },
-  'Review Required': { label: 'Review', color: 'outline', bgClass: 'bg-purple-100' },
-  'Posted': { label: 'Posted', color: 'default', bgClass: 'bg-green-100' },
-};
 ```
 
 ---
 
-## Phase 4: Create Lease Drawer Component
+## Phase 3: Multi-Step CreateLeaseDrawer
 
-### `src/components/workflow/CreateLeaseDrawer.tsx`
+### Component: `src/components/workflow/CreateLeaseDrawer.tsx`
 
-**Features:**
-- Uses Vaul Drawer (bottom sheet on mobile, side panel styling)
-- React Hook Form with Zod validation
-- Toggle switch for Lease Type (Real Estate / Equipment)
-- Email input for Approver
-- react-dropzone for PDF upload
-- On submit: inserts into `leases` with status "Pending Approval"
-- Shows Sonner success toast and closes drawer
+**Step-based UI Flow:**
 
-**Zod Schema:**
+| Step | Content | Condition |
+|------|---------|-----------|
+| 1 | Lease Type Toggle (Real Estate / Equipment) | Always shown |
+| 2 | Category Toggle (New Lease / Lease Amendment) | Always shown |
+| 3 | Parent Lease Combobox | Only if category = "Lease Amendment" |
+| 4 | Approver Email + PDF Dropzone | Always shown |
+
+**State Management:**
 ```typescript
-const createLeaseSchema = z.object({
-  leaseType: z.enum(['Real Estate', 'Equipment']),
-  approverEmail: z.string().email('Please enter a valid email'),
-  file: z.instanceof(File).optional(),
+const [step, setStep] = useState(1);
+const [parentLeases, setParentLeases] = useState<PostedLease[]>([]);
+const [searchQuery, setSearchQuery] = useState('');
+const [parentLeaseOpen, setParentLeaseOpen] = useState(false);
+
+const form = useForm<CreateLeaseFormValues>({
+  resolver: zodResolver(createLeaseSchema),
+  defaultValues: {
+    leaseType: 'Real Estate',
+    category: 'New Lease',
+    approverEmail: '',
+    parentLeaseId: undefined,
+  },
 });
 ```
 
-**Key Implementation:**
-- Toggle implemented using two styled buttons or RadioGroup
-- Dropzone with file type validation (PDF only)
-- Upload file to Supabase Storage bucket "leases"
-- Insert lease record with: `status`, `lease_type`, `approver_email`, `initializer_id`, `storage_path`
-
----
-
-## Phase 5: Update Dashboard with Create Button
-
-### Modify `src/pages/Dashboard.tsx`
-
-Replace the existing "New Lease" button logic with a button that opens the CreateLeaseDrawer:
-
-```tsx
-const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
-
-// In actions:
-<Button variant="accent" onClick={() => setCreateDrawerOpen(true)}>
-  <Plus className="h-4 w-4 mr-2" />
-  Create New Lease
-</Button>
-
-// Render drawer:
-<CreateLeaseDrawer 
-  open={createDrawerOpen} 
-  onOpenChange={setCreateDrawerOpen}
-  onSuccess={(leaseId) => navigate(`/app/leases/${leaseId}`)}
-/>
-```
-
----
-
-## Phase 6: Nudge Logic Component
-
-### `src/components/workflow/NudgeApproverButton.tsx`
-
-**Features:**
-- Button appears for leases with status "Pending Approval"
-- 60-second UI cooldown after clicking
-- Updates `last_nudged_at` in database
-- Shows Sonner toast confirmation
-
-**Implementation:**
+**Zod Schema Update:**
 ```typescript
-const [cooldown, setCooldown] = useState(false);
-const [secondsLeft, setSecondsLeft] = useState(0);
+const createLeaseSchema = z.object({
+  leaseType: z.enum(['Real Estate', 'Equipment']),
+  category: z.enum(['New Lease', 'Lease Amendment']),
+  approverEmail: z.string().email('Please enter a valid email'),
+  parentLeaseId: z.string().uuid().optional(),
+}).refine((data) => {
+  // Require parentLeaseId when category is Amendment
+  if (data.category === 'Lease Amendment' && !data.parentLeaseId) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Please select a parent lease for amendments',
+  path: ['parentLeaseId'],
+});
+```
 
-const handleNudge = async () => {
-  await supabase
-    .from('leases')
-    .update({ last_nudged_at: new Date().toISOString() })
-    .eq('id', leaseId);
-  
-  toast.success('Nudge sent to approver');
-  setCooldown(true);
-  setSecondsLeft(60);
-};
+### Searchable Parent Lease Combobox
 
-// Timer effect to count down
+Build using Popover + Command (cmdk) pattern:
+
+```typescript
+// Fetch posted leases for selection
 useEffect(() => {
-  if (!cooldown) return;
-  const timer = setInterval(() => {
-    setSecondsLeft(s => {
-      if (s <= 1) { setCooldown(false); return 0; }
-      return s - 1;
-    });
-  }, 1000);
-  return () => clearInterval(timer);
-}, [cooldown]);
+  if (category !== 'Lease Amendment') return;
+  
+  const fetchPostedLeases = async () => {
+    const { data } = await supabase
+      .from('leases')
+      .select('id, filename, tenant_name, landlord_name, property_address, lease_end')
+      .eq('lifecycle_status', 'Posted')
+      .eq('workspace_id', workspace?.id)
+      .order('uploaded_at', { ascending: false });
+    
+    setParentLeases(data || []);
+  };
+  fetchPostedLeases();
+}, [category, workspace?.id]);
 ```
 
----
+UI Component Structure:
+- Popover trigger shows selected lease or placeholder
+- Command with CommandInput for search
+- CommandList with filtered results showing:
+  - Filename
+  - Tenant name
+  - Property address (truncated)
+  - Lease end date
 
-## Phase 7: Approver Interface
+### Manual Entry Ghost Button
 
-### Update `src/pages/app/ApprovalInbox.tsx`
-
-**Features:**
-- Query leases where `approver_email` matches current user's email
-- Filter by status "Pending Approval"
-- Display: Lease Type, Initializer info, Submitted date
-- Each item has Approve/Reject buttons
-
-### `src/components/workflow/ApprovalDialog.tsx`
-
-**AlertDialog with two flows:**
-
-1. **Approve:**
-   - Sets status to "Abstracting"
-   - Triggers mock 5-second background process
-   - After delay, updates to "Review Required"
-   - Populates `abstraction_data` with mock data
-   - Populates `confidence_scores` (some < 80%)
-
-2. **Reject:**
-   - Requires `rejection_comment` (Textarea, validated)
-   - Sets status to "Rejected"
-   - Stores comment in `rejection_comment` column
-
----
-
-## Phase 8: Rejected Lease Callout
-
-### Update `src/pages/Leases.tsx`
-
-Add a section at the top for rejected leases:
-
+Add below the form:
 ```tsx
-{rejectedLeases.length > 0 && (
-  <Alert variant="destructive" className="mb-4">
-    <AlertCircle className="h-4 w-4" />
-    <AlertTitle>Rejected Leases</AlertTitle>
-    <AlertDescription>
-      {rejectedLeases.map(lease => (
-        <div key={lease.id} className="flex items-center justify-between py-2">
-          <span>{lease.filename}: {lease.rejection_comment}</span>
-          <Button size="sm" onClick={() => handleEdit(lease.id)}>
-            Edit & Resubmit
-          </Button>
-        </div>
-      ))}
-    </AlertDescription>
-  </Alert>
-)}
+<Button 
+  type="button" 
+  variant="ghost" 
+  className="w-full text-muted-foreground"
+  onClick={() => {
+    onOpenChange(false);
+    navigate('/app/leases/new', { 
+      state: { 
+        category: form.getValues('category'),
+        leaseType: form.getValues('leaseType'),
+        parentLeaseId: form.getValues('parentLeaseId'),
+      }
+    });
+  }}
+>
+  <FileText className="h-4 w-4 mr-2" />
+  Enter Details Manually
+</Button>
 ```
 
 ---
 
-## Phase 9: Side-by-Side AI Review View
+## Phase 4: Update NewLease.tsx for Amendment Support
+
+### Read Navigation State
+```typescript
+const location = useLocation();
+const navigationState = location.state as {
+  category?: LeaseCategory;
+  leaseType?: WorkflowLeaseType;
+  parentLeaseId?: string;
+} | null;
+
+const [category, setCategory] = useState<'new' | 'amendment'>(
+  navigationState?.category === 'Lease Amendment' ? 'amendment' : 'new'
+);
+const [parentLeaseId, setParentLeaseId] = useState<string | undefined>(
+  navigationState?.parentLeaseId
+);
+```
+
+### Add Category Toggle
+Add a toggle at the top of the form to switch between "New Lease" and "Amendment".
+
+### Parent Lease Selector
+When "Amendment" is selected, show the same searchable combobox pattern used in the drawer.
+
+### Include parent_lease_id in Submit
+```typescript
+const leaseId = await createDraftLease({
+  category,
+  parentLeaseId: category === 'amendment' ? parentLeaseId : undefined,
+  // ... other fields
+});
+```
+
+---
+
+## Phase 5: Contextual Side-by-Side Review for Amendments
 
 ### Update `src/pages/app/LeaseReview.tsx`
 
-**Left Panel (existing):** PDF viewer using signed URL
-
-**Right Panel Enhancements:**
-
-1. **Confidence UI:**
-   - Each field shows confidence percentage
-   - Fields with `confidence_scores[field] < 80` get amber border
-   
-   ```tsx
-   const getFieldBorderClass = (field: string) => {
-     const confidence = lease?.confidence_scores?.[field] || 100;
-     if (confidence < 80) return 'border-amber-400 border-2';
-     return '';
-   };
-   ```
-
-2. **Audit Tracking:**
-   - Track original values on load
-   - On any field change, append to `audit_log`
-   
-   ```typescript
-   const trackFieldChange = (field: string, oldValue: string, newValue: string) => {
-     if (oldValue === newValue) return;
-     
-     const entry: AuditEntry = {
-       field,
-       oldValue,
-       newValue,
-       userId: user.id,
-       timestamp: new Date().toISOString(),
-     };
-     
-     setAuditLog(prev => [...prev, entry]);
-   };
-   ```
-
-3. **Low-Confidence Interaction Tracking:**
-   - Track which low-confidence fields have been interacted with
-   - Use a Set to store field names
-   
-   ```typescript
-   const [interactedLowConfFields, setInteractedLowConfFields] = useState<Set<string>>(new Set());
-   
-   const handleFieldFocus = (field: string) => {
-     const confidence = lease?.confidence_scores?.[field] || 100;
-     if (confidence < 80) {
-       setInteractedLowConfFields(prev => new Set([...prev, field]));
-     }
-   };
-   ```
-
----
-
-## Phase 10: Post Lease Footer
-
-### Persistent Footer Component
-
-```tsx
-<div className="sticky bottom-0 border-t bg-background p-4 flex justify-between items-center">
-  <div className="text-sm text-muted-foreground">
-    {lowConfidenceFields.length} fields require attention
-  </div>
-  <Button 
-    disabled={!allLowConfFieldsInteracted}
-    onClick={handlePostLease}
-  >
-    <CheckCircle className="h-4 w-4 mr-2" />
-    Post Lease
-  </Button>
-</div>
+**Parent Lease State:**
+```typescript
+const [parentLease, setParentLease] = useState<any | null>(null);
+const isAmendment = !!lease?.parent_lease_id;
 ```
 
-**Post Logic:**
+**Fetch Parent Lease Data:**
 ```typescript
-const handlePostLease = async () => {
-  // Save audit log
-  await supabase
-    .from('leases')
-    .update({
-      status: 'Posted',
-      audit_log: auditLog,
-      ...form, // Save all form fields
-    })
-    .eq('id', leaseId);
+useEffect(() => {
+  if (!lease?.parent_lease_id) return;
   
-  toast.success(
-    'Lease posted successfully. The Approver and Initializer have been notified via email.',
-    { duration: 5000 }
+  const fetchParentLease = async () => {
+    const { data } = await supabase
+      .from('leases')
+      .select('*')
+      .eq('id', lease.parent_lease_id)
+      .single();
+    
+    if (data) setParentLease(data);
+  };
+  fetchParentLease();
+}, [lease?.parent_lease_id]);
+```
+
+### Layout Options for Amendment Review
+
+**Option A: Floating "Current Terms" Card**
+A collapsible card positioned at the top of the right panel showing parent lease data:
+
+```tsx
+{isAmendment && parentLease && (
+  <Collapsible open={showParentTerms} onOpenChange={setShowParentTerms}>
+    <Card className="mb-4 border-blue-200 bg-blue-50/50">
+      <CollapsibleTrigger asChild>
+        <CardHeader className="cursor-pointer py-3">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <FileText size={14} className="text-blue-600" />
+              Current Terms (Parent Lease)
+            </span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", showParentTerms && "rotate-180")} />
+          </CardTitle>
+        </CardHeader>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <CardContent className="pt-0 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <Label className="text-xs text-muted-foreground">Monthly Rent</Label>
+            <p className="font-medium">${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount}</p>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">Lease End</Label>
+            <p className="font-medium">{parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}</p>
+          </div>
+          {/* Additional fields */}
+        </CardContent>
+      </CollapsibleContent>
+    </Card>
+  </Collapsible>
+)}
+```
+
+**Option B: Third Panel (for larger screens)**
+Add a third resizable panel when amendment is detected:
+
+```tsx
+<ResizablePanelGroup direction="horizontal">
+  {/* PDF Panel */}
+  <ResizablePanel defaultSize={isAmendment ? 35 : 50}>
+    {/* PDF viewer */}
+  </ResizablePanel>
+  
+  <ResizableHandle />
+  
+  {/* Parent Terms Panel - only for amendments */}
+  {isAmendment && parentLease && (
+    <>
+      <ResizablePanel defaultSize={25} minSize={15} collapsible>
+        <div className="h-full flex flex-col bg-blue-50/30 border-r">
+          <div className="p-2 border-b bg-blue-100/50">
+            <span className="text-[10px] font-bold uppercase text-blue-700">
+              Current Terms
+            </span>
+          </div>
+          <ScrollArea className="flex-1">
+            {/* Parent lease fields for comparison */}
+          </ScrollArea>
+        </div>
+      </ResizablePanel>
+      <ResizableHandle />
+    </>
+  )}
+  
+  {/* Review Panel */}
+  <ResizablePanel defaultSize={isAmendment ? 40 : 50}>
+    {/* Existing review form */}
+  </ResizablePanel>
+</ResizablePanelGroup>
+```
+
+### Visual Diff Indicators
+For each field in the review form, show change indicators when values differ from parent:
+
+```tsx
+const getChangeBadge = (fieldId: string, currentValue: any, parentValue: any) => {
+  if (!isAmendment || !parentLease) return null;
+  
+  const hasChanged = currentValue !== parentValue && parentValue != null;
+  if (!hasChanged) return null;
+  
+  return (
+    <Badge variant="outline" className="text-[9px] text-orange-600 border-orange-300 bg-orange-50">
+      Changed from: {parentValue}
+    </Badge>
   );
-  
-  navigate('/app/leases');
 };
 ```
 
 ---
 
-## File Structure Summary
+## Phase 6: UI Component Summary
 
-```text
-src/
-  components/
-    workflow/
-      CreateLeaseDrawer.tsx     # Vaul drawer with form
-      ApprovalDialog.tsx        # Approve/Reject AlertDialog
-      NudgeApproverButton.tsx   # Nudge with 60s cooldown
-      WorkflowStatusBadge.tsx   # Status badge component
-      RejectedLeaseCallout.tsx  # Red callout for rejected leases
-  types/
-    workflow.ts                 # New workflow types
-  pages/
-    Dashboard.tsx              # Updated with Create button
-    Leases.tsx                 # Updated with rejected callout
-    app/
-      ApprovalInbox.tsx        # Updated approver interface
-      LeaseReview.tsx          # Updated with confidence UI + audit
-```
+### New/Modified Files:
+
+| File | Action | Description |
+|------|--------|-------------|
+| `src/types/workflow.ts` | Modify | Add LeaseCategory type |
+| `src/components/workflow/CreateLeaseDrawer.tsx` | Modify | Multi-step form with category + parent selection |
+| `src/components/workflow/ParentLeaseCombobox.tsx` | Create | Reusable searchable parent lease selector |
+| `src/pages/app/NewLease.tsx` | Modify | Support amendment category + parent lease |
+| `src/pages/app/LeaseReview.tsx` | Modify | Add parent lease comparison UI |
+| Migration | Create | Add parent_lease_id column |
 
 ---
 
 ## Implementation Order
 
-1. **Database Migration** - Add new columns to leases table
-2. **Fix Build Errors** - Resolve 3 errors in LeaseReview.tsx
-3. **Type Definitions** - Create workflow.ts types
-4. **CreateLeaseDrawer** - Vaul drawer with form + dropzone
-5. **Dashboard Update** - Replace New Lease button
-6. **NudgeApproverButton** - 60-second cooldown logic
-7. **ApprovalDialog** - Approve/Reject with mock abstraction
-8. **RejectedLeaseCallout** - Red alert with edit button
-9. **LeaseReview Updates** - Confidence UI + audit tracking
-10. **Post Lease Footer** - Conditional enable + success notification
+1. **Database Migration** - Add `parent_lease_id` column to leases table
+2. **Type Updates** - Add `LeaseCategory` type and update `CreateLeaseFormData`
+3. **ParentLeaseCombobox** - Create reusable searchable dropdown component
+4. **CreateLeaseDrawer** - Implement multi-step flow with category + parent selection
+5. **NewLease Page** - Update manual entry form to support amendments
+6. **LeaseReview** - Add parent lease fetching and comparison UI
 
 ---
 
-## Mock Abstraction Data
+## Technical Notes
 
-When transitioning from "Abstracting" to "Review Required":
+### Searchable Combobox Pattern
+Uses existing shadcn/ui components:
+- `Popover` + `PopoverTrigger` + `PopoverContent` for dropdown container
+- `Command` + `CommandInput` + `CommandList` + `CommandItem` for search functionality
+- Filter parent leases client-side based on search query
 
-```json
-{
-  "abstraction_data": {
-    "property_address": "123 Main Street, Suite 100",
-    "landlord_name": "ABC Properties LLC",
-    "tenant_name": "Demo Company Inc",
-    "lease_start": "2025-02-01",
-    "lease_end": "2028-02-01",
-    "monthly_rent": 5000,
-    "security_deposit": 10000
-  },
-  "confidence_scores": {
-    "property_address": 95,
-    "landlord_name": 88,
-    "tenant_name": 72,
-    "lease_start": 91,
-    "lease_end": 85,
-    "monthly_rent": 65,
-    "security_deposit": 78
-  }
-}
+### Parent Lease Query Filter
+Only shows leases with `lifecycle_status = 'Posted'` from the same workspace:
+```sql
+SELECT id, filename, tenant_name, landlord_name, lease_end 
+FROM leases 
+WHERE lifecycle_status = 'Posted' 
+AND workspace_id = $workspace_id
+ORDER BY uploaded_at DESC
 ```
 
-Fields with confidence < 80 (tenant_name, monthly_rent, security_deposit) will display amber borders.
+### Amendment Validation
+- Parent lease must be in "Posted" status
+- Amendment inherits `lease_type` from parent (optional UX enhancement)
+- `parent_lease_id` is stored as foreign key reference
+
+### Mobile Responsiveness
+- Multi-step form works well in drawer on mobile
+- Parent lease comparison card (Option A) is mobile-friendly
+- Three-panel layout (Option B) automatically collapses on mobile
 
 ---
 
 ## Security Considerations
 
-1. **RLS Policies**: Existing policies cover SELECT/UPDATE for workspace members
-2. **Email Validation**: Zod validates approver email format
-3. **Audit Trail**: All manual changes logged with user ID and timestamp
-4. **Status Transitions**: Only valid transitions allowed via application logic
+1. **RLS Policy for parent_lease_id** - Users can only select parent leases from their workspace
+2. **Validation** - Server-side check that parent_lease_id points to a Posted lease in same workspace
+3. **Foreign Key** - Database-level constraint ensures referential integrity
