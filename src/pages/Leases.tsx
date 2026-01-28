@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DeleteLeaseDialog } from "@/components/leases/DeleteLeaseDialog";
+import { RejectedLeaseCallout } from "@/components/workflow/RejectedLeaseCallout";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -33,6 +34,7 @@ interface LeaseRow {
   id: string;
   filename: string;
   status: string;
+  lifecycle_status: string | null;
   landlord_name: string | null;
   tenant_name: string | null;
   lease_start: string | null;
@@ -41,6 +43,7 @@ interface LeaseRow {
   uploaded_at: string;
   processed_at: string | null;
   extracted_json: Record<string, unknown> | null;
+  rejection_comment: string | null;
 }
 
 type SortField = "property" | "tenant" | "landlord" | "lease_start" | "lease_end" | "sqft";
@@ -56,6 +59,7 @@ export default function Leases() {
   const [sortField, setSortField] = useState<SortField>("lease_end");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [leases, setLeases] = useState<LeaseRow[]>([]);
+  const [rejectedLeases, setRejectedLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const expirationFilters = [
@@ -66,14 +70,26 @@ export default function Leases() {
 
   const fetchLeases = async () => {
     try {
+      // Fetch active leases
       const { data, error } = await supabase
         .from("leases")
         .select("*")
-        .in("status", ["Ready", "final", "review"])
+        .in("status", ["Ready", "final", "review", "Posted"])
         .order("uploaded_at", { ascending: false });
 
       if (error) throw error;
-      setLeases((data || []) as LeaseRow[]);
+      setLeases((data || []) as unknown as LeaseRow[]);
+
+      // Fetch rejected leases separately
+      const { data: rejected, error: rejectedError } = await supabase
+        .from("leases")
+        .select("*")
+        .eq("lifecycle_status", "Rejected")
+        .order("uploaded_at", { ascending: false });
+
+      if (!rejectedError) {
+        setRejectedLeases((rejected || []) as unknown as LeaseRow[]);
+      }
     } catch (error) {
       console.error("Error fetching leases:", error);
       toast.error("Failed to load leases");
@@ -258,6 +274,14 @@ export default function Leases() {
       />
 
       <div className="p-6">
+        {/* Rejected Leases Callout */}
+        <RejectedLeaseCallout 
+          leases={rejectedLeases.map(l => ({
+            id: l.id,
+            filename: l.filename,
+            rejection_comment: l.rejection_comment,
+          }))} 
+        />
         {loading ? (
           <div className="flex items-center justify-center h-[40vh]">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

@@ -16,7 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface AppHeaderProps {
   title: string;
-  subtitle?: string;
+  subtitle?: string | React.ReactNode;
   actions?: React.ReactNode;
 }
 

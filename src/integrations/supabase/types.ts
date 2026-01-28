@@ -257,10 +257,13 @@ export type Database = {
       leases: {
         Row: {
           activated_at: string | null
+          approver_email: string | null
+          audit_log: Json | null
           base_rent_amount: string | null
           base_rent_frequency: string | null
           business_unit: string | null
           category: string | null
+          confidence_scores: Json | null
           confirmed_sections: string[]
           current_monthly_rent: number | null
           error_message: string | null
@@ -272,11 +275,14 @@ export type Database = {
           extracted_json: Json | null
           filename: string
           id: string
+          initializer_id: string | null
           internal_approved_at: string | null
           landlord_name: string | null
+          last_nudged_at: string | null
           lease_end: string | null
           lease_owner_id: string | null
           lease_start: string | null
+          lease_type: string | null
           lifecycle_status: string | null
           notes: string | null
           processed_at: string | null
@@ -293,10 +299,13 @@ export type Database = {
         }
         Insert: {
           activated_at?: string | null
+          approver_email?: string | null
+          audit_log?: Json | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
           business_unit?: string | null
           category?: string | null
+          confidence_scores?: Json | null
           confirmed_sections?: string[]
           current_monthly_rent?: number | null
           error_message?: string | null
@@ -308,11 +317,14 @@ export type Database = {
           extracted_json?: Json | null
           filename: string
           id?: string
+          initializer_id?: string | null
           internal_approved_at?: string | null
           landlord_name?: string | null
+          last_nudged_at?: string | null
           lease_end?: string | null
           lease_owner_id?: string | null
           lease_start?: string | null
+          lease_type?: string | null
           lifecycle_status?: string | null
           notes?: string | null
           processed_at?: string | null
@@ -329,10 +341,13 @@ export type Database = {
         }
         Update: {
           activated_at?: string | null
+          approver_email?: string | null
+          audit_log?: Json | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
           business_unit?: string | null
           category?: string | null
+          confidence_scores?: Json | null
           confirmed_sections?: string[]
           current_monthly_rent?: number | null
           error_message?: string | null
@@ -344,11 +359,14 @@ export type Database = {
           extracted_json?: Json | null
           filename?: string
           id?: string
+          initializer_id?: string | null
           internal_approved_at?: string | null
           landlord_name?: string | null
+          last_nudged_at?: string | null
           lease_end?: string | null
           lease_owner_id?: string | null
           lease_start?: string | null
+          lease_type?: string | null
           lifecycle_status?: string | null
           notes?: string | null
           processed_at?: string | null
