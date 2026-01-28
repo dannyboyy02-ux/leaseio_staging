@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -7,14 +8,19 @@ import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
 import { QuickStats } from '@/components/dashboard/QuickStats';
 import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
+import { CreateLeaseDrawer } from '@/components/workflow/CreateLeaseDrawer';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function Dashboard() {
   const { user, workspace } = useApp();
   const { t } = useLanguage();
+  const navigate = useNavigate();
+  const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
-  const isBusinessPlan = workspace?.plan === 'business';
+  const handleLeaseCreated = (leaseId: string) => {
+    navigate(`/app/leases/${leaseId}`);
+  };
 
   return (
     <AppLayout>
@@ -23,19 +29,9 @@ export default function Dashboard() {
         subtitle={workspace?.name || user?.companyName}
         actions={
           <div className="flex items-center gap-2">
-            {isBusinessPlan && (
-              <Button variant="outline" asChild>
-                <Link to="/app/leases/new">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Lease
-                </Link>
-              </Button>
-            )}
-            <Button variant="accent" asChild>
-              <Link to="/app/leases?action=upload">
-                <Plus className="h-4 w-4 mr-2" />
-                {t('dashboard.upload_lease')}
-              </Link>
+            <Button variant="accent" onClick={() => setCreateDrawerOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create New Lease
             </Button>
           </div>
         }
@@ -54,6 +50,12 @@ export default function Dashboard() {
         {/* Upcoming Events */}
         <UpcomingEvents />
       </div>
+
+      <CreateLeaseDrawer
+        open={createDrawerOpen}
+        onOpenChange={setCreateDrawerOpen}
+        onSuccess={handleLeaseCreated}
+      />
     </AppLayout>
   );
 }
