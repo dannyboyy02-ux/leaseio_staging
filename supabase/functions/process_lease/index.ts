@@ -703,6 +703,60 @@ function extractConfidence(field: any): number | null {
   return null;
 }
 
+// Validation helpers
+function validateMonthlyRent(value: number | null): { valid: boolean; issue?: string } {
+  if (value === null) return { valid: true };
+  if (value < 0) return { valid: false, issue: 'Negative rent' };
+  if (value < 100) return { valid: false, issue: 'Suspiciously low (< $100)' };
+  if (value > 1000000) return { valid: false, issue: 'Suspiciously high (> $1M)' };
+  return { valid: true };
+}
+
+function validateDate(dateStr: string | null): { valid: boolean; issue?: string } {
+  if (!dateStr) return { valid: true };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return { valid: false, issue: 'Invalid format' };
+  const year = new Date(dateStr).getFullYear();
+  if (year < 1950 || year > 2100) return { valid: false, issue: `Year ${year} out of range` };
+  return { valid: true };
+}
+
+function validateSquareFootage(value: number | null): { valid: boolean; issue?: string } {
+  if (value === null) return { valid: true };
+  if (value < 0) return { valid: false, issue: 'Negative sqft' };
+  if (value < 100) return { valid: false, issue: 'Too small (< 100)' };
+  if (value > 10000000) return { valid: false, issue: 'Too large (> 10M)' };
+  return { valid: true };
+}
+
+function validateLeaseData(data: any): string[] {
+  const warnings: string[] = [];
+  
+  const rentCheck = validateMonthlyRent(extractValue(data.current_monthly_rent));
+  if (!rentCheck.valid) warnings.push(`Rent: ${rentCheck.issue}`);
+  
+  const startCheck = validateDate(extractValue(data.lease_start));
+  if (!startCheck.valid) warnings.push(`Start: ${startCheck.issue}`);
+  
+  const endCheck = validateDate(extractValue(data.lease_end));
+  if (!endCheck.valid) warnings.push(`End: ${endCheck.issue}`);
+  
+  const leaseStart = extractValue(data.lease_start);
+  const leaseEnd = extractValue(data.lease_end);
+  if (leaseStart && leaseEnd) {
+    if (new Date(leaseEnd) <= new Date(leaseStart)) {
+      warnings.push('End must be after start');
+    }
+  }
+  
+  const sqftCheck = validateSquareFootage(extractValue(data.square_footage));
+  if (!sqftCheck.valid) warnings.push(`Sqft: ${sqftCheck.issue}`);
+  
+  if (!extractValue(data.landlord_name)) warnings.push('Missing landlord');
+  if (!extractValue(data.tenant_name)) warnings.push('Missing tenant');
+  
+  return warnings;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -868,6 +922,13 @@ serve(async (req) => {
       throw error;
     }
 
+    // Step 2.5: Validate extracted data
+    const validationWarnings = validateLeaseData(leaseData);
+    if (validationWarnings.length > 0) {
+      console.log('[process_lease] Validation warnings:', validationWarnings);
+      (leaseData as any)._validation_warnings = validationWarnings;
+    }
+
     // Step 3: Update lease record with extracted data
     const { error: updateError } = await supabaseAdmin
       .from('leases')
@@ -890,6 +951,34 @@ serve(async (req) => {
     if (updateError) {
       console.error('[process_lease] Update error:', updateError);
       throw new Error(`Failed to update lease: ${updateError.message}`);
+    }
+
+    // Step 3.25: Store field-level confidence scores
+    const fieldsToTrack = ['landlord_name', 'tenant_name', 'property_address', 'lease_start', 'lease_end', 'square_footage', 'current_monthly_rent', 'rent_escalation_type'];
+    const confidenceEntries: { lease_id: string; field_name: string; confidence_score: number }[] = [];
+    
+    for (const fieldName of fieldsToTrack) {
+      const fieldData = (leaseData as any)[fieldName];
+      const confidence = extractConfidence(fieldData);
+      if (confidence !== null) {
+        confidenceEntries.push({ 
+          lease_id: leaseId, 
+          field_name: fieldName, 
+          confidence_score: Math.min(confidence, 1.0) // Ensure max is 1.0
+        });
+      }
+    }
+
+    if (confidenceEntries.length > 0) {
+      const { error: confError } = await supabaseAdmin
+        .from('lease_field_confidence')
+        .upsert(confidenceEntries, { onConflict: 'lease_id,field_name' });
+      
+      if (confError) {
+        console.error('[process_lease] Confidence insert error:', confError);
+      } else {
+        console.log(`[process_lease] Stored ${confidenceEntries.length} confidence scores`);
+      }
     }
 
     // Step 3.5: Insert rent schedule entries
