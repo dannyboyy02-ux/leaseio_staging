@@ -169,6 +169,44 @@ export type Database = {
           },
         ]
       }
+      lease_field_confidence: {
+        Row: {
+          confidence_score: number
+          corrected_at: string | null
+          created_at: string | null
+          field_name: string
+          id: string
+          lease_id: string
+          was_corrected: boolean | null
+        }
+        Insert: {
+          confidence_score: number
+          corrected_at?: string | null
+          created_at?: string | null
+          field_name: string
+          id?: string
+          lease_id: string
+          was_corrected?: boolean | null
+        }
+        Update: {
+          confidence_score?: number
+          corrected_at?: string | null
+          created_at?: string | null
+          field_name?: string
+          id?: string
+          lease_id?: string
+          was_corrected?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_field_confidence_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lease_notifications: {
         Row: {
           created_at: string
@@ -259,6 +297,7 @@ export type Database = {
           activated_at: string | null
           approver_email: string | null
           audit_log: Json | null
+          avg_confidence_score: number | null
           base_rent_amount: string | null
           base_rent_frequency: string | null
           business_unit: string | null
@@ -302,6 +341,7 @@ export type Database = {
           activated_at?: string | null
           approver_email?: string | null
           audit_log?: Json | null
+          avg_confidence_score?: number | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
           business_unit?: string | null
@@ -345,6 +385,7 @@ export type Database = {
           activated_at?: string | null
           approver_email?: string | null
           audit_log?: Json | null
+          avg_confidence_score?: number | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
           business_unit?: string | null

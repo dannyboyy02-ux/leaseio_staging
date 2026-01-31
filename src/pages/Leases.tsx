@@ -44,7 +44,41 @@ interface LeaseRow {
   processed_at: string | null;
   extracted_json: Record<string, unknown> | null;
   rejection_comment: string | null;
+  avg_confidence_score: number | null;
 }
+
+// Confidence badge component for lease list
+const ConfidenceListBadge = ({ score }: { score: number | null }) => {
+  if (score === null) {
+    return (
+      <Badge variant="outline" className="text-[9px] text-muted-foreground">
+        Pending
+      </Badge>
+    );
+  }
+  
+  if (score >= 0.90) {
+    return (
+      <Badge variant="outline" className="text-[9px] text-green-600 border-green-400 bg-green-50">
+        High Confidence
+      </Badge>
+    );
+  }
+  
+  if (score >= 0.70) {
+    return (
+      <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-400 bg-amber-50">
+        Review Needed
+      </Badge>
+    );
+  }
+  
+  return (
+    <Badge variant="outline" className="text-[9px] text-red-600 border-red-400 bg-red-50">
+      Verify Carefully
+    </Badge>
+  );
+};
 
 type SortField = "property" | "tenant" | "landlord" | "lease_start" | "lease_end" | "sqft";
 type SortDirection = "asc" | "desc";
@@ -376,13 +410,16 @@ export default function Leases() {
                         {getSortIcon("sqft")}
                       </Button>
                     </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      Confidence
+                    </TableHead>
                     <TableHead className="text-right">{t("leases.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAndSortedLeases.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         {t("leases.no_match")}
                       </TableCell>
                     </TableRow>
@@ -417,6 +454,9 @@ export default function Leases() {
                             </div>
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">{formatSqFt(lease.square_footage)}</TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <ConfidenceListBadge score={lease.avg_confidence_score} />
+                          </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                               <Tooltip>

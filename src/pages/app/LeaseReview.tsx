@@ -18,6 +18,9 @@ import {
   Calendar,
   AlertTriangle,
   GitBranch,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -44,6 +47,7 @@ interface ExtractedField {
   value: any;
   page?: number;
   confidence: "low" | "medium" | "high" | number;
+  source_text?: string;
 }
 
 interface ExtractedJson {
@@ -56,7 +60,63 @@ interface ExtractedJson {
   monthly_rent?: ExtractedField;
   security_deposit?: ExtractedField;
   escalation_type?: ExtractedField;
+  current_monthly_rent?: ExtractedField;
+  rent_escalation_type?: ExtractedField;
+  square_footage?: ExtractedField;
+  _validation_warnings?: string[];
 }
+
+// Helper to get confidence from extracted_json field
+const getFieldConfidence = (extractedJson: ExtractedJson | null, fieldId: string): number | null => {
+  if (!extractedJson) return null;
+  const field = (extractedJson as Record<string, ExtractedField | undefined>)[fieldId];
+  if (!field) return null;
+  if (typeof field.confidence === 'number') return field.confidence;
+  // Convert legacy string confidence to number
+  if (field.confidence === 'high') return 0.95;
+  if (field.confidence === 'medium') return 0.80;
+  if (field.confidence === 'low') return 0.60;
+  return null;
+};
+
+// Confidence badge component
+const ConfidenceBadge = ({ confidence }: { confidence: number | null }) => {
+  if (confidence === null) {
+    return (
+      <Badge variant="outline" className="text-[9px] h-4 font-medium text-muted-foreground bg-muted">
+        <HelpCircle size={8} className="mr-0.5" />
+        N/A
+      </Badge>
+    );
+  }
+  
+  const percentage = Math.round(confidence * 100);
+  
+  if (confidence >= 0.90) {
+    return (
+      <Badge variant="outline" className="text-[9px] h-4 font-medium text-green-600 border-green-400 bg-green-50">
+        <CheckCircle2 size={8} className="mr-0.5" />
+        {percentage}%
+      </Badge>
+    );
+  }
+  
+  if (confidence >= 0.70) {
+    return (
+      <Badge variant="outline" className="text-[9px] h-4 font-medium text-amber-600 border-amber-400 bg-amber-50">
+        <AlertTriangle size={8} className="mr-0.5" />
+        {percentage}%
+      </Badge>
+    );
+  }
+  
+  return (
+    <Badge variant="outline" className="text-[9px] h-4 font-medium text-red-600 border-red-400 bg-red-50">
+      <XCircle size={8} className="mr-0.5" />
+      {percentage}%
+    </Badge>
+  );
+};
 
 const FIELD_CONFIG = [
   { id: "landlord_name", label: "Landlord", icon: Building2 },
@@ -402,6 +462,27 @@ export default function LeaseReview() {
 
                 <ScrollArea className="flex-1 h-full">
                   <div className="p-6 space-y-6 max-w-2xl mx-auto pb-24">
+                    {/* Validation Warnings Banner */}
+                    {(lease?.extracted_json as ExtractedJson)?._validation_warnings && 
+                     (lease?.extracted_json as ExtractedJson)._validation_warnings!.length > 0 && (
+                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                          <div>
+                            <h4 className="font-semibold text-amber-800 text-sm mb-1">Validation Warnings</h4>
+                            <ul className="text-sm text-amber-700 space-y-1">
+                              {(lease?.extracted_json as ExtractedJson)._validation_warnings!.map((warning, i) => (
+                                <li key={i} className="flex items-center gap-2">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                  {warning}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Amendment: Current Terms Comparison Card */}
                     {isAmendment && parentLease && (
                       <Collapsible open={showParentTerms} onOpenChange={setShowParentTerms}>
@@ -458,32 +539,25 @@ export default function LeaseReview() {
                       </CardHeader>
                       <CardContent className="pt-6 space-y-5">
                         {FIELD_CONFIG.map((field) => {
-                          const confidence = confidenceScores[field.id];
-                          const isLowConfidence = confidence !== undefined && confidence < LOW_CONFIDENCE_THRESHOLD;
+                          const extractedJson = lease?.extracted_json as ExtractedJson | null;
+                          const fieldConfidence = getFieldConfidence(extractedJson, field.id);
+                          const confidence = confidenceScores[field.id] ?? (fieldConfidence ? Math.round(fieldConfidence * 100) : undefined);
+                          const isLowConfidence = fieldConfidence !== null && fieldConfidence < 0.80;
+                          
+                          // Get page from extracted json for PDF navigation
+                          const extractedField = extractedJson && field.id !== '_validation_warnings' 
+                            ? (extractedJson as Record<string, ExtractedField | string[] | undefined>)[field.id]
+                            : undefined;
+                          const fieldPage = extractedField && typeof extractedField === 'object' && !Array.isArray(extractedField) 
+                            ? extractedField.page 
+                            : undefined;
                           
                           return (
                             <div key={field.id} className="group">
                               <div className="flex items-center justify-between mb-1.5">
                                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                                   <field.icon size={12} className="text-muted-foreground" /> {field.label}
-                                  {confidence !== undefined ? (
-                                    <Badge 
-                                      variant="outline" 
-                                      className={cn(
-                                        "text-[9px] h-4 font-medium",
-                                        isLowConfidence 
-                                          ? "text-amber-600 border-amber-400 bg-amber-50" 
-                                          : "bg-muted"
-                                      )}
-                                    >
-                                      {confidence}% confidence
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-[9px] h-4 bg-muted font-medium">
-                                      {(lease?.extracted_json as ExtractedJson)?.[field.id as keyof ExtractedJson]
-                                        ?.confidence || "Manual"}
-                                    </Badge>
-                                  )}
+                                  <ConfidenceBadge confidence={fieldConfidence} />
                                 </Label>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                   <Button
@@ -491,11 +565,7 @@ export default function LeaseReview() {
                                     size="icon"
                                     className="h-6 w-6 text-muted-foreground hover:text-primary"
                                     title="Locate in PDF"
-                                    onClick={() =>
-                                      jumpToPage(
-                                        (lease?.extracted_json as ExtractedJson)?.[field.id as keyof ExtractedJson]?.page,
-                                      )
-                                    }
+                                    onClick={() => jumpToPage(fieldPage)}
                                   >
                                     <Target size={12} />
                                   </Button>
@@ -528,6 +598,8 @@ export default function LeaseReview() {
                                 className={cn(
                                   "text-sm transition-all focus-visible:ring-primary",
                                   getFieldBorderClass(field.id),
+                                  isLowConfidence && "border-amber-400 border-2",
+                                  fieldConfidence !== null && fieldConfidence < 0.70 && "border-red-400 border-2",
                                 )}
                               />
                               {/* Show change indicator for amendments */}
