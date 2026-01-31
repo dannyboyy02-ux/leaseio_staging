@@ -14,7 +14,8 @@ import {
   HelpCircle,
   Lock,
   Upload,
-  Sparkles
+  Sparkles,
+  Activity
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
@@ -37,6 +38,7 @@ const mainNavItems = [
   { title: 'nav.leases', href: '/app/leases', icon: FileText },
   { title: 'nav.imports', href: '/app/imports', icon: Upload },
   { title: 'nav.reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
+  { title: 'nav.extraction_analytics', href: '/app/analytics/extraction', icon: Activity },
   { title: 'nav.notifications', href: '/app/notifications', icon: Bell },
   { title: 'nav.integrations', href: '/app/integrations', icon: Plug },
 ];

@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      field_corrections: {
+        Row: {
+          ai_confidence: number | null
+          corrected_at: string | null
+          corrected_by: string | null
+          corrected_value: string | null
+          correction_type: string | null
+          field_name: string
+          id: string
+          lease_id: string
+          original_value: string | null
+          user_notes: string | null
+        }
+        Insert: {
+          ai_confidence?: number | null
+          corrected_at?: string | null
+          corrected_by?: string | null
+          corrected_value?: string | null
+          correction_type?: string | null
+          field_name: string
+          id?: string
+          lease_id: string
+          original_value?: string | null
+          user_notes?: string | null
+        }
+        Update: {
+          ai_confidence?: number | null
+          corrected_at?: string | null
+          corrected_by?: string | null
+          corrected_value?: string | null
+          correction_type?: string | null
+          field_name?: string
+          id?: string
+          lease_id?: string
+          original_value?: string | null
+          user_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_corrections_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invite_tokens: {
         Row: {
           accepted_at: string | null

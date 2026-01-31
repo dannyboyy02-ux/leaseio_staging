@@ -641,6 +641,36 @@ Document: "Property in downtown area. Market rate rent."
 
 Extraction: {"property_address": {"value": null, "confidence": 0.0, "page": 1, "source_text": "downtown area"}, "current_monthly_rent": {"value": null, "confidence": 0.0, "page": 1, "source_text": "market rate rent"}}
 
+Example 5 - Complex Rent with CPI:
+
+Document: "Base rent Year 1: $8,000/month. Years 2-5: Annual increase equal to CPI, min 2%, max 4%. Premises: 3,200 RSF."
+
+Extraction: {"current_monthly_rent": {"value": 8000, "confidence": 0.97}, "rent_escalation_type": {"value": "CPI adjustment, 2% floor, 4% ceiling", "confidence": 0.93}, "square_footage": {"value": 3200, "confidence": 0.96}}
+
+Example 6 - Percentage Rent:
+
+Document: "Minimum rent: $5,000/month. Plus 6% of gross sales over $1M annually."
+
+Extraction: {"current_monthly_rent": {"value": 5000, "confidence": 0.98}, "rent_escalation_type": {"value": "Min rent plus 6% of sales over $1M", "confidence": 0.90}}
+
+Example 7 - Triple Net:
+
+Document: "Base: $12/sqft/year. Tenant pays taxes, insurance, CAM ~$4.50/sqft. 5,000 RSF."
+
+Extraction: {"current_monthly_rent": {"value": 5000, "confidence": 0.92}, "square_footage": {"value": 5000, "confidence": 0.98}, "rent_escalation_type": {"value": "NNN - tenant pays separately", "confidence": 0.95}}
+
+Example 8 - Equipment Lease with Calculated End:
+
+Document: "Tech Rental LLC to Startup Inc. $1,250/mo for Dell R740. 24mo from April 1, 2024."
+
+Extraction: {"landlord_name": {"value": "Tech Rental LLC", "confidence": 0.97}, "tenant_name": {"value": "Startup Inc", "confidence": 0.96}, "current_monthly_rent": {"value": 1250, "confidence": 0.98}, "lease_start": {"value": "2024-04-01", "confidence": 0.98}, "lease_end": {"value": "2026-03-31", "confidence": 0.90}}
+
+Example 9 - Incomplete Data:
+
+Document: "Property at ~456 Oak St, downtown area."
+
+Extraction: {"property_address": {"value": "456 Oak Street, downtown", "confidence": 0.55}}
+
 Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -703,12 +733,12 @@ function extractConfidence(field: any): number | null {
   return null;
 }
 
-// Validation helpers
-function validateMonthlyRent(value: number | null): { valid: boolean; issue?: string } {
+// Validation helpers with suggestions
+function validateMonthlyRent(value: number | null): { valid: boolean; issue?: string; suggestion?: string } {
   if (value === null) return { valid: true };
-  if (value < 0) return { valid: false, issue: 'Negative rent' };
-  if (value < 100) return { valid: false, issue: 'Suspiciously low (< $100)' };
-  if (value > 1000000) return { valid: false, issue: 'Suspiciously high (> $1M)' };
+  if (value < 0) return { valid: false, issue: 'Negative rent', suggestion: 'Check if credit/refund instead' };
+  if (value < 100) return { valid: false, issue: `Low rent ($${value})`, suggestion: 'Verify monthly not daily/hourly' };
+  if (value > 500000) return { valid: false, issue: `High rent ($${value.toLocaleString()})`, suggestion: 'Check if annual not monthly or $/sqft' };
   return { valid: true };
 }
 
@@ -728,11 +758,29 @@ function validateSquareFootage(value: number | null): { valid: boolean; issue?: 
   return { valid: true };
 }
 
-function validateLeaseData(data: any): string[] {
+function validateAddress(address: string | null): { valid: boolean; issue?: string } {
+  if (!address) return { valid: true };
+  const hasCity = /,\s*[A-Z][a-z]+/.test(address);
+  const hasState = /\b[A-Z]{2}\b/.test(address);
+  const hasZip = /\b\d{5}(-\d{4})?\b/.test(address);
+  if (!hasCity && !hasState && !hasZip) {
+    return { valid: false, issue: 'Incomplete address - missing city/state/ZIP' };
+  }
+  return { valid: true };
+}
+
+function validateLeaseData(data: any): { warnings: string[]; suggestions: string[] } {
   const warnings: string[] = [];
+  const suggestions: string[] = [];
   
   const rentCheck = validateMonthlyRent(extractValue(data.current_monthly_rent));
-  if (!rentCheck.valid) warnings.push(`Rent: ${rentCheck.issue}`);
+  if (!rentCheck.valid) {
+    warnings.push(rentCheck.issue || 'Rent validation failed');
+    if (rentCheck.suggestion) suggestions.push(rentCheck.suggestion);
+  }
+  
+  const addressCheck = validateAddress(extractValue(data.property_address));
+  if (!addressCheck.valid) warnings.push(addressCheck.issue || 'Address incomplete');
   
   const startCheck = validateDate(extractValue(data.lease_start));
   if (!startCheck.valid) warnings.push(`Start: ${startCheck.issue}`);
@@ -754,7 +802,7 @@ function validateLeaseData(data: any): string[] {
   if (!extractValue(data.landlord_name)) warnings.push('Missing landlord');
   if (!extractValue(data.tenant_name)) warnings.push('Missing tenant');
   
-  return warnings;
+  return { warnings, suggestions };
 }
 
 serve(async (req) => {
@@ -923,10 +971,11 @@ serve(async (req) => {
     }
 
     // Step 2.5: Validate extracted data
-    const validationWarnings = validateLeaseData(leaseData);
+    const { warnings: validationWarnings, suggestions: validationSuggestions } = validateLeaseData(leaseData);
     if (validationWarnings.length > 0) {
       console.log('[process_lease] Validation warnings:', validationWarnings);
       (leaseData as any)._validation_warnings = validationWarnings;
+      (leaseData as any)._validation_suggestions = validationSuggestions;
     }
 
     // Step 3: Update lease record with extracted data
