@@ -8,6 +8,7 @@ import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
 import { QuickStats } from '@/components/dashboard/QuickStats';
 import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
+import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
 import { CreateLeaseDrawer } from '@/components/workflow/CreateLeaseDrawer';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -38,6 +39,9 @@ export default function Dashboard() {
       />
 
       <div className="p-6 space-y-6">
+        {/* Onboarding Checklist */}
+        <OnboardingChecklist />
+
         {/* Pending Approvals - Business Plan Only */}
         <PendingApprovalsSection />
 

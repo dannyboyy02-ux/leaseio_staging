@@ -806,5 +806,31 @@
     "faq2_a": "La mayoría de los documentos se procesan en 1-2 minutos. Los documentos complejos con muchas páginas pueden tardar un poco más.",
     "faq3_q": "¿Puedo editar los datos extraídos?",
     "faq3_a": "¡Sí! Después de la extracción, puede revisar y editar cualquier campo antes de finalizar el arrendamiento."
+  },
+  "empty": {
+    "no_leases": "Sin arrendamientos aún",
+    "upload_first": "Suba su primer arrendamiento para comenzar",
+    "upload_description": "Suba un documento PDF de arrendamiento y nuestra IA extraerá automáticamente términos clave, fechas y calendarios de renta.",
+    "upload_first_lease": "Subir Su Primer Arrendamiento",
+    "download_sample": "Descargar Ejemplo",
+    "supports_pdf": "Soporta archivos PDF hasta 50MB",
+    "benefit1_title": "Extracción con IA",
+    "benefit1_desc": "Términos clave, fechas y calendarios de renta extraídos automáticamente en minutos.",
+    "benefit2_title": "Rastrear Fechas",
+    "benefit2_desc": "Nunca pierda una ventana de renovación o fecha de vencimiento.",
+    "benefit3_title": "Alertas Inteligentes",
+    "benefit3_desc": "Reciba notificaciones por email para fechas límite y pagos próximos."
+  },
+  "onboarding": {
+    "getting_started": "Primeros Pasos",
+    "completed": "completado",
+    "step1_title": "Suba su primer arrendamiento",
+    "step1_desc": "Comience subiendo un documento PDF de arrendamiento",
+    "step2_title": "Invite miembros del equipo",
+    "step2_desc": "Agregue colegas para colaborar en la gestión de arrendamientos",
+    "step3_title": "Configure notificaciones",
+    "step3_desc": "Configure alertas por email para fechas importantes",
+    "step4_title": "Explore integraciones",
+    "step4_desc": "Conecte con QuickBooks y otras herramientas"
   }
 }

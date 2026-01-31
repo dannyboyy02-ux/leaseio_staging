@@ -1,134 +1,208 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronRight, Upload, Users, Bell, Link2, X } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Check, ChevronRight, Upload, Users, Bell, Link2, X, Rocket } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { supabase } from '@/integrations/supabase/client';
+
+const DISMISSED_KEY = 'leaseio.onboarding_dismissed';
 
 interface OnboardingStep {
   id: string;
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
   icon: React.ComponentType<{ className?: string }>;
-  completed: boolean;
   href: string;
 }
 
-const steps: OnboardingStep[] = [
+const stepDefinitions: OnboardingStep[] = [
   {
     id: 'upload',
-    title: 'Upload your first lease',
-    description: 'Get started by uploading a PDF lease document',
+    titleKey: 'onboarding.step1_title',
+    descriptionKey: 'onboarding.step1_desc',
     icon: Upload,
-    completed: false,
-    href: '/app/leases?action=upload',
+    href: '/app/leases/new',
   },
   {
     id: 'team',
-    title: 'Invite team members',
-    description: 'Add colleagues to collaborate on lease management',
+    titleKey: 'onboarding.step2_title',
+    descriptionKey: 'onboarding.step2_desc',
     icon: Users,
-    completed: false,
-    href: '/app/settings/workspace?tab=members',
+    href: '/app/settings/workspace',
   },
   {
     id: 'notifications',
-    title: 'Configure notifications',
-    description: 'Set up email and SMS alerts for key dates',
+    titleKey: 'onboarding.step3_title',
+    descriptionKey: 'onboarding.step3_desc',
     icon: Bell,
-    completed: true,
-    href: '/app/settings/workspace?tab=notifications',
+    href: '/app/notifications',
   },
   {
     id: 'integrations',
-    title: 'Connect QuickBooks',
-    description: 'Sync lease data with your accounting system',
+    titleKey: 'onboarding.step4_title',
+    descriptionKey: 'onboarding.step4_desc',
     icon: Link2,
-    completed: false,
     href: '/app/integrations',
   },
 ];
 
 export function OnboardingChecklist() {
   const [dismissed, setDismissed] = useState(false);
+  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
+  const { user, workspace } = useApp();
+  const { t } = useLanguage();
+  
+  useEffect(() => {
+    // Check if dismissed
+    const wasDismissed = localStorage.getItem(DISMISSED_KEY);
+    if (wasDismissed === 'true') {
+      setDismissed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (dismissed || !user?.id) return;
+
+    const checkProgress = async () => {
+      const completed: string[] = [];
+
+      // Check if user has uploaded any leases
+      const { count: leaseCount } = await supabase
+        .from('leases')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      
+      if (leaseCount && leaseCount > 0) {
+        completed.push('upload');
+      }
+
+      // Check if workspace has team members
+      if (workspace?.id) {
+        const { count: memberCount } = await supabase
+          .from('workspace_members')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', workspace.id);
+        
+        if (memberCount && memberCount > 1) {
+          completed.push('team');
+        }
+      }
+
+      // Check if user has any notifications configured
+      const { count: notificationCount } = await supabase
+        .from('lease_notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_confirmed', true);
+      
+      if (notificationCount && notificationCount > 0) {
+        completed.push('notifications');
+      }
+
+      // Check integrations (simplified - just check if they've visited)
+      const visitedIntegrations = localStorage.getItem('leaseio.visited_integrations');
+      if (visitedIntegrations === 'true') {
+        completed.push('integrations');
+      }
+
+      setCompletedSteps(completed);
+    };
+
+    checkProgress();
+  }, [user?.id, workspace?.id, dismissed]);
+
+  const handleDismiss = () => {
+    setDismissed(true);
+    localStorage.setItem(DISMISSED_KEY, 'true');
+  };
   
   if (dismissed) return null;
 
-  const completedCount = steps.filter(s => s.completed).length;
-  const progress = (completedCount / steps.length) * 100;
+  const completedCount = completedSteps.length;
+  const progress = (completedCount / stepDefinitions.length) * 100;
+
+  // Hide if all steps completed
+  if (completedCount >= stepDefinitions.length) return null;
 
   return (
-    <Card variant="feature" className="animate-fade-up">
+    <Card className="border-primary/30 bg-primary/5 animate-fade-up">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-lg">Getting Started</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              Complete these steps to get the most out of LeaseIO
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+              <Rocket className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">{t('onboarding.getting_started')}</CardTitle>
+              <CardDescription>
+                {completedCount}/{stepDefinitions.length} {t('onboarding.completed')}
+              </CardDescription>
+            </div>
           </div>
           <Button 
             variant="ghost" 
-            size="icon-sm"
-            onClick={() => setDismissed(true)}
-            className="text-muted-foreground hover:text-foreground"
+            size="icon"
+            onClick={handleDismiss}
+            className="text-muted-foreground hover:text-foreground h-8 w-8"
           >
             <X className="h-4 w-4" />
           </Button>
         </div>
         <div className="flex items-center gap-3 mt-3">
-          <Progress value={progress} variant="accent" className="flex-1" />
-          <span className="text-sm font-medium text-muted-foreground">
-            {completedCount}/{steps.length}
-          </span>
+          <Progress value={progress} className="flex-1 h-2" />
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {steps.map((step, index) => (
-            <Link
-              key={step.id}
-              to={step.href}
-              className={cn(
-                'flex items-center gap-4 rounded-lg p-3 transition-all hover:bg-muted/50',
-                'animate-fade-up',
-                step.completed && 'opacity-60'
-              )}
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              <div
+          {stepDefinitions.map((step, index) => {
+            const isCompleted = completedSteps.includes(step.id);
+            return (
+              <Link
+                key={step.id}
+                to={step.href}
                 className={cn(
-                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors',
-                  step.completed
-                    ? 'bg-success/10 text-success'
-                    : 'bg-muted text-muted-foreground'
+                  'flex items-center gap-4 rounded-lg p-3 transition-all hover:bg-muted/50',
+                  'animate-fade-up',
+                  isCompleted && 'opacity-60'
                 )}
+                style={{ animationDelay: `${index * 50}ms` }}
               >
-                {step.completed ? (
-                  <Check className="h-5 w-5" />
-                ) : (
-                  <step.icon className="h-5 w-5" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p
+                <div
                   className={cn(
-                    'text-sm font-medium',
-                    step.completed && 'line-through'
+                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors',
+                    isCompleted
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-muted text-muted-foreground'
                   )}
                 >
-                  {step.title}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {step.description}
-                </p>
-              </div>
-              {!step.completed && (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
-            </Link>
-          ))}
+                  {isCompleted ? (
+                    <Check className="h-5 w-5" />
+                  ) : (
+                    <step.icon className="h-5 w-5" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={cn(
+                      'text-sm font-medium',
+                      isCompleted && 'line-through'
+                    )}
+                  >
+                    {t(step.titleKey)}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {t(step.descriptionKey)}
+                  </p>
+                </div>
+                {!isCompleted && (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Link>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
