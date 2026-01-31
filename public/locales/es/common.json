@@ -14,7 +14,8 @@
     "upgrade_for_more": "Actualizar para más",
     "account_settings": "Configuración de Cuenta",
     "help_support": "Ayuda y Soporte",
-    "log_out": "Cerrar Sesión"
+    "log_out": "Cerrar Sesión",
+    "audit_log": "Registro de Auditoría"
   },
   "landing": {
     "nav": {

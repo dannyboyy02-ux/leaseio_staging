@@ -15,7 +15,8 @@ import {
   Lock,
   Upload,
   Sparkles,
-  Activity
+  Activity,
+  ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
@@ -46,6 +47,7 @@ const mainNavItems = [
 const settingsNavItems = [
   { title: 'nav.workspace', href: '/app/settings/workspace', icon: Building2 },
   { title: 'nav.account', href: '/app/settings/account', icon: User },
+  { title: 'nav.audit_log', href: '/app/audit-log', icon: ClipboardList, requiresAdmin: true },
 ];
 
 export function AppSidebar() {

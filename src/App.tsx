@@ -28,6 +28,7 @@ import Upgrade from "./pages/app/Upgrade";
 import NewLease from "./pages/app/NewLease";
 import ApprovalInbox from "./pages/app/ApprovalInbox";
 import ExtractionAnalytics from "./pages/app/ExtractionAnalytics";
+import AuditLog from "./pages/app/AuditLog";
 import Dashboard from "./pages/Dashboard";
 import Leases from "./pages/Leases";
 import Notifications from "./pages/Notifications";
@@ -180,6 +181,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <ExtractionAnalytics />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/audit-log"
+                  element={
+                    <ProtectedRoute>
+                      <AuditLog />
                     </ProtectedRoute>
                   }
                 />
