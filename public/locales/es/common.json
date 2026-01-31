@@ -6,7 +6,7 @@
     "reports": "Informes",
     "notifications": "Notificaciones",
     "integrations": "Integraciones",
-    "extraction_analytics": "Análisis de Extracción",
+    "data_quality": "Calidad de Datos",
     "workspace": "Espacio de Trabajo",
     "account": "Cuenta",
     "settings": "Configuración",
@@ -15,7 +15,10 @@
     "account_settings": "Configuración de Cuenta",
     "help_support": "Ayuda y Soporte",
     "log_out": "Cerrar Sesión",
-    "audit_log": "Registro de Auditoría"
+    "audit_log": "Registro de Auditoría",
+    "portfolio": "Portafolio",
+    "reports_analytics": "Informes y Análisis",
+    "tools": "Herramientas"
   },
   "landing": {
     "nav": {
@@ -786,5 +789,22 @@
   "language": {
     "english": "English",
     "spanish": "Español"
+  },
+  "support": {
+    "title": "Ayuda y Soporte",
+    "description": "Obtenga ayuda con LeaseIO",
+    "email_title": "Soporte por Email",
+    "email_desc": "Envíenos un email y le responderemos dentro de 24 horas.",
+    "contact_email": "Contactar Soporte",
+    "docs_title": "Documentación",
+    "docs_desc": "Explore nuestras guías y tutoriales para comenzar.",
+    "coming_soon": "Próximamente",
+    "faq_title": "Preguntas Frecuentes",
+    "faq1_q": "¿Cómo subo un arrendamiento?",
+    "faq1_a": "Vaya al Panel o a la página de Arrendamientos y haga clic en 'Subir Arrendamiento'. Puede arrastrar y soltar un PDF o hacer clic para buscar en sus archivos.",
+    "faq2_q": "¿Cuánto tiempo tarda la extracción con IA?",
+    "faq2_a": "La mayoría de los documentos se procesan en 1-2 minutos. Los documentos complejos con muchas páginas pueden tardar un poco más.",
+    "faq3_q": "¿Puedo editar los datos extraídos?",
+    "faq3_a": "¡Sí! Después de la extracción, puede revisar y editar cualquier campo antes de finalizar el arrendamiento."
   }
 }

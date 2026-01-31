@@ -29,6 +29,7 @@ import NewLease from "./pages/app/NewLease";
 import ApprovalInbox from "./pages/app/ApprovalInbox";
 import ExtractionAnalytics from "./pages/app/ExtractionAnalytics";
 import AuditLog from "./pages/app/AuditLog";
+import Support from "./pages/app/Support";
 import Dashboard from "./pages/Dashboard";
 import Leases from "./pages/Leases";
 import Notifications from "./pages/Notifications";
@@ -177,7 +178,7 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/app/analytics/extraction"
+                  path="/app/reports/data-quality"
                   element={
                     <ProtectedRoute>
                       <ExtractionAnalytics />
@@ -185,10 +186,18 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/app/audit-log"
+                  path="/app/reports/audit-log"
                   element={
                     <ProtectedRoute>
                       <AuditLog />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/support"
+                  element={
+                    <ProtectedRoute>
+                      <Support />
                     </ProtectedRoute>
                   }
                 />
