@@ -5,9 +5,7 @@ import {
   BarChart3, 
   Bell, 
   Plug, 
-  Settings,
   User,
-  CreditCard,
   ChevronRight,
   LogOut,
   Building2,
@@ -32,14 +30,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
-const mainNavItems = [
+// Portfolio section items
+const portfolioItems = [
   { title: 'nav.dashboard', href: '/app/dashboard', icon: LayoutDashboard },
   { title: 'nav.leases', href: '/app/leases', icon: FileText },
   { title: 'nav.imports', href: '/app/imports', icon: Upload },
+];
+
+// Reports & Analytics section items
+const reportsItems = [
   { title: 'nav.reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
-  { title: 'nav.extraction_analytics', href: '/app/analytics/extraction', icon: Activity },
+  { title: 'nav.data_quality', href: '/app/reports/data-quality', icon: Activity },
+  { title: 'nav.audit_log', href: '/app/reports/audit-log', icon: ClipboardList, requiresAdmin: true },
+];
+
+// Tools section items
+const toolsItems = [
   { title: 'nav.notifications', href: '/app/notifications', icon: Bell },
   { title: 'nav.integrations', href: '/app/integrations', icon: Plug },
 ];
@@ -47,13 +55,12 @@ const mainNavItems = [
 const settingsNavItems = [
   { title: 'nav.workspace', href: '/app/settings/workspace', icon: Building2 },
   { title: 'nav.account', href: '/app/settings/account', icon: User },
-  { title: 'nav.audit_log', href: '/app/audit-log', icon: ClipboardList, requiresAdmin: true },
 ];
 
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, workspace, canAccessFeature } = useApp();
+  const { user, workspace, canAccessFeature, userRole } = useApp();
   const { signOut, user: authUser } = useAuth();
   const { t } = useLanguage();
 
@@ -94,6 +101,40 @@ export function AppSidebar() {
     }
   };
 
+  const isAdmin = userRole === 'admin' || userRole === 'owner';
+
+  const renderNavItem = (item: typeof portfolioItems[0] & { requiresBusiness?: boolean; requiresAdmin?: boolean }) => {
+    const isActive = location.pathname === item.href;
+    const isLocked = item.requiresBusiness && !canAccessFeature('business');
+    const isAdminOnly = item.requiresAdmin;
+    const translatedTitle = t(item.title);
+    
+    // Hide admin-only items from non-admins
+    if (isAdminOnly && !isAdmin) return null;
+    
+    return (
+      <Link
+        key={item.href}
+        to={isLocked ? '#' : item.href}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+          isActive
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+          isLocked && 'opacity-50 cursor-not-allowed'
+        )}
+        onClick={(e) => isLocked && e.preventDefault()}
+      >
+        <item.icon className="h-5 w-5" />
+        <span className="flex-1">{translatedTitle}</span>
+        {isLocked && <Lock className="h-4 w-4" />}
+        {item.requiresBusiness && !isLocked && (
+          <Badge variant="business" className="text-[10px] px-1.5">Business</Badge>
+        )}
+      </Link>
+    );
+  };
+
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground flex flex-col">
       {/* Logo */}
@@ -108,37 +149,38 @@ export function AppSidebar() {
 
       {/* Main Navigation */}
       <nav className="flex-1 overflow-y-auto py-6 px-3 scrollbar-thin">
-        <div className="space-y-1">
-          {mainNavItems.map((item) => {
-            const isActive = location.pathname === item.href;
-            const isLocked = item.requiresBusiness && !canAccessFeature('business');
-            const translatedTitle = t(item.title);
-            
-            return (
-              <Link
-                key={item.href}
-                to={isLocked ? '#' : item.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-                  isLocked && 'opacity-50 cursor-not-allowed'
-                )}
-                onClick={(e) => isLocked && e.preventDefault()}
-              >
-                <item.icon className="h-5 w-5" />
-                <span className="flex-1">{translatedTitle}</span>
-                {isLocked && <Lock className="h-4 w-4" />}
-                {item.requiresBusiness && !isLocked && (
-                  <Badge variant="business" className="text-[10px] px-1.5">Business</Badge>
-                )}
-              </Link>
-            );
-          })}
+        {/* Portfolio Section */}
+        <div className="mb-6">
+          <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
+            {t('nav.portfolio')}
+          </p>
+          <div className="space-y-1">
+            {portfolioItems.map(renderNavItem)}
+          </div>
         </div>
 
-        <div className="mt-8">
+        {/* Reports & Analytics Section */}
+        <div className="mb-6">
+          <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
+            {t('nav.reports_analytics')}
+          </p>
+          <div className="space-y-1">
+            {reportsItems.map(renderNavItem)}
+          </div>
+        </div>
+
+        {/* Tools Section */}
+        <div className="mb-6">
+          <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
+            {t('nav.tools')}
+          </p>
+          <div className="space-y-1">
+            {toolsItems.map(renderNavItem)}
+          </div>
+        </div>
+
+        {/* Settings Section */}
+        <div>
           <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
             {t('nav.settings')}
           </p>
@@ -163,21 +205,23 @@ export function AppSidebar() {
                 </Link>
               );
             })}
-            
-            {/* Plan indicator below Account */}
-            <Link
-              to="/app/upgrade"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-            >
-              <Sparkles className="h-5 w-5" />
-              <span className="flex-1">{planLabel} Plan</span>
-              <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5">
-                {currentPlan === 'free' ? 'Upgrade' : planLabel}
-              </Badge>
-            </Link>
           </div>
         </div>
       </nav>
+
+      {/* Plan & Billing */}
+      <div className="px-4 py-2 border-t border-sidebar-border">
+        <Link
+          to="/app/upgrade"
+          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+        >
+          <Sparkles className="h-5 w-5" />
+          <span className="flex-1">{planLabel} Plan</span>
+          <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5">
+            {currentPlan === 'free' ? 'Upgrade' : planLabel}
+          </Badge>
+        </Link>
+      </div>
 
       {/* Usage Meter */}
       <div className="px-4 py-4 border-t border-sidebar-border">
@@ -232,7 +276,7 @@ export function AppSidebar() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to="#" className="flex items-center gap-2">
+              <Link to="/app/support" className="flex items-center gap-2">
                 <HelpCircle className="h-4 w-4" />
                 {t('nav.help_support')}
               </Link>

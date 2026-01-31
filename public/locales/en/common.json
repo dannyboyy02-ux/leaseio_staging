@@ -6,7 +6,7 @@
     "reports": "Reports",
     "notifications": "Notifications",
     "integrations": "Integrations",
-    "extraction_analytics": "Extraction Analytics",
+    "data_quality": "Data Quality",
     "workspace": "Workspace",
     "account": "Account",
     "settings": "Settings",
@@ -15,7 +15,10 @@
     "account_settings": "Account Settings",
     "help_support": "Help & Support",
     "log_out": "Log Out",
-    "audit_log": "Audit Log"
+    "audit_log": "Audit Log",
+    "portfolio": "Portfolio",
+    "reports_analytics": "Reports & Analytics",
+    "tools": "Tools"
   },
   "landing": {
     "nav": {
@@ -786,5 +789,22 @@
   "language": {
     "english": "English",
     "spanish": "Español"
+  },
+  "support": {
+    "title": "Help & Support",
+    "description": "Get help with LeaseIO",
+    "email_title": "Email Support",
+    "email_desc": "Send us an email and we'll get back to you within 24 hours.",
+    "contact_email": "Contact Support",
+    "docs_title": "Documentation",
+    "docs_desc": "Browse our guides and tutorials to get started.",
+    "coming_soon": "Coming Soon",
+    "faq_title": "Frequently Asked Questions",
+    "faq1_q": "How do I upload a lease?",
+    "faq1_a": "Go to the Dashboard or Leases page and click 'Upload Lease'. You can drag and drop a PDF or click to browse your files.",
+    "faq2_q": "How long does AI extraction take?",
+    "faq2_a": "Most documents are processed within 1-2 minutes. Complex documents with many pages may take a bit longer.",
+    "faq3_q": "Can I edit extracted data?",
+    "faq3_a": "Yes! After extraction, you can review and edit any field before finalizing the lease."
   }
 }
