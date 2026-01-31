@@ -18,7 +18,8 @@
     "audit_log": "Audit Log",
     "portfolio": "Portfolio",
     "reports_analytics": "Reports & Analytics",
-    "tools": "Tools"
+    "tools": "Tools",
+    "language": "Language"
   },
   "landing": {
     "nav": {
@@ -832,5 +833,15 @@
     "step3_desc": "Set up email alerts for key dates",
     "step4_title": "Explore integrations",
     "step4_desc": "Connect with QuickBooks and other tools"
+  },
+  "form": {
+    "required": "This field is required",
+    "invalid_email": "Invalid email address",
+    "invalid_date": "Invalid date format",
+    "invalid_number": "Must be a valid number",
+    "save_success": "Changes saved successfully",
+    "save_error": "Failed to save changes",
+    "delete_confirm": "Are you sure you want to delete this?",
+    "changes_unsaved": "You have unsaved changes"
   }
 }

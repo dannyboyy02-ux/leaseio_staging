@@ -18,6 +18,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.notifications': 'Notifications',
     'nav.integrations': 'Integrations',
     'nav.extraction_analytics': 'Extraction Analytics',
+    'nav.data_quality': 'Data Quality',
     'nav.workspace': 'Workspace',
     'nav.account': 'Account',
     'nav.settings': 'Settings',
@@ -26,6 +27,11 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.account_settings': 'Account Settings',
     'nav.help_support': 'Help & Support',
     'nav.log_out': 'Log Out',
+    'nav.portfolio': 'Portfolio',
+    'nav.reports_analytics': 'Reports & Analytics',
+    'nav.tools': 'Tools',
+    'nav.language': 'Language',
+    'nav.audit_log': 'Audit Log',
     
     // Landing Page - Nav
     'landing.nav.product': 'Product',
@@ -580,6 +586,7 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.notifications': 'Notificaciones',
     'nav.integrations': 'Integraciones',
     'nav.extraction_analytics': 'Análisis de Extracción',
+    'nav.data_quality': 'Calidad de Datos',
     'nav.workspace': 'Espacio de Trabajo',
     'nav.account': 'Cuenta',
     'nav.settings': 'Configuración',
@@ -588,6 +595,11 @@ const translations: Record<Language, Record<string, string>> = {
     'nav.account_settings': 'Configuración de Cuenta',
     'nav.help_support': 'Ayuda y Soporte',
     'nav.log_out': 'Cerrar Sesión',
+    'nav.portfolio': 'Portafolio',
+    'nav.reports_analytics': 'Informes y Análisis',
+    'nav.tools': 'Herramientas',
+    'nav.language': 'Idioma',
+    'nav.audit_log': 'Registro de Auditoría',
     
     // Landing Page - Nav
     'landing.nav.product': 'Producto',
