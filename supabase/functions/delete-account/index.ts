@@ -3,9 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 // Secure CORS configuration
 const ALLOWED_ORIGINS = [
-  'https://leaseflow.ai',
-  'https://www.leaseflow.ai',
-  'https://app.leaseflow.ai',
+  'https://theleaseio.com',
+  'https://www.theleaseio.com',
+  'https://app.theleaseio.com',
   'https://theleaseio.lovable.app',
   'http://localhost:5173',
   'http://localhost:3000',
@@ -13,12 +13,13 @@ const ALLOWED_ORIGINS = [
 ];
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  const origin = requestOrigin && (
+  const isLovablePreview = requestOrigin?.includes('lovableproject.com') || requestOrigin?.endsWith('.lovable.app');
+  const isAllowed = requestOrigin && (
     ALLOWED_ORIGINS.includes(requestOrigin) || 
-    requestOrigin.endsWith('.lovable.app')
-  )
-    ? requestOrigin 
-    : ALLOWED_ORIGINS[0];
+    isLovablePreview
+  );
+  
+  const origin = isAllowed ? requestOrigin : ALLOWED_ORIGINS[0];
     
   return {
     'Access-Control-Allow-Origin': origin,
