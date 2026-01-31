@@ -4,10 +4,35 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Secure CORS configuration
+const ALLOWED_ORIGINS = [
+  'https://leaseflow.ai',
+  'https://www.leaseflow.ai',
+  'https://app.leaseflow.ai',
+  'https://theleaseio.lovable.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+];
+
+function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
+  const origin = requestOrigin && (
+    ALLOWED_ORIGINS.includes(requestOrigin) || 
+    requestOrigin.endsWith('.lovable.app')
+  )
+    ? requestOrigin 
+    : ALLOWED_ORIGINS[0];
+    
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+// Default CORS headers for backwards compatibility
+const corsHeaders = getCorsHeaders(null);
 
 interface LeaseNotificationRecord {
   id: string;
