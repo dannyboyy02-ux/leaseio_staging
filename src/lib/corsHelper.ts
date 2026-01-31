@@ -2,9 +2,9 @@
 // This file is for reference only - each edge function should copy this pattern
 
 export const ALLOWED_ORIGINS = [
-  'https://leaseflow.ai',
-  'https://www.leaseflow.ai',
-  'https://app.leaseflow.ai',
+  'https://theleaseio.com',
+  'https://www.theleaseio.com',
+  'https://app.theleaseio.com',
   'https://theleaseio.lovable.app',
   'http://localhost:5173',
   'http://localhost:3000',
@@ -12,12 +12,13 @@ export const ALLOWED_ORIGINS = [
 ];
 
 export function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  // Check if origin is in allowed list
-  const origin = requestOrigin && ALLOWED_ORIGINS.some(allowed => 
-    requestOrigin === allowed || requestOrigin.endsWith('.lovable.app')
-  )
-    ? requestOrigin 
-    : ALLOWED_ORIGINS[0];
+  const isLovablePreview = requestOrigin?.includes('lovableproject.com') || requestOrigin?.endsWith('.lovable.app');
+  const isAllowed = requestOrigin && (
+    ALLOWED_ORIGINS.includes(requestOrigin) || 
+    isLovablePreview
+  );
+  
+  const origin = isAllowed ? requestOrigin : ALLOWED_ORIGINS[0];
     
   return {
     'Access-Control-Allow-Origin': origin,
