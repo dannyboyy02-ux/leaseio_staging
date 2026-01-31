@@ -64,6 +64,7 @@ interface ExtractedJson {
   rent_escalation_type?: ExtractedField;
   square_footage?: ExtractedField;
   _validation_warnings?: string[];
+  _validation_suggestions?: string[];
 }
 
 // Helper to get confidence from extracted_json field
@@ -274,7 +275,7 @@ export default function LeaseReview() {
     if (isPdfCollapsed) setIsPdfCollapsed(false);
   };
 
-  // Track field changes for audit log
+  // Track field changes for audit log and corrections
   const handleFieldChange = useCallback((fieldId: string, newValue: string) => {
     const oldValue = form[fieldId as keyof typeof form];
     
@@ -292,6 +293,35 @@ export default function LeaseReview() {
       setAuditLog(prev => [...prev, entry]);
     }
   }, [form, user?.id]);
+
+  // Track field corrections when field loses focus
+  const trackFieldCorrection = useCallback(async (fieldId: string) => {
+    const originalValue = originalValues.current[fieldId];
+    const currentValue = form[fieldId as keyof typeof form];
+    
+    // Only track if value changed from original
+    if (originalValue === currentValue || !lease?.id) return;
+    
+    // Get the confidence for this field from extracted_json
+    const extractedJson = lease?.extracted_json as ExtractedJson | null;
+    const fieldConfidence = getFieldConfidence(extractedJson, fieldId);
+    
+    const { error } = await supabase.from('field_corrections').insert({
+      lease_id: lease.id,
+      field_name: fieldId,
+      original_value: originalValue || null,
+      corrected_value: currentValue || null,
+      ai_confidence: fieldConfidence,
+      correction_type: !originalValue ? 'add_missing' : !currentValue ? 'delete_wrong' : 'edit'
+    });
+    
+    if (error) {
+      console.error('Failed to track correction:', error);
+    } else {
+      // Update original value so we don't track the same correction again
+      originalValues.current[fieldId] = currentValue;
+    }
+  }, [form, lease?.id, lease?.extracted_json]);
 
   // Track low-confidence field interactions
   const handleFieldFocus = useCallback((fieldId: string) => {
@@ -468,7 +498,7 @@ export default function LeaseReview() {
                       <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
                         <div className="flex items-start gap-3">
                           <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                          <div>
+                          <div className="flex-1">
                             <h4 className="font-semibold text-amber-800 text-sm mb-1">Validation Warnings</h4>
                             <ul className="text-sm text-amber-700 space-y-1">
                               {(lease?.extracted_json as ExtractedJson)._validation_warnings!.map((warning, i) => (
@@ -478,6 +508,20 @@ export default function LeaseReview() {
                                 </li>
                               ))}
                             </ul>
+                            {(lease?.extracted_json as ExtractedJson)?._validation_suggestions && 
+                             (lease?.extracted_json as ExtractedJson)._validation_suggestions!.length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-amber-200">
+                                <p className="font-medium text-amber-800 text-sm">Suggestions:</p>
+                                <ul className="text-sm text-amber-700 space-y-1 mt-1">
+                                  {(lease?.extracted_json as ExtractedJson)._validation_suggestions!.map((suggestion, i) => (
+                                    <li key={i} className="flex items-center gap-2">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                                      {suggestion}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -592,6 +636,7 @@ export default function LeaseReview() {
                                 value={(form as any)[field.id]}
                                 onChange={(e) => handleFieldChange(field.id, e.target.value)}
                                 onFocus={() => handleFieldFocus(field.id)}
+                                onBlur={() => trackFieldCorrection(field.id)}
                                 placeholder={
                                   field.id === "escalation_type" ? `Calculated: ${derivedInsights.avgIncrease}%/yr` : ""
                                 }
