@@ -1,14 +1,14 @@
 import { FileText, Upload, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface EmptyLeaseStateProps {
   onUpload: () => void;
 }
 
 export function EmptyLeaseState({ onUpload }: EmptyLeaseStateProps) {
-  const { t } = useLanguage();
+  const { t } = useAppTranslation();
   
   return (
     <Card variant="ghost" className="border-2 border-dashed border-border">

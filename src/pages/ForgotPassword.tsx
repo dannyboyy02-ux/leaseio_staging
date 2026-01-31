@@ -7,8 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { FileText, Loader2, ArrowLeft, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export default function ForgotPassword() {
+  const { t } = useAppTranslation();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -20,8 +22,8 @@ export default function ForgotPassword() {
     
     if (!email.trim()) {
       toast({
-        title: 'Email required',
-        description: 'Please enter your email address.',
+        title: t('auth.errors.email_required'),
+        description: t('auth.errors.enter_email'),
         variant: 'destructive',
       });
       return;
@@ -30,8 +32,8 @@ export default function ForgotPassword() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       toast({
-        title: 'Invalid email',
-        description: 'Please enter a valid email address.',
+        title: t('auth.errors.invalid_email'),
+        description: t('auth.errors.enter_valid_email'),
         variant: 'destructive',
       });
       return;
@@ -45,8 +47,8 @@ export default function ForgotPassword() {
     
     if (error) {
       toast({
-        title: 'Error',
-        description: 'An error occurred. Please try again.',
+        title: t('auth.errors.signin_failed'),
+        description: t('auth.errors.signin_failed'),
         variant: 'destructive',
       });
       return;
@@ -75,16 +77,16 @@ export default function ForgotPassword() {
                 <div className="mx-auto h-12 w-12 rounded-full bg-accent/10 flex items-center justify-center mb-4">
                   <CheckCircle className="h-6 w-6 text-accent" />
                 </div>
-                <h1 className="font-display text-2xl font-bold text-foreground">Check your email</h1>
+                <h1 className="font-display text-2xl font-bold text-foreground">{t('auth.forgot.check_email')}</h1>
                 <p className="text-muted-foreground">
-                  If an account exists for {email}, you'll receive a password reset link shortly.
+                  {t('auth.forgot.email_sent', { email })}
                 </p>
               </>
             ) : (
               <>
-                <h1 className="font-display text-2xl font-bold text-foreground">Forgot password?</h1>
+                <h1 className="font-display text-2xl font-bold text-foreground">{t('auth.forgot.title')}</h1>
                 <p className="text-muted-foreground">
-                  Enter your email and we'll send you a reset link.
+                  {t('auth.forgot.description')}
                 </p>
               </>
             )}
@@ -93,26 +95,26 @@ export default function ForgotPassword() {
             {isSubmitted ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground text-center">
-                  Didn't receive the email? Check your spam folder or try again.
+                  {t('auth.forgot.spam_note')}
                 </p>
                 <Button 
                   variant="outline" 
                   className="w-full"
                   onClick={() => setIsSubmitted(false)}
                 >
-                  Try another email
+                  {t('auth.forgot.try_another')}
                 </Button>
                 <Button asChild className="w-full">
                   <Link to="/login">
                     <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to sign in
+                    {t('auth.forgot.back_to_signin')}
                   </Link>
                 </Button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t('auth.email')}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -128,17 +130,17 @@ export default function ForgotPassword() {
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending...
+                      {t('auth.forgot.sending')}
                     </>
                   ) : (
-                    'Send reset link'
+                    t('auth.forgot.send_reset')
                   )}
                 </Button>
 
                 <Button variant="ghost" asChild className="w-full">
                   <Link to="/login">
                     <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to sign in
+                    {t('auth.forgot.back_to_signin')}
                   </Link>
                 </Button>
               </form>
