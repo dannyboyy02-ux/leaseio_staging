@@ -2,10 +2,35 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Secure CORS configuration
+const ALLOWED_ORIGINS = [
+  'https://leaseflow.ai',
+  'https://www.leaseflow.ai',
+  'https://app.leaseflow.ai',
+  'https://theleaseio.lovable.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+];
+
+function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
+  const origin = requestOrigin && (
+    ALLOWED_ORIGINS.includes(requestOrigin) || 
+    requestOrigin.endsWith('.lovable.app')
+  )
+    ? requestOrigin 
+    : ALLOWED_ORIGINS[0];
+    
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+// Default CORS headers for backwards compatibility
+const corsHeaders = getCorsHeaders(null);
 
 // Azure Document Intelligence
 const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');

@@ -35,12 +35,14 @@ interface LeaseUploadModalProps {
   onSuccess?: (leaseId: string) => void;
 }
 
-// Mock existing leases for amendment parent selection
-const mockLeases = [
-  { id: '1', name: 'Suite 100, 123 Main St - Master Lease' },
-  { id: '2', name: '456 Oak Avenue - Master Lease' },
-  { id: '3', name: '789 Pine Boulevard - Master Lease' },
-];
+// Parent lease interface for amendments
+interface ParentLease {
+  id: string;
+  tenant_name: string | null;
+  landlord_name: string | null;
+  lease_start: string | null;
+  lease_end: string | null;
+}
 
 type Step = 'upload' | 'classify' | 'processing' | 'success' | 'error';
 
@@ -64,6 +66,50 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
   const [resultLeaseId, setResultLeaseId] = useState<string>('');
   const [pendingLeaseId, setPendingLeaseId] = useState<string | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Real parent leases from database
+  const [availableParentLeases, setAvailableParentLeases] = useState<ParentLease[]>([]);
+  const [loadingParentLeases, setLoadingParentLeases] = useState(false);
+
+  // Fetch posted leases for amendment parent selection
+  useEffect(() => {
+    async function fetchPostedLeases() {
+      if (leaseType !== 'amendment') {
+        setAvailableParentLeases([]);
+        return;
+      }
+      
+      setLoadingParentLeases(true);
+      
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setLoadingParentLeases(false);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('leases')
+          .select('id, tenant_name, landlord_name, lease_start, lease_end')
+          .eq('lifecycle_status', 'Posted')
+          .order('uploaded_at', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching parent leases:', error);
+          setAvailableParentLeases([]);
+        } else {
+          setAvailableParentLeases(data || []);
+        }
+      } catch (err) {
+        console.error('Error fetching parent leases:', err);
+        setAvailableParentLeases([]);
+      }
+      
+      setLoadingParentLeases(false);
+    }
+    
+    fetchPostedLeases();
+  }, [leaseType]);
 
   // Polling for lease status updates
   useEffect(() => {
@@ -158,22 +204,17 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
 
       setProcessingStatus({ stage: 'analyzing', message: 'Analyzing document with AI...' });
 
-      // Call the edge function using the Supabase client's functions URL
-      const supabaseUrl = 'https://wwkwoxxcprnjjufkbzac.supabase.co';
-      const response = await fetch(
-        `${supabaseUrl}/functions/v1/process_lease`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-          body: formData,
-        }
-      );
+      // Call the edge function using the Supabase client method
+      const { data: result, error: invokeError } = await supabase.functions.invoke('process_lease', {
+        body: formData,
+      });
 
-      const result = await response.json();
+      if (invokeError) {
+        console.error('Edge function invocation error:', invokeError);
+        throw new Error(`Failed to process lease: ${invokeError.message}`);
+      }
 
-      if (!response.ok) {
+      if (result?.error) {
         throw new Error(result.error || 'Failed to process lease');
       }
 
@@ -381,16 +422,23 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
             {leaseType === 'amendment' && (
               <div className="space-y-2 animate-fade-up">
                 <Label htmlFor="parent-lease">Select the master lease this amends</Label>
-                <Select value={parentLeaseId} onValueChange={setParentLeaseId}>
+                <Select value={parentLeaseId} onValueChange={setParentLeaseId} disabled={loadingParentLeases}>
                   <SelectTrigger id="parent-lease">
-                    <SelectValue placeholder="Search or select a lease..." />
+                    <SelectValue placeholder={loadingParentLeases ? "Loading leases..." : "Search or select a lease..."} />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockLeases.map((lease) => (
-                      <SelectItem key={lease.id} value={lease.id}>
-                        {lease.name}
-                      </SelectItem>
-                    ))}
+                    {availableParentLeases.length === 0 && !loadingParentLeases ? (
+                      <div className="p-2 text-center text-sm text-muted-foreground">
+                        No posted leases available
+                      </div>
+                    ) : (
+                      availableParentLeases.map((lease) => (
+                        <SelectItem key={lease.id} value={lease.id}>
+                          {lease.tenant_name || 'Unknown Tenant'} - {lease.landlord_name || 'Unknown Landlord'}
+                          {lease.lease_start && ` (${lease.lease_start})`}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
