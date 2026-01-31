@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DeleteLeaseDialog } from "@/components/leases/DeleteLeaseDialog";
 import { RejectedLeaseCallout } from "@/components/workflow/RejectedLeaseCallout";
+import { EmptyLeaseState } from "@/components/leases/EmptyLeaseState";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -321,17 +322,7 @@ export default function Leases() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : leases.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[40vh] text-center">
-            <div className="rounded-full bg-muted p-4 mb-4">
-              <FileText className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2">{t("leases.no_leases")}</h3>
-            <p className="text-muted-foreground mb-4">{t("leases.upload_first")}</p>
-            <Button variant="accent" onClick={() => navigate("/app/imports?action=upload")}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t("dashboard.upload_lease")}
-            </Button>
-          </div>
+          <EmptyLeaseState onUpload={() => navigate("/app/imports?action=upload")} />
         ) : (
           <div className="space-y-4">
             {/* Filters */}

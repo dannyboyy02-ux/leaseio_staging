@@ -806,5 +806,31 @@
     "faq2_a": "Most documents are processed within 1-2 minutes. Complex documents with many pages may take a bit longer.",
     "faq3_q": "Can I edit extracted data?",
     "faq3_a": "Yes! After extraction, you can review and edit any field before finalizing the lease."
+  },
+  "empty": {
+    "no_leases": "No leases yet",
+    "upload_first": "Upload your first lease to get started",
+    "upload_description": "Upload a PDF lease document and our AI will extract key terms, dates, and rent schedules automatically.",
+    "upload_first_lease": "Upload Your First Lease",
+    "download_sample": "Download Sample",
+    "supports_pdf": "Supports PDF files up to 50MB",
+    "benefit1_title": "AI Extraction",
+    "benefit1_desc": "Key terms, dates, and rent schedules extracted automatically in minutes.",
+    "benefit2_title": "Track Deadlines",
+    "benefit2_desc": "Never miss a renewal window or lease expiration date.",
+    "benefit3_title": "Smart Alerts",
+    "benefit3_desc": "Get email notifications for upcoming deadlines and payments."
+  },
+  "onboarding": {
+    "getting_started": "Getting Started",
+    "completed": "completed",
+    "step1_title": "Upload your first lease",
+    "step1_desc": "Get started by uploading a PDF lease document",
+    "step2_title": "Invite team members",
+    "step2_desc": "Add colleagues to collaborate on lease management",
+    "step3_title": "Configure notifications",
+    "step3_desc": "Set up email alerts for key dates",
+    "step4_title": "Explore integrations",
+    "step4_desc": "Connect with QuickBooks and other tools"
   }
 }
