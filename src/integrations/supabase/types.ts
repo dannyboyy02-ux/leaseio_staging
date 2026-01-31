@@ -339,6 +339,53 @@ export type Database = {
           },
         ]
       }
+      lease_state_transitions: {
+        Row: {
+          created_at: string | null
+          from_lifecycle: string | null
+          from_status: string | null
+          id: string
+          lease_id: string
+          metadata: Json | null
+          to_lifecycle: string | null
+          to_status: string
+          transition_reason: string | null
+          transitioned_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          from_lifecycle?: string | null
+          from_status?: string | null
+          id?: string
+          lease_id: string
+          metadata?: Json | null
+          to_lifecycle?: string | null
+          to_status: string
+          transition_reason?: string | null
+          transitioned_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          from_lifecycle?: string | null
+          from_status?: string | null
+          id?: string
+          lease_id?: string
+          metadata?: Json | null
+          to_lifecycle?: string | null
+          to_status?: string
+          transition_reason?: string | null
+          transitioned_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_state_transitions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leases: {
         Row: {
           activated_at: string | null

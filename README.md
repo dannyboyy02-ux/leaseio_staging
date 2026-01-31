@@ -59,6 +59,20 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase (Authentication, Database, Edge Functions, Storage)
+
+## Environment Setup
+
+1. Copy the example environment file:
+```bash
+cp .env.example .env
+```
+
+2. Update `.env` with your Supabase project credentials:
+   - Get `VITE_SUPABASE_URL` from Supabase Dashboard → Settings → API
+   - Get `VITE_SUPABASE_PUBLISHABLE_KEY` from Supabase Dashboard → Settings → API
+
+3. Never commit `.env` to git.
 
 ## How can I deploy this project?
 
