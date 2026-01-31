@@ -16,11 +16,12 @@ const ALLOWED_ORIGINS = [
 ];
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  const isLovablePreview = requestOrigin?.includes('lovableproject.com') || requestOrigin?.endsWith('.lovable.app');
-  const isAllowed = requestOrigin && (
-    ALLOWED_ORIGINS.includes(requestOrigin) || 
-    isLovablePreview
+  const isLovablePreview = requestOrigin && (
+    requestOrigin.includes('lovableproject.com') ||
+    requestOrigin.includes('lovable.app')
   );
+  const isProductionDomain = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin);
+  const isAllowed = isProductionDomain || isLovablePreview;
   
   const origin = isAllowed ? requestOrigin : ALLOWED_ORIGINS[0];
     
