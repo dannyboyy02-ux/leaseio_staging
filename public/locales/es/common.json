@@ -18,7 +18,8 @@
     "audit_log": "Registro de Auditoría",
     "portfolio": "Portafolio",
     "reports_analytics": "Informes y Análisis",
-    "tools": "Herramientas"
+    "tools": "Herramientas",
+    "language": "Idioma"
   },
   "landing": {
     "nav": {
@@ -832,5 +833,15 @@
     "step3_desc": "Configure alertas por email para fechas importantes",
     "step4_title": "Explore integraciones",
     "step4_desc": "Conecte con QuickBooks y otras herramientas"
+  },
+  "form": {
+    "required": "Este campo es obligatorio",
+    "invalid_email": "Dirección de email inválida",
+    "invalid_date": "Formato de fecha inválido",
+    "invalid_number": "Debe ser un número válido",
+    "save_success": "Cambios guardados exitosamente",
+    "save_error": "Error al guardar cambios",
+    "delete_confirm": "¿Está seguro que desea eliminar esto?",
+    "changes_unsaved": "Tiene cambios sin guardar"
   }
 }
