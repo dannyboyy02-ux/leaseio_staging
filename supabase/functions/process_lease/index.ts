@@ -13,7 +13,7 @@ const AZURE_DI_KEY = Deno.env.get('AZURE_DI_KEY');
 
 // OpenAI
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
+const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
 
 // Supabase
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -281,50 +281,367 @@ async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
 async function extractLeaseDataWithOpenAI(documentText: string): Promise<LeaseExtractionResult> {
   console.log('[OpenAI] Extracting lease data...');
   
-  const systemPrompt = `You are an expert commercial lease analyst. Your task is to extract key information from lease documents following industry-standard lease abstraction practices.
+  const systemPrompt = `You are an expert commercial lease abstraction specialist with 20+ years of experience analyzing real estate and equipment leases. Your task is to extract key information with the highest possible accuracy.
 
-Extract the following information and return as JSON:
-- landlord_name: The landlord/lessor name
-- tenant_name: The tenant/lessee name  
-- property_address: Full property address
-- lease_start: Lease commencement date (ISO format YYYY-MM-DD if possible)
-- lease_end: Lease expiration date (ISO format YYYY-MM-DD if possible)
-- square_footage: The rentable or usable square footage of the premises (number only, no units). Look for "rentable square feet", "RSF", "usable square feet", "premises size", etc.
+DOMAIN KNOWLEDGE - CRITICAL LEASE TERMINOLOGY:
 
-RENT SCHEDULE (CRITICAL - extract complete rent history):
-- current_monthly_rent: The current monthly rent amount as of today (number only, no currency symbol)
-- rent_escalation_type: How rent increases over time. Examples: "3% annual increase", "CPI adjustment", "Fixed schedule", "Step increases", "None"
-- rent_commencement_date: When rent payments begin (may differ from lease start)
-- rent_schedule: Array of ALL rent periods found in the document. For each period:
-  - period_start: Start date of this rent period (YYYY-MM-DD)
-  - period_end: End date of this rent period (YYYY-MM-DD), null if ongoing
-  - monthly_amount: Monthly rent for this period (number only)
-  - annual_amount: Annual rent for this period (number only)
-  - notes: Any special notes about this period (e.g., "Year 1", "After CPI adjustment")
+Common term mappings you MUST recognize:
 
-For leases with escalations, extract EACH rent period separately. For example:
-Year 1: $5,000/month -> { period_start: "2024-01-01", period_end: "2024-12-31", monthly_amount: 5000 }
-Year 2: $5,150/month -> { period_start: "2025-01-01", period_end: "2025-12-31", monthly_amount: 5150 }
+- "Base Rent" / "Minimum Rent" / "Fixed Rent" / "Monthly Rent" → monthly_rent
 
-- base_rent_amount: Initial base rent (legacy field, use current_monthly_rent for new logic)
-- base_rent_frequency: "monthly", "quarterly", or "annually"
-- security_deposit: Security deposit amount
-- renewal_options: Summary of renewal options
-- escalation_clauses: Summary of rent escalation terms (text description)
-- termination_clauses: Summary of termination provisions
-- key_dates: Array of important dates [{date, description}]
-- risks: Array of identified risks [{title, severity (low/medium/high), explanation, citation_snippet, citation_page}]
+- "Commencement Date" / "Effective Date" / "Start Date" → lease_start  
 
-For risks, look for:
-- Unfavorable termination clauses
-- Automatic renewal without notice
-- Excessive rent escalations (flag if >5% annual)
-- Limited assignment/subletting rights
-- Personal guarantee requirements
-- Missing or unclear provisions
-- Unclear rent escalation methodology
+- "Expiration Date" / "Termination Date" / "End Date" / "Term End" → lease_end
 
-Return ONLY valid JSON, no markdown or explanation.`;
+- "Landlord" / "Lessor" / "Owner" (interchangeable)
+
+- "Tenant" / "Lessee" / "Renter" (interchangeable)
+
+- "Premises" / "Demised Premises" / "Leased Premises" → property_address
+
+- "NRA" / "Rentable Square Feet" / "RSF" / "Usable Square Feet" → square_footage
+
+- "CAM" / "Common Area Maintenance" / "Operating Expenses" / "Additional Rent"
+
+- "Security Deposit" / "Damage Deposit" / "Good Faith Deposit"
+
+- "Triple Net" / "NNN" → tenant pays taxes, insurance, maintenance separately
+
+- "Gross Lease" → all-inclusive rent
+
+- "CPI" / "Consumer Price Index" → inflation-based rent increases
+
+EXTRACTION RULES - FOLLOW EXACTLY:
+
+1. Extract ONLY information explicitly stated in the document
+
+2. NEVER guess, infer, or make assumptions
+
+3. If information is not found, set value to null and confidence to 0.0
+
+4. For ambiguous data, set lower confidence score
+
+5. Dates MUST be in YYYY-MM-DD format
+
+6. Numbers should be extracted WITHOUT currency symbols or commas
+
+7. If multiple values exist (e.g., escalating rent), extract ALL periods
+
+Return data as JSON with this EXACT structure:
+
+{
+
+  "landlord_name": {
+
+    "value": "Exact legal entity name as written",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote from document (max 100 chars)"
+
+  },
+
+  "tenant_name": {
+
+    "value": "Exact legal entity name as written",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "property_address": {
+
+    "value": "Full address including city, state, zip",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "lease_start": {
+
+    "value": "YYYY-MM-DD or null",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "lease_end": {
+
+    "value": "YYYY-MM-DD or null",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "square_footage": {
+
+    "value": numeric_value_only,
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "current_monthly_rent": {
+
+    "value": numeric_amount_only,
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "rent_escalation_type": {
+
+    "value": "Description of how rent increases (e.g., '3% annual', 'CPI adjustment', 'Fixed schedule', 'None')",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "rent_commencement_date": {
+
+    "value": "YYYY-MM-DD or null",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "rent_schedule": [
+
+    {
+
+      "period_start": "YYYY-MM-DD",
+
+      "period_end": "YYYY-MM-DD or null if ongoing",
+
+      "monthly_amount": numeric_value,
+
+      "annual_amount": numeric_value,
+
+      "notes": "e.g., 'Year 1', 'After CPI adjustment'",
+
+      "confidence": 0.0-1.0
+
+    }
+
+  ],
+
+  "base_rent_amount": {
+
+    "value": "Initial base rent as string for legacy compatibility",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "base_rent_frequency": {
+
+    "value": "monthly, quarterly, or annually",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "security_deposit": {
+
+    "value": "Amount as string",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "renewal_options": {
+
+    "value": "Summary of renewal terms",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "escalation_clauses": {
+
+    "value": "Detailed description of rent escalation methodology",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "termination_clauses": {
+
+    "value": "Summary of termination provisions",
+
+    "confidence": 0.0-1.0,
+
+    "page": page_number,
+
+    "source_text": "verbatim quote"
+
+  },
+
+  "key_dates": [
+
+    {
+
+      "date": "YYYY-MM-DD",
+
+      "description": "Description of date significance",
+
+      "confidence": 0.0-1.0
+
+    }
+
+  ],
+
+  "risks": [
+
+    {
+
+      "title": "Brief risk title",
+
+      "severity": "low, medium, or high",
+
+      "explanation": "Detailed explanation of risk",
+
+      "citation_snippet": "Relevant quote from document",
+
+      "citation_page": page_number,
+
+      "confidence": 0.0-1.0
+
+    }
+
+  ]
+
+}
+
+CONFIDENCE SCORING GUIDELINES:
+
+- 0.95-1.0: Information clearly stated, no ambiguity
+
+- 0.85-0.94: Information found but slightly ambiguous format
+
+- 0.70-0.84: Information inferred from context, not explicitly stated
+
+- 0.50-0.69: Multiple possible interpretations, best guess selected
+
+- 0.00-0.49: Very uncertain or not found
+
+RISK IDENTIFICATION - Flag these issues:
+
+- Rent escalations exceeding 5% annually (HIGH severity)
+
+- Automatic renewal without advance notice requirements (MEDIUM-HIGH)
+
+- Personal guarantee requirements (MEDIUM)
+
+- Restrictions on assignment/subletting (MEDIUM)
+
+- Unclear or missing termination provisions (MEDIUM)
+
+- Landlord can terminate without cause (HIGH)
+
+- Missing force majeure clauses (LOW-MEDIUM)
+
+- Ambiguous rent calculation methodology (MEDIUM)
+
+COMMON EXTRACTION ERRORS TO AVOID:
+
+- DO NOT confuse "security deposit" with "first month's rent"
+
+- DO NOT extract partial addresses (need full address with city/state/zip)
+
+- DO NOT use placeholder dates like "TBD" or "____-__-__"
+
+- DO NOT extract dollar signs or commas in numeric amounts
+
+- DO NOT assume lease end date = start date + term (extract actual end date)
+
+- DO NOT confuse "rentable" vs "usable" square footage (prefer rentable/RSF)
+
+- DO NOT miss rent escalations buried in addendums or exhibits
+
+- DO NOT overlook percentage rent clauses in retail leases
+
+EXAMPLE EXTRACTIONS FROM REAL COMMERCIAL LEASES:
+
+Example 1 - Office Lease:
+
+Document: "This Lease Agreement is made between XYZ Properties LLC ('Landlord') and Acme Corporation ('Tenant') for premises at 123 Main Street, Suite 500, Chicago, IL 60601. Term: January 1, 2024 to December 31, 2028. Base monthly rent: Ten Thousand Dollars ($10,000.00)."
+
+Extraction: {"landlord_name": {"value": "XYZ Properties LLC", "confidence": 0.98, "page": 1, "source_text": "XYZ Properties LLC ('Landlord')"}, "tenant_name": {"value": "Acme Corporation", "confidence": 0.98, "page": 1}, "property_address": {"value": "123 Main Street, Suite 500, Chicago, IL 60601", "confidence": 0.97, "page": 1}, "lease_start": {"value": "2024-01-01", "confidence": 0.99, "page": 1}, "lease_end": {"value": "2028-12-31", "confidence": 0.99, "page": 1}, "current_monthly_rent": {"value": 10000, "confidence": 0.99, "page": 1}}
+
+Example 2 - Retail Lease with Escalations:
+
+Document: "Year 1 rent (Jan 1, 2024 - Dec 31, 2024): $5,000/month. Year 2: $5,150/month (3% increase). Year 3: $5,305/month (3% increase). Premises: 2,500 RSF."
+
+Extraction: {"current_monthly_rent": {"value": 5000, "confidence": 0.96, "page": 2}, "rent_escalation_type": {"value": "3% annual increase", "confidence": 0.95, "page": 2}, "square_footage": {"value": 2500, "confidence": 0.94, "page": 2}, "rent_schedule": [{"period_start": "2024-01-01", "period_end": "2024-12-31", "monthly_amount": 5000, "annual_amount": 60000, "notes": "Year 1", "confidence": 0.96}, {"period_start": "2025-01-01", "period_end": "2025-12-31", "monthly_amount": 5150, "annual_amount": 61800, "notes": "Year 2 - 3% increase", "confidence": 0.95}]}
+
+Example 3 - Equipment Lease:
+
+Document: "Lessor: ABC Equipment Leasing Inc. Lessee: Manufacturing Co. Equipment: Forklift Model XL-2000. Monthly payment: $850. Term: 36 months from March 15, 2024."
+
+Extraction: {"landlord_name": {"value": "ABC Equipment Leasing Inc", "confidence": 0.97, "page": 1}, "tenant_name": {"value": "Manufacturing Co", "confidence": 0.96, "page": 1}, "lease_start": {"value": "2024-03-15", "confidence": 0.98, "page": 1}, "current_monthly_rent": {"value": 850, "confidence": 0.98, "page": 1}}
+
+Example 4 - Missing Information:
+
+Document: "Property in downtown area. Market rate rent."
+
+Extraction: {"property_address": {"value": null, "confidence": 0.0, "page": 1, "source_text": "downtown area"}, "current_monthly_rent": {"value": null, "confidence": 0.0, "page": 1, "source_text": "market rate rent"}}
+
+Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -336,7 +653,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       model: OPENAI_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Please analyze this lease document and extract the key information:\n\n${documentText.substring(0, 50000)}` }
+        { role: 'user', content: `Please analyze this lease document and extract the key information:\n\n${documentText}` }
       ],
       temperature: 0.1,
       max_tokens: 4000,
