@@ -6,33 +6,33 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export function LanguageToggle() {
-  const { language, setLanguage } = useLanguage();
+  const { lang, changeLanguage, t } = useAppTranslation();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-2">
           <Globe className="h-4 w-4" />
-          <span className="text-xs font-medium uppercase">{language}</span>
+          <span className="text-xs font-medium uppercase">{lang}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem
-          onClick={() => setLanguage('en')}
-          className={language === 'en' ? 'bg-accent' : ''}
+          onClick={() => changeLanguage('en')}
+          className={lang === 'en' ? 'bg-accent' : ''}
         >
           <span className="mr-2">🇺🇸</span>
-          American English
+          {t('language.english')}
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => setLanguage('es')}
-          className={language === 'es' ? 'bg-accent' : ''}
+          onClick={() => changeLanguage('es')}
+          className={lang === 'es' ? 'bg-accent' : ''}
         >
           <span className="mr-2">🇲🇽</span>
-          Español Latino
+          {t('language.spanish')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

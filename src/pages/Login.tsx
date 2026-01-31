@@ -8,8 +8,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { FileText, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export default function Login() {
+  const { t } = useAppTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -23,8 +25,8 @@ export default function Login() {
     
     if (!email || !password) {
       toast({
-        title: 'Missing fields',
-        description: 'Please enter both email and password.',
+        title: t('auth.errors.missing_fields'),
+        description: t('auth.errors.enter_email_password'),
         variant: 'destructive',
       });
       return;
@@ -37,15 +39,15 @@ export default function Login() {
     setIsLoading(false);
     
     if (error) {
-      let message = 'An error occurred during sign in.';
+      let message = t('auth.errors.signin_failed');
       if (error.message.includes('Invalid login credentials')) {
-        message = 'Invalid email or password. Please try again.';
+        message = t('auth.errors.invalid_credentials');
       } else if (error.message.includes('Email not confirmed')) {
-        message = 'Please confirm your email address before signing in.';
+        message = t('auth.errors.email_not_confirmed');
       }
       
       toast({
-        title: 'Sign in failed',
+        title: t('auth.errors.signin_failed'),
         description: message,
         variant: 'destructive',
       });
@@ -53,8 +55,8 @@ export default function Login() {
     }
 
     toast({
-      title: 'Welcome back!',
-      description: 'You have successfully signed in.',
+      title: t('auth.success.welcome_back'),
+      description: t('auth.success.signed_in'),
     });
     
     navigate('/app/dashboard');
@@ -75,13 +77,13 @@ export default function Login() {
 
         <Card className="shadow-lg">
           <CardHeader className="text-center pb-2">
-            <h1 className="font-display text-2xl font-bold text-foreground">Welcome back</h1>
-            <p className="text-muted-foreground">Sign in to your account</p>
+            <h1 className="font-display text-2xl font-bold text-foreground">{t('auth.welcome_back')}</h1>
+            <p className="text-muted-foreground">{t('auth.sign_in_to_account')}</p>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('auth.email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -95,12 +97,12 @@ export default function Login() {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t('auth.password')}</Label>
                   <Link 
                     to="/forgot-password" 
                     className="text-sm text-primary hover:underline"
                   >
-                    Forgot password?
+                    {t('auth.forgot_password')}
                   </Link>
                 </div>
                 <Input
@@ -121,7 +123,7 @@ export default function Login() {
                   onCheckedChange={(checked) => setRememberMe(checked as boolean)}
                 />
                 <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
-                  Remember me
+                  {t('auth.remember_me')}
                 </Label>
               </div>
 
@@ -129,19 +131,19 @@ export default function Login() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    {t('auth.signing_in')}
                   </>
                 ) : (
-                  'Sign in'
+                  t('auth.sign_in')
                 )}
               </Button>
             </form>
 
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
-                Don't have an account?{' '}
+                {t('auth.no_account')}{' '}
                 <Link to="/signup" className="text-primary hover:underline font-medium">
-                  Create account
+                  {t('auth.create_account')}
                 </Link>
               </p>
             </div>
@@ -149,10 +151,10 @@ export default function Login() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground mt-8">
-          By signing in, you agree to our{' '}
-          <Link to="/terms" className="underline hover:text-foreground">Terms</Link>
-          {' '}and{' '}
-          <Link to="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
+          {t('auth.by_signing_in')}{' '}
+          <Link to="/terms" className="underline hover:text-foreground">{t('auth.terms_of_service')}</Link>
+          {' '}{t('auth.and')}{' '}
+          <Link to="/privacy" className="underline hover:text-foreground">{t('auth.privacy_policy')}</Link>
         </p>
       </div>
     </div>

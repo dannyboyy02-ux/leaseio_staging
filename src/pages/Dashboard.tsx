@@ -10,11 +10,11 @@ import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
 import { CreateLeaseDrawer } from '@/components/workflow/CreateLeaseDrawer';
 import { useApp } from '@/contexts/AppContext';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export default function Dashboard() {
   const { user, workspace } = useApp();
-  const { t } = useLanguage();
+  const { t } = useAppTranslation();
   const navigate = useNavigate();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
@@ -31,7 +31,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <Button variant="accent" onClick={() => setCreateDrawerOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Create New Lease
+              {t('dashboard.create_new_lease')}
             </Button>
           </div>
         }
