@@ -687,6 +687,22 @@ Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
   }
 }
 
+// Helper function to extract value from confidence-scored field
+function extractValue(field: any): any {
+  if (field && typeof field === 'object' && 'value' in field) {
+    return field.value;
+  }
+  return field; // Fallback for legacy format
+}
+
+// Helper function to extract confidence from field
+function extractConfidence(field: any): number | null {
+  if (field && typeof field === 'object' && 'confidence' in field) {
+    return field.confidence;
+  }
+  return null;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -857,16 +873,16 @@ serve(async (req) => {
       .from('leases')
       .update({
         status: 'Ready',
-        landlord_name: leaseData.landlord_name,
-        tenant_name: leaseData.tenant_name,
-        lease_start: safeDate(leaseData.lease_start),
-        lease_end: safeDate(leaseData.lease_end),
-        base_rent_amount: leaseData.base_rent_amount,
-        base_rent_frequency: leaseData.base_rent_frequency,
-        current_monthly_rent: leaseData.current_monthly_rent,
-        rent_escalation_type: leaseData.rent_escalation_type,
-        square_footage: leaseData.square_footage,
-        extracted_json: leaseData,
+        landlord_name: extractValue(leaseData.landlord_name),
+        tenant_name: extractValue(leaseData.tenant_name),
+        lease_start: safeDate(extractValue(leaseData.lease_start)),
+        lease_end: safeDate(extractValue(leaseData.lease_end)),
+        base_rent_amount: extractValue(leaseData.base_rent_amount),
+        base_rent_frequency: extractValue(leaseData.base_rent_frequency),
+        current_monthly_rent: extractValue(leaseData.current_monthly_rent),
+        rent_escalation_type: extractValue(leaseData.rent_escalation_type),
+        square_footage: extractValue(leaseData.square_footage),
+        extracted_json: leaseData, // Store full structured data including confidence scores
         processed_at: new Date().toISOString(),
       })
       .eq('id', leaseId);
