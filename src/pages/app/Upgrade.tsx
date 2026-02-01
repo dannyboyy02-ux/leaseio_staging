@@ -8,27 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { cn } from '@/lib/utils';
 import { PLANS, PLAN_ORDER, ANNUAL_DISCOUNT_PERCENT, isUpgrade, type BillingInterval } from '@/config/pricing';
 import type { SubscriptionPlan } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
-const featureHighlights: Record<string, { title: string; description: string }> = {
-  reports: {
-    title: 'Unlock Reporting Dashboards',
-    description: 'Get portfolio analytics, renewal pipelines, escalation calendars, and rent projections.',
-  },
-  integrations: {
-    title: 'Unlock QuickBooks Integration',
-    description: 'Sync lease payments and receivables with your accounting system automatically.',
-  },
-  teams: {
-    title: 'Unlock Team Access',
-    description: 'Invite team members with role-based permissions to collaborate on leases.',
-  },
-};
-
 export default function Upgrade() {
+  const { t } = useAppTranslation();
   const [searchParams] = useSearchParams();
   const feature = searchParams.get('feature');
   const { workspace } = useApp();
@@ -36,10 +23,25 @@ export default function Upgrade() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
   const { toast } = useToast();
 
+  const featureHighlights: Record<string, { title: string; description: string }> = {
+    reports: {
+      title: t('upgrade.highlight_reports'),
+      description: t('upgrade.highlight_reports_desc'),
+    },
+    integrations: {
+      title: t('upgrade.highlight_integrations'),
+      description: t('upgrade.highlight_integrations_desc'),
+    },
+    teams: {
+      title: t('upgrade.highlight_teams'),
+      description: t('upgrade.highlight_teams_desc'),
+    },
+  };
+
   const handlePlanAction = (planId: string, action: 'upgrade' | 'downgrade') => {
     toast({
-      title: `${action === 'upgrade' ? 'Upgrade' : 'Downgrade'} to ${PLANS[planId as SubscriptionPlan].name}`,
-      description: 'Payment integration coming soon. Contact support@leaseio.app to change your plan.',
+      title: `${action === 'upgrade' ? t('upgrade.upgrade_to') : t('upgrade.downgrade_to')} ${PLANS[planId as SubscriptionPlan].name}`,
+      description: t('upgrade.payment_coming'),
     });
   };
 
@@ -48,13 +50,13 @@ export default function Upgrade() {
   return (
     <AppLayout>
       <AppHeader
-        title="Upgrade Your Plan"
-        subtitle="Unlock more features and scale your lease management"
+        title={t('upgrade.title')}
+        subtitle={t('upgrade.subtitle')}
         actions={
           <Button variant="ghost" asChild>
             <Link to="/app/dashboard">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Dashboard
+              {t('upgrade.back_to_dashboard')}
             </Link>
           </Button>
         }
@@ -82,7 +84,7 @@ export default function Upgrade() {
             "text-sm font-medium transition-colors",
             billingInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground'
           )}>
-            Monthly
+            {t('upgrade.monthly')}
           </span>
           <Switch
             checked={billingInterval === 'annual'}
@@ -92,10 +94,10 @@ export default function Upgrade() {
             "text-sm font-medium transition-colors",
             billingInterval === 'annual' ? 'text-foreground' : 'text-muted-foreground'
           )}>
-            Annual
+            {t('upgrade.annual')}
           </span>
           <span className="ml-2 px-2 py-0.5 rounded-full bg-accent/10 text-accent text-xs font-medium">
-            Save {ANNUAL_DISCOUNT_PERCENT}%
+            {t('upgrade.save')} {ANNUAL_DISCOUNT_PERCENT}%
           </span>
         </div>
 
@@ -126,28 +128,28 @@ export default function Upgrade() {
               >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge variant="pro">Most Popular</Badge>
+                    <Badge variant="pro">{t('upgrade.most_popular')}</Badge>
                   </div>
                 )}
                 {isCurrent && (
                   <div className="absolute -top-3 right-4">
-                    <Badge variant="secondary">Current</Badge>
+                    <Badge variant="secondary">{t('upgrade.current')}</Badge>
                   </div>
                 )}
                 <CardHeader className="pt-8 pb-4">
                   <CardTitle className="text-lg">{plan.name}</CardTitle>
                   <div className="mt-2">
                     {displayPrice === 0 ? (
-                      <span className="text-3xl font-bold">Free</span>
+                      <span className="text-3xl font-bold">{t('upgrade.free')}</span>
                     ) : (
                       <div className="space-y-1">
                         <div className="flex items-baseline gap-1">
                           <span className="text-3xl font-bold">${displayPrice}</span>
-                          <span className="text-muted-foreground">/mo</span>
+                          <span className="text-muted-foreground">{t('upgrade.per_month')}</span>
                         </div>
                         {isAnnual && (
                           <div className="text-xs text-muted-foreground">
-                            ${annualTotal}/year · Save ${annualSavings}
+                            ${annualTotal}{t('upgrade.per_year')} · {t('upgrade.save')} ${annualSavings}
                           </div>
                         )}
                       </div>
@@ -169,23 +171,23 @@ export default function Upgrade() {
                   </ul>
                   {isCurrent ? (
                     <Button variant="secondary" className="w-full" disabled>
-                      Current Plan
+                      {t('upgrade.current_plan')}
                     </Button>
                   ) : isUpgradeOption ? (
                     <Button variant="accent" className="w-full" onClick={() => handlePlanAction(planId, 'upgrade')}>
-                      Upgrade to {plan.name}
+                      {t('upgrade.upgrade_to')} {plan.name}
                     </Button>
                   ) : isDowngradeOption && planId !== 'free' ? (
                     <Button variant="outline" className="w-full" onClick={() => handlePlanAction(planId, 'downgrade')}>
-                      Downgrade to {plan.name}
+                      {t('upgrade.downgrade_to')} {plan.name}
                     </Button>
                   ) : planId === 'free' ? (
                     <Button variant="ghost" className="w-full" disabled>
-                      Free Tier
+                      {t('upgrade.free_tier')}
                     </Button>
                   ) : (
                     <Button variant="outline" className="w-full" onClick={() => handlePlanAction(planId, 'upgrade')}>
-                      Select Plan
+                      {t('upgrade.select_plan')}
                     </Button>
                   )}
                 </CardContent>
@@ -197,25 +199,25 @@ export default function Upgrade() {
         {/* FAQ Section */}
         <Card className="mt-8">
           <CardHeader>
-            <CardTitle>Frequently Asked Questions</CardTitle>
+            <CardTitle>{t('upgrade.faq_title')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <h4 className="font-medium mb-1">Can I upgrade or downgrade anytime?</h4>
+              <h4 className="font-medium mb-1">{t('upgrade.faq1_q')}</h4>
               <p className="text-sm text-muted-foreground">
-                Yes! You can change your plan at any time. When upgrading, you'll be charged a prorated amount. When downgrading, changes take effect at your next billing cycle.
+                {t('upgrade.faq1_a')}
               </p>
             </div>
             <div>
-              <h4 className="font-medium mb-1">What happens to my data if I downgrade?</h4>
+              <h4 className="font-medium mb-1">{t('upgrade.faq2_q')}</h4>
               <p className="text-sm text-muted-foreground">
-                Your data remains safe. However, if you exceed the document limit of your new plan, you won't be able to add new documents until you're within the limit.
+                {t('upgrade.faq2_a')}
               </p>
             </div>
             <div>
-              <h4 className="font-medium mb-1">Do you offer annual billing?</h4>
+              <h4 className="font-medium mb-1">{t('upgrade.faq3_q')}</h4>
               <p className="text-sm text-muted-foreground">
-                Yes! Toggle to annual billing above to save {ANNUAL_DISCOUNT_PERCENT}% on any paid plan.
+                {t('upgrade.faq3_a', { percent: ANNUAL_DISCOUNT_PERCENT })}
               </p>
             </div>
           </CardContent>
