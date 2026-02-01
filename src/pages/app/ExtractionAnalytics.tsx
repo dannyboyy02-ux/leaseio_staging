@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
+import { useAppTranslation } from "@/hooks/useAppTranslation";
 
 interface StatsData {
   totalLeases: number;
@@ -68,6 +69,7 @@ interface RecentCorrection {
 }
 
 export default function ExtractionAnalytics() {
+  const { t } = useAppTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -211,13 +213,13 @@ export default function ExtractionAnalytics() {
     <AppLayout>
       <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-muted/30">
         <AppHeader
-          title="Extraction Analytics"
-          subtitle="Monitor AI extraction quality and user corrections"
+          title={t('analytics.title')}
+          subtitle={t('analytics.subtitle')}
           actions={
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => navigate(-1)}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                {t('analytics.back')}
               </Button>
               <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing}>
                 {refreshing ? (
@@ -225,7 +227,7 @@ export default function ExtractionAnalytics() {
                 ) : (
                   <RefreshCcw className="h-4 w-4 mr-2" />
                 )}
-                Refresh
+                {t('analytics.refresh')}
               </Button>
             </div>
           }
@@ -237,7 +239,7 @@ export default function ExtractionAnalytics() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Leases Processed</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t('analytics.total_processed')}</CardTitle>
                   <FileText className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
@@ -247,7 +249,7 @@ export default function ExtractionAnalytics() {
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Avg Confidence Score</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t('analytics.avg_confidence')}</CardTitle>
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
@@ -258,32 +260,32 @@ export default function ExtractionAnalytics() {
                     variant={stats.avgConfidence >= 0.9 ? "default" : stats.avgConfidence >= 0.7 ? "secondary" : "destructive"}
                     className="mt-1"
                   >
-                    {stats.avgConfidence >= 0.9 ? "Excellent" : stats.avgConfidence >= 0.7 ? "Good" : "Needs Improvement"}
+                    {stats.avgConfidence >= 0.9 ? t('analytics.excellent') : stats.avgConfidence >= 0.7 ? t('analytics.good') : t('analytics.needs_improvement')}
                   </Badge>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Corrections</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t('analytics.total_corrections')}</CardTitle>
                   <AlertCircle className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">{stats.totalCorrections}</div>
-                  <p className="text-xs text-muted-foreground mt-1">User-made edits</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t('analytics.user_edits')}</p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Most Corrected Field</CardTitle>
+                  <CardTitle className="text-sm font-medium">{t('analytics.most_corrected')}</CardTitle>
                   <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-xl font-bold truncate">
                     {formatFieldName(stats.mostCorrectedField)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Focus area for AI improvement</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t('analytics.focus_area')}</p>
                 </CardContent>
               </Card>
             </div>
@@ -293,9 +295,9 @@ export default function ExtractionAnalytics() {
               {/* Corrections by Field */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Corrections by Field</CardTitle>
+                  <CardTitle className="text-base">{t('analytics.corrections_per_field')}</CardTitle>
                   <CardDescription>
-                    Number of user corrections per field (green &lt;5, yellow 5-15, red &gt;15)
+                    {t('analytics.corrections_chart_desc')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -323,7 +325,7 @@ export default function ExtractionAnalytics() {
                     </ResponsiveContainer>
                   ) : (
                     <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                      No corrections recorded yet
+                      {t('analytics.no_corrections')}
                     </div>
                   )}
                 </CardContent>
@@ -332,8 +334,8 @@ export default function ExtractionAnalytics() {
               {/* Confidence Distribution */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Confidence Distribution</CardTitle>
-                  <CardDescription>Distribution of AI confidence scores across all fields</CardDescription>
+                  <CardTitle className="text-base">{t('analytics.confidence_distribution')}</CardTitle>
+                  <CardDescription>{t('analytics.confidence_chart_desc')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {confidenceDistribution.some((d) => d.count > 0) ? (
@@ -362,7 +364,7 @@ export default function ExtractionAnalytics() {
                     </ResponsiveContainer>
                   ) : (
                     <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-                      No confidence data recorded yet
+                      {t('analytics.no_confidence_data')}
                     </div>
                   )}
                 </CardContent>
@@ -372,8 +374,8 @@ export default function ExtractionAnalytics() {
             {/* Recent Corrections Table */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Recent Corrections</CardTitle>
-                <CardDescription>Last 20 user-made corrections to AI-extracted data</CardDescription>
+                <CardTitle className="text-base">{t('analytics.recent_corrections')}</CardTitle>
+                <CardDescription>{t('analytics.recent_corrections_desc')}</CardDescription>
               </CardHeader>
               <CardContent>
                 {recentCorrections.length > 0 ? (
@@ -381,10 +383,10 @@ export default function ExtractionAnalytics() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Field</TableHead>
-                          <TableHead>Original Value</TableHead>
-                          <TableHead>Corrected Value</TableHead>
+                          <TableHead>{t('analytics.date')}</TableHead>
+                          <TableHead>{t('analytics.field')}</TableHead>
+                          <TableHead>{t('analytics.original')}</TableHead>
+                          <TableHead>{t('analytics.corrected')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -398,12 +400,12 @@ export default function ExtractionAnalytics() {
                             </TableCell>
                             <TableCell className="text-sm">
                               <span className="text-red-600 line-through">
-                                {correction.original_value || "(empty)"}
+                                {correction.original_value || t('analytics.empty')}
                               </span>
                             </TableCell>
                             <TableCell className="text-sm">
                               <span className="text-green-600">
-                                {correction.corrected_value || "(cleared)"}
+                                {correction.corrected_value || t('analytics.cleared')}
                               </span>
                             </TableCell>
                           </TableRow>
@@ -413,7 +415,7 @@ export default function ExtractionAnalytics() {
                   </div>
                 ) : (
                   <div className="flex items-center justify-center h-[200px] text-muted-foreground">
-                    No corrections recorded yet
+                    {t('analytics.no_corrections')}
                   </div>
                 )}
               </CardContent>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileText, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -33,6 +33,7 @@ const PLAN_DISPLAY_NAMES: Record<string, string> = {
 };
 
 export default function Signup() {
+  const { t } = useAppTranslation();
   const [searchParams] = useSearchParams();
   const preselectedPlan = searchParams.get('plan') || 'free';
   const planDisplayName = PLAN_DISPLAY_NAMES[preselectedPlan] || 'Free';
@@ -58,32 +59,32 @@ export default function Signup() {
 
   const validateForm = () => {
     if (!formData.firstName.trim()) {
-      toast({ title: 'Missing field', description: 'Please enter your first name.', variant: 'destructive' });
+      toast({ title: t('auth.errors.missing_fields'), description: t('auth.errors.missing_first_name'), variant: 'destructive' });
       return false;
     }
     if (!formData.lastName.trim()) {
-      toast({ title: 'Missing field', description: 'Please enter your last name.', variant: 'destructive' });
+      toast({ title: t('auth.errors.missing_fields'), description: t('auth.errors.missing_last_name'), variant: 'destructive' });
       return false;
     }
     if (!formData.email.trim()) {
-      toast({ title: 'Missing field', description: 'Please enter your email.', variant: 'destructive' });
+      toast({ title: t('auth.errors.email_required'), description: t('auth.errors.enter_email'), variant: 'destructive' });
       return false;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      toast({ title: 'Invalid email', description: 'Please enter a valid email address.', variant: 'destructive' });
+      toast({ title: t('auth.errors.invalid_email'), description: t('auth.errors.enter_valid_email'), variant: 'destructive' });
       return false;
     }
     if (formData.password.length < 8) {
-      toast({ title: 'Weak password', description: 'Password must be at least 8 characters.', variant: 'destructive' });
+      toast({ title: t('auth.errors.missing_fields'), description: t('auth.errors.weak_password'), variant: 'destructive' });
       return false;
     }
     if (formData.password !== formData.confirmPassword) {
-      toast({ title: 'Password mismatch', description: 'Passwords do not match.', variant: 'destructive' });
+      toast({ title: t('auth.errors.missing_fields'), description: t('auth.errors.password_mismatch'), variant: 'destructive' });
       return false;
     }
     if (!acceptTerms) {
-      toast({ title: 'Terms required', description: 'Please accept the Terms and Privacy Policy.', variant: 'destructive' });
+      toast({ title: t('auth.errors.missing_fields'), description: t('auth.errors.terms_required'), variant: 'destructive' });
       return false;
     }
     return true;
@@ -105,25 +106,22 @@ export default function Signup() {
     
     if (error) {
       setIsLoading(false);
-      let message = 'An error occurred during sign up.';
+      let message = t('auth.errors.signup_failed');
       if (error.message.includes('already registered')) {
-        message = 'An account with this email already exists. Please sign in.';
+        message = t('auth.errors.already_registered');
       }
       
       toast({
-        title: 'Sign up failed',
+        title: t('auth.errors.signup_failed'),
         description: message,
         variant: 'destructive',
       });
       return;
     }
 
-    // Create workspace for new user
-    // Note: The profile is created automatically via trigger
-
     toast({
-      title: 'Account created!',
-      description: 'Please check your email to confirm your account.',
+      title: t('auth.success.account_created'),
+      description: t('auth.success.check_email'),
     });
     
     setIsLoading(false);
@@ -145,16 +143,16 @@ export default function Signup() {
 
         <Card className="shadow-lg">
           <CardHeader className="text-center pb-2">
-            <h1 className="font-display text-2xl font-bold text-foreground">Create your account</h1>
+            <h1 className="font-display text-2xl font-bold text-foreground">{t('auth.create_your_account')}</h1>
             <p className="text-muted-foreground">
-              Start with the {planDisplayName} plan
+              {t('auth.start_with_plan', { plan: planDisplayName })}
             </p>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">First name</Label>
+                  <Label htmlFor="firstName">{t('auth.first_name')}</Label>
                   <Input
                     id="firstName"
                     placeholder="Alex"
@@ -164,7 +162,7 @@ export default function Signup() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName">Last name</Label>
+                  <Label htmlFor="lastName">{t('auth.last_name')}</Label>
                   <Input
                     id="lastName"
                     placeholder="Morgan"
@@ -176,7 +174,7 @@ export default function Signup() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Work email</Label>
+                <Label htmlFor="email">{t('auth.work_email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -189,7 +187,7 @@ export default function Signup() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="companyName">Company name</Label>
+                <Label htmlFor="companyName">{t('auth.company_name')}</Label>
                 <Input
                   id="companyName"
                   placeholder="Acme Properties"
@@ -200,7 +198,7 @@ export default function Signup() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="timezone">Time zone</Label>
+                <Label htmlFor="timezone">{t('auth.timezone')}</Label>
                 <Select value={formData.timezone} onValueChange={(value) => handleChange('timezone', value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select timezone" />
@@ -216,7 +214,7 @@ export default function Signup() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('auth.password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -226,11 +224,11 @@ export default function Signup() {
                   disabled={isLoading}
                   autoComplete="new-password"
                 />
-                <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
+                <p className="text-xs text-muted-foreground">{t('auth.min_password')}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
+                <Label htmlFor="confirmPassword">{t('auth.confirm_password')}</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
@@ -250,10 +248,10 @@ export default function Signup() {
                   className="mt-1"
                 />
                 <Label htmlFor="terms" className="text-sm text-muted-foreground cursor-pointer leading-relaxed">
-                  I agree to the{' '}
-                  <Link to="/terms" className="text-primary hover:underline">Terms of Service</Link>
-                  {' '}and{' '}
-                  <Link to="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+                  {t('auth.agree_terms')}{' '}
+                  <Link to="/terms" className="text-primary hover:underline">{t('auth.terms_of_service')}</Link>
+                  {' '}{t('auth.and')}{' '}
+                  <Link to="/privacy" className="text-primary hover:underline">{t('auth.privacy_policy')}</Link>
                 </Label>
               </div>
 
@@ -261,19 +259,19 @@ export default function Signup() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating account...
+                    {t('auth.creating_account')}
                   </>
                 ) : (
-                  'Create account'
+                  t('auth.create_account')
                 )}
               </Button>
             </form>
 
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
-                Already have an account?{' '}
+                {t('auth.have_account')}{' '}
                 <Link to="/login" className="text-primary hover:underline font-medium">
-                  Sign in
+                  {t('auth.sign_in')}
                 </Link>
               </p>
             </div>

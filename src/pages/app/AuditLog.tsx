@@ -7,7 +7,6 @@ import {
   ChevronLeft, 
   ChevronRight,
   ArrowRight,
-  User,
   FileText
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -34,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { useAppTranslation } from "@/hooks/useAppTranslation";
 
 interface StateTransition {
   id: string;
@@ -57,6 +57,7 @@ interface StateTransition {
 const PAGE_SIZE = 20;
 
 export default function AuditLog() {
+  const { t } = useAppTranslation();
   const [transitions, setTransitions] = useState<StateTransition[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -106,15 +107,15 @@ export default function AuditLog() {
   };
 
   const exportToCSV = () => {
-    const headers = ['Timestamp', 'Lease', 'From Status', 'To Status', 'From Lifecycle', 'To Lifecycle', 'Reason'];
-    const rows = transitions.map(t => [
-      format(new Date(t.created_at), 'yyyy-MM-dd HH:mm:ss'),
-      t.leases?.tenant_name || t.leases?.filename || t.lease_id,
-      t.from_status || '',
-      t.to_status,
-      t.from_lifecycle || '',
-      t.to_lifecycle || '',
-      t.transition_reason || ''
+    const headers = [t('audit.timestamp'), t('audit.lease'), 'From Status', 'To Status', 'From Lifecycle', 'To Lifecycle', t('audit.reason')];
+    const rows = transitions.map(tr => [
+      format(new Date(tr.created_at), 'yyyy-MM-dd HH:mm:ss'),
+      tr.leases?.tenant_name || tr.leases?.filename || tr.lease_id,
+      tr.from_status || '',
+      tr.to_status,
+      tr.from_lifecycle || '',
+      tr.to_lifecycle || '',
+      tr.transition_reason || ''
     ]);
 
     const csvContent = [
@@ -144,12 +145,12 @@ export default function AuditLog() {
   return (
     <AppLayout>
       <AppHeader
-        title="Audit Log"
-        subtitle="Track all lease state transitions and changes"
+        title={t('audit.title')}
+        subtitle={t('audit.subtitle')}
         actions={
           <Button onClick={exportToCSV} variant="outline">
             <Download size={16} className="mr-2" />
-            Export CSV
+            {t('audit.export_csv')}
           </Button>
         }
       />
@@ -160,15 +161,15 @@ export default function AuditLog() {
           <CardHeader>
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Filter size={16} />
-              Filters
+              {t('audit.filters')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-4">
               <div className="flex-1 min-w-[200px]">
-                <label className="text-xs text-muted-foreground mb-1 block">Lease ID</label>
+                <label className="text-xs text-muted-foreground mb-1 block">{t('audit.lease_id')}</label>
                 <Input
-                  placeholder="Filter by Lease ID..."
+                  placeholder={t('audit.filter_by_lease')}
                   value={leaseIdFilter}
                   onChange={(e) => {
                     setLeaseIdFilter(e.target.value);
@@ -177,7 +178,7 @@ export default function AuditLog() {
                 />
               </div>
               <div className="w-[200px]">
-                <label className="text-xs text-muted-foreground mb-1 block">Status</label>
+                <label className="text-xs text-muted-foreground mb-1 block">{t('audit.status')}</label>
                 <Select
                   value={statusFilter}
                   onValueChange={(value) => {
@@ -186,10 +187,10 @@ export default function AuditLog() {
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="All statuses" />
+                    <SelectValue placeholder={t('audit.all_statuses')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="all">{t('audit.all_statuses')}</SelectItem>
                     <SelectItem value="Draft">Draft</SelectItem>
                     <SelectItem value="Pending Approval">Pending Approval</SelectItem>
                     <SelectItem value="Review Required">Review Required</SelectItem>
@@ -211,23 +212,23 @@ export default function AuditLog() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Timestamp</TableHead>
-                  <TableHead>Lease</TableHead>
-                  <TableHead>Transition</TableHead>
-                  <TableHead>Reason</TableHead>
+                  <TableHead>{t('audit.timestamp')}</TableHead>
+                  <TableHead>{t('audit.lease')}</TableHead>
+                  <TableHead>{t('audit.transition')}</TableHead>
+                  <TableHead>{t('audit.reason')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                      Loading...
+                      {t('audit.loading')}
                     </TableCell>
                   </TableRow>
                 ) : transitions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                      No state transitions found
+                      {t('audit.no_transitions')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -297,7 +298,7 @@ export default function AuditLog() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t">
               <div className="text-sm text-muted-foreground">
-                Showing {page * PAGE_SIZE + 1} - {Math.min((page + 1) * PAGE_SIZE, totalCount)} of {totalCount}
+                {t('audit.showing')} {page * PAGE_SIZE + 1} - {Math.min((page + 1) * PAGE_SIZE, totalCount)} {t('audit.of')} {totalCount}
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -307,7 +308,7 @@ export default function AuditLog() {
                   disabled={page === 0}
                 >
                   <ChevronLeft size={16} />
-                  Previous
+                  {t('audit.previous')}
                 </Button>
                 <Button
                   variant="outline"
@@ -315,7 +316,7 @@ export default function AuditLog() {
                   onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
                   disabled={page >= totalPages - 1}
                 >
-                  Next
+                  {t('audit.next')}
                   <ChevronRight size={16} />
                 </Button>
               </div>

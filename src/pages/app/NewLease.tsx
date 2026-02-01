@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FileText, Building2, Truck, Settings, Box, ArrowLeft, Loader2, FilePlus, FileEdit, Cpu } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -12,6 +12,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ParentLeaseCombobox } from '@/components/workflow/ParentLeaseCombobox';
 import { useLifecycleWorkflow } from '@/hooks/useLifecycleWorkflow';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { cn } from '@/lib/utils';
 import type { LeaseCategory as LegacyLeaseCategory } from '@/types/lifecycle';
 import type { LeaseCategory, WorkflowLeaseType } from '@/types/workflow';
@@ -31,6 +32,7 @@ interface NavigationState {
 }
 
 export default function NewLease() {
+  const { t } = useAppTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { workspace } = useApp();
@@ -92,13 +94,12 @@ export default function NewLease() {
       <AppLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
           <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-          <h2 className="text-2xl font-semibold mb-2">Business Plan Required</h2>
+          <h2 className="text-2xl font-semibold mb-2">{t('new_lease.business_required')}</h2>
           <p className="text-muted-foreground text-center max-w-md mb-6">
-            The lease lifecycle workflow is available exclusively on the Business plan. 
-            Upgrade to start managing leases from intent to activation.
+            {t('new_lease.business_required_desc')}
           </p>
           <Button onClick={() => navigate('/app/upgrade')}>
-            Upgrade to Business
+            {t('new_lease.upgrade_to_business')}
           </Button>
         </div>
       </AppLayout>
@@ -108,12 +109,12 @@ export default function NewLease() {
   return (
     <AppLayout>
       <AppHeader
-        title="New Lease"
-        subtitle="Capture lease intent early"
+        title={t('new_lease.title')}
+        subtitle={t('new_lease.subtitle')}
         actions={
           <Button variant="outline" onClick={() => navigate('/app/dashboard')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+            {t('new_lease.back')}
           </Button>
         }
       />
@@ -123,8 +124,8 @@ export default function NewLease() {
           {/* Workflow Category (New vs Amendment) */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Lease Category</CardTitle>
-              <CardDescription>Is this a new lease or an amendment to an existing lease?</CardDescription>
+              <CardTitle className="text-lg">{t('new_lease.category_title')}</CardTitle>
+              <CardDescription>{t('new_lease.category_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
@@ -141,7 +142,7 @@ export default function NewLease() {
                   }}
                 >
                   <FilePlus className="h-6 w-6" />
-                  <span>New Lease</span>
+                  <span>{t('new_lease.new_lease')}</span>
                 </Button>
                 <Button
                   type="button"
@@ -153,7 +154,7 @@ export default function NewLease() {
                   onClick={() => setWorkflowCategory('Lease Amendment')}
                 >
                   <FileEdit className="h-6 w-6" />
-                  <span>Amendment</span>
+                  <span>{t('new_lease.amendment')}</span>
                 </Button>
               </div>
             </CardContent>
@@ -163,8 +164,8 @@ export default function NewLease() {
           {workflowCategory === 'Lease Amendment' && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Parent Lease</CardTitle>
-                <CardDescription>Select the original lease being amended</CardDescription>
+                <CardTitle className="text-lg">{t('new_lease.parent_title')}</CardTitle>
+                <CardDescription>{t('new_lease.parent_desc')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <ParentLeaseCombobox
@@ -178,8 +179,8 @@ export default function NewLease() {
           {/* Lease Type (Real Estate vs Equipment) */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Lease Type</CardTitle>
-              <CardDescription>What type of asset is being leased?</CardDescription>
+              <CardTitle className="text-lg">{t('new_lease.type_title')}</CardTitle>
+              <CardDescription>{t('new_lease.type_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
@@ -193,7 +194,7 @@ export default function NewLease() {
                   onClick={() => setWorkflowLeaseType('Real Estate')}
                 >
                   <Building2 className="h-6 w-6" />
-                  <span>Real Estate</span>
+                  <span>{t('new_lease.real_estate')}</span>
                 </Button>
                 <Button
                   type="button"
@@ -205,7 +206,7 @@ export default function NewLease() {
                   onClick={() => setWorkflowLeaseType('Equipment')}
                 >
                   <Cpu className="h-6 w-6" />
-                  <span>Equipment</span>
+                  <span>{t('new_lease.equipment')}</span>
                 </Button>
               </div>
             </CardContent>
@@ -214,8 +215,8 @@ export default function NewLease() {
           {/* Asset Category Selection */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Asset Category</CardTitle>
-              <CardDescription>More specific categorization for reporting</CardDescription>
+              <CardTitle className="text-lg">{t('new_lease.asset_category_title')}</CardTitle>
+              <CardDescription>{t('new_lease.asset_category_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <RadioGroup
@@ -249,12 +250,12 @@ export default function NewLease() {
           {/* Business Unit */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Business Unit / Location</CardTitle>
-              <CardDescription>Which team or location will use this lease?</CardDescription>
+              <CardTitle className="text-lg">{t('new_lease.business_unit_title')}</CardTitle>
+              <CardDescription>{t('new_lease.business_unit_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <Input
-                placeholder="e.g., New York Office, Fleet Operations, IT Department"
+                placeholder={t('new_lease.business_unit_placeholder')}
                 value={businessUnit}
                 onChange={(e) => setBusinessUnit(e.target.value)}
                 required
@@ -265,13 +266,13 @@ export default function NewLease() {
           {/* Estimated Term */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Estimated Lease Term</CardTitle>
-              <CardDescription>How long do you expect this lease to run? (in months)</CardDescription>
+              <CardTitle className="text-lg">{t('new_lease.term_title')}</CardTitle>
+              <CardDescription>{t('new_lease.term_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <Label htmlFor="termMin" className="text-xs text-muted-foreground">Minimum</Label>
+                  <Label htmlFor="termMin" className="text-xs text-muted-foreground">{t('new_lease.minimum')}</Label>
                   <Input
                     id="termMin"
                     type="number"
@@ -282,9 +283,9 @@ export default function NewLease() {
                     required
                   />
                 </div>
-                <span className="text-muted-foreground mt-5">to</span>
+                <span className="text-muted-foreground mt-5">{t('new_lease.to')}</span>
                 <div className="flex-1">
-                  <Label htmlFor="termMax" className="text-xs text-muted-foreground">Maximum</Label>
+                  <Label htmlFor="termMax" className="text-xs text-muted-foreground">{t('new_lease.maximum')}</Label>
                   <Input
                     id="termMax"
                     type="number"
@@ -294,7 +295,7 @@ export default function NewLease() {
                     onChange={(e) => setEstimatedTermMax(e.target.value)}
                   />
                 </div>
-                <span className="text-muted-foreground mt-5">months</span>
+                <span className="text-muted-foreground mt-5">{t('new_lease.months')}</span>
               </div>
             </CardContent>
           </Card>
@@ -302,13 +303,13 @@ export default function NewLease() {
           {/* Estimated Cost */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Estimated Monthly Cost</CardTitle>
-              <CardDescription>Optional: What's the expected monthly payment range?</CardDescription>
+              <CardTitle className="text-lg">{t('new_lease.cost_title')}</CardTitle>
+              <CardDescription>{t('new_lease.cost_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <Label htmlFor="costMin" className="text-xs text-muted-foreground">Minimum</Label>
+                  <Label htmlFor="costMin" className="text-xs text-muted-foreground">{t('new_lease.minimum')}</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                     <Input
@@ -323,9 +324,9 @@ export default function NewLease() {
                     />
                   </div>
                 </div>
-                <span className="text-muted-foreground mt-5">to</span>
+                <span className="text-muted-foreground mt-5">{t('new_lease.to')}</span>
                 <div className="flex-1">
-                  <Label htmlFor="costMax" className="text-xs text-muted-foreground">Maximum</Label>
+                  <Label htmlFor="costMax" className="text-xs text-muted-foreground">{t('new_lease.maximum')}</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                     <Input
@@ -347,12 +348,12 @@ export default function NewLease() {
           {/* Notes */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Notes</CardTitle>
-              <CardDescription>Optional: Any additional context or requirements</CardDescription>
+              <CardTitle className="text-lg">{t('new_lease.notes_title')}</CardTitle>
+              <CardDescription>{t('new_lease.notes_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
-                placeholder="Add any relevant notes, links to proposals, or special requirements..."
+                placeholder={t('new_lease.notes_placeholder')}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={4}
@@ -367,7 +368,7 @@ export default function NewLease() {
               variant="outline"
               onClick={() => navigate('/app/dashboard')}
             >
-              Cancel
+              {t('new_lease.cancel')}
             </Button>
             <Button 
               type="submit" 
@@ -376,10 +377,10 @@ export default function NewLease() {
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  {t('new_lease.creating')}
                 </>
               ) : (
-                'Save Draft'
+                t('new_lease.save_draft')
               )}
             </Button>
           </div>
