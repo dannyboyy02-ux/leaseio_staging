@@ -4,23 +4,14 @@ import { format } from "date-fns";
 import {
   FileText,
   CheckCircle,
-  Building2,
-  DollarSign,
   Save,
   Loader2,
-  Target,
-  ShieldCheck,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Calculator,
-  TrendingUp,
-  Calendar,
   AlertTriangle,
   GitBranch,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
+  DollarSign,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -28,109 +19,66 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
 import { WorkflowStatusBadge } from "@/components/workflow/WorkflowStatusBadge";
-import { LeaseStatusBadge, isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStatusBadge";
+import { isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStatusBadge";
 import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
 import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
+import { SectionCard, RisksSection, SECTION_CONFIG, getFieldConfidence, type SectionKey } from "@/components/leases/LeaseReviewSections";
+import { LeaseExports } from "@/components/leases/LeaseExports";
+import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
 
-interface ExtractedField {
-  value: any;
-  page?: number;
-  confidence: "low" | "medium" | "high" | number;
-  source_text?: string;
-}
-
 interface ExtractedJson {
-  property_address?: ExtractedField;
-  landlord_name?: ExtractedField;
-  tenant_name?: ExtractedField;
-  lease_start?: ExtractedField;
-  lease_end?: ExtractedField;
-  base_rent_amount?: ExtractedField;
-  monthly_rent?: ExtractedField;
-  security_deposit?: ExtractedField;
-  escalation_type?: ExtractedField;
-  current_monthly_rent?: ExtractedField;
-  rent_escalation_type?: ExtractedField;
-  square_footage?: ExtractedField;
+  property_address?: any;
+  landlord_name?: any;
+  tenant_name?: any;
+  lease_start?: any;
+  lease_end?: any;
+  base_rent_amount?: any;
+  monthly_rent?: any;
+  security_deposit?: any;
+  escalation_type?: any;
+  current_monthly_rent?: any;
+  rent_escalation_type?: any;
+  square_footage?: any;
+  rent_commencement_date?: any;
+  base_rent_frequency?: any;
+  renewal_options?: any;
+  termination_clauses?: any;
+  escalation_clauses?: any;
   _validation_warnings?: string[];
   _validation_suggestions?: string[];
 }
 
-// Helper to get confidence from extracted_json field
-const getFieldConfidence = (extractedJson: ExtractedJson | null, fieldId: string): number | null => {
-  if (!extractedJson) return null;
-  const field = (extractedJson as Record<string, ExtractedField | undefined>)[fieldId];
-  if (!field) return null;
-  if (typeof field.confidence === 'number') return field.confidence;
-  // Convert legacy string confidence to number
-  if (field.confidence === 'high') return 0.95;
-  if (field.confidence === 'medium') return 0.80;
-  if (field.confidence === 'low') return 0.60;
-  return null;
-};
+interface Risk {
+  id: string;
+  title: string;
+  severity: string;
+  explanation: string | null;
+  citation_snippet: string | null;
+  citation_page: number | null;
+}
 
-// Confidence badge component
-const ConfidenceBadge = ({ confidence }: { confidence: number | null }) => {
-  if (confidence === null) {
-    return (
-      <Badge variant="outline" className="text-[9px] h-4 font-medium text-muted-foreground bg-muted">
-        <HelpCircle size={8} className="mr-0.5" />
-        N/A
-      </Badge>
-    );
+// Helper to extract value from field (handles both string and object formats)
+const getFieldValue = (field: any): string => {
+  if (!field) return "";
+  if (typeof field === "string") return field;
+  if (typeof field === "number") return String(field);
+  if (typeof field === "object" && "value" in field) {
+    return field.value != null ? String(field.value) : "";
   }
-  
-  const percentage = Math.round(confidence * 100);
-  
-  if (confidence >= 0.90) {
-    return (
-      <Badge variant="outline" className="text-[9px] h-4 font-medium text-green-600 border-green-400 bg-green-50">
-        <CheckCircle2 size={8} className="mr-0.5" />
-        {percentage}%
-      </Badge>
-    );
-  }
-  
-  if (confidence >= 0.70) {
-    return (
-      <Badge variant="outline" className="text-[9px] h-4 font-medium text-amber-600 border-amber-400 bg-amber-50">
-        <AlertTriangle size={8} className="mr-0.5" />
-        {percentage}%
-      </Badge>
-    );
-  }
-  
-  return (
-    <Badge variant="outline" className="text-[9px] h-4 font-medium text-red-600 border-red-400 bg-red-50">
-      <XCircle size={8} className="mr-0.5" />
-      {percentage}%
-    </Badge>
-  );
+  return "";
 };
-
-const FIELD_CONFIG = [
-  { id: "landlord_name", label: "Landlord", icon: Building2 },
-  { id: "tenant_name", label: "Tenant", icon: Building2 },
-  { id: "property_address", label: "Premises Address", icon: Building2 },
-  { id: "lease_start", label: "Lease Start", icon: Calendar },
-  { id: "lease_end", label: "Lease End", icon: Calendar },
-  { id: "base_rent_amount", label: "Monthly Rent", icon: DollarSign },
-  { id: "escalation_type", label: "Escalation Type", icon: Calculator },
-];
 
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
@@ -138,6 +86,7 @@ export default function LeaseReview() {
   const { user } = useApp();
   
   const [lease, setLease] = useState<any | null>(null);
+  const [risks, setRisks] = useState<Risk[]>([]);
   const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -146,6 +95,7 @@ export default function LeaseReview() {
   const [basePdfUrl, setBasePdfUrl] = useState<string | null>(null);
   const [isPdfCollapsed, setIsPdfCollapsed] = useState(false);
   const [verifiedFields, setVerifiedFields] = useState<Set<string>>(new Set());
+  const [confirmedSections, setConfirmedSections] = useState<string[]>([]);
   
   // Audit tracking
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
@@ -160,15 +110,16 @@ export default function LeaseReview() {
   
   const isAmendment = !!lease?.parent_lease_id;
 
-  const [form, setForm] = useState({
-    landlord_name: "",
-    tenant_name: "",
-    property_address: "",
-    lease_start: "",
-    lease_end: "",
-    base_rent_amount: "",
-    escalation_type: "",
-  });
+  // All field IDs from sections
+  const allFieldIds = useMemo(() => {
+    const ids: string[] = [];
+    Object.values(SECTION_CONFIG).forEach(section => {
+      section.fields.forEach(field => ids.push(field.id));
+    });
+    return ids;
+  }, []);
+
+  const [form, setForm] = useState<Record<string, string>>({});
 
   // Get confidence scores from lease
   const confidenceScores: ConfidenceScores = useMemo(() => {
@@ -177,10 +128,12 @@ export default function LeaseReview() {
 
   // Get low-confidence fields
   const lowConfidenceFields = useMemo(() => {
-    return Object.entries(confidenceScores)
-      .filter(([_, score]) => score < LOW_CONFIDENCE_THRESHOLD)
-      .map(([field]) => field);
-  }, [confidenceScores]);
+    const extractedJson = lease?.extracted_json as ExtractedJson | null;
+    return allFieldIds.filter(fieldId => {
+      const conf = getFieldConfidence(extractedJson, fieldId);
+      return conf !== null && conf < LOW_CONFIDENCE_THRESHOLD / 100;
+    });
+  }, [lease?.extracted_json, allFieldIds]);
 
   // Check if all low-confidence fields have been interacted with
   const allLowConfFieldsInteracted = useMemo(() => {
@@ -188,56 +141,54 @@ export default function LeaseReview() {
     return lowConfidenceFields.every(field => interactedLowConfFields.has(field));
   }, [lowConfidenceFields, interactedLowConfFields]);
 
-  // Analyst Logic: Average Annual Increase Calculation
-  const derivedInsights = useMemo(() => {
-    const rawRent = form.base_rent_amount || "0";
-    const startRent = parseFloat(rawRent.toString().replace(/[^0-9.]/g, "")) || 0;
-
-    if (!rentSchedule.length || startRent === 0 || !form.lease_end || !form.lease_start) {
-      return { avgIncrease: "0.00", currentRent: startRent };
-    }
-
-    const endRent = rentSchedule[rentSchedule.length - 1].monthly_amount || startRent;
-    const years = Math.max(1, new Date(form.lease_end).getFullYear() - new Date(form.lease_start).getFullYear());
-
-    const totalIncreasePercent = ((endRent - startRent) / startRent) * 100;
-    const avgAnnualIncrease = (totalIncreasePercent / years).toFixed(2);
-
-    return { avgIncrease: avgAnnualIncrease, currentRent: startRent };
-  }, [rentSchedule, form]);
-
-  // Check if lease is in "Review Required" status for showing Post button
+  // Check status states
   const isReviewRequired = lease?.lifecycle_status === 'Review Required';
   const isPendingApproval = lease?.lifecycle_status === 'Pending Approval';
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
+  const isPosted = lease?.lifecycle_status === 'Posted';
+  const isLocked = isPosted || isPendingApproval;
+
+  // Derived rent insights
+  const derivedInsights = useMemo(() => {
+    const rawRent = form.base_rent_amount || form.current_monthly_rent || "0";
+    const startRent = parseFloat(rawRent.toString().replace(/[^0-9.]/g, "")) || 0;
+    return { currentRent: startRent };
+  }, [form.base_rent_amount, form.current_monthly_rent]);
 
   useEffect(() => {
     async function init() {
       if (!leaseId) return;
+      
+      // Fetch lease data
       const { data, error } = await supabase.from("leases").select("*").eq("id", leaseId).single();
       if (error) return;
 
       setLease(data);
       const ext = (data.extracted_json as ExtractedJson) || {};
 
-      const formData = {
-        landlord_name: data.landlord_name || ext.landlord_name?.value || "",
-        tenant_name: data.tenant_name || ext.tenant_name?.value || "",
-        property_address: ext.property_address?.value || "",
-        lease_start: data.lease_start || ext.lease_start?.value || "",
-        lease_end: data.lease_end || ext.lease_end?.value || "",
-        base_rent_amount: data.base_rent_amount || ext.base_rent_amount?.value || ext.monthly_rent?.value || "",
-        escalation_type: ext.escalation_type?.value || "",
-      };
+      // Build form from all section fields
+      const formData: Record<string, string> = {};
+      allFieldIds.forEach(fieldId => {
+        // Priority: lease column > extracted_json value
+        const leaseVal = data[fieldId];
+        const extractedVal = getFieldValue(ext[fieldId as keyof ExtractedJson]);
+        formData[fieldId] = leaseVal != null ? String(leaseVal) : extractedVal;
+      });
       
       setForm(formData);
       originalValues.current = { ...formData };
+      
+      // Load confirmed sections
+      if (data.confirmed_sections && Array.isArray(data.confirmed_sections)) {
+        setConfirmedSections(data.confirmed_sections);
+      }
       
       // Load existing audit log
       if (data.audit_log && Array.isArray(data.audit_log)) {
         setAuditLog(data.audit_log as unknown as AuditEntry[]);
       }
 
+      // Fetch rent schedule
       const { data: rs } = await supabase
         .from("rent_schedules")
         .select("*")
@@ -245,6 +196,14 @@ export default function LeaseReview() {
         .order("period_start");
       setRentSchedule(rs || []);
 
+      // Fetch risks
+      const { data: riskData } = await supabase
+        .from("risks")
+        .select("*")
+        .eq("lease_id", leaseId);
+      setRisks(riskData || []);
+
+      // Get PDF URL
       if (data.storage_path) {
         const { data: urlData } = await supabase.storage.from("leases").createSignedUrl(data.storage_path, 3600);
         setPdfUrl(urlData?.signedUrl || null);
@@ -260,17 +219,13 @@ export default function LeaseReview() {
       if (!leaseId) return;
       const { data, error } = await supabase
         .from("leases")
-        .select("status, lifecycle_status, extracted_json, landlord_name, tenant_name, lease_start, lease_end, base_rent_amount")
+        .select("status, lifecycle_status")
         .eq("id", leaseId)
         .single();
       
       if (error) return;
       
-      // Update lease status
       if (data.status !== lease?.status) {
-        setLease((prev: any) => ({ ...prev, ...data }));
-        
-        // If processing is complete, reload all data
         if (data.status === 'Ready' || data.status === 'Failed') {
           init();
           if (pollInterval) {
@@ -281,17 +236,14 @@ export default function LeaseReview() {
       }
     };
 
-    // Start polling if in processing state
     if (lease?.status === 'Processing' || lease?.status === 'Uploaded') {
       pollInterval = setInterval(pollForProcessingComplete, 3000);
     }
 
     return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
+      if (pollInterval) clearInterval(pollInterval);
     };
-  }, [leaseId, lease?.status]);
+  }, [leaseId, lease?.status, allFieldIds]);
 
   // Fetch parent lease for amendments
   useEffect(() => {
@@ -317,17 +269,15 @@ export default function LeaseReview() {
     if (isPdfCollapsed) setIsPdfCollapsed(false);
   };
 
-  // Track field changes for audit log and corrections
+  // Handle field change with audit tracking
   const handleFieldChange = useCallback((fieldId: string, newValue: string) => {
-    const oldValue = form[fieldId as keyof typeof form];
-    
+    const oldValue = form[fieldId];
     setForm(prev => ({ ...prev, [fieldId]: newValue }));
     
-    // Only add to audit log if value actually changed from original
     if (originalValues.current[fieldId] !== newValue && oldValue !== newValue) {
       const entry: AuditEntry = {
         field: fieldId,
-        oldValue: oldValue,
+        oldValue: oldValue || '',
         newValue: newValue,
         userId: user?.id || 'unknown',
         timestamp: new Date().toISOString(),
@@ -336,19 +286,17 @@ export default function LeaseReview() {
     }
   }, [form, user?.id]);
 
-  // Track field corrections when field loses focus
+  // Track field corrections on blur
   const trackFieldCorrection = useCallback(async (fieldId: string) => {
     const originalValue = originalValues.current[fieldId];
-    const currentValue = form[fieldId as keyof typeof form];
+    const currentValue = form[fieldId];
     
-    // Only track if value changed from original
     if (originalValue === currentValue || !lease?.id) return;
     
-    // Get the confidence for this field from extracted_json
     const extractedJson = lease?.extracted_json as ExtractedJson | null;
     const fieldConfidence = getFieldConfidence(extractedJson, fieldId);
     
-    const { error } = await supabase.from('field_corrections').insert({
+    await supabase.from('field_corrections').insert({
       lease_id: lease.id,
       field_name: fieldId,
       original_value: originalValue || null,
@@ -357,53 +305,77 @@ export default function LeaseReview() {
       correction_type: !originalValue ? 'add_missing' : !currentValue ? 'delete_wrong' : 'edit'
     });
     
-    if (error) {
-      console.error('Failed to track correction:', error);
-    } else {
-      // Update original value so we don't track the same correction again
-      originalValues.current[fieldId] = currentValue;
-    }
+    originalValues.current[fieldId] = currentValue;
   }, [form, lease?.id, lease?.extracted_json]);
 
-  // Track low-confidence field interactions
+  // Track low-confidence field focus
   const handleFieldFocus = useCallback((fieldId: string) => {
-    const confidence = confidenceScores[fieldId];
-    if (confidence !== undefined && confidence < LOW_CONFIDENCE_THRESHOLD) {
+    const extractedJson = lease?.extracted_json as ExtractedJson | null;
+    const conf = getFieldConfidence(extractedJson, fieldId);
+    if (conf !== null && conf < LOW_CONFIDENCE_THRESHOLD / 100) {
       setInteractedLowConfFields(prev => new Set([...prev, fieldId]));
     }
-  }, [confidenceScores]);
+  }, [lease?.extracted_json]);
 
-  // Get field border class based on confidence
-  const getFieldBorderClass = useCallback((fieldId: string) => {
-    const confidence = confidenceScores[fieldId];
-    if (confidence !== undefined && confidence < LOW_CONFIDENCE_THRESHOLD) {
-      return 'border-amber-400 border-2';
-    }
-    if (verifiedFields.has(fieldId)) {
-      return 'border-green-200 bg-green-50/20';
-    }
-    return '';
-  }, [confidenceScores, verifiedFields]);
+  // Toggle field verification
+  const handleVerifyField = useCallback((fieldId: string) => {
+    setVerifiedFields(prev => {
+      const next = new Set(prev);
+      if (next.has(fieldId)) {
+        next.delete(fieldId);
+      } else {
+        next.add(fieldId);
+      }
+      return next;
+    });
+  }, []);
 
+  // Confirm section as reviewed
+  const handleConfirmSection = useCallback(async (sectionKey: string) => {
+    const newConfirmed = [...confirmedSections, sectionKey];
+    setConfirmedSections(newConfirmed);
+    
+    // Persist to database
+    if (lease?.id) {
+      await supabase
+        .from('leases')
+        .update({ confirmed_sections: newConfirmed })
+        .eq('id', lease.id);
+    }
+  }, [confirmedSections, lease?.id]);
+
+  // Save draft
   const handleSync = async () => {
     setSaving(true);
     try {
+      // Build update object with only valid lease columns
+      const updateData: Record<string, any> = {
+        landlord_name: form.landlord_name || null,
+        tenant_name: form.tenant_name || null,
+        lease_start: form.lease_start || null,
+        lease_end: form.lease_end || null,
+        base_rent_amount: form.base_rent_amount || null,
+        current_monthly_rent: form.current_monthly_rent ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null : null,
+        square_footage: form.square_footage ? parseFloat(form.square_footage) || null : null,
+        rent_escalation_type: form.rent_escalation_type || null,
+        confirmed_sections: confirmedSections,
+        audit_log: JSON.parse(JSON.stringify(auditLog)),
+      };
+
       const { error } = await supabase
         .from("leases")
-        .update({ 
-          ...form,
-          audit_log: JSON.parse(JSON.stringify(auditLog)),
-        })
+        .update(updateData)
         .eq("id", lease.id);
       if (error) throw error;
-      toast.success("Lease records updated successfully");
+      toast.success("Lease saved successfully");
     } catch (err) {
-      toast.error("Update failed");
+      toast.error("Save failed");
     } finally {
       setSaving(false);
     }
   };
 
+  // Post lease
   const handlePostLease = async () => {
     if (!allLowConfFieldsInteracted) {
       toast.error("Please review all highlighted fields before posting");
@@ -412,23 +384,26 @@ export default function LeaseReview() {
 
     setPosting(true);
     try {
+      const updateData: Record<string, any> = {
+        landlord_name: form.landlord_name || null,
+        tenant_name: form.tenant_name || null,
+        lease_start: form.lease_start || null,
+        lease_end: form.lease_end || null,
+        base_rent_amount: form.base_rent_amount || null,
+        status: 'Posted',
+        lifecycle_status: 'Posted',
+        confirmed_sections: confirmedSections,
+        audit_log: JSON.parse(JSON.stringify(auditLog)),
+      };
+
       const { error } = await supabase
         .from("leases")
-        .update({ 
-          ...form,
-          status: 'Posted',
-          lifecycle_status: 'Posted',
-          audit_log: JSON.parse(JSON.stringify(auditLog)),
-        })
+        .update(updateData)
         .eq("id", lease.id);
       
       if (error) throw error;
       
-      toast.success(
-        "Lease posted successfully. The Approver and Initializer have been notified via email.",
-        { duration: 5000 }
-      );
-      
+      toast.success("Lease posted successfully", { duration: 5000 });
       navigate('/app/leases');
     } catch (err) {
       console.error('Error posting lease:', err);
@@ -443,7 +418,7 @@ export default function LeaseReview() {
       <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
     );
 
-  // Show processing indicator if lease is still being processed
+  // Show processing indicator
   if (isProcessing) {
     return (
       <AppLayout>
@@ -457,9 +432,7 @@ export default function LeaseReview() {
           <p className="text-muted-foreground text-center max-w-md mb-2">
             Our AI is extracting key terms and data from your document. This typically takes 30-90 seconds.
           </p>
-          <p className="text-sm text-muted-foreground mb-6">
-            {lease?.filename}
-          </p>
+          <p className="text-sm text-muted-foreground mb-6">{lease?.filename}</p>
           <Button variant="outline" onClick={() => navigate('/app/imports')}>
             View Import History
           </Button>
@@ -468,31 +441,57 @@ export default function LeaseReview() {
     );
   }
 
+  const extractedJson = lease?.extracted_json as ExtractedJson | null;
+
   return (
     <AppLayout>
       <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-muted/30">
         <AppHeader
-          title="Abstraction Cockpit"
+          title="Lease Review"
           subtitle={
             <div className="flex items-center gap-2">
               <span>{lease.filename}</span>
               {lease.lifecycle_status && (
                 <WorkflowStatusBadge status={lease.lifecycle_status} />
               )}
+              {isLocked && (
+                <Badge variant="secondary" className="text-xs">
+                  Read-only
+                </Badge>
+              )}
             </div>
           }
           actions={
             <div className="flex items-center gap-2">
+              <LeaseExports
+                lease={{
+                  id: lease.id,
+                  filename: lease.filename,
+                  extracted_json: extractedJson,
+                  landlord_name: lease.landlord_name,
+                  tenant_name: lease.tenant_name,
+                  lease_start: lease.lease_start,
+                  lease_end: lease.lease_end,
+                  base_rent_amount: lease.base_rent_amount,
+                  current_monthly_rent: lease.current_monthly_rent,
+                  status: lease.status,
+                  lifecycle_status: lease.lifecycle_status,
+                }}
+                formValues={form}
+                rentSchedule={rentSchedule}
+              />
               {isPendingApproval && (
                 <NudgeApproverButton 
                   leaseId={lease.id}
                   lastNudgedAt={lease.last_nudged_at}
                 />
               )}
-              <Button onClick={handleSync} disabled={saving} variant="outline">
-                {saving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
-                Save Draft
-              </Button>
+              {!isLocked && (
+                <Button onClick={handleSync} disabled={saving} variant="outline">
+                  {saving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
+                  Save Draft
+                </Button>
+              )}
             </div>
           }
         />
@@ -532,7 +531,7 @@ export default function LeaseReview() {
 
             <ResizableHandle withHandle className="bg-border w-1 hover:bg-primary transition-colors" />
 
-            {/* Right Panel: Abstraction & Verification */}
+            {/* Right Panel: Review Sections */}
             <ResizablePanel defaultSize={50} minSize={30}>
               <div className="flex h-full flex-col bg-background">
                 <div className="p-2 border-b flex items-center bg-background">
@@ -565,10 +564,7 @@ export default function LeaseReview() {
                         leaseId={lease.id}
                         errorMessage={lease.error_message}
                         storagePath={lease.storage_path}
-                        onRetrySuccess={() => {
-                          // Refresh the page data
-                          window.location.reload();
-                        }}
+                        onRetrySuccess={() => window.location.reload()}
                       />
                     )}
 
@@ -582,42 +578,28 @@ export default function LeaseReview() {
                         confidenceScores={confidenceScores}
                       />
                     )}
-                    {/* Validation Warnings Banner */}
-                    {(lease?.extracted_json as ExtractedJson)?._validation_warnings && 
-                     (lease?.extracted_json as ExtractedJson)._validation_warnings!.length > 0 && (
+
+                    {/* Validation Warnings */}
+                    {extractedJson?._validation_warnings && extractedJson._validation_warnings.length > 0 && (
                       <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
                         <div className="flex items-start gap-3">
                           <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                           <div className="flex-1">
                             <h4 className="font-semibold text-amber-800 text-sm mb-1">Validation Warnings</h4>
                             <ul className="text-sm text-amber-700 space-y-1">
-                              {(lease?.extracted_json as ExtractedJson)._validation_warnings!.map((warning, i) => (
+                              {extractedJson._validation_warnings.map((warning, i) => (
                                 <li key={i} className="flex items-center gap-2">
                                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                                   {warning}
                                 </li>
                               ))}
                             </ul>
-                            {(lease?.extracted_json as ExtractedJson)?._validation_suggestions && 
-                             (lease?.extracted_json as ExtractedJson)._validation_suggestions!.length > 0 && (
-                              <div className="mt-3 pt-3 border-t border-amber-200">
-                                <p className="font-medium text-amber-800 text-sm">Suggestions:</p>
-                                <ul className="text-sm text-amber-700 space-y-1 mt-1">
-                                  {(lease?.extracted_json as ExtractedJson)._validation_suggestions!.map((suggestion, i) => (
-                                    <li key={i} className="flex items-center gap-2">
-                                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                                      {suggestion}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {/* Amendment: Current Terms Comparison Card */}
+                    {/* Amendment: Parent Lease Comparison */}
                     {isAmendment && parentLease && (
                       <Collapsible open={showParentTerms} onOpenChange={setShowParentTerms}>
                         <Card className="shadow-none border border-blue-200 bg-blue-50/30 overflow-hidden">
@@ -654,159 +636,49 @@ export default function LeaseReview() {
                                   {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}
                                 </p>
                               </div>
-                              <div className="col-span-2">
-                                <Label className="text-[10px] uppercase text-blue-600">Original Filename</Label>
-                                <p className="font-medium truncate">{parentLease.filename}</p>
-                              </div>
                             </CardContent>
                           </CollapsibleContent>
                         </Card>
                       </Collapsible>
                     )}
 
-                    {/* Card 1: Key Provisions */}
+                    {/* Section Cards */}
+                    {(Object.keys(SECTION_CONFIG) as SectionKey[]).map((sectionKey) => (
+                      <SectionCard
+                        key={sectionKey}
+                        sectionKey={sectionKey}
+                        form={form}
+                        extractedJson={extractedJson}
+                        confidenceScores={confidenceScores}
+                        verifiedFields={verifiedFields}
+                        isLocked={isLocked}
+                        onFieldChange={handleFieldChange}
+                        onFieldFocus={handleFieldFocus}
+                        onFieldBlur={trackFieldCorrection}
+                        onVerifyField={handleVerifyField}
+                        onJumpToPage={jumpToPage}
+                        confirmedSections={confirmedSections}
+                        onConfirmSection={handleConfirmSection}
+                      />
+                    ))}
+
+                    {/* Risks Section */}
+                    <RisksSection risks={risks} onJumpToPage={jumpToPage} />
+
+                    {/* Rent Schedule */}
                     <Card className="shadow-none border overflow-hidden">
-                      <CardHeader className="bg-muted/30 border-b pb-4">
+                      <CardHeader className="bg-muted/30 border-b py-3">
                         <CardTitle className="text-sm font-bold flex items-center gap-2">
-                          <FileText size={16} className="text-primary" /> Key Provisions
+                          <DollarSign size={16} className="text-green-600" />
+                          Rent Schedule
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="pt-6 space-y-5">
-                        {FIELD_CONFIG.map((field) => {
-                          const extractedJson = lease?.extracted_json as ExtractedJson | null;
-                          const fieldConfidence = getFieldConfidence(extractedJson, field.id);
-                          const confidence = confidenceScores[field.id] ?? (fieldConfidence ? Math.round(fieldConfidence * 100) : undefined);
-                          const isLowConfidence = fieldConfidence !== null && fieldConfidence < 0.80;
-                          
-                          // Get page from extracted json for PDF navigation
-                          const extractedField = extractedJson && field.id !== '_validation_warnings' 
-                            ? (extractedJson as Record<string, ExtractedField | string[] | undefined>)[field.id]
-                            : undefined;
-                          const fieldPage = extractedField && typeof extractedField === 'object' && !Array.isArray(extractedField) 
-                            ? extractedField.page 
-                            : undefined;
-                          
-                          return (
-                            <div key={field.id} className="group">
-                              <div className="flex items-center justify-between mb-1.5">
-                                <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
-                                  <field.icon size={12} className="text-muted-foreground" /> {field.label}
-                                  <ConfidenceBadge confidence={fieldConfidence} />
-                                </Label>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 text-muted-foreground hover:text-primary"
-                                    title="Locate in PDF"
-                                    onClick={() => jumpToPage(fieldPage)}
-                                  >
-                                    <Target size={12} />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className={cn(
-                                      "h-6 w-6 transition-colors",
-                                      verifiedFields.has(field.id)
-                                        ? "text-green-600"
-                                        : "text-muted-foreground hover:text-green-600",
-                                    )}
-                                    onClick={() => {
-                                      const n = new Set(verifiedFields);
-                                      n.has(field.id) ? n.delete(field.id) : n.add(field.id);
-                                      setVerifiedFields(n);
-                                    }}
-                                  >
-                                    <ShieldCheck size={12} />
-                                  </Button>
-                                </div>
-                              </div>
-                              <Input
-                                value={(form as any)[field.id]}
-                                onChange={(e) => handleFieldChange(field.id, e.target.value)}
-                                onFocus={() => handleFieldFocus(field.id)}
-                                onBlur={() => trackFieldCorrection(field.id)}
-                                placeholder={
-                                  field.id === "escalation_type" ? `Calculated: ${derivedInsights.avgIncrease}%/yr` : ""
-                                }
-                                className={cn(
-                                  "text-sm transition-all focus-visible:ring-primary",
-                                  getFieldBorderClass(field.id),
-                                  isLowConfidence && "border-amber-400 border-2",
-                                  fieldConfidence !== null && fieldConfidence < 0.70 && "border-red-400 border-2",
-                                )}
-                              />
-                              {/* Show change indicator for amendments */}
-                              {isAmendment && parentLease && (() => {
-                                const parentValue = parentLease[field.id];
-                                const currentValue = (form as any)[field.id];
-                                const hasChanged = parentValue && currentValue && parentValue !== currentValue;
-                                if (!hasChanged) return null;
-                                return (
-                                  <Badge 
-                                    variant="outline" 
-                                    className="mt-1 text-[9px] text-orange-600 border-orange-300 bg-orange-50"
-                                  >
-                                    Changed from: {parentValue}
-                                  </Badge>
-                                );
-                              })()}
-                            </div>
-                          );
-                        })}
-                      </CardContent>
-                    </Card>
-
-                    {/* Card 2: Rent Schedule */}
-                    <Card className="shadow-none border overflow-hidden">
-                      <CardHeader className="bg-muted/30 border-b pb-4">
-                        <CardTitle className="text-sm font-bold flex items-center gap-2">
-                          <DollarSign size={16} className="text-green-600" /> $ Rent Schedule
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-6">
-                        <div className="grid grid-cols-3 gap-3 mb-8">
-                          <div className="p-3 rounded-lg bg-background border shadow-sm">
-                            <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-1">
-                              Current Monthly Rent
-                            </span>
-                            <span className="text-md font-bold">
-                              ${derivedInsights.currentRent.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="p-3 rounded-lg bg-background border shadow-sm">
-                            <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-1 flex items-center gap-1">
-                              <TrendingUp size={10} /> Escalation Type
-                            </span>
-                            <span className="text-xs font-semibold">
-                              {form.escalation_type || `${derivedInsights.avgIncrease}% /yr`}
-                            </span>
-                          </div>
-                          <div className="p-3 rounded-lg bg-background border shadow-sm">
-                            <span className="text-[9px] uppercase font-bold text-muted-foreground block mb-1 flex items-center gap-1">
-                              <Calendar size={10} /> Next Increase
-                            </span>
-                            <span className="text-xs font-semibold">
-                              {rentSchedule.find((r) => new Date(r.period_start) > new Date())?.period_start
-                                ? format(
-                                    new Date(
-                                      rentSchedule.find((r) => new Date(r.period_start) > new Date())!.period_start,
-                                    ),
-                                    "MMM yyyy",
-                                  )
-                                : "No Changes"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border overflow-hidden">
-                          <RentScheduleTable 
-                            rentSchedule={rentSchedule}
-                            currentMonthlyRent={derivedInsights.currentRent}
-                            rentEscalationType={form.escalation_type || null}
-                          />
-                        </div>
+                      <CardContent className="pt-4">
+                        <RentScheduleTable
+                          rentSchedule={rentSchedule}
+                          currentMonthlyRent={derivedInsights.currentRent}
+                          rentEscalationType={form.rent_escalation_type || null}
+                        />
                       </CardContent>
                     </Card>
                   </div>
@@ -838,6 +710,9 @@ export default function LeaseReview() {
                   {auditLog.length} change{auditLog.length !== 1 ? 's' : ''} tracked
                 </Badge>
               )}
+              <Badge variant="outline" className="text-xs">
+                {confirmedSections.length}/{Object.keys(SECTION_CONFIG).length} sections reviewed
+              </Badge>
             </div>
             <Button 
               disabled={!allLowConfFieldsInteracted || posting}
