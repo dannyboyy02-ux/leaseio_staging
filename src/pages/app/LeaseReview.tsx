@@ -206,6 +206,7 @@ export default function LeaseReview() {
   // Check if lease is in "Review Required" status for showing Post button
   const isReviewRequired = lease?.lifecycle_status === 'Review Required';
   const isPendingApproval = lease?.lifecycle_status === 'Pending Approval';
+  const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
 
   useEffect(() => {
     async function init() {
@@ -249,7 +250,45 @@ export default function LeaseReview() {
       setLoading(false);
     }
     init();
-  }, [leaseId]);
+
+    // Set up polling if processing
+    let pollInterval: NodeJS.Timeout | null = null;
+    const pollForProcessingComplete = async () => {
+      if (!leaseId) return;
+      const { data, error } = await supabase
+        .from("leases")
+        .select("status, lifecycle_status, extracted_json, landlord_name, tenant_name, lease_start, lease_end, base_rent_amount")
+        .eq("id", leaseId)
+        .single();
+      
+      if (error) return;
+      
+      // Update lease status
+      if (data.status !== lease?.status) {
+        setLease((prev: any) => ({ ...prev, ...data }));
+        
+        // If processing is complete, reload all data
+        if (data.status === 'Ready' || data.status === 'Failed') {
+          init();
+          if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
+        }
+      }
+    };
+
+    // Start polling if in processing state
+    if (lease?.status === 'Processing' || lease?.status === 'Uploaded') {
+      pollInterval = setInterval(pollForProcessingComplete, 3000);
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [leaseId, lease?.status]);
 
   // Fetch parent lease for amendments
   useEffect(() => {
@@ -400,6 +439,31 @@ export default function LeaseReview() {
     return (
       <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
     );
+
+  // Show processing indicator if lease is still being processed
+  if (isProcessing) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+          <div className="relative mb-6">
+            <div className="h-20 w-20 rounded-full border-4 border-muted flex items-center justify-center">
+              <Loader2 className="h-10 w-10 text-primary animate-spin" />
+            </div>
+          </div>
+          <h2 className="text-2xl font-semibold mb-2">Processing Lease</h2>
+          <p className="text-muted-foreground text-center max-w-md mb-2">
+            Our AI is extracting key terms and data from your document. This typically takes 30-90 seconds.
+          </p>
+          <p className="text-sm text-muted-foreground mb-6">
+            {lease?.filename}
+          </p>
+          <Button variant="outline" onClick={() => navigate('/app/imports')}>
+            View Import History
+          </Button>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
