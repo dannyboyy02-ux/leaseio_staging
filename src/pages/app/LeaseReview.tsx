@@ -31,6 +31,9 @@ import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
 import { SectionCard, RisksSection, SECTION_CONFIG, getFieldConfidence, type SectionKey } from "@/components/leases/LeaseReviewSections";
 import { LeaseExports } from "@/components/leases/LeaseExports";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
+import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
+import { AmendmentsList } from "@/components/leases/AmendmentsList";
+import { AmendmentChanges } from "@/components/leases/AmendmentChanges";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -58,6 +61,12 @@ interface ExtractedJson {
   escalation_clauses?: any;
   _validation_warnings?: string[];
   _validation_suggestions?: string[];
+  _amendment_changes?: Array<{
+    field: string;
+    old_value: string | null;
+    new_value: string | null;
+    change_type?: 'modified' | 'added' | 'removed';
+  }>;
 }
 
 interface Risk {
@@ -107,8 +116,10 @@ export default function LeaseReview() {
   // Parent lease for amendments
   const [parentLease, setParentLease] = useState<any | null>(null);
   const [showParentTerms, setShowParentTerms] = useState(true);
+  const [amendmentsRefresh, setAmendmentsRefresh] = useState(0);
   
   const isAmendment = !!lease?.parent_lease_id;
+  const isMasterLease = !isAmendment && lease?.category !== 'Lease Amendment';
 
   // All field IDs from sections
   const allFieldIds = useMemo(() => {
@@ -463,6 +474,14 @@ export default function LeaseReview() {
           }
           actions={
             <div className="flex items-center gap-2">
+              {/* Upload Amendment button - only for master leases */}
+              {isMasterLease && !isProcessing && (
+                <UploadAmendmentDialog
+                  parentLeaseId={lease.id}
+                  parentFilename={lease.filename}
+                  onSuccess={() => setAmendmentsRefresh(prev => prev + 1)}
+                />
+              )}
               <LeaseExports
                 lease={{
                   id: lease.id,
@@ -642,6 +661,11 @@ export default function LeaseReview() {
                       </Collapsible>
                     )}
 
+                    {/* Amendment Changes - for amendment leases */}
+                    {isAmendment && extractedJson?._amendment_changes && extractedJson._amendment_changes.length > 0 && (
+                      <AmendmentChanges changes={extractedJson._amendment_changes} />
+                    )}
+
                     {/* Section Cards */}
                     {(Object.keys(SECTION_CONFIG) as SectionKey[]).map((sectionKey) => (
                       <SectionCard
@@ -681,6 +705,14 @@ export default function LeaseReview() {
                         />
                       </CardContent>
                     </Card>
+
+                    {/* Amendments List - for master leases */}
+                    {isMasterLease && (
+                      <AmendmentsList 
+                        parentLeaseId={lease.id} 
+                        refreshTrigger={amendmentsRefresh}
+                      />
+                    )}
                   </div>
                 </ScrollArea>
               </div>
