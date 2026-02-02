@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, differenceInDays } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 
 interface FinancialData {
   totalMonthlyRent: number;
@@ -61,14 +62,16 @@ export function FinancialSummary() {
           (Number(lease.current_monthly_rent) || 0) > (Number(max.current_monthly_rent) || 0) ? lease : max
         , activeLeases[0]);
 
-        const propertyAddress = highestRentLease.extracted_json 
-          ? (highestRentLease.extracted_json as Record<string, unknown>)?.property_address as string
-          : null;
+        const propertyName = getPropertyDisplayName(
+          highestRentLease.extracted_json as Record<string, unknown> | null,
+          highestRentLease.filename,
+          'Property'
+        );
 
         nextPayment = {
           amount: totalMonthlyRent,
           property: activeLeases.length === 1 
-            ? (propertyAddress || highestRentLease.filename || 'Property')
+            ? propertyName
             : `${activeLeases.length} ${t('dashboard.properties')}`,
           dueDate: nextMonth,
           daysUntil,

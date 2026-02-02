@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedDate, formatLocalizedDateWithWeekday } from '@/lib/dateFormatters';
 import { cn } from '@/lib/utils';
+import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 
 interface NotificationWithLease {
   id: string;
@@ -197,10 +198,11 @@ export default function NotificationDetail() {
   const NotificationIcon = config.icon;
   const daysUntil = getDaysUntil(notification.event_date);
   const isPast = daysUntil < 0;
-  const property =
-    (notification.leases?.extracted_json as any)?.property_address ||
-    notification.leases?.filename ||
-    t('notifications.unknown_property');
+  const property = getPropertyDisplayName(
+    notification.leases?.extracted_json as Record<string, unknown> | null,
+    notification.leases?.filename || null,
+    t('notifications.unknown_property')
+  );
 
   return (
     <AppLayout>
