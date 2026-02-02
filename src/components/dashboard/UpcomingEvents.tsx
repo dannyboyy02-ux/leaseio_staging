@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { differenceInDays, format } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 
 interface UpcomingEvent {
   id: string;
@@ -77,10 +78,10 @@ export function UpcomingEvents() {
       const upcomingEvents: UpcomingEvent[] = [];
 
       for (const lease of leases || []) {
-        const propertyAddress = lease.extracted_json 
-          ? (lease.extracted_json as Record<string, unknown>)?.property_address as string
-          : null;
-        const property = propertyAddress || lease.filename || 'Unknown Property';
+        const property = getPropertyDisplayName(
+          lease.extracted_json as Record<string, unknown> | null,
+          lease.filename
+        );
 
         if (lease.lease_end) {
           const endDate = new Date(lease.lease_end);

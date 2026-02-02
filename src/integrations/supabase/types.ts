@@ -59,6 +59,13 @@ export type Database = {
             referencedRelation: "leases"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "field_corrections_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
         ]
       }
       invite_tokens: {
@@ -141,6 +148,13 @@ export type Database = {
             referencedRelation: "leases"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lease_activity_log_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lease_approval_actions: {
@@ -179,6 +193,13 @@ export type Database = {
             referencedRelation: "leases"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lease_approval_actions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lease_approvers: {
@@ -212,6 +233,13 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_approvers_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
             referencedColumns: ["id"]
           },
         ]
@@ -250,6 +278,13 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_field_confidence_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
             referencedColumns: ["id"]
           },
         ]
@@ -302,6 +337,13 @@ export type Database = {
             referencedRelation: "leases"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lease_notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lease_nudges: {
@@ -335,6 +377,13 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_nudges_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
             referencedColumns: ["id"]
           },
         ]
@@ -382,6 +431,13 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_state_transitions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
             referencedColumns: ["id"]
           },
         ]
@@ -528,6 +584,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "leases_parent_lease_id_fkey"
+            columns: ["parent_lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "leases_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -648,6 +711,13 @@ export type Database = {
             referencedRelation: "leases"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "rent_schedules_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
         ]
       }
       risks: {
@@ -684,6 +754,13 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risks_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
             referencedColumns: ["id"]
           },
         ]
@@ -808,9 +885,83 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_correction_analytics: {
+        Row: {
+          avg_original_confidence: number | null
+          field_name: string | null
+          last_correction: string | null
+          leases_affected: number | null
+          total_corrections: number | null
+        }
+        Relationships: []
+      }
+      v_review_queue: {
+        Row: {
+          avg_confidence_score: number | null
+          fields_requiring_review: string[] | null
+          filename: string | null
+          id: string | null
+          landlord_name: string | null
+          review_field_count: number | null
+          status: string | null
+          tenant_name: string | null
+          uploaded_at: string | null
+          user_id: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          avg_confidence_score?: number | null
+          fields_requiring_review?: never
+          filename?: string | null
+          id?: string | null
+          landlord_name?: string | null
+          review_field_count?: never
+          status?: string | null
+          tenant_name?: string | null
+          uploaded_at?: string | null
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          avg_confidence_score?: number | null
+          fields_requiring_review?: never
+          filename?: string | null
+          id?: string | null
+          landlord_name?: string | null
+          review_field_count?: never
+          status?: string | null
+          tenant_name?: string | null
+          uploaded_at?: string | null
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leases_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      approve_field: {
+        Args: { p_field_name: string; p_lease_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      finalize_lease_approval: {
+        Args: { p_lease_id: string; p_user_id: string }
+        Returns: boolean
+      }
       get_workspace_role: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: Database["public"]["Enums"]["workspace_role"]
@@ -830,6 +981,18 @@ export type Database = {
       is_workspace_owner: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
+      }
+      record_field_correction: {
+        Args: {
+          p_corrected_value: string
+          p_correction_type?: string
+          p_field_name: string
+          p_lease_id: string
+          p_original_value: string
+          p_user_id: string
+          p_user_notes?: string
+        }
+        Returns: string
       }
     }
     Enums: {

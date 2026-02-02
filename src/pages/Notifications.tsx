@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedDate } from '@/lib/dateFormatters';
+import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 
 interface NotificationWithLease {
   id: string;
@@ -203,10 +204,11 @@ export default function Notifications() {
                   const daysUntil = getDaysUntil(notification.event_date);
                   const isPast = daysUntil < 0;
                   const wasSent = notification.last_notified_at !== null;
-                  const property =
-                    (notification.leases?.extracted_json as any)?.property_address ||
-                    notification.leases?.filename ||
-                    t('notifications.unknown_property');
+                  const property = getPropertyDisplayName(
+                    notification.leases?.extracted_json as Record<string, unknown> | null,
+                    notification.leases?.filename || null,
+                    t('notifications.unknown_property')
+                  );
 
                   return (
                     <Card

@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 
 interface LeaseRow {
   id: string;
@@ -149,7 +150,11 @@ export function LeaseQuickView() {
             </TableHeader>
             <TableBody>
               {leases.map((lease, index) => {
-                const propertyAddress = lease.extracted_json?.property_address as string | undefined;
+                const propertyDisplay = getPropertyDisplayName(
+                  lease.extracted_json,
+                  lease.filename,
+                  'Unnamed Property'
+                );
                 return (
                 <TableRow
                   key={lease.id}
@@ -160,7 +165,7 @@ export function LeaseQuickView() {
                   <TableCell className="py-3">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate max-w-[200px]">
-                        {propertyAddress || lease.filename || 'Unnamed Property'}
+                        {propertyDisplay}
                       </span>
                       <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
                     </div>
