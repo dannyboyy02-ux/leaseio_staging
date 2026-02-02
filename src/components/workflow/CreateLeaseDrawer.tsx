@@ -163,41 +163,48 @@ export function CreateLeaseDrawer({ open, onOpenChange, onSuccess }: CreateLease
     setIsSubmitting(true);
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('leases')
-        .upload(fileName, file);
+      // Get the current session for auth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Session expired. Please log in again.');
+        return;
+      }
 
-      if (uploadError) throw uploadError;
+      // Create form data for the edge function
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('leaseType', values.leaseType === 'Real Estate' ? 'master' : 'master');
+      formData.append('category', values.category);
+      formData.append('approverEmail', values.approverEmail);
+      if (values.category === 'Lease Amendment' && values.parentLeaseId) {
+        formData.append('parentLeaseId', values.parentLeaseId);
+      }
 
-      const { data: lease, error: insertError } = await supabase
-        .from('leases')
-        .insert({
-          user_id: user.id,
-          workspace_id: workspace.id,
-          filename: file.name,
-          storage_path: fileName,
-          status: 'Pending Approval',
-          lifecycle_status: 'Pending Approval',
-          lease_type: values.leaseType,
-          category: values.category,
-          approver_email: values.approverEmail,
-          initializer_id: user.id,
-          parent_lease_id: values.category === 'Lease Amendment' ? values.parentLeaseId : null,
-        })
-        .select()
-        .single();
+      // Call the process_lease edge function
+      const { data: result, error: invokeError } = await supabase.functions.invoke('process_lease', {
+        body: formData,
+      });
 
-      if (insertError) throw insertError;
+      if (invokeError) {
+        console.error('Edge function invocation error:', invokeError);
+        throw new Error(`Failed to process lease: ${invokeError.message}`);
+      }
 
-      toast.success('Lease created and sent for approval');
-      onOpenChange(false);
-      form.reset();
-      setFile(null);
-      setStep(1);
-      onSuccess?.(lease.id);
+      if (result?.error) {
+        throw new Error(result.error || 'Failed to process lease');
+      }
+
+      // Successfully submitted - the edge function creates the lease and starts processing
+      if (result.leaseId) {
+        toast.success('Lease uploaded and processing started');
+        onOpenChange(false);
+        form.reset();
+        setFile(null);
+        setStep(1);
+        onSuccess?.(result.leaseId);
+      } else {
+        throw new Error('No lease ID returned from processing');
+      }
     } catch (error: any) {
       console.error('Error creating lease:', error);
       toast.error(error.message || 'Failed to create lease');
