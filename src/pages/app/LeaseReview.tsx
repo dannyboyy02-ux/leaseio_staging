@@ -41,6 +41,12 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
 
+interface ApprovalMetadata {
+  approved: boolean;
+  approved_at: string;
+  approved_by: string;
+}
+
 interface ExtractedJson {
   property_address?: any;
   landlord_name?: any;
@@ -61,6 +67,7 @@ interface ExtractedJson {
   escalation_clauses?: any;
   _validation_warnings?: string[];
   _validation_suggestions?: string[];
+  _approval?: ApprovalMetadata;
   _amendment_changes?: Array<{
     field: string;
     old_value: string | null;
@@ -68,6 +75,9 @@ interface ExtractedJson {
     change_type?: 'modified' | 'added' | 'removed';
   }>;
 }
+
+// Tier-1 required fields that must be marked as reviewed before approval
+const TIER1_REQUIRED_FIELDS = ['landlord_name', 'tenant_name', 'lease_start', 'lease_end'];
 
 interface Risk {
   id: string;
@@ -100,6 +110,8 @@ export default function LeaseReview() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [basePdfUrl, setBasePdfUrl] = useState<string | null>(null);
   const [isPdfCollapsed, setIsPdfCollapsed] = useState(false);
@@ -152,12 +164,44 @@ export default function LeaseReview() {
     return lowConfidenceFields.every(field => interactedLowConfFields.has(field));
   }, [lowConfidenceFields, interactedLowConfFields]);
 
+  // Check approval state from extracted_json
+  const approvalState = useMemo(() => {
+    const extractedJson = lease?.extracted_json as ExtractedJson | null;
+    return extractedJson?._approval || null;
+  }, [lease?.extracted_json]);
+  
+  const isApproved = !!approvalState?.approved;
+
   // Check status states
   const isReviewRequired = lease?.lifecycle_status === 'Review Required';
   const isPendingApproval = lease?.lifecycle_status === 'Pending Approval';
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lease?.lifecycle_status === 'Posted';
-  const isLocked = isPosted || isPendingApproval;
+  // Lock editing when approved, posted, or pending approval
+  const isLocked = isPosted || isPendingApproval || isApproved;
+
+  // Check if all Tier-1 required fields are reviewed (either confirmed via section or verified individually)
+  const allTier1FieldsReviewed = useMemo(() => {
+    // A field is considered "reviewed" if:
+    // 1. Its section is confirmed, OR
+    // 2. The field itself is in verifiedFields
+    const sectionForField: Record<string, string> = {};
+    Object.entries(SECTION_CONFIG).forEach(([sectionKey, section]) => {
+      section.fields.forEach(field => {
+        sectionForField[field.id] = sectionKey;
+      });
+    });
+
+    return TIER1_REQUIRED_FIELDS.every(fieldId => {
+      const sectionKey = sectionForField[fieldId];
+      const sectionConfirmed = sectionKey && confirmedSections.includes(sectionKey);
+      const fieldVerified = verifiedFields.has(fieldId);
+      return sectionConfirmed || fieldVerified;
+    });
+  }, [confirmedSections, verifiedFields]);
+
+  // Can approve only if: not processing, all Tier-1 fields reviewed
+  const canApprove = !isProcessing && allTier1FieldsReviewed;
 
   // Derived rent insights
   const derivedInsights = useMemo(() => {
@@ -424,6 +468,95 @@ export default function LeaseReview() {
     }
   };
 
+  // Approve lease - stores approval in extracted_json._approval
+  const handleApproveLease = async () => {
+    if (!allTier1FieldsReviewed) {
+      toast.error("Please mark all required fields (Landlord, Tenant, Lease Start, Lease End) as reviewed before approving");
+      return;
+    }
+
+    setApproving(true);
+    try {
+      // First save any pending edits
+      const updateData: Record<string, any> = {
+        landlord_name: form.landlord_name || null,
+        tenant_name: form.tenant_name || null,
+        lease_start: form.lease_start || null,
+        lease_end: form.lease_end || null,
+        base_rent_amount: form.base_rent_amount || null,
+        current_monthly_rent: form.current_monthly_rent ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null : null,
+        square_footage: form.square_footage ? parseFloat(form.square_footage) || null : null,
+        rent_escalation_type: form.rent_escalation_type || null,
+        confirmed_sections: confirmedSections,
+        audit_log: JSON.parse(JSON.stringify(auditLog)),
+      };
+
+      // Add approval metadata to extracted_json
+      const currentExtractedJson = (lease.extracted_json || {}) as ExtractedJson;
+      const approvalMetadata: ApprovalMetadata = {
+        approved: true,
+        approved_at: new Date().toISOString(),
+        approved_by: user?.id || 'unknown',
+      };
+      
+      updateData.extracted_json = {
+        ...currentExtractedJson,
+        _approval: approvalMetadata,
+      };
+
+      const { error } = await supabase
+        .from("leases")
+        .update(updateData)
+        .eq("id", lease.id);
+      
+      if (error) throw error;
+      
+      // Update local state
+      setLease((prev: any) => ({
+        ...prev,
+        extracted_json: updateData.extracted_json,
+      }));
+      
+      toast.success("Lease approved successfully");
+    } catch (err) {
+      console.error('Error approving lease:', err);
+      toast.error("Failed to approve lease");
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  // Reopen lease - removes approval from extracted_json
+  const handleReopenLease = async () => {
+    setReopening(true);
+    try {
+      const currentExtractedJson = (lease.extracted_json || {}) as ExtractedJson;
+      
+      // Remove the approval metadata
+      const { _approval, ...restExtractedJson } = currentExtractedJson;
+
+      const { error } = await supabase
+        .from("leases")
+        .update({ extracted_json: restExtractedJson })
+        .eq("id", lease.id);
+      
+      if (error) throw error;
+      
+      // Update local state
+      setLease((prev: any) => ({
+        ...prev,
+        extracted_json: restExtractedJson,
+      }));
+      
+      toast.success("Lease reopened for editing");
+    } catch (err) {
+      console.error('Error reopening lease:', err);
+      toast.error("Failed to reopen lease");
+    } finally {
+      setReopening(false);
+    }
+  };
+
   if (loading)
     return (
       <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
@@ -465,7 +598,13 @@ export default function LeaseReview() {
               {lease.lifecycle_status && (
                 <WorkflowStatusBadge status={lease.lifecycle_status} />
               )}
-              {isLocked && (
+              {isApproved && (
+                <Badge className="bg-green-600 text-white text-xs">
+                  <CheckCircle size={12} className="mr-1" />
+                  Approved
+                </Badge>
+              )}
+              {isLocked && !isApproved && (
                 <Badge variant="secondary" className="text-xs">
                   Read-only
                 </Badge>
@@ -505,10 +644,43 @@ export default function LeaseReview() {
                   lastNudgedAt={lease.last_nudged_at}
                 />
               )}
+              {/* Reopen button - only shown when approved */}
+              {isApproved && (
+                <Button 
+                  onClick={handleReopenLease} 
+                  disabled={reopening} 
+                  variant="outline"
+                  className="text-amber-600 border-amber-400 hover:bg-amber-50"
+                >
+                  {reopening ? (
+                    <Loader2 className="animate-spin mr-2" size={16} />
+                  ) : (
+                    <FileText className="mr-2" size={16} />
+                  )}
+                  Reopen
+                </Button>
+              )}
+              {/* Save Draft - only when not locked */}
               {!isLocked && (
                 <Button onClick={handleSync} disabled={saving} variant="outline">
                   {saving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
                   Save Draft
+                </Button>
+              )}
+              {/* Approve Lease - only when not locked and not approved */}
+              {!isLocked && !isApproved && (
+                <Button 
+                  onClick={handleApproveLease} 
+                  disabled={approving || !canApprove}
+                  className="bg-green-600 hover:bg-green-700"
+                  title={!canApprove ? "Mark all required fields (Parties & Dates sections) as reviewed first" : "Approve this lease"}
+                >
+                  {approving ? (
+                    <Loader2 className="animate-spin mr-2" size={16} />
+                  ) : (
+                    <CheckCircle className="mr-2" size={16} />
+                  )}
+                  Approve Lease
                 </Button>
               )}
             </div>
