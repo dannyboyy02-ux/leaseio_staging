@@ -35,6 +35,9 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
 import { WorkflowStatusBadge } from "@/components/workflow/WorkflowStatusBadge";
+import { LeaseStatusBadge, isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStatusBadge";
+import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
+import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -556,6 +559,29 @@ export default function LeaseReview() {
 
                 <ScrollArea className="flex-1 h-full">
                   <div className="p-6 space-y-6 max-w-2xl mx-auto pb-24">
+                    {/* Failed Lease Banner */}
+                    {isFailedStatus(lease?.status) && (
+                      <FailedLeaseBanner
+                        leaseId={lease.id}
+                        errorMessage={lease.error_message}
+                        storagePath={lease.storage_path}
+                        onRetrySuccess={() => {
+                          // Refresh the page data
+                          window.location.reload();
+                        }}
+                      />
+                    )}
+
+                    {/* Needs Review Banner */}
+                    {needsReviewStatus(lease?.lifecycle_status) && (
+                      <NeedsReviewBanner
+                        landlordName={form.landlord_name}
+                        tenantName={form.tenant_name}
+                        leaseStart={form.lease_start}
+                        leaseEnd={form.lease_end}
+                        confidenceScores={confidenceScores}
+                      />
+                    )}
                     {/* Validation Warnings Banner */}
                     {(lease?.extracted_json as ExtractedJson)?._validation_warnings && 
                      (lease?.extracted_json as ExtractedJson)._validation_warnings!.length > 0 && (

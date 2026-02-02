@@ -8,19 +8,14 @@ import {
   RotateCcw, 
   Trash2, 
   FileText,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Upload as UploadIcon,
-  XCircle
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
+import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -49,13 +44,7 @@ interface ImportRow {
   storage_path: string | null;
 }
 
-const statusConfig: Record<string, { label: string; labelEs: string; icon: React.ComponentType<{ className?: string }>; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  'Uploaded': { label: 'Processing', labelEs: 'Procesando', icon: Loader2, variant: 'secondary' },
-  'Processing': { label: 'Processing', labelEs: 'Procesando', icon: Loader2, variant: 'default' },
-  'Ready': { label: 'Ready', labelEs: 'Listo', icon: CheckCircle2, variant: 'outline' },
-  'Approved': { label: 'Active', labelEs: 'Activo', icon: CheckCircle2, variant: 'default' },
-  'Failed': { label: 'Failed', labelEs: 'Fallido', icon: XCircle, variant: 'destructive' },
-};
+// Note: Using unified LeaseStatusBadge component for consistent status display
 
 export default function ImportHistory() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -194,20 +183,6 @@ export default function ImportHistory() {
     !searchQuery || imp.filename.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const renderStatusBadge = (status: string) => {
-    const config = statusConfig[status] || statusConfig['Uploaded'];
-    const Icon = config.icon;
-    const isProcessing = status === 'Processing' || status === 'Uploaded';
-    const label = language === 'es' ? config.labelEs : config.label;
-
-    return (
-      <Badge variant={config.variant} className="gap-1.5">
-        <Icon className={`h-3 w-3 ${isProcessing ? 'animate-spin' : ''}`} />
-        {label}
-      </Badge>
-    );
-  };
-
   return (
     <AppLayout>
       <AppHeader
@@ -283,7 +258,7 @@ export default function ImportHistory() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            {renderStatusBadge(imp.status)}
+                            <LeaseStatusBadge status={imp.status} />
                             {imp.status === 'Failed' && imp.error_message && (
                               <Tooltip>
                                 <TooltipTrigger asChild>

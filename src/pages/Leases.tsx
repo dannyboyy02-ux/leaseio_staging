@@ -23,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { DeleteLeaseDialog } from "@/components/leases/DeleteLeaseDialog";
 import { RejectedLeaseCallout } from "@/components/workflow/RejectedLeaseCallout";
 import { EmptyLeaseState } from "@/components/leases/EmptyLeaseState";
+import { LeaseStatusBadge } from "@/components/leases/LeaseStatusBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -404,6 +405,9 @@ export default function Leases() {
                     <TableHead className="hidden lg:table-cell">
                       Confidence
                     </TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      Status
+                    </TableHead>
                     <TableHead className="text-right">{t("leases.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -447,6 +451,9 @@ export default function Leases() {
                           <TableCell className="hidden sm:table-cell">{formatSqFt(lease.square_footage)}</TableCell>
                           <TableCell className="hidden lg:table-cell">
                             <ConfidenceListBadge score={lease.avg_confidence_score} />
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            <LeaseStatusBadge status={lease.lifecycle_status || lease.status} />
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
