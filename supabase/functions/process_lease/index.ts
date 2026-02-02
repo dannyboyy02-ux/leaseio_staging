@@ -700,48 +700,158 @@ Extraction: {"property_address": {"value": "456 Oak Street, downtown", "confiden
 
 Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Please analyze this lease document and extract the key information:\n\n${documentText}` }
-      ],
-      temperature: 0.1,
-      max_tokens: 4000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('[OpenAI] Request failed:', errorText);
-    throw new Error(`OpenAI request failed: ${response.status} - ${errorText}`);
+  // Helper function to safely extract JSON from OpenAI response
+  function extractJsonFromResponse(content: string): object {
+    // Try to extract JSON from response with multiple strategies
+    let jsonStr = content;
+    
+    // Strategy 1: Look for markdown code blocks
+    if (content.includes('```json')) {
+      const match = content.match(/```json\s*([\s\S]*?)\s*```/);
+      if (match) jsonStr = match[1];
+    } else if (content.includes('```')) {
+      const match = content.match(/```\s*([\s\S]*?)\s*```/);
+      if (match) jsonStr = match[1];
+    }
+    
+    // Strategy 2: Find JSON object boundaries
+    const trimmed = jsonStr.trim();
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      jsonStr = trimmed.substring(firstBrace, lastBrace + 1);
+    }
+    
+    // Strategy 3: Clean common issues before parsing
+    jsonStr = jsonStr
+      .replace(/,\s*}/g, '}')  // Remove trailing commas before }
+      .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
+      .replace(/[\x00-\x1F\x7F]/g, ' ') // Remove control characters
+      .replace(/\n\s*\n/g, '\n'); // Reduce multiple newlines
+    
+    try {
+      return JSON.parse(jsonStr.trim());
+    } catch (e) {
+      // Strategy 4: Try to fix common JSON issues
+      console.log('[OpenAI] First parse attempt failed, trying cleanup...');
+      
+      // Try to fix unquoted property names
+      const fixedJson = jsonStr
+        .replace(/(\w+)\s*:/g, '"$1":') // Quote unquoted keys
+        .replace(/:\s*'([^']*)'/g, ':"$1"') // Convert single quotes to double
+        .replace(/""/g, '"'); // Fix double quotes from previous operations
+      
+      try {
+        return JSON.parse(fixedJson.trim());
+      } catch (e2) {
+        console.error('[OpenAI] JSON cleanup failed:', e2);
+        console.error('[OpenAI] Failed content preview:', jsonStr.substring(0, 500));
+        throw e; // Throw original error
+      }
+    }
   }
 
-  const data = await response.json();
-  const content = data.choices[0].message.content;
+  // Retry logic for API calls
+  const maxRetries = 2;
+  let lastError: Error | null = null;
   
-  console.log('[OpenAI] Raw response:', content.substring(0, 500));
-  
-  // Parse JSON from response (handle markdown code blocks)
-  let jsonStr = content;
-  if (content.includes('```json')) {
-    jsonStr = content.split('```json')[1].split('```')[0];
-  } else if (content.includes('```')) {
-    jsonStr = content.split('```')[1].split('```')[0];
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Please analyze this lease document and extract the key information:\n\n${documentText}` }
+          ],
+          temperature: attempt === 0 ? 0.1 : 0.0, // Lower temperature on retry
+          max_tokens: 4000,
+          response_format: { type: "json_object" }, // Request JSON mode
+        }),
+      });
+
+      // Check Content-Type header before parsing
+      const contentType = response.headers.get('content-type');
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[OpenAI] Request failed (attempt ${attempt + 1}):`, errorText);
+        
+        // Check if it's HTML (server error, rate limit, etc.)
+        if (errorText.trim().startsWith('<!') || errorText.includes('<html')) {
+          lastError = new Error(`OpenAI returned HTML error page (status ${response.status})`);
+          if (attempt < maxRetries) {
+            console.log(`[OpenAI] Retrying after HTML response...`);
+            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+            continue;
+          }
+          throw lastError;
+        }
+        
+        throw new Error(`OpenAI request failed: ${response.status} - ${errorText}`);
+      }
+
+      // Verify JSON content type
+      if (!contentType?.includes('application/json')) {
+        const textResponse = await response.text();
+        console.error('[OpenAI] Expected JSON but got:', contentType);
+        console.error('[OpenAI] Response preview:', textResponse.substring(0, 200));
+        lastError = new Error(`OpenAI returned non-JSON response: ${contentType}`);
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+          continue;
+        }
+        throw lastError;
+      }
+
+      const data = await response.json();
+      
+      if (!data.choices?.[0]?.message?.content) {
+        console.error('[OpenAI] Missing content in response:', JSON.stringify(data).substring(0, 300));
+        lastError = new Error('OpenAI response missing content');
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+          continue;
+        }
+        throw lastError;
+      }
+      
+      const content = data.choices[0].message.content;
+      console.log('[OpenAI] Raw response:', content.substring(0, 500));
+      console.log(`[OpenAI] Tokens - prompt: ${data.usage?.prompt_tokens || 'N/A'}, completion: ${data.usage?.completion_tokens || 'N/A'}`);
+      
+      try {
+        const parsed = extractJsonFromResponse(content);
+        console.log('[OpenAI] Successfully parsed JSON response');
+        return parsed as LeaseExtractionResult;
+      } catch (parseError) {
+        console.error(`[OpenAI] JSON parse failed (attempt ${attempt + 1}):`, parseError);
+        lastError = new Error(`Failed to parse OpenAI response as JSON: ${parseError}`);
+        
+        if (attempt < maxRetries) {
+          console.log('[OpenAI] Retrying with different parameters...');
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        throw lastError;
+      }
+    } catch (error) {
+      console.error(`[OpenAI] Attempt ${attempt + 1} failed:`, error);
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+    }
   }
   
-  try {
-    return JSON.parse(jsonStr.trim());
-  } catch (e) {
-    console.error('[OpenAI] Failed to parse JSON:', e);
-    throw new Error('Failed to parse OpenAI response as JSON');
-  }
+  throw lastError || new Error('All OpenAI extraction attempts failed');
 }
 
 // Helper function to extract value from confidence-scored field
