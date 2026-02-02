@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
 import { FileText, ChevronRight, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import {
   Table,
   TableBody,
@@ -16,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
+import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 
 interface LeaseRow {
   id: string;
@@ -23,6 +23,7 @@ interface LeaseRow {
   current_monthly_rent: number | null;
   lease_end: string | null;
   status: string | null;
+  lifecycle_status: string | null;
   extracted_json: Record<string, unknown> | null;
 }
 
@@ -36,29 +37,6 @@ function formatCurrency(amount: number | null): string {
   }).format(amount);
 }
 
-function getStatusBadge(status: string | null, endDate: string | null) {
-  const now = new Date();
-  const expirationDate = endDate ? new Date(endDate) : null;
-  const daysUntilExpiration = expirationDate ? differenceInDays(expirationDate, now) : null;
-
-  if (daysUntilExpiration !== null && daysUntilExpiration < 0) {
-    return <Badge variant="destructive">Expired</Badge>;
-  }
-  if (daysUntilExpiration !== null && daysUntilExpiration <= 90) {
-    return <Badge variant="warning">Expiring Soon</Badge>;
-  }
-  if (status === 'final') {
-    return <Badge variant="success">Active</Badge>;
-  }
-  if (status === 'review') {
-    return <Badge variant="info">In Review</Badge>;
-  }
-  if (status === 'processing') {
-    return <Badge variant="secondary">Processing</Badge>;
-  }
-  return <Badge variant="outline">{status || 'Draft'}</Badge>;
-}
-
 export function LeaseQuickView() {
   const { data: leases, isLoading } = useQuery({
     queryKey: ['leases-quick-view'],
@@ -68,7 +46,7 @@ export function LeaseQuickView() {
 
       const { data, error } = await supabase
         .from('leases')
-        .select('id, filename, current_monthly_rent, lease_end, status, extracted_json')
+        .select('id, filename, current_monthly_rent, lease_end, status, lifecycle_status, extracted_json')
         .eq('user_id', user.id)
         .order('lease_end', { ascending: true, nullsFirst: false })
         .limit(5);
@@ -179,7 +157,7 @@ export function LeaseQuickView() {
                       : '—'}
                   </TableCell>
                   <TableCell className="text-right">
-                    {getStatusBadge(lease.status, lease.lease_end)}
+                    <LeaseStatusBadge status={lease.lifecycle_status || lease.status} />
                   </TableCell>
                 </TableRow>
                 );
