@@ -85,7 +85,7 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
     if (diffDays === 0) return t('dashboard.today');
     if (diffDays === 1) return t('dashboard.tomorrow');
     if (diffDays > 0) return `${diffDays} ${t('dashboard.days')}`;
-    return language === 'es' ? 'Pasado' : 'Past';
+    return t('notifications.past');
   };
 
   return (

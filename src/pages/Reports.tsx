@@ -1,4 +1,4 @@
-import { BarChart3, PieChart, TrendingUp, Calendar, Download, Lock } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Calendar, Download, Lock, ClipboardList } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -34,12 +34,21 @@ const reports = [
     descKey: 'reports.rent_projections_desc',
     icon: BarChart3,
   },
+  {
+    id: 'audit',
+    titleKey: 'reports.audit_log',
+    descKey: 'reports.audit_log_desc',
+    icon: ClipboardList,
+    href: '/app/reports/audit-log',
+    requiresAdmin: true,
+  },
 ];
 
 export default function Reports() {
-  const { canAccessFeature } = useApp();
+  const { canAccessFeature, userRole } = useApp();
   const { t } = useLanguage();
   const hasAccess = canAccessFeature('business');
+  const isAdmin = userRole === 'admin' || userRole === 'owner';
 
   if (!hasAccess) {
     return (
@@ -94,7 +103,9 @@ export default function Reports() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {reports.map((report, index) => (
+          {reports
+            .filter((report) => !report.requiresAdmin || isAdmin)
+            .map((report, index) => (
             <Card
               key={report.id}
               variant="interactive"
@@ -114,8 +125,12 @@ export default function Reports() {
               <CardContent>
                 <CardDescription className="mb-4">{t(report.descKey)}</CardDescription>
                 <div className="flex gap-2">
-                  <Button variant="secondary" className="flex-1">
-                    {t('reports.view_report')}
+                  <Button variant="secondary" className="flex-1" asChild={!!report.href}>
+                    {report.href ? (
+                      <Link to={report.href}>{t('reports.view_report')}</Link>
+                    ) : (
+                      t('reports.view_report')
+                    )}
                   </Button>
                   <Button variant="ghost" size="icon">
                     <Download className="h-4 w-4" />
