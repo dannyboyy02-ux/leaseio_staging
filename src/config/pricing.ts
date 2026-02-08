@@ -5,14 +5,14 @@ export type BillingInterval = 'monthly' | 'annual';
 
 export interface PlanConfig {
   id: SubscriptionPlan;
-  name: string;
-  description: string;
+  nameKey: string;
+  descriptionKey: string;
   price: {
     monthly: number;
     annual: number;
   };
   documentLimit: number;
-  features: string[];
+  featureKeys: string[];
   teamMembers: number;
   hasTeamAccess: boolean;
   hasAdvancedReports: boolean;
@@ -26,15 +26,15 @@ export interface PlanConfig {
 export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
   free: {
     id: 'free',
-    name: 'Free',
-    description: 'Try LeaseIO with a single lease',
+    nameKey: 'plan.free',
+    descriptionKey: 'plan.description.free',
     price: { monthly: 0, annual: 0 },
     documentLimit: 1,
-    features: [
-      '1 lease document',
-      'AI lease extraction',
-      'Basic rent tracking',
-      'Email notifications',
+    featureKeys: [
+      'plan.feature.1_lease',
+      'plan.feature.ai_extraction',
+      'plan.feature.basic_tracking',
+      'plan.feature.email_notifications',
     ],
     teamMembers: 0,
     hasTeamAccess: false,
@@ -46,17 +46,17 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
   },
   starter: {
     id: 'starter',
-    name: 'Starter',
-    description: 'Perfect for small portfolios',
+    nameKey: 'plan.starter',
+    descriptionKey: 'plan.description.starter',
     price: { monthly: 29, annual: 278 }, // ~20% annual discount
     documentLimit: 5,
-    features: [
-      '5 lease documents',
-      'AI lease extraction',
-      'Rent schedule tracking',
-      'Email notifications',
-      'Rent roll export',
-      'Document storage',
+    featureKeys: [
+      'plan.feature.5_leases',
+      'plan.feature.ai_extraction',
+      'plan.feature.rent_schedule',
+      'plan.feature.email_notifications',
+      'plan.feature.rent_roll',
+      'plan.feature.document_storage',
     ],
     teamMembers: 0,
     hasTeamAccess: false,
@@ -68,17 +68,17 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
   },
   pro: {
     id: 'pro',
-    name: 'Pro',
-    description: 'For growing property managers',
+    nameKey: 'plan.pro',
+    descriptionKey: 'plan.description.pro',
     price: { monthly: 79, annual: 758 },
     documentLimit: 15,
-    features: [
-      '15 lease documents',
-      'Everything in Starter',
-      'SMS notifications',
-      'Risk analysis',
-      'Advanced reporting',
-      'Priority support',
+    featureKeys: [
+      'plan.feature.15_leases',
+      'plan.feature.everything_starter',
+      'plan.feature.sms',
+      'plan.feature.risk_analysis',
+      'plan.feature.advanced_reports',
+      'plan.feature.priority_support',
     ],
     teamMembers: 0,
     hasTeamAccess: false,
@@ -91,17 +91,17 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
   },
   business: {
     id: 'business',
-    name: 'Business',
-    description: 'For teams and enterprises',
+    nameKey: 'plan.business',
+    descriptionKey: 'plan.description.business',
     price: { monthly: 199, annual: 1910 },
     documentLimit: 50,
-    features: [
-      '50 lease documents',
-      'Everything in Pro',
-      'Team access (5 seats)',
-      'Role-based permissions',
-      'QuickBooks integration',
-      'Custom branding',
+    featureKeys: [
+      'plan.feature.50_leases',
+      'plan.feature.everything_pro',
+      'plan.feature.team_access',
+      'plan.feature.role_permissions',
+      'plan.feature.quickbooks',
+      'plan.feature.custom_branding',
     ],
     teamMembers: 5,
     hasTeamAccess: true,

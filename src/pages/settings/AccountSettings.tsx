@@ -691,18 +691,18 @@ export default function AccountSettings() {
                       )}
                       {plan.popular && !isCurrent && (
                         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                          <Badge variant="pro">Popular</Badge>
+                          <Badge variant="pro">{t('account.popular')}</Badge>
                         </div>
                       )}
                       <CardHeader className="pb-3">
-                        <CardTitle className="text-base">{plan.name}</CardTitle>
+                        <CardTitle className="text-base">{t(plan.nameKey)}</CardTitle>
                         <div className="flex items-baseline gap-1 mt-1">
                           {plan.price.monthly === 0 ? (
                             <span className="text-2xl font-bold">{t('account.free')}</span>
                           ) : (
                             <>
                               <span className="text-2xl font-bold">${plan.price.monthly}</span>
-                              <span className="text-muted-foreground text-sm">/mo</span>
+                              <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
                             </>
                           )}
                         </div>
@@ -712,10 +712,10 @@ export default function AccountSettings() {
                       </CardHeader>
                       <CardContent className="flex-1 flex flex-col">
                         <ul className="space-y-1.5 mb-4 flex-1">
-                          {plan.features.slice(0, 4).map((feature) => (
-                            <li key={feature} className="flex items-start gap-2 text-xs">
+                          {plan.featureKeys.slice(0, 4).map((featureKey) => (
+                            <li key={featureKey} className="flex items-start gap-2 text-xs">
                               <Check className="h-3 w-3 text-success shrink-0 mt-0.5" />
-                              <span className="text-muted-foreground">{feature}</span>
+                              <span className="text-muted-foreground">{t(featureKey)}</span>
                             </li>
                           ))}
                         </ul>
