@@ -587,6 +587,8 @@
     "escalation_calendar_desc": "View all scheduled rent escalations with projected increases.",
     "rent_projections": "Rent Projections",
     "rent_projections_desc": "Forecast future rent obligations based on current lease terms and escalations.",
+    "audit_log": "Audit Log",
+    "audit_log_desc": "Review lease status transitions and compliance history.",
     "view_report": "View Report",
     "monthly_overview": "Monthly Rent Overview",
     "monthly_overview_desc": "Total committed rent across all active leases",

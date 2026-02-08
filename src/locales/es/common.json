@@ -587,6 +587,8 @@
     "escalation_calendar_desc": "Vea todas las escalaciones de renta programadas con aumentos proyectados.",
     "rent_projections": "Proyecciones de Renta",
     "rent_projections_desc": "Pronostique obligaciones de renta futuras basadas en términos actuales de arrendamiento y escalaciones.",
+    "audit_log": "Registro de Auditoría",
+    "audit_log_desc": "Revise transiciones de estado de arrendamientos e historial de cumplimiento.",
     "view_report": "Ver Informe",
     "monthly_overview": "Resumen de Renta Mensual",
     "monthly_overview_desc": "Renta comprometida total en todos los arrendamientos activos",
