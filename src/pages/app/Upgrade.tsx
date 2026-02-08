@@ -137,7 +137,7 @@ export default function Upgrade() {
                   </div>
                 )}
                 <CardHeader className="pt-8 pb-4">
-                  <CardTitle className="text-lg">{plan.name}</CardTitle>
+                  <CardTitle className="text-lg">{t(plan.nameKey)}</CardTitle>
                   <div className="mt-2">
                     {displayPrice === 0 ? (
                       <span className="text-3xl font-bold">{t('upgrade.free')}</span>
@@ -155,17 +155,17 @@ export default function Upgrade() {
                       </div>
                     )}
                   </div>
-                  <CardDescription className="mt-2">{plan.description}</CardDescription>
+                  <CardDescription className="mt-2">{t(plan.descriptionKey)}</CardDescription>
                   <div className="mt-3 inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
-                    {plan.documentLimit} {plan.documentLimit === 1 ? 'lease' : 'leases'}
+                    {plan.documentLimit} {plan.documentLimit === 1 ? t('upgrade.lease') : t('upgrade.leases')}
                   </div>
                 </CardHeader>
                 <CardContent className="flex-1 flex flex-col">
                   <ul className="space-y-2.5 mb-6 flex-1">
-                    {plan.features.map((feat) => (
-                      <li key={feat} className="flex items-start gap-2 text-sm">
+                    {plan.featureKeys.map((featureKey) => (
+                      <li key={featureKey} className="flex items-start gap-2 text-sm">
                         <Check className="h-4 w-4 text-success shrink-0 mt-0.5" />
-                        <span className="text-muted-foreground">{feat}</span>
+                        <span className="text-muted-foreground">{t(featureKey)}</span>
                       </li>
                     ))}
                   </ul>
@@ -175,11 +175,11 @@ export default function Upgrade() {
                     </Button>
                   ) : isUpgradeOption ? (
                     <Button variant="accent" className="w-full" onClick={() => handlePlanAction(planId, 'upgrade')}>
-                      {t('upgrade.upgrade_to')} {plan.name}
+                      {t('upgrade.upgrade_to')} {t(plan.nameKey)}
                     </Button>
                   ) : isDowngradeOption && planId !== 'free' ? (
                     <Button variant="outline" className="w-full" onClick={() => handlePlanAction(planId, 'downgrade')}>
-                      {t('upgrade.downgrade_to')} {plan.name}
+                      {t('upgrade.downgrade_to')} {t(plan.nameKey)}
                     </Button>
                   ) : planId === 'free' ? (
                     <Button variant="ghost" className="w-full" disabled>

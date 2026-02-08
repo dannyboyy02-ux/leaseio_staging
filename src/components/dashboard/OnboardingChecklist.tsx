@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
+import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
+import { canManageWorkspaceMembers } from '@/lib/authorization';
 
 const DISMISSED_KEY = 'leaseio.onboarding_dismissed';
 
@@ -53,8 +55,10 @@ const stepDefinitions: OnboardingStep[] = [
 export function OnboardingChecklist() {
   const [dismissed, setDismissed] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
-  const { user, workspace } = useApp();
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const { user, workspace, userRole } = useApp();
   const { t } = useLanguage();
+  const canManageMembers = canManageWorkspaceMembers(userRole);
   
   useEffect(() => {
     // Check if dismissed
@@ -121,11 +125,19 @@ export function OnboardingChecklist() {
   
   if (dismissed) return null;
 
-  const completedCount = completedSteps.length;
-  const progress = (completedCount / stepDefinitions.length) * 100;
+  const visibleSteps = canManageMembers
+    ? stepDefinitions
+    : stepDefinitions.filter((step) => step.id !== 'team');
+  const visibleCompletedSteps = completedSteps.filter((stepId) =>
+    visibleSteps.some((step) => step.id === stepId)
+  );
+  const completedCount = visibleCompletedSteps.length;
+  const progress = visibleSteps.length
+    ? (visibleCompletedSteps.length / visibleSteps.length) * 100
+    : 0;
 
   // Hide if all steps completed
-  if (completedCount >= stepDefinitions.length) return null;
+  if (visibleCompletedSteps.length >= visibleSteps.length) return null;
 
   return (
     <Card className="border-primary/30 bg-primary/5 animate-fade-up">
@@ -157,19 +169,10 @@ export function OnboardingChecklist() {
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {stepDefinitions.map((step, index) => {
+          {visibleSteps.map((step, index) => {
             const isCompleted = completedSteps.includes(step.id);
-            return (
-              <Link
-                key={step.id}
-                to={step.href}
-                className={cn(
-                  'flex items-center gap-4 rounded-lg p-3 transition-all hover:bg-muted/50',
-                  'animate-fade-up',
-                  isCompleted && 'opacity-60'
-                )}
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
+            const content = (
+              <>
                 <div
                   className={cn(
                     'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors',
@@ -200,10 +203,45 @@ export function OnboardingChecklist() {
                 {!isCompleted && (
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 )}
+              </>
+            );
+
+            const sharedClassName = cn(
+              'flex w-full items-center gap-4 rounded-lg p-3 text-left transition-all hover:bg-muted/50',
+              'animate-fade-up',
+              isCompleted && 'opacity-60'
+            );
+
+            return step.id === 'team' ? (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => setInviteDialogOpen(true)}
+                className={sharedClassName}
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                {content}
+              </button>
+            ) : (
+              <Link
+                key={step.id}
+                to={step.href}
+                className={sharedClassName}
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                {content}
               </Link>
             );
           })}
         </div>
+        {canManageMembers && (
+          <InviteMemberDialog
+            open={inviteDialogOpen}
+            onOpenChange={setInviteDialogOpen}
+            workspaceId={workspace?.id ?? ''}
+            onInviteSent={() => {}}
+          />
+        )}
       </CardContent>
     </Card>
   );

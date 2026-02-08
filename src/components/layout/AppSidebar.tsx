@@ -31,6 +31,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  canAccessIntegrationsPage,
+  canAccessReportsDataQuality,
+  canAccessWorkspaceSettings,
+} from '@/lib/authorization';
 
 // Portfolio section items
 const portfolioItems = [
@@ -43,7 +48,6 @@ const portfolioItems = [
 const reportsItems = [
   { title: 'nav.reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
   { title: 'nav.data_quality', href: '/app/reports/data-quality', icon: Activity },
-  { title: 'nav.audit_log', href: '/app/reports/audit-log', icon: ClipboardList, requiresAdmin: true },
 ];
 
 // Tools section items
@@ -135,6 +139,27 @@ export function AppSidebar() {
     );
   };
 
+  const filteredReportsItems = reportsItems.filter((item) => {
+    if (item.title === 'nav.data_quality') {
+      return canAccessReportsDataQuality(userRole);
+    }
+    return true;
+  });
+
+  const filteredToolsItems = toolsItems.filter((item) => {
+    if (item.title === 'nav.integrations') {
+      return canAccessIntegrationsPage(userRole);
+    }
+    return true;
+  });
+
+  const filteredSettingsNavItems = settingsNavItems.filter((item) => {
+    if (item.title === 'nav.workspace') {
+      return canAccessWorkspaceSettings(userRole);
+    }
+    return true;
+  });
+
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground flex flex-col">
       {/* Logo */}
@@ -165,7 +190,7 @@ export function AppSidebar() {
             {t('nav.reports_analytics')}
           </p>
           <div className="space-y-1">
-            {reportsItems.map(renderNavItem)}
+            {filteredReportsItems.map(renderNavItem)}
           </div>
         </div>
 
@@ -175,7 +200,7 @@ export function AppSidebar() {
             {t('nav.tools')}
           </p>
           <div className="space-y-1">
-            {toolsItems.map(renderNavItem)}
+            {filteredToolsItems.map(renderNavItem)}
           </div>
         </div>
 
@@ -185,7 +210,7 @@ export function AppSidebar() {
             {t('nav.settings')}
           </p>
           <div className="space-y-1">
-            {settingsNavItems.map((item) => {
+            {filteredSettingsNavItems.map((item) => {
               const isActive = location.pathname === item.href;
               const translatedTitle = t(item.title);
               

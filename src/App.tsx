@@ -39,6 +39,13 @@ import Reports from "./pages/Reports";
 import WorkspaceSettings from "./pages/settings/WorkspaceSettings";
 import AccountSettings from "./pages/settings/AccountSettings";
 import NotFound from "./pages/NotFound";
+import { RequireRole } from "@/components/auth/RequireRole";
+import {
+  canAccessIntegrationsPage,
+  canAccessReportsAuditLog,
+  canAccessReportsDataQuality,
+  canAccessWorkspaceSettings,
+} from "@/lib/authorization";
 
 const queryClient = new QueryClient();
 
@@ -138,14 +145,6 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/app/integrations"
-                  element={
-                    <ProtectedRoute>
-                      <Integrations />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
                   path="/app/reports"
                   element={
                     <ProtectedRoute>
@@ -157,7 +156,9 @@ const App = () => (
                   path="/app/settings/workspace"
                   element={
                     <ProtectedRoute>
-                      <WorkspaceSettings />
+                      <RequireRole allow={canAccessWorkspaceSettings}>
+                        <WorkspaceSettings />
+                      </RequireRole>
                     </ProtectedRoute>
                   }
                 />
@@ -181,7 +182,9 @@ const App = () => (
                   path="/app/reports/data-quality"
                   element={
                     <ProtectedRoute>
-                      <ExtractionAnalytics />
+                      <RequireRole allow={canAccessReportsDataQuality}>
+                        <ExtractionAnalytics />
+                      </RequireRole>
                     </ProtectedRoute>
                   }
                 />
@@ -189,7 +192,19 @@ const App = () => (
                   path="/app/reports/audit-log"
                   element={
                     <ProtectedRoute>
-                      <AuditLog />
+                      <RequireRole allow={canAccessReportsAuditLog}>
+                        <AuditLog />
+                      </RequireRole>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/integrations"
+                  element={
+                    <ProtectedRoute>
+                      <RequireRole allow={canAccessIntegrationsPage}>
+                        <Integrations />
+                      </RequireRole>
                     </ProtectedRoute>
                   }
                 />

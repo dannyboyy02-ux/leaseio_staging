@@ -8,6 +8,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { canEditWorkspaceSettings } from '@/lib/authorization';
 
 interface Integration {
   id: string;
@@ -49,8 +50,9 @@ const integrations: Integration[] = [
 ];
 
 export default function Integrations() {
-  const { canAccessFeature } = useApp();
+  const { canAccessFeature, userRole } = useApp();
   const { t } = useLanguage();
+  const canManageIntegrations = canEditWorkspaceSettings(userRole);
 
   const getIntegrationStatus = (integration: Integration) => {
     if (!canAccessFeature(integration.requiresPlan)) {
@@ -110,24 +112,34 @@ export default function Integrations() {
                   </CardDescription>
 
                   {isLocked ? (
-                    <Button variant="outline" className="w-full" asChild>
-                      <Link to="/app/upgrade?feature=integrations">
-                        <Lock className="h-4 w-4 mr-2" />
-                        {t('integrations.upgrade_business')}
-                        <ArrowRight className="h-4 w-4 ml-auto" />
-                      </Link>
-                    </Button>
+                    canManageIntegrations ? (
+                      <Button variant="outline" className="w-full" asChild>
+                        <Link to="/app/upgrade?feature=integrations">
+                          <Lock className="h-4 w-4 mr-2" />
+                          {t('integrations.upgrade_business')}
+                          <ArrowRight className="h-4 w-4 ml-auto" />
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button variant="outline" className="w-full" disabled>
+                        {t('integrations.read_only')}
+                      </Button>
+                    )
                   ) : isConnected ? (
                     <div className="flex gap-2">
-                      <Button variant="outline" className="flex-1">
+                      <Button variant="outline" className="flex-1" disabled={!canManageIntegrations}>
                         {t('integrations.configure')}
                       </Button>
-                      <Button variant="ghost" className="text-destructive hover:text-destructive">
+                      <Button
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        disabled={!canManageIntegrations}
+                      >
                         {t('integrations.disconnect')}
                       </Button>
                     </div>
                   ) : (
-                    <Button variant="accent" className="w-full">
+                    <Button variant="accent" className="w-full" disabled={!canManageIntegrations}>
                       <Link2 className="h-4 w-4 mr-2" />
                       {t('integrations.connect')}
                       <ExternalLink className="h-4 w-4 ml-auto" />

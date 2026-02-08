@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Bell, Shield, Save, Loader2, UserPlus, Trash2, Crown } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, Link2, CreditCard } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useApp } from '@/contexts/AppContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +26,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
 import { MemberRoleSelect } from '@/components/workspace/MemberRoleSelect';
 import { WorkspaceRole } from '@/types';
+import { Link } from 'react-router-dom';
+import {
+  canAccessWorkspaceBilling,
+  canAccessWorkspaceDefaults,
+  canAccessWorkspaceIntegrations,
+  canAccessWorkspaceProfile,
+  canEditWorkspaceSettings,
+  canManageWorkspaceMembers,
+} from '@/lib/authorization';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -36,8 +44,7 @@ const timezones = [
 ];
 
 export default function WorkspaceSettings() {
-  const { workspace, refreshProfile } = useApp();
-  const { user: authUser } = useAuth();
+  const { workspace, refreshProfile, userRole } = useApp();
   const { t } = useLanguage();
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
   const [timezone, setTimezone] = useState(workspace?.timezone || 'America/New_York');
@@ -48,7 +55,22 @@ export default function WorkspaceSettings() {
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
-  const isOwner = workspace?.ownerId === authUser?.id;
+  const canEdit = canEditWorkspaceSettings(userRole);
+  const canManageMembers = canManageWorkspaceMembers(userRole);
+  const canAccessDefaults = canAccessWorkspaceDefaults(userRole);
+  const canAccessIntegrations = canAccessWorkspaceIntegrations(userRole);
+  const canAccessBilling = canAccessWorkspaceBilling(userRole);
+  const canAccessProfile = canAccessWorkspaceProfile(userRole);
+
+  const tabs = [
+    { id: 'profile', label: t('workspace.profile'), icon: Building2, visible: canAccessProfile },
+    { id: 'members', label: t('workspace.users_access'), icon: Users, visible: canManageMembers },
+    { id: 'defaults', label: t('workspace.defaults'), icon: Bell, visible: canAccessDefaults },
+    { id: 'integrations', label: t('workspace.integrations_tab'), icon: Link2, visible: canAccessIntegrations },
+    { id: 'billing', label: t('workspace.billing_plan'), icon: CreditCard, visible: canAccessBilling },
+  ].filter((tab) => tab.visible);
+
+  const defaultTab = tabs[0]?.id ?? 'profile';
 
   useEffect(() => {
     if (workspace) {
@@ -100,6 +122,10 @@ export default function WorkspaceSettings() {
   });
 
   const handleSaveGeneral = async () => {
+    if (!canEdit) {
+      toast.error(t('workspace.read_only'));
+      return;
+    }
     if (!workspace?.id) {
       toast.error('No workspace found');
       return;
@@ -128,6 +154,10 @@ export default function WorkspaceSettings() {
   };
 
   const handleSaveNotifications = async () => {
+    if (!canEdit) {
+      toast.error(t('workspace.read_only'));
+      return;
+    }
     if (!workspace?.id) {
       toast.error('No workspace found');
       return;
@@ -185,28 +215,18 @@ export default function WorkspaceSettings() {
       <AppHeader title={t('workspace.title')} subtitle={t('workspace.subtitle')} />
 
       <div className="p-6">
-        <Tabs defaultValue="general">
+        <Tabs defaultValue={defaultTab}>
           <TabsList className="mb-6">
-            <TabsTrigger value="general" className="gap-2">
-              <Building2 className="h-4 w-4" />
-              {t('workspace.general')}
-            </TabsTrigger>
-            <TabsTrigger value="members" className="gap-2">
-              <Users className="h-4 w-4" />
-              {t('workspace.members')}
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-2">
-              <Bell className="h-4 w-4" />
-              {t('workspace.notifications')}
-            </TabsTrigger>
-            <TabsTrigger value="security" className="gap-2">
-              <Shield className="h-4 w-4" />
-              {t('workspace.security')}
-            </TabsTrigger>
+            {tabs.map((tab) => (
+              <TabsTrigger key={tab.id} value={tab.id} className="gap-2">
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           {/* General Settings */}
-          <TabsContent value="general" className="space-y-6">
+          <TabsContent value="profile" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>{t('workspace.details')}</CardTitle>
@@ -219,12 +239,13 @@ export default function WorkspaceSettings() {
                     id="workspace-name"
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
+                    disabled={!canEdit}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="timezone">{t('workspace.default_timezone')}</Label>
                   <Select value={timezone} onValueChange={setTimezone}>
-                    <SelectTrigger id="timezone">
+                    <SelectTrigger id="timezone" disabled={!canEdit}>
                       <SelectValue placeholder="Select timezone" />
                     </SelectTrigger>
                     <SelectContent>
@@ -239,7 +260,7 @@ export default function WorkspaceSettings() {
                     {t('workspace.timezone_desc')}
                   </p>
                 </div>
-                <Button variant="accent" onClick={handleSaveGeneral} disabled={isSaving}>
+                <Button variant="accent" onClick={handleSaveGeneral} disabled={!canEdit || isSaving}>
                   {isSaving ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
@@ -247,110 +268,110 @@ export default function WorkspaceSettings() {
                   )}
                   {isSaving ? t('workspace.saving') : t('workspace.save_changes')}
                 </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Members */}
-          <TabsContent value="members" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>{t('workspace.team_members')}</CardTitle>
-                    <CardDescription>{t('workspace.manage_access')}</CardDescription>
-                  </div>
-                  {isOwner && (
-                    <Button variant="accent" onClick={() => setInviteDialogOpen(true)}>
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      {t('workspace.invite_member')}
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {membersLoading ? (
-                  <div className="space-y-4">
-                    {[...Array(3)].map((_, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <Skeleton className="h-10 w-10 rounded-full" />
-                        <div className="flex-1 space-y-2">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-3 w-48" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : !members || members.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>{t('workspace.no_members')}</p>
-                    <p className="text-sm">{t('workspace.only_one')}</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {members.map((member, index) => (
-                      <div
-                        key={member.id}
-                        className={cn(
-                          'flex items-center justify-between py-4 animate-fade-up',
-                          index === 0 && 'pt-0'
-                        )}
-                        style={{ animationDelay: `${index * 50}ms` }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>
-                              {member.name
-                                .split(' ')
-                                .map((n: string) => n[0])
-                                .join('')
-                                .slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{member.name}</p>
-                            <p className="text-sm text-muted-foreground">{member.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {member.user_id === workspace?.ownerId ? (
-                            <Badge variant="default" className="flex items-center gap-1">
-                              <Crown className="h-3 w-3" />
-                              {t('workspace.owner')}
-                            </Badge>
-                          ) : isOwner ? (
-                            <>
-                              <MemberRoleSelect
-                                memberId={member.id}
-                                currentRole={member.role as WorkspaceRole}
-                                onRoleChanged={() => refetchMembers()}
-                              />
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveMember(member.id)}
-                                className="text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          ) : (
-                            <Badge variant="outline">
-                              {getRoleLabel(member.role)}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                {!canEdit && (
+                  <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Notifications */}
-          <TabsContent value="notifications" className="space-y-6">
+          {/* Members */}
+          {canManageMembers && (
+            <TabsContent value="members" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{t('workspace.team_members')}</CardTitle>
+                      <CardDescription>{t('workspace.manage_access')}</CardDescription>
+                    </div>
+                    <Button variant="accent" onClick={() => setInviteDialogOpen(true)}>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      {t('workspace.invite_member')}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {membersLoading ? (
+                    <div className="space-y-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <Skeleton className="h-10 w-10 rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-48" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : !members || members.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>{t('workspace.no_members')}</p>
+                      <p className="text-sm">{t('workspace.only_one')}</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {members.map((member, index) => (
+                        <div
+                          key={member.id}
+                          className={cn(
+                            'flex items-center justify-between py-4 animate-fade-up',
+                            index === 0 && 'pt-0'
+                          )}
+                          style={{ animationDelay: `${index * 50}ms` }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarFallback>
+                                {member.name
+                                  .split(' ')
+                                  .map((n: string) => n[0])
+                                  .join('')
+                                  .slice(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{member.name}</p>
+                              <p className="text-sm text-muted-foreground">{member.email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {member.user_id === workspace?.ownerId ? (
+                              <Badge variant="default" className="flex items-center gap-1">
+                                <Crown className="h-3 w-3" />
+                                {t('workspace.owner')}
+                              </Badge>
+                            ) : (
+                              <>
+                                <MemberRoleSelect
+                                  memberId={member.id}
+                                  currentRole={member.role as WorkspaceRole}
+                                  onRoleChanged={() => refetchMembers()}
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRemoveMember(member.id)}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Defaults */}
+          {canAccessDefaults && (
+            <TabsContent value="defaults" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>{t('workspace.notification_settings')}</CardTitle>
@@ -368,12 +389,13 @@ export default function WorkspaceSettings() {
                     onChange={(e) => setNotificationDays(e.target.value)}
                     min="1"
                     max="365"
+                    disabled={!canEdit}
                   />
                   <p className="text-xs text-muted-foreground">
                     {t('workspace.reminder_desc')}
                   </p>
                 </div>
-                <Button variant="accent" onClick={handleSaveNotifications} disabled={isSavingNotifications}>
+                <Button variant="accent" onClick={handleSaveNotifications} disabled={!canEdit || isSavingNotifications}>
                   {isSavingNotifications ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
@@ -381,31 +403,57 @@ export default function WorkspaceSettings() {
                   )}
                   {isSavingNotifications ? t('workspace.saving') : t('workspace.save_changes')}
                 </Button>
+                {!canEdit && (
+                  <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>
+                )}
               </CardContent>
             </Card>
-          </TabsContent>
+            </TabsContent>
+          )}
 
-          {/* Security */}
-          <TabsContent value="security" className="space-y-6">
+          {/* Integrations */}
+          {canAccessIntegrations && (
+            <TabsContent value="integrations" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>{t('workspace.audit_log')}</CardTitle>
-                <CardDescription>
-                  {t('workspace.view_activity')}
-                </CardDescription>
+                <CardTitle>{t('workspace.integrations_tab')}</CardTitle>
+                <CardDescription>{t('workspace.integrations_desc')}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <Shield className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">{t('workspace.logs_appear')}</p>
-                </div>
+                <Button variant="accent" asChild>
+                  <Link to="/app/integrations">
+                    <Link2 className="h-4 w-4 mr-2" />
+                    {t('workspace.manage_integrations')}
+                  </Link>
+                </Button>
+                {!canEdit && (
+                  <p className="text-xs text-muted-foreground mt-2">{t('workspace.read_only')}</p>
+                )}
               </CardContent>
             </Card>
-          </TabsContent>
+            </TabsContent>
+          )}
+
+          {/* Billing & Plan */}
+          {canAccessBilling && (
+            <TabsContent value="billing" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('workspace.billing_plan')}</CardTitle>
+                <CardDescription>{t('workspace.billing_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="accent" asChild>
+                  <Link to="/app/settings/account">{t('workspace.manage_billing')}</Link>
+                </Button>
+              </CardContent>
+            </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
-      {workspace && (
+      {workspace && canManageMembers && (
         <InviteMemberDialog
           open={inviteDialogOpen}
           onOpenChange={setInviteDialogOpen}

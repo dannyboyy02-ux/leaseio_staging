@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { FileText, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('');
@@ -15,6 +16,7 @@ export default function ResetPassword() {
   const { updatePassword, session } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useAppTranslation();
 
   // Check if user has a valid session from reset link
   useEffect(() => {
@@ -29,8 +31,8 @@ export default function ResetPassword() {
     
     if (password.length < 8) {
       toast({
-        title: 'Weak password',
-        description: 'Password must be at least 8 characters.',
+        title: t('auth.reset.weak_password_title'),
+        description: t('auth.reset.weak_password_desc'),
         variant: 'destructive',
       });
       return;
@@ -38,8 +40,8 @@ export default function ResetPassword() {
 
     if (password !== confirmPassword) {
       toast({
-        title: 'Password mismatch',
-        description: 'Passwords do not match.',
+        title: t('auth.reset.password_mismatch_title'),
+        description: t('auth.reset.password_mismatch_desc'),
         variant: 'destructive',
       });
       return;
@@ -53,16 +55,16 @@ export default function ResetPassword() {
     
     if (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to update password. The reset link may have expired.',
+        title: t('auth.reset.error_title'),
+        description: t('auth.reset.error_desc'),
         variant: 'destructive',
       });
       return;
     }
 
     toast({
-      title: 'Password updated!',
-      description: 'Your password has been successfully changed.',
+      title: t('auth.reset.success_title'),
+      description: t('auth.reset.success_desc'),
     });
     
     navigate('/login');
@@ -83,15 +85,17 @@ export default function ResetPassword() {
 
         <Card className="shadow-lg">
           <CardHeader className="text-center pb-2">
-            <h1 className="font-display text-2xl font-bold text-foreground">Set new password</h1>
+            <h1 className="font-display text-2xl font-bold text-foreground">
+              {t('auth.reset.title')}
+            </h1>
             <p className="text-muted-foreground">
-              Enter your new password below.
+              {t('auth.reset.description')}
             </p>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="password">New password</Label>
+                <Label htmlFor="password">{t('auth.reset.new_password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -101,11 +105,11 @@ export default function ResetPassword() {
                   disabled={isLoading}
                   autoComplete="new-password"
                 />
-                <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
+                <p className="text-xs text-muted-foreground">{t('auth.min_password')}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm new password</Label>
+                <Label htmlFor="confirmPassword">{t('auth.reset.confirm_new')}</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
@@ -121,19 +125,19 @@ export default function ResetPassword() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Updating...
+                    {t('auth.reset.resetting')}
                   </>
                 ) : (
-                  'Update password'
+                  t('auth.reset.reset_password')
                 )}
               </Button>
             </form>
 
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
-                Remember your password?{' '}
+                {t('auth.reset.remember_password')}{' '}
                 <Link to="/login" className="text-primary hover:underline font-medium">
-                  Sign in
+                  {t('auth.sign_in')}
                 </Link>
               </p>
             </div>
