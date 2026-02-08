@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
+import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
 
 const DISMISSED_KEY = 'leaseio.onboarding_dismissed';
 
@@ -53,6 +54,7 @@ const stepDefinitions: OnboardingStep[] = [
 export function OnboardingChecklist() {
   const [dismissed, setDismissed] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { user, workspace } = useApp();
   const { t } = useLanguage();
   
@@ -159,17 +161,8 @@ export function OnboardingChecklist() {
         <div className="space-y-2">
           {stepDefinitions.map((step, index) => {
             const isCompleted = completedSteps.includes(step.id);
-            return (
-              <Link
-                key={step.id}
-                to={step.href}
-                className={cn(
-                  'flex items-center gap-4 rounded-lg p-3 transition-all hover:bg-muted/50',
-                  'animate-fade-up',
-                  isCompleted && 'opacity-60'
-                )}
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
+            const content = (
+              <>
                 <div
                   className={cn(
                     'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors',
@@ -200,10 +193,43 @@ export function OnboardingChecklist() {
                 {!isCompleted && (
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 )}
+              </>
+            );
+
+            const sharedClassName = cn(
+              'flex w-full items-center gap-4 rounded-lg p-3 text-left transition-all hover:bg-muted/50',
+              'animate-fade-up',
+              isCompleted && 'opacity-60'
+            );
+
+            return step.id === 'team' ? (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => setInviteDialogOpen(true)}
+                className={sharedClassName}
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                {content}
+              </button>
+            ) : (
+              <Link
+                key={step.id}
+                to={step.href}
+                className={sharedClassName}
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                {content}
               </Link>
             );
           })}
         </div>
+        <InviteMemberDialog
+          open={inviteDialogOpen}
+          onOpenChange={setInviteDialogOpen}
+          workspaceId={workspace?.id ?? ''}
+          onInviteSent={() => {}}
+        />
       </CardContent>
     </Card>
   );
