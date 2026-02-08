@@ -9,6 +9,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
 import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
+import { canManageWorkspaceMembers } from '@/lib/authorization';
 
 const DISMISSED_KEY = 'leaseio.onboarding_dismissed';
 
@@ -55,8 +56,9 @@ export function OnboardingChecklist() {
   const [dismissed, setDismissed] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const { user, workspace } = useApp();
+  const { user, workspace, userRole } = useApp();
   const { t } = useLanguage();
+  const canManageMembers = canManageWorkspaceMembers(userRole);
   
   useEffect(() => {
     // Check if dismissed
@@ -123,11 +125,19 @@ export function OnboardingChecklist() {
   
   if (dismissed) return null;
 
-  const completedCount = completedSteps.length;
-  const progress = (completedCount / stepDefinitions.length) * 100;
+  const visibleSteps = canManageMembers
+    ? stepDefinitions
+    : stepDefinitions.filter((step) => step.id !== 'team');
+  const visibleCompletedSteps = completedSteps.filter((stepId) =>
+    visibleSteps.some((step) => step.id === stepId)
+  );
+  const completedCount = visibleCompletedSteps.length;
+  const progress = visibleSteps.length
+    ? (visibleCompletedSteps.length / visibleSteps.length) * 100
+    : 0;
 
   // Hide if all steps completed
-  if (completedCount >= stepDefinitions.length) return null;
+  if (visibleCompletedSteps.length >= visibleSteps.length) return null;
 
   return (
     <Card className="border-primary/30 bg-primary/5 animate-fade-up">
@@ -159,7 +169,7 @@ export function OnboardingChecklist() {
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {stepDefinitions.map((step, index) => {
+          {visibleSteps.map((step, index) => {
             const isCompleted = completedSteps.includes(step.id);
             const content = (
               <>
@@ -224,12 +234,14 @@ export function OnboardingChecklist() {
             );
           })}
         </div>
-        <InviteMemberDialog
-          open={inviteDialogOpen}
-          onOpenChange={setInviteDialogOpen}
-          workspaceId={workspace?.id ?? ''}
-          onInviteSent={() => {}}
-        />
+        {canManageMembers && (
+          <InviteMemberDialog
+            open={inviteDialogOpen}
+            onOpenChange={setInviteDialogOpen}
+            workspaceId={workspace?.id ?? ''}
+            onInviteSent={() => {}}
+          />
+        )}
       </CardContent>
     </Card>
   );

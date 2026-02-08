@@ -1,4 +1,5 @@
 import { BarChart3, PieChart, TrendingUp, Calendar, Download, Lock, ClipboardList } from 'lucide-react';
+import type { ComponentType } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -8,8 +9,21 @@ import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Link } from 'react-router-dom';
 import { RentRollExport } from '@/components/reports/RentRollExport';
+import {
+  canAccessReportsAuditLog,
+  canAccessReportsDataQuality,
+  canExportReports,
+} from '@/lib/authorization';
 
-const reports = [
+const reports: Array<{
+  id: string;
+  titleKey: string;
+  descKey: string;
+  icon: ComponentType<{ className?: string }>;
+  href?: string;
+  requiresAdmin?: boolean;
+  requiresEditor?: boolean;
+}> = [
   {
     id: 'portfolio',
     titleKey: 'reports.portfolio_overview',
@@ -42,6 +56,15 @@ const reports = [
     href: '/app/reports/audit-log',
     requiresAdmin: true,
   },
+  {
+    id: 'data-quality',
+    titleKey: 'reports.data_quality',
+    descKey: 'reports.data_quality_desc',
+    icon: TrendingUp,
+    href: '/app/reports/data-quality',
+    requiresAdmin: false,
+    requiresEditor: true,
+  },
 ];
 
 export default function Reports() {
@@ -49,6 +72,8 @@ export default function Reports() {
   const { t } = useLanguage();
   const hasAccess = canAccessFeature('business');
   const isAdmin = userRole === 'admin' || userRole === 'owner';
+  const isEditor = userRole === 'editor';
+  const canExport = canExportReports(userRole);
 
   if (!hasAccess) {
     return (
@@ -85,16 +110,16 @@ export default function Reports() {
 
   return (
     <AppLayout>
-      <AppHeader
-        title={t('reports.title')}
-        subtitle={t('reports.subtitle')}
-        actions={
-          <Button variant="outline">
+        <AppHeader
+          title={t('reports.title')}
+          subtitle={t('reports.subtitle')}
+          actions={
+          <Button variant="outline" disabled={!canExport}>
             <Download className="h-4 w-4 mr-2" />
             {t('reports.export_all')}
           </Button>
-        }
-      />
+          }
+        />
 
       <div className="p-6">
         {/* Rent Roll Export */}
@@ -104,7 +129,21 @@ export default function Reports() {
 
         <div className="grid gap-6 md:grid-cols-2">
           {reports
-            .filter((report) => !report.requiresAdmin || isAdmin)
+            .filter((report) => {
+              if (report.id === 'audit') {
+                return canAccessReportsAuditLog(userRole);
+              }
+              if (report.id === 'data-quality') {
+                return canAccessReportsDataQuality(userRole);
+              }
+              if (report.requiresAdmin) {
+                return isAdmin;
+              }
+              if (report.requiresEditor) {
+                return isEditor || isAdmin;
+              }
+              return true;
+            })
             .map((report, index) => (
             <Card
               key={report.id}
@@ -132,7 +171,7 @@ export default function Reports() {
                       t('reports.view_report')
                     )}
                   </Button>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" disabled={!canExport}>
                     <Download className="h-4 w-4" />
                   </Button>
                 </div>

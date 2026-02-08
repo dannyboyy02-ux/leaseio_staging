@@ -6,6 +6,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useApp } from '@/contexts/AppContext';
+import { canExportReports } from '@/lib/authorization';
 
 interface LeaseData {
   id: string;
@@ -24,6 +26,8 @@ interface LeaseData {
 export function RentRollExport() {
   const [isExporting, setIsExporting] = useState(false);
   const { t } = useLanguage();
+  const { userRole } = useApp();
+  const canExport = canExportReports(userRole);
 
   const formatCurrency = (amount: number | string | null): string => {
     if (!amount) return '';
@@ -54,6 +58,10 @@ export function RentRollExport() {
   };
 
   const exportToCSV = async () => {
+    if (!canExport) {
+      toast.error(t('reports.export_restricted'));
+      return;
+    }
     setIsExporting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -160,7 +168,7 @@ export function RentRollExport() {
         <p className="text-sm text-muted-foreground mb-4">
           {t('reports.rent_roll_details')}
         </p>
-        <Button onClick={exportToCSV} disabled={isExporting}>
+        <Button onClick={exportToCSV} disabled={isExporting || !canExport}>
           {isExporting ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
