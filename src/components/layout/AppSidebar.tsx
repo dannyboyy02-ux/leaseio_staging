@@ -43,7 +43,6 @@ const portfolioItems = [
 const reportsItems = [
   { title: 'nav.reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
   { title: 'nav.data_quality', href: '/app/reports/data-quality', icon: Activity },
-  { title: 'nav.audit_log', href: '/app/reports/audit-log', icon: ClipboardList, requiresAdmin: true },
 ];
 
 // Tools section items
