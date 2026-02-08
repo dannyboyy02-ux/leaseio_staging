@@ -6,6 +6,7 @@
     "reports": "Reports",
     "notifications": "Notifications",
     "integrations": "Integrations",
+    "extraction_analytics": "Extraction Analytics",
     "data_quality": "Data Quality",
     "workspace": "Workspace",
     "account": "Account",
@@ -425,6 +426,9 @@
       "description_placeholder": "e.g., Insurance renewal deadline",
       "add_date": "Add Date",
       "save": "Save Notification Preferences",
+      "missing_date_description": "Please enter both date and description",
+      "save_success": "Notification preferences saved",
+      "save_error": "Failed to save notification preferences",
       "days_before": "days before",
       "lease_commencement": "Lease Commencement",
       "lease_expiration": "Lease Expiration",
@@ -504,6 +508,8 @@
     "keep_subscription": "Keep Subscription",
     "free": "Free",
     "current": "Current",
+    "popular": "Popular",
+    "per_month": "/mo",
     "downgrade": "Downgrade",
     "free_tier": "Free Tier",
     "leases": "leases",
@@ -612,7 +618,8 @@
     "download": "Download",
     "upgrade": "Upgrade",
     "business_plan": "Business Plan",
-    "search_placeholder": "Search leases, parties, properties..."
+    "search_placeholder": "Search leases, parties, properties...",
+    "per_month_short": "mo"
   },
   "plan": {
     "free": "Free",
@@ -621,6 +628,12 @@
     "business": "Business",
     "plan": "Plan",
     "upgrade": "Upgrade",
+    "description": {
+      "free": "Try LeaseIO with a single lease",
+      "starter": "Perfect for small portfolios",
+      "pro": "For growing property managers",
+      "business": "For teams and enterprises"
+    },
     "feature": {
       "1_lease": "1 lease document",
       "5_leases": "5 lease documents",
@@ -696,7 +709,16 @@
       "new_password": "New Password",
       "confirm_new": "Confirm New Password",
       "reset_password": "Reset Password",
-      "resetting": "Resetting..."
+      "resetting": "Resetting...",
+      "weak_password_title": "Weak password",
+      "weak_password_desc": "Password must be at least 8 characters.",
+      "password_mismatch_title": "Password mismatch",
+      "password_mismatch_desc": "Passwords do not match.",
+      "error_title": "Error",
+      "error_desc": "Failed to update password. The reset link may have expired.",
+      "success_title": "Password updated!",
+      "success_desc": "Your password has been successfully changed.",
+      "remember_password": "Remember your password?"
     },
     "errors": {
       "missing_fields": "Missing fields",
@@ -849,6 +871,35 @@
     "step4_title": "Explore integrations",
     "step4_desc": "Connect with QuickBooks and other tools"
   },
+  "onboarding_flow": {
+    "workspace_name_required_title": "Workspace name required",
+    "workspace_name_required_desc": "Please enter a name for your workspace.",
+    "not_authenticated_title": "Not authenticated",
+    "not_authenticated_desc": "Please sign in to continue.",
+    "workspace_created_title": "Workspace created!",
+    "workspace_created_desc": "Your workspace is ready. Let's upload your first lease.",
+    "error_title": "Error",
+    "error_create_workspace": "Failed to create workspace.",
+    "name_workspace_title": "Name your workspace",
+    "name_workspace_desc": "This is where you'll manage all your leases.",
+    "workspace_name_label": "Workspace name",
+    "workspace_name_placeholder": "Acme Properties",
+    "continue": "Continue",
+    "choose_plan_title": "Choose your plan",
+    "choose_plan_desc": "Start with a 14-day free trial. Cancel anytime.",
+    "popular": "Popular",
+    "free": "Free",
+    "per_month": "/mo",
+    "lease": "lease",
+    "leases": "leases",
+    "plan_label": "Plan",
+    "document_limit": "Document limit",
+    "trial_ends": "Trial ends",
+    "all_set_title": "You're all set!",
+    "all_set_desc": "Your workspace \"{{name}}\" is ready with the {{plan}} plan.",
+    "creating": "Creating...",
+    "upload_first_lease": "Upload your first lease"
+  },
   "audit": {
     "title": "Audit Log",
     "subtitle": "Track all lease state transitions and changes",
@@ -881,6 +932,8 @@
     "free": "Free",
     "per_month": "/mo",
     "per_year": "/year",
+    "lease": "lease",
+    "leases": "leases",
     "current_plan": "Current Plan",
     "upgrade_to": "Upgrade to",
     "downgrade_to": "Downgrade to",
@@ -967,6 +1020,102 @@
     "posting": "Posting...",
     "review_fields": "Please review all highlighted fields before posting",
     "nudge_approver": "Nudge Approver"
+  },
+  "accept_invite": {
+    "title": "Workspace Invitation",
+    "brand": "LeaseIO",
+    "preparing": "Preparing invitation...",
+    "token_missing": "Invitation token missing.",
+    "login_required_title": "Login Required",
+    "login_required_message": "Please log in (or create an account) using the email that received the invite.",
+    "continue_to_login": "Continue to Login",
+    "accepting": "Accepting invitation...",
+    "accepted_title": "Accepted",
+    "accepted_redirecting": "Invitation accepted. Redirecting...",
+    "go_to_dashboard": "Go to Dashboard",
+    "failed_title": "Invite Failed",
+    "failed": "Failed to accept invitation.",
+    "retry": "Retry"
+  },
+  "not_found": {
+    "message": "Oops! Page not found",
+    "return_home": "Return to Home"
+  },
+  "index": {
+    "title": "Welcome to Your Blank App",
+    "subtitle": "Start building your amazing project here!"
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "last_updated": "Last updated:",
+    "section1": {
+      "title": "1. Information We Collect",
+      "paragraph1": "We collect information you provide directly to us, including your name, email address, company name, and payment information when you register for an account or subscribe to our service.",
+      "paragraph2": "We also collect lease documents you upload to our platform for the purpose of providing our AI-powered abstraction services."
+    },
+    "section2": {
+      "title": "2. How We Use Your Information",
+      "intro": "We use the information we collect to:",
+      "bullet1": "Provide, maintain, and improve our services",
+      "bullet2": "Process your lease documents using AI technology",
+      "bullet3": "Send you notifications about your leases and account",
+      "bullet4": "Process payments and send invoices",
+      "bullet5": "Respond to your comments, questions, and requests"
+    },
+    "section3": {
+      "title": "3. Data Security",
+      "paragraph1": "We implement appropriate technical and organizational measures to protect your personal information and documents. All data is encrypted at rest using AES-256 encryption and in transit using TLS 1.3."
+    },
+    "section4": {
+      "title": "4. Data Retention",
+      "paragraph1": "We retain your information for as long as your account is active or as needed to provide you services. If you close your account, we will delete your data within 30 days unless required by law to retain it longer."
+    },
+    "section5": {
+      "title": "5. Your Rights",
+      "paragraph1": "You have the right to access, correct, or delete your personal information at any time. You can export your data through the application or by contacting support."
+    },
+    "section6": {
+      "title": "6. Contact Us",
+      "paragraph1": "If you have any questions about this Privacy Policy, please contact us at",
+      "email": "privacy@leaseio.com"
+    }
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "last_updated": "Last updated:",
+    "section1": {
+      "title": "1. Acceptance of Terms",
+      "paragraph1": "By accessing or using LeaseIO, you agree to be bound by these Terms of Service. If you do not agree to these terms, you may not use our service."
+    },
+    "section2": {
+      "title": "2. Description of Service",
+      "paragraph1": "LeaseIO provides AI-powered lease abstraction and lease operations management services. Our platform extracts key terms from lease documents, tracks important dates, and integrates with accounting systems."
+    },
+    "section3": {
+      "title": "3. User Accounts",
+      "paragraph1": "You are responsible for maintaining the security of your account and password. You must notify us immediately of any unauthorized access to your account."
+    },
+    "section4": {
+      "title": "4. Subscription and Billing",
+      "paragraph1": "Subscriptions are billed monthly in advance. Document limits are enforced per billing period. Each master lease counts as one document, and each amendment counts as one additional document."
+    },
+    "section5": {
+      "title": "5. Data Ownership",
+      "paragraph1": "You retain all rights to your lease documents and extracted data. We do not claim ownership of any content you upload to our service. You may export your data at any time."
+    },
+    "section6": {
+      "title": "6. Limitation of Liability",
+      "paragraph1": "LeaseIO is provided \"as is\" without warranties of any kind. We are not liable for any errors in AI-extracted data. Users are responsible for reviewing and verifying all extracted information before finalizing."
+    },
+    "section7": {
+      "title": "7. Termination",
+      "paragraph1": "You may cancel your subscription at any time. We may terminate your account for violation of these terms. Upon termination, your data will be deleted within 30 days."
+    },
+    "section8": {
+      "title": "8. Contact",
+      "paragraph1": "For questions about these terms, contact us at",
+      "email": "legal@leaseio.com"
+    }
   },
   "form": {
     "required": "This field is required",

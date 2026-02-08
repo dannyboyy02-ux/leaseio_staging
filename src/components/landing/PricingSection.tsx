@@ -10,35 +10,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 export function PricingSection() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
-  const { t, language } = useLanguage();
-
-  // Feature translations mapping
-  const getTranslatedFeatures = (planId: string, features: string[]) => {
-    const featureTranslations: Record<string, string> = {
-      '1 lease document': t('plan.feature.1_lease'),
-      'AI lease extraction': t('plan.feature.ai_extraction'),
-      'Basic rent tracking': t('plan.feature.basic_tracking'),
-      'Email notifications': t('plan.feature.email_notifications'),
-      '5 lease documents': t('plan.feature.5_leases'),
-      'Rent schedule tracking': t('plan.feature.rent_schedule'),
-      'Rent roll export': t('plan.feature.rent_roll'),
-      'Document storage': t('plan.feature.document_storage'),
-      '15 lease documents': t('plan.feature.15_leases'),
-      'Everything in Starter': t('plan.feature.everything_starter'),
-      'SMS notifications': t('plan.feature.sms'),
-      'Risk analysis': t('plan.feature.risk_analysis'),
-      'Advanced reporting': t('plan.feature.advanced_reports'),
-      'Priority support': t('plan.feature.priority_support'),
-      '50 lease documents': t('plan.feature.50_leases'),
-      'Everything in Pro': t('plan.feature.everything_pro'),
-      'Team access (5 seats)': t('plan.feature.team_access'),
-      'Role-based permissions': t('plan.feature.role_permissions'),
-      'QuickBooks integration': t('plan.feature.quickbooks'),
-      'Custom branding': t('plan.feature.custom_branding'),
-    };
-    
-    return features.map(f => featureTranslations[f] || f);
-  };
+  const { t } = useLanguage();
 
   return (
     <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 bg-muted/30">
@@ -84,7 +56,7 @@ export function PricingSection() {
             const annualSavings = (monthlyPrice * 12) - annualTotal;
             const isAnnual = billingInterval === 'annual';
             const displayPrice = isAnnual ? annualMonthly : monthlyPrice;
-            const translatedFeatures = getTranslatedFeatures(planId, plan.features);
+            const translatedFeatures = plan.featureKeys.map((featureKey) => t(featureKey));
             
             return (
               <Card 
@@ -121,7 +93,7 @@ export function PricingSection() {
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
-                    {language === 'es' ? plan.description.replace('Try LeaseIO with a single lease', 'Pruebe LeaseIO con un solo arrendamiento').replace('Perfect for small portfolios', 'Perfecto para portafolios pequeños').replace('For growing property managers', 'Para gestores de propiedades en crecimiento').replace('For teams and enterprises', 'Para equipos y empresas') : plan.description}
+                    {t(plan.descriptionKey)}
                   </p>
                   <div className="mt-3 inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
                     {plan.documentLimit} {plan.documentLimit === 1 ? t('landing.pricing.lease') : t('landing.pricing.leases')}

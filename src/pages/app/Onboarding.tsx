@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { PLANS, PLAN_ORDER } from '@/config/pricing';
 import type { SubscriptionPlan } from '@/types';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export default function Onboarding() {
   const [step, setStep] = useState(1);
@@ -20,6 +21,7 @@ export default function Onboarding() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t, language } = useAppTranslation();
 
   useEffect(() => {
     // Pre-fill workspace name from user metadata if available
@@ -31,8 +33,8 @@ export default function Onboarding() {
   const handleCreateWorkspace = async () => {
     if (!workspaceName.trim()) {
       toast({
-        title: 'Workspace name required',
-        description: 'Please enter a name for your workspace.',
+        title: t('onboarding_flow.workspace_name_required_title'),
+        description: t('onboarding_flow.workspace_name_required_desc'),
         variant: 'destructive',
       });
       return;
@@ -40,8 +42,8 @@ export default function Onboarding() {
 
     if (!user) {
       toast({
-        title: 'Not authenticated',
-        description: 'Please sign in to continue.',
+        title: t('onboarding_flow.not_authenticated_title'),
+        description: t('onboarding_flow.not_authenticated_desc'),
         variant: 'destructive',
       });
       navigate('/login');
@@ -79,15 +81,15 @@ export default function Onboarding() {
       if (memberError) throw memberError;
 
       toast({
-        title: 'Workspace created!',
-        description: 'Your workspace is ready. Let\'s upload your first lease.',
+        title: t('onboarding_flow.workspace_created_title'),
+        description: t('onboarding_flow.workspace_created_desc'),
       });
 
       navigate('/app/leases');
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to create workspace.',
+        title: t('onboarding_flow.error_title'),
+        description: error.message || t('onboarding_flow.error_create_workspace'),
         variant: 'destructive',
       });
     } finally {
@@ -138,23 +140,25 @@ export default function Onboarding() {
                 <div className="mx-auto h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <Building2 className="h-6 w-6 text-primary" />
                 </div>
-                <h1 className="font-display text-2xl font-bold text-foreground">Name your workspace</h1>
+                <h1 className="font-display text-2xl font-bold text-foreground">
+                  {t('onboarding_flow.name_workspace_title')}
+                </h1>
                 <p className="text-muted-foreground">
-                  This is where you'll manage all your leases.
+                  {t('onboarding_flow.name_workspace_desc')}
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="workspaceName">Workspace name</Label>
+                  <Label htmlFor="workspaceName">{t('onboarding_flow.workspace_name_label')}</Label>
                   <Input
                     id="workspaceName"
-                    placeholder="Acme Properties"
+                    placeholder={t('onboarding_flow.workspace_name_placeholder')}
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
                   />
                 </div>
                 <Button onClick={() => setStep(2)} className="w-full" disabled={!workspaceName.trim()}>
-                  Continue
+                  {t('onboarding_flow.continue')}
                 </Button>
               </CardContent>
             </>
@@ -166,9 +170,11 @@ export default function Onboarding() {
                 <div className="mx-auto h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <CreditCard className="h-6 w-6 text-primary" />
                 </div>
-                <h1 className="font-display text-2xl font-bold text-foreground">Choose your plan</h1>
+                <h1 className="font-display text-2xl font-bold text-foreground">
+                  {t('onboarding_flow.choose_plan_title')}
+                </h1>
                 <p className="text-muted-foreground">
-                  Start with a 14-day free trial. Cancel anytime.
+                  {t('onboarding_flow.choose_plan_desc')}
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -188,23 +194,25 @@ export default function Onboarding() {
                       >
                         {plan.popular && (
                           <div className="absolute -top-2 left-4 px-2 py-0.5 rounded-full bg-accent text-accent-foreground text-xs font-medium">
-                            Popular
+                            {t('onboarding_flow.popular')}
                           </div>
                         )}
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-semibold text-foreground">{plan.name}</span>
+                          <span className="font-semibold text-foreground">{t(plan.nameKey)}</span>
                         </div>
                         <div className="text-lg font-bold text-foreground mb-1">
-                          {plan.price.monthly === 0 ? 'Free' : `$${plan.price.monthly}/mo`}
+                          {plan.price.monthly === 0
+                            ? t('onboarding_flow.free')
+                            : `$${plan.price.monthly}${t('onboarding_flow.per_month')}`}
                         </div>
                         <div className="text-sm text-primary font-medium mb-3">
-                          {plan.documentLimit} {plan.documentLimit === 1 ? 'lease' : 'leases'}
+                          {plan.documentLimit} {plan.documentLimit === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
                         </div>
                         <ul className="space-y-1">
-                          {plan.features.slice(0, 3).map((feature) => (
-                            <li key={feature} className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {plan.featureKeys.slice(0, 3).map((featureKey) => (
+                            <li key={featureKey} className="flex items-center gap-2 text-xs text-muted-foreground">
                               <Check className="h-3 w-3 text-accent shrink-0" />
-                              <span className="truncate">{feature}</span>
+                              <span className="truncate">{t(featureKey)}</span>
                             </li>
                           ))}
                         </ul>
@@ -214,10 +222,10 @@ export default function Onboarding() {
                 </div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
-                    Back
+                    {t('common.back')}
                   </Button>
                   <Button onClick={() => setStep(3)} className="flex-1">
-                    Continue
+                    {t('onboarding_flow.continue')}
                   </Button>
                 </div>
               </CardContent>
@@ -230,44 +238,52 @@ export default function Onboarding() {
                 <div className="mx-auto h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                   <Upload className="h-6 w-6 text-primary" />
                 </div>
-                <h1 className="font-display text-2xl font-bold text-foreground">You're all set!</h1>
+                <h1 className="font-display text-2xl font-bold text-foreground">
+                  {t('onboarding_flow.all_set_title')}
+                </h1>
                 <p className="text-muted-foreground">
-                  Your workspace "{workspaceName}" is ready with the {selectedPlanConfig.name} plan.
+                  {t('onboarding_flow.all_set_desc', {
+                    name: workspaceName,
+                    plan: t(selectedPlanConfig.nameKey),
+                  })}
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="bg-muted/50 rounded-lg p-4 space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Plan</span>
-                    <span className="font-medium text-foreground">{selectedPlanConfig.name}</span>
+                    <span className="text-muted-foreground">{t('onboarding_flow.plan_label')}</span>
+                    <span className="font-medium text-foreground">{t(selectedPlanConfig.nameKey)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Document limit</span>
+                    <span className="text-muted-foreground">{t('onboarding_flow.document_limit')}</span>
                     <span className="font-medium text-foreground">
-                      {selectedPlanConfig.documentLimit} {selectedPlanConfig.documentLimit === 1 ? 'lease' : 'leases'}
+                      {selectedPlanConfig.documentLimit}{' '}
+                      {selectedPlanConfig.documentLimit === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
                     </span>
                   </div>
                   {selectedPlanConfig.price.monthly > 0 && (
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Trial ends</span>
+                      <span className="text-muted-foreground">{t('onboarding_flow.trial_ends')}</span>
                       <span className="font-medium text-foreground">
-                        {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                        {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString(
+                          language === 'es' ? 'es-419' : 'en-US'
+                        )}
                       </span>
                     </div>
                   )}
                 </div>
                 <div className="flex gap-3">
                   <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
-                    Back
+                    {t('common.back')}
                   </Button>
                   <Button onClick={handleCreateWorkspace} className="flex-1" disabled={isLoading}>
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating...
+                        {t('onboarding_flow.creating')}
                       </>
                     ) : (
-                      'Upload your first lease'
+                      t('onboarding_flow.upload_first_lease')
                     )}
                   </Button>
                 </div>

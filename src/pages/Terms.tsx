@@ -1,84 +1,100 @@
 import { LandingNav } from '@/components/landing/LandingNav';
 import { FooterSection } from '@/components/landing/FooterSection';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export default function Terms() {
+  const { t, language } = useAppTranslation();
+
   return (
     <div className="min-h-screen bg-background">
       <LandingNav />
       <main className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mx-auto">
-          <h1 className="font-display text-4xl font-bold text-foreground mb-8">Terms of Service</h1>
+          <h1 className="font-display text-4xl font-bold text-foreground mb-8">
+            {t('terms.title')}
+          </h1>
           
           <div className="prose prose-neutral dark:prose-invert max-w-none space-y-6 text-muted-foreground">
             <p className="text-lg">
-              Last updated: {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+              {t('terms.last_updated')}{' '}
+              {new Date().toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+              })}
             </p>
 
             <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-foreground">1. Acceptance of Terms</h2>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('terms.section1.title')}
+              </h2>
               <p>
-                By accessing or using LeaseIO, you agree to be bound by these Terms of Service. 
-                If you do not agree to these terms, you may not use our service.
+                {t('terms.section1.paragraph1')}
               </p>
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-foreground">2. Description of Service</h2>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('terms.section2.title')}
+              </h2>
               <p>
-                LeaseIO provides AI-powered lease abstraction and lease operations management 
-                services. Our platform extracts key terms from lease documents, tracks important dates, 
-                and integrates with accounting systems.
+                {t('terms.section2.paragraph1')}
               </p>
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-foreground">3. User Accounts</h2>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('terms.section3.title')}
+              </h2>
               <p>
-                You are responsible for maintaining the security of your account and password. 
-                You must notify us immediately of any unauthorized access to your account.
+                {t('terms.section3.paragraph1')}
               </p>
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-foreground">4. Subscription and Billing</h2>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('terms.section4.title')}
+              </h2>
               <p>
-                Subscriptions are billed monthly in advance. Document limits are enforced per billing 
-                period. Each master lease counts as one document, and each amendment counts as one 
-                additional document.
+                {t('terms.section4.paragraph1')}
               </p>
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-foreground">5. Data Ownership</h2>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('terms.section5.title')}
+              </h2>
               <p>
-                You retain all rights to your lease documents and extracted data. We do not claim 
-                ownership of any content you upload to our service. You may export your data at any time.
+                {t('terms.section5.paragraph1')}
               </p>
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-foreground">6. Limitation of Liability</h2>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('terms.section6.title')}
+              </h2>
               <p>
-                LeaseIO is provided "as is" without warranties of any kind. We are not 
-                liable for any errors in AI-extracted data. Users are responsible for reviewing 
-                and verifying all extracted information before finalizing.
+                {t('terms.section6.paragraph1')}
               </p>
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-foreground">7. Termination</h2>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('terms.section7.title')}
+              </h2>
               <p>
-                You may cancel your subscription at any time. We may terminate your account for 
-                violation of these terms. Upon termination, your data will be deleted within 30 days.
+                {t('terms.section7.paragraph1')}
               </p>
             </section>
 
             <section className="space-y-4">
-              <h2 className="text-2xl font-semibold text-foreground">8. Contact</h2>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('terms.section8.title')}
+              </h2>
               <p>
-                For questions about these terms, contact us at{' '}
+                {t('terms.section8.paragraph1')}{' '}
                 <a href="mailto:legal@leaseio.com" className="text-primary hover:underline">
-                  legal@leaseio.com
+                  {t('terms.section8.email')}
                 </a>
               </p>
             </section>

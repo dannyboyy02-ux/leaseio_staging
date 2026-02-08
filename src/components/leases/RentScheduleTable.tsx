@@ -108,7 +108,7 @@ export function RentScheduleTable({
                 {formatDate(nextIncrease.date)}
               </p>
               <p className="text-sm text-yellow-600">
-                → {formatCurrency(nextIncrease.amount)}/{language === 'es' ? 'mes' : 'mo'}
+                → {formatCurrency(nextIncrease.amount)}/{t('common.per_month_short')}
               </p>
             </div>
           )}
