@@ -6,6 +6,7 @@
     "reports": "Informes",
     "notifications": "Notificaciones",
     "integrations": "Integraciones",
+    "extraction_analytics": "Analítica de extracción",
     "data_quality": "Calidad de Datos",
     "workspace": "Espacio de Trabajo",
     "account": "Cuenta",
@@ -425,6 +426,9 @@
       "description_placeholder": "ej., Fecha límite de renovación de seguro",
       "add_date": "Agregar Fecha",
       "save": "Guardar Preferencias de Notificación",
+      "missing_date_description": "Ingrese fecha y descripción",
+      "save_success": "Preferencias guardadas",
+      "save_error": "Error al guardar preferencias",
       "days_before": "días antes",
       "lease_commencement": "Inicio del Arrendamiento",
       "lease_expiration": "Vencimiento del Arrendamiento",
@@ -504,6 +508,8 @@
     "keep_subscription": "Mantener Suscripción",
     "free": "Gratis",
     "current": "Actual",
+    "popular": "Popular",
+    "per_month": "/mes",
     "downgrade": "Degradar",
     "free_tier": "Nivel Gratis",
     "leases": "arrendamientos",
@@ -612,7 +618,8 @@
     "download": "Descargar",
     "upgrade": "Actualizar",
     "business_plan": "Plan Business",
-    "search_placeholder": "Buscar arrendamientos, partes, propiedades..."
+    "search_placeholder": "Buscar arrendamientos, partes, propiedades...",
+    "per_month_short": "mes"
   },
   "plan": {
     "free": "Gratis",
@@ -621,6 +628,12 @@
     "business": "Business",
     "plan": "Plan",
     "upgrade": "Actualizar",
+    "description": {
+      "free": "Pruebe LeaseIO con un solo arrendamiento",
+      "starter": "Perfecto para portafolios pequeños",
+      "pro": "Para gestores de propiedades en crecimiento",
+      "business": "Para equipos y empresas"
+    },
     "feature": {
       "1_lease": "1 documento de arrendamiento",
       "5_leases": "5 documentos de arrendamiento",
@@ -696,7 +709,16 @@
       "new_password": "Nueva Contraseña",
       "confirm_new": "Confirmar Nueva Contraseña",
       "reset_password": "Restablecer Contraseña",
-      "resetting": "Restableciendo..."
+      "resetting": "Restableciendo...",
+      "weak_password_title": "Contraseña débil",
+      "weak_password_desc": "La contraseña debe tener al menos 8 caracteres.",
+      "password_mismatch_title": "Las contraseñas no coinciden",
+      "password_mismatch_desc": "Las contraseñas no coinciden.",
+      "error_title": "Error",
+      "error_desc": "No se pudo actualizar la contraseña. Es posible que el enlace haya expirado.",
+      "success_title": "¡Contraseña actualizada!",
+      "success_desc": "Su contraseña se ha cambiado correctamente.",
+      "remember_password": "¿Recuerda su contraseña?"
     },
     "errors": {
       "missing_fields": "Campos faltantes",
@@ -849,6 +871,35 @@
     "step4_title": "Explore integraciones",
     "step4_desc": "Conecte con QuickBooks y otras herramientas"
   },
+  "onboarding_flow": {
+    "workspace_name_required_title": "Se requiere nombre del espacio de trabajo",
+    "workspace_name_required_desc": "Ingrese un nombre para su espacio de trabajo.",
+    "not_authenticated_title": "No autenticado",
+    "not_authenticated_desc": "Inicie sesión para continuar.",
+    "workspace_created_title": "¡Espacio de trabajo creado!",
+    "workspace_created_desc": "Su espacio de trabajo está listo. Carguemos su primer arrendamiento.",
+    "error_title": "Error",
+    "error_create_workspace": "No se pudo crear el espacio de trabajo.",
+    "name_workspace_title": "Nombre su espacio de trabajo",
+    "name_workspace_desc": "Aquí administrará todos sus arrendamientos.",
+    "workspace_name_label": "Nombre del espacio de trabajo",
+    "workspace_name_placeholder": "Propiedades Acme",
+    "continue": "Continuar",
+    "choose_plan_title": "Elija su plan",
+    "choose_plan_desc": "Comience con una prueba gratuita de 14 días. Cancele cuando quiera.",
+    "popular": "Popular",
+    "free": "Gratis",
+    "per_month": "/mes",
+    "lease": "arrendamiento",
+    "leases": "arrendamientos",
+    "plan_label": "Plan",
+    "document_limit": "Límite de documentos",
+    "trial_ends": "La prueba termina",
+    "all_set_title": "¡Todo listo!",
+    "all_set_desc": "Su espacio de trabajo \"{{name}}\" está listo con el plan {{plan}}.",
+    "creating": "Creando...",
+    "upload_first_lease": "Cargue su primer arrendamiento"
+  },
   "audit": {
     "title": "Registro de Auditoría",
     "subtitle": "Rastree todas las transiciones de estado de arrendamientos y cambios",
@@ -881,6 +932,8 @@
     "free": "Gratis",
     "per_month": "/mes",
     "per_year": "/año",
+    "lease": "arrendamiento",
+    "leases": "arrendamientos",
     "current_plan": "Plan Actual",
     "upgrade_to": "Actualizar a",
     "downgrade_to": "Degradar a",
@@ -967,6 +1020,102 @@
     "posting": "Publicando...",
     "review_fields": "Por favor revise todos los campos resaltados antes de publicar",
     "nudge_approver": "Recordar al Aprobador"
+  },
+  "accept_invite": {
+    "title": "Invitación al espacio de trabajo",
+    "brand": "LeaseIO",
+    "preparing": "Preparando invitación...",
+    "token_missing": "Falta el token de invitación.",
+    "login_required_title": "Se requiere iniciar sesión",
+    "login_required_message": "Inicie sesión (o cree una cuenta) con el correo que recibió la invitación.",
+    "continue_to_login": "Continuar al inicio de sesión",
+    "accepting": "Aceptando invitación...",
+    "accepted_title": "Aceptado",
+    "accepted_redirecting": "Invitación aceptada. Redirigiendo...",
+    "go_to_dashboard": "Ir al panel",
+    "failed_title": "La invitación falló",
+    "failed": "No se pudo aceptar la invitación.",
+    "retry": "Reintentar"
+  },
+  "not_found": {
+    "message": "¡Ups! Página no encontrada",
+    "return_home": "Volver al inicio"
+  },
+  "index": {
+    "title": "Bienvenido a su aplicación en blanco",
+    "subtitle": "¡Comience a construir su proyecto increíble aquí!"
+  },
+  "privacy": {
+    "title": "Política de Privacidad",
+    "last_updated": "Última actualización:",
+    "section1": {
+      "title": "1. Información que recopilamos",
+      "paragraph1": "Recopilamos la información que nos proporciona directamente, incluyendo su nombre, correo electrónico, nombre de la empresa e información de pago cuando se registra o se suscribe a nuestro servicio.",
+      "paragraph2": "También recopilamos los documentos de arrendamiento que sube a nuestra plataforma para proporcionar nuestros servicios de abstracción con IA."
+    },
+    "section2": {
+      "title": "2. Cómo usamos su información",
+      "intro": "Utilizamos la información recopilada para:",
+      "bullet1": "Proveer, mantener y mejorar nuestros servicios",
+      "bullet2": "Procesar sus documentos de arrendamiento usando tecnología de IA",
+      "bullet3": "Enviarle notificaciones sobre sus arrendamientos y su cuenta",
+      "bullet4": "Procesar pagos y enviar facturas",
+      "bullet5": "Responder a sus comentarios, preguntas y solicitudes"
+    },
+    "section3": {
+      "title": "3. Seguridad de los datos",
+      "paragraph1": "Implementamos medidas técnicas y organizativas apropiadas para proteger su información personal y documentos. Todos los datos se cifran en reposo con AES-256 y en tránsito con TLS 1.3."
+    },
+    "section4": {
+      "title": "4. Retención de datos",
+      "paragraph1": "Conservamos su información mientras su cuenta esté activa o según sea necesario para brindarle servicios. Si cierra su cuenta, eliminaremos sus datos dentro de los 30 días, salvo que la ley requiera conservarlos por más tiempo."
+    },
+    "section5": {
+      "title": "5. Sus derechos",
+      "paragraph1": "Tiene derecho a acceder, corregir o eliminar su información personal en cualquier momento. Puede exportar sus datos desde la aplicación o contactando a soporte."
+    },
+    "section6": {
+      "title": "6. Contáctenos",
+      "paragraph1": "Si tiene preguntas sobre esta Política de Privacidad, contáctenos en",
+      "email": "privacy@leaseio.com"
+    }
+  },
+  "terms": {
+    "title": "Términos de Servicio",
+    "last_updated": "Última actualización:",
+    "section1": {
+      "title": "1. Aceptación de los términos",
+      "paragraph1": "Al acceder o usar LeaseIO, acepta estar sujeto a estos Términos de Servicio. Si no está de acuerdo, no puede usar nuestro servicio."
+    },
+    "section2": {
+      "title": "2. Descripción del servicio",
+      "paragraph1": "LeaseIO ofrece servicios de abstracción de arrendamientos con IA y gestión de operaciones. Nuestra plataforma extrae términos clave de documentos, rastrea fechas importantes e integra sistemas contables."
+    },
+    "section3": {
+      "title": "3. Cuentas de usuario",
+      "paragraph1": "Usted es responsable de mantener la seguridad de su cuenta y contraseña. Debe notificarnos de inmediato cualquier acceso no autorizado."
+    },
+    "section4": {
+      "title": "4. Suscripción y facturación",
+      "paragraph1": "Las suscripciones se facturan mensualmente por adelantado. Los límites de documentos se aplican por período de facturación. Cada arrendamiento maestro cuenta como un documento y cada enmienda como uno adicional."
+    },
+    "section5": {
+      "title": "5. Propiedad de los datos",
+      "paragraph1": "Usted conserva todos los derechos sobre sus documentos de arrendamiento y datos extraídos. No reclamamos propiedad sobre el contenido que sube. Puede exportar sus datos en cualquier momento."
+    },
+    "section6": {
+      "title": "6. Limitación de responsabilidad",
+      "paragraph1": "LeaseIO se proporciona \"tal cual\" sin garantías de ningún tipo. No somos responsables de errores en datos extraídos por IA. Los usuarios deben revisar y verificar la información antes de finalizar."
+    },
+    "section7": {
+      "title": "7. Terminación",
+      "paragraph1": "Puede cancelar su suscripción en cualquier momento. Podemos terminar su cuenta por violación de estos términos. Tras la terminación, sus datos se eliminarán dentro de los 30 días."
+    },
+    "section8": {
+      "title": "8. Contacto",
+      "paragraph1": "Para preguntas sobre estos términos, contáctenos en",
+      "email": "legal@leaseio.com"
+    }
   },
   "form": {
     "required": "Este campo es obligatorio",

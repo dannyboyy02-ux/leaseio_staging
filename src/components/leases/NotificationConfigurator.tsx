@@ -208,7 +208,7 @@ export function NotificationConfigurator({
 
   const handleAddCustomDate = () => {
     if (!customDate || !customDescription) {
-      toast.error(language === 'es' ? 'Ingrese fecha y descripción' : 'Please enter both date and description');
+      toast.error(t('notifications.config.missing_date_description'));
       return;
     }
 
@@ -254,10 +254,10 @@ export function NotificationConfigurator({
 
       if (error) throw error;
 
-      toast.success(language === 'es' ? 'Preferencias guardadas' : 'Notification preferences saved');
+      toast.success(t('notifications.config.save_success'));
     } catch (error) {
       console.error('Error saving notifications:', error);
-      toast.error(language === 'es' ? 'Error al guardar preferencias' : 'Failed to save notification preferences');
+      toast.error(t('notifications.config.save_error'));
     } finally {
       setSaving(false);
     }
