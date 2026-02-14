@@ -1,12 +1,13 @@
 // Lease Lifecycle Types (Business Plan Only)
 
-export type LifecycleStatus = 
-  | 'draft' 
-  | 'pending_internal_approval' 
-  | 'lease_candidate' 
-  | 'pending_execution_approval' 
-  | 'active' 
-  | 'rejected';
+export type LifecycleStatus =
+  | 'requested'
+  | 'negotiating'
+  | 'pending_review'
+  | 'executed'
+  | 'active'
+  | 'expired'
+  | 'cancelled';
 
 export type LeaseCategory = 'property' | 'equipment' | 'vehicle' | 'other';
 
@@ -14,15 +15,15 @@ export type ApprovalType = 'internal' | 'execution';
 
 export type ApprovalAction = 'approve' | 'send_back' | 'reject' | 'pause';
 
-export type ActivityType = 
-  | 'status_change' 
-  | 'approval' 
-  | 'rejection' 
-  | 'send_back' 
+export type ActivityType =
+  | 'status_change'
+  | 'approval'
+  | 'rejection'
+  | 'send_back'
   | 'pause'
-  | 'nudge_sent' 
-  | 'document_upload' 
-  | 'created' 
+  | 'nudge_sent'
+  | 'document_upload'
+  | 'created'
   | 'comment';
 
 export type NudgeType = 'manual' | 'automatic_day2' | 'automatic_day5' | 'automatic_day10';
@@ -50,7 +51,7 @@ export interface LifecycleLease {
   executionApprovedAt: string | null;
   activatedAt: string | null;
   uploadedAt: string;
-  // Extracted data (for lease_candidate and beyond)
+  // Extracted data (for executed and beyond)
   tenantName: string | null;
   landlordName: string | null;
   leaseStart: string | null;
@@ -119,12 +120,13 @@ export interface LeaseNudge {
 
 // State machine transitions
 export const LIFECYCLE_TRANSITIONS: Record<LifecycleStatus, LifecycleStatus[]> = {
-  draft: ['pending_internal_approval'],
-  pending_internal_approval: ['lease_candidate', 'draft', 'rejected'],
-  lease_candidate: ['pending_execution_approval'],
-  pending_execution_approval: ['active', 'lease_candidate', 'rejected'],
-  active: [],
-  rejected: [],
+  requested: ['negotiating', 'cancelled'],
+  negotiating: ['pending_review', 'cancelled'],
+  pending_review: ['executed', 'negotiating', 'cancelled'],
+  executed: ['active', 'cancelled'],
+  active: ['expired', 'cancelled'],
+  expired: [],
+  cancelled: [],
 };
 
 // Status display configuration
@@ -135,33 +137,33 @@ export const LIFECYCLE_STATUS_CONFIG: Record<LifecycleStatus, {
   bgClass: string;
   textClass: string;
 }> = {
-  draft: {
-    label: 'Draft',
-    shortLabel: 'Draft',
+  requested: {
+    label: 'Requested',
+    shortLabel: 'Requested',
     color: 'secondary',
     bgClass: 'bg-muted',
     textClass: 'text-muted-foreground',
   },
-  pending_internal_approval: {
-    label: 'Pending Approval',
-    shortLabel: 'Pending',
+  negotiating: {
+    label: 'Negotiating',
+    shortLabel: 'Negotiating',
     color: 'outline',
     bgClass: 'bg-warning/10',
     textClass: 'text-warning',
   },
-  lease_candidate: {
-    label: 'Lease Candidate',
-    shortLabel: 'Candidate',
+  pending_review: {
+    label: 'Pending Review',
+    shortLabel: 'Review',
     color: 'outline',
     bgClass: 'bg-info/10',
     textClass: 'text-info',
   },
-  pending_execution_approval: {
-    label: 'Pending Execution',
-    shortLabel: 'Execution',
+  executed: {
+    label: 'Executed',
+    shortLabel: 'Executed',
     color: 'outline',
-    bgClass: 'bg-warning/10',
-    textClass: 'text-warning',
+    bgClass: 'bg-primary/10',
+    textClass: 'text-primary',
   },
   active: {
     label: 'Active',
@@ -170,9 +172,16 @@ export const LIFECYCLE_STATUS_CONFIG: Record<LifecycleStatus, {
     bgClass: 'bg-success/10',
     textClass: 'text-success',
   },
-  rejected: {
-    label: 'Rejected',
-    shortLabel: 'Rejected',
+  expired: {
+    label: 'Expired',
+    shortLabel: 'Expired',
+    color: 'outline',
+    bgClass: 'bg-muted',
+    textClass: 'text-muted-foreground',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    shortLabel: 'Cancelled',
     color: 'destructive',
     bgClass: 'bg-destructive/10',
     textClass: 'text-destructive',
