@@ -62,6 +62,9 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
       expiration: t('notifications.type.expiration'),
       commencement: t('notifications.type.commencement'),
       custom: t('notifications.type.custom'),
+      new_request: 'New Request',
+      status_changed: 'Status Changed',
+      document_uploaded: 'Document Uploaded',
     };
     return labels[type] || type;
   };
@@ -73,6 +76,9 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
       expiration: 'destructive',
       commencement: 'default',
       custom: 'secondary',
+      new_request: 'default',
+      status_changed: 'info',
+      document_uploaded: 'warning',
     };
     return variants[type] || 'secondary';
   };

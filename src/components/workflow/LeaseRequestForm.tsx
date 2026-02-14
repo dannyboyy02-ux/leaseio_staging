@@ -31,6 +31,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { createLeaseNotification } from '@/lib/leaseNotifications';
 import type { CreateLeaseRequestData } from '@/types/workflow';
 
 const leaseRequestSchema = z.object({
@@ -222,6 +223,11 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
       });
 
       await notifyFinanceAdmins(lease.id, payload.requestTitle);
+      await createLeaseNotification({
+        leaseId: lease.id,
+        eventType: 'new_request',
+        description: `New lease request created: ${payload.requestTitle}`,
+      });
 
       toast.success('Lease request created');
       onOpenChange(false);

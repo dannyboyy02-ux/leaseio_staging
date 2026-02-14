@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
+import { createLeaseNotification } from '@/lib/leaseNotifications';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -261,6 +262,12 @@ export default function LeaseReview() {
       details: { source: 'lease_review' },
     });
 
+    await createLeaseNotification({
+      leaseId: lease.id,
+      eventType: 'status_changed',
+      description: `Lease status updated: ${previousStatus || 'unknown'} → ${newStatus}`,
+    });
+
     setLease((prev: any) => (prev ? { ...prev, lifecycle_status: newStatus } : prev));
   }, [lease, user]);
 
@@ -292,6 +299,12 @@ export default function LeaseReview() {
         user_id: user.id,
         activity_type: 'document_upload',
         details: { filename: stageFile.name, stage: lease.lifecycle_status },
+      });
+
+      await createLeaseNotification({
+        leaseId: lease.id,
+        eventType: 'document_uploaded',
+        description: `Document uploaded: ${stageFile.name}`,
       });
 
       setLease((prev: any) => (prev ? { ...prev, storage_path: storagePath, filename: stageFile.name } : prev));
