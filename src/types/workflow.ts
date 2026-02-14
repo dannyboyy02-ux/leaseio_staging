@@ -22,13 +22,22 @@ export interface AuditEntry {
   timestamp: string;
 }
 
-export interface CreateLeaseFormData {
-  leaseType: WorkflowLeaseType;
-  category: LeaseCategory;
-  approverEmail: string;
-  parentLeaseId?: string;
+export interface CreateLeaseRequestData {
+  requestTitle: string;
+  category: 'property' | 'equipment' | 'vehicle' | 'other';
+  requestingDepartment: string;
+  requestUrgency: 'low' | 'standard' | 'urgent';
+  expectedStartDate?: string;
+  estimatedMonthlyCostMin?: number;
+  estimatedMonthlyCostMax?: number;
+  estimatedTermMonths?: number;
+  vendorName?: string;
+  requestDescription?: string;
   file?: File;
 }
+
+// Backward-compatible alias until workflow components are migrated in Phase 2.
+export type CreateLeaseFormData = CreateLeaseRequestData;
 
 export interface PostedLease {
   id: string;
