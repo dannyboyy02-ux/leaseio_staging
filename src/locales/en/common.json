@@ -32,39 +32,39 @@
       "get_started": "Get Started"
     },
     "hero": {
-      "badge": "Simple Lease Management for Growing Businesses",
-      "headline": "Know what you owe,",
-      "headline_accent": "when it's due",
-      "subheadline": "LeaseIO extracts key terms from your leases in minutes. Track renewals, manage rent schedules, and never miss a deadline—no accounting complexity required.",
-      "cta_trial": "Start Free Trial",
+      "badge": "Lease Visibility for Growing Companies",
+      "headline": "Every lease. Every department.",
+      "headline_accent": "One platform.",
+      "subheadline": "Departments initiate leases without finance knowing. LeaseIO captures every lease request before it's signed, giving finance real-time pipeline visibility and ASC 842 compliance confidence.",
+      "cta_trial": "Start Free",
       "cta_signin": "Sign In",
       "trust_setup": "5-minute setup",
-      "trust_ai": "AI-powered extraction",
+      "trust_ai": "AI-powered abstraction",
       "trust_security": "Bank-grade security",
       "demo_coming": "Interactive Demo Coming Soon"
     },
     "features": {
-      "title": "Built for operators, not accountants",
-      "subtitle": "No complex accounting standards. No journal entries. Just simple, clear visibility into your lease obligations.",
+      "title": "Built for how companies actually manage leases",
+      "subtitle": "From initial request to ASC 842 compliance — one platform connects every department to finance.",
       "ai_extraction": {
-        "title": "AI Lease Extraction",
-        "desc": "Upload a PDF and our AI extracts key terms, dates, parties, and rent schedules in minutes—not hours."
+        "title": "Lease Request Intake",
+        "desc": "Any department can log a lease request in seconds — no document required. Finance sees it immediately."
       },
       "deadline_tracking": {
-        "title": "Deadline Tracking",
-        "desc": "Never miss a renewal window or expiration date. Visual calendar shows what's coming up across your portfolio."
+        "title": "Pipeline Visibility",
+        "desc": "See every lease request across the organization in one view. Know what's being negotiated, what's pending, and what's active."
       },
       "rent_schedule": {
-        "title": "Rent Schedule Management",
-        "desc": "Track escalations, step increases, and rent changes. Know exactly what you owe each month."
+        "title": "AI Document Abstraction",
+        "desc": "Upload executed documents and AI extracts key terms, dates, rent schedules, and obligations automatically."
       },
       "notifications": {
-        "title": "Smart Notifications",
-        "desc": "Get email alerts for renewals, expirations, and payment due dates. Customize timing to match your workflow."
+        "title": "Multi-Department Notifications",
+        "desc": "Finance gets notified on new requests. Requestors get updates on status changes. Everyone stays aligned."
       },
       "rent_roll": {
-        "title": "One-Click Rent Roll",
-        "desc": "Export your entire portfolio to CSV with one click. Total monthly rent, annual obligations, and more."
+        "title": "ASC 842 Compliance Ready",
+        "desc": "Active leases flow directly into your compliance repository. Never miss a commencement date or unrecorded obligation."
       },
       "security": {
         "title": "Secure & Private",
@@ -73,22 +73,22 @@
     },
     "how": {
       "title": "How it works",
-      "subtitle": "Get from PDF to actionable insights in four simple steps.",
+      "subtitle": "From lease request to compliance-ready in four steps.",
       "step1": {
-        "title": "Upload",
-        "desc": "Drop your lease PDF into LeaseIO. Master leases and amendments supported."
+        "title": "Log a Request",
+        "desc": "Operations, facilities, or any department logs a lease request with basic details. No document needed."
       },
       "step2": {
-        "title": "Extract",
-        "desc": "Our AI reads the document and extracts key terms, dates, rent schedules, and more."
+        "title": "Track Negotiations",
+        "desc": "Update status as the deal progresses. Attach LOIs, drafts, or term sheets along the way."
       },
       "step3": {
-        "title": "Review",
-        "desc": "Review extracted data side-by-side with the original PDF. Make corrections if needed."
+        "title": "Upload & Abstract",
+        "desc": "When the lease is signed, upload the executed document. AI extracts all key terms automatically."
       },
       "step4": {
-        "title": "Automate",
-        "desc": "Finalize and unlock notifications, escalation tracking, and accounting sync."
+        "title": "Stay Compliant",
+        "desc": "Abstracted leases enter your active repository. Finance has full visibility for ASC 842 reporting."
       }
     },
     "pricing": {
@@ -612,9 +612,17 @@
   },
   "empty": {
     "no_leases": "No leases yet",
-    "upload_first": "Upload your first lease document to get started. Our AI will automatically extract key terms, dates, and financial information for you.",
+    "upload_first": "Upload your first lease to get started",
+    "upload_description": "Upload a PDF lease document and our AI will extract key terms, dates, and rent schedules automatically.",
     "upload_first_lease": "Upload Your First Lease",
-    "supports_pdf": "Supports PDF files up to 50MB"
+    "download_sample": "Download Sample",
+    "supports_pdf": "Supports PDF files up to 50MB",
+    "benefit1_title": "AI Extraction",
+    "benefit1_desc": "Key terms, dates, and rent schedules extracted automatically in minutes.",
+    "benefit2_title": "Track Deadlines",
+    "benefit2_desc": "Never miss a renewal window or lease expiration date.",
+    "benefit3_title": "Smart Alerts",
+    "benefit3_desc": "Get email notifications for upcoming deadlines and payments."
   },
   "common": {
     "confirm": "Confirm",
@@ -645,10 +653,8 @@
     "plan": "Plan",
     "upgrade": "Upgrade",
     "description": {
-      "free": "Try LeaseIO with a single lease",
-      "starter": "Perfect for small portfolios",
-      "pro": "For growing property managers",
-      "business": "For teams and enterprises"
+      "free": "For small teams getting started with lease visibility",
+      "business": "For organizations that need full lease lifecycle management"
     },
     "feature": {
       "1_lease": "1 lease document",
@@ -671,7 +677,20 @@
       "quickbooks": "QuickBooks integration",
       "custom_branding": "Custom branding",
       "everything_starter": "Everything in Starter",
-      "everything_pro": "Everything in Pro"
+      "everything_pro": "Everything in Pro",
+      "lease_request_intake": "Lease request intake",
+      "pipeline_visibility": "Pipeline visibility",
+      "basic_notifications": "Basic notifications",
+      "status_tracking": "Status tracking",
+      "1_abstraction": "1 AI abstraction included",
+      "everything_free": "Everything in Free",
+      "unlimited_users": "Unlimited users",
+      "unlimited_leases": "Unlimited active leases",
+      "unlimited_abstraction": "Unlimited AI abstraction",
+      "asc842_reports": "ASC 842 compliance reports",
+      "role_based_access": "Role-based access control",
+      "bulk_upload": "Bulk document upload",
+      "export_integrations": "Export integrations"
     }
   },
   "auth": {
@@ -860,20 +879,6 @@
     "faq2_a": "Most documents are processed within 1-2 minutes. Complex documents with many pages may take a bit longer.",
     "faq3_q": "Can I edit extracted data?",
     "faq3_a": "Yes! After extraction, you can review and edit any field before finalizing the lease."
-  },
-  "empty": {
-    "no_leases": "No leases yet",
-    "upload_first": "Upload your first lease to get started",
-    "upload_description": "Upload a PDF lease document and our AI will extract key terms, dates, and rent schedules automatically.",
-    "upload_first_lease": "Upload Your First Lease",
-    "download_sample": "Download Sample",
-    "supports_pdf": "Supports PDF files up to 50MB",
-    "benefit1_title": "AI Extraction",
-    "benefit1_desc": "Key terms, dates, and rent schedules extracted automatically in minutes.",
-    "benefit2_title": "Track Deadlines",
-    "benefit2_desc": "Never miss a renewal window or lease expiration date.",
-    "benefit3_title": "Smart Alerts",
-    "benefit3_desc": "Get email notifications for upcoming deadlines and payments."
   },
   "onboarding": {
     "getting_started": "Getting Started",

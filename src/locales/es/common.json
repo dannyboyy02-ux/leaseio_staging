@@ -32,63 +32,63 @@
       "get_started": "Comenzar"
     },
     "hero": {
-      "badge": "Gestión Simple de Arrendamientos para Negocios en Crecimiento",
-      "headline": "Sepa lo que debe,",
-      "headline_accent": "cuándo vence",
-      "subheadline": "LeaseIO extrae términos clave de sus arrendamientos en minutos. Rastree renovaciones, administre calendarios de renta y nunca pierda una fecha límite—sin complejidad contable.",
-      "cta_trial": "Prueba Gratis",
+      "badge": "Visibilidad de Arrendamientos para Empresas en Crecimiento",
+      "headline": "Cada arrendamiento. Cada departamento.",
+      "headline_accent": "Una sola plataforma.",
+      "subheadline": "Los departamentos inician arrendamientos sin que finanzas lo sepa. LeaseIO captura cada solicitud antes de la firma y brinda visibilidad del pipeline en tiempo real y confianza para ASC 842.",
+      "cta_trial": "Comenzar Gratis",
       "cta_signin": "Iniciar Sesión",
       "trust_setup": "Configuración en 5 minutos",
-      "trust_ai": "Extracción con IA",
-      "trust_security": "Seguridad bancaria",
-      "demo_coming": "Demo Interactivo Próximamente"
+      "trust_ai": "Abstracción con IA",
+      "trust_security": "Seguridad nivel bancario",
+      "demo_coming": "Demo interactiva próximamente"
     },
     "features": {
-      "title": "Diseñado para operadores, no contadores",
-      "subtitle": "Sin estándares contables complejos. Sin asientos contables. Solo visibilidad simple y clara de sus obligaciones de arrendamiento.",
+      "title": "Diseñado para cómo las empresas gestionan arrendamientos",
+      "subtitle": "Desde la solicitud inicial hasta el cumplimiento ASC 842: una plataforma conecta a todos los departamentos con finanzas.",
       "ai_extraction": {
-        "title": "Extracción con IA",
-        "desc": "Suba un PDF y nuestra IA extrae términos clave, fechas, partes y calendarios de renta en minutos—no horas."
+        "title": "Ingreso de Solicitudes",
+        "desc": "Cualquier departamento puede registrar una solicitud en segundos, sin documento. Finanzas la ve al instante."
       },
       "deadline_tracking": {
-        "title": "Seguimiento de Fechas",
-        "desc": "Nunca pierda una ventana de renovación o fecha de vencimiento. El calendario visual muestra lo que viene en su portafolio."
+        "title": "Visibilidad del Pipeline",
+        "desc": "Vea todas las solicitudes de arrendamiento de la organización en una sola vista."
       },
       "rent_schedule": {
-        "title": "Gestión de Calendario de Renta",
-        "desc": "Rastree escalaciones, aumentos escalonados y cambios de renta. Sepa exactamente cuánto debe cada mes."
+        "title": "Abstracción de Documentos con IA",
+        "desc": "Cargue contratos ejecutados y la IA extrae términos, fechas, rentas y obligaciones automáticamente."
       },
       "notifications": {
-        "title": "Notificaciones Inteligentes",
-        "desc": "Reciba alertas por email para renovaciones, vencimientos y fechas de pago. Personalice el tiempo según su flujo de trabajo."
+        "title": "Notificaciones Multidepartamentales",
+        "desc": "Finanzas recibe alertas de nuevas solicitudes y los solicitantes reciben actualizaciones de estado."
       },
       "rent_roll": {
-        "title": "Rol de Rentas con Un Clic",
-        "desc": "Exporte todo su portafolio a CSV con un clic. Renta mensual total, obligaciones anuales y más."
+        "title": "Listo para Cumplimiento ASC 842",
+        "desc": "Los arrendamientos activos pasan directamente a su repositorio de cumplimiento."
       },
       "security": {
         "title": "Seguro y Privado",
-        "desc": "El cifrado bancario mantiene sus documentos de arrendamiento seguros. Sus datos nunca se comparten ni se usan para entrenamiento."
+        "desc": "El cifrado de nivel bancario protege sus documentos. Sus datos no se comparten ni se usan para entrenamiento."
       }
     },
     "how": {
       "title": "Cómo funciona",
-      "subtitle": "Pase de PDF a información accionable en cuatro simples pasos.",
+      "subtitle": "De solicitud a cumplimiento en cuatro pasos.",
       "step1": {
-        "title": "Subir",
-        "desc": "Suba su PDF de arrendamiento a LeaseIO. Soporta arrendamientos maestros y enmiendas."
+        "title": "Registrar Solicitud",
+        "desc": "Operaciones, facilities o cualquier área registra la solicitud con datos básicos."
       },
       "step2": {
-        "title": "Extraer",
-        "desc": "Nuestra IA lee el documento y extrae términos clave, fechas, calendarios de renta y más."
+        "title": "Seguir Negociación",
+        "desc": "Actualice el estado conforme avanza la negociación y adjunte LOIs o borradores."
       },
       "step3": {
-        "title": "Revisar",
-        "desc": "Revise los datos extraídos junto al PDF original. Haga correcciones si es necesario."
+        "title": "Cargar y Abstraer",
+        "desc": "Cuando se firme el contrato, cárguelo y la IA extraerá los términos clave."
       },
       "step4": {
-        "title": "Automatizar",
-        "desc": "Finalice y active notificaciones, seguimiento de escalaciones y sincronización contable."
+        "title": "Mantener Cumplimiento",
+        "desc": "Los arrendamientos abstraídos entran al repositorio activo para reportes ASC 842."
       }
     },
     "pricing": {
@@ -612,9 +612,17 @@
   },
   "empty": {
     "no_leases": "Sin arrendamientos aún",
-    "upload_first": "Suba su primer documento de arrendamiento para comenzar. Nuestra IA extraerá automáticamente términos clave, fechas e información financiera.",
+    "upload_first": "Suba su primer arrendamiento para comenzar",
+    "upload_description": "Suba un documento PDF de arrendamiento y nuestra IA extraerá automáticamente términos clave, fechas y calendarios de renta.",
     "upload_first_lease": "Subir Su Primer Arrendamiento",
-    "supports_pdf": "Soporta archivos PDF hasta 50MB"
+    "download_sample": "Descargar Ejemplo",
+    "supports_pdf": "Soporta archivos PDF hasta 50MB",
+    "benefit1_title": "Extracción con IA",
+    "benefit1_desc": "Términos clave, fechas y calendarios de renta extraídos automáticamente en minutos.",
+    "benefit2_title": "Rastrear Fechas",
+    "benefit2_desc": "Nunca pierda una ventana de renovación o fecha de vencimiento.",
+    "benefit3_title": "Alertas Inteligentes",
+    "benefit3_desc": "Reciba notificaciones por email para fechas límite y pagos próximos."
   },
   "common": {
     "confirm": "Confirmar",
@@ -645,10 +653,8 @@
     "plan": "Plan",
     "upgrade": "Actualizar",
     "description": {
-      "free": "Pruebe LeaseIO con un solo arrendamiento",
-      "starter": "Perfecto para portafolios pequeños",
-      "pro": "Para gestores de propiedades en crecimiento",
-      "business": "Para equipos y empresas"
+      "free": "Para equipos pequeños que inician con visibilidad de arrendamientos",
+      "business": "Para organizaciones que necesitan gestión completa del ciclo de vida"
     },
     "feature": {
       "1_lease": "1 documento de arrendamiento",
@@ -671,7 +677,20 @@
       "quickbooks": "Integración con QuickBooks",
       "custom_branding": "Marca personalizada",
       "everything_starter": "Todo en Inicial",
-      "everything_pro": "Todo en Pro"
+      "everything_pro": "Todo en Pro",
+      "lease_request_intake": "Ingreso de solicitudes de arrendamiento",
+      "pipeline_visibility": "Visibilidad del pipeline",
+      "basic_notifications": "Notificaciones básicas",
+      "status_tracking": "Seguimiento de estado",
+      "1_abstraction": "1 abstracción con IA incluida",
+      "everything_free": "Todo lo de Gratis",
+      "unlimited_users": "Usuarios ilimitados",
+      "unlimited_leases": "Arrendamientos activos ilimitados",
+      "unlimited_abstraction": "Abstracción con IA ilimitada",
+      "asc842_reports": "Reportes de cumplimiento ASC 842",
+      "role_based_access": "Control de acceso por roles",
+      "bulk_upload": "Carga masiva de documentos",
+      "export_integrations": "Integraciones de exportación"
     }
   },
   "auth": {
@@ -860,20 +879,6 @@
     "faq2_a": "La mayoría de los documentos se procesan en 1-2 minutos. Los documentos complejos con muchas páginas pueden tardar un poco más.",
     "faq3_q": "¿Puedo editar los datos extraídos?",
     "faq3_a": "¡Sí! Después de la extracción, puede revisar y editar cualquier campo antes de finalizar el arrendamiento."
-  },
-  "empty": {
-    "no_leases": "Sin arrendamientos aún",
-    "upload_first": "Suba su primer arrendamiento para comenzar",
-    "upload_description": "Suba un documento PDF de arrendamiento y nuestra IA extraerá automáticamente términos clave, fechas y calendarios de renta.",
-    "upload_first_lease": "Subir Su Primer Arrendamiento",
-    "download_sample": "Descargar Ejemplo",
-    "supports_pdf": "Soporta archivos PDF hasta 50MB",
-    "benefit1_title": "Extracción con IA",
-    "benefit1_desc": "Términos clave, fechas y calendarios de renta extraídos automáticamente en minutos.",
-    "benefit2_title": "Rastrear Fechas",
-    "benefit2_desc": "Nunca pierda una ventana de renovación o fecha de vencimiento.",
-    "benefit3_title": "Alertas Inteligentes",
-    "benefit3_desc": "Reciba notificaciones por email para fechas límite y pagos próximos."
   },
   "onboarding": {
     "getting_started": "Primeros Pasos",

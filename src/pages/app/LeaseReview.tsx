@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   GitBranch,
   DollarSign,
+  Upload,
+  Clock,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -24,7 +26,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
-import { WorkflowStatusBadge } from "@/components/workflow/WorkflowStatusBadge";
 import { isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStatusBadge";
 import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
 import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
@@ -34,12 +35,15 @@ import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/R
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
 import { AmendmentsList } from "@/components/leases/AmendmentsList";
 import { AmendmentChanges } from "@/components/leases/AmendmentChanges";
+import { ActivityTimeline } from "@/components/lifecycle/ActivityTimeline";
+import { LifecycleStatusBadge } from "@/components/lifecycle/LifecycleStatusBadge";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
+import { createLeaseNotification } from '@/lib/leaseNotifications';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -129,6 +133,9 @@ export default function LeaseReview() {
   const [parentLease, setParentLease] = useState<any | null>(null);
   const [showParentTerms, setShowParentTerms] = useState(true);
   const [amendmentsRefresh, setAmendmentsRefresh] = useState(0);
+  const [stageFile, setStageFile] = useState<File | null>(null);
+  const [uploadingStageFile, setUploadingStageFile] = useState(false);
+  const [runningAbstraction, setRunningAbstraction] = useState(false);
   
   const isAmendment = !!lease?.parent_lease_id;
   const isMasterLease = !isAmendment && lease?.category !== 'Lease Amendment';
@@ -172,11 +179,14 @@ export default function LeaseReview() {
   
   const isApproved = !!approvalState?.approved;
 
+  const lifecycleStatus = lease?.lifecycle_status;
+  const isIntakeStage = lifecycleStatus === 'requested' || lifecycleStatus === 'negotiating' || lifecycleStatus === 'pending_review';
+
   // Check status states
-  const isReviewRequired = lease?.lifecycle_status === 'Review Required';
-  const isPendingApproval = lease?.lifecycle_status === 'Pending Approval';
+  const isReviewRequired = lifecycleStatus === 'pending_review';
+  const isPendingApproval = false;
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
-  const isPosted = lease?.lifecycle_status === 'Posted';
+  const isPosted = lifecycleStatus === 'active';
   // Lock editing when approved, posted, or pending approval
   const isLocked = isPosted || isPendingApproval || isApproved;
 
@@ -202,6 +212,161 @@ export default function LeaseReview() {
 
   // Can approve only if: not processing, all Tier-1 fields reviewed
   const canApprove = !isProcessing && allTier1FieldsReviewed;
+
+  const lifecycleSteps = [
+    'requested',
+    'negotiating',
+    'pending_review',
+    'executed',
+    'active',
+  ] as const;
+
+  const currentLifecycleIndex = lifecycleSteps.findIndex((status) => status === lifecycleStatus);
+
+
+  const renderStatusProgress = () => (
+    <div className="mb-4 rounded-lg border bg-background p-3">
+      <div className="grid grid-cols-5 gap-2">
+        {lifecycleSteps.map((step, idx) => {
+          const active = idx <= (currentLifecycleIndex === -1 ? -1 : currentLifecycleIndex);
+          return (
+            <div key={step} className="flex items-center gap-2">
+              <div className={cn('h-2 w-full rounded-full', active ? 'bg-primary' : 'bg-muted')} />
+              <span className={cn('text-[11px] capitalize', idx === currentLifecycleIndex ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
+                {step.replace(/_/g, ' ')}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const updateLifecycleStatus = useCallback(async (newStatus: string) => {
+    if (!lease || !user) return;
+
+    const previousStatus = lease.lifecycle_status;
+    const { error } = await supabase
+      .from('leases')
+      .update({ lifecycle_status: newStatus })
+      .eq('id', lease.id);
+
+    if (error) throw error;
+
+    await supabase.from('lease_activity_log').insert({
+      lease_id: lease.id,
+      user_id: user.id,
+      activity_type: 'status_change',
+      from_status: previousStatus,
+      to_status: newStatus,
+      details: { source: 'lease_review' },
+    });
+
+    await createLeaseNotification({
+      leaseId: lease.id,
+      eventType: 'status_changed',
+      description: `Lease status updated: ${previousStatus || 'unknown'} → ${newStatus}`,
+    });
+
+    setLease((prev: any) => (prev ? { ...prev, lifecycle_status: newStatus } : prev));
+  }, [lease, user]);
+
+  const handleStageDocumentUpload = useCallback(async () => {
+    if (!lease || !user || !stageFile) {
+      toast.error('Select a PDF file first');
+      return;
+    }
+
+    setUploadingStageFile(true);
+    try {
+      const safeName = stageFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storagePath = `${user.id}/${lease.id}/${Date.now()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from('leases')
+        .upload(storagePath, stageFile, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from('leases')
+        .update({ storage_path: storagePath, filename: stageFile.name })
+        .eq('id', lease.id);
+
+      if (updateError) throw updateError;
+
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user.id,
+        activity_type: 'document_upload',
+        details: { filename: stageFile.name, stage: lease.lifecycle_status },
+      });
+
+      await createLeaseNotification({
+        leaseId: lease.id,
+        eventType: 'document_uploaded',
+        description: `Document uploaded: ${stageFile.name}`,
+      });
+
+      setLease((prev: any) => (prev ? { ...prev, storage_path: storagePath, filename: stageFile.name } : prev));
+      setStageFile(null);
+      toast.success('Document uploaded');
+    } catch (error) {
+      console.error('Error uploading stage document:', error);
+      toast.error('Failed to upload document');
+    } finally {
+      setUploadingStageFile(false);
+    }
+  }, [lease, stageFile, user]);
+
+  const handleRunAbstraction = useCallback(async () => {
+    if (!lease) return;
+
+    setRunningAbstraction(true);
+    try {
+      let fileToProcess = stageFile;
+
+      if (!fileToProcess && lease.storage_path) {
+        const { data: existingFile, error: downloadError } = await supabase.storage
+          .from('leases')
+          .download(lease.storage_path);
+        if (downloadError) throw downloadError;
+        fileToProcess = new File([existingFile], lease.filename || 'lease.pdf', { type: 'application/pdf' });
+      }
+
+      if (!fileToProcess) {
+        toast.error('Upload an executed document before running abstraction');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileToProcess);
+      formData.append('leaseType', lease.parent_lease_id ? 'amendment' : 'master');
+      if (lease.parent_lease_id) formData.append('parentLeaseId', lease.parent_lease_id);
+
+      const { data, error } = await supabase.functions.invoke('process_lease', { body: formData });
+      if (error) throw error;
+
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user?.id || null,
+        activity_type: 'comment',
+        details: {
+          message: 'Abstraction triggered',
+          generated_lease_id: data?.leaseId || null,
+        },
+      });
+
+      toast.success('Abstraction started');
+      if (data?.leaseId) {
+        navigate(`/app/leases/${data.leaseId}`);
+      }
+    } catch (error) {
+      console.error('Error running abstraction:', error);
+      toast.error('Failed to run abstraction');
+    } finally {
+      setRunningAbstraction(false);
+    }
+  }, [lease, navigate, stageFile, user?.id]);
 
   // Derived rent insights
   const derivedInsights = useMemo(() => {
@@ -446,7 +611,7 @@ export default function LeaseReview() {
         lease_end: form.lease_end || null,
         base_rent_amount: form.base_rent_amount || null,
         status: 'Posted',
-        lifecycle_status: 'Posted',
+        lifecycle_status: 'active',
         confirmed_sections: confirmedSections,
         audit_log: JSON.parse(JSON.stringify(auditLog)),
       };
@@ -587,6 +752,81 @@ export default function LeaseReview() {
 
   const extractedJson = lease?.extracted_json as ExtractedJson | null;
 
+  if (isIntakeStage && lease) {
+    return (
+      <AppLayout>
+        <div className="p-6 space-y-4">
+          <AppHeader
+            title={lease.request_title || 'Lease Request'}
+            subtitle={
+              <div className="flex items-center gap-2">
+                <LifecycleStatusBadge status={lease.lifecycle_status as any} />
+                <span className="text-sm text-muted-foreground">{lease.requesting_department || 'Unknown department'}</span>
+              </div>
+            }
+            actions={
+              <div className="flex items-center gap-2">
+                {lifecycleStatus === 'requested' && (
+                  <Button onClick={() => updateLifecycleStatus('negotiating')}>Move to Negotiating</Button>
+                )}
+                {lifecycleStatus === 'negotiating' && (
+                  <Button onClick={() => updateLifecycleStatus('pending_review')}>Move to Pending Review</Button>
+                )}
+                {lifecycleStatus === 'pending_review' && (
+                  <Button onClick={() => updateLifecycleStatus('executed')}>Mark Executed</Button>
+                )}
+              </div>
+            }
+          />
+
+          {renderStatusProgress()}
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader><CardTitle>Request Details</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p><span className="font-medium">Title:</span> {lease.request_title || '—'}</p>
+                <p><span className="font-medium">Department:</span> {lease.requesting_department || '—'}</p>
+                <p><span className="font-medium">Urgency:</span> {lease.request_urgency || 'standard'}</p>
+                <p><span className="font-medium">Vendor:</span> {lease.vendor_name || '—'}</p>
+                <p><span className="font-medium">Notes:</span> {lease.request_description || lease.notes || '—'}</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => setStageFile(e.target.files?.[0] || null)}
+                  className="text-sm"
+                />
+                {stageFile && <p className="text-xs text-muted-foreground">Selected: {stageFile.name}</p>}
+                {lease.filename && <p className="text-xs text-muted-foreground">Current: {lease.filename}</p>}
+                <Button onClick={handleStageDocumentUpload} disabled={uploadingStageFile || !stageFile} variant="outline" className="w-full">
+                  {uploadingStageFile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}Upload Document
+                </Button>
+                {lifecycleStatus === 'pending_review' && (
+                  <Button onClick={handleRunAbstraction} disabled={runningAbstraction} className="w-full">
+                    {runningAbstraction ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Clock className="h-4 w-4 mr-2" />}Run Abstraction
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader><CardTitle>Activity Timeline</CardTitle></CardHeader>
+            <CardContent>
+              <ActivityTimeline leaseId={lease.id} />
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-muted/30">
@@ -596,7 +836,7 @@ export default function LeaseReview() {
             <div className="flex items-center gap-2">
               <span>{lease.filename}</span>
               {lease.lifecycle_status && (
-                <WorkflowStatusBadge status={lease.lifecycle_status} />
+                <LifecycleStatusBadge status={lease.lifecycle_status as any} />
               )}
               {isApproved && (
                 <Badge className="bg-green-600 text-white text-xs">
@@ -686,6 +926,8 @@ export default function LeaseReview() {
             </div>
           }
         />
+
+        <div className="px-6 pt-4">{renderStatusProgress()}</div>
 
         <div className="flex-1 px-6 overflow-hidden">
           <ResizablePanelGroup
@@ -885,6 +1127,15 @@ export default function LeaseReview() {
                         refreshTrigger={amendmentsRefresh}
                       />
                     )}
+
+                    <Card className="shadow-none border overflow-hidden">
+                      <CardHeader className="bg-muted/30 border-b py-3">
+                        <CardTitle className="text-sm font-bold">Activity Timeline</CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <ActivityTimeline leaseId={lease.id} />
+                      </CardContent>
+                    </Card>
                   </div>
                 </ScrollArea>
               </div>

@@ -23,7 +23,7 @@ import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 interface NotificationWithLease {
   id: string;
   lease_id: string;
-  event_type: 'renewal_window' | 'escalation' | 'expiration' | 'commencement' | 'custom';
+  event_type: 'renewal_window' | 'escalation' | 'expiration' | 'commencement' | 'custom' | 'new_request' | 'status_changed' | 'document_uploaded';
   event_date: string;
   event_description: string | null;
   notify_days_before: number[];
@@ -63,6 +63,21 @@ export default function Notifications() {
       icon: Calendar,
       variant: 'default' as const,
       labelKey: 'notifications.type.commencement',
+    },
+    new_request: {
+      icon: Bell,
+      variant: 'default' as const,
+      labelKey: 'notifications.type.custom',
+    },
+    status_changed: {
+      icon: Bell,
+      variant: 'info' as const,
+      labelKey: 'notifications.type.custom',
+    },
+    document_uploaded: {
+      icon: Bell,
+      variant: 'warning' as const,
+      labelKey: 'notifications.type.custom',
     },
     custom: {
       icon: Bell,

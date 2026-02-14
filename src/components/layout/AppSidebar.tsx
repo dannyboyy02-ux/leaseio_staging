@@ -69,7 +69,7 @@ export function AppSidebar() {
   const { t } = useLanguage();
 
   const usagePercent = workspace 
-    ? (workspace.documentsUsed / workspace.documentLimit) * 100 
+    ? (workspace.activeLeasesUsed / (workspace.maxActiveLeases === -1 ? Math.max(workspace.activeLeasesUsed,1) : workspace.maxActiveLeases)) * 100 
     : 0;
 
   const getUsageVariant = () => {
@@ -252,9 +252,9 @@ export function AppSidebar() {
       <div className="px-4 py-4 border-t border-sidebar-border">
         <div className="rounded-lg bg-sidebar-accent/50 p-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-sidebar-foreground/80">{t('nav.documents')}</span>
+            <span className="text-xs font-medium text-sidebar-foreground/80">Active Leases</span>
             <span className="text-xs text-sidebar-foreground/60">
-              {workspace?.documentsUsed} / {workspace?.documentLimit}
+              {workspace?.activeLeasesUsed} / {workspace?.maxActiveLeases === -1 ? '∞' : workspace?.maxActiveLeases}
             </span>
           </div>
           <Progress value={usagePercent} variant={getUsageVariant()} className="h-1.5" />

@@ -68,6 +68,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const plan = (profile.plan as SubscriptionPlan) || "free";
       const planConfig = PLANS[plan];
 
+
+      const { count: activeLeasesCount } = await supabase
+        .from('leases')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', (profile as any).current_workspace_id || profile.id)
+        .eq('lifecycle_status', 'active');
+
       // ---- NEW: try to load real workspace if profile.current_workspace_id exists ----
       const currentWorkspaceId = (profile as any).current_workspace_id as string | null | undefined;
 
@@ -98,8 +105,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             name: ws.name || profile.company_name || "My Workspace",
             ownerId: ws.owner_id,
             plan,
-            documentLimit: planConfig?.documentLimit || 1,
-            documentsUsed: profile.processed_count || 0,
+            maxActiveLeases: planConfig?.maxActiveLeases ?? 5,
+            activeLeasesUsed: activeLeasesCount || 0,
             timezone: ws.timezone || profile.timezone || "America/New_York",
             defaultNotificationDays: ws.default_notification_days ?? 90,
             createdAt: ws.created_at || profile.created_at,
@@ -122,8 +129,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: profile.company_name || "My Workspace",
         ownerId: profile.id,
         plan,
-        documentLimit: planConfig?.documentLimit || 1,
-        documentsUsed: profile.processed_count || 0,
+        maxActiveLeases: planConfig?.maxActiveLeases ?? 5,
+        activeLeasesUsed: activeLeasesCount || 0,
         timezone: profile.timezone || "America/New_York",
         defaultNotificationDays: 90,
         createdAt: profile.created_at,
