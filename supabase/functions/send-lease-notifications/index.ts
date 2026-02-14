@@ -241,6 +241,12 @@ function generateSubject(eventType: string, daysUntil: number, property: string)
       return `📅 Lease Commencement in ${daysUntil} Days - ${property}`;
     case "custom":
       return `📌 Reminder: ${property} - ${daysUntil} Days`;
+    case "new_request":
+      return `🆕 New Lease Request - ${property}`;
+    case "status_changed":
+      return `🔄 Lease Status Updated - ${property}`;
+    case "document_uploaded":
+      return `📄 Document Uploaded - ${property}`;
     default:
       return `Lease Notification - ${property}`;
   }

@@ -9,7 +9,7 @@ import { QuickStats } from '@/components/dashboard/QuickStats';
 import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
-import { CreateLeaseDrawer } from '@/components/workflow/CreateLeaseDrawer';
+import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 
@@ -55,7 +55,7 @@ export default function Dashboard() {
         <UpcomingEvents />
       </div>
 
-      <CreateLeaseDrawer
+      <LeaseRequestForm
         open={createDrawerOpen}
         onOpenChange={setCreateDrawerOpen}
         onSuccess={handleLeaseCreated}
