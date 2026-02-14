@@ -1,6 +1,6 @@
 // Core Types for LeaseIO
 
-export type SubscriptionPlan = 'free' | 'starter' | 'pro' | 'business';
+export type SubscriptionPlan = 'free' | 'business';
 
 export type BillingInterval = 'monthly' | 'annual';
 
@@ -31,8 +31,8 @@ export interface Workspace {
   name: string;
   ownerId: string;
   plan: SubscriptionPlan;
-  documentLimit: number;
-  documentsUsed: number;
+  maxActiveLeases: number;
+  activeLeasesUsed: number;
   timezone: string;
   defaultNotificationDays: number;
   createdAt: string;

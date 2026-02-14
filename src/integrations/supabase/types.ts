@@ -486,6 +486,7 @@ export type Database = {
           requestor_id: string | null
           square_footage: number | null
           status: string
+          status_changed_at: string | null
           storage_path: string | null
           submitted_for_approval_at: string | null
           tenant_name: string | null
@@ -537,6 +538,7 @@ export type Database = {
           requestor_id?: string | null
           square_footage?: number | null
           status?: string
+          status_changed_at?: string | null
           storage_path?: string | null
           submitted_for_approval_at?: string | null
           tenant_name?: string | null
@@ -588,6 +590,7 @@ export type Database = {
           requestor_id?: string | null
           square_footage?: number | null
           status?: string
+          status_changed_at?: string | null
           storage_path?: string | null
           submitted_for_approval_at?: string | null
           tenant_name?: string | null

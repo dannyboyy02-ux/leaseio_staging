@@ -49,6 +49,7 @@ interface LeaseRow {
   lease_end: string | null;
   square_footage: number | null;
   uploaded_at: string;
+  status_changed_at: string | null;
   extracted_json: Record<string, unknown> | null;
   avg_confidence_score: number | null;
   estimated_monthly_cost_min: number | null;

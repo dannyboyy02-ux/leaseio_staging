@@ -10,13 +10,13 @@ import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from '@/components/ui/drawer';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -187,6 +187,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           lease_type: payload.category,
           filename: fileName,
           uploaded_at: now,
+          status_changed_at: now,
         })
         .select('id')
         .single();
@@ -242,14 +243,14 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   };
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[94vh]">
-        <DrawerHeader>
-          <DrawerTitle>Create Lease Request</DrawerTitle>
-          <DrawerDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Create Lease Request</SheetTitle>
+          <SheetDescription>
             Log lease activity early so finance has visibility before execution.
-          </DrawerDescription>
-        </DrawerHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         <div className="px-4 pb-4 overflow-y-auto">
           <Form {...form}>
@@ -449,7 +450,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           </Form>
         </div>
 
-        <DrawerFooter>
+        <SheetFooter>
           <Button
             type="submit"
             form="lease-request-form"
@@ -461,8 +462,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 }

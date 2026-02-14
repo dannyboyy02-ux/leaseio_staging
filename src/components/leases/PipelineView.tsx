@@ -15,6 +15,7 @@ export interface PipelineLease {
   estimated_monthly_cost_min: number | null;
   estimated_monthly_cost_max: number | null;
   uploaded_at: string;
+  status_changed_at: string | null;
   lifecycle_status: string | null;
 }
 
@@ -53,9 +54,10 @@ const getCostText = (lease: PipelineLease) => {
   return `Up to $${max!.toLocaleString()} / mo`;
 };
 
-const getDaysInStage = (uploadedAt: string) => {
+const getDaysInStage = (lease: PipelineLease) => {
+  const dateStr = lease.status_changed_at || lease.uploaded_at;
   try {
-    const start = parseISO(uploadedAt);
+    const start = parseISO(dateStr);
     return Math.max(0, differenceInCalendarDays(new Date(), start));
   } catch {
     return 0;
@@ -78,7 +80,7 @@ export function PipelineView({ leases, onOpenLease }: PipelineViewProps) {
             <div className="space-y-3">
               {columnLeases.map((lease) => {
                 const Icon = getCategoryIcon(lease.category);
-                const days = getDaysInStage(lease.uploaded_at);
+                const days = getDaysInStage(lease);
                 return (
                   <Card
                     key={lease.id}

@@ -1,19 +1,16 @@
-import { Loader2, CheckCircle2, AlertTriangle, XCircle, Clock, FileCheck } from 'lucide-react';
+import type { ComponentType } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-
-export type LeaseProcessingStatus = 
-  | 'Uploaded'
-  | 'Processing' 
-  | 'Ready' 
-  | 'Needs Review'
-  | 'Review Required'
-  | 'Failed'
-  | 'Posted'
-  | 'Approved'
-  | 'Pending Approval'
-  | 'Rejected'
-  | 'Draft';
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  FileCheck,
+  FileText,
+  Loader2,
+  XCircle,
+} from 'lucide-react';
 
 interface LeaseStatusBadgeProps {
   status: string | null;
@@ -23,67 +20,24 @@ interface LeaseStatusBadgeProps {
 
 const STATUS_CONFIG: Record<string, {
   label: string;
-  variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning' | 'success';
-  icon?: React.ComponentType<{ className?: string }>;
+  variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning' | 'success' | 'info';
+  icon?: ComponentType<{ className?: string }>;
   iconClassName?: string;
 }> = {
-  'Uploaded': { 
-    label: 'Processing', 
-    variant: 'secondary',
-    icon: Loader2,
-    iconClassName: 'animate-spin'
-  },
-  'Processing': { 
-    label: 'Processing', 
-    variant: 'secondary',
-    icon: Loader2,
-    iconClassName: 'animate-spin'
-  },
-  'Ready': { 
-    label: 'Ready', 
-    variant: 'success',
-    icon: CheckCircle2
-  },
-  'Needs Review': { 
-    label: 'Needs Review', 
-    variant: 'warning',
-    icon: AlertTriangle
-  },
-  'Review Required': { 
-    label: 'Needs Review', 
-    variant: 'warning',
-    icon: AlertTriangle
-  },
-  'Failed': { 
-    label: 'Failed', 
-    variant: 'destructive',
-    icon: XCircle
-  },
-  'Posted': { 
-    label: 'Posted', 
-    variant: 'success',
-    icon: FileCheck
-  },
-  'Approved': { 
-    label: 'Active', 
-    variant: 'success',
-    icon: CheckCircle2
-  },
-  'Pending Approval': { 
-    label: 'Pending', 
-    variant: 'outline',
-    icon: Clock
-  },
-  'Rejected': { 
-    label: 'Rejected', 
-    variant: 'destructive',
-    icon: XCircle
-  },
-  'Draft': { 
-    label: 'Draft', 
-    variant: 'secondary',
-    icon: undefined
-  },
+  Processing: { label: 'Processing', variant: 'info', icon: Loader2, iconClassName: 'animate-spin' },
+  Uploaded: { label: 'Uploaded', variant: 'secondary', icon: FileText },
+  Failed: { label: 'Failed', variant: 'destructive', icon: AlertCircle },
+  Ready: { label: 'Ready', variant: 'success', icon: CheckCircle2 },
+  review: { label: 'Review', variant: 'warning', icon: AlertTriangle },
+  final: { label: 'Final', variant: 'success', icon: CheckCircle2 },
+  Posted: { label: 'Posted', variant: 'default', icon: FileCheck },
+  requested: { label: 'Requested', variant: 'secondary', icon: Clock },
+  negotiating: { label: 'Negotiating', variant: 'warning', icon: Clock },
+  pending_review: { label: 'Pending Review', variant: 'outline', icon: AlertTriangle },
+  executed: { label: 'Executed', variant: 'outline', icon: FileCheck },
+  active: { label: 'Active', variant: 'success', icon: CheckCircle2 },
+  expired: { label: 'Expired', variant: 'secondary', icon: Clock },
+  cancelled: { label: 'Cancelled', variant: 'destructive', icon: XCircle },
 };
 
 export function LeaseStatusBadge({ status, className, showIcon = true }: LeaseStatusBadgeProps) {
@@ -95,29 +49,21 @@ export function LeaseStatusBadge({ status, className, showIcon = true }: LeaseSt
   const Icon = config.icon;
 
   return (
-    <Badge 
-      variant={config.variant}
-      className={cn('gap-1', className)}
-    >
-      {showIcon && Icon && (
-        <Icon className={cn('h-3 w-3', config.iconClassName)} />
-      )}
+    <Badge variant={config.variant} className={cn('gap-1', className)}>
+      {showIcon && Icon && <Icon className={cn('h-3 w-3', config.iconClassName)} />}
       {config.label}
     </Badge>
   );
 }
 
-// Helper to check if a status indicates the lease is still processing
 export function isProcessingStatus(status: string | null): boolean {
   return status === 'Processing' || status === 'Uploaded';
 }
 
-// Helper to check if a status indicates the lease failed
 export function isFailedStatus(status: string | null): boolean {
   return status === 'Failed';
 }
 
-// Helper to check if a status requires review
 export function needsReviewStatus(status: string | null): boolean {
-  return status === 'Needs Review' || status === 'Review Required';
+  return status === 'Needs Review' || status === 'Review Required' || status === 'pending_review';
 }
