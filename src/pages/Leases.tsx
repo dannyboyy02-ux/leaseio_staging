@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -74,17 +74,21 @@ const ConfidenceListBadge = ({ score }: { score: number | null }) => {
 
 export default function Leases() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useLanguage();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<LeaseRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [expirationFilter, setExpirationFilter] = useState('all');
-  const [viewMode, setViewMode] = useState<LeaseViewMode>('pipeline');
+  const [viewMode, setViewMode] = useState<LeaseViewMode>((searchParams.get('view') as LeaseViewMode) || 'pipeline');
   const [sortField, setSortField] = useState<SortField>('lease_end');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [leases, setLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
+
+
+  const statusFilter = searchParams.get('status');
 
   const expirationFilters = [
     { value: 'all', label: t('leases.all_leases') },
@@ -193,7 +197,9 @@ export default function Leases() {
         matchesExpiration = days !== null && days >= 0 && days <= filterDays;
       }
 
-      return matchesSearch && matchesExpiration;
+      const matchesStatus = !statusFilter || lease.lifecycle_status === statusFilter;
+
+      return matchesSearch && matchesExpiration && matchesStatus;
     });
 
     result.sort((a, b) => {
@@ -233,7 +239,7 @@ export default function Leases() {
     });
 
     return result;
-  }, [leases, searchQuery, expirationFilter, sortField, sortDirection]);
+  }, [leases, searchQuery, expirationFilter, sortField, sortDirection, statusFilter]);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '—';
@@ -267,11 +273,12 @@ export default function Leases() {
         ) : (
           <>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              {statusFilter && <Badge variant="outline">Filtered: {statusFilter.replace(/_/g, ' ')}</Badge>}
               <div className="inline-flex rounded-lg border bg-background p-1">
-                <Button variant={viewMode === 'pipeline' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('pipeline')}>
+                <Button variant={viewMode === 'pipeline' ? 'default' : 'ghost'} size="sm" onClick={() => { setViewMode('pipeline'); setSearchParams((prev) => { const p = new URLSearchParams(prev); p.set('view', 'pipeline'); return p; }); }}>
                   Pipeline View
                 </Button>
-                <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => setViewMode('list')}>
+                <Button variant={viewMode === 'list' ? 'default' : 'ghost'} size="sm" onClick={() => { setViewMode('list'); setSearchParams((prev) => { const p = new URLSearchParams(prev); p.set('view', 'list'); return p; }); }}>
                   List View
                 </Button>
               </div>
