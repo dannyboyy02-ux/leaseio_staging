@@ -460,6 +460,7 @@ export type Database = {
           estimated_monthly_cost_min: number | null
           estimated_term_max: number | null
           estimated_term_min: number | null
+          expected_start_date: string | null
           execution_approved_at: string | null
           extracted_json: Json | null
           filename: string
@@ -478,11 +479,18 @@ export type Database = {
           processed_at: string | null
           rejection_reason: string | null
           rent_escalation_type: string | null
+          request_description: string | null
+          request_title: string | null
+          request_urgency: string | null
+          requesting_department: string | null
+          requestor_id: string | null
           square_footage: number | null
           status: string
+          status_changed_at: string | null
           storage_path: string | null
           submitted_for_approval_at: string | null
           tenant_name: string | null
+          vendor_name: string | null
           uploaded_at: string
           user_id: string
           workspace_id: string | null
@@ -504,6 +512,7 @@ export type Database = {
           estimated_monthly_cost_min?: number | null
           estimated_term_max?: number | null
           estimated_term_min?: number | null
+          expected_start_date?: string | null
           execution_approved_at?: string | null
           extracted_json?: Json | null
           filename: string
@@ -522,11 +531,18 @@ export type Database = {
           processed_at?: string | null
           rejection_reason?: string | null
           rent_escalation_type?: string | null
+          request_description?: string | null
+          request_title?: string | null
+          request_urgency?: string | null
+          requesting_department?: string | null
+          requestor_id?: string | null
           square_footage?: number | null
           status?: string
+          status_changed_at?: string | null
           storage_path?: string | null
           submitted_for_approval_at?: string | null
           tenant_name?: string | null
+          vendor_name?: string | null
           uploaded_at?: string
           user_id: string
           workspace_id?: string | null
@@ -548,6 +564,7 @@ export type Database = {
           estimated_monthly_cost_min?: number | null
           estimated_term_max?: number | null
           estimated_term_min?: number | null
+          expected_start_date?: string | null
           execution_approved_at?: string | null
           extracted_json?: Json | null
           filename?: string
@@ -566,11 +583,18 @@ export type Database = {
           processed_at?: string | null
           rejection_reason?: string | null
           rent_escalation_type?: string | null
+          request_description?: string | null
+          request_title?: string | null
+          request_urgency?: string | null
+          requesting_department?: string | null
+          requestor_id?: string | null
           square_footage?: number | null
           status?: string
+          status_changed_at?: string | null
           storage_path?: string | null
           submitted_for_approval_at?: string | null
           tenant_name?: string | null
+          vendor_name?: string | null
           uploaded_at?: string
           user_id?: string
           workspace_id?: string | null
@@ -588,6 +612,13 @@ export type Database = {
             columns: ["parent_lease_id"]
             isOneToOne: false
             referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leases_requestor_id_fkey"
+            columns: ["requestor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -905,6 +936,7 @@ export type Database = {
           review_field_count: number | null
           status: string | null
           tenant_name: string | null
+          vendor_name: string | null
           uploaded_at: string | null
           user_id: string | null
           workspace_id: string | null
@@ -918,6 +950,7 @@ export type Database = {
           review_field_count?: never
           status?: string | null
           tenant_name?: string | null
+          vendor_name?: string | null
           uploaded_at?: string | null
           user_id?: string | null
           workspace_id?: string | null
@@ -931,11 +964,19 @@ export type Database = {
           review_field_count?: never
           status?: string | null
           tenant_name?: string | null
+          vendor_name?: string | null
           uploaded_at?: string | null
           user_id?: string | null
           workspace_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "leases_requestor_id_fkey"
+            columns: ["requestor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "leases_user_id_fkey"
             columns: ["user_id"]

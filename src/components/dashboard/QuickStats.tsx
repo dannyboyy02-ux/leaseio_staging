@@ -1,162 +1,84 @@
-import { FileText, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Skeleton } from '@/components/ui/skeleton';
-import { differenceInDays } from 'date-fns';
-import { Link } from 'react-router-dom';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { BarChart3 } from 'lucide-react';
+import { useApp } from '@/contexts/AppContext';
 
-interface StatCard {
-  titleKey: string;
-  value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
-  variant: 'default' | 'accent' | 'warning' | 'success';
-  href?: string;
-}
+const STATUS_ORDER = ['requested', 'negotiating', 'pending_review', 'executed', 'active'] as const;
 
-const variantStyles = {
-  default: 'bg-primary/10 text-primary',
-  accent: 'bg-accent/10 text-accent',
-  warning: 'bg-warning/10 text-warning',
-  success: 'bg-success/10 text-success',
+const STATUS_LABELS: Record<(typeof STATUS_ORDER)[number], string> = {
+  requested: 'Requested',
+  negotiating: 'Negotiating',
+  pending_review: 'Pending Review',
+  executed: 'Executed',
+  active: 'Active',
 };
 
 export function QuickStats() {
-  const { t } = useLanguage();
-  
-  const { data, isLoading } = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+  const { workspace } = useApp();
 
-      const { data: leases, error } = await supabase
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard-pipeline-summary', workspace?.id],
+    enabled: !!workspace?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('leases')
-        .select('id, status, lease_end')
-        .eq('user_id', user.id);
+        .select('id, lifecycle_status')
+        .eq('workspace_id', workspace!.id);
 
       if (error) throw error;
 
-      const allLeases = leases || [];
-      const now = new Date();
+      const counts = STATUS_ORDER.reduce((acc, status) => {
+        acc[status] = 0;
+        return acc;
+      }, {} as Record<(typeof STATUS_ORDER)[number], number>);
 
-      const activeLeases = allLeases.filter(l => 
-        l.status === 'Ready' || l.status === 'final' || l.status === 'review' || l.status === 'Approved'
-      ).length;
+      for (const lease of data || []) {
+        if (lease.lifecycle_status && lease.lifecycle_status in counts) {
+          counts[lease.lifecycle_status as (typeof STATUS_ORDER)[number]] += 1;
+        }
+      }
 
-      const pendingReview = allLeases.filter(l => 
-        l.status === 'review' || l.status === 'processing' || l.status === 'Processing' || l.status === 'Ready'
-      ).length;
-
-      const expiringIn90Days = allLeases.filter(l => {
-        if (!l.lease_end || l.status === 'archived') return false;
-        const endDate = new Date(l.lease_end);
-        const days = differenceInDays(endDate, now);
-        return days >= 0 && days <= 90;
-      }).length;
-
-      const finalized = allLeases.filter(l => l.status === 'final' || l.status === 'Approved').length;
-
-      return {
-        activeLeases,
-        pendingReview,
-        expiringIn90Days,
-        finalized,
-      };
+      return counts;
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
-          <Card key={i} variant="interactive">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <Skeleton className="h-10 w-10 rounded-lg" />
-              </div>
-              <div className="mt-4 space-y-2">
-                <Skeleton className="h-8 w-16" />
-                <Skeleton className="h-4 w-24" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
-  const stats: StatCard[] = [
-    {
-      titleKey: 'dashboard.active_leases',
-      value: data?.activeLeases ?? 0,
-      icon: FileText,
-      variant: 'default',
-      href: '/app/leases',
-    },
-    {
-      titleKey: 'dashboard.action_required',
-      value: data?.pendingReview ?? 0,
-      icon: Clock,
-      variant: 'accent',
-      href: '/app/leases?status=review',
-    },
-    {
-      titleKey: 'dashboard.expiring_90_days',
-      value: data?.expiringIn90Days ?? 0,
-      icon: AlertTriangle,
-      variant: 'warning',
-      href: '/app/leases?expiring=90',
-    },
-    {
-      titleKey: 'dashboard.finalized',
-      value: data?.finalized ?? 0,
-      icon: CheckCircle2,
-      variant: 'success',
-      href: '/app/leases?status=final',
-    },
-  ];
-
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {stats.map((stat, index) => {
-        const content = (
-          <Card
-            variant="interactive"
-            className={cn('animate-fade-up h-full')}
-            style={{ animationDelay: `${index * 50}ms` }}
-          >
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div
-                  className={cn(
-                    'flex h-10 w-10 items-center justify-center rounded-lg',
-                    variantStyles[stat.variant]
-                  )}
-                >
-                  <stat.icon className="h-5 w-5" />
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg flex items-center gap-2">
+          <BarChart3 className="h-5 w-5 text-primary" />
+          Pipeline Summary
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {STATUS_ORDER.map((status) => (
+              <Skeleton key={status} className="h-20 rounded-lg" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {STATUS_ORDER.map((status) => (
+              <Link
+                key={status}
+                to={`/app/leases?status=${status}`}
+                className="rounded-lg border bg-card p-3 transition-colors hover:border-primary/40"
+              >
+                <p className="text-xs text-muted-foreground">{STATUS_LABELS[status]}</p>
+                <div className="mt-2 flex items-end justify-between">
+                  <p className="text-2xl font-semibold">{data?.[status] ?? 0}</p>
+                  <Badge variant="secondary" className="text-[10px]">view</Badge>
                 </div>
-              </div>
-              <div className="mt-4">
-                <p className="text-2xl font-bold font-display">{stat.value}</p>
-                <p className="text-sm text-muted-foreground">{t(stat.titleKey)}</p>
-              </div>
-            </CardContent>
-          </Card>
-        );
-
-        if (stat.href) {
-          return (
-            <Link key={stat.titleKey} to={stat.href} className="block">
-              {content}
-            </Link>
-          );
-        }
-
-        return <div key={stat.titleKey}>{content}</div>;
-      })}
-    </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

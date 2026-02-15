@@ -26,7 +26,6 @@ import LeaseReview from "./pages/app/LeaseReview";
 import ImportHistory from "./pages/app/ImportHistory";
 import Upgrade from "./pages/app/Upgrade";
 import NewLease from "./pages/app/NewLease";
-import ApprovalInbox from "./pages/app/ApprovalInbox";
 import ExtractionAnalytics from "./pages/app/ExtractionAnalytics";
 import AuditLog from "./pages/app/AuditLog";
 import Support from "./pages/app/Support";
@@ -109,14 +108,6 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <LeaseReview />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/app/approvals"
-                  element={
-                    <ProtectedRoute>
-                      <ApprovalInbox />
                     </ProtectedRoute>
                   }
                 />
