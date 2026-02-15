@@ -14,6 +14,7 @@ import {
   DollarSign,
   Upload,
   Clock,
+  X,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -136,6 +137,15 @@ export default function LeaseReview() {
   const [stageFile, setStageFile] = useState<File | null>(null);
   const [uploadingStageFile, setUploadingStageFile] = useState(false);
   const [runningAbstraction, setRunningAbstraction] = useState(false);
+  const [editingRequest, setEditingRequest] = useState(false);
+  const [requestEdits, setRequestEdits] = useState({
+    request_title: '',
+    requesting_department: '',
+    request_urgency: '',
+    vendor_name: '',
+    request_description: '',
+  });
+  const [savingEdits, setSavingEdits] = useState(false);
   
   const isAmendment = !!lease?.parent_lease_id;
   const isMasterLease = !isAmendment && lease?.category !== 'Lease Amendment';
@@ -246,9 +256,10 @@ export default function LeaseReview() {
     if (!lease || !user) return;
 
     const previousStatus = lease.lifecycle_status;
+    const now = new Date().toISOString();
     const { error } = await supabase
       .from('leases')
-      .update({ lifecycle_status: newStatus })
+      .update({ lifecycle_status: newStatus, status_changed_at: now })
       .eq('id', lease.id);
 
     if (error) throw error;
@@ -268,8 +279,53 @@ export default function LeaseReview() {
       description: `Lease status updated: ${previousStatus || 'unknown'} → ${newStatus}`,
     });
 
-    setLease((prev: any) => (prev ? { ...prev, lifecycle_status: newStatus } : prev));
+    setLease((prev: any) => (prev ? { ...prev, lifecycle_status: newStatus, status_changed_at: now } : prev));
   }, [lease, user]);
+
+  const saveRequestEdits = useCallback(async () => {
+    if (!lease || !user) return;
+    setSavingEdits(true);
+    try {
+      const { error } = await supabase
+        .from('leases')
+        .update({
+          request_title: requestEdits.request_title || null,
+          requesting_department: requestEdits.requesting_department || null,
+          request_urgency: requestEdits.request_urgency || 'standard',
+          vendor_name: requestEdits.vendor_name || null,
+          request_description: requestEdits.request_description || null,
+          notes: requestEdits.request_description || null,
+        })
+        .eq('id', lease.id);
+
+      if (error) throw error;
+
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user.id,
+        activity_type: 'comment',
+        details: { message: 'Request details updated', source: 'inline_edit' },
+      });
+
+      setLease((prev: any) => prev ? {
+        ...prev,
+        request_title: requestEdits.request_title,
+        requesting_department: requestEdits.requesting_department,
+        request_urgency: requestEdits.request_urgency,
+        vendor_name: requestEdits.vendor_name,
+        request_description: requestEdits.request_description,
+        notes: requestEdits.request_description,
+      } : prev);
+
+      setEditingRequest(false);
+      toast.success('Request details updated');
+    } catch (err) {
+      console.error('Error saving request edits:', err);
+      toast.error('Failed to save changes');
+    } finally {
+      setSavingEdits(false);
+    }
+  }, [lease, user, requestEdits]);
 
   const handleStageDocumentUpload = useCallback(async () => {
     if (!lease || !user || !stageFile) {
@@ -384,6 +440,13 @@ export default function LeaseReview() {
       if (error) return;
 
       setLease(data);
+      setRequestEdits({
+        request_title: data.request_title || '',
+        requesting_department: data.requesting_department || '',
+        request_urgency: data.request_urgency || 'standard',
+        vendor_name: data.vendor_name || '',
+        request_description: data.request_description || data.notes || '',
+      });
       const ext = (data.extracted_json as ExtractedJson) || {};
 
       // Build form from all section fields
@@ -775,41 +838,180 @@ export default function LeaseReview() {
                 {lifecycleStatus === 'pending_review' && (
                   <Button onClick={() => updateLifecycleStatus('executed')}>Mark Executed</Button>
                 )}
+                {lifecycleStatus && !['active', 'expired', 'cancelled'].includes(lifecycleStatus) && (
+                  <Button
+                    variant="outline"
+                    className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to cancel this lease request? This action cannot be undone.')) {
+                        updateLifecycleStatus('cancelled');
+                      }
+                    }}
+                  >
+                    Cancel Request
+                  </Button>
+                )}
               </div>
             }
           />
 
           {renderStatusProgress()}
+          {lifecycleStatus === 'cancelled' && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center">
+              <p className="text-sm font-medium text-destructive">This lease request has been cancelled</p>
+            </div>
+          )}
 
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
-              <CardHeader><CardTitle>Request Details</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p><span className="font-medium">Title:</span> {lease.request_title || '—'}</p>
-                <p><span className="font-medium">Department:</span> {lease.requesting_department || '—'}</p>
-                <p><span className="font-medium">Urgency:</span> {lease.request_urgency || 'standard'}</p>
-                <p><span className="font-medium">Vendor:</span> {lease.vendor_name || '—'}</p>
-                <p><span className="font-medium">Notes:</span> {lease.request_description || lease.notes || '—'}</p>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Request Details</CardTitle>
+                {(lifecycleStatus === 'requested' || lifecycleStatus === 'negotiating') && !editingRequest && (
+                  <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>Edit</Button>
+                )}
+                {editingRequest && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditingRequest(false);
+                      setRequestEdits({
+                        request_title: lease.request_title || '',
+                        requesting_department: lease.requesting_department || '',
+                        request_urgency: lease.request_urgency || 'standard',
+                        vendor_name: lease.vendor_name || '',
+                        request_description: lease.request_description || lease.notes || '',
+                      });
+                    }}>Cancel</Button>
+                    <Button size="sm" disabled={savingEdits} onClick={saveRequestEdits}>
+                      {savingEdits ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+                      Save
+                    </Button>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {editingRequest ? (
+                  <>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Title</Label>
+                      <input
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.request_title}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, request_title: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Department</Label>
+                      <input
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.requesting_department}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, requesting_department: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Urgency</Label>
+                      <select
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.request_urgency}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, request_urgency: e.target.value }))}
+                      >
+                        <option value="low">Low</option>
+                        <option value="standard">Standard</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Vendor / Counterparty</Label>
+                      <input
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.vendor_name}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_name: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Description / Notes</Label>
+                      <textarea
+                        rows={3}
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.request_description}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, request_description: e.target.value }))}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p><span className="font-medium">Title:</span> {lease.request_title || '—'}</p>
+                    <p><span className="font-medium">Department:</span> {lease.requesting_department || '—'}</p>
+                    <p><span className="font-medium">Urgency:</span> <span className="capitalize">{lease.request_urgency || 'standard'}</span></p>
+                    <p><span className="font-medium">Vendor:</span> {lease.vendor_name || '—'}</p>
+                    <p><span className="font-medium">Notes:</span> {lease.request_description || lease.notes || '—'}</p>
+                  </>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={(e) => setStageFile(e.target.files?.[0] || null)}
-                  className="text-sm"
-                />
-                {stageFile && <p className="text-xs text-muted-foreground">Selected: {stageFile.name}</p>}
-                {lease.filename && <p className="text-xs text-muted-foreground">Current: {lease.filename}</p>}
+                {lease.storage_path && lease.filename && (
+                  <div className="flex items-center justify-between rounded-md border p-2.5 text-sm bg-muted/30">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{lease.filename}</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        const { data } = await supabase.storage.from('leases').createSignedUrl(lease.storage_path, 120);
+                        if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+                        else toast.error('Could not generate download link');
+                      }}
+                    >
+                      Download
+                    </Button>
+                  </div>
+                )}
+
+                <div
+                  className={cn(
+                    'cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition-colors',
+                    stageFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40',
+                  )}
+                  onClick={() => document.getElementById('stage-file-input')?.click()}
+                >
+                  <input
+                    id="stage-file-input"
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      setStageFile(e.target.files?.[0] || null);
+                      if (e.target) e.target.value = '';
+                    }}
+                  />
+                  <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    {stageFile ? stageFile.name : 'Click to select a PDF or drag and drop'}
+                  </p>
+                </div>
+
+                {stageFile && (
+                  <div className="flex items-center justify-between rounded-md border p-2 text-sm">
+                    <span className="truncate">{stageFile.name}</span>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setStageFile(null)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+
                 <Button onClick={handleStageDocumentUpload} disabled={uploadingStageFile || !stageFile} variant="outline" className="w-full">
-                  {uploadingStageFile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}Upload Document
+                  {uploadingStageFile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                  Upload Document
                 </Button>
                 {lifecycleStatus === 'pending_review' && (
                   <Button onClick={handleRunAbstraction} disabled={runningAbstraction} className="w-full">
-                    {runningAbstraction ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Clock className="h-4 w-4 mr-2" />}Run Abstraction
+                    {runningAbstraction ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Clock className="h-4 w-4 mr-2" />}
+                    Run Abstraction
                   </Button>
                 )}
               </CardContent>
