@@ -26,7 +26,7 @@ export function PendingApprovalsSection() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('leases')
-        .select('id, request_title, lifecycle_status, storage_path, uploaded_at')
+        .select('id, filename, lifecycle_status, storage_path, uploaded_at')
         .eq('workspace_id', workspace!.id)
         .in('lifecycle_status', ['requested', 'pending_review', 'executed'])
         .order('uploaded_at', { ascending: false })
@@ -45,7 +45,7 @@ export function PendingApprovalsSection() {
       if (lease.lifecycle_status === 'requested') {
         output.push({
           id: `requested-${lease.id}`,
-          title: lease.request_title || 'New lease request',
+          title: lease.filename || 'New lease request',
           description: 'New request needs finance acknowledgment',
           href: `/app/leases/${lease.id}`,
           urgency: 'normal',
@@ -55,7 +55,7 @@ export function PendingApprovalsSection() {
       if (lease.lifecycle_status === 'pending_review') {
         output.push({
           id: `review-${lease.id}`,
-          title: lease.request_title || 'Document pending review',
+          title: lease.filename || 'Document pending review',
           description: lease.storage_path
             ? 'Executed document uploaded and waiting for review'
             : 'Awaiting executed document upload',
@@ -67,7 +67,7 @@ export function PendingApprovalsSection() {
       if (lease.lifecycle_status === 'executed') {
         output.push({
           id: `executed-${lease.id}`,
-          title: lease.request_title || 'Executed lease ready',
+          title: lease.filename || 'Executed lease ready',
           description: 'Lease can be moved to active repository',
           href: `/app/leases/${lease.id}`,
           urgency: 'normal',
