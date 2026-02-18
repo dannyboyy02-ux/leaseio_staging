@@ -19,6 +19,17 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
+  const safeText = (v: unknown): string => {
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'object' && v !== null && 'value' in v) {
+      return String((v as any).value ?? '');
+    }
+    return '';
+  };
+
+  const firstName = safeText(user?.firstName);
+
   const handleLeaseCreated = (leaseId: string) => {
     navigate(`/app/leases/${leaseId}`);
   };
@@ -26,7 +37,7 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <AppHeader
-        title={`${t('dashboard.welcome_back')}${user?.firstName ? `, ${user.firstName}` : ''}`}
+        title={`${t('dashboard.welcome_back')}${firstName ? `, ${firstName}` : ''}`}
         subtitle={workspace?.name || user?.companyName}
         actions={
           <div className="flex items-center gap-2">
