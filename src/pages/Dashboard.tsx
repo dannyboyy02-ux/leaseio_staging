@@ -12,12 +12,15 @@ import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist'
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 
 export default function Dashboard() {
   const { user, workspace } = useApp();
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
+
+  const safeText = (v: unknown) => getExtractedFieldValue(v) ?? (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
 
   const handleLeaseCreated = (leaseId: string) => {
     navigate(`/app/leases/${leaseId}`);
@@ -26,8 +29,8 @@ export default function Dashboard() {
   return (
     <AppLayout>
       <AppHeader
-        title={`${t('dashboard.welcome_back')}${user?.firstName ? `, ${user.firstName}` : ''}`}
-        subtitle={workspace?.name || user?.companyName}
+        title={`${t('dashboard.welcome_back')}${safeText(user?.firstName) ? `, ${safeText(user?.firstName)}` : ''}`}
+        subtitle={safeText(workspace?.name) || safeText(user?.companyName)}
         actions={
           <div className="flex items-center gap-2">
             <Button variant="accent" onClick={() => setCreateDrawerOpen(true)}>
