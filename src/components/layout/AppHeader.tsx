@@ -52,7 +52,7 @@ function safeRender(node: unknown): React.ReactNode {
 interface NotificationPreview {
   id: string;
   event_type: string;
-  event_description: string | null;
+  event_description: unknown;
   event_date: string;
   lease_id: string;
 }
@@ -198,7 +198,7 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
                       </span>
                     </div>
                     <p className="text-sm line-clamp-1">
-                      {notification.event_description || getEventTypeLabel(notification.event_type)}
+                      {safeRender(notification.event_description) || getEventTypeLabel(notification.event_type)}
                     </p>
                   </DropdownMenuItem>
                 ))
