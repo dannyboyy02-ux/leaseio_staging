@@ -20,26 +20,30 @@ export interface ExtractedFieldObject {
  * Handles both old string format and new object format.
  */
 export function getExtractedFieldValue(field: unknown): string | null {
-  if (!field) return null;
-  
-  // If it's a string, return directly
-  if (typeof field === 'string') {
-    return field;
+  try {
+    if (field === null || field === undefined) return null;
+
+    // If it's a string, return directly
+    if (typeof field === 'string') {
+      return field;
+    }
+
+    // If it's a number, convert to string
+    if (typeof field === 'number') {
+      return String(field);
+    }
+
+    // If it's an object with a value property
+    if (typeof field === 'object' && 'value' in field) {
+      const obj = field as ExtractedFieldObject;
+      if (obj.value === null || obj.value === undefined) return null;
+      return String(obj.value);
+    }
+
+    return null;
+  } catch {
+    return null;
   }
-  
-  // If it's a number, convert to string
-  if (typeof field === 'number') {
-    return String(field);
-  }
-  
-  // If it's an object with a value property
-  if (typeof field === 'object' && field !== null && 'value' in field) {
-    const obj = field as ExtractedFieldObject;
-    if (obj.value === null || obj.value === undefined) return null;
-    return typeof obj.value === 'number' ? String(obj.value) : String(obj.value);
-  }
-  
-  return null;
 }
 
 /**

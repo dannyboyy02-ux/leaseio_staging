@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
 import { createLeaseNotification } from '@/lib/leaseNotifications';
+import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -92,17 +93,6 @@ interface Risk {
   citation_snippet: string | null;
   citation_page: number | null;
 }
-
-// Helper to extract value from field (handles both string and object formats)
-const getFieldValue = (field: any): string => {
-  if (!field) return "";
-  if (typeof field === "string") return field;
-  if (typeof field === "number") return String(field);
-  if (typeof field === "object" && "value" in field) {
-    return field.value != null ? String(field.value) : "";
-  }
-  return "";
-};
 
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
@@ -454,7 +444,7 @@ export default function LeaseReview() {
       allFieldIds.forEach(fieldId => {
         // Priority: lease column > extracted_json value
         const leaseVal = data[fieldId];
-        const extractedVal = getFieldValue(ext[fieldId as keyof ExtractedJson]);
+        const extractedVal = getExtractedFieldValue(ext[fieldId as keyof ExtractedJson]) ?? "";
         formData[fieldId] = leaseVal != null ? String(leaseVal) : extractedVal;
       });
       
