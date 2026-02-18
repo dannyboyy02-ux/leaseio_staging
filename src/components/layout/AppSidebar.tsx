@@ -83,6 +83,15 @@ export function AppSidebar() {
     navigate('/');
   };
 
+  const safeText = (v: unknown): string => {
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'object' && v !== null && 'value' in v) {
+      return String((v as any).value ?? '');
+    }
+    return '';
+  };
+
   const displayUser = {
     firstName: authUser?.user_metadata?.first_name || user?.firstName || '',
     lastName: authUser?.user_metadata?.last_name || user?.lastName || '',
@@ -279,15 +288,15 @@ export function AppSidebar() {
             >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
-                  {displayUser.firstName?.[0]}{displayUser.lastName?.[0]}
+                  {safeText(displayUser.firstName)?.[0]}{safeText(displayUser.lastName)?.[0]}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 text-left">
                 <p className="text-sm font-medium truncate">
-                  {displayUser.firstName} {displayUser.lastName}
+                  {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
                 </p>
                 <p className="text-xs text-sidebar-foreground/60 truncate">
-                  {workspace?.name || displayUser.email}
+                  {safeText(workspace?.name) || safeText(displayUser.email)}
                 </p>
               </div>
               <ChevronRight className="h-4 w-4 text-sidebar-foreground/40" />

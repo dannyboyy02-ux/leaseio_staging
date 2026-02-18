@@ -20,10 +20,39 @@ interface AppHeaderProps {
   actions?: React.ReactNode;
 }
 
+
+function safeRender(node: unknown): React.ReactNode {
+  if (node == null) {
+    return null;
+  }
+
+  if (typeof node === 'string' || typeof node === 'number') {
+    return node;
+  }
+
+  if (typeof node === 'boolean') {
+    return node ? 'true' : 'false';
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(safeRender);
+  }
+
+  if (typeof node === 'object' && '$$typeof' in node) {
+    return node as React.ReactNode;
+  }
+
+  try {
+    return JSON.stringify(node);
+  } catch {
+    return String(node);
+  }
+}
+
 interface NotificationPreview {
   id: string;
   event_type: string;
-  event_description: string | null;
+  event_description: unknown;
   event_date: string;
   lease_id: string;
 }
@@ -99,7 +128,7 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
       <div className="flex-1">
         <h1 className="font-display text-xl font-semibold text-foreground">{title}</h1>
         {subtitle && (
-          <p className="text-sm text-muted-foreground">{subtitle}</p>
+          <p className="text-sm text-muted-foreground">{safeRender(subtitle)}</p>
         )}
       </div>
 
@@ -169,7 +198,7 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
                       </span>
                     </div>
                     <p className="text-sm line-clamp-1">
-                      {notification.event_description || getEventTypeLabel(notification.event_type)}
+                      {safeRender(notification.event_description) || getEventTypeLabel(notification.event_type)}
                     </p>
                   </DropdownMenuItem>
                 ))
