@@ -29,6 +29,7 @@ import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { PipelineView } from '@/components/leases/PipelineView';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -158,7 +159,7 @@ export default function Leases() {
 
   const getPropertyAddress = (lease: LeaseRow): string => {
     const json = lease.extracted_json as Record<string, unknown> | null;
-    return (lease.request_title || (json?.address as string) || lease.filename);
+    return lease.request_title || getExtractedFieldValue(json?.address) || lease.filename || '';
   };
 
   const getDaysUntilExpiration = (leaseEnd: string | null): number | null => {
