@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import {
   canAccessIntegrationsPage,
   canAccessReportsDataQuality,
@@ -83,14 +84,7 @@ export function AppSidebar() {
     navigate('/');
   };
 
-  const safeText = (v: unknown): string => {
-    if (typeof v === 'string') return v;
-    if (typeof v === 'number') return String(v);
-    if (typeof v === 'object' && v !== null && 'value' in v) {
-      return String((v as any).value ?? '');
-    }
-    return '';
-  };
+  const safeText = (v: unknown) => getExtractedFieldValue(v) ?? (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
 
   const displayUser = {
     firstName: authUser?.user_metadata?.first_name || user?.firstName || '',
