@@ -94,6 +94,19 @@ interface Risk {
   citation_page: number | null;
 }
 
+/**
+ * Safely coerce any runtime value from extracted_json to a renderable string.
+ * Guards against ExtractedField objects ({value, confidence, page, source_text})
+ * being passed directly as React children (React error #31).
+ */
+function renderWarning(w: unknown): string {
+  if (typeof w === 'string') return w;
+  if (typeof w === 'number') return String(w);
+  const extracted = getExtractedFieldValue(w);
+  if (extracted) return extracted;
+  try { return JSON.stringify(w); } catch { return String(w); }
+}
+
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
@@ -1205,7 +1218,7 @@ export default function LeaseReview() {
                     )}
 
                     {/* Validation Warnings */}
-                    {extractedJson?._validation_warnings && extractedJson._validation_warnings.length > 0 && (
+                    {Array.isArray(extractedJson?._validation_warnings) && extractedJson._validation_warnings.length > 0 && (
                       <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
                         <div className="flex items-start gap-3">
                           <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
@@ -1215,7 +1228,7 @@ export default function LeaseReview() {
                               {extractedJson._validation_warnings.map((warning, i) => (
                                 <li key={i} className="flex items-center gap-2">
                                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                  {warning}
+                                  {renderWarning(warning)}
                                 </li>
                               ))}
                             </ul>
