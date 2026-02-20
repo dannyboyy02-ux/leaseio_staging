@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { canExportReports } from '@/lib/authorization';
+import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 
 interface LeaseData {
   id: string;
@@ -100,7 +101,10 @@ export function RentRollExport() {
       const rows = leases.map((lease) => {
         const monthly = lease.current_monthly_rent || 0;
         const extractedJson = lease.extracted_json as Record<string, unknown> | null;
-        const propertyAddress = extractedJson?.property_address as string || lease.filename || 'Unknown';
+        const propertyAddress =
+          getExtractedFieldValue(extractedJson?.property_address) ||
+          lease.filename ||
+          'Unknown';
         return [
           propertyAddress,
           lease.tenant_name || '',
