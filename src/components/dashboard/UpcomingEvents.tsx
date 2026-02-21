@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, ChevronRight, AlertCircle, TrendingUp, Clock, DollarSign } from 'lucide-react';
+import { Calendar, ChevronRight, AlertCircle, TrendingUp, Clock, DollarSign, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { differenceInDays, format } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
+
+const DISMISSED_EVENTS_KEY = 'leaseio.dismissed_events';
+
+function getDismissedEvents(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(DISMISSED_EVENTS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
 
 interface UpcomingEvent {
   id: string;
@@ -33,6 +44,13 @@ function formatCurrency(amount: number, language: string): string {
 
 export function UpcomingEvents() {
   const { t, language } = useLanguage();
+  const [dismissedIds, setDismissedIds] = useState<string[]>(getDismissedEvents);
+
+  const dismissEvent = (id: string) => {
+    const updated = [...dismissedIds, id];
+    setDismissedIds(updated);
+    localStorage.setItem(DISMISSED_EVENTS_KEY, JSON.stringify(updated));
+  };
 
   const eventConfig = {
     renewal: {
@@ -64,14 +82,12 @@ export function UpcomingEvents() {
       if (!user) throw new Error('Not authenticated');
 
       const now = new Date();
-      const ninetyDaysFromNow = new Date(now);
-      ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
       const { data: leases, error } = await supabase
         .from('leases')
-        .select('id, filename, lease_end, current_monthly_rent, status, extracted_json')
+        .select('id, filename, lease_end, current_monthly_rent, extracted_json')
         .eq('user_id', user.id)
-        .in('status', ['Ready', 'final', 'review', 'Approved']);
+        .in('lifecycle_status', ['active', 'executed', 'pending_review']);
 
       if (error) throw error;
 
@@ -115,7 +131,7 @@ export function UpcomingEvents() {
         if (lease.current_monthly_rent && Number(lease.current_monthly_rent) > 0) {
           const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
           const daysUntilPayment = differenceInDays(nextMonth, now);
-          
+
           upcomingEvents.push({
             id: `pay-${lease.id}`,
             type: 'payment',
@@ -134,6 +150,8 @@ export function UpcomingEvents() {
         .slice(0, 5);
     },
   });
+
+  const visibleEvents = (events || []).filter((e) => !dismissedIds.includes(e.id));
 
   if (isLoading) {
     return (
@@ -183,7 +201,7 @@ export function UpcomingEvents() {
         </div>
       </CardHeader>
       <CardContent>
-        {!events || events.length === 0 ? (
+        {visibleEvents.length === 0 ? (
           <div className="text-center py-8">
             <Calendar className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
             <p className="text-sm text-muted-foreground">{t('dashboard.no_upcoming_events')}</p>
@@ -193,66 +211,79 @@ export function UpcomingEvents() {
           </div>
         ) : (
           <div className="space-y-3">
-            {events.map((event, index) => {
+            {visibleEvents.map((event, index) => {
               const config = eventConfig[event.type];
               const EventIcon = config.icon;
               const isUrgent = event.daysUntil <= 7;
               const isWarning = event.daysUntil <= 30;
-              
+
               return (
-                <Link
+                <div
                   key={event.id}
-                  to={`/app/leases/${event.leaseId}`}
                   className={cn(
-                    'flex items-start gap-4 p-3 rounded-lg transition-all hover:bg-muted/50 animate-fade-up',
-                    isUrgent && 'bg-destructive/5 hover:bg-destructive/10'
+                    'flex items-center rounded-lg transition-all animate-fade-up group',
+                    isUrgent && 'bg-destructive/5'
                   )}
                   style={{ animationDelay: `${(index + 1) * 50}ms` }}
                 >
-                  <div
+                  <Link
+                    to={`/app/leases/${event.leaseId}`}
                     className={cn(
-                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-                      config.variant === 'info' && 'bg-info/10 text-info',
-                      config.variant === 'warning' && 'bg-warning/10 text-warning',
-                      config.variant === 'destructive' && 'bg-destructive/10 text-destructive',
-                      config.variant === 'default' && 'bg-primary/10 text-primary'
+                      'flex items-start gap-4 p-3 flex-1 min-w-0 rounded-lg hover:bg-muted/50 transition-all',
+                      isUrgent && 'hover:bg-destructive/10'
                     )}
                   >
-                    <EventIcon className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant={config.variant} className="text-[10px]">
-                        {t(config.labelKey)}
-                      </Badge>
-                      <span className={cn(
-                        'text-xs',
-                        isUrgent ? 'text-destructive font-medium' : 
-                        isWarning ? 'text-warning' : 'text-muted-foreground'
-                      )}>
-                        {getDaysLabel(event.daysUntil)}
+                    <div
+                      className={cn(
+                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+                        config.variant === 'info' && 'bg-info/10 text-info',
+                        config.variant === 'warning' && 'bg-warning/10 text-warning',
+                        config.variant === 'destructive' && 'bg-destructive/10 text-destructive',
+                        config.variant === 'default' && 'bg-primary/10 text-primary'
+                      )}
+                    >
+                      <EventIcon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant={config.variant} className="text-[10px]">
+                          {t(config.labelKey)}
+                        </Badge>
+                        <span className={cn(
+                          'text-xs',
+                          isUrgent ? 'text-destructive font-medium' :
+                          isWarning ? 'text-warning' : 'text-muted-foreground'
+                        )}>
+                          {getDaysLabel(event.daysUntil)}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium truncate">{t(event.titleKey)}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="truncate">{event.property}</span>
+                        {event.amount && (
+                          <>
+                            <span>·</span>
+                            <span className="font-medium text-foreground">
+                              {formatCurrency(event.amount, language)}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end shrink-0">
+                      <span className="text-xs text-muted-foreground">
+                        {format(event.date, 'MMM d')}
                       </span>
                     </div>
-                    <p className="text-sm font-medium truncate">{t(event.titleKey)}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="truncate">{event.property}</span>
-                      {event.amount && (
-                        <>
-                          <span>·</span>
-                          <span className="font-medium text-foreground">
-                            {formatCurrency(event.amount, language)}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end shrink-0">
-                    <span className="text-xs text-muted-foreground">
-                      {format(event.date, 'MMM d')}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground mt-2" />
-                  </div>
-                </Link>
+                  </Link>
+                  <button
+                    onClick={() => dismissEvent(event.id)}
+                    className="p-2 mr-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                    title="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               );
             })}
           </div>
