@@ -193,10 +193,10 @@ export default function LeaseReview() {
   const isApproved = !!approvalState?.approved;
 
   const lifecycleStatus = lease?.lifecycle_status;
-  const isIntakeStage = lifecycleStatus === 'requested' || lifecycleStatus === 'negotiating' || lifecycleStatus === 'pending_review';
+  const isIntakeStage = lifecycleStatus === 'submitted' || lifecycleStatus === 'under_review' || lifecycleStatus === 'approved';
 
   // Check status states
-  const isReviewRequired = lifecycleStatus === 'pending_review';
+  const isReviewRequired = lifecycleStatus === 'under_review';
   const isPendingApproval = false;
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lifecycleStatus === 'active';
@@ -227,9 +227,9 @@ export default function LeaseReview() {
   const canApprove = !isProcessing && allTier1FieldsReviewed;
 
   const lifecycleSteps = [
-    'requested',
-    'negotiating',
-    'pending_review',
+    'submitted',
+    'under_review',
+    'approved',
     'executed',
     'active',
   ] as const;
@@ -832,16 +832,16 @@ export default function LeaseReview() {
             }
             actions={
               <div className="flex items-center gap-2">
-                {lifecycleStatus === 'requested' && (
-                  <Button onClick={() => updateLifecycleStatus('negotiating')}>Move to Negotiating</Button>
+                {lifecycleStatus === 'submitted' && (
+                  <Button onClick={() => updateLifecycleStatus('under_review')}>Move to Under Review</Button>
                 )}
-                {lifecycleStatus === 'negotiating' && (
-                  <Button onClick={() => updateLifecycleStatus('pending_review')}>Move to Pending Review</Button>
+                {lifecycleStatus === 'under_review' && (
+                  <Button onClick={() => updateLifecycleStatus('approved')}>Move to Approved</Button>
                 )}
-                {lifecycleStatus === 'pending_review' && (
+                {lifecycleStatus === 'approved' && (
                   <Button onClick={() => updateLifecycleStatus('executed')}>Mark Executed</Button>
                 )}
-                {lifecycleStatus && !['active', 'expired', 'cancelled'].includes(lifecycleStatus) && (
+                {lifecycleStatus && !['active', 'expired', 'cancelled', 'rejected'].includes(lifecycleStatus) && (
                   <Button
                     variant="outline"
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
@@ -869,7 +869,7 @@ export default function LeaseReview() {
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle>Request Details</CardTitle>
-                {(lifecycleStatus === 'requested' || lifecycleStatus === 'negotiating') && !editingRequest && (
+                {(lifecycleStatus === 'submitted' || lifecycleStatus === 'under_review') && !editingRequest && (
                   <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>Edit</Button>
                 )}
                 {editingRequest && (
@@ -1011,7 +1011,7 @@ export default function LeaseReview() {
                   {uploadingStageFile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
                   Upload Document
                 </Button>
-                {lifecycleStatus === 'pending_review' && (
+                {lifecycleStatus === 'approved' && (
                   <Button onClick={handleRunAbstraction} disabled={runningAbstraction} className="w-full">
                     {runningAbstraction ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Clock className="h-4 w-4 mr-2" />}
                     Run Abstraction
@@ -1020,6 +1020,130 @@ export default function LeaseReview() {
               </CardContent>
             </Card>
           </div>
+
+          {(lease.monthly_payment || lease.term_months) && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <DollarSign size={14} className="text-green-600" />
+                    Financial Terms
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Monthly Payment</p>
+                    <p className="font-medium">
+                      {lease.monthly_payment ? `$${Number(lease.monthly_payment).toLocaleString()}` : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Term</p>
+                    <p className="font-medium">{lease.term_months ? `${lease.term_months} months` : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Asset Type</p>
+                    <p className="font-medium capitalize">{lease.asset_type || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Escalation Rate</p>
+                    <p className="font-medium">
+                      {lease.escalation_rate != null ? `${lease.escalation_rate}% / yr` : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Start Date</p>
+                    <p className="font-medium">
+                      {lease.lease_start ? format(new Date(lease.lease_start), 'MMM d, yyyy') : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">End Date</p>
+                    <p className="font-medium">
+                      {lease.lease_start && lease.term_months ? (() => {
+                        const end = new Date(lease.lease_start);
+                        end.setMonth(end.getMonth() + Number(lease.term_months));
+                        return format(end, 'MMM d, yyyy');
+                      })() : '—'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {(lease.calc_total_commitment || lease.calc_pv_liability) && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <DollarSign size={14} className="text-blue-600" />
+                      Financial Impact
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {lease.covenant_flagged && (
+                      <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
+                        <AlertTriangle size={12} />
+                        Covenant threshold may be impacted
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Total Cash Commitment</p>
+                        <p className="font-medium">
+                          {lease.calc_total_commitment
+                            ? `$${Math.round(Number(lease.calc_total_commitment)).toLocaleString()}`
+                            : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Est. Lease Liability (PV)</p>
+                        <p className="font-medium">
+                          {lease.calc_pv_liability
+                            ? `$${Math.round(Number(lease.calc_pv_liability)).toLocaleString()}`
+                            : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Monthly P&L Charge</p>
+                        <p className="font-medium">
+                          {lease.calc_straight_line_exp
+                            ? `$${Math.round(Number(lease.calc_straight_line_exp)).toLocaleString()}`
+                            : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Cash vs. P&L Delta</p>
+                        <p className="font-medium">
+                          {lease.calc_cash_pl_delta != null
+                            ? `$${Math.round(Number(lease.calc_cash_pl_delta)).toLocaleString()}`
+                            : '—'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <p className="text-xs text-muted-foreground">Classification:</p>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-xs',
+                          lease.lease_classification === 'pending' && 'border-amber-400 text-amber-700 bg-amber-50',
+                          lease.lease_classification === 'operating' && 'border-green-400 text-green-700 bg-green-50',
+                          lease.lease_classification === 'finance' && 'border-blue-400 text-blue-700 bg-blue-50',
+                        )}
+                      >
+                        {lease.lease_classification === 'pending'
+                          ? 'Pending Financial Review'
+                          : lease.lease_classification === 'operating'
+                          ? 'Operating Lease'
+                          : lease.lease_classification === 'finance'
+                          ? 'Finance Lease'
+                          : '—'}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
 
           <Card>
             <CardHeader><CardTitle>Activity Timeline</CardTitle></CardHeader>
