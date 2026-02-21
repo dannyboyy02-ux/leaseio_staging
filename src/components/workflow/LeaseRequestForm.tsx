@@ -227,7 +227,6 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           calc_cash_pl_delta: calcs?.cashPLDelta ?? null,
           // Lifecycle
           lifecycle_status: 'submitted',
-          status: 'draft',
           lease_owner_id: user.id,
           initializer_id: user.id,
           filename: fileName,
