@@ -215,7 +215,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           // Financial inputs
           monthly_payment: values.monthlyPayment,
           term_months: values.termMonths,
-          expected_start_date: values.startDate || null,
+          lease_start: values.startDate || null,
           escalation_rate: values.escalationRate ?? 0,
           // Covenant & classification
           covenant_flagged: values.covenantFlagged,
