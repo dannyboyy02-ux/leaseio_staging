@@ -1,14 +1,17 @@
+// Re-export calculation types so consumers can import from one place
+export type { LeaseInputs, LeaseCalculations } from '@/lib/leaseCalculations';
+
 export type WorkflowLeaseType = 'Real Estate' | 'Equipment';
 
-export type LeaseCategory = 'New Lease' | 'Lease Amendment';
-
-export type WorkflowStatus = 
-  | 'Draft' 
-  | 'Pending Approval' 
-  | 'Rejected' 
-  | 'Abstracting' 
-  | 'Review Required' 
-  | 'Posted';
+/** Lifecycle status values — matches DB constraint */
+export type WorkflowStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'approved'
+  | 'executed'
+  | 'active'
+  | 'rejected'
+  | 'cancelled';
 
 export interface ConfidenceScores {
   [field: string]: number; // 0-100
@@ -22,22 +25,23 @@ export interface AuditEntry {
   timestamp: string;
 }
 
+/** Data submitted when creating a new lease commitment request (Phase 1) */
 export interface CreateLeaseRequestData {
-  requestTitle: string;
-  category: 'property' | 'equipment' | 'vehicle' | 'other';
+  // Commitment Details
+  assetType: 'property' | 'equipment' | 'vehicle' | 'other';
+  description: string;
+  vendor?: string;
   requestingDepartment: string;
-  requestUrgency: 'low' | 'standard' | 'urgent';
-  expectedStartDate?: string;
-  estimatedMonthlyCostMin?: number;
-  estimatedMonthlyCostMax?: number;
-  estimatedTermMonths?: number;
-  vendorName?: string;
-  requestDescription?: string;
+  // Lease Terms
+  monthlyPayment: number;
+  termMonths: number;
+  startDate: string;         // ISO date
+  escalationRate?: number;   // annual %, default 0
+  // Financial Review
+  covenantFlagged?: boolean;
+  // Document
   file?: File;
 }
-
-// Backward-compatible alias until workflow components are migrated in Phase 2.
-export type CreateLeaseFormData = CreateLeaseRequestData;
 
 export interface PostedLease {
   id: string;
@@ -52,12 +56,13 @@ export const WORKFLOW_STATUS_CONFIG: Record<WorkflowStatus, {
   variant: 'default' | 'secondary' | 'destructive' | 'outline';
   bgClass: string;
 }> = {
-  'Draft': { label: 'Draft', variant: 'secondary', bgClass: 'bg-muted' },
-  'Pending Approval': { label: 'Pending', variant: 'outline', bgClass: 'bg-yellow-100' },
-  'Rejected': { label: 'Rejected', variant: 'destructive', bgClass: 'bg-red-100' },
-  'Abstracting': { label: 'Processing', variant: 'outline', bgClass: 'bg-blue-100' },
-  'Review Required': { label: 'Review', variant: 'outline', bgClass: 'bg-purple-100' },
-  'Posted': { label: 'Posted', variant: 'default', bgClass: 'bg-green-100' },
+  submitted:    { label: 'Submitted',    variant: 'secondary',    bgClass: 'bg-muted' },
+  under_review: { label: 'Under Review', variant: 'outline',      bgClass: 'bg-yellow-100' },
+  approved:     { label: 'Approved',     variant: 'default',      bgClass: 'bg-green-100' },
+  executed:     { label: 'Executed',     variant: 'outline',      bgClass: 'bg-blue-100' },
+  active:       { label: 'Active',       variant: 'default',      bgClass: 'bg-green-100' },
+  rejected:     { label: 'Rejected',     variant: 'destructive',  bgClass: 'bg-red-100' },
+  cancelled:    { label: 'Cancelled',    variant: 'destructive',  bgClass: 'bg-red-100' },
 };
 
 export const LOW_CONFIDENCE_THRESHOLD = 80;

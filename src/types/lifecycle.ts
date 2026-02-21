@@ -1,12 +1,13 @@
-// Lease Lifecycle Types (Business Plan Only)
+// Lease Lifecycle Types
 
 export type LifecycleStatus =
-  | 'requested'
-  | 'negotiating'
-  | 'pending_review'
+  | 'submitted'
+  | 'under_review'
+  | 'approved'
   | 'executed'
   | 'active'
   | 'expired'
+  | 'rejected'
   | 'cancelled';
 
 export type LeaseCategory = 'property' | 'equipment' | 'vehicle' | 'other';
@@ -51,6 +52,17 @@ export interface LifecycleLease {
   executionApprovedAt: string | null;
   activatedAt: string | null;
   uploadedAt: string;
+  // Financial inputs (Phase 1)
+  monthlyPayment: number | null;
+  termMonths: number | null;
+  assetType: LeaseCategory | null;
+  escalationRate: number | null;
+  calcTotalCommitment: number | null;
+  calcPvLiability: number | null;
+  calcStraightLineExp: number | null;
+  calcCashPlDelta: number | null;
+  leaseClassification: 'operating' | 'finance' | 'pending' | null;
+  covenantFlagged: boolean;
   // Extracted data (for executed and beyond)
   tenantName: string | null;
   landlordName: string | null;
@@ -65,7 +77,6 @@ export interface WorkspaceApprover {
   userId: string;
   isActive: boolean;
   createdAt: string;
-  // Joined data
   userEmail?: string;
   userName?: string;
 }
@@ -77,7 +88,6 @@ export interface LeaseApprover {
   approvalType: ApprovalType;
   approvedAt: string | null;
   createdAt: string;
-  // Joined data
   approverEmail?: string;
   approverName?: string;
 }
@@ -90,7 +100,6 @@ export interface LeaseApprovalAction {
   action: ApprovalAction;
   comment: string | null;
   createdAt: string;
-  // Joined data
   approverEmail?: string;
   approverName?: string;
 }
@@ -104,7 +113,6 @@ export interface LeaseActivityLog {
   toStatus: string | null;
   details: Record<string, unknown> | null;
   createdAt: string;
-  // Joined data
   userEmail?: string;
   userName?: string;
 }
@@ -120,12 +128,13 @@ export interface LeaseNudge {
 
 // State machine transitions
 export const LIFECYCLE_TRANSITIONS: Record<LifecycleStatus, LifecycleStatus[]> = {
-  requested: ['negotiating', 'cancelled'],
-  negotiating: ['pending_review', 'cancelled'],
-  pending_review: ['executed', 'negotiating', 'cancelled'],
+  submitted: ['under_review', 'cancelled'],
+  under_review: ['approved', 'rejected', 'cancelled'],
+  approved: ['executed', 'rejected', 'cancelled'],
   executed: ['active', 'cancelled'],
   active: ['expired', 'cancelled'],
   expired: [],
+  rejected: ['submitted'],
   cancelled: [],
 };
 
@@ -137,26 +146,26 @@ export const LIFECYCLE_STATUS_CONFIG: Record<LifecycleStatus, {
   bgClass: string;
   textClass: string;
 }> = {
-  requested: {
-    label: 'Requested',
-    shortLabel: 'Requested',
+  submitted: {
+    label: 'Submitted',
+    shortLabel: 'Submitted',
     color: 'secondary',
     bgClass: 'bg-muted',
     textClass: 'text-muted-foreground',
   },
-  negotiating: {
-    label: 'Negotiating',
-    shortLabel: 'Negotiating',
+  under_review: {
+    label: 'Under Review',
+    shortLabel: 'Review',
     color: 'outline',
     bgClass: 'bg-warning/10',
     textClass: 'text-warning',
   },
-  pending_review: {
-    label: 'Pending Review',
-    shortLabel: 'Review',
-    color: 'outline',
-    bgClass: 'bg-info/10',
-    textClass: 'text-info',
+  approved: {
+    label: 'Approved',
+    shortLabel: 'Approved',
+    color: 'default',
+    bgClass: 'bg-success/10',
+    textClass: 'text-success',
   },
   executed: {
     label: 'Executed',
@@ -178,6 +187,13 @@ export const LIFECYCLE_STATUS_CONFIG: Record<LifecycleStatus, {
     color: 'outline',
     bgClass: 'bg-muted',
     textClass: 'text-muted-foreground',
+  },
+  rejected: {
+    label: 'Rejected',
+    shortLabel: 'Rejected',
+    color: 'destructive',
+    bgClass: 'bg-destructive/10',
+    textClass: 'text-destructive',
   },
   cancelled: {
     label: 'Cancelled',
