@@ -1,11 +1,17 @@
-import { DollarSign, CalendarClock, TrendingUp, Wallet } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { DollarSign, CalendarClock, TrendingUp, Wallet, AlertTriangle, FileText } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, differenceInDays } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
+
+interface PipelineData {
+  pendingCount: number;
+  totalCashCommitment: number;
+  covenantFlaggedCount: number;
+}
 
 interface FinancialData {
   totalMonthlyRent: number;
@@ -30,7 +36,35 @@ function formatCurrency(amount: number, language: string): string {
 
 export function FinancialSummary() {
   const { t, language } = useLanguage();
-  
+
+  // Pipeline: submitted, under_review, approved
+  const { data: pipeline, isLoading: pipelineLoading } = useQuery({
+    queryKey: ['pipeline-summary'],
+    queryFn: async (): Promise<PipelineData> => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: leases, error } = await supabase
+        .from('leases')
+        .select('id, calc_total_commitment, covenant_flagged')
+        .eq('user_id', user.id)
+        .in('lifecycle_status', ['submitted', 'under_review', 'approved']);
+
+      if (error) throw error;
+
+      const rows = leases || [];
+      return {
+        pendingCount: rows.length,
+        totalCashCommitment: rows.reduce(
+          (sum, l) => sum + (Number((l as any).calc_total_commitment) || 0),
+          0,
+        ),
+        covenantFlaggedCount: rows.filter((l) => (l as any).covenant_flagged).length,
+      };
+    },
+  });
+
+  // Active portfolio: executed + active leases
   const { data, isLoading } = useQuery({
     queryKey: ['financial-summary'],
     queryFn: async (): Promise<FinancialData> => {
@@ -39,17 +73,17 @@ export function FinancialSummary() {
 
       const { data: leases, error } = await supabase
         .from('leases')
-        .select('id, filename, current_monthly_rent, lease_start, lease_end, status, extracted_json')
+        .select('id, filename, current_monthly_rent, monthly_payment, lease_start, lease_end, extracted_json')
         .eq('user_id', user.id)
-        .in('status', ['Ready', 'final', 'review', 'Approved']);
+        .in('lifecycle_status', ['executed', 'active']);
 
       if (error) throw error;
 
       const activeLeases = leases || [];
-      const totalMonthlyRent = activeLeases.reduce(
-        (sum, lease) => sum + (lease.current_monthly_rent || 0),
-        0
-      );
+      const totalMonthlyRent = activeLeases.reduce((sum, lease) => {
+        const rent = Number(lease.current_monthly_rent) || Number((lease as any).monthly_payment) || 0;
+        return sum + rent;
+      }, 0);
       const annualObligation = totalMonthlyRent * 12;
 
       let nextPayment: FinancialData['nextPayment'] = null;
@@ -57,22 +91,25 @@ export function FinancialSummary() {
         const now = new Date();
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const daysUntil = differenceInDays(nextMonth, now);
-        
-        const highestRentLease = activeLeases.reduce((max, lease) => 
-          (Number(lease.current_monthly_rent) || 0) > (Number(max.current_monthly_rent) || 0) ? lease : max
-        , activeLeases[0]);
+
+        const highestRentLease = activeLeases.reduce((max, lease) => {
+          const rent = Number(lease.current_monthly_rent) || Number((lease as any).monthly_payment) || 0;
+          const maxRent = Number(max.current_monthly_rent) || Number((max as any).monthly_payment) || 0;
+          return rent > maxRent ? lease : max;
+        }, activeLeases[0]);
 
         const propertyName = getPropertyDisplayName(
           highestRentLease.extracted_json as Record<string, unknown> | null,
           highestRentLease.filename,
-          'Property'
+          'Property',
         );
 
         nextPayment = {
           amount: totalMonthlyRent,
-          property: activeLeases.length === 1 
-            ? propertyName
-            : `${activeLeases.length} ${t('dashboard.properties')}`,
+          property:
+            activeLeases.length === 1
+              ? propertyName
+              : `${activeLeases.length} ${t('dashboard.properties')}`,
           dueDate: nextMonth,
           daysUntil,
         };
@@ -87,29 +124,45 @@ export function FinancialSummary() {
     },
   });
 
-  if (isLoading) {
+  const isAnythingLoading = pipelineLoading || isLoading;
+
+  if (isAnythingLoading) {
     return (
-      <Card className="bg-gradient-to-br from-primary/5 via-background to-accent/5 border-primary/10">
-        <CardContent className="p-6">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="space-y-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-8 w-32" />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="p-6">
+            <div className="grid gap-6 sm:grid-cols-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-8 w-32" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-primary/5 via-background to-accent/5 border-primary/10">
+          <CardContent className="p-6">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-8 w-32" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   const leaseCount = data?.activeLeaseCount || 0;
-  const leaseLabel = leaseCount === 1 
-    ? t('dashboard.active_lease') 
+  const leaseLabel = leaseCount === 1
+    ? t('dashboard.active_lease')
     : t('dashboard.active_leases_count');
 
-  const stats = [
+  const activeStats = [
     {
       label: t('dashboard.total_monthly_rent'),
       value: formatCurrency(data?.totalMonthlyRent || 0, language),
@@ -133,7 +186,7 @@ export function FinancialSummary() {
     },
     {
       label: t('dashboard.rent_per_lease'),
-      value: data?.activeLeaseCount 
+      value: data?.activeLeaseCount
         ? formatCurrency((data?.totalMonthlyRent || 0) / data.activeLeaseCount, language)
         : '—',
       icon: Wallet,
@@ -142,29 +195,86 @@ export function FinancialSummary() {
   ];
 
   return (
-    <Card className="bg-gradient-to-br from-primary/5 via-background to-accent/5 border-primary/10 animate-fade-up">
-      <CardContent className="p-6">
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat, index) => (
-            <div
-              key={stat.label}
-              className="flex items-start gap-4 animate-fade-up"
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <stat.icon className="h-6 w-6" />
+    <div className="space-y-4 animate-fade-up">
+      {/* Pipeline Section */}
+      {(pipeline?.pendingCount ?? 0) > 0 && (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2 text-warning">
+              <FileText className="h-4 w-4" />
+              Pipeline
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-6 sm:grid-cols-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Pending Commitments</p>
+                  <p className="text-2xl font-bold font-display">{pipeline?.pendingCount ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">awaiting review</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-                <p className={`text-2xl font-bold font-display truncate ${stat.highlight ? 'text-warning' : ''}`}>
-                  {stat.value}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">{stat.description}</p>
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning">
+                  <DollarSign className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Estimated Commitment</p>
+                  <p className="text-2xl font-bold font-display">
+                    {formatCurrency(pipeline?.totalCashCommitment ?? 0, language)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">total cash over terms</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Covenant Flagged</p>
+                  <p className="text-2xl font-bold font-display">
+                    {pipeline?.covenantFlaggedCount ?? 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground">require financial review</p>
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active Portfolio Section */}
+      <Card className="bg-gradient-to-br from-primary/5 via-background to-accent/5 border-primary/10">
+        <CardContent className="p-6">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {activeStats.map((stat, index) => (
+              <div
+                key={stat.label}
+                className="flex items-start gap-4 animate-fade-up"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <stat.icon className="h-6 w-6" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                  <p
+                    className={`text-2xl font-bold font-display truncate ${
+                      stat.highlight ? 'text-warning' : ''
+                    }`}
+                  >
+                    {stat.value}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{stat.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

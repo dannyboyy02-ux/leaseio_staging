@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, Link2, CreditCard } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, Link2, CreditCard, TrendingUp } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -53,7 +53,13 @@ export default function WorkspaceSettings() {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+  const [isSavingFinancial, setIsSavingFinancial] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+
+  // Financial configuration state
+  const [discountRate, setDiscountRate] = useState('5.5');
+  const [covenantThreshold, setCovenantThreshold] = useState('');
+  const [approvalThreshold, setApprovalThreshold] = useState('0');
 
   const canEdit = canEditWorkspaceSettings(userRole);
   const canManageMembers = canManageWorkspaceMembers(userRole);
@@ -80,19 +86,35 @@ export default function WorkspaceSettings() {
     }
   }, [workspace]);
 
+  // Load financial settings from workspaces table
+  useEffect(() => {
+    if (!workspace?.id) return;
+    supabase
+      .from('workspaces')
+      .select('discount_rate, covenant_threshold, approval_threshold')
+      .eq('id', workspace.id)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setDiscountRate(String((data as any).discount_rate ?? 5.5));
+          setCovenantThreshold(
+            (data as any).covenant_threshold != null
+              ? String((data as any).covenant_threshold)
+              : ''
+          );
+          setApprovalThreshold(String((data as any).approval_threshold ?? 0));
+        }
+      });
+  }, [workspace?.id]);
+
   const { data: members, isLoading: membersLoading, refetch: refetchMembers } = useQuery({
     queryKey: ['workspace-members', workspace?.id],
     queryFn: async () => {
       if (!workspace?.id) return [];
-      
+
       const { data, error } = await supabase
         .from('workspace_members')
-        .select(`
-          id,
-          role,
-          user_id,
-          created_at
-        `)
+        .select(`id, role, user_id, created_at`)
         .eq('workspace_id', workspace.id);
 
       if (error) throw error;
@@ -112,8 +134,8 @@ export default function WorkspaceSettings() {
         return {
           ...member,
           email: profile?.email || 'Unknown',
-          name: profile?.first_name && profile?.last_name 
-            ? `${profile.first_name} ${profile.last_name}` 
+          name: profile?.first_name && profile?.last_name
+            ? `${profile.first_name} ${profile.last_name}`
             : profile?.email || 'Unknown User',
         };
       }) || [];
@@ -122,27 +144,15 @@ export default function WorkspaceSettings() {
   });
 
   const handleSaveGeneral = async () => {
-    if (!canEdit) {
-      toast.error(t('workspace.read_only'));
-      return;
-    }
-    if (!workspace?.id) {
-      toast.error('No workspace found');
-      return;
-    }
-
+    if (!canEdit) { toast.error(t('workspace.read_only')); return; }
+    if (!workspace?.id) { toast.error('No workspace found'); return; }
     setIsSaving(true);
     try {
       const { error } = await supabase
         .from('workspaces')
-        .update({
-          name: workspaceName.trim(),
-          timezone: timezone,
-        })
+        .update({ name: workspaceName.trim(), timezone })
         .eq('id', workspace.id);
-
       if (error) throw error;
-
       if (refreshProfile) await refreshProfile();
       toast.success('Workspace settings saved!');
     } catch (error) {
@@ -154,27 +164,16 @@ export default function WorkspaceSettings() {
   };
 
   const handleSaveNotifications = async () => {
-    if (!canEdit) {
-      toast.error(t('workspace.read_only'));
-      return;
-    }
-    if (!workspace?.id) {
-      toast.error('No workspace found');
-      return;
-    }
-
+    if (!canEdit) { toast.error(t('workspace.read_only')); return; }
+    if (!workspace?.id) { toast.error('No workspace found'); return; }
     setIsSavingNotifications(true);
     try {
       const days = parseInt(notificationDays) || 90;
       const { error } = await supabase
         .from('workspaces')
-        .update({
-          default_notification_days: days,
-        })
+        .update({ default_notification_days: days })
         .eq('id', workspace.id);
-
       if (error) throw error;
-
       if (refreshProfile) await refreshProfile();
       toast.success('Notification settings saved!');
     } catch (error) {
@@ -185,13 +184,32 @@ export default function WorkspaceSettings() {
     }
   };
 
-  const handleRemoveMember = async (memberId: string) => {
+  const handleSaveFinancial = async () => {
+    if (!canEdit) { toast.error(t('workspace.read_only')); return; }
+    if (!workspace?.id) { toast.error('No workspace found'); return; }
+    setIsSavingFinancial(true);
     try {
       const { error } = await supabase
-        .from('workspace_members')
-        .delete()
-        .eq('id', memberId);
+        .from('workspaces')
+        .update({
+          discount_rate: parseFloat(discountRate) || 5.5,
+          covenant_threshold: covenantThreshold ? parseFloat(covenantThreshold) : null,
+          approval_threshold: parseFloat(approvalThreshold) || 0,
+        } as any)
+        .eq('id', workspace.id);
+      if (error) throw error;
+      toast.success('Financial configuration saved!');
+    } catch (error) {
+      console.error('Error saving financial config:', error);
+      toast.error('Failed to save financial configuration');
+    } finally {
+      setIsSavingFinancial(false);
+    }
+  };
 
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      const { error } = await supabase.from('workspace_members').delete().eq('id', memberId);
       if (error) throw error;
       toast.success('Member removed');
       refetchMembers();
@@ -256,21 +274,13 @@ export default function WorkspaceSettings() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {t('workspace.timezone_desc')}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t('workspace.timezone_desc')}</p>
                 </div>
                 <Button variant="accent" onClick={handleSaveGeneral} disabled={!canEdit || isSaving}>
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
+                  {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                   {isSaving ? t('workspace.saving') : t('workspace.save_changes')}
                 </Button>
-                {!canEdit && (
-                  <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>
-                )}
+                {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
               </CardContent>
             </Card>
           </TabsContent>
@@ -324,11 +334,7 @@ export default function WorkspaceSettings() {
                           <div className="flex items-center gap-3">
                             <Avatar>
                               <AvatarFallback>
-                                {member.name
-                                  .split(' ')
-                                  .map((n: string) => n[0])
-                                  .join('')
-                                  .slice(0, 2)}
+                                {member.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                               </AvatarFallback>
                             </Avatar>
                             <div>
@@ -372,82 +378,170 @@ export default function WorkspaceSettings() {
           {/* Defaults */}
           {canAccessDefaults && (
             <TabsContent value="defaults" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('workspace.notification_settings')}</CardTitle>
-                <CardDescription>
-                  {t('workspace.notification_timing')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="notification-days">{t('workspace.reminder_days')}</Label>
-                  <Input
-                    id="notification-days"
-                    type="number"
-                    value={notificationDays}
-                    onChange={(e) => setNotificationDays(e.target.value)}
-                    min="1"
-                    max="365"
-                    disabled={!canEdit}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t('workspace.reminder_desc')}
-                  </p>
-                </div>
-                <Button variant="accent" onClick={handleSaveNotifications} disabled={!canEdit || isSavingNotifications}>
-                  {isSavingNotifications ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
-                  {isSavingNotifications ? t('workspace.saving') : t('workspace.save_changes')}
-                </Button>
-                {!canEdit && (
-                  <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>
-                )}
-              </CardContent>
-            </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t('workspace.notification_settings')}</CardTitle>
+                  <CardDescription>{t('workspace.notification_timing')}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="notification-days">{t('workspace.reminder_days')}</Label>
+                    <Input
+                      id="notification-days"
+                      type="number"
+                      value={notificationDays}
+                      onChange={(e) => setNotificationDays(e.target.value)}
+                      min="1"
+                      max="365"
+                      disabled={!canEdit}
+                    />
+                    <p className="text-xs text-muted-foreground">{t('workspace.reminder_desc')}</p>
+                  </div>
+                  <Button
+                    variant="accent"
+                    onClick={handleSaveNotifications}
+                    disabled={!canEdit || isSavingNotifications}
+                  >
+                    {isSavingNotifications ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {isSavingNotifications ? t('workspace.saving') : t('workspace.save_changes')}
+                  </Button>
+                  {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                </CardContent>
+              </Card>
+
+              {/* Financial Configuration */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <CardTitle>Financial Configuration</CardTitle>
+                      <CardDescription>
+                        These values feed into lease liability calculations and approval routing.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="discount-rate">Incremental Borrowing Rate (%)</Label>
+                    <div className="relative">
+                      <Input
+                        id="discount-rate"
+                        type="number"
+                        min={0}
+                        step="0.1"
+                        value={discountRate}
+                        onChange={(e) => setDiscountRate(e.target.value)}
+                        disabled={!canEdit}
+                        className="pr-8"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Incremental borrowing rate used for lease liability calculations (ASC 842). Default: 5.5%.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="covenant-threshold">Covenant Threshold ($)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input
+                        id="covenant-threshold"
+                        type="number"
+                        min={0}
+                        step="1000"
+                        value={covenantThreshold}
+                        onChange={(e) => setCovenantThreshold(e.target.value)}
+                        disabled={!canEdit}
+                        placeholder="Optional"
+                        className="pl-7"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Total finance lease liability limit from your debt agreement. Commitments that would exceed this trigger a warning.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="approval-threshold">Approval Threshold ($)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input
+                        id="approval-threshold"
+                        type="number"
+                        min={0}
+                        step="1000"
+                        value={approvalThreshold}
+                        onChange={(e) => setApprovalThreshold(e.target.value)}
+                        disabled={!canEdit}
+                        placeholder="0"
+                        className="pl-7"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Commitments with total cash commitment above this amount require Financial Approver review. Set to 0 to require review for all.
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="accent"
+                    onClick={handleSaveFinancial}
+                    disabled={!canEdit || isSavingFinancial}
+                  >
+                    {isSavingFinancial ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {isSavingFinancial ? t('workspace.saving') : 'Save Financial Config'}
+                  </Button>
+                  {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
 
           {/* Integrations */}
           {canAccessIntegrations && (
             <TabsContent value="integrations" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('workspace.integrations_tab')}</CardTitle>
-                <CardDescription>{t('workspace.integrations_desc')}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="accent" asChild>
-                  <Link to="/app/integrations">
-                    <Link2 className="h-4 w-4 mr-2" />
-                    {t('workspace.manage_integrations')}
-                  </Link>
-                </Button>
-                {!canEdit && (
-                  <p className="text-xs text-muted-foreground mt-2">{t('workspace.read_only')}</p>
-                )}
-              </CardContent>
-            </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t('workspace.integrations_tab')}</CardTitle>
+                  <CardDescription>{t('workspace.integrations_desc')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="accent" asChild>
+                    <Link to="/app/integrations">
+                      <Link2 className="h-4 w-4 mr-2" />
+                      {t('workspace.manage_integrations')}
+                    </Link>
+                  </Button>
+                  {!canEdit && <p className="text-xs text-muted-foreground mt-2">{t('workspace.read_only')}</p>}
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
 
           {/* Billing & Plan */}
           {canAccessBilling && (
             <TabsContent value="billing" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('workspace.billing_plan')}</CardTitle>
-                <CardDescription>{t('workspace.billing_desc')}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="accent" asChild>
-                  <Link to="/app/settings/account">{t('workspace.manage_billing')}</Link>
-                </Button>
-              </CardContent>
-            </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t('workspace.billing_plan')}</CardTitle>
+                  <CardDescription>{t('workspace.billing_desc')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="accent" asChild>
+                    <Link to="/app/settings/account">{t('workspace.manage_billing')}</Link>
+                  </Button>
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
         </Tabs>

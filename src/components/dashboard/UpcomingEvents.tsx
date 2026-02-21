@@ -83,11 +83,12 @@ export function UpcomingEvents() {
 
       const now = new Date();
 
+      // Only executed and active leases have confirmed payment terms
       const { data: leases, error } = await supabase
         .from('leases')
-        .select('id, filename, lease_end, current_monthly_rent, extracted_json')
+        .select('id, filename, lease_end, current_monthly_rent, monthly_payment, extracted_json')
         .eq('user_id', user.id)
-        .in('lifecycle_status', ['active', 'executed', 'pending_review']);
+        .in('lifecycle_status', ['executed', 'active']);
 
       if (error) throw error;
 
@@ -96,8 +97,11 @@ export function UpcomingEvents() {
       for (const lease of leases || []) {
         const property = getPropertyDisplayName(
           lease.extracted_json as Record<string, unknown> | null,
-          lease.filename
+          lease.filename,
         );
+
+        const monthlyRent =
+          Number(lease.current_monthly_rent) || Number((lease as any).monthly_payment) || 0;
 
         if (lease.lease_end) {
           const endDate = new Date(lease.lease_end);
@@ -128,7 +132,7 @@ export function UpcomingEvents() {
           }
         }
 
-        if (lease.current_monthly_rent && Number(lease.current_monthly_rent) > 0) {
+        if (monthlyRent > 0) {
           const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
           const daysUntilPayment = differenceInDays(nextMonth, now);
 
@@ -140,14 +144,12 @@ export function UpcomingEvents() {
             date: nextMonth,
             daysUntil: daysUntilPayment,
             leaseId: lease.id,
-            amount: Number(lease.current_monthly_rent),
+            amount: monthlyRent,
           });
         }
       }
 
-      return upcomingEvents
-        .sort((a, b) => a.daysUntil - b.daysUntil)
-        .slice(0, 5);
+      return upcomingEvents.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 5);
     },
   });
 
@@ -222,7 +224,7 @@ export function UpcomingEvents() {
                   key={event.id}
                   className={cn(
                     'flex items-center rounded-lg transition-all animate-fade-up group',
-                    isUrgent && 'bg-destructive/5'
+                    isUrgent && 'bg-destructive/5',
                   )}
                   style={{ animationDelay: `${(index + 1) * 50}ms` }}
                 >
@@ -230,7 +232,7 @@ export function UpcomingEvents() {
                     to={`/app/leases/${event.leaseId}`}
                     className={cn(
                       'flex items-start gap-4 p-3 flex-1 min-w-0 rounded-lg hover:bg-muted/50 transition-all',
-                      isUrgent && 'hover:bg-destructive/10'
+                      isUrgent && 'hover:bg-destructive/10',
                     )}
                   >
                     <div
@@ -239,7 +241,7 @@ export function UpcomingEvents() {
                         config.variant === 'info' && 'bg-info/10 text-info',
                         config.variant === 'warning' && 'bg-warning/10 text-warning',
                         config.variant === 'destructive' && 'bg-destructive/10 text-destructive',
-                        config.variant === 'default' && 'bg-primary/10 text-primary'
+                        config.variant === 'default' && 'bg-primary/10 text-primary',
                       )}
                     >
                       <EventIcon className="h-5 w-5" />
@@ -249,11 +251,16 @@ export function UpcomingEvents() {
                         <Badge variant={config.variant} className="text-[10px]">
                           {t(config.labelKey)}
                         </Badge>
-                        <span className={cn(
-                          'text-xs',
-                          isUrgent ? 'text-destructive font-medium' :
-                          isWarning ? 'text-warning' : 'text-muted-foreground'
-                        )}>
+                        <span
+                          className={cn(
+                            'text-xs',
+                            isUrgent
+                              ? 'text-destructive font-medium'
+                              : isWarning
+                              ? 'text-warning'
+                              : 'text-muted-foreground',
+                          )}
+                        >
                           {getDaysLabel(event.daysUntil)}
                         </span>
                       </div>
