@@ -73,7 +73,7 @@ export function FinancialSummary() {
 
       const { data: leases, error } = await supabase
         .from('leases')
-        .select('id, filename, current_monthly_rent, monthly_payment, lease_start, lease_end, extracted_json')
+        .select('id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, lease_start, lease_end, extracted_json')
         .eq('user_id', user.id)
         .in('lifecycle_status', ['executed', 'active']);
 
@@ -81,7 +81,11 @@ export function FinancialSummary() {
 
       const activeLeases = leases || [];
       const totalMonthlyRent = activeLeases.reduce((sum, lease) => {
-        const rent = Number(lease.current_monthly_rent) || Number((lease as any).monthly_payment) || 0;
+        const rent =
+          Number((lease as any).executed_monthly_payment) ||
+          Number(lease.current_monthly_rent) ||
+          Number((lease as any).monthly_payment) ||
+          0;
         return sum + rent;
       }, 0);
       const annualObligation = totalMonthlyRent * 12;
@@ -93,8 +97,16 @@ export function FinancialSummary() {
         const daysUntil = differenceInDays(nextMonth, now);
 
         const highestRentLease = activeLeases.reduce((max, lease) => {
-          const rent = Number(lease.current_monthly_rent) || Number((lease as any).monthly_payment) || 0;
-          const maxRent = Number(max.current_monthly_rent) || Number((max as any).monthly_payment) || 0;
+          const rent =
+            Number((lease as any).executed_monthly_payment) ||
+            Number(lease.current_monthly_rent) ||
+            Number((lease as any).monthly_payment) ||
+            0;
+          const maxRent =
+            Number((max as any).executed_monthly_payment) ||
+            Number(max.current_monthly_rent) ||
+            Number((max as any).monthly_payment) ||
+            0;
           return rent > maxRent ? lease : max;
         }, activeLeases[0]);
 

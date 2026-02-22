@@ -12,6 +12,9 @@ import {
   Plus,
   CheckCircle,
   XCircle,
+  Lock,
+  Pencil,
+  ScanText,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -53,6 +56,12 @@ const ACTIVITY_CONFIG: Record<ActivityType, {
   financial_rejected: { icon: XCircle, label: 'Financial Rejected', colorClass: 'text-destructive' },
   financial_returned: { icon: RotateCcw, label: 'Returned for Revision', colorClass: 'text-warning' },
   resubmitted: { icon: RotateCcw, label: 'Resubmitted', colorClass: 'text-info' },
+  // Phase 4 — executed record
+  executed_uploaded: { icon: Upload, label: 'Executed Document Uploaded', colorClass: 'text-primary' },
+  executed_terms_extracted: { icon: ScanText, label: 'Executed Terms Extracted', colorClass: 'text-info' },
+  executed_terms_edited: { icon: Pencil, label: 'Executed Term Edited', colorClass: 'text-warning' },
+  classification_resolved: { icon: CheckCircle, label: 'Classification Resolved', colorClass: 'text-success' },
+  model_locked: { icon: Lock, label: 'Model Locked', colorClass: 'text-success' },
 };
 
 export function ActivityTimeline({ leaseId, className }: ActivityTimelineProps) {

@@ -36,3 +36,12 @@ export const isSubmitterOnly = (functionalRoles: FunctionalRole[]): boolean =>
   !functionalRoles.includes('manager_approver') &&
   !functionalRoles.includes('financial_approver') &&
   !functionalRoles.includes('admin');
+
+// Phase 4 — executed document role checks
+/** User can upload an executed document (financial_approver or admin) */
+export const canUploadExecutedDocument = (functionalRoles: FunctionalRole[]): boolean =>
+  functionalRoles.includes('financial_approver') || functionalRoles.includes('admin');
+
+/** User can access variance review (financial_approver or admin) */
+export const canAccessVarianceReview = (functionalRoles: FunctionalRole[]): boolean =>
+  functionalRoles.includes('financial_approver') || functionalRoles.includes('admin');

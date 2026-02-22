@@ -32,7 +32,13 @@ export type ActivityType =
   | 'financial_approved'
   | 'financial_rejected'
   | 'financial_returned'
-  | 'resubmitted';
+  | 'resubmitted'
+  // Phase 4 — executed record
+  | 'executed_uploaded'
+  | 'executed_terms_extracted'
+  | 'executed_terms_edited'
+  | 'classification_resolved'
+  | 'model_locked';
 
 export type FunctionalRole = 'submitter' | 'manager_approver' | 'financial_approver' | 'admin';
 
