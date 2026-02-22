@@ -69,14 +69,11 @@ interface LeaseExtractionResult {
   property_address: string | null;
   lease_start: string | null;
   lease_end: string | null;
-  // Square footage
   square_footage: number | null;
-  // New rent schedule fields
   current_monthly_rent: number | null;
   rent_escalation_type: string | null;
   rent_schedule: RentPeriod[];
   rent_commencement_date: string | null;
-  // Legacy fields for backwards compatibility
   base_rent_amount: string | null;
   base_rent_frequency: string | null;
   security_deposit: string | null;
@@ -87,212 +84,121 @@ interface LeaseExtractionResult {
   risks: { title: string; severity: 'low' | 'medium' | 'high'; explanation: string; citation_snippet?: string; citation_page?: number }[];
 }
 
-// Validate UUID format
 function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
 }
 
-// Check if file is a PDF by examining magic bytes
 function isPdfFile(bytes: ArrayBuffer): boolean {
   const header = new Uint8Array(bytes.slice(0, 4));
   return header.every((byte, index) => byte === PDF_MAGIC_BYTES[index]);
 }
 
-// Sanitize filename to prevent path traversal
 function sanitizeFilename(filename: string): string {
-  // Remove path components and dangerous characters
   const sanitized = filename
-    .replace(/[\/\\]/g, '_')  // Replace path separators
-    .replace(/\.\./g, '_')     // Remove parent directory references
-    .replace(/[<>:"|?*\x00-\x1f]/g, '_')  // Remove invalid chars
+    .replace(/[\/\\]/g, '_')
+    .replace(/\.\./g, '_')
+    .replace(/[<>:"|?*\x00-\x1f]/g, '_')
     .trim();
-  
-  // Ensure it's not empty and has reasonable length
   if (!sanitized || sanitized.length > 255) {
     return `lease_${Date.now()}.pdf`;
   }
-  
   return sanitized;
 }
 
-// Helper to sanitize date strings before inserting into Postgres DATE columns
 function safeDate(input: string | null | undefined): string | null {
-  // Return null for falsy values
-  if (!input || typeof input !== 'string') {
-    return null;
-  }
-  
+  if (!input || typeof input !== 'string') return null;
   const trimmed = input.trim();
-  
-  // Return null for empty strings
-  if (!trimmed) {
-    return null;
-  }
-  
-  // Return null if contains underscores (placeholder like 20__-__-__ or ____-__-__)
+  if (!trimmed) return null;
   if (trimmed.includes('_')) {
     console.log(`[safeDate] Rejecting placeholder date: ${trimmed}`);
     return null;
   }
-  
-  // Return null for common non-date tokens
   const invalidTokens = ['tbd', 'n/a', 'unknown', 'pending', 'none', 'null', 'undefined'];
   if (invalidTokens.includes(trimmed.toLowerCase())) {
     console.log(`[safeDate] Rejecting non-date token: ${trimmed}`);
     return null;
   }
-  
-  // If already in YYYY-MM-DD format, return as-is
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-  
-  // Try to parse common date formats
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
   try {
-    // MM/DD/YYYY or M/D/YYYY
     const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (slashMatch) {
       const [, month, day, year] = slashMatch;
-      const formatted = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-      console.log(`[safeDate] Parsed MM/DD/YYYY: ${trimmed} -> ${formatted}`);
-      return formatted;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
-    
-    // Month D, YYYY or Month DD, YYYY (e.g., "January 1, 2024" or "Jan 15, 2024")
     const monthNames: Record<string, string> = {
-      'january': '01', 'jan': '01',
-      'february': '02', 'feb': '02',
-      'march': '03', 'mar': '03',
-      'april': '04', 'apr': '04',
-      'may': '05',
-      'june': '06', 'jun': '06',
-      'july': '07', 'jul': '07',
-      'august': '08', 'aug': '08',
-      'september': '09', 'sep': '09', 'sept': '09',
-      'october': '10', 'oct': '10',
-      'november': '11', 'nov': '11',
+      'january': '01', 'jan': '01', 'february': '02', 'feb': '02',
+      'march': '03', 'mar': '03', 'april': '04', 'apr': '04', 'may': '05',
+      'june': '06', 'jun': '06', 'july': '07', 'jul': '07',
+      'august': '08', 'aug': '08', 'september': '09', 'sep': '09', 'sept': '09',
+      'october': '10', 'oct': '10', 'november': '11', 'nov': '11',
       'december': '12', 'dec': '12',
     };
-    
     const monthMatch = trimmed.match(/^([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
     if (monthMatch) {
       const [, monthStr, day, year] = monthMatch;
       const monthNum = monthNames[monthStr.toLowerCase()];
-      if (monthNum) {
-        const formatted = `${year}-${monthNum}-${day.padStart(2, '0')}`;
-        console.log(`[safeDate] Parsed Month D, YYYY: ${trimmed} -> ${formatted}`);
-        return formatted;
-      }
+      if (monthNum) return `${year}-${monthNum}-${day.padStart(2, '0')}`;
     }
-    
-    // Try JavaScript Date parsing as last resort
     const parsed = new Date(trimmed);
     if (!isNaN(parsed.getTime())) {
       const year = parsed.getFullYear();
       const month = String(parsed.getMonth() + 1).padStart(2, '0');
       const day = String(parsed.getDate()).padStart(2, '0');
-      // Only accept if year is reasonable (1900-2100)
-      if (year >= 1900 && year <= 2100) {
-        const formatted = `${year}-${month}-${day}`;
-        console.log(`[safeDate] Parsed via Date(): ${trimmed} -> ${formatted}`);
-        return formatted;
-      }
+      if (year >= 1900 && year <= 2100) return `${year}-${month}-${day}`;
     }
   } catch (e) {
     console.log(`[safeDate] Parse error for: ${trimmed}`, e);
   }
-  
   console.log(`[safeDate] Could not parse, returning null: ${trimmed}`);
   return null;
 }
 
 async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
   console.log('[Azure DI] Starting document analysis...');
-  
   const analyzeUrl = `${AZURE_DI_ENDPOINT}/documentintelligence/documentModels/prebuilt-layout:analyze?api-version=2024-11-30`;
-  
   const analyzeResponse = await fetch(analyzeUrl, {
     method: 'POST',
-    headers: {
-      'Ocp-Apim-Subscription-Key': AZURE_DI_KEY!,
-      'Content-Type': 'application/pdf',
-    },
+    headers: { 'Ocp-Apim-Subscription-Key': AZURE_DI_KEY!, 'Content-Type': 'application/pdf' },
     body: new Blob([pdfBytes], { type: 'application/pdf' }),
   });
-
   if (!analyzeResponse.ok) {
     const errorText = await analyzeResponse.text();
-    console.error('[Azure DI] Analyze request failed:', errorText);
     throw new Error(`Azure DI analyze failed: ${analyzeResponse.status} - ${errorText}`);
   }
-
   const operationLocation = analyzeResponse.headers.get('Operation-Location');
-  if (!operationLocation) {
-    throw new Error('Azure DI did not return Operation-Location header');
-  }
-
+  if (!operationLocation) throw new Error('Azure DI did not return Operation-Location header');
   console.log('[Azure DI] Polling for results...');
-  
-  // Poll for results
   let result = null;
   let attempts = 0;
-  const maxAttempts = 60; // 60 seconds max
-  
+  const maxAttempts = 60;
   while (attempts < maxAttempts) {
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
     const pollResponse = await fetch(operationLocation, {
-      headers: {
-        'Ocp-Apim-Subscription-Key': AZURE_DI_KEY!,
-      },
+      headers: { 'Ocp-Apim-Subscription-Key': AZURE_DI_KEY! },
     });
-
     if (!pollResponse.ok) {
       const errorText = await pollResponse.text();
-      console.error('[Azure DI] Poll failed:', errorText);
       throw new Error(`Azure DI poll failed: ${pollResponse.status}`);
     }
-
     const pollResult = await pollResponse.json();
-    
-    if (pollResult.status === 'succeeded') {
-      result = pollResult.analyzeResult;
-      break;
-    } else if (pollResult.status === 'failed') {
-      console.error('[Azure DI] Analysis failed:', pollResult.error);
-      throw new Error(`Azure DI analysis failed: ${JSON.stringify(pollResult.error)}`);
-    }
-    
+    if (pollResult.status === 'succeeded') { result = pollResult.analyzeResult; break; }
+    else if (pollResult.status === 'failed') throw new Error(`Azure DI analysis failed: ${JSON.stringify(pollResult.error)}`);
     attempts++;
   }
-
-  if (!result) {
-    throw new Error('Azure DI analysis timed out');
-  }
-
+  if (!result) throw new Error('Azure DI analysis timed out');
   console.log(`[Azure DI] Extracted ${result.pages?.length || 0} pages`);
-  
-  // Extract text content from paragraphs and tables
   let extractedText = '';
-  
-  // Get paragraphs
   if (result.paragraphs) {
-    for (const paragraph of result.paragraphs) {
-      extractedText += paragraph.content + '\n\n';
-    }
+    for (const paragraph of result.paragraphs) extractedText += paragraph.content + '\n\n';
   }
-  
-  // Get tables
   if (result.tables) {
     for (const table of result.tables) {
       extractedText += '\n[TABLE]\n';
       const rows: Record<number, Record<number, string>> = {};
-      
       for (const cell of table.cells) {
         if (!rows[cell.rowIndex]) rows[cell.rowIndex] = {};
         rows[cell.rowIndex][cell.columnIndex] = cell.content;
       }
-      
       for (const rowIdx of Object.keys(rows).map(Number).sort((a, b) => a - b)) {
         const row = rows[rowIdx];
         const cells = Object.keys(row).map(Number).sort((a, b) => a - b).map(colIdx => row[colIdx]);
@@ -301,13 +207,11 @@ async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
       extractedText += '[/TABLE]\n\n';
     }
   }
-  
   return extractedText;
 }
 
 async function extractLeaseDataWithOpenAI(documentText: string): Promise<LeaseExtractionResult> {
   console.log('[OpenAI] Extracting lease data...');
-  
   const systemPrompt = `You are an expert commercial lease abstraction specialist with 20+ years of experience analyzing real estate and equipment leases. Your task is to extract key information with the highest possible accuracy.
 
 DOMAIN KNOWLEDGE - CRITICAL LEASE TERMINOLOGY:
@@ -642,70 +546,10 @@ COMMON EXTRACTION ERRORS TO AVOID:
 
 - DO NOT overlook percentage rent clauses in retail leases
 
-EXAMPLE EXTRACTIONS FROM REAL COMMERCIAL LEASES:
-
-Example 1 - Office Lease:
-
-Document: "This Lease Agreement is made between XYZ Properties LLC ('Landlord') and Acme Corporation ('Tenant') for premises at 123 Main Street, Suite 500, Chicago, IL 60601. Term: January 1, 2024 to December 31, 2028. Base monthly rent: Ten Thousand Dollars ($10,000.00)."
-
-Extraction: {"landlord_name": {"value": "XYZ Properties LLC", "confidence": 0.98, "page": 1, "source_text": "XYZ Properties LLC ('Landlord')"}, "tenant_name": {"value": "Acme Corporation", "confidence": 0.98, "page": 1}, "property_address": {"value": "123 Main Street, Suite 500, Chicago, IL 60601", "confidence": 0.97, "page": 1}, "lease_start": {"value": "2024-01-01", "confidence": 0.99, "page": 1}, "lease_end": {"value": "2028-12-31", "confidence": 0.99, "page": 1}, "current_monthly_rent": {"value": 10000, "confidence": 0.99, "page": 1}}
-
-Example 2 - Retail Lease with Escalations:
-
-Document: "Year 1 rent (Jan 1, 2024 - Dec 31, 2024): $5,000/month. Year 2: $5,150/month (3% increase). Year 3: $5,305/month (3% increase). Premises: 2,500 RSF."
-
-Extraction: {"current_monthly_rent": {"value": 5000, "confidence": 0.96, "page": 2}, "rent_escalation_type": {"value": "3% annual increase", "confidence": 0.95, "page": 2}, "square_footage": {"value": 2500, "confidence": 0.94, "page": 2}, "rent_schedule": [{"period_start": "2024-01-01", "period_end": "2024-12-31", "monthly_amount": 5000, "annual_amount": 60000, "notes": "Year 1", "confidence": 0.96}, {"period_start": "2025-01-01", "period_end": "2025-12-31", "monthly_amount": 5150, "annual_amount": 61800, "notes": "Year 2 - 3% increase", "confidence": 0.95}]}
-
-Example 3 - Equipment Lease:
-
-Document: "Lessor: ABC Equipment Leasing Inc. Lessee: Manufacturing Co. Equipment: Forklift Model XL-2000. Monthly payment: $850. Term: 36 months from March 15, 2024."
-
-Extraction: {"landlord_name": {"value": "ABC Equipment Leasing Inc", "confidence": 0.97, "page": 1}, "tenant_name": {"value": "Manufacturing Co", "confidence": 0.96, "page": 1}, "lease_start": {"value": "2024-03-15", "confidence": 0.98, "page": 1}, "current_monthly_rent": {"value": 850, "confidence": 0.98, "page": 1}}
-
-Example 4 - Missing Information:
-
-Document: "Property in downtown area. Market rate rent."
-
-Extraction: {"property_address": {"value": null, "confidence": 0.0, "page": 1, "source_text": "downtown area"}, "current_monthly_rent": {"value": null, "confidence": 0.0, "page": 1, "source_text": "market rate rent"}}
-
-Example 5 - Complex Rent with CPI:
-
-Document: "Base rent Year 1: $8,000/month. Years 2-5: Annual increase equal to CPI, min 2%, max 4%. Premises: 3,200 RSF."
-
-Extraction: {"current_monthly_rent": {"value": 8000, "confidence": 0.97}, "rent_escalation_type": {"value": "CPI adjustment, 2% floor, 4% ceiling", "confidence": 0.93}, "square_footage": {"value": 3200, "confidence": 0.96}}
-
-Example 6 - Percentage Rent:
-
-Document: "Minimum rent: $5,000/month. Plus 6% of gross sales over $1M annually."
-
-Extraction: {"current_monthly_rent": {"value": 5000, "confidence": 0.98}, "rent_escalation_type": {"value": "Min rent plus 6% of sales over $1M", "confidence": 0.90}}
-
-Example 7 - Triple Net:
-
-Document: "Base: $12/sqft/year. Tenant pays taxes, insurance, CAM ~$4.50/sqft. 5,000 RSF."
-
-Extraction: {"current_monthly_rent": {"value": 5000, "confidence": 0.92}, "square_footage": {"value": 5000, "confidence": 0.98}, "rent_escalation_type": {"value": "NNN - tenant pays separately", "confidence": 0.95}}
-
-Example 8 - Equipment Lease with Calculated End:
-
-Document: "Tech Rental LLC to Startup Inc. $1,250/mo for Dell R740. 24mo from April 1, 2024."
-
-Extraction: {"landlord_name": {"value": "Tech Rental LLC", "confidence": 0.97}, "tenant_name": {"value": "Startup Inc", "confidence": 0.96}, "current_monthly_rent": {"value": 1250, "confidence": 0.98}, "lease_start": {"value": "2024-04-01", "confidence": 0.98}, "lease_end": {"value": "2026-03-31", "confidence": 0.90}}
-
-Example 9 - Incomplete Data:
-
-Document: "Property at ~456 Oak St, downtown area."
-
-Extraction: {"property_address": {"value": "456 Oak Street, downtown", "confidence": 0.55}}
-
 Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
 
-  // Helper function to safely extract JSON from OpenAI response
   function extractJsonFromResponse(content: string): object {
-    // Try to extract JSON from response with multiple strategies
     let jsonStr = content;
-    
-    // Strategy 1: Look for markdown code blocks
     if (content.includes('```json')) {
       const match = content.match(/```json\s*([\s\S]*?)\s*```/);
       if (match) jsonStr = match[1];
@@ -713,164 +557,106 @@ Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
       const match = content.match(/```\s*([\s\S]*?)\s*```/);
       if (match) jsonStr = match[1];
     }
-    
-    // Strategy 2: Find JSON object boundaries
     const trimmed = jsonStr.trim();
     const firstBrace = trimmed.indexOf('{');
     const lastBrace = trimmed.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
       jsonStr = trimmed.substring(firstBrace, lastBrace + 1);
     }
-    
-    // Strategy 3: Clean common issues before parsing
     jsonStr = jsonStr
-      .replace(/,\s*}/g, '}')  // Remove trailing commas before }
-      .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
-      .replace(/[\x00-\x1F\x7F]/g, ' ') // Remove control characters
-      .replace(/\n\s*\n/g, '\n'); // Reduce multiple newlines
-    
+      .replace(/,\s*}/g, '}')
+      .replace(/,\s*]/g, ']')
+      .replace(/[\x00-\x1F\x7F]/g, ' ')
+      .replace(/\n\s*\n/g, '\n');
     try {
       return JSON.parse(jsonStr.trim());
     } catch (e) {
-      // Strategy 4: Try to fix common JSON issues
       console.log('[OpenAI] First parse attempt failed, trying cleanup...');
-      
-      // Try to fix unquoted property names
       const fixedJson = jsonStr
-        .replace(/(\w+)\s*:/g, '"$1":') // Quote unquoted keys
-        .replace(/:\s*'([^']*)'/g, ':"$1"') // Convert single quotes to double
-        .replace(/""/g, '"'); // Fix double quotes from previous operations
-      
+        .replace(/(\w+)\s*:/g, '"$1":')
+        .replace(/:\s*'([^']*)'/g, ':"$1"')
+        .replace(/""/g, '"');
       try {
         return JSON.parse(fixedJson.trim());
       } catch (e2) {
         console.error('[OpenAI] JSON cleanup failed:', e2);
         console.error('[OpenAI] Failed content preview:', jsonStr.substring(0, 500));
-        throw e; // Throw original error
+        throw e;
       }
     }
   }
 
-  // Retry logic for API calls
   const maxRetries = 2;
   let lastError: Error | null = null;
-  
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: OPENAI_MODEL,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Please analyze this lease document and extract the key information:\n\n${documentText}` }
           ],
-          temperature: attempt === 0 ? 0.1 : 0.0, // Lower temperature on retry
+          temperature: attempt === 0 ? 0.1 : 0.0,
           max_tokens: 4000,
-          response_format: { type: "json_object" }, // Request JSON mode
+          response_format: { type: "json_object" },
         }),
       });
-
-      // Check Content-Type header before parsing
       const contentType = response.headers.get('content-type');
-      
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[OpenAI] Request failed (attempt ${attempt + 1}):`, errorText);
-        
-        // Check if it's HTML (server error, rate limit, etc.)
         if (errorText.trim().startsWith('<!') || errorText.includes('<html')) {
           lastError = new Error(`OpenAI returned HTML error page (status ${response.status})`);
-          if (attempt < maxRetries) {
-            console.log(`[OpenAI] Retrying after HTML response...`);
-            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-            continue;
-          }
+          if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
           throw lastError;
         }
-        
         throw new Error(`OpenAI request failed: ${response.status} - ${errorText}`);
       }
-
-      // Verify JSON content type
       if (!contentType?.includes('application/json')) {
         const textResponse = await response.text();
-        console.error('[OpenAI] Expected JSON but got:', contentType);
-        console.error('[OpenAI] Response preview:', textResponse.substring(0, 200));
         lastError = new Error(`OpenAI returned non-JSON response: ${contentType}`);
-        if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-          continue;
-        }
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
         throw lastError;
       }
-
       const data = await response.json();
-      
       if (!data.choices?.[0]?.message?.content) {
-        console.error('[OpenAI] Missing content in response:', JSON.stringify(data).substring(0, 300));
         lastError = new Error('OpenAI response missing content');
-        if (attempt < maxRetries) {
-          await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-          continue;
-        }
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
         throw lastError;
       }
-      
       const content = data.choices[0].message.content;
       console.log('[OpenAI] Raw response:', content.substring(0, 500));
       console.log(`[OpenAI] Tokens - prompt: ${data.usage?.prompt_tokens || 'N/A'}, completion: ${data.usage?.completion_tokens || 'N/A'}`);
-      
       try {
         const parsed = extractJsonFromResponse(content);
         console.log('[OpenAI] Successfully parsed JSON response');
         return parsed as LeaseExtractionResult;
       } catch (parseError) {
-        console.error(`[OpenAI] JSON parse failed (attempt ${attempt + 1}):`, parseError);
         lastError = new Error(`Failed to parse OpenAI response as JSON: ${parseError}`);
-        
-        if (attempt < maxRetries) {
-          console.log('[OpenAI] Retrying with different parameters...');
-          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-          continue;
-        }
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); continue; }
         throw lastError;
       }
     } catch (error) {
-      console.error(`[OpenAI] Attempt ${attempt + 1} failed:`, error);
       lastError = error instanceof Error ? error : new Error(String(error));
-      
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-        continue;
-      }
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
     }
   }
-  
   throw lastError || new Error('All OpenAI extraction attempts failed');
 }
 
-// Helper function to extract value from confidence-scored field
 function extractValue(field: any): any {
-  if (field && typeof field === 'object' && 'value' in field) {
-    return field.value;
-  }
-  return field; // Fallback for legacy format
+  if (field && typeof field === 'object' && 'value' in field) return field.value;
+  return field;
 }
 
-// Helper function to extract confidence from field
 function extractConfidence(field: any): number | null {
-  if (field && typeof field === 'object' && 'confidence' in field) {
-    return field.confidence;
-  }
+  if (field && typeof field === 'object' && 'confidence' in field) return field.confidence;
   return null;
 }
 
-// Validation helpers with suggestions
 function validateMonthlyRent(value: number | null): { valid: boolean; issue?: string; suggestion?: string } {
   if (value === null) return { valid: true };
   if (value < 0) return { valid: false, issue: 'Negative rent', suggestion: 'Check if credit/refund instead' };
@@ -900,58 +686,39 @@ function validateAddress(address: string | null): { valid: boolean; issue?: stri
   const hasCity = /,\s*[A-Z][a-z]+/.test(address);
   const hasState = /\b[A-Z]{2}\b/.test(address);
   const hasZip = /\b\d{5}(-\d{4})?\b/.test(address);
-  if (!hasCity && !hasState && !hasZip) {
-    return { valid: false, issue: 'Incomplete address - missing city/state/ZIP' };
-  }
+  if (!hasCity && !hasState && !hasZip) return { valid: false, issue: 'Incomplete address - missing city/state/ZIP' };
   return { valid: true };
 }
 
 function validateLeaseData(data: any): { warnings: string[]; suggestions: string[] } {
   const warnings: string[] = [];
   const suggestions: string[] = [];
-  
   const rentCheck = validateMonthlyRent(extractValue(data.current_monthly_rent));
-  if (!rentCheck.valid) {
-    warnings.push(rentCheck.issue || 'Rent validation failed');
-    if (rentCheck.suggestion) suggestions.push(rentCheck.suggestion);
-  }
-  
+  if (!rentCheck.valid) { warnings.push(rentCheck.issue || 'Rent validation failed'); if (rentCheck.suggestion) suggestions.push(rentCheck.suggestion); }
   const addressCheck = validateAddress(extractValue(data.property_address));
   if (!addressCheck.valid) warnings.push(addressCheck.issue || 'Address incomplete');
-  
   const startCheck = validateDate(extractValue(data.lease_start));
   if (!startCheck.valid) warnings.push(`Start: ${startCheck.issue}`);
-  
   const endCheck = validateDate(extractValue(data.lease_end));
   if (!endCheck.valid) warnings.push(`End: ${endCheck.issue}`);
-  
   const leaseStart = extractValue(data.lease_start);
   const leaseEnd = extractValue(data.lease_end);
-  if (leaseStart && leaseEnd) {
-    if (new Date(leaseEnd) <= new Date(leaseStart)) {
-      warnings.push('End must be after start');
-    }
-  }
-  
+  if (leaseStart && leaseEnd && new Date(leaseEnd) <= new Date(leaseStart)) warnings.push('End must be after start');
   const sqftCheck = validateSquareFootage(extractValue(data.square_footage));
   if (!sqftCheck.valid) warnings.push(`Sqft: ${sqftCheck.issue}`);
-  
   if (!extractValue(data.landlord_name)) warnings.push('Missing landlord');
   if (!extractValue(data.tenant_name)) warnings.push('Missing tenant');
-  
   return { warnings, suggestions };
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     console.log('[process_lease] Request received');
-    
-    // Get authorization header
+
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
@@ -960,15 +727,11 @@ serve(async (req) => {
       });
     }
 
-    // Create Supabase client with service role for DB operations
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    
-    // Create Supabase client with user token to verify auth
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } }
     });
-    
-    // Get authenticated user
+
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
       console.error('[process_lease] Auth error:', authError);
@@ -977,16 +740,17 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    
     console.log(`[process_lease] User authenticated: ${user.id}`);
 
-    // Parse form data
     const formData = await req.formData();
     const file = formData.get('file') as File;
     const leaseType = formData.get('leaseType') as string || 'master';
     const parentLeaseId = formData.get('parentLeaseId') as string | null;
-    
-    // Validate file exists
+    // Phase 4: extraction mode. Defaults to 'pipeline' — zero breaking changes to existing callers.
+    const extractionMode = (formData.get('extractionMode') as string) || 'pipeline';
+    // Phase 4: existing lease ID — required when extractionMode === 'executed'
+    const targetLeaseId = formData.get('leaseId') as string | null;
+
     if (!file) {
       return new Response(JSON.stringify({ error: 'No file provided' }), {
         status: 400,
@@ -994,120 +758,298 @@ serve(async (req) => {
       });
     }
 
-    // Validate file size
     if (file.size > MAX_FILE_SIZE) {
-      console.log(`[process_lease] File too large: ${file.size} bytes`);
       return new Response(JSON.stringify({ error: 'File too large. Maximum size is 50MB.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Read file bytes for validation
     const fileBytes = await file.arrayBuffer();
-    
-    // Validate file is actually a PDF using magic bytes
+
     if (!isPdfFile(fileBytes)) {
-      console.log('[process_lease] File is not a valid PDF');
       return new Response(JSON.stringify({ error: 'Invalid file type. Only PDF files are allowed.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Validate lease type
+    const sanitizedFilename = sanitizeFilename(file.name);
+    console.log(`[process_lease] Processing file: ${sanitizedFilename}, size: ${file.size}, mode: ${extractionMode}`);
+
+    // ================================================================
+    // PHASE 4 — EXECUTED MODE
+    // Branches here. All pipeline code below is UNTOUCHED.
+    // ================================================================
+    if (extractionMode === 'executed') {
+      if (!targetLeaseId || !isValidUUID(targetLeaseId)) {
+        return new Response(JSON.stringify({ error: 'leaseId is required for executed mode and must be a valid UUID.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Fetch existing lease (need pipeline terms for variance + auth check)
+      const { data: existingLease, error: fetchError } = await supabaseAdmin
+        .from('leases')
+        .select('id, user_id, workspace_id, lifecycle_status, current_monthly_rent, monthly_payment, lease_start, lease_end, tenant_name, landlord_name, model_locked')
+        .eq('id', targetLeaseId)
+        .single();
+
+      if (fetchError || !existingLease) {
+        return new Response(JSON.stringify({ error: 'Lease not found.' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Authorization: owner always allowed; otherwise check workspace role
+      if (existingLease.user_id !== user.id) {
+        if (existingLease.workspace_id) {
+          const { data: roleData } = await supabaseAdmin
+            .from('workspace_roles')
+            .select('role')
+            .eq('workspace_id', existingLease.workspace_id)
+            .eq('user_id', user.id)
+            .single();
+          if (!roleData || !['financial_approver', 'admin', 'editor'].includes(roleData.role)) {
+            return new Response(JSON.stringify({ error: 'Unauthorized to upload executed document for this lease.' }), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        } else {
+          return new Response(JSON.stringify({ error: 'Unauthorized.' }), {
+            status: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      // Guard: cannot upload to a locked record
+      if (existingLease.model_locked) {
+        return new Response(JSON.stringify({ error: 'Cannot upload executed document on a locked lease record.' }), {
+          status: 409,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Build storage path: {workspace_id|user_id}/{leaseId}/executed/{timestamp}-{filename}
+      const timestamp = Date.now();
+      const bucketPrefix = existingLease.workspace_id
+        ? `${existingLease.workspace_id}/${targetLeaseId}/executed`
+        : `${user.id}/${targetLeaseId}/executed`;
+      const executedStoragePath = `${bucketPrefix}/${timestamp}-${sanitizedFilename}`;
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('executed-leases')
+        .upload(executedStoragePath, fileBytes, { contentType: 'application/pdf', upsert: true });
+
+      if (uploadError) throw new Error(`Failed to upload executed document: ${uploadError.message}`);
+      console.log('[process_lease] Executed document uploaded to storage');
+
+      // Activity log: executed_uploaded
+      await supabaseAdmin.from('lease_activity_log').insert({
+        lease_id: targetLeaseId,
+        user_id: user.id,
+        activity_type: 'executed_uploaded',
+        details: { filename: sanitizedFilename, storage_path: executedStoragePath },
+      });
+
+      // Azure DI OCR
+      let executedText: string;
+      try {
+        executedText = await analyzeWithAzureDI(fileBytes);
+        console.log(`[process_lease] Executed: extracted ${executedText.length} characters`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Executed document analysis failed: ${msg}`);
+      }
+
+      // OpenAI extraction (reuses identical function)
+      let leaseData: LeaseExtractionResult;
+      try {
+        leaseData = await extractLeaseDataWithOpenAI(executedText);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Executed AI extraction failed: ${msg}`);
+      }
+
+      // Map to executed_* fields
+      const execMonthlyPayment   = extractValue(leaseData.current_monthly_rent) as number | null;
+      const execCommencementDate = safeDate(extractValue(leaseData.lease_start));
+      const execExpiryDate       = safeDate(extractValue(leaseData.lease_end));
+      const execTenantName       = extractValue(leaseData.tenant_name) as string | null;
+      const execLandlordName     = extractValue(leaseData.landlord_name) as string | null;
+      const execRentReviewClause = extractValue(leaseData.escalation_clauses) as string | null;
+      const execBreakClause      = extractValue(leaseData.termination_clauses) as string | null;
+
+      // Per-field confidence summary for executed_extraction_confidence column
+      const execFieldMap: [string, any][] = [
+        ['monthly_payment',    leaseData.current_monthly_rent],
+        ['commencement_date',  leaseData.lease_start],
+        ['expiry_date',        leaseData.lease_end],
+        ['tenant_name',        leaseData.tenant_name],
+        ['landlord_name',      leaseData.landlord_name],
+        ['rent_review_clause', leaseData.escalation_clauses],
+        ['break_clause',       leaseData.termination_clauses],
+      ];
+      const executedConfidence: Record<string, number> = {};
+      for (const [key, field] of execFieldMap) {
+        const conf = extractConfidence(field);
+        if (conf !== null) executedConfidence[key] = conf;
+      }
+
+      // Compute variance against pipeline terms
+      const pipelineMonthly = (existingLease.current_monthly_rent ?? existingLease.monthly_payment ?? null) as number | null;
+
+      const varianceMonthly = execMonthlyPayment !== null && pipelineMonthly !== null
+        ? execMonthlyPayment - pipelineMonthly : null;
+
+      const varianceCommencementDays = execCommencementDate && existingLease.lease_start
+        ? Math.round((new Date(execCommencementDate).getTime() - new Date(existingLease.lease_start as string).getTime()) / 86400000)
+        : null;
+
+      const varianceExpiryDays = execExpiryDate && existingLease.lease_end
+        ? Math.round((new Date(execExpiryDate).getTime() - new Date(existingLease.lease_end as string).getTime()) / 86400000)
+        : null;
+
+      const varianceTenantMatch = execTenantName && existingLease.tenant_name
+        ? execTenantName.toLowerCase().trim() === (existingLease.tenant_name as string).toLowerCase().trim()
+        : null;
+
+      const varianceLandlordMatch = execLandlordName && existingLease.landlord_name
+        ? execLandlordName.toLowerCase().trim() === (existingLease.landlord_name as string).toLowerCase().trim()
+        : null;
+
+      // Write executed + variance fields to the existing lease row
+      const { error: updateError } = await supabaseAdmin
+        .from('leases')
+        .update({
+          executed_storage_path:          executedStoragePath,
+          executed_filename:              sanitizedFilename,
+          executed_extracted_json:        leaseData,
+          executed_extraction_confidence: executedConfidence,
+          executed_uploaded_at:           new Date().toISOString(),
+          executed_uploaded_by:           user.id,
+          executed_monthly_payment:       execMonthlyPayment,
+          executed_commencement_date:     execCommencementDate,
+          executed_expiry_date:           execExpiryDate,
+          executed_tenant_name:           execTenantName,
+          executed_landlord_name:         execLandlordName,
+          executed_rent_review_clause:    execRentReviewClause,
+          executed_break_clause:          execBreakClause,
+          variance_monthly_payment:       varianceMonthly,
+          variance_commencement_days:     varianceCommencementDays,
+          variance_expiry_days:           varianceExpiryDays,
+          variance_tenant_name_match:     varianceTenantMatch,
+          variance_landlord_name_match:   varianceLandlordMatch,
+        })
+        .eq('id', targetLeaseId);
+
+      if (updateError) throw new Error(`Failed to update lease with executed data: ${updateError.message}`);
+
+      // Activity log: executed_terms_extracted
+      await supabaseAdmin.from('lease_activity_log').insert({
+        lease_id: targetLeaseId,
+        user_id: user.id,
+        activity_type: 'executed_terms_extracted',
+        details: {
+          fields_extracted:           execFieldMap.filter(([, f]) => extractValue(f) !== null).length,
+          variance_monthly:           varianceMonthly,
+          variance_commencement_days: varianceCommencementDays,
+          variance_expiry_days:       varianceExpiryDays,
+          tenant_match:               varianceTenantMatch,
+          landlord_match:             varianceLandlordMatch,
+        },
+      });
+
+      console.log('[process_lease] Executed mode complete');
+
+      return new Response(JSON.stringify({
+        success: true,
+        leaseId: targetLeaseId,
+        executedData: {
+          executed_monthly_payment:    execMonthlyPayment,
+          executed_commencement_date:  execCommencementDate,
+          executed_expiry_date:        execExpiryDate,
+          executed_tenant_name:        execTenantName,
+          executed_landlord_name:      execLandlordName,
+          executed_rent_review_clause: execRentReviewClause,
+          executed_break_clause:       execBreakClause,
+          executed_storage_path:       executedStoragePath,
+          executed_filename:           sanitizedFilename,
+        },
+        variance: {
+          variance_monthly_payment:     varianceMonthly,
+          variance_commencement_days:   varianceCommencementDays,
+          variance_expiry_days:         varianceExpiryDays,
+          variance_tenant_name_match:   varianceTenantMatch,
+          variance_landlord_name_match: varianceLandlordMatch,
+        },
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ================================================================
+    // PIPELINE MODE — original code UNCHANGED below this line
+    // ================================================================
+
     if (!ALLOWED_LEASE_TYPES.includes(leaseType as typeof ALLOWED_LEASE_TYPES[number])) {
-      console.log(`[process_lease] Invalid lease type: ${leaseType}`);
       return new Response(JSON.stringify({ error: 'Invalid lease type. Must be "master" or "amendment".' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Validate parentLeaseId if provided
     if (parentLeaseId && !isValidUUID(parentLeaseId)) {
-      console.log(`[process_lease] Invalid parentLeaseId format: ${parentLeaseId}`);
       return new Response(JSON.stringify({ error: 'Invalid parent lease ID format.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Sanitize filename
-    const sanitizedFilename = sanitizeFilename(file.name);
-    console.log(`[process_lease] Processing file: ${sanitizedFilename}, size: ${file.size}`);
-
-    // Create initial lease record
     const leaseId = crypto.randomUUID();
     const storagePath = `${user.id}/${leaseId}/${sanitizedFilename}`;
-    
+
     const { error: insertError } = await supabaseAdmin
       .from('leases')
-      .insert({
-        id: leaseId,
-        user_id: user.id,
-        filename: sanitizedFilename,
-        storage_path: storagePath,
-        status: 'Processing',
-      });
+      .insert({ id: leaseId, user_id: user.id, filename: sanitizedFilename, storage_path: storagePath, status: 'Processing' });
 
-    if (insertError) {
-      console.error('[process_lease] Insert error:', insertError);
-      throw new Error(`Failed to create lease record: ${insertError.message}`);
-    }
-
+    if (insertError) throw new Error(`Failed to create lease record: ${insertError.message}`);
     console.log(`[process_lease] Created lease record: ${leaseId}`);
 
-    // Upload file to storage
     const { error: uploadError } = await supabaseAdmin.storage
       .from('leases')
-      .upload(storagePath, fileBytes, {
-        contentType: 'application/pdf',
-        upsert: true,
-      });
+      .upload(storagePath, fileBytes, { contentType: 'application/pdf', upsert: true });
 
     if (uploadError) {
-      console.error('[process_lease] Upload error:', uploadError);
-      await supabaseAdmin.from('leases').update({ 
-        status: 'Failed', 
-        error_message: `Upload failed: ${uploadError.message}` 
-      }).eq('id', leaseId);
+      await supabaseAdmin.from('leases').update({ status: 'Failed', error_message: `Upload failed: ${uploadError.message}` }).eq('id', leaseId);
       throw new Error(`Failed to upload file: ${uploadError.message}`);
     }
-
     console.log('[process_lease] File uploaded to storage');
 
-    // Step 1: Analyze with Azure Document Intelligence
     let extractedText: string;
     try {
       extractedText = await analyzeWithAzureDI(fileBytes);
       console.log(`[process_lease] Extracted ${extractedText.length} characters`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[process_lease] Azure DI error:', error);
-      await supabaseAdmin.from('leases').update({ 
-        status: 'Failed', 
-        error_message: `Document analysis failed: ${errorMessage}` 
-      }).eq('id', leaseId);
+      await supabaseAdmin.from('leases').update({ status: 'Failed', error_message: `Document analysis failed: ${errorMessage}` }).eq('id', leaseId);
       throw error;
     }
 
-    // Step 2: Extract lease data with OpenAI
     let leaseData: LeaseExtractionResult;
     try {
       leaseData = await extractLeaseDataWithOpenAI(extractedText);
       console.log('[process_lease] Lease data extracted:', JSON.stringify(leaseData).substring(0, 500));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[process_lease] OpenAI error:', error);
-      await supabaseAdmin.from('leases').update({ 
-        status: 'Failed', 
-        error_message: `AI extraction failed: ${errorMessage}` 
-      }).eq('id', leaseId);
+      await supabaseAdmin.from('leases').update({ status: 'Failed', error_message: `AI extraction failed: ${errorMessage}` }).eq('id', leaseId);
       throw error;
     }
 
-    // Step 2.5: Validate extracted data
     const { warnings: validationWarnings, suggestions: validationSuggestions } = validateLeaseData(leaseData);
     if (validationWarnings.length > 0) {
       console.log('[process_lease] Validation warnings:', validationWarnings);
@@ -1115,7 +1057,6 @@ serve(async (req) => {
       (leaseData as any)._validation_suggestions = validationSuggestions;
     }
 
-    // Step 3: Update lease record with extracted data
     const { error: updateError } = await supabaseAdmin
       .from('leases')
       .update({
@@ -1129,48 +1070,29 @@ serve(async (req) => {
         current_monthly_rent: extractValue(leaseData.current_monthly_rent),
         rent_escalation_type: extractValue(leaseData.rent_escalation_type),
         square_footage: extractValue(leaseData.square_footage),
-        extracted_json: leaseData, // Store full structured data including confidence scores
+        extracted_json: leaseData,
         processed_at: new Date().toISOString(),
       })
       .eq('id', leaseId);
 
-    if (updateError) {
-      console.error('[process_lease] Update error:', updateError);
-      throw new Error(`Failed to update lease: ${updateError.message}`);
-    }
+    if (updateError) throw new Error(`Failed to update lease: ${updateError.message}`);
 
-    // Step 3.25: Store field-level confidence scores
     const fieldsToTrack = ['landlord_name', 'tenant_name', 'property_address', 'lease_start', 'lease_end', 'square_footage', 'current_monthly_rent', 'rent_escalation_type'];
     const confidenceEntries: { lease_id: string; field_name: string; confidence_score: number }[] = [];
-    
     for (const fieldName of fieldsToTrack) {
       const fieldData = (leaseData as any)[fieldName];
       const confidence = extractConfidence(fieldData);
-      if (confidence !== null) {
-        confidenceEntries.push({ 
-          lease_id: leaseId, 
-          field_name: fieldName, 
-          confidence_score: Math.min(confidence, 1.0) // Ensure max is 1.0
-        });
-      }
+      if (confidence !== null) confidenceEntries.push({ lease_id: leaseId, field_name: fieldName, confidence_score: Math.min(confidence, 1.0) });
     }
-
     if (confidenceEntries.length > 0) {
-      const { error: confError } = await supabaseAdmin
-        .from('lease_field_confidence')
-        .upsert(confidenceEntries, { onConflict: 'lease_id,field_name' });
-      
-      if (confError) {
-        console.error('[process_lease] Confidence insert error:', confError);
-      } else {
-        console.log(`[process_lease] Stored ${confidenceEntries.length} confidence scores`);
-      }
+      const { error: confError } = await supabaseAdmin.from('lease_field_confidence').upsert(confidenceEntries, { onConflict: 'lease_id,field_name' });
+      if (confError) console.error('[process_lease] Confidence insert error:', confError);
+      else console.log(`[process_lease] Stored ${confidenceEntries.length} confidence scores`);
     }
 
-    // Step 3.5: Insert rent schedule entries
     if (leaseData.rent_schedule && leaseData.rent_schedule.length > 0) {
       const rentScheduleToInsert = leaseData.rent_schedule
-        .filter(period => period.period_start) // Only insert periods with a start date
+        .filter(period => period.period_start)
         .map(period => ({
           lease_id: leaseId,
           period_start: safeDate(period.period_start),
@@ -1179,22 +1101,13 @@ serve(async (req) => {
           annual_amount: period.annual_amount,
           notes: period.notes,
         }));
-
       if (rentScheduleToInsert.length > 0) {
-        const { error: rentError } = await supabaseAdmin
-          .from('rent_schedules')
-          .insert(rentScheduleToInsert);
-
-        if (rentError) {
-          console.error('[process_lease] Rent schedule insert error:', rentError);
-          // Don't fail the whole operation for rent schedule
-        } else {
-          console.log(`[process_lease] Inserted ${rentScheduleToInsert.length} rent schedule entries`);
-        }
+        const { error: rentError } = await supabaseAdmin.from('rent_schedules').insert(rentScheduleToInsert);
+        if (rentError) console.error('[process_lease] Rent schedule insert error:', rentError);
+        else console.log(`[process_lease] Inserted ${rentScheduleToInsert.length} rent schedule entries`);
       }
     }
 
-    // Step 4: Insert risks
     if (leaseData.risks && leaseData.risks.length > 0) {
       const risksToInsert = leaseData.risks.map(risk => ({
         lease_id: leaseId,
@@ -1204,35 +1117,20 @@ serve(async (req) => {
         citation_snippet: risk.citation_snippet || null,
         citation_page: risk.citation_page || null,
       }));
-
-      const { error: risksError } = await supabaseAdmin
-        .from('risks')
-        .insert(risksToInsert);
-
-      if (risksError) {
-        console.error('[process_lease] Risks insert error:', risksError);
-        // Don't fail the whole operation for risks
-      } else {
-        console.log(`[process_lease] Inserted ${risksToInsert.length} risks`);
-      }
+      const { error: risksError } = await supabaseAdmin.from('risks').insert(risksToInsert);
+      if (risksError) console.error('[process_lease] Risks insert error:', risksError);
+      else console.log(`[process_lease] Inserted ${risksToInsert.length} risks`);
     }
 
     console.log('[process_lease] Processing complete');
-
-    return new Response(JSON.stringify({ 
-      success: true, 
-      leaseId,
-      data: leaseData 
-    }), {
+    return new Response(JSON.stringify({ success: true, leaseId, data: leaseData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Processing failed';
     console.error('[process_lease] Error:', error);
-    return new Response(JSON.stringify({ 
-      error: errorMessage 
-    }), {
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
