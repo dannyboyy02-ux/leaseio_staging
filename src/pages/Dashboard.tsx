@@ -9,6 +9,8 @@ import { QuickStats } from '@/components/dashboard/QuickStats';
 import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
+import { CommitmentHistory } from '@/components/dashboard/CommitmentHistory';
+import { CovenantHealthPanel } from '@/components/dashboard/CovenantHealthPanel';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -20,7 +22,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
 
-  const safeText = (v: unknown) => getExtractedFieldValue(v) ?? (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
+  const safeText = (v: unknown) =>
+    getExtractedFieldValue(v) ??
+    (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
 
   const handleLeaseCreated = (leaseId: string) => {
     navigate(`/app/leases/${leaseId}`);
@@ -53,6 +57,12 @@ export default function Dashboard() {
 
         {/* Quick Stats */}
         <QuickStats />
+
+        {/* Phase 5: Portfolio Intelligence */}
+        <div className="grid gap-6 md:grid-cols-2">
+          <CommitmentHistory />
+          <CovenantHealthPanel />
+        </div>
 
         {/* Upcoming Events */}
         <UpcomingEvents />

@@ -20,107 +20,72 @@ interface AppHeaderProps {
   actions?: React.ReactNode;
 }
 
-
 function safeRender(node: unknown): React.ReactNode {
-  if (node == null) {
-    return null;
-  }
-
-  if (typeof node === 'string' || typeof node === 'number') {
-    return node;
-  }
-
-  if (typeof node === 'boolean') {
-    return node ? 'true' : 'false';
-  }
-
-  if (Array.isArray(node)) {
-    return node.map(safeRender);
-  }
-
-  if (typeof node === 'object' && '$$typeof' in node) {
-    return node as React.ReactNode;
-  }
-
-  try {
-    return JSON.stringify(node);
-  } catch {
-    return String(node);
-  }
+  if (node == null) return null;
+  if (typeof node === 'string' || typeof node === 'number') return node;
+  if (typeof node === 'boolean') return node ? 'true' : 'false';
+  if (Array.isArray(node)) return node.map(safeRender);
+  if (typeof node === 'object' && '$$typeof' in node) return node as React.ReactNode;
+  try { return JSON.stringify(node); } catch { return String(node); }
 }
 
-interface NotificationPreview {
+interface InAppNotification {
   id: string;
-  event_type: string;
-  event_description: unknown;
-  event_date: string;
-  lease_id: string;
+  lease_id: string | null;
+  alert_type: string;
+  title: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+const ALERT_CONFIG: Record<string, { variant: 'warning' | 'destructive' | 'info' | 'default'; label: string }> = {
+  expiry_approaching: { variant: 'warning', label: 'Expiry' },
+  covenant_breach:    { variant: 'destructive', label: 'Covenant' },
+  variance_high:      { variant: 'info', label: 'Variance' },
+  approval_pending:   { variant: 'default', label: 'Approval' },
+};
+
+function timeAgo(dateStr: string): string {
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationPreview[]>([]);
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const navigate = useNavigate();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
 
   useEffect(() => {
-    async function fetchRecentNotifications() {
+    async function fetchUnread() {
       try {
         const { data } = await supabase
-          .from('lease_notifications')
-          .select('id, event_type, event_description, event_date, lease_id')
-          .eq('is_confirmed', true)
-          .eq('notify_email', true)
-          .gte('event_date', new Date().toISOString().split('T')[0])
-          .order('event_date', { ascending: true })
+          .from('notifications')
+          .select('id, lease_id, alert_type, title, body, read_at, created_at')
+          .is('read_at', null)
+          .order('created_at', { ascending: false })
           .limit(5);
-        
-        setNotifications(data || []);
-      } catch (error) {
-        console.error('Error fetching notifications:', error);
+        setNotifications((data as InAppNotification[]) || []);
+      } catch (err) {
+        console.error('Error fetching notifications:', err);
       }
     }
-
-    fetchRecentNotifications();
+    fetchUnread();
   }, []);
 
-  const getEventTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      renewal_window: t('notifications.type.renewal_window'),
-      escalation: t('notifications.type.escalation'),
-      expiration: t('notifications.type.expiration'),
-      commencement: t('notifications.type.commencement'),
-      custom: t('notifications.type.custom'),
-      new_request: 'New Request',
-      status_changed: 'Status Changed',
-      document_uploaded: 'Document Uploaded',
-    };
-    return labels[type] || type;
-  };
-
-  const getEventTypeBadgeVariant = (type: string) => {
-    const variants: Record<string, 'warning' | 'info' | 'destructive' | 'default' | 'secondary'> = {
-      renewal_window: 'warning',
-      escalation: 'info',
-      expiration: 'destructive',
-      commencement: 'default',
-      custom: 'secondary',
-      new_request: 'default',
-      status_changed: 'info',
-      document_uploaded: 'warning',
-    };
-    return variants[type] || 'secondary';
-  };
-
-  const formatTimeAgo = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return t('dashboard.today');
-    if (diffDays === 1) return t('dashboard.tomorrow');
-    if (diffDays > 0) return `${diffDays} ${t('dashboard.days')}`;
-    return t('notifications.past');
+  const handleClick = async (n: InAppNotification) => {
+    await supabase
+      .from('notifications')
+      .update({ read_at: new Date().toISOString() })
+      .eq('id', n.id);
+    setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+    setDropdownOpen(false);
+    navigate(n.lease_id ? `/app/leases/${n.lease_id}` : '/app/notifications');
   };
 
   return (
@@ -133,7 +98,6 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Language Toggle */}
         <LanguageToggle />
 
         {/* Global Search */}
@@ -161,8 +125,8 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
           )}
         </div>
 
-        {/* Notifications */}
-        <DropdownMenu>
+        {/* In-App Notifications Bell */}
+        <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
               <Bell className="h-5 w-5" />
@@ -174,8 +138,11 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <div className="px-4 py-3 border-b border-border">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <p className="font-medium">{t('notifications.title')}</p>
+              {notifications.length > 0 && (
+                <span className="text-xs text-muted-foreground">{notifications.length} unread</span>
+              )}
             </div>
             <div className="py-2 max-h-80 overflow-y-auto">
               {notifications.length === 0 ? (
@@ -183,32 +150,30 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
                   {t('notifications.no_notifications')}
                 </div>
               ) : (
-                notifications.map((notification) => (
-                  <DropdownMenuItem 
-                    key={notification.id}
-                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
-                    onClick={() => navigate(`/app/notifications/${notification.id}`)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Badge variant={getEventTypeBadgeVariant(notification.event_type)} className="text-[10px]">
-                        {getEventTypeLabel(notification.event_type)}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {formatTimeAgo(notification.event_date)}
-                      </span>
-                    </div>
-                    <p className="text-sm line-clamp-1">
-                      {safeRender(notification.event_description) || getEventTypeLabel(notification.event_type)}
-                    </p>
-                  </DropdownMenuItem>
-                ))
+                notifications.map((n) => {
+                  const cfg = ALERT_CONFIG[n.alert_type] ?? { variant: 'default' as const, label: n.alert_type };
+                  return (
+                    <DropdownMenuItem
+                      key={n.id}
+                      className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                      onClick={() => handleClick(n)}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <Badge variant={cfg.variant} className="text-[10px]">{cfg.label}</Badge>
+                        <span className="text-xs text-muted-foreground">{timeAgo(n.created_at)}</span>
+                      </div>
+                      <p className="text-sm font-medium line-clamp-1">{n.title}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{n.body}</p>
+                    </DropdownMenuItem>
+                  );
+                })
               )}
             </div>
             <div className="border-t border-border p-2">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className="w-full justify-center text-sm"
-                onClick={() => navigate('/app/notifications')}
+                onClick={() => { setDropdownOpen(false); navigate('/app/notifications'); }}
               >
                 {t('notifications.view_all')}
               </Button>
@@ -216,7 +181,6 @@ export function AppHeader({ title, subtitle, actions }: AppHeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Custom Actions */}
         {actions}
       </div>
     </header>
