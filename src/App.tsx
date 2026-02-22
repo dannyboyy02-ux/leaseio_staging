@@ -23,6 +23,8 @@ import AcceptInvite from "./pages/AcceptInvite";
 // App pages (protected)
 import Onboarding from "./pages/app/Onboarding";
 import LeaseReview from "./pages/app/LeaseReview";
+import ApprovalQueue from "./pages/app/ApprovalQueue";
+import FinancialReview from "./pages/app/FinancialReview";
 import ImportHistory from "./pages/app/ImportHistory";
 import Upgrade from "./pages/app/Upgrade";
 import NewLease from "./pages/app/NewLease";
@@ -108,6 +110,22 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <LeaseReview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/leases/:leaseId/financial-review"
+                  element={
+                    <ProtectedRoute>
+                      <FinancialReview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/approvals"
+                  element={
+                    <ProtectedRoute>
+                      <ApprovalQueue />
                     </ProtectedRoute>
                   }
                 />

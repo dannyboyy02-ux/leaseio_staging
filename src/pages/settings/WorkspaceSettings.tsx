@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, Link2, CreditCard, TrendingUp } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, Link2, CreditCard, TrendingUp, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
 import { MemberRoleSelect } from '@/components/workspace/MemberRoleSelect';
 import { WorkspaceRole } from '@/types';
+import type { FunctionalRole } from '@/types/lifecycle';
 import { Link } from 'react-router-dom';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   canAccessWorkspaceBilling,
   canAccessWorkspaceDefaults,
@@ -54,7 +56,12 @@ export default function WorkspaceSettings() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
   const [isSavingFinancial, setIsSavingFinancial] = useState(false);
+  const [isSavingRoles, setIsSavingRoles] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+
+  // Phase 2 — functional roles state: map of user_id → Set<FunctionalRole>
+  const [memberRoles, setMemberRoles] = useState<Record<string, Set<FunctionalRole>>>({});
+  const [rolesLoaded, setRolesLoaded] = useState(false);
 
   // Financial configuration state
   const [discountRate, setDiscountRate] = useState('5.5');
@@ -71,6 +78,7 @@ export default function WorkspaceSettings() {
   const tabs = [
     { id: 'profile', label: t('workspace.profile'), icon: Building2, visible: canAccessProfile },
     { id: 'members', label: t('workspace.users_access'), icon: Users, visible: canManageMembers },
+    { id: 'roles', label: 'Team & Roles', icon: ShieldCheck, visible: canManageMembers },
     { id: 'defaults', label: t('workspace.defaults'), icon: Bell, visible: canAccessDefaults },
     { id: 'integrations', label: t('workspace.integrations_tab'), icon: Link2, visible: canAccessIntegrations },
     { id: 'billing', label: t('workspace.billing_plan'), icon: CreditCard, visible: canAccessBilling },
@@ -106,6 +114,77 @@ export default function WorkspaceSettings() {
         }
       });
   }, [workspace?.id]);
+
+  // Load functional roles from workspace_roles table
+  useEffect(() => {
+    if (!workspace?.id) return;
+    (supabase as any)
+      .from('workspace_roles')
+      .select('user_id, role')
+      .eq('workspace_id', workspace.id)
+      .then(({ data }: { data: Array<{ user_id: string; role: string }> | null }) => {
+        const map: Record<string, Set<FunctionalRole>> = {};
+        for (const row of data || []) {
+          if (!map[row.user_id]) map[row.user_id] = new Set();
+          map[row.user_id].add(row.role as FunctionalRole);
+        }
+        setMemberRoles(map);
+        setRolesLoaded(true);
+      });
+  }, [workspace?.id]);
+
+  const toggleFunctionalRole = (userId: string, role: FunctionalRole) => {
+    setMemberRoles((prev) => {
+      const next = { ...prev };
+      const current = new Set(next[userId] || []);
+      if (current.has(role)) {
+        current.delete(role);
+      } else {
+        current.add(role);
+      }
+      next[userId] = current;
+      return next;
+    });
+  };
+
+  const hasFinancialApprover = Object.values(memberRoles).some((roles) =>
+    roles.has('financial_approver'),
+  );
+
+  const handleSaveRoles = async () => {
+    if (!canEdit) { toast.error(t('workspace.read_only')); return; }
+    if (!workspace?.id) { toast.error('No workspace found'); return; }
+    setIsSavingRoles(true);
+    try {
+      // Delete all existing roles for this workspace, then re-insert
+      const { error: deleteError } = await (supabase as any)
+        .from('workspace_roles')
+        .delete()
+        .eq('workspace_id', workspace.id);
+      if (deleteError) throw deleteError;
+
+      const rows: Array<{ workspace_id: string; user_id: string; role: FunctionalRole }> = [];
+      for (const [userId, roles] of Object.entries(memberRoles)) {
+        for (const role of roles) {
+          rows.push({ workspace_id: workspace.id, user_id: userId, role });
+        }
+      }
+
+      if (rows.length > 0) {
+        const { error: insertError } = await (supabase as any)
+          .from('workspace_roles')
+          .insert(rows);
+        if (insertError) throw insertError;
+      }
+
+      toast.success('Team roles saved');
+    } catch (error) {
+      console.error('Error saving roles:', error);
+      toast.error('Failed to save team roles');
+    } finally {
+      setIsSavingRoles(false);
+    }
+  };
 
   const { data: members, isLoading: membersLoading, refetch: refetchMembers } = useQuery({
     queryKey: ['workspace-members', workspace?.id],
@@ -370,6 +449,137 @@ export default function WorkspaceSettings() {
                       ))}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* Team & Roles */}
+          {canManageMembers && (
+            <TabsContent value="roles" className="space-y-6">
+              {!hasFinancialApprover && rolesLoaded && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:bg-amber-950/20 dark:border-amber-700">
+                  <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No Financial Approver assigned</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                      At least one team member must be designated as a Financial Approver. Without one, submitted commitments cannot proceed through financial review.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Approval Roles</CardTitle>
+                  <CardDescription>
+                    Assign functional approval roles to team members. A user can hold multiple roles.
+                    These are separate from workspace access levels (Admin / Editor / Viewer).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {membersLoading || !rolesLoaded ? (
+                    <div className="space-y-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <Skeleton className="h-10 w-10 rounded-full" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-48" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : !members || members.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No team members yet. Invite members first.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Header row */}
+                      <div className="hidden sm:grid grid-cols-[1fr_120px_140px_150px_100px] gap-4 px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <span>Member</span>
+                        <span className="text-center">Submitter</span>
+                        <span className="text-center">Manager Approver</span>
+                        <span className="text-center">Financial Approver</span>
+                        <span className="text-center">Admin</span>
+                      </div>
+                      <div className="divide-y divide-border rounded-lg border">
+                        {members.map((member) => {
+                          const roles = memberRoles[member.user_id] || new Set<FunctionalRole>();
+                          const isOwner = member.user_id === workspace?.ownerId;
+                          const initials = member.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2);
+                          return (
+                            <div
+                              key={member.id}
+                              className="grid grid-cols-1 sm:grid-cols-[1fr_120px_140px_150px_100px] gap-3 sm:gap-4 items-center px-3 py-3"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-medium">{member.name}</p>
+                                  <p className="text-xs text-muted-foreground">{member.email}</p>
+                                </div>
+                              </div>
+
+                              {/* Mobile labels + Checkboxes */}
+                              <div className="flex flex-wrap gap-4 sm:contents">
+                                {(
+                                  [
+                                    { role: 'submitter' as FunctionalRole, label: 'Submitter' },
+                                    { role: 'manager_approver' as FunctionalRole, label: 'Manager Approver' },
+                                    { role: 'financial_approver' as FunctionalRole, label: 'Financial Approver' },
+                                    { role: 'admin' as FunctionalRole, label: 'Admin' },
+                                  ] as const
+                                ).map(({ role, label }) => (
+                                  <div key={role} className="flex sm:justify-center items-center gap-2">
+                                    <span className="text-xs text-muted-foreground sm:hidden">{label}:</span>
+                                    <Checkbox
+                                      id={`${member.user_id}-${role}`}
+                                      checked={roles.has(role)}
+                                      onCheckedChange={() => {
+                                        if (canEdit && !isOwner) toggleFunctionalRole(member.user_id, role);
+                                      }}
+                                      disabled={!canEdit || isOwner}
+                                      aria-label={`${label} for ${member.name}`}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+
+                              {isOwner && (
+                                <div className="sm:col-span-4 flex items-center">
+                                  <Badge variant="default" className="flex items-center gap-1 text-xs">
+                                    <Crown className="h-3 w-3" />
+                                    Owner — all roles
+                                  </Badge>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex items-center gap-3">
+                    <Button
+                      variant="accent"
+                      onClick={handleSaveRoles}
+                      disabled={!canEdit || isSavingRoles}
+                    >
+                      {isSavingRoles ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      {isSavingRoles ? 'Saving…' : 'Save Roles'}
+                    </Button>
+                    {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

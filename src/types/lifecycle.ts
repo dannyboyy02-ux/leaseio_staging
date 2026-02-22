@@ -25,7 +25,16 @@ export type ActivityType =
   | 'nudge_sent'
   | 'document_upload'
   | 'created'
-  | 'comment';
+  | 'comment'
+  // Phase 2 — approval chain
+  | 'manager_approved'
+  | 'manager_rejected'
+  | 'financial_approved'
+  | 'financial_rejected'
+  | 'financial_returned'
+  | 'resubmitted';
+
+export type FunctionalRole = 'submitter' | 'manager_approver' | 'financial_approver' | 'admin';
 
 export type NudgeType = 'manual' | 'automatic_day2' | 'automatic_day5' | 'automatic_day10';
 
@@ -128,8 +137,8 @@ export interface LeaseNudge {
 
 // State machine transitions
 export const LIFECYCLE_TRANSITIONS: Record<LifecycleStatus, LifecycleStatus[]> = {
-  submitted: ['under_review', 'cancelled'],
-  under_review: ['approved', 'rejected', 'cancelled'],
+  submitted: ['under_review', 'rejected', 'approved', 'cancelled'],
+  under_review: ['approved', 'rejected', 'submitted', 'cancelled'],
   approved: ['executed', 'rejected', 'cancelled'],
   executed: ['active', 'cancelled'],
   active: ['expired', 'cancelled'],
