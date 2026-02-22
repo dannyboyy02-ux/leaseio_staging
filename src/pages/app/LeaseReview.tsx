@@ -49,6 +49,10 @@ import { AmendmentChanges } from "@/components/leases/AmendmentChanges";
 import { ActivityTimeline } from "@/components/lifecycle/ActivityTimeline";
 import { LifecycleStatusBadge } from "@/components/lifecycle/LifecycleStatusBadge";
 import { SummaryShareControls } from '@/components/summary/SummaryShareControls';
+import { UploadExecutedDocumentDialog } from "@/components/leases/UploadExecutedDocumentDialog";
+import { ExecutedTermsReview } from "@/components/leases/ExecutedTermsReview";
+import { VarianceReport } from "@/components/leases/VarianceReport";
+import { ModelLockConfirmation } from "@/components/leases/ModelLockConfirmation";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -748,6 +752,13 @@ export default function LeaseReview() {
     }
   }, [confirmedSections, lease?.id]);
 
+  // Phase 4 — refetch lease from DB (used after executed doc upload or term edits)
+  const refetchLease = useCallback(async () => {
+    if (!leaseId) return;
+    const { data } = await supabase.from('leases').select('*').eq('id', leaseId).single();
+    if (data) setLease(data);
+  }, [leaseId]);
+
   // Save draft
   const handleSync = async () => {
     setSaving(true);
@@ -995,7 +1006,7 @@ export default function LeaseReview() {
               </div>
               <Button size="sm" variant="outline" className="flex-shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100" onClick={openResubmit}>
                 <RotateCcw className="h-4 w-4 mr-1.5" />
-                Edit & Resubmit
+                Edit &amp; Resubmit
               </Button>
             </div>
           )}
@@ -1152,11 +1163,14 @@ export default function LeaseReview() {
                   {uploadingStageFile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
                   Upload Document
                 </Button>
+
+                {/* Phase 4 — upload executed document when approved */}
                 {lifecycleStatus === 'approved' && (
-                  <Button onClick={handleRunAbstraction} disabled={runningAbstraction} className="w-full">
-                    {runningAbstraction ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Clock className="h-4 w-4 mr-2" />}
-                    Run Abstraction
-                  </Button>
+                  <UploadExecutedDocumentDialog
+                    leaseId={lease.id}
+                    leaseFilename={lease.filename || ''}
+                    onSuccess={refetchLease}
+                  />
                 )}
               </CardContent>
             </Card>
@@ -1244,7 +1258,7 @@ export default function LeaseReview() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Monthly P&L Charge</p>
+                        <p className="text-xs text-muted-foreground">Monthly P&amp;L Charge</p>
                         <p className="font-medium">
                           {lease.calc_straight_line_exp
                             ? `$${Math.round(Number(lease.calc_straight_line_exp)).toLocaleString()}`
@@ -1252,7 +1266,7 @@ export default function LeaseReview() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Cash vs. P&L Delta</p>
+                        <p className="text-xs text-muted-foreground">Cash vs. P&amp;L Delta</p>
                         <p className="font-medium">
                           {lease.calc_cash_pl_delta != null
                             ? `$${Math.round(Number(lease.calc_cash_pl_delta)).toLocaleString()}`
@@ -1305,7 +1319,7 @@ export default function LeaseReview() {
         <Dialog open={resubmitDialogOpen} onOpenChange={(o) => !o && setResubmitDialogOpen(false)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Edit & Resubmit</DialogTitle>
+              <DialogTitle>Edit &amp; Resubmit</DialogTitle>
               <DialogDescription>
                 Update the financial inputs below. The request will be routed through the approval chain from the beginning.
               </DialogDescription>
@@ -1536,7 +1550,7 @@ export default function LeaseReview() {
                     </Button>
                   )}
                   <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-tight">
-                    Review & Verification Panel
+                    Review &amp; Verification Panel
                   </span>
                   {lowConfidenceFields.length > 0 && (
                     <Badge variant="outline" className="ml-2 text-amber-600 border-amber-400">
@@ -1657,6 +1671,51 @@ export default function LeaseReview() {
                         onConfirmSection={handleConfirmSection}
                       />
                     ))}
+
+                    {/* Phase 4 — Executed Document Section */}
+                    {lifecycleStatus === 'executed' && (
+                      <>
+                        <ExecutedTermsReview
+                          leaseId={lease.id}
+                          pipelineTerms={{
+                            tenant_name: form.tenant_name || null,
+                            landlord_name: form.landlord_name || null,
+                            commencement_date: form.lease_start || null,
+                            expiry_date: form.lease_end || null,
+                            monthly_payment: form.current_monthly_rent || null,
+                            rent_review_clause: null,
+                            break_clause: null,
+                          }}
+                          executedTerms={{
+                            tenant_name: lease.executed_tenant_name ?? null,
+                            landlord_name: lease.executed_landlord_name ?? null,
+                            commencement_date: lease.executed_commencement_date ?? null,
+                            expiry_date: lease.executed_expiry_date ?? null,
+                            monthly_payment: lease.executed_monthly_payment != null ? String(lease.executed_monthly_payment) : null,
+                            rent_review_clause: lease.executed_rent_review_clause ?? null,
+                            break_clause: lease.executed_break_clause ?? null,
+                            confidence: (lease.executed_confidence as Record<string, number>) || {},
+                          }}
+                          canEdit={!lease.model_locked}
+                          onTermUpdated={refetchLease}
+                        />
+                        <VarianceReport
+                          leaseFilename={lease.filename || ''}
+                          pipelineMonthly={Number(lease.current_monthly_rent || lease.monthly_payment) || 0}
+                          executedMonthly={Number(lease.executed_monthly_payment) || 0}
+                          varianceMonthlyPayment={lease.variance_monthly_payment != null ? Number(lease.variance_monthly_payment) : null}
+                          varianceCommencementDays={lease.variance_commencement_days != null ? Number(lease.variance_commencement_days) : null}
+                          varianceExpiryDays={lease.variance_expiry_days != null ? Number(lease.variance_expiry_days) : null}
+                          varianceTenantNameMatch={lease.variance_tenant_name_match != null ? Boolean(lease.variance_tenant_name_match) : null}
+                          varianceLandlordNameMatch={lease.variance_landlord_name_match != null ? Boolean(lease.variance_landlord_name_match) : null}
+                        />
+                        <ModelLockConfirmation
+                          leaseId={lease.id}
+                          disabled={!!lease.model_locked}
+                          onSuccess={refetchLease}
+                        />
+                      </>
+                    )}
 
                     {/* Risks Section */}
                     <RisksSection risks={risks} onJumpToPage={jumpToPage} />
