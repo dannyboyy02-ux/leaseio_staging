@@ -12,6 +12,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
+import PublicSummaryPage from "./pages/PublicSummaryPage";
 
 // Auth pages
 import Login from "./pages/Login";
@@ -64,6 +65,9 @@ const App = () => (
                 <Route path="/" element={<Landing />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
+
+                {/* Public share route — no auth required */}
+                <Route path="/share/:token" element={<PublicSummaryPage />} />
 
                 {/* Auth routes */}
                 <Route path="/login" element={<Login />} />

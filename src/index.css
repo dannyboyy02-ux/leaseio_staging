@@ -312,3 +312,67 @@
 .stagger-3 { animation-delay: 0.15s; }
 .stagger-4 { animation-delay: 0.2s; }
 .stagger-5 { animation-delay: 0.25s; }
+
+/* ─────────────────────────────────────────
+   Print / PDF stylesheet
+   Used by /share/:token and Download PDF
+───────────────────────────────────────── */
+@media print {
+  /* Hide all app chrome */
+  .no-print,
+  nav,
+  header:not(.summary-header),
+  aside,
+  [data-sidebar],
+  .sidebar {
+    display: none !important;
+  }
+
+  /* Reset page to white */
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-size: 10pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Summary container fills the page */
+  .summary-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Ensure watermark prints */
+  .draft-watermark span {
+    color: rgba(239, 68, 68, 0.12) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Metric cards — force background colors to print */
+  .summary-container div[style*="background"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Page setup */
+  @page {
+    size: letter portrait;
+    margin: 0.65in;
+  }
+
+  /* Keep financial metric grid on same page */
+  section {
+    page-break-inside: avoid;
+  }
+
+  /* Allow break only between major sections */
+  h2 {
+    page-break-after: avoid;
+  }
+}
