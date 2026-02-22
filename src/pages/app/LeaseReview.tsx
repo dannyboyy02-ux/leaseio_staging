@@ -15,6 +15,7 @@ import {
   Upload,
   Clock,
   X,
+  RotateCcw,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -23,6 +24,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -149,6 +159,17 @@ export default function LeaseReview() {
     request_description: '',
   });
   const [savingEdits, setSavingEdits] = useState(false);
+
+  // Phase 2 — resubmit flow for returned leases
+  const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false);
+  const [resubmitFields, setResubmitFields] = useState({
+    monthlyPayment: '',
+    termMonths: '',
+    escalationRate: '',
+    startDate: '',
+    covenantFlagged: false,
+  });
+  const [resubmitting, setResubmitting] = useState(false);
   
   const isAmendment = !!lease?.parent_lease_id;
   const isMasterLease = !isAmendment && lease?.category !== 'Lease Amendment';
@@ -236,6 +257,102 @@ export default function LeaseReview() {
 
   const currentLifecycleIndex = lifecycleSteps.findIndex((status) => status === lifecycleStatus);
 
+  // Phase 2 — open resubmit dialog pre-populated with current values
+  const openResubmit = () => {
+    setResubmitFields({
+      monthlyPayment: lease?.monthly_payment ? String(lease.monthly_payment) : '',
+      termMonths: lease?.term_months ? String(lease.term_months) : '',
+      escalationRate: lease?.escalation_rate != null ? String(lease.escalation_rate) : '0',
+      startDate: lease?.lease_start || '',
+      covenantFlagged: !!lease?.covenant_flagged,
+    });
+    setResubmitDialogOpen(true);
+  };
+
+  const handleResubmit = async () => {
+    if (!lease || !user) return;
+    setResubmitting(true);
+    const now = new Date().toISOString();
+    try {
+      const monthlyPayment = parseFloat(resubmitFields.monthlyPayment) || lease.monthly_payment;
+      const termMonths = parseInt(resubmitFields.termMonths) || lease.term_months;
+      const escalationRate = parseFloat(resubmitFields.escalationRate) || 0;
+      const startDate = resubmitFields.startDate || lease.lease_start;
+
+      // Recalculate
+      let updatedCalcs: Record<string, number | null> = {};
+      if (monthlyPayment && termMonths && startDate) {
+        const { calculateLease } = await import('@/lib/leaseCalculations');
+        const wsResult = await (supabase as any)
+          .from('workspaces')
+          .select('discount_rate')
+          .eq('id', lease.workspace_id)
+          .single();
+        const discountRate = wsResult.data?.discount_rate ?? 5.5;
+        const calcs = calculateLease({ monthlyPayment, termMonths, startDate, escalationRate, discountRate });
+        updatedCalcs = {
+          calc_total_commitment: calcs.totalCashCommitment,
+          calc_pv_liability: calcs.pvLiability,
+          calc_straight_line_exp: calcs.straightLineExpense,
+          calc_cash_pl_delta: calcs.cashPLDelta,
+        };
+      }
+
+      // Re-evaluate approval routing
+      const { getApprovalRequirements, getInitialStatusAfterSubmission } = await import('@/lib/approvalRouting');
+      const [managerRoles, financialRoles, wsSettings] = await Promise.all([
+        (supabase as any).from('workspace_roles').select('user_id').eq('workspace_id', lease.workspace_id).eq('role', 'manager_approver').then((r: any) => r.data || []),
+        (supabase as any).from('workspace_roles').select('user_id').eq('workspace_id', lease.workspace_id).eq('role', 'financial_approver').then((r: any) => r.data || []),
+        (supabase as any).from('workspaces').select('approval_threshold').eq('id', lease.workspace_id).single().then((r: any) => r.data),
+      ]);
+
+      const requirements = getApprovalRequirements({
+        totalCashCommitment: updatedCalcs.calc_total_commitment ?? lease.calc_total_commitment ?? 0,
+        approvalThreshold: wsSettings?.approval_threshold ?? null,
+        hasManagerApprovers: managerRoles.length > 0,
+        hasFinancialApprovers: financialRoles.length > 0,
+        covenantFlagged: resubmitFields.covenantFlagged,
+      });
+      const newStatus = getInitialStatusAfterSubmission(requirements);
+
+      await supabase
+        .from('leases')
+        .update({
+          monthly_payment: monthlyPayment,
+          term_months: termMonths,
+          escalation_rate: escalationRate,
+          lease_start: startDate,
+          covenant_flagged: resubmitFields.covenantFlagged,
+          financial_returned_to_submitter: false,
+          financial_rejection_reason: null,
+          manager_approved_by: null,
+          manager_approved_at: null,
+          manager_rejection_reason: null,
+          lifecycle_status: newStatus,
+          status_changed_at: now,
+          ...updatedCalcs,
+        } as any)
+        .eq('id', lease.id);
+
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user.id,
+        activity_type: 'resubmitted',
+        from_status: 'submitted',
+        to_status: newStatus,
+        details: { monthly_payment: monthlyPayment, term_months: termMonths },
+      } as any);
+
+      toast.success('Resubmitted for review');
+      setResubmitDialogOpen(false);
+      setLease((prev: any) => prev ? { ...prev, lifecycle_status: newStatus, financial_returned_to_submitter: false } : prev);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to resubmit');
+    } finally {
+      setResubmitting(false);
+    }
+  };
 
   const renderStatusProgress = () => (
     <div className="mb-4 rounded-lg border bg-background p-3">
@@ -859,6 +976,29 @@ export default function LeaseReview() {
           />
 
           {renderStatusProgress()}
+
+          {/* Phase 2 — Returned for Revision banner */}
+          {lease?.financial_returned_to_submitter && lifecycleStatus === 'submitted' && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 flex flex-col sm:flex-row sm:items-start gap-3">
+              <RotateCcw className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-amber-800 dark:text-amber-300">Returned for Revision</p>
+                {lease?.financial_rejection_reason && (
+                  <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
+                    "{lease.financial_rejection_reason}"
+                  </p>
+                )}
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+                  Edit your financial inputs and resubmit to route through the approval chain again.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" className="flex-shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100" onClick={openResubmit}>
+                <RotateCcw className="h-4 w-4 mr-1.5" />
+                Edit & Resubmit
+              </Button>
+            </div>
+          )}
+
           {lifecycleStatus === 'cancelled' && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center">
               <p className="text-sm font-medium text-destructive">This lease request has been cancelled</p>
@@ -1152,6 +1292,86 @@ export default function LeaseReview() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Phase 2 — Resubmit Dialog */}
+        <Dialog open={resubmitDialogOpen} onOpenChange={(o) => !o && setResubmitDialogOpen(false)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit & Resubmit</DialogTitle>
+              <DialogDescription>
+                Update the financial inputs below. The request will be routed through the approval chain from the beginning.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="rs-payment" className="text-sm">Monthly Payment ($)</Label>
+                <Input
+                  id="rs-payment"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={resubmitFields.monthlyPayment}
+                  onChange={(e) => setResubmitFields((p) => ({ ...p, monthlyPayment: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="rs-term" className="text-sm">Term (months)</Label>
+                  <Input
+                    id="rs-term"
+                    type="number"
+                    min={1}
+                    max={360}
+                    value={resubmitFields.termMonths}
+                    onChange={(e) => setResubmitFields((p) => ({ ...p, termMonths: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rs-esc" className="text-sm">Annual Escalation (%)</Label>
+                  <Input
+                    id="rs-esc"
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    value={resubmitFields.escalationRate}
+                    onChange={(e) => setResubmitFields((p) => ({ ...p, escalationRate: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rs-start" className="text-sm">Start Date</Label>
+                <Input
+                  id="rs-start"
+                  type="date"
+                  value={resubmitFields.startDate}
+                  onChange={(e) => setResubmitFields((p) => ({ ...p, startDate: e.target.value }))}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="rs-covenant"
+                  checked={resubmitFields.covenantFlagged}
+                  onChange={(e) => setResubmitFields((p) => ({ ...p, covenantFlagged: e.target.checked }))}
+                  className="h-4 w-4 rounded border-input accent-primary"
+                />
+                <label htmlFor="rs-covenant" className="text-sm cursor-pointer">
+                  This commitment may impact financial covenants
+                </label>
+              </div>
+            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setResubmitDialogOpen(false)} disabled={resubmitting}>
+                Cancel
+              </Button>
+              <Button onClick={handleResubmit} disabled={resubmitting || !resubmitFields.monthlyPayment || !resubmitFields.termMonths}>
+                {resubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Resubmit for Review
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </AppLayout>
     );
   }

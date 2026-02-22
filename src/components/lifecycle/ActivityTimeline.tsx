@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { 
-  FileText, 
-  Check, 
-  X, 
-  RotateCcw, 
-  Bell, 
-  Upload, 
+import {
+  FileText,
+  Check,
+  X,
+  RotateCcw,
+  Bell,
+  Upload,
   MessageSquare,
   Pause,
-  Plus
+  Plus,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -44,6 +46,13 @@ const ACTIVITY_CONFIG: Record<ActivityType, {
   nudge_sent: { icon: Bell, label: 'Nudge Sent', colorClass: 'text-info' },
   document_upload: { icon: Upload, label: 'Document Uploaded', colorClass: 'text-primary' },
   comment: { icon: MessageSquare, label: 'Comment', colorClass: 'text-muted-foreground' },
+  // Phase 2 — approval chain
+  manager_approved: { icon: CheckCircle, label: 'Manager Approved', colorClass: 'text-success' },
+  manager_rejected: { icon: XCircle, label: 'Manager Rejected', colorClass: 'text-destructive' },
+  financial_approved: { icon: CheckCircle, label: 'Financial Approved', colorClass: 'text-success' },
+  financial_rejected: { icon: XCircle, label: 'Financial Rejected', colorClass: 'text-destructive' },
+  financial_returned: { icon: RotateCcw, label: 'Returned for Revision', colorClass: 'text-warning' },
+  resubmitted: { icon: RotateCcw, label: 'Resubmitted', colorClass: 'text-info' },
 };
 
 export function ActivityTimeline({ leaseId, className }: ActivityTimelineProps) {
@@ -157,9 +166,15 @@ export function ActivityTimeline({ leaseId, className }: ActivityTimelineProps) 
               </div>
 
               {activity.details && (
-                <div className="mt-1 text-sm text-muted-foreground">
+                <div className="mt-1 text-sm text-muted-foreground space-y-0.5">
                   {activity.details.comment && (
                     <p className="italic">"{activity.details.comment as string}"</p>
+                  )}
+                  {activity.details.reason && (
+                    <p>Reason: {activity.details.reason as string}</p>
+                  )}
+                  {activity.details.classification && (
+                    <p>Classification: <span className="capitalize">{(activity.details.classification as string).replace(/_/g, ' ')}</span></p>
                   )}
                   {activity.details.filename && (
                     <p>File: {activity.details.filename as string}</p>

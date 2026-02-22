@@ -1,10 +1,11 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  BarChart3, 
-  Bell, 
-  Plug, 
+import { useEffect, useState } from 'react';
+import {
+  LayoutDashboard,
+  FileText,
+  BarChart3,
+  Bell,
+  Plug,
   User,
   ChevronRight,
   LogOut,
@@ -14,7 +15,8 @@ import {
   Upload,
   Sparkles,
   Activity,
-  ClipboardList
+  ClipboardList,
+  ClipboardCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
@@ -36,7 +38,10 @@ import {
   canAccessIntegrationsPage,
   canAccessReportsDataQuality,
   canAccessWorkspaceSettings,
+  canAccessApprovals,
+  isSubmitterOnly,
 } from '@/lib/authorization';
+import { supabase } from '@/integrations/supabase/client';
 
 // Portfolio section items
 const portfolioItems = [
@@ -65,9 +70,53 @@ const settingsNavItems = [
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, workspace, canAccessFeature, userRole } = useApp();
+  const { user, workspace, canAccessFeature, userRole, userFunctionalRoles } = useApp();
   const { signOut, user: authUser } = useAuth();
   const { t } = useLanguage();
+
+  // Phase 2 — approval badge count (pending items needing current user's action)
+  const [approvalBadge, setApprovalBadge] = useState(0);
+
+  useEffect(() => {
+    if (!workspace?.id || !userFunctionalRoles.length) return;
+
+    const fetchBadge = async () => {
+      try {
+        let count = 0;
+        if (userFunctionalRoles.includes('manager_approver')) {
+          const { count: mc } = await supabase
+            .from('leases')
+            .select('id', { count: 'exact', head: true })
+            .eq('workspace_id', workspace.id)
+            .eq('lifecycle_status', 'submitted')
+            .or('financial_returned_to_submitter.is.null,financial_returned_to_submitter.eq.false')
+            .is('manager_approved_by', null) as any;
+          count += mc || 0;
+        }
+        if (userFunctionalRoles.includes('financial_approver')) {
+          const { count: fc } = await supabase
+            .from('leases')
+            .select('id', { count: 'exact', head: true })
+            .eq('workspace_id', workspace.id)
+            .eq('lifecycle_status', 'under_review')
+            .is('financial_approved_by', null) as any;
+          count += fc || 0;
+        }
+        setApprovalBadge(count);
+      } catch {
+        // table may not exist yet
+      }
+    };
+
+    fetchBadge();
+    const interval = setInterval(fetchBadge, 30_000);
+    const handleFocus = () => fetchBadge();
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [workspace?.id, userFunctionalRoles]);
 
   const usagePercent = workspace 
     ? (workspace.activeLeasesUsed / (workspace.maxActiveLeases === -1 ? Math.max(workspace.activeLeasesUsed,1) : workspace.maxActiveLeases)) * 100 
@@ -109,6 +158,8 @@ export function AppSidebar() {
   };
 
   const isAdmin = userRole === 'admin' || userRole === 'owner';
+  const showApprovals = canAccessApprovals(userFunctionalRoles) || isAdmin;
+  const hideApprovalsForSubmitterOnly = isSubmitterOnly(userFunctionalRoles);
 
   const renderNavItem = (item: typeof portfolioItems[0] & { requiresBusiness?: boolean; requiresAdmin?: boolean }) => {
     const isActive = location.pathname === item.href;
@@ -204,6 +255,29 @@ export function AppSidebar() {
           </p>
           <div className="space-y-1">
             {filteredToolsItems.map(renderNavItem)}
+            {/* Approvals — hidden for submitter-only users */}
+            {showApprovals && !hideApprovalsForSubmitterOnly && (
+              <Link
+                to="/app/approvals"
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                  location.pathname === '/app/approvals'
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                )}
+              >
+                <ClipboardCheck className="h-5 w-5" />
+                <span className="flex-1">Approvals</span>
+                {approvalBadge > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="text-[10px] h-5 min-w-[1.25rem] px-1.5 flex items-center justify-center"
+                  >
+                    {approvalBadge}
+                  </Badge>
+                )}
+              </Link>
+            )}
           </div>
         </div>
 

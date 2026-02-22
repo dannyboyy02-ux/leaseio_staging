@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { getApprovalRequirements, getInitialStatusAfterSubmission } from '@/lib/approvalRouting';
 import {
   Sheet,
   SheetContent,
@@ -162,31 +163,21 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     [isSubmitting, user, workspace],
   );
 
-  const notifyAdmins = async (leaseId: string, description: string) => {
-    if (!workspace || !user) return;
-    const { data: members } = await supabase
-      .from('workspace_members')
-      .select('user_id, role')
+  const notifyRoleHolders = async (leaseId: string, role: string, message: string) => {
+    if (!workspace) return;
+    const { data: roleRows } = await (supabase as any)
+      .from('workspace_roles')
+      .select('user_id')
       .eq('workspace_id', workspace.id)
-      .eq('role', 'admin');
-
-    const recipientIds = Array.from(new Set([
-      workspace.ownerId,
-      ...(members || []).map((m) => m.user_id).filter(Boolean),
-    ].filter((id) => id && id !== user.id)));
-
+      .eq('role', role);
+    const recipientIds = (roleRows || []).map((r: any) => r.user_id).filter(Boolean);
     if (!recipientIds.length) return;
-
     await supabase.from('lease_activity_log').insert({
       lease_id: leaseId,
       user_id: null,
       activity_type: 'comment',
-      details: {
-        notification_type: 'finance_new_request',
-        recipient_ids: recipientIds,
-        message: `New commitment request submitted: ${description}`,
-      },
-    });
+      details: { notification_type: `notify_${role}`, recipient_ids: recipientIds, message },
+    } as any);
   };
 
   const submit = async (values: LeaseRequestFormValues) => {
@@ -200,33 +191,60 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
       const now = new Date().toISOString();
       const fileName = file?.name ?? `${values.description}.request`;
 
+      // ── Evaluate approval routing before inserting ──────────────────────
+      const [wsSettings, managerRoles, financialRoles] = await Promise.all([
+        (supabase as any)
+          .from('workspaces')
+          .select('approval_threshold')
+          .eq('id', workspace.id)
+          .single()
+          .then((r: any) => r.data),
+        (supabase as any)
+          .from('workspace_roles')
+          .select('user_id')
+          .eq('workspace_id', workspace.id)
+          .eq('role', 'manager_approver')
+          .then((r: any) => r.data || []),
+        (supabase as any)
+          .from('workspace_roles')
+          .select('user_id')
+          .eq('workspace_id', workspace.id)
+          .eq('role', 'financial_approver')
+          .then((r: any) => r.data || []),
+      ]);
+
+      const approvalRequirements = getApprovalRequirements({
+        totalCashCommitment: calcs?.totalCashCommitment ?? 0,
+        approvalThreshold: wsSettings?.approval_threshold ?? null,
+        hasManagerApprovers: managerRoles.length > 0,
+        hasFinancialApprovers: financialRoles.length > 0,
+        covenantFlagged: values.covenantFlagged,
+      });
+
+      const initialStatus = getInitialStatusAfterSubmission(approvalRequirements);
+
       const { data: lease, error: createError } = await supabase
         .from('leases')
         .insert({
           user_id: user.id,
           workspace_id: workspace.id,
           requestor_id: user.id,
-          // Map description to request_title (the identifying name of this commitment)
           request_title: values.description,
           category: values.assetType,
           asset_type: values.assetType,
           requesting_department: values.requestingDepartment,
           vendor_name: values.vendor || null,
-          // Financial inputs
           monthly_payment: values.monthlyPayment,
           term_months: values.termMonths,
           lease_start: values.startDate || null,
           escalation_rate: values.escalationRate ?? 0,
-          // Covenant & classification
           covenant_flagged: values.covenantFlagged,
           lease_classification: 'pending',
-          // Stored calculations
           calc_total_commitment: calcs?.totalCashCommitment ?? null,
           calc_pv_liability: calcs?.pvLiability ?? null,
           calc_straight_line_exp: calcs?.straightLineExpense ?? null,
           calc_cash_pl_delta: calcs?.cashPLDelta ?? null,
-          // Lifecycle
-          lifecycle_status: 'submitted',
+          lifecycle_status: initialStatus,
           lease_owner_id: user.id,
           initializer_id: user.id,
           filename: fileName,
@@ -255,17 +273,26 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         lease_id: lease.id,
         user_id: user.id,
         activity_type: 'created',
-        to_status: 'submitted',
+        to_status: initialStatus,
         details: {
           description: values.description,
           requesting_department: values.requestingDepartment,
           monthly_payment: values.monthlyPayment,
           term_months: values.termMonths,
           has_attachment: Boolean(file),
+          auto_approved: initialStatus === 'approved',
         },
-      });
+      } as any);
 
-      await notifyAdmins(lease.id, values.description);
+      // Notify appropriate approvers
+      if (initialStatus === 'submitted' && approvalRequirements.requiresManagerApproval) {
+        await notifyRoleHolders(lease.id, 'manager_approver',
+          `New commitment request awaiting your review: ${values.description}`);
+      } else if (initialStatus === 'under_review' && approvalRequirements.requiresFinancialApproval) {
+        await notifyRoleHolders(lease.id, 'financial_approver',
+          `New commitment request awaiting financial review: ${values.description}`);
+      }
+
       await createLeaseNotification({
         leaseId: lease.id,
         eventType: 'new_request',

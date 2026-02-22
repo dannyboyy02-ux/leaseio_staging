@@ -3,6 +3,7 @@ import { User, Workspace, WorkspaceRole, SubscriptionPlan } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
 import { PLANS, getPlanIndex } from "@/config/pricing";
+import type { FunctionalRole } from "@/types/lifecycle";
 
 interface AppContextType {
   user: User | null;
@@ -11,12 +12,17 @@ interface AppContextType {
   setWorkspace: (workspace: Workspace | null) => void;
   userRole: WorkspaceRole | "owner" | null;
   setUserRole: (role: WorkspaceRole | "owner" | null) => void;
+  /** Phase 2 functional roles from workspace_roles table */
+  userFunctionalRoles: FunctionalRole[];
+  setUserFunctionalRoles: (roles: FunctionalRole[]) => void;
   isAuthenticated: boolean;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   refreshProfile: () => Promise<void>;
   canAccessFeature: (requiredPlan: SubscriptionPlan) => boolean;
   hasPermission: (permission: "billing" | "integrations" | "members" | "leases" | "export") => boolean;
+  /** Returns true if user holds any of the specified functional roles */
+  hasFunctionalRole: (role: FunctionalRole | FunctionalRole[]) => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -26,6 +32,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [userRole, setUserRole] = useState<WorkspaceRole | "owner" | null>("owner");
+  const [userFunctionalRoles, setUserFunctionalRoles] = useState<FunctionalRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const isAuthenticated = !!authUser;
@@ -35,6 +42,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setWorkspace(null);
       setUserRole(null);
+      setUserFunctionalRoles([]);
       setIsLoading(false);
       return;
     }
@@ -115,6 +123,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
             updatedAt: ws.updated_at || ws.created_at || profile.created_at,
           });
 
+          // Load functional roles (Phase 2) — gracefully handle missing table
+          try {
+            const { data: functionalRoleRows } = await (supabase as any)
+              .from('workspace_roles')
+              .select('role')
+              .eq('workspace_id', ws.id)
+              .eq('user_id', authUser.id);
+            setUserFunctionalRoles((functionalRoleRows || []).map((r: any) => r.role as FunctionalRole));
+          } catch {
+            setUserFunctionalRoles([]);
+          }
+
           setIsLoading(false);
           return;
         } else {
@@ -154,6 +174,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [authUser, authLoading]);
 
+  const hasFunctionalRole = (role: FunctionalRole | FunctionalRole[]): boolean => {
+    const roles = Array.isArray(role) ? role : [role];
+    return roles.some((r) => userFunctionalRoles.includes(r));
+  };
+
   const canAccessFeature = (requiredPlan: SubscriptionPlan): boolean => {
     if (!workspace) return false;
     const currentPlanIndex = getPlanIndex(workspace.plan);
@@ -183,12 +208,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setWorkspace,
         userRole,
         setUserRole,
+        userFunctionalRoles,
+        setUserFunctionalRoles,
         isAuthenticated,
         isLoading,
         setIsLoading,
         refreshProfile,
         canAccessFeature,
         hasPermission,
+        hasFunctionalRole,
       }}
     >
       {children}
