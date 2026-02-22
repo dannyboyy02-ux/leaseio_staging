@@ -48,6 +48,7 @@ import { AmendmentsList } from "@/components/leases/AmendmentsList";
 import { AmendmentChanges } from "@/components/leases/AmendmentChanges";
 import { ActivityTimeline } from "@/components/lifecycle/ActivityTimeline";
 import { LifecycleStatusBadge } from "@/components/lifecycle/LifecycleStatusBadge";
+import { SummaryShareControls } from '@/components/summary/SummaryShareControls';
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -1285,6 +1286,13 @@ export default function LeaseReview() {
             </div>
           )}
 
+          {lease.calc_total_commitment && (
+            <SummaryShareControls
+              leaseId={lease.id}
+              lifecycleStatus={lease.lifecycle_status || ''}
+            />
+          )}
+
           <Card>
             <CardHeader><CardTitle>Activity Timeline</CardTitle></CardHeader>
             <CardContent>
@@ -1617,6 +1625,7 @@ export default function LeaseReview() {
                                 <p className="font-medium">
                                   {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}
                                 </p>
+
                               </div>
                             </CardContent>
                           </CollapsibleContent>
