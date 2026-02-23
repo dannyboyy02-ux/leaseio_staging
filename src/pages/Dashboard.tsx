@@ -9,7 +9,6 @@ import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
 import { CommitmentHistory } from '@/components/dashboard/CommitmentHistory';
-import { CovenantHealthPanel } from '@/components/dashboard/CovenantHealthPanel';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -54,11 +53,8 @@ export default function Dashboard() {
         {/* Action Required — only renders when there are pending items */}
         <PendingApprovalsSection />
 
-        {/* Portfolio Intelligence */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <CommitmentHistory />
-          <CovenantHealthPanel />
-        </div>
+        {/* Commitment trend — full width */}
+        <CommitmentHistory />
 
         {/* Upcoming Events */}
         <UpcomingEvents />

@@ -43,7 +43,7 @@ const leaseRequestSchema = z.object({
   vendor: z.string().trim().optional(),
   requestingDepartment: z.string().trim().min(2, 'Requesting department is required'),
   monthlyPayment: z.coerce.number().positive('Monthly payment is required'),
-  termMonths: z.coerce.number().int().min(1).max(360, 'Term must be 1–360 months'),
+  termMonths: z.coerce.number().int().min(1).max(360, 'Term must be 1\u2013360 months'),
   startDate: z.string().min(1, 'Start date is required'),
   escalationRate: z.coerce.number().min(0).default(0),
   covenantFlagged: z.boolean().default(false),
@@ -245,6 +245,9 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           calc_straight_line_exp: calcs?.straightLineExpense ?? null,
           calc_cash_pl_delta: calcs?.cashPLDelta ?? null,
           lifecycle_status: initialStatus,
+          // Lease requests don't go through AI abstraction — set Ready so the
+          // processing spinner never fires when landing on the detail page.
+          status: 'Ready',
           lease_owner_id: user.id,
           initializer_id: user.id,
           filename: fileName,
@@ -595,7 +598,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   Document
                 </p>
                 <Label className="text-sm font-normal text-muted-foreground">
-                  Attach Quote / Draft Lease (optional PDF, max 20 MB)
+                  Attach Quote / Draft Lease (optional PDF, max 20 MB)
                 </Label>
                 <div
                   {...getRootProps()}
