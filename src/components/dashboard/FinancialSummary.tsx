@@ -1,10 +1,11 @@
-import { DollarSign, CalendarClock, TrendingUp, Wallet, AlertTriangle, FileText } from 'lucide-react';
+import { DollarSign, CalendarClock, AlertTriangle, Building2, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, differenceInDays } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 
 interface PipelineData {
@@ -16,13 +17,14 @@ interface PipelineData {
 interface FinancialData {
   totalMonthlyRent: number;
   annualObligation: number;
+  activeLeaseCount: number;
+  expiringCount: number;
   nextPayment: {
     amount: number;
     property: string;
     dueDate: Date;
     daysUntil: number;
   } | null;
-  activeLeaseCount: number;
 }
 
 function formatCurrency(amount: number, language: string): string {
@@ -36,18 +38,17 @@ function formatCurrency(amount: number, language: string): string {
 
 export function FinancialSummary() {
   const { t, language } = useLanguage();
+  const { workspace } = useApp();
 
   // Pipeline: submitted, under_review, approved
   const { data: pipeline, isLoading: pipelineLoading } = useQuery({
-    queryKey: ['pipeline-summary'],
+    queryKey: ['pipeline-summary', workspace?.id],
+    enabled: !!workspace?.id,
     queryFn: async (): Promise<PipelineData> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       const { data: leases, error } = await supabase
         .from('leases')
         .select('id, calc_total_commitment, covenant_flagged')
-        .eq('user_id', user.id)
+        .eq('workspace_id', workspace!.id)
         .in('lifecycle_status', ['submitted', 'under_review', 'approved']);
 
       if (error) throw error;
@@ -66,20 +67,24 @@ export function FinancialSummary() {
 
   // Active portfolio: executed + active leases
   const { data, isLoading } = useQuery({
-    queryKey: ['financial-summary'],
+    queryKey: ['financial-summary', workspace?.id],
+    enabled: !!workspace?.id,
     queryFn: async (): Promise<FinancialData> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       const { data: leases, error } = await supabase
         .from('leases')
-        .select('id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, lease_start, lease_end, extracted_json')
-        .eq('user_id', user.id)
+        .select(
+          'id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
+          'lease_start, lease_end, executed_expiry_date, extracted_json'
+        )
+        .eq('workspace_id', workspace!.id)
         .in('lifecycle_status', ['executed', 'active']);
 
       if (error) throw error;
 
       const activeLeases = leases || [];
+      const now = new Date();
+      const in90Days = new Date(now.getTime() + 90 * 86_400_000);
+
       const totalMonthlyRent = activeLeases.reduce((sum, lease) => {
         const rent =
           Number((lease as any).executed_monthly_payment) ||
@@ -88,11 +93,16 @@ export function FinancialSummary() {
           0;
         return sum + rent;
       }, 0);
-      const annualObligation = totalMonthlyRent * 12;
+
+      const expiringCount = activeLeases.filter((lease) => {
+        const raw = (lease as any).executed_expiry_date || lease.lease_end;
+        if (!raw) return false;
+        const d = new Date(raw);
+        return d >= now && d <= in90Days;
+      }).length;
 
       let nextPayment: FinancialData['nextPayment'] = null;
       if (activeLeases.length > 0 && totalMonthlyRent > 0) {
-        const now = new Date();
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const daysUntil = differenceInDays(nextMonth, now);
 
@@ -129,16 +139,15 @@ export function FinancialSummary() {
 
       return {
         totalMonthlyRent,
-        annualObligation,
-        nextPayment,
+        annualObligation: totalMonthlyRent * 12,
         activeLeaseCount: activeLeases.length,
+        expiringCount,
+        nextPayment,
       };
     },
   });
 
-  const isAnythingLoading = pipelineLoading || isLoading;
-
-  if (isAnythingLoading) {
+  if (pipelineLoading || isLoading) {
     return (
       <div className="space-y-4">
         <Card>
@@ -153,7 +162,7 @@ export function FinancialSummary() {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-primary/5 via-background to-accent/5 border-primary/10">
+        <Card>
           <CardContent className="p-6">
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {[...Array(4)].map((_, i) => (
@@ -180,12 +189,7 @@ export function FinancialSummary() {
       value: formatCurrency(data?.totalMonthlyRent || 0, language),
       icon: DollarSign,
       description: `${leaseCount} ${leaseLabel}`,
-    },
-    {
-      label: t('dashboard.annual_obligation'),
-      value: formatCurrency(data?.annualObligation || 0, language),
-      icon: TrendingUp,
-      description: t('dashboard.total_for_year'),
+      highlight: false,
     },
     {
       label: t('dashboard.next_payment_due'),
@@ -194,21 +198,27 @@ export function FinancialSummary() {
       description: data?.nextPayment
         ? `${format(data.nextPayment.dueDate, 'MMM d')} · ${data.nextPayment.daysUntil} ${t('dashboard.days')}`
         : t('dashboard.no_upcoming_payments'),
-      highlight: data?.nextPayment && data.nextPayment.daysUntil <= 7,
+      highlight: !!(data?.nextPayment && data.nextPayment.daysUntil <= 7),
     },
     {
-      label: t('dashboard.rent_per_lease'),
-      value: data?.activeLeaseCount
-        ? formatCurrency((data?.totalMonthlyRent || 0) / data.activeLeaseCount, language)
-        : '—',
-      icon: Wallet,
-      description: t('dashboard.average_monthly'),
+      label: 'Active Leases',
+      value: String(leaseCount),
+      icon: Building2,
+      description: 'in portfolio',
+      highlight: false,
+    },
+    {
+      label: 'Expiring ≤ 90 Days',
+      value: String(data?.expiringCount || 0),
+      icon: AlertTriangle,
+      description: (data?.expiringCount || 0) > 0 ? 'require attention' : 'all clear',
+      highlight: (data?.expiringCount || 0) > 0,
     },
   ];
 
   return (
     <div className="space-y-4 animate-fade-up">
-      {/* Pipeline Section */}
+      {/* Pipeline warning — only shown when there are pending leases */}
       {(pipeline?.pendingCount ?? 0) > 0 && (
         <Card className="border-warning/30 bg-warning/5">
           <CardHeader className="pb-3">
@@ -258,7 +268,7 @@ export function FinancialSummary() {
         </Card>
       )}
 
-      {/* Active Portfolio Section */}
+      {/* Hero KPI tiles */}
       <Card className="bg-gradient-to-br from-primary/5 via-background to-accent/5 border-primary/10">
         <CardContent className="p-6">
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -268,7 +278,13 @@ export function FinancialSummary() {
                 className="flex items-start gap-4 animate-fade-up"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <div
+                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+                    stat.highlight
+                      ? 'bg-warning/10 text-warning'
+                      : 'bg-primary/10 text-primary'
+                  }`}
+                >
                   <stat.icon className="h-6 w-6" />
                 </div>
                 <div className="min-w-0">

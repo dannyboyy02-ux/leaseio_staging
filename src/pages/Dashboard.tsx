@@ -5,7 +5,6 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
-import { QuickStats } from '@/components/dashboard/QuickStats';
 import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
@@ -46,19 +45,16 @@ export default function Dashboard() {
       />
 
       <div className="p-6 space-y-6">
-        {/* Onboarding Checklist */}
+        {/* Onboarding — auto-hides when all steps complete or dismissed */}
         <OnboardingChecklist />
 
-        {/* Pending Approvals - Business Plan Only */}
-        <PendingApprovalsSection />
-
-        {/* Financial Summary - Top Priority */}
+        {/* Hero KPI tiles */}
         <FinancialSummary />
 
-        {/* Quick Stats */}
-        <QuickStats />
+        {/* Action Required — only renders when there are pending items */}
+        <PendingApprovalsSection />
 
-        {/* Phase 5: Portfolio Intelligence */}
+        {/* Portfolio Intelligence */}
         <div className="grid gap-6 md:grid-cols-2">
           <CommitmentHistory />
           <CovenantHealthPanel />

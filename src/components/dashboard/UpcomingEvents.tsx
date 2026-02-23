@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { differenceInDays, format } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 
 const DISMISSED_EVENTS_KEY = 'leaseio.dismissed_events';
@@ -44,6 +45,7 @@ function formatCurrency(amount: number, language: string): string {
 
 export function UpcomingEvents() {
   const { t, language } = useLanguage();
+  const { workspace } = useApp();
   const [dismissedIds, setDismissedIds] = useState<string[]>(getDismissedEvents);
 
   const dismissEvent = (id: string) => {
@@ -53,41 +55,25 @@ export function UpcomingEvents() {
   };
 
   const eventConfig = {
-    renewal: {
-      icon: Clock,
-      variant: 'info' as const,
-      labelKey: 'dashboard.renewal',
-    },
-    escalation: {
-      icon: TrendingUp,
-      variant: 'warning' as const,
-      labelKey: 'dashboard.escalation',
-    },
-    expiration: {
-      icon: AlertCircle,
-      variant: 'destructive' as const,
-      labelKey: 'dashboard.expiration',
-    },
-    payment: {
-      icon: DollarSign,
-      variant: 'default' as const,
-      labelKey: 'dashboard.payment',
-    },
+    renewal:    { icon: Clock,        variant: 'info' as const,        labelKey: 'dashboard.renewal' },
+    escalation: { icon: TrendingUp,   variant: 'warning' as const,     labelKey: 'dashboard.escalation' },
+    expiration: { icon: AlertCircle,  variant: 'destructive' as const, labelKey: 'dashboard.expiration' },
+    payment:    { icon: DollarSign,   variant: 'default' as const,     labelKey: 'dashboard.payment' },
   };
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ['upcoming-events'],
+    queryKey: ['upcoming-events', workspace?.id],
+    enabled: !!workspace?.id,
     queryFn: async (): Promise<UpcomingEvent[]> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       const now = new Date();
 
-      // Only executed and active leases have confirmed payment terms
       const { data: leases, error } = await supabase
         .from('leases')
-        .select('id, filename, lease_end, current_monthly_rent, monthly_payment, extracted_json')
-        .eq('user_id', user.id)
+        .select(
+          'id, filename, lease_end, executed_expiry_date, ' +
+          'current_monthly_rent, monthly_payment, executed_monthly_payment, extracted_json'
+        )
+        .eq('workspace_id', workspace!.id)
         .in('lifecycle_status', ['executed', 'active']);
 
       if (error) throw error;
@@ -101,10 +87,16 @@ export function UpcomingEvents() {
         );
 
         const monthlyRent =
-          Number(lease.current_monthly_rent) || Number((lease as any).monthly_payment) || 0;
+          Number((lease as any).executed_monthly_payment) ||
+          Number(lease.current_monthly_rent) ||
+          Number((lease as any).monthly_payment) ||
+          0;
 
-        if (lease.lease_end) {
-          const endDate = new Date(lease.lease_end);
+        // Prefer executed_expiry_date, fall back to lease_end
+        const expiryRaw = (lease as any).executed_expiry_date || lease.lease_end;
+
+        if (expiryRaw) {
+          const endDate = new Date(expiryRaw);
           const daysUntil = differenceInDays(endDate, now);
 
           if (daysUntil >= 0 && daysUntil <= 90) {
@@ -119,14 +111,14 @@ export function UpcomingEvents() {
             });
           }
 
-          if (daysUntil >= 30 && daysUntil <= 60) {
+          if (daysUntil >= 30 && daysUntil <= 180) {
             upcomingEvents.push({
               id: `ren-${lease.id}`,
               type: 'renewal',
               titleKey: 'dashboard.renewal_window_opens',
               property,
               date: new Date(endDate.getTime() - 60 * 24 * 60 * 60 * 1000),
-              daysUntil: daysUntil - 60,
+              daysUntil: Math.max(0, daysUntil - 60),
               leaseId: lease.id,
             });
           }
@@ -135,7 +127,6 @@ export function UpcomingEvents() {
         if (monthlyRent > 0) {
           const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
           const daysUntilPayment = differenceInDays(nextMonth, now);
-
           upcomingEvents.push({
             id: `pay-${lease.id}`,
             type: 'payment',
@@ -207,9 +198,7 @@ export function UpcomingEvents() {
           <div className="text-center py-8">
             <Calendar className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
             <p className="text-sm text-muted-foreground">{t('dashboard.no_upcoming_events')}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t('dashboard.events_appear_here')}
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">{t('dashboard.events_appear_here')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -238,10 +227,10 @@ export function UpcomingEvents() {
                     <div
                       className={cn(
                         'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-                        config.variant === 'info' && 'bg-info/10 text-info',
-                        config.variant === 'warning' && 'bg-warning/10 text-warning',
+                        config.variant === 'info'        && 'bg-info/10 text-info',
+                        config.variant === 'warning'     && 'bg-warning/10 text-warning',
                         config.variant === 'destructive' && 'bg-destructive/10 text-destructive',
-                        config.variant === 'default' && 'bg-primary/10 text-primary',
+                        config.variant === 'default'     && 'bg-primary/10 text-primary',
                       )}
                     >
                       <EventIcon className="h-5 w-5" />
@@ -254,11 +243,9 @@ export function UpcomingEvents() {
                         <span
                           className={cn(
                             'text-xs',
-                            isUrgent
-                              ? 'text-destructive font-medium'
-                              : isWarning
-                              ? 'text-warning'
-                              : 'text-muted-foreground',
+                            isUrgent  ? 'text-destructive font-medium' :
+                            isWarning ? 'text-warning' :
+                                        'text-muted-foreground',
                           )}
                         >
                           {getDaysLabel(event.daysUntil)}
@@ -268,20 +255,13 @@ export function UpcomingEvents() {
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className="truncate">{event.property}</span>
                         {event.amount && (
-                          <>
-                            <span>·</span>
-                            <span className="font-medium text-foreground">
-                              {formatCurrency(event.amount, language)}
-                            </span>
-                          </>
+                          <><span>·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}</span></>
                         )}
                       </div>
                     </div>
-                    <div className="flex flex-col items-end shrink-0">
-                      <span className="text-xs text-muted-foreground">
-                        {format(event.date, 'MMM d')}
-                      </span>
-                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {format(event.date, 'MMM d')}
+                    </span>
                   </Link>
                   <button
                     onClick={() => dismissEvent(event.id)}
