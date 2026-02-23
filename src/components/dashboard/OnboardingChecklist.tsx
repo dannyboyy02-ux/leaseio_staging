@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ChevronRight, Upload, Users, Bell, Link2, X, Rocket } from 'lucide-react';
+import { Check, ChevronRight, Upload, Users, Bell, ShieldCheck, X, Rocket } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -17,6 +17,8 @@ interface OnboardingStep {
   id: string;
   titleKey: string;
   descriptionKey: string;
+  title?: string;
+  description?: string;
   icon: React.ComponentType<{ className?: string }>;
   href: string;
 }
@@ -27,7 +29,7 @@ const stepDefinitions: OnboardingStep[] = [
     titleKey: 'onboarding.step1_title',
     descriptionKey: 'onboarding.step1_desc',
     icon: Upload,
-    href: '/app/leases/new',
+    href: '/app/imports',
   },
   {
     id: 'team',
@@ -37,18 +39,20 @@ const stepDefinitions: OnboardingStep[] = [
     href: '/app/settings/workspace',
   },
   {
+    id: 'approvers',
+    titleKey: 'onboarding.step3_approvers_title',
+    title: 'Set up approval roles',
+    descriptionKey: 'onboarding.step3_approvers_desc',
+    description: 'Assign manager and financial approvers in Team & Roles',
+    icon: ShieldCheck,
+    href: '/app/settings/workspace',
+  },
+  {
     id: 'notifications',
     titleKey: 'onboarding.step3_title',
     descriptionKey: 'onboarding.step3_desc',
     icon: Bell,
     href: '/app/notifications',
-  },
-  {
-    id: 'integrations',
-    titleKey: 'onboarding.step4_title',
-    descriptionKey: 'onboarding.step4_desc',
-    icon: Link2,
-    href: '/app/integrations',
   },
 ];
 
@@ -61,7 +65,6 @@ export function OnboardingChecklist() {
   const canManageMembers = canManageWorkspaceMembers(userRole);
   
   useEffect(() => {
-    // Check if dismissed
     const wasDismissed = localStorage.getItem(DISMISSED_KEY);
     if (wasDismissed === 'true') {
       setDismissed(true);
@@ -96,6 +99,18 @@ export function OnboardingChecklist() {
         }
       }
 
+      // Check if workspace has approval roles configured
+      if (workspace?.id) {
+        const { count: rolesCount } = await (supabase as any)
+          .from('workspace_roles')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', workspace.id);
+        
+        if (rolesCount && rolesCount > 0) {
+          completed.push('approvers');
+        }
+      }
+
       // Check if user has any notifications configured
       const { count: notificationCount } = await supabase
         .from('lease_notifications')
@@ -104,12 +119,6 @@ export function OnboardingChecklist() {
       
       if (notificationCount && notificationCount > 0) {
         completed.push('notifications');
-      }
-
-      // Check integrations (simplified - just check if they've visited)
-      const visitedIntegrations = localStorage.getItem('leaseio.visited_integrations');
-      if (visitedIntegrations === 'true') {
-        completed.push('integrations');
       }
 
       setCompletedSteps(completed);
@@ -127,7 +136,7 @@ export function OnboardingChecklist() {
 
   const visibleSteps = canManageMembers
     ? stepDefinitions
-    : stepDefinitions.filter((step) => step.id !== 'team');
+    : stepDefinitions.filter((step) => step.id !== 'team' && step.id !== 'approvers');
   const visibleCompletedSteps = completedSteps.filter((stepId) =>
     visibleSteps.some((step) => step.id === stepId)
   );
@@ -136,7 +145,6 @@ export function OnboardingChecklist() {
     ? (visibleCompletedSteps.length / visibleSteps.length) * 100
     : 0;
 
-  // Hide if all steps completed
   if (visibleCompletedSteps.length >= visibleSteps.length) return null;
 
   return (
@@ -150,7 +158,7 @@ export function OnboardingChecklist() {
             <div>
               <CardTitle className="text-lg">{t('onboarding.getting_started')}</CardTitle>
               <CardDescription>
-                {completedCount}/{stepDefinitions.length} {t('onboarding.completed')}
+                {completedCount}/{visibleSteps.length} {t('onboarding.completed')}
               </CardDescription>
             </div>
           </div>
@@ -171,6 +179,8 @@ export function OnboardingChecklist() {
         <div className="space-y-2">
           {visibleSteps.map((step, index) => {
             const isCompleted = completedSteps.includes(step.id);
+            const translatedTitle = step.title || t(step.titleKey);
+            const translatedDesc = step.description || t(step.descriptionKey);
             const content = (
               <>
                 <div
@@ -194,10 +204,10 @@ export function OnboardingChecklist() {
                       isCompleted && 'line-through'
                     )}
                   >
-                    {t(step.titleKey)}
+                    {translatedTitle}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {t(step.descriptionKey)}
+                    {translatedDesc}
                   </p>
                 </div>
                 {!isCompleted && (

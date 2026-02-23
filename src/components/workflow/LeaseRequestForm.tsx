@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Building2, Car, Cpu, Loader2, Package, Upload, X } from 'lucide-react';
+import { AlertTriangle, Building2, Car, Cpu, Loader2, Package, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useApp } from '@/contexts/AppContext';
@@ -70,6 +70,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [calcs, setCalcs] = useState<LeaseCalculations | null>(null);
+  const [hasApprovers, setHasApprovers] = useState<boolean | null>(null);
   const [workspaceSettings, setWorkspaceSettings] = useState<{
     discountRate: number;
     covenantThreshold: number | null;
@@ -90,7 +91,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     },
   });
 
-  // Fetch workspace financial settings when form opens
+  // Fetch workspace financial settings and approver check when form opens
   useEffect(() => {
     if (!open || !workspace?.id) return;
     supabase
@@ -106,12 +107,23 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           });
         }
       });
+
+    // Check if workspace has any approval roles configured
+    (supabase as any)
+      .from('workspace_roles')
+      .select('role', { count: 'exact', head: true })
+      .eq('workspace_id', workspace.id)
+      .in('role', ['manager_approver', 'financial_approver'])
+      .then(({ count }: { count: number | null }) => {
+        setHasApprovers((count ?? 0) > 0);
+      });
   }, [open, workspace?.id]);
 
   useEffect(() => {
     if (!open) {
       setFile(null);
       setCalcs(null);
+      setHasApprovers(null);
       form.reset();
     }
   }, [open, form]);
@@ -323,6 +335,26 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
             Enter lease terms to see the financial impact before you submit.
           </SheetDescription>
         </SheetHeader>
+
+        {/* No-approvers warning */}
+        {hasApprovers === false && (
+          <div className="mx-4 mt-4 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:bg-amber-950/20 dark:border-amber-700">
+            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No approvers configured</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                This request will be auto-approved. Ask your admin to assign approval roles in{' '}
+                <Link
+                  to="/app/settings/workspace"
+                  className="underline"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Workspace Settings
+                </Link>.
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="px-4 pb-4 overflow-y-auto">
           <Form {...form}>
