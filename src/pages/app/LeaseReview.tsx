@@ -144,6 +144,7 @@ export default function LeaseReview() {
   // Audit tracking
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const originalValues = useRef<Record<string, string>>({});
+  const processingStartTime = useRef<number | null>(null);
   
   // Low-confidence field interaction tracking
   const [interactedLowConfFields, setInteractedLowConfFields] = useState<Set<string>>(new Set());
@@ -175,6 +176,10 @@ export default function LeaseReview() {
     covenantFlagged: false,
   });
   const [resubmitting, setResubmitting] = useState(false);
+
+  // Processing cancel state
+  const [cancellingProcessing, setCancellingProcessing] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   
   const isAmendment = !!lease?.parent_lease_id;
   const isMasterLease = !isAmendment && lease?.category !== 'Lease Amendment';
@@ -623,6 +628,9 @@ export default function LeaseReview() {
 
     // Set up polling if processing
     let pollInterval: NodeJS.Timeout | null = null;
+    let elapsedInterval: NodeJS.Timeout | null = null;
+    let timeoutTimer: NodeJS.Timeout | null = null;
+
     const pollForProcessingComplete = async () => {
       if (!leaseId) return;
       const { data, error } = await supabase
@@ -633,23 +641,46 @@ export default function LeaseReview() {
       
       if (error) return;
       
-      if (data.status !== lease?.status) {
-        if (data.status === 'Ready' || data.status === 'Failed') {
-          init();
-          if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
-          }
-        }
+      if (data.status === 'Ready' || data.status === 'Failed') {
+        init();
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        if (elapsedInterval) { clearInterval(elapsedInterval); elapsedInterval = null; }
+        if (timeoutTimer) { clearTimeout(timeoutTimer); timeoutTimer = null; }
       }
     };
 
     if (lease?.status === 'Processing' || lease?.status === 'Uploaded') {
+      if (!processingStartTime.current) {
+        processingStartTime.current = Date.now();
+      }
       pollInterval = setInterval(pollForProcessingComplete, 3000);
+
+      // Elapsed time counter
+      elapsedInterval = setInterval(() => {
+        if (processingStartTime.current) {
+          setElapsedSeconds(Math.floor((Date.now() - processingStartTime.current) / 1000));
+        }
+      }, 1000);
+
+      // Auto-cancel after 3 minutes
+      timeoutTimer = setTimeout(async () => {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        if (elapsedInterval) { clearInterval(elapsedInterval); elapsedInterval = null; }
+        await supabase
+          .from('leases')
+          .update({ status: 'Failed', error_message: 'Processing timed out after 3 minutes' })
+          .eq('id', leaseId);
+        init();
+      }, 180_000);
+    } else {
+      processingStartTime.current = null;
+      setElapsedSeconds(0);
     }
 
     return () => {
       if (pollInterval) clearInterval(pollInterval);
+      if (elapsedInterval) clearInterval(elapsedInterval);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
     };
   }, [leaseId, lease?.status, allFieldIds]);
 
@@ -917,6 +948,31 @@ export default function LeaseReview() {
     }
   };
 
+  // Cancel processing — sets status to Failed so FailedLeaseBanner shows with retry
+  const handleCancelProcessing = useCallback(async () => {
+    if (!lease || !user) return;
+    setCancellingProcessing(true);
+    try {
+      const { error } = await supabase
+        .from('leases')
+        .update({ status: 'Failed', error_message: 'Processing cancelled by user' })
+        .eq('id', lease.id);
+      if (error) throw error;
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user.id,
+        activity_type: 'comment',
+        details: { message: 'Processing cancelled by user' },
+      });
+      setLease((prev: any) => prev ? { ...prev, status: 'Failed', error_message: 'Processing cancelled by user' } : prev);
+    } catch (err) {
+      console.error('Error cancelling processing:', err);
+      toast.error('Failed to cancel processing');
+    } finally {
+      setCancellingProcessing(false);
+    }
+  }, [lease, user]);
+
   if (loading)
     return (
       <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
@@ -924,6 +980,11 @@ export default function LeaseReview() {
 
   // Show processing indicator
   if (isProcessing) {
+    const formatElapsed = (secs: number) => {
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return m > 0 ? `${m}m ${s}s` : `${s}s`;
+    };
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
@@ -936,10 +997,29 @@ export default function LeaseReview() {
           <p className="text-muted-foreground text-center max-w-md mb-2">
             Our AI is extracting key terms and data from your document. This typically takes 30-90 seconds.
           </p>
-          <p className="text-sm text-muted-foreground mb-6">{lease?.filename}</p>
-          <Button variant="outline" onClick={() => navigate('/app/imports')}>
-            View Import History
-          </Button>
+          <p className="text-sm text-muted-foreground mb-1">{lease?.filename}</p>
+          {elapsedSeconds > 0 ? (
+            <p className="text-xs text-muted-foreground mb-6 flex items-center gap-1.5">
+              <Clock className="h-3 w-3" />
+              {formatElapsed(elapsedSeconds)} elapsed{elapsedSeconds > 90 ? ' · taking longer than usual' : ''}
+            </p>
+          ) : (
+            <div className="mb-6" />
+          )}
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => navigate('/app/imports')}>
+              View Import History
+            </Button>
+            <Button
+              variant="ghost"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              disabled={cancellingProcessing}
+              onClick={handleCancelProcessing}
+            >
+              {cancellingProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <X className="h-4 w-4 mr-2" />}
+              Cancel Processing
+            </Button>
+          </div>
         </div>
       </AppLayout>
     );
