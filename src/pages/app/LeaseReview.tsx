@@ -16,6 +16,7 @@ import {
   Clock,
   X,
   RotateCcw,
+  ClipboardCheck,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -125,7 +126,7 @@ function renderWarning(w: unknown): string {
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
-  const { user } = useApp();
+  const { user, userRole, userFunctionalRoles } = useApp();
   
   const [lease, setLease] = useState<any | null>(null);
   const [risks, setRisks] = useState<Risk[]>([]);
@@ -406,7 +407,7 @@ export default function LeaseReview() {
     await createLeaseNotification({
       leaseId: lease.id,
       eventType: 'status_changed',
-      description: `Lease status updated: ${previousStatus || 'unknown'} → ${newStatus}`,
+      description: `Lease status updated: ${previousStatus || 'unknown'} \u2192 ${newStatus}`,
     });
 
     setLease((prev: any) => (prev ? { ...prev, lifecycle_status: newStatus, status_changed_at: now } : prev));
@@ -1001,7 +1002,7 @@ export default function LeaseReview() {
           {elapsedSeconds > 0 ? (
             <p className="text-xs text-muted-foreground mb-6 flex items-center gap-1.5">
               <Clock className="h-3 w-3" />
-              {formatElapsed(elapsedSeconds)} elapsed{elapsedSeconds > 90 ? ' · taking longer than usual' : ''}
+              {formatElapsed(elapsedSeconds)} elapsed{elapsedSeconds > 90 ? ' \u00b7 taking longer than usual' : ''}
             </p>
           ) : (
             <div className="mb-6" />
@@ -1026,6 +1027,29 @@ export default function LeaseReview() {
   }
 
   const extractedJson = lease?.extracted_json as ExtractedJson | null;
+
+  // Compute role-aware next-step guidance for the intake stage
+  const isRequestor = lease?.requestor_id === user?.id || lease?.user_id === user?.id;
+  const isManagerApprover = (userFunctionalRoles ?? []).includes('manager_approver');
+  const isFinancialApprover = (userFunctionalRoles ?? []).includes('financial_approver');
+  const isAdminUser = userRole === 'admin' || userRole === 'owner';
+
+  let nextStepBanner: { type: 'action' | 'info'; message: string } | null = null;
+  if (lifecycleStatus === 'submitted') {
+    if (isManagerApprover || isAdminUser) {
+      nextStepBanner = { type: 'action', message: 'Action required: this request is waiting for your manager review.' };
+    } else if (isRequestor) {
+      nextStepBanner = { type: 'info', message: "Your request is pending manager review. You'll be notified when the status changes." };
+    }
+  } else if (lifecycleStatus === 'under_review') {
+    if (isFinancialApprover || isAdminUser) {
+      nextStepBanner = { type: 'action', message: 'Action required: this request is awaiting your financial review.' };
+    } else {
+      nextStepBanner = { type: 'info', message: "This request is under financial review. You'll be notified once a decision is made." };
+    }
+  } else if (lifecycleStatus === 'approved') {
+    nextStepBanner = { type: 'info', message: 'This request is approved. Upload the executed document to advance to Executed status.' };
+  }
 
   if (isIntakeStage && lease) {
     return (
@@ -1068,6 +1092,27 @@ export default function LeaseReview() {
           />
 
           {renderStatusProgress()}
+
+          {/* Role-aware next-step guidance */}
+          {nextStepBanner && (
+            <div className={cn(
+              'flex items-start gap-3 rounded-lg border p-4',
+              nextStepBanner.type === 'action'
+                ? 'border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-700'
+                : 'border-slate-200 bg-slate-50 dark:bg-slate-800/20 dark:border-slate-700'
+            )}>
+              <ClipboardCheck className={cn(
+                'h-5 w-5 mt-0.5 flex-shrink-0',
+                nextStepBanner.type === 'action' ? 'text-blue-600' : 'text-slate-400'
+              )} />
+              <p className={cn(
+                'text-sm',
+                nextStepBanner.type === 'action'
+                  ? 'text-blue-800 dark:text-blue-300 font-medium'
+                  : 'text-slate-600 dark:text-slate-400'
+              )}>{nextStepBanner.message}</p>
+            </div>
+          )}
 
           {/* Phase 2 — Returned for Revision banner */}
           {lease?.financial_returned_to_submitter && lifecycleStatus === 'submitted' && (
@@ -1174,11 +1219,11 @@ export default function LeaseReview() {
                   </>
                 ) : (
                   <>
-                    <p><span className="font-medium">Title:</span> {lease.request_title || '—'}</p>
-                    <p><span className="font-medium">Department:</span> {lease.requesting_department || '—'}</p>
+                    <p><span className="font-medium">Title:</span> {lease.request_title || '\u2014'}</p>
+                    <p><span className="font-medium">Department:</span> {lease.requesting_department || '\u2014'}</p>
                     <p><span className="font-medium">Urgency:</span> <span className="capitalize">{lease.request_urgency || 'standard'}</span></p>
-                    <p><span className="font-medium">Vendor:</span> {lease.vendor_name || '—'}</p>
-                    <p><span className="font-medium">Notes:</span> {lease.request_description || lease.notes || '—'}</p>
+                    <p><span className="font-medium">Vendor:</span> {lease.vendor_name || '\u2014'}</p>
+                    <p><span className="font-medium">Notes:</span> {lease.request_description || lease.notes || '\u2014'}</p>
                   </>
                 )}
               </CardContent>
@@ -1269,27 +1314,27 @@ export default function LeaseReview() {
                   <div>
                     <p className="text-xs text-muted-foreground">Monthly Payment</p>
                     <p className="font-medium">
-                      {lease.monthly_payment ? `$${Number(lease.monthly_payment).toLocaleString()}` : '—'}
+                      {lease.monthly_payment ? `$${Number(lease.monthly_payment).toLocaleString()}` : '\u2014'}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Term</p>
-                    <p className="font-medium">{lease.term_months ? `${lease.term_months} months` : '—'}</p>
+                    <p className="font-medium">{lease.term_months ? `${lease.term_months} months` : '\u2014'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Asset Type</p>
-                    <p className="font-medium capitalize">{lease.asset_type || '—'}</p>
+                    <p className="font-medium capitalize">{lease.asset_type || '\u2014'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Escalation Rate</p>
                     <p className="font-medium">
-                      {lease.escalation_rate != null ? `${lease.escalation_rate}% / yr` : '—'}
+                      {lease.escalation_rate != null ? `${lease.escalation_rate}% / yr` : '\u2014'}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Start Date</p>
                     <p className="font-medium">
-                      {lease.lease_start ? format(new Date(lease.lease_start), 'MMM d, yyyy') : '—'}
+                      {lease.lease_start ? format(new Date(lease.lease_start), 'MMM d, yyyy') : '\u2014'}
                     </p>
                   </div>
                   <div>
@@ -1299,7 +1344,7 @@ export default function LeaseReview() {
                         const end = new Date(lease.lease_start);
                         end.setMonth(end.getMonth() + Number(lease.term_months));
                         return format(end, 'MMM d, yyyy');
-                      })() : '—'}
+                      })() : '\u2014'}
                     </p>
                   </div>
                 </CardContent>
@@ -1326,7 +1371,7 @@ export default function LeaseReview() {
                         <p className="font-medium">
                           {lease.calc_total_commitment
                             ? `$${Math.round(Number(lease.calc_total_commitment)).toLocaleString()}`
-                            : '—'}
+                            : '\u2014'}
                         </p>
                       </div>
                       <div>
@@ -1334,7 +1379,7 @@ export default function LeaseReview() {
                         <p className="font-medium">
                           {lease.calc_pv_liability
                             ? `$${Math.round(Number(lease.calc_pv_liability)).toLocaleString()}`
-                            : '—'}
+                            : '\u2014'}
                         </p>
                       </div>
                       <div>
@@ -1342,7 +1387,7 @@ export default function LeaseReview() {
                         <p className="font-medium">
                           {lease.calc_straight_line_exp
                             ? `$${Math.round(Number(lease.calc_straight_line_exp)).toLocaleString()}`
-                            : '—'}
+                            : '\u2014'}
                         </p>
                       </div>
                       <div>
@@ -1350,7 +1395,7 @@ export default function LeaseReview() {
                         <p className="font-medium">
                           {lease.calc_cash_pl_delta != null
                             ? `$${Math.round(Number(lease.calc_cash_pl_delta)).toLocaleString()}`
-                            : '—'}
+                            : '\u2014'}
                         </p>
                       </div>
                     </div>
@@ -1371,7 +1416,7 @@ export default function LeaseReview() {
                           ? 'Operating Lease'
                           : lease.lease_classification === 'finance'
                           ? 'Finance Lease'
-                          : '—'}
+                          : '\u2014'}
                       </Badge>
                     </div>
                   </CardContent>
@@ -1719,7 +1764,6 @@ export default function LeaseReview() {
                                 <p className="font-medium">
                                   {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}
                                 </p>
-
                               </div>
                             </CardContent>
                           </CollapsibleContent>
