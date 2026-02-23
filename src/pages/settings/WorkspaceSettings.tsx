@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, Link2, CreditCard, TrendingUp, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, CreditCard, TrendingUp, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   canAccessWorkspaceBilling,
   canAccessWorkspaceDefaults,
-  canAccessWorkspaceIntegrations,
   canAccessWorkspaceProfile,
   canEditWorkspaceSettings,
   canManageWorkspaceMembers,
@@ -71,7 +70,6 @@ export default function WorkspaceSettings() {
   const canEdit = canEditWorkspaceSettings(userRole);
   const canManageMembers = canManageWorkspaceMembers(userRole);
   const canAccessDefaults = canAccessWorkspaceDefaults(userRole);
-  const canAccessIntegrations = canAccessWorkspaceIntegrations(userRole);
   const canAccessBilling = canAccessWorkspaceBilling(userRole);
   const canAccessProfile = canAccessWorkspaceProfile(userRole);
 
@@ -80,7 +78,6 @@ export default function WorkspaceSettings() {
     { id: 'members', label: t('workspace.users_access'), icon: Users, visible: canManageMembers },
     { id: 'roles', label: 'Team & Roles', icon: ShieldCheck, visible: canManageMembers },
     { id: 'defaults', label: t('workspace.defaults'), icon: Bell, visible: canAccessDefaults },
-    { id: 'integrations', label: t('workspace.integrations_tab'), icon: Link2, visible: canAccessIntegrations },
     { id: 'billing', label: t('workspace.billing_plan'), icon: CreditCard, visible: canAccessBilling },
   ].filter((tab) => tab.visible);
 
@@ -712,27 +709,6 @@ export default function WorkspaceSettings() {
                     {isSavingFinancial ? t('workspace.saving') : 'Save Financial Config'}
                   </Button>
                   {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
-
-          {/* Integrations */}
-          {canAccessIntegrations && (
-            <TabsContent value="integrations" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t('workspace.integrations_tab')}</CardTitle>
-                  <CardDescription>{t('workspace.integrations_desc')}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="accent" asChild>
-                    <Link to="/app/integrations">
-                      <Link2 className="h-4 w-4 mr-2" />
-                      {t('workspace.manage_integrations')}
-                    </Link>
-                  </Button>
-                  {!canEdit && <p className="text-xs text-muted-foreground mt-2">{t('workspace.read_only')}</p>}
                 </CardContent>
               </Card>
             </TabsContent>

@@ -36,14 +36,12 @@ import Dashboard from "./pages/Dashboard";
 import Leases from "./pages/Leases";
 import Notifications from "./pages/Notifications";
 import NotificationDetail from "./pages/app/NotificationDetail";
-import Integrations from "./pages/Integrations";
 import Reports from "./pages/Reports";
 import WorkspaceSettings from "./pages/settings/WorkspaceSettings";
 import AccountSettings from "./pages/settings/AccountSettings";
 import NotFound from "./pages/NotFound";
 import { RequireRole } from "@/components/auth/RequireRole";
 import {
-  canAccessIntegrationsPage,
   canAccessReportsAuditLog,
   canAccessReportsDataQuality,
   canAccessWorkspaceSettings,
@@ -207,16 +205,6 @@ const App = () => (
                     <ProtectedRoute>
                       <RequireRole allow={canAccessReportsAuditLog}>
                         <AuditLog />
-                      </RequireRole>
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/app/integrations"
-                  element={
-                    <ProtectedRoute>
-                      <RequireRole allow={canAccessIntegrationsPage}>
-                        <Integrations />
                       </RequireRole>
                     </ProtectedRoute>
                   }

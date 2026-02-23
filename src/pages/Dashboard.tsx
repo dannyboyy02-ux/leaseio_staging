@@ -37,7 +37,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             <Button variant="accent" onClick={() => setCreateDrawerOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              {t('dashboard.create_new_lease')}
+              New Request
             </Button>
           </div>
         }

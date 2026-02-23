@@ -5,7 +5,6 @@ import {
   FileText,
   BarChart3,
   Bell,
-  Plug,
   User,
   ChevronRight,
   LogOut,
@@ -35,7 +34,6 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import {
-  canAccessIntegrationsPage,
   canAccessReportsDataQuality,
   canAccessWorkspaceSettings,
   canAccessApprovals,
@@ -47,7 +45,7 @@ import { supabase } from '@/integrations/supabase/client';
 const portfolioItems = [
   { title: 'nav.dashboard', href: '/app/dashboard', icon: LayoutDashboard },
   { title: 'nav.leases', href: '/app/leases', icon: FileText },
-  { title: 'nav.imports', href: '/app/imports', icon: Upload },
+  { title: 'nav.imports', href: '/app/imports', icon: Upload, overrideTitle: 'Upload Lease' },
 ];
 
 // Reports & Analytics section items
@@ -59,7 +57,6 @@ const reportsItems = [
 // Tools section items
 const toolsItems = [
   { title: 'nav.notifications', href: '/app/notifications', icon: Bell },
-  { title: 'nav.integrations', href: '/app/integrations', icon: Plug },
 ];
 
 const settingsNavItems = [
@@ -165,7 +162,7 @@ export function AppSidebar() {
     const isActive = location.pathname === item.href;
     const isLocked = item.requiresBusiness && !canAccessFeature('business');
     const isAdminOnly = item.requiresAdmin;
-    const translatedTitle = t(item.title);
+    const translatedTitle = item.overrideTitle || t(item.title);
     
     // Hide admin-only items from non-admins
     if (isAdminOnly && !isAdmin) return null;
@@ -200,12 +197,7 @@ export function AppSidebar() {
     return true;
   });
 
-  const filteredToolsItems = toolsItems.filter((item) => {
-    if (item.title === 'nav.integrations') {
-      return canAccessIntegrationsPage(userRole);
-    }
-    return true;
-  });
+  const filteredToolsItems = toolsItems;
 
   const filteredSettingsNavItems = settingsNavItems.filter((item) => {
     if (item.title === 'nav.workspace') {
@@ -331,7 +323,7 @@ export function AppSidebar() {
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-sidebar-foreground/80">Active Leases</span>
             <span className="text-xs text-sidebar-foreground/60">
-              {workspace?.activeLeasesUsed} / {workspace?.maxActiveLeases === -1 ? '∞' : workspace?.maxActiveLeases}
+              {workspace?.activeLeasesUsed} / {workspace?.maxActiveLeases === -1 ? '\u221e' : workspace?.maxActiveLeases}
             </span>
           </div>
           <Progress value={usagePercent} variant={getUsageVariant()} className="h-1.5" />
