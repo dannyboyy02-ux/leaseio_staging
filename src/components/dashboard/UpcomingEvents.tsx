@@ -172,6 +172,9 @@ export function UpcomingEvents() {
     );
   }
 
+  // Hide entirely when there are no events — don't show an empty card to new users
+  if (visibleEvents.length === 0) return null;
+
   const getDaysLabel = (days: number) => {
     if (days === 0) return t('dashboard.today');
     if (days === 1) return t('dashboard.tomorrow');
@@ -194,87 +197,79 @@ export function UpcomingEvents() {
         </div>
       </CardHeader>
       <CardContent>
-        {visibleEvents.length === 0 ? (
-          <div className="text-center py-8">
-            <Calendar className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-sm text-muted-foreground">{t('dashboard.no_upcoming_events')}</p>
-            <p className="text-xs text-muted-foreground mt-1">{t('dashboard.events_appear_here')}</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {visibleEvents.map((event, index) => {
-              const config = eventConfig[event.type];
-              const EventIcon = config.icon;
-              const isUrgent = event.daysUntil <= 7;
-              const isWarning = event.daysUntil <= 30;
+        <div className="space-y-3">
+          {visibleEvents.map((event, index) => {
+            const config = eventConfig[event.type];
+            const EventIcon = config.icon;
+            const isUrgent = event.daysUntil <= 7;
+            const isWarning = event.daysUntil <= 30;
 
-              return (
-                <div
-                  key={event.id}
+            return (
+              <div
+                key={event.id}
+                className={cn(
+                  'flex items-center rounded-lg transition-all animate-fade-up group',
+                  isUrgent && 'bg-destructive/5',
+                )}
+                style={{ animationDelay: `${(index + 1) * 50}ms` }}
+              >
+                <Link
+                  to={`/app/leases/${event.leaseId}`}
                   className={cn(
-                    'flex items-center rounded-lg transition-all animate-fade-up group',
-                    isUrgent && 'bg-destructive/5',
+                    'flex items-start gap-4 p-3 flex-1 min-w-0 rounded-lg hover:bg-muted/50 transition-all',
+                    isUrgent && 'hover:bg-destructive/10',
                   )}
-                  style={{ animationDelay: `${(index + 1) * 50}ms` }}
                 >
-                  <Link
-                    to={`/app/leases/${event.leaseId}`}
+                  <div
                     className={cn(
-                      'flex items-start gap-4 p-3 flex-1 min-w-0 rounded-lg hover:bg-muted/50 transition-all',
-                      isUrgent && 'hover:bg-destructive/10',
+                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+                      config.variant === 'info'        && 'bg-info/10 text-info',
+                      config.variant === 'warning'     && 'bg-warning/10 text-warning',
+                      config.variant === 'destructive' && 'bg-destructive/10 text-destructive',
+                      config.variant === 'default'     && 'bg-primary/10 text-primary',
                     )}
                   >
-                    <div
-                      className={cn(
-                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-                        config.variant === 'info'        && 'bg-info/10 text-info',
-                        config.variant === 'warning'     && 'bg-warning/10 text-warning',
-                        config.variant === 'destructive' && 'bg-destructive/10 text-destructive',
-                        config.variant === 'default'     && 'bg-primary/10 text-primary',
-                      )}
-                    >
-                      <EventIcon className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge variant={config.variant} className="text-[10px]">
-                          {t(config.labelKey)}
-                        </Badge>
-                        <span
-                          className={cn(
-                            'text-xs',
-                            isUrgent  ? 'text-destructive font-medium' :
-                            isWarning ? 'text-warning' :
-                                        'text-muted-foreground',
-                          )}
-                        >
-                          {getDaysLabel(event.daysUntil)}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium truncate">{t(event.titleKey)}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="truncate">{event.property}</span>
-                        {event.amount && (
-                          <><span>·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}</span></>
+                    <EventIcon className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant={config.variant} className="text-[10px]">
+                        {t(config.labelKey)}
+                      </Badge>
+                      <span
+                        className={cn(
+                          'text-xs',
+                          isUrgent  ? 'text-destructive font-medium' :
+                          isWarning ? 'text-warning' :
+                                      'text-muted-foreground',
                         )}
-                      </div>
+                      >
+                        {getDaysLabel(event.daysUntil)}
+                      </span>
                     </div>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {format(event.date, 'MMM d')}
-                    </span>
-                  </Link>
-                  <button
-                    onClick={() => dismissEvent(event.id)}
-                    className="p-2 mr-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
-                    title="Dismiss"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                    <p className="text-sm font-medium truncate">{t(event.titleKey)}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="truncate">{event.property}</span>
+                      {event.amount && (
+                        <><span>·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}</span></>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {format(event.date, 'MMM d')}
+                  </span>
+                </Link>
+                <button
+                  onClick={() => dismissEvent(event.id)}
+                  className="p-2 mr-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                  title="Dismiss"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );

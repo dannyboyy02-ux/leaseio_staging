@@ -1,5 +1,6 @@
-import { DollarSign, CalendarClock, AlertTriangle, Building2, FileText } from 'lucide-react';
+import { DollarSign, CalendarClock, AlertTriangle, Building2, FileText, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,7 +37,7 @@ function formatCurrency(amount: number, language: string): string {
   }).format(amount);
 }
 
-export function FinancialSummary() {
+export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }) {
   const { t, language } = useLanguage();
   const { workspace } = useApp();
 
@@ -175,6 +176,31 @@ export function FinancialSummary() {
           </CardContent>
         </Card>
       </div>
+    );
+  }
+
+  // Empty state: no leases in any stage — show a single action-oriented card
+  if ((pipeline?.pendingCount ?? 0) === 0 && (data?.activeLeaseCount ?? 0) === 0) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col items-center justify-center py-16 text-center gap-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+            <Building2 className="h-8 w-8 text-primary/60" />
+          </div>
+          <div>
+            <p className="text-base font-semibold">Your portfolio is empty</p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-xs mx-auto">
+              Submit your first lease request to start tracking commitments, approvals, and key dates.
+            </p>
+          </div>
+          {onNewRequest && (
+            <Button onClick={onNewRequest} className="mt-2">
+              <Plus className="h-4 w-4 mr-2" />
+              New Request
+            </Button>
+          )}
+        </CardContent>
+      </Card>
     );
   }
 

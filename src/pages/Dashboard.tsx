@@ -47,16 +47,16 @@ export default function Dashboard() {
         {/* Onboarding — auto-hides when all steps complete or dismissed */}
         <OnboardingChecklist />
 
-        {/* Hero KPI tiles */}
-        <FinancialSummary />
+        {/* Hero KPI tiles — shows empty state CTA when no lease data */}
+        <FinancialSummary onNewRequest={() => setCreateDrawerOpen(true)} />
 
         {/* Action Required — only renders when there are pending items */}
         <PendingApprovalsSection />
 
-        {/* Commitment trend — full width */}
+        {/* Commitment trend — hides when no data */}
         <CommitmentHistory />
 
-        {/* Upcoming Events */}
+        {/* Upcoming Events — hides when no events */}
         <UpcomingEvents />
       </div>
 

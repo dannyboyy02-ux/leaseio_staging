@@ -56,6 +56,9 @@ export function CommitmentHistory() {
     fetchData();
   }, [workspace?.id]);
 
+  // Hide entirely when there's no data — don't show an empty card to new users
+  if (!loading && data.length === 0) return null;
+
   return (
     <Card>
       <CardHeader>
@@ -73,18 +76,6 @@ export function CommitmentHistory() {
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-3 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <TrendingUp className="h-6 w-6 text-muted-foreground/40" />
-            </div>
-            <div>
-              <p className="text-sm font-medium">No commitment history yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Commitment trends will appear here as you add lease requests.
-              </p>
-            </div>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={200}>
