@@ -89,7 +89,6 @@ export default function Leases() {
   const [leases, setLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-
   const statusFilter = searchParams.get('status');
 
   const expirationFilters = [
@@ -103,7 +102,7 @@ export default function Leases() {
       const { data, error } = await supabase
         .from('leases')
         .select('*')
-        .in('lifecycle_status', ['requested', 'negotiating', 'pending_review', 'executed', 'active', 'expired', 'cancelled'])
+        .in('lifecycle_status', ['submitted', 'under_review', 'approved', 'executed', 'active', 'expired', 'cancelled'])
         .order('uploaded_at', { ascending: false });
 
       if (error) throw error;
@@ -180,7 +179,7 @@ export default function Leases() {
     return <span className="text-muted-foreground">{days} {t('dashboard.days')}</span>;
   };
 
-  const formatSqFt = (sqft: number | null) => (sqft ? `${sqft.toLocaleString()} SF` : '—');
+  const formatSqFt = (sqft: number | null) => (sqft ? `${sqft.toLocaleString()} SF` : '\u2014');
 
   const filteredAndSortedLeases = useMemo(() => {
     const result = leases.filter((lease) => {
@@ -244,7 +243,7 @@ export default function Leases() {
   }, [leases, searchQuery, expirationFilter, sortField, sortDirection, statusFilter]);
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '—';
+    if (!dateStr) return '\u2014';
     try {
       return format(parseISO(dateStr), 'MMM d, yyyy');
     } catch {
@@ -260,7 +259,7 @@ export default function Leases() {
         actions={
           <Button variant="accent" onClick={() => setCreateDrawerOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            New Lease Request
+            New Request
           </Button>
         }
       />
@@ -271,7 +270,7 @@ export default function Leases() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : leases.length === 0 ? (
-          <EmptyLeaseState onUpload={() => setCreateDrawerOpen(true)} />
+          <EmptyLeaseState onNewRequest={() => setCreateDrawerOpen(true)} />
         ) : (
           <>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -364,9 +363,9 @@ export default function Leases() {
                                 {lease.request_urgency === 'urgent' && <Badge variant="destructive" className="mt-1 w-fit text-[10px]">Urgent</Badge>}
                               </div>
                             </TableCell>
-                            <TableCell>{lease.tenant_name || '—'}</TableCell>
-                            <TableCell className="hidden lg:table-cell text-muted-foreground">{lease.landlord_name || '—'}</TableCell>
-                            <TableCell className="hidden md:table-cell">{lease.requesting_department || '—'}</TableCell>
+                            <TableCell>{lease.tenant_name || '\u2014'}</TableCell>
+                            <TableCell className="hidden lg:table-cell text-muted-foreground">{lease.landlord_name || '\u2014'}</TableCell>
+                            <TableCell className="hidden md:table-cell">{lease.requesting_department || '\u2014'}</TableCell>
                             <TableCell className="hidden md:table-cell">
                               <div className="flex flex-col gap-1">
                                 <span>{formatDate(lease.lease_end)}</span>
