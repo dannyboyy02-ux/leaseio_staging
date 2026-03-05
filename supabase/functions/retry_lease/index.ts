@@ -132,6 +132,54 @@ function safeDate(input: string | null | undefined): string | null {
   return null;
 }
 
+/**
+ * Escalation Rate Normalization
+ *
+ * Parsing boundary: rent_escalation_type is parsed ONLY in ingestion functions
+ * (process_lease and retry_lease). Downstream code must use escalation_rate
+ * and escalation_type exclusively.
+ *
+ * ASC 842 hard rule: CPI/index leases must NEVER be silently defaulted to 0.
+ * escalationRate is returned as null for index leases to make the gap explicit.
+ *
+ * Keep this function in sync with the copy in process_lease/index.ts.
+ */
+function normalizeEscalation(rentEscalationTypeRaw: string | null): {
+  escalationType: string;
+  escalationRate: number | null;
+  needsEscalationReview: boolean;
+} {
+  if (rentEscalationTypeRaw) {
+    const raw = rentEscalationTypeRaw.trim();
+
+    // Extract numeric percent (e.g. "3% annual", "2.5%", "fixed 3%")
+    const percentMatch = raw.match(/(\d+(?:\.\d+)?)\s*%/);
+    if (percentMatch) {
+      return {
+        escalationType: 'percent',
+        escalationRate: parseFloat(percentMatch[1]),
+        needsEscalationReview: false,
+      };
+    }
+
+    // Detect CPI / index-based escalation
+    const cpiPattern = /\b(cpi|index|consumer\s+price|inflation[- ]based)\b/i;
+    if (cpiPattern.test(raw)) {
+      return {
+        escalationType: 'index',
+        escalationRate: null, // explicitly null — never silently 0
+        needsEscalationReview: true,
+      };
+    }
+  }
+
+  return {
+    escalationType: 'none',
+    escalationRate: 0,
+    needsEscalationReview: false,
+  };
+}
+
 async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
   console.log('[Azure DI] Starting document analysis...');
   
@@ -237,8 +285,6 @@ For leases with escalations, extract EACH rent period separately.
 - key_dates: Array of [{date, description}]
 - risks: Array of [{title, severity (low/medium/high), explanation, citation_snippet, citation_page}]
 
-For risks, look for: unfavorable termination clauses, automatic renewals, excessive escalations (>5% annual), limited subletting rights, personal guarantees, missing provisions.
-
 Return ONLY valid JSON, no markdown.`;
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -307,7 +353,6 @@ serve(async (req) => {
     
     console.log(`[retry_lease] User authenticated: ${user.id}`);
 
-    // Parse and validate request body
     let body: unknown;
     try {
       body = await req.json();
@@ -318,7 +363,6 @@ serve(async (req) => {
       });
     }
 
-    // Validate body structure
     if (!body || typeof body !== 'object') {
       return new Response(JSON.stringify({ error: 'Request body must be an object' }), {
         status: 400,
@@ -328,7 +372,6 @@ serve(async (req) => {
 
     const { leaseId } = body as { leaseId?: unknown };
     
-    // Validate leaseId exists
     if (!leaseId) {
       return new Response(JSON.stringify({ error: 'Missing leaseId' }), {
         status: 400,
@@ -336,7 +379,6 @@ serve(async (req) => {
       });
     }
 
-    // Validate leaseId is a string
     if (typeof leaseId !== 'string') {
       return new Response(JSON.stringify({ error: 'leaseId must be a string' }), {
         status: 400,
@@ -344,7 +386,6 @@ serve(async (req) => {
       });
     }
 
-    // Validate leaseId is a valid UUID format
     if (!isValidUUID(leaseId)) {
       console.log(`[retry_lease] Invalid leaseId format: ${leaseId}`);
       return new Response(JSON.stringify({ error: 'Invalid leaseId format. Must be a valid UUID.' }), {
@@ -383,8 +424,9 @@ serve(async (req) => {
       .update({ status: 'Processing', error_message: null })
       .eq('id', leaseId);
 
-    // Delete existing risks
+    // Delete derived artifacts before regenerating to prevent duplicates
     await supabaseAdmin.from('risks').delete().eq('lease_id', leaseId);
+    await supabaseAdmin.from('rent_schedules').delete().eq('lease_id', leaseId);
 
     // Download file from storage
     const { data: fileData, error: downloadError } = await supabaseAdmin.storage
@@ -430,10 +472,13 @@ serve(async (req) => {
       throw error;
     }
 
-    // Delete existing rent schedules before re-inserting
-    await supabaseAdmin.from('rent_schedules').delete().eq('lease_id', leaseId);
+    // Normalize escalation fields — same contract as process_lease
+    // Parsing boundary: rent_escalation_type is read here and nowhere else downstream.
+    const { escalationType, escalationRate, needsEscalationReview } =
+      normalizeEscalation(leaseData.rent_escalation_type);
+    console.log(`[retry_lease] Escalation normalized: type=${escalationType}, rate=${escalationRate}, review=${needsEscalationReview}`);
 
-    // Update lease record
+    // Update lease record with normalized fields
     await supabaseAdmin
       .from('leases')
       .update({
@@ -445,7 +490,10 @@ serve(async (req) => {
         base_rent_amount: leaseData.base_rent_amount,
         base_rent_frequency: leaseData.base_rent_frequency,
         current_monthly_rent: leaseData.current_monthly_rent,
-        rent_escalation_type: leaseData.rent_escalation_type,
+        rent_escalation_type: leaseData.rent_escalation_type, // stored for reference
+        escalation_type: escalationType,
+        escalation_rate: escalationRate,
+        needs_escalation_review: needsEscalationReview,
         extracted_json: leaseData,
         processed_at: new Date().toISOString(),
         error_message: null,

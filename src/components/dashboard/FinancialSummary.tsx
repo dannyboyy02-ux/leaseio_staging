@@ -8,22 +8,12 @@ import { format, differenceInDays } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
-import { calculateLease } from '@/lib/leaseCalculations';
-
-// Default discount rate used when lease or workspace does not specify one.
-// 5% is a reasonable mid-market incremental borrowing rate for ASC 842 purposes.
-const PORTFOLIO_DISCOUNT_RATE_DEFAULT = 5.0;
+import { computePortfolioMetrics, type PortfolioMetrics } from '@/lib/portfolioAnalytics';
 
 interface PipelineData {
   pendingCount: number;
   totalCashCommitment: number;
   covenantFlaggedCount: number;
-}
-
-interface PortfolioAnalytics {
-  totalPVLiability: number;       // sum of pvLiability for non-index leases
-  indexBasedLeaseCount: number;   // count of leases where escalation_type = 'index'
-  indexBasedLeasePV: number;      // sum of pvLiability for index leases at escalation_rate=0 (floor)
 }
 
 interface FinancialData {
@@ -37,7 +27,7 @@ interface FinancialData {
     dueDate: Date;
     daysUntil: number;
   } | null;
-  portfolio: PortfolioAnalytics;
+  portfolio: PortfolioMetrics;
   indexLeaseNames: string[];
 }
 
@@ -80,7 +70,6 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
   });
 
   // Active portfolio: executed + active leases
-  // Step 2: select term_months so we can prefer it over date derivation
   const { data, isLoading } = useQuery({
     queryKey: ['financial-summary', workspace?.id],
     enabled: !!workspace?.id,
@@ -153,64 +142,19 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         };
       }
 
-      // ----------------------------------------------------------------
-      // Steps 2 + 4 — Portfolio PV Liability analytics
-      //
-      // calcLeasePV: prefers term_months (Step 2); falls back to date
-      // derivation. Uses escalation_rate and escalation_type only —
-      // never references rent_escalation_type (parsing boundary).
-      // ----------------------------------------------------------------
-      const calcLeasePV = (lease: any, escalationRateOverride?: number): number => {
-        const monthly =
-          Number(lease.executed_monthly_payment) ||
-          Number(lease.current_monthly_rent) ||
-          Number(lease.monthly_payment) ||
-          0;
-        if (!monthly) return 0;
+      // Portfolio PV analytics — delegated to pure module
+      const portfolio = computePortfolioMetrics(activeLeases as any[]);
 
-        // Step 2: prefer term_months; fall back to date derivation
-        const termMonths: number =
-          typeof lease.term_months === 'number' && lease.term_months > 0
-            ? lease.term_months
-            : lease.lease_start && lease.lease_end
-            ? Math.max(
-                1,
-                Math.round(
-                  (new Date(lease.lease_end).getTime() - new Date(lease.lease_start).getTime()) /
-                    (365.25 / 12 * 24 * 60 * 60 * 1000)
-                )
-              )
-            : 12;
-
-        const startDate: string = lease.lease_start ?? new Date().toISOString().slice(0, 10);
-
-        // escalationRateOverride is used for index leases (explicit 0 = floor estimate)
-        const escalationRate: number =
-          escalationRateOverride !== undefined
-            ? escalationRateOverride
-            : Number(lease.escalation_rate) || 0;
-
-        const discountRate: number =
-          Number(lease.discount_rate) || PORTFOLIO_DISCOUNT_RATE_DEFAULT;
-
-        try {
-          return calculateLease({ monthlyPayment: monthly, termMonths, startDate, escalationRate, discountRate }).pvLiability;
-        } catch {
-          return 0;
-        }
-      };
-
-      // Step 3 / naming: use pvLiability; aggregate per contract
-      const indexLeases    = activeLeases.filter(l => (l as any).escalation_type === 'index');
-      const nonIndexLeases = activeLeases.filter(l => (l as any).escalation_type !== 'index');
-
-      const totalPVLiability  = nonIndexLeases.reduce((sum, l) => sum + calcLeasePV(l), 0);
-      // Index leases: explicit 0 override — baseline floor, NOT a projection
-      const indexBasedLeasePV = indexLeases.reduce((sum, l) => sum + calcLeasePV(l, 0), 0);
-      const indexBasedLeaseCount = indexLeases.length;
-      const indexLeaseNames = indexLeases.map(l =>
-        getPropertyDisplayName(l.extracted_json as Record<string, unknown> | null, l.filename, 'Property')
-      );
+      // Index lease display names — UI concern, stays here
+      const indexLeaseNames = activeLeases
+        .filter(l => (l as any).escalation_type === 'index')
+        .map(l =>
+          getPropertyDisplayName(
+            l.extracted_json as Record<string, unknown> | null,
+            l.filename,
+            'Property',
+          )
+        );
 
       return {
         totalMonthlyRent,
@@ -218,7 +162,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         activeLeaseCount: activeLeases.length,
         expiringCount,
         nextPayment,
-        portfolio: { totalPVLiability, indexBasedLeaseCount, indexBasedLeasePV },
+        portfolio,
         indexLeaseNames,
       };
     },
@@ -255,7 +199,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
     );
   }
 
-  // Empty state: no leases in any stage — show a single action-oriented card
+  // Empty state: no leases in any stage
   if ((pipeline?.pendingCount ?? 0) === 0 && (data?.activeLeaseCount ?? 0) === 0) {
     return (
       <Card className="border-dashed">
@@ -320,7 +264,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
 
   return (
     <div className="space-y-4 animate-fade-up">
-      {/* Pipeline warning — only shown when there are pending leases */}
+      {/* Pipeline card — only shown when there are pending leases */}
       {(pipeline?.pendingCount ?? 0) > 0 && (
         <Card className="border-warning/30 bg-warning/5">
           <CardHeader className="pb-3">
@@ -406,9 +350,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         </CardContent>
       </Card>
 
-      {/* Step 5 — PV Liability Disclosure
-          Two honest numbers side by side. The CFO must immediately see
-          whether the top-line figure is complete or excludes index leases. */}
+      {/* PV Liability Disclosure — shown when index leases are present */}
       {(data?.portfolio.indexBasedLeaseCount ?? 0) > 0 && (
         <Card className="border-l-4 border-l-amber-400 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
           <CardHeader className="pb-3">

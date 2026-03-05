@@ -12,6 +12,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { calculateLease } from '../leaseCalculations';
+import { computePortfolioMetrics, type LeaseRow } from '../portfolioAnalytics';
 
 // ---------------------------------------------------------------------------
 // Mirror of normalizeEscalation from process_lease/index.ts
@@ -53,8 +54,6 @@ function normalizeEscalation(rentEscalationTypeRaw: string | null): {
 // ---------------------------------------------------------------------------
 describe('Scenario 1: escalation_rate column populated', () => {
   it('uses escalation_rate directly without parsing rent_escalation_type', () => {
-    // When process_lease sees a non-null escalation_rate already in the DB,
-    // normalization is skipped. Downstream analytics consume the stored value.
     const storedRate = 3.5;
     const result = calculateLease({
       monthlyPayment: 5000,
@@ -64,7 +63,7 @@ describe('Scenario 1: escalation_rate column populated', () => {
       discountRate: 5.0,
     });
     expect(result.pvLiability).toBeGreaterThan(0);
-    expect(result.totalCashCommitment).toBeGreaterThan(5000 * 24); // escalation increases total
+    expect(result.totalCashCommitment).toBeGreaterThan(5000 * 24);
   });
 });
 
@@ -101,7 +100,7 @@ describe('Scenario 3: CPI/index escalation flagging', () => {
   it('flags "CPI-based" — escalation_rate is null, not 0', () => {
     const result = normalizeEscalation('CPI-based');
     expect(result.escalationType).toBe('index');
-    expect(result.escalationRate).toBeNull(); // must be null, never 0
+    expect(result.escalationRate).toBeNull();
     expect(result.needsEscalationReview).toBe(true);
   });
 
@@ -155,43 +154,15 @@ describe('Scenario 4: both fields null/empty', () => {
 
 // ---------------------------------------------------------------------------
 // Scenario 5 — Portfolio with mixed lease types
+// Uses the real computePortfolioMetrics module (not a local mock)
 // ---------------------------------------------------------------------------
 describe('Scenario 5: mixed portfolio aggregation', () => {
-  interface MockLease {
-    escalationType: string;
-    monthlyPayment: number;
-    termMonths: number;
-    startDate: string;
-    escalationRate: number;
-    discountRate: number;
-  }
-
-  function computePortfolio(leases: MockLease[]) {
-    const nonIndex = leases.filter(l => l.escalationType !== 'index');
-    const index    = leases.filter(l => l.escalationType === 'index');
-
-    const pv = (l: MockLease, rateOverride?: number) =>
-      calculateLease({
-        monthlyPayment: l.monthlyPayment,
-        termMonths:     l.termMonths,
-        startDate:      l.startDate,
-        escalationRate: rateOverride !== undefined ? rateOverride : l.escalationRate,
-        discountRate:   l.discountRate,
-      }).pvLiability;
-
-    return {
-      totalPVLiability:    nonIndex.reduce((s, l) => s + pv(l), 0),
-      indexBasedLeaseCount: index.length,
-      indexBasedLeasePV:   index.reduce((s, l) => s + pv(l, 0), 0),
-    };
-  }
-
   it('totalPVLiability excludes index leases', () => {
-    const leases: MockLease[] = [
-      { escalationType: 'percent', monthlyPayment: 5000, termMonths: 24, startDate: '2026-01-01', escalationRate: 3,   discountRate: 5 },
-      { escalationType: 'index',   monthlyPayment: 3000, termMonths: 24, startDate: '2026-01-01', escalationRate: 0,   discountRate: 5 },
+    const leases: LeaseRow[] = [
+      { escalation_type: 'percent', current_monthly_rent: 5000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 3,   discount_rate: 5 },
+      { escalation_type: 'index',   current_monthly_rent: 3000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0,   discount_rate: 5 },
     ];
-    const result = computePortfolio(leases);
+    const result = computePortfolioMetrics(leases);
     const percentOnly = calculateLease({ monthlyPayment: 5000, termMonths: 24, startDate: '2026-01-01', escalationRate: 3, discountRate: 5 });
     expect(result.totalPVLiability).toBeCloseTo(percentOnly.pvLiability, 0);
     expect(result.indexBasedLeaseCount).toBe(1);
@@ -199,15 +170,14 @@ describe('Scenario 5: mixed portfolio aggregation', () => {
   });
 
   it('indexBasedLeasePV and totalPVLiability counts are correct for 3-lease mix', () => {
-    const leases: MockLease[] = [
-      { escalationType: 'percent', monthlyPayment: 4000, termMonths: 36, startDate: '2026-01-01', escalationRate: 2,   discountRate: 5 },
-      { escalationType: 'none',    monthlyPayment: 2000, termMonths: 12, startDate: '2026-01-01', escalationRate: 0,   discountRate: 5 },
-      { escalationType: 'index',   monthlyPayment: 6000, termMonths: 24, startDate: '2026-01-01', escalationRate: 0,   discountRate: 5 },
+    const leases: LeaseRow[] = [
+      { escalation_type: 'percent', current_monthly_rent: 4000, term_months: 36, lease_start: '2026-01-01', escalation_rate: 2, discount_rate: 5 },
+      { escalation_type: 'none',    current_monthly_rent: 2000, term_months: 12, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
+      { escalation_type: 'index',   current_monthly_rent: 6000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
     ];
-    const result = computePortfolio(leases);
+    const result = computePortfolioMetrics(leases);
     expect(result.indexBasedLeaseCount).toBe(1);
     expect(result.indexBasedLeasePV).toBeGreaterThan(0);
-    // totalPVLiability should include only the percent + none leases
     const expected = [
       calculateLease({ monthlyPayment: 4000, termMonths: 36, startDate: '2026-01-01', escalationRate: 2, discountRate: 5 }).pvLiability,
       calculateLease({ monthlyPayment: 2000, termMonths: 12, startDate: '2026-01-01', escalationRate: 0, discountRate: 5 }).pvLiability,
@@ -218,7 +188,6 @@ describe('Scenario 5: mixed portfolio aggregation', () => {
 
 // ---------------------------------------------------------------------------
 // Scenario 6 — Dashboard renders both figures when indexBasedLeaseCount > 0
-// (logic test — UI rendering verified in integration/E2E)
 // ---------------------------------------------------------------------------
 describe('Scenario 6: dashboard disclosure condition', () => {
   it('shows disclosure when indexBasedLeaseCount > 0', () => {
@@ -283,25 +252,23 @@ describe('Scenario 8: term_months fallback to date derivation', () => {
 
 // ---------------------------------------------------------------------------
 // Scenario 9 — Downstream analytics never references rent_escalation_type
-// (architectural boundary — verified by code search, asserted conceptually here)
 // ---------------------------------------------------------------------------
 describe('Scenario 9: parsing boundary — downstream uses escalation_type only', () => {
-  it('portfolio computation uses escalation_type flag, not rent_escalation_type string', () => {
-    // Simulate what FinancialSummary does: filter by escalation_type field
-    const leases = [
-      { escalation_type: 'percent', rent_escalation_type: '3% annual',   monthly: 5000 },
-      { escalation_type: 'index',   rent_escalation_type: 'CPI-linked',  monthly: 3000 },
-      { escalation_type: 'none',    rent_escalation_type: null,           monthly: 2000 },
+  it('computePortfolioMetrics filters on escalation_type, not rent_escalation_type', () => {
+    const leases: LeaseRow[] = [
+      { escalation_type: 'percent', current_monthly_rent: 5000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 3, discount_rate: 5 },
+      { escalation_type: 'index',   current_monthly_rent: 3000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
+      { escalation_type: 'none',    current_monthly_rent: 2000, term_months: 12, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
     ];
-
-    // Downstream code must filter on escalation_type — never parse rent_escalation_type
-    const nonIndex = leases.filter(l => l.escalation_type !== 'index');
-    const index    = leases.filter(l => l.escalation_type === 'index');
-
-    expect(nonIndex).toHaveLength(2);
-    expect(index).toHaveLength(1);
-    expect(index[0].escalation_type).toBe('index');
-    // Downstream code does not need to inspect rent_escalation_type at all
+    const result = computePortfolioMetrics(leases);
+    // Only 2 non-index leases contribute to totalPVLiability
+    expect(result.indexBasedLeaseCount).toBe(1);
+    // totalPVLiability must exclude the index lease
+    const nonIndexTotal = [
+      calculateLease({ monthlyPayment: 5000, termMonths: 24, startDate: '2026-01-01', escalationRate: 3, discountRate: 5 }).pvLiability,
+      calculateLease({ monthlyPayment: 2000, termMonths: 12, startDate: '2026-01-01', escalationRate: 0, discountRate: 5 }).pvLiability,
+    ].reduce((a, b) => a + b, 0);
+    expect(result.totalPVLiability).toBeCloseTo(nonIndexTotal, 0);
   });
 });
 
@@ -315,13 +282,11 @@ describe('ASC 842 hard rules', () => {
   });
 
   it('index lease PV uses explicit 0 override, documented as floor estimate', () => {
-    // When portfolio code calculates index lease PV, it passes 0 explicitly
-    // as an override. This is a documented floor, not a projection.
     const floor = calculateLease({
       monthlyPayment: 5000,
       termMonths: 24,
       startDate: '2026-01-01',
-      escalationRate: 0, // explicit override for floor calculation
+      escalationRate: 0,
       discountRate: 5.0,
     });
     expect(floor.pvLiability).toBeGreaterThan(0);
@@ -338,5 +303,12 @@ describe('ASC 842 hard rules', () => {
     expect(result).toHaveProperty('pvLiability');
     expect(result).not.toHaveProperty('pvExposure');
     expect(result).not.toHaveProperty('totalPVExposure');
+  });
+
+  it('computePortfolioMetrics result has correct property names', () => {
+    const result = computePortfolioMetrics([]);
+    expect(result).toHaveProperty('totalPVLiability');
+    expect(result).toHaveProperty('indexBasedLeaseCount');
+    expect(result).toHaveProperty('indexBasedLeasePV');
   });
 });
