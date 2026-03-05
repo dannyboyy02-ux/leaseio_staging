@@ -1,4 +1,4 @@
-import { DollarSign, CalendarClock, AlertTriangle, Building2, FileText, Plus } from 'lucide-react';
+import { DollarSign, CalendarClock, AlertTriangle, Building2, FileText, Plus, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ interface FinancialData {
   annualObligation: number;
   activeLeaseCount: number;
   expiringCount: number;
+  avgRemainingTermMonths: number;
   nextPayment: {
     amount: number;
     property: string;
@@ -106,6 +107,20 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         return d >= now && d <= in90Days;
       }).length;
 
+      // Average remaining term in months across active portfolio
+      const avgRemainingTermMonths =
+        activeLeases.length > 0
+          ? Math.round(
+              activeLeases.reduce((sum, lease) => {
+                const raw = (lease as any).executed_expiry_date || lease.lease_end;
+                if (!raw) return sum;
+                const endDate = new Date(raw);
+                const remainingMs = Math.max(0, endDate.getTime() - now.getTime());
+                return sum + remainingMs / ((365.25 / 12) * 24 * 60 * 60 * 1000);
+              }, 0) / activeLeases.length,
+            )
+          : 0;
+
       let nextPayment: FinancialData['nextPayment'] = null;
       if (activeLeases.length > 0 && totalMonthlyRent > 0) {
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -161,6 +176,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         annualObligation: totalMonthlyRent * 12,
         activeLeaseCount: activeLeases.length,
         expiringCount,
+        avgRemainingTermMonths,
         nextPayment,
         portfolio,
         indexLeaseNames,
@@ -349,6 +365,48 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
           </div>
         </CardContent>
       </Card>
+
+      {/* Portfolio Health — always shown when active leases exist */}
+      {(data?.activeLeaseCount ?? 0) > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2 text-foreground/80">
+              <TrendingUp className="h-4 w-4" />
+              Portfolio Health
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-6 sm:grid-cols-3">
+              <div>
+                <p className="text-sm text-muted-foreground">PV Liability (ASC 842)</p>
+                <p className="text-2xl font-bold font-display">
+                  {formatCurrency(data!.portfolio.totalPVLiability, language)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">present value of all lease obligations</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Avg Remaining Term</p>
+                <p className="text-2xl font-bold font-display">
+                  {data!.avgRemainingTermMonths}{' '}
+                  <span className="text-base font-normal text-muted-foreground">mo</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">across active portfolio</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Expiring \u2264 90 Days</p>
+                <p className={`text-2xl font-bold font-display ${
+                  (data?.expiringCount ?? 0) > 0 ? 'text-warning' : ''
+                }`}>
+                  {data!.expiringCount}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {(data?.expiringCount ?? 0) > 0 ? 'require attention' : 'no upcoming expirations'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* PV Liability Disclosure — shown when index leases are present */}
       {(data?.portfolio.indexBasedLeaseCount ?? 0) > 0 && (
