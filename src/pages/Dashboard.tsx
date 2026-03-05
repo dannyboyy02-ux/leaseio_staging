@@ -9,6 +9,7 @@ import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
 import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
 import { CommitmentHistory } from '@/components/dashboard/CommitmentHistory';
+import { EscalationReviewPanel } from '@/components/dashboard/EscalationReviewPanel';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -52,6 +53,9 @@ export default function Dashboard() {
 
         {/* Hero KPI tiles — shows empty state CTA when no lease data */}
         <FinancialSummary onNewRequest={() => setCreateDrawerOpen(true)} />
+
+        {/* Escalation Review — hides when no leases need review */}
+        <EscalationReviewPanel />
 
         {/* Commitment trend — hides when no data */}
         <CommitmentHistory />
