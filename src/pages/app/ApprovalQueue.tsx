@@ -26,7 +26,6 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -36,6 +35,7 @@ import { cn } from '@/lib/utils';
 interface QueueLease {
   id: string;
   request_title: string | null;
+  tenant_name: string | null;
   requesting_department: string | null;
   asset_type: string | null;
   monthly_payment: number | null;
@@ -54,7 +54,7 @@ interface QueueLease {
 }
 
 const fmt = (n: number | null | undefined) =>
-  n != null ? `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—';
+  n != null ? `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '\u2014';
 
 function LeaseQueueCard({
   lease,
@@ -80,7 +80,10 @@ function LeaseQueueCard({
     : lease.lifecycle_status === 'rejected' ? 'Rejected'
     : lease.lifecycle_status;
 
-  const canManagerAct = isManagerApprover && lease.lifecycle_status === 'submitted' && !lease.financial_returned_to_submitter;
+  const canManagerAct =
+    isManagerApprover &&
+    lease.lifecycle_status === 'submitted' &&
+    !lease.financial_returned_to_submitter;
   const canFinancialAct = isFinancialApprover && lease.lifecycle_status === 'under_review';
   const canAct = canManagerAct || canFinancialAct;
 
@@ -97,11 +100,16 @@ function LeaseQueueCard({
               >
                 {lease.request_title || 'Untitled Request'}
               </button>
+              {lease.tenant_name && (
+                <p className="text-xs font-medium text-foreground/70 mt-0.5 truncate">
+                  {lease.tenant_name}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground mt-0.5">
                 {lease.asset_type && (
                   <span className="capitalize">{lease.asset_type}</span>
                 )}
-                {lease.requesting_department && ` · ${lease.requesting_department}`}
+                {lease.requesting_department && ` \u00b7 ${lease.requesting_department}`}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -123,7 +131,9 @@ function LeaseQueueCard({
             </div>
             <div className="rounded-md bg-muted/60 p-2">
               <p className="text-muted-foreground">Term</p>
-              <p className="font-semibold">{lease.term_months != null ? `${lease.term_months} mo` : '—'}</p>
+              <p className="font-semibold">
+                {lease.term_months != null ? `${lease.term_months} mo` : '\u2014'}
+              </p>
             </div>
             <div className="rounded-md bg-muted/60 p-2">
               <p className="text-muted-foreground">Total Commitment</p>
@@ -145,7 +155,7 @@ function LeaseQueueCard({
           {/* Actions */}
           {!viewerMode && (
             <div className="flex flex-wrap gap-2 pt-1">
-              {canAct ? (
+              {canManagerAct ? (
                 <>
                   <Button
                     size="sm"
@@ -165,22 +175,45 @@ function LeaseQueueCard({
                     <XCircle className="h-4 w-4 mr-1.5" />
                     Reject
                   </Button>
+                  <Button size="sm" variant="ghost" onClick={() => onView(lease)} className="gap-1">
+                    View Lease <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </>
-              ) : canFinancialAct ? null : (
+              ) : canFinancialAct ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => onView(lease)}
+                    className="flex-1 sm:flex-none gap-1"
+                  >
+                    Open Financial Review <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 sm:flex-none text-destructive hover:text-destructive"
+                    onClick={() => onReject(lease)}
+                  >
+                    <XCircle className="h-4 w-4 mr-1.5" />
+                    Reject
+                  </Button>
+                </>
+              ) : (
                 <Button size="sm" variant="ghost" onClick={() => onView(lease)} className="gap-1">
-                  View Details <ChevronRight className="h-4 w-4" />
-                </Button>
-              )}
-              {canFinancialAct && (
-                <Button size="sm" variant="default" onClick={() => onView(lease)} className="flex-1 sm:flex-none gap-1">
-                  Review <ChevronRight className="h-4 w-4" />
+                  View Lease <ChevronRight className="h-4 w-4" />
                 </Button>
               )}
             </div>
           )}
           {viewerMode && (
-            <Button size="sm" variant="ghost" onClick={() => onView(lease)} className="gap-1 w-full sm:w-auto">
-              View <ChevronRight className="h-4 w-4" />
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onView(lease)}
+              className="gap-1 w-full sm:w-auto"
+            >
+              View Lease <ChevronRight className="h-4 w-4" />
             </Button>
           )}
         </div>
@@ -201,7 +234,6 @@ export default function ApprovalQueue() {
   const [reviewed, setReviewed] = useState<QueueLease[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Dialog state
   const [approveTarget, setApproveTarget] = useState<QueueLease | null>(null);
   const [rejectTarget, setRejectTarget] = useState<QueueLease | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -220,7 +252,8 @@ export default function ApprovalQueue() {
       return {
         ...l,
         requestorEmail: p?.email,
-        requestorName: p?.first_name && p?.last_name ? `${p.first_name} ${p.last_name}` : p?.email,
+        requestorName:
+          p?.first_name && p?.last_name ? `${p.first_name} ${p.last_name}` : p?.email,
       };
     });
   };
@@ -233,7 +266,10 @@ export default function ApprovalQueue() {
         supabase
           .from('leases')
           .select(
-            'id, request_title, requesting_department, asset_type, monthly_payment, term_months, calc_total_commitment, covenant_flagged, lifecycle_status, financial_returned_to_submitter, manager_approved_by, manager_approved_at, financial_approved_by, created_at, uploaded_at, requestor_id',
+            'id, request_title, tenant_name, requesting_department, asset_type,' +
+            'monthly_payment, term_months, calc_total_commitment, covenant_flagged,' +
+            'lifecycle_status, financial_returned_to_submitter, manager_approved_by,' +
+            'manager_approved_at, financial_approved_by, created_at, uploaded_at, requestor_id',
           )
           .eq('workspace_id', workspace.id);
 
@@ -257,24 +293,20 @@ export default function ApprovalQueue() {
 
       const myReviewResults = await Promise.all(myReviewConditions.map((q) => q));
       const myReviewLeases = myReviewResults.flatMap((r) => r.data || []);
-      // deduplicate by id
-      const myReviewUniq = Array.from(new Map(myReviewLeases.map((l) => [l.id, l])).values());
+      const myReviewUniq = Array.from(
+        new Map(myReviewLeases.map((l) => [l.id, l])).values()
+      );
 
-      // All Pending
       const { data: allPendingData } = await baseQuery()
         .in('lifecycle_status', ['submitted', 'under_review'])
         .order('uploaded_at', { ascending: false });
 
-      // Reviewed (where I was the approver)
       const { data: reviewedData } = await baseQuery()
-        .or(
-          `manager_approved_by.eq.${user.id},financial_approved_by.eq.${user.id}`,
-        )
+        .or(`manager_approved_by.eq.${user.id},financial_approved_by.eq.${user.id}`)
         .not('lifecycle_status', 'in', '("submitted","under_review")')
         .order('uploaded_at', { ascending: false })
         .limit(50);
 
-      // Also fetch rejected/returned items from activity log where I acted
       const { data: activityRows } = await supabase
         .from('lease_activity_log')
         .select('lease_id')
@@ -291,14 +323,17 @@ export default function ApprovalQueue() {
       }
 
       const reviewedUniq = Array.from(
-        new Map([...(reviewedData || []), ...actedLeases].map((l) => [l.id, l])).values(),
+        new Map(
+          [...(reviewedData || []), ...actedLeases].map((l) => [l.id, l])
+        ).values()
       );
 
-      const [myReviewWithProfiles, allPendingWithProfiles, reviewedWithProfiles] = await Promise.all([
-        attachProfiles(myReviewUniq),
-        attachProfiles(allPendingData || []),
-        attachProfiles(reviewedUniq),
-      ]);
+      const [myReviewWithProfiles, allPendingWithProfiles, reviewedWithProfiles] =
+        await Promise.all([
+          attachProfiles(myReviewUniq),
+          attachProfiles(allPendingData || []),
+          attachProfiles(reviewedUniq),
+        ]);
 
       setPendingMyReview(myReviewWithProfiles);
       setAllPending(allPendingWithProfiles);
@@ -310,11 +345,8 @@ export default function ApprovalQueue() {
     }
   }, [workspace?.id, user?.id, isManagerApprover, isFinancialApprover]);
 
-  useEffect(() => {
-    fetchLeases();
-  }, [fetchLeases]);
+  useEffect(() => { fetchLeases(); }, [fetchLeases]);
 
-  // Poll on window focus
   useEffect(() => {
     const handler = () => fetchLeases();
     window.addEventListener('focus', handler);
@@ -330,7 +362,6 @@ export default function ApprovalQueue() {
 
     try {
       if (isManager) {
-        // Manager approves → under_review
         await supabase
           .from('leases')
           .update({
@@ -350,7 +381,6 @@ export default function ApprovalQueue() {
           details: { role: 'manager_approver' },
         } as any);
 
-        // Notify financial approvers
         const { data: finRoles } = await (supabase as any)
           .from('workspace_roles')
           .select('user_id')
@@ -369,13 +399,12 @@ export default function ApprovalQueue() {
           } as any);
         }
       } else {
-        // Financial approve is handled from FinancialReview page — navigate there
         navigate(`/app/leases/${lease.id}/financial-review`);
         setApproveTarget(null);
         return;
       }
 
-      toast.success('Approved — forwarded to financial review');
+      toast.success('Approved \u2014 forwarded to financial review');
       setApproveTarget(null);
       fetchLeases();
     } catch (err) {
@@ -413,7 +442,6 @@ export default function ApprovalQueue() {
           details: { role: 'manager_approver', reason: rejectReason.trim() },
         } as any);
       } else {
-        // Financial approver — final rejection
         await supabase
           .from('leases')
           .update({
@@ -433,7 +461,6 @@ export default function ApprovalQueue() {
         } as any);
       }
 
-      // Notify submitter
       if (lease.requestorEmail) {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
@@ -537,12 +564,16 @@ export default function ApprovalQueue() {
           <DialogHeader>
             <DialogTitle>Approve this commitment?</DialogTitle>
             <DialogDescription>
-              Approving will forward "{approveTarget?.request_title}" to the Financial Approver for review.
-              This action is recorded in the audit log.
+              Approving will forward "{approveTarget?.request_title}" to the Financial Approver
+              for review. This action is recorded in the audit log.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setApproveTarget(null)} disabled={isActing}>
+            <Button
+              variant="outline"
+              onClick={() => setApproveTarget(null)}
+              disabled={isActing}
+            >
               Cancel
             </Button>
             <Button onClick={handleApprove} disabled={isActing}>
@@ -554,12 +585,16 @@ export default function ApprovalQueue() {
       </Dialog>
 
       {/* Reject Dialog */}
-      <Dialog open={!!rejectTarget} onOpenChange={(o) => { if (!o) { setRejectTarget(null); setRejectReason(''); } }}>
+      <Dialog
+        open={!!rejectTarget}
+        onOpenChange={(o) => { if (!o) { setRejectTarget(null); setRejectReason(''); } }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Reject this request?</DialogTitle>
             <DialogDescription>
-              The submitter will be notified with your reason. This action is recorded in the audit log.
+              The submitter will be notified with your reason. This action is recorded in the
+              audit log.
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
@@ -570,13 +605,17 @@ export default function ApprovalQueue() {
               id="reject-reason"
               className="mt-2"
               rows={4}
-              placeholder="Explain why this request is being rejected…"
+              placeholder="Explain why this request is being rejected\u2026"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => { setRejectTarget(null); setRejectReason(''); }} disabled={isActing}>
+            <Button
+              variant="outline"
+              onClick={() => { setRejectTarget(null); setRejectReason(''); }}
+              disabled={isActing}
+            >
               Cancel
             </Button>
             <Button
