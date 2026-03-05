@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FileText, Building2, Truck, Settings, Box, ArrowLeft, Loader2, FilePlus, FileEdit, Cpu } from 'lucide-react';
+import {
+  Building2, Truck, Settings, Box,
+  ArrowLeft, Loader2, FilePlus, FileEdit, Cpu,
+} from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -11,8 +14,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ParentLeaseCombobox } from '@/components/workflow/ParentLeaseCombobox';
 import { useLifecycleWorkflow } from '@/hooks/useLifecycleWorkflow';
-import { useApp } from '@/contexts/AppContext';
-import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { cn } from '@/lib/utils';
 import type { LeaseCategory as LegacyLeaseCategory } from '@/types/lifecycle';
 import type { LeaseCategory, WorkflowLeaseType } from '@/types/workflow';
@@ -32,53 +33,72 @@ interface NavigationState {
 }
 
 export default function NewLease() {
-  const { t } = useAppTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { workspace } = useApp();
   const { isBusinessPlan, isLoading, createDraftLease } = useLifecycleWorkflow();
 
-  const navigationState = location.state as NavigationState | null;
+  const navState = location.state as NavigationState | null;
 
-  // Workflow fields (from drawer)
+  // Workflow selectors
   const [workflowCategory, setWorkflowCategory] = useState<LeaseCategory>(
-    navigationState?.workflowCategory || 'New Lease'
+    navState?.workflowCategory || 'New Lease'
   );
   const [workflowLeaseType, setWorkflowLeaseType] = useState<WorkflowLeaseType>(
-    navigationState?.workflowLeaseType || 'Real Estate'
+    navState?.workflowLeaseType || 'Real Estate'
   );
-  const [parentLeaseId, setParentLeaseId] = useState<string | undefined>(
-    navigationState?.parentLeaseId
-  );
-
-  // Legacy fields
+  const [parentLeaseId, setParentLeaseId] = useState<string | undefined>(navState?.parentLeaseId);
   const [assetCategory, setAssetCategory] = useState<LegacyLeaseCategory>('property');
-  const [businessUnit, setBusinessUnit] = useState('');
-  const [estimatedTermMin, setEstimatedTermMin] = useState('');
-  const [estimatedTermMax, setEstimatedTermMax] = useState('');
-  const [estimatedCostMin, setEstimatedCostMin] = useState('');
-  const [estimatedCostMax, setEstimatedCostMax] = useState('');
+
+  // Intake fields
+  const [requestTitle, setRequestTitle] = useState('');
+  const [tenantName, setTenantName] = useState('');
+  const [requestingDepartment, setRequestingDepartment] = useState('');
+  const [leaseStart, setLeaseStart] = useState('');
+  const [leaseEnd, setLeaseEnd] = useState('');
+  const [monthlyRent, setMonthlyRent] = useState('');
+  const [escalationType, setEscalationType] = useState('');
+  const [escalationRate, setEscalationRate] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Derived term preview
+  const termMonthsPreview =
+    leaseStart && leaseEnd && leaseEnd > leaseStart
+      ? Math.round(
+          (new Date(leaseEnd).getTime() - new Date(leaseStart).getTime()) /
+            ((365.25 / 12) * 24 * 60 * 60 * 1000)
+        )
+      : null;
+
+  const canSubmit =
+    requestTitle.trim() &&
+    tenantName.trim() &&
+    requestingDepartment.trim() &&
+    monthlyRent &&
+    parseFloat(monthlyRent) > 0 &&
+    leaseStart &&
+    leaseEnd &&
+    leaseEnd > leaseStart &&
+    (workflowCategory !== 'Lease Amendment' || parentLeaseId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!businessUnit.trim()) {
-      return;
-    }
-
-    const termMin = parseInt(estimatedTermMin) || 12;
-    const termMax = parseInt(estimatedTermMax) || termMin;
+    if (!canSubmit) return;
 
     const leaseId = await createDraftLease({
       category: assetCategory,
-      businessUnit: businessUnit.trim(),
-      estimatedTermMin: termMin,
-      estimatedTermMax: termMax,
-      estimatedMonthlyCostMin: estimatedCostMin ? parseFloat(estimatedCostMin) : undefined,
-      estimatedMonthlyCostMax: estimatedCostMax ? parseFloat(estimatedCostMax) : undefined,
+      businessUnit: requestingDepartment.trim(),
+      requestTitle: requestTitle.trim(),
+      tenantName: tenantName.trim(),
+      requestingDepartment: requestingDepartment.trim(),
+      monthlyRent: parseFloat(monthlyRent),
+      leaseStart,
+      leaseEnd,
+      escalationType: escalationType || undefined,
+      escalationRate:
+        escalationType === 'percent' && escalationRate
+          ? parseFloat(escalationRate)
+          : undefined,
       notes: notes.trim() || undefined,
-      // New workflow fields
       workflowCategory,
       workflowLeaseType,
       parentLeaseId: workflowCategory === 'Lease Amendment' ? parentLeaseId : undefined,
@@ -92,15 +112,12 @@ export default function NewLease() {
   if (!isBusinessPlan) {
     return (
       <AppLayout>
-        <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
-          <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-          <h2 className="text-2xl font-semibold mb-2">{t('new_lease.business_required')}</h2>
-          <p className="text-muted-foreground text-center max-w-md mb-6">
-            {t('new_lease.business_required_desc')}
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
+          <h2 className="text-2xl font-semibold mb-2">Business Plan Required</h2>
+          <p className="text-muted-foreground max-w-md mb-6">
+            Lease workflow is available on the Business plan.
           </p>
-          <Button onClick={() => navigate('/app/upgrade')}>
-            {t('new_lease.upgrade_to_business')}
-          </Button>
+          <Button onClick={() => navigate('/app/upgrade')}>Upgrade to Business</Button>
         </div>
       </AppLayout>
     );
@@ -109,23 +126,24 @@ export default function NewLease() {
   return (
     <AppLayout>
       <AppHeader
-        title={t('new_lease.title')}
-        subtitle={t('new_lease.subtitle')}
+        title="New Lease Request"
+        subtitle="Submit a commitment for review and approval"
         actions={
           <Button variant="outline" onClick={() => navigate('/app/dashboard')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            {t('new_lease.back')}
+            Back
           </Button>
         }
       />
 
       <div className="p-6 max-w-2xl">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Workflow Category (New vs Amendment) */}
+
+          {/* Workflow Category */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{t('new_lease.category_title')}</CardTitle>
-              <CardDescription>{t('new_lease.category_desc')}</CardDescription>
+              <CardTitle className="text-lg">Category</CardTitle>
+              <CardDescription>New commitment or amendment to an existing lease?</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
@@ -136,13 +154,10 @@ export default function NewLease() {
                     'h-20 flex flex-col gap-2',
                     workflowCategory === 'New Lease' && 'ring-2 ring-primary ring-offset-2'
                   )}
-                  onClick={() => {
-                    setWorkflowCategory('New Lease');
-                    setParentLeaseId(undefined);
-                  }}
+                  onClick={() => { setWorkflowCategory('New Lease'); setParentLeaseId(undefined); }}
                 >
                   <FilePlus className="h-6 w-6" />
-                  <span>{t('new_lease.new_lease')}</span>
+                  <span>New Lease</span>
                 </Button>
                 <Button
                   type="button"
@@ -154,33 +169,30 @@ export default function NewLease() {
                   onClick={() => setWorkflowCategory('Lease Amendment')}
                 >
                   <FileEdit className="h-6 w-6" />
-                  <span>{t('new_lease.amendment')}</span>
+                  <span>Amendment</span>
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Parent Lease Selection (for amendments) */}
+          {/* Parent Lease */}
           {workflowCategory === 'Lease Amendment' && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">{t('new_lease.parent_title')}</CardTitle>
-                <CardDescription>{t('new_lease.parent_desc')}</CardDescription>
+                <CardTitle className="text-lg">Parent Lease</CardTitle>
+                <CardDescription>Select the lease being amended</CardDescription>
               </CardHeader>
               <CardContent>
-                <ParentLeaseCombobox
-                  value={parentLeaseId}
-                  onValueChange={setParentLeaseId}
-                />
+                <ParentLeaseCombobox value={parentLeaseId} onValueChange={setParentLeaseId} />
               </CardContent>
             </Card>
           )}
 
-          {/* Lease Type (Real Estate vs Equipment) */}
+          {/* Lease Type */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{t('new_lease.type_title')}</CardTitle>
-              <CardDescription>{t('new_lease.type_desc')}</CardDescription>
+              <CardTitle className="text-lg">Lease Type</CardTitle>
+              <CardDescription>Real estate or equipment?</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
@@ -194,7 +206,7 @@ export default function NewLease() {
                   onClick={() => setWorkflowLeaseType('Real Estate')}
                 >
                   <Building2 className="h-6 w-6" />
-                  <span>{t('new_lease.real_estate')}</span>
+                  <span>Real Estate</span>
                 </Button>
                 <Button
                   type="button"
@@ -206,17 +218,66 @@ export default function NewLease() {
                   onClick={() => setWorkflowLeaseType('Equipment')}
                 >
                   <Cpu className="h-6 w-6" />
-                  <span>{t('new_lease.equipment')}</span>
+                  <span>Equipment</span>
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Asset Category Selection */}
+          {/* Request Details */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{t('new_lease.asset_category_title')}</CardTitle>
-              <CardDescription>{t('new_lease.asset_category_desc')}</CardDescription>
+              <CardTitle className="text-lg">Request Details</CardTitle>
+              <CardDescription>Identify this commitment and the requesting team</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="requestTitle">
+                  Request Title <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="requestTitle"
+                  placeholder="e.g. Austin HQ Expansion — 5th Floor"
+                  value={requestTitle}
+                  onChange={(e) => setRequestTitle(e.target.value)}
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="tenantName">
+                  Tenant / Counterparty Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="tenantName"
+                  placeholder="e.g. Acme Properties LLC"
+                  value={tenantName}
+                  onChange={(e) => setTenantName(e.target.value)}
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="requestingDepartment">
+                  Requesting Department <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="requestingDepartment"
+                  placeholder="e.g. Operations"
+                  value={requestingDepartment}
+                  onChange={(e) => setRequestingDepartment(e.target.value)}
+                  required
+                  className="mt-1"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Asset Category */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Asset Category</CardTitle>
+              <CardDescription>What type of asset is being leased?</CardDescription>
             </CardHeader>
             <CardContent>
               <RadioGroup
@@ -228,11 +289,7 @@ export default function NewLease() {
                   const Icon = ASSET_CATEGORY_ICONS[cat];
                   return (
                     <div key={cat}>
-                      <RadioGroupItem
-                        value={cat}
-                        id={cat}
-                        className="peer sr-only"
-                      />
+                      <RadioGroupItem value={cat} id={cat} className="peer sr-only" />
                       <Label
                         htmlFor={cat}
                         className="flex flex-col items-center justify-center p-4 border-2 rounded-lg cursor-pointer transition-all peer-checked:border-primary peer-checked:bg-primary/5 hover:bg-muted/50"
@@ -247,113 +304,139 @@ export default function NewLease() {
             </CardContent>
           </Card>
 
-          {/* Business Unit */}
+          {/* Lease Term */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{t('new_lease.business_unit_title')}</CardTitle>
-              <CardDescription>{t('new_lease.business_unit_desc')}</CardDescription>
+              <CardTitle className="text-lg">Lease Term</CardTitle>
+              <CardDescription>Commencement and expiry dates</CardDescription>
             </CardHeader>
             <CardContent>
-              <Input
-                placeholder={t('new_lease.business_unit_placeholder')}
-                value={businessUnit}
-                onChange={(e) => setBusinessUnit(e.target.value)}
-                required
-              />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="leaseStart">
+                    Start Date <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="leaseStart"
+                    type="date"
+                    value={leaseStart}
+                    onChange={(e) => setLeaseStart(e.target.value)}
+                    required
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="leaseEnd">
+                    End Date <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="leaseEnd"
+                    type="date"
+                    value={leaseEnd}
+                    min={leaseStart || undefined}
+                    onChange={(e) => setLeaseEnd(e.target.value)}
+                    required
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              {termMonthsPreview !== null && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Term: {termMonthsPreview} months
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          {/* Estimated Term */}
+          {/* Financial Terms */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{t('new_lease.term_title')}</CardTitle>
-              <CardDescription>{t('new_lease.term_desc')}</CardDescription>
+              <CardTitle className="text-lg">Financial Terms</CardTitle>
+              <CardDescription>Monthly commitment and escalation details</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <Label htmlFor="termMin" className="text-xs text-muted-foreground">{t('new_lease.minimum')}</Label>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="monthlyRent">
+                  Monthly Rent <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative mt-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                   <Input
-                    id="termMin"
+                    id="monthlyRent"
                     type="number"
-                    min="1"
-                    placeholder="12"
-                    value={estimatedTermMin}
-                    onChange={(e) => setEstimatedTermMin(e.target.value)}
+                    min="0"
+                    step="0.01"
+                    placeholder="5,000"
+                    className="pl-7"
+                    value={monthlyRent}
+                    onChange={(e) => setMonthlyRent(e.target.value)}
                     required
                   />
                 </div>
-                <span className="text-muted-foreground mt-5">{t('new_lease.to')}</span>
-                <div className="flex-1">
-                  <Label htmlFor="termMax" className="text-xs text-muted-foreground">{t('new_lease.maximum')}</Label>
-                  <Input
-                    id="termMax"
-                    type="number"
-                    min="1"
-                    placeholder="36"
-                    value={estimatedTermMax}
-                    onChange={(e) => setEstimatedTermMax(e.target.value)}
-                  />
-                </div>
-                <span className="text-muted-foreground mt-5">{t('new_lease.months')}</span>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Estimated Cost */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">{t('new_lease.cost_title')}</CardTitle>
-              <CardDescription>{t('new_lease.cost_desc')}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <Label htmlFor="costMin" className="text-xs text-muted-foreground">{t('new_lease.minimum')}</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                    <Input
-                      id="costMin"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="1,000"
-                      className="pl-7"
-                      value={estimatedCostMin}
-                      onChange={(e) => setEstimatedCostMin(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <span className="text-muted-foreground mt-5">{t('new_lease.to')}</span>
-                <div className="flex-1">
-                  <Label htmlFor="costMax" className="text-xs text-muted-foreground">{t('new_lease.maximum')}</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                    <Input
-                      id="costMax"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="5,000"
-                      className="pl-7"
-                      value={estimatedCostMax}
-                      onChange={(e) => setEstimatedCostMax(e.target.value)}
-                    />
-                  </div>
-                </div>
+              <div>
+                <Label className="mb-2 block">Escalation Type</Label>
+                <RadioGroup
+                  value={escalationType}
+                  onValueChange={(v) => {
+                    setEscalationType(v);
+                    if (v !== 'percent') setEscalationRate('');
+                  }}
+                  className="flex flex-wrap gap-4"
+                >
+                  {[
+                    { value: '', label: 'None' },
+                    { value: 'percent', label: 'Fixed %' },
+                    { value: 'index', label: 'CPI / Index' },
+                  ].map(({ value, label }) => (
+                    <div key={value || 'none'} className="flex items-center gap-2">
+                      <RadioGroupItem value={value} id={`esc-${value || 'none'}`} />
+                      <Label htmlFor={`esc-${value || 'none'}`} className="cursor-pointer font-normal">
+                        {label}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
               </div>
+
+              {escalationType === 'percent' && (
+                <div>
+                  <Label htmlFor="escalationRate">Annual Escalation Rate</Label>
+                  <div className="relative mt-1">
+                    <Input
+                      id="escalationRate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      placeholder="3.0"
+                      value={escalationRate}
+                      onChange={(e) => setEscalationRate(e.target.value)}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                  </div>
+                </div>
+              )}
+
+              {escalationType === 'index' && (
+                <p className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md p-3">
+                  CPI / index-based leases are flagged for manual rate review before the rent
+                  schedule is finalized.
+                </p>
+              )}
             </CardContent>
           </Card>
 
           {/* Notes */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{t('new_lease.notes_title')}</CardTitle>
-              <CardDescription>{t('new_lease.notes_desc')}</CardDescription>
+              <CardTitle className="text-lg">Notes</CardTitle>
+              <CardDescription>Additional context for reviewers (optional)</CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
-                placeholder={t('new_lease.notes_placeholder')}
+                placeholder="Background, urgency, special conditions…"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={4}
@@ -363,24 +446,17 @@ export default function NewLease() {
 
           {/* Actions */}
           <div className="flex justify-end gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate('/app/dashboard')}
-            >
-              {t('new_lease.cancel')}
+            <Button type="button" variant="outline" onClick={() => navigate('/app/dashboard')}>
+              Cancel
             </Button>
-            <Button 
-              type="submit" 
-              disabled={isLoading || !businessUnit.trim() || (workflowCategory === 'Lease Amendment' && !parentLeaseId)}
-            >
+            <Button type="submit" disabled={isLoading || !canSubmit}>
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {t('new_lease.creating')}
+                  Submitting…
                 </>
               ) : (
-                t('new_lease.save_draft')
+                'Submit Request'
               )}
             </Button>
           </div>

@@ -16,15 +16,24 @@ import { getApprovalRequirements, getInitialStatusAfterSubmission } from '@/lib/
 interface CreateDraftLeaseInput {
   category: LeaseCategory;
   businessUnit: string;
-  estimatedTermMin: number;
-  estimatedTermMax: number;
+  estimatedTermMin?: number;
+  estimatedTermMax?: number;
   estimatedMonthlyCostMin?: number;
   estimatedMonthlyCostMax?: number;
   notes?: string;
-  // New workflow fields
+  // Workflow fields
   workflowCategory?: 'New Lease' | 'Lease Amendment';
   workflowLeaseType?: 'Real Estate' | 'Equipment';
   parentLeaseId?: string;
+  // Pilot intake fields — all optional so existing callers are unaffected
+  requestTitle?: string;
+  requestingDepartment?: string;
+  tenantName?: string;
+  monthlyRent?: number;
+  leaseStart?: string;
+  leaseEnd?: string;
+  escalationType?: string;
+  escalationRate?: number;
 }
 
 interface SubmitForApprovalInput {
@@ -52,6 +61,18 @@ export function useLifecycleWorkflow() {
 
     setIsLoading(true);
     try {
+      // Derive term months from actual dates if provided
+      let derivedTermMonths: number | null = null;
+      if (input.leaseStart && input.leaseEnd) {
+        derivedTermMonths = Math.max(
+          1,
+          Math.round(
+            (new Date(input.leaseEnd).getTime() - new Date(input.leaseStart).getTime()) /
+              ((365.25 / 12) * 24 * 60 * 60 * 1000)
+          )
+        );
+      }
+
       // Determine initial lifecycle status via workspace approval routing
       const [rolesResult, wsResult] = await Promise.all([
         supabase
@@ -70,10 +91,12 @@ export function useLifecycleWorkflow() {
       const hasFinancialApprovers = roles.includes('financial_approver');
       const approvalThreshold: number | null = wsResult.data?.approval_threshold ?? null;
 
-      // Use estimated max commitment for routing; if not provided, treat as zero
-      const estimatedCommitment =
-        (input.estimatedMonthlyCostMax ?? input.estimatedMonthlyCostMin ?? 0) *
-        (input.estimatedTermMax || input.estimatedTermMin || 12);
+      // Prefer actual monthly rent over range estimates for commitment routing
+      const monthlyForRouting =
+        input.monthlyRent ?? input.estimatedMonthlyCostMax ?? input.estimatedMonthlyCostMin ?? 0;
+      const termForRouting =
+        derivedTermMonths ?? input.estimatedTermMax ?? input.estimatedTermMin ?? 12;
+      const estimatedCommitment = monthlyForRouting * termForRouting;
 
       const requirements = getApprovalRequirements({
         totalCashCommitment: estimatedCommitment,
@@ -97,8 +120,18 @@ export function useLifecycleWorkflow() {
           category: input.category,
           asset_type: input.category,
           business_unit: input.businessUnit,
-          requesting_department: input.businessUnit,
-          request_title: `${input.workflowCategory || 'New Lease'} — ${input.businessUnit}`,
+          requesting_department: input.requestingDepartment ?? input.businessUnit,
+          request_title:
+            input.requestTitle ??
+            `${input.workflowCategory || 'New Lease'} — ${input.businessUnit}`,
+          tenant_name: input.tenantName ?? null,
+          monthly_payment: input.monthlyRent ?? null,
+          lease_start: input.leaseStart ?? null,
+          lease_end: input.leaseEnd ?? null,
+          term_months: derivedTermMonths,
+          escalation_type: input.escalationType ?? null,
+          escalation_rate: input.escalationRate ?? null,
+          needs_escalation_review: input.escalationType === 'index' ? true : null,
           estimated_term_min: input.estimatedTermMin,
           estimated_term_max: input.estimatedTermMax,
           estimated_monthly_cost_min: input.estimatedMonthlyCostMin,
@@ -215,7 +248,6 @@ export function useLifecycleWorkflow() {
       return false;
     }
 
-    // Validate comment required for send_back and pause
     if ((action === 'send_back' || action === 'pause') && !comment?.trim()) {
       toast.error('Comment is required for this action');
       return false;
@@ -223,7 +255,6 @@ export function useLifecycleWorkflow() {
 
     setIsLoading(true);
     try {
-      // Get current lease status
       const { data: lease, error: fetchError } = await supabase
         .from('leases')
         .select('lifecycle_status')
@@ -235,7 +266,6 @@ export function useLifecycleWorkflow() {
       const currentStatus = lease.lifecycle_status as LifecycleStatus;
       let newStatus: LifecycleStatus = currentStatus;
 
-      // Determine new status based on action
       if (action === 'approve') {
         if (approvalType === 'internal') {
           newStatus = 'under_review';
@@ -247,9 +277,7 @@ export function useLifecycleWorkflow() {
       } else if (action === 'reject') {
         newStatus = 'rejected';
       }
-      // 'pause' doesn't change status
 
-      // Record the approval action
       const { error: actionError } = await supabase
         .from('lease_approval_actions')
         .insert({
@@ -262,7 +290,6 @@ export function useLifecycleWorkflow() {
 
       if (actionError) throw actionError;
 
-      // Update lease status if changed
       if (newStatus !== currentStatus) {
         const updateData: Record<string, unknown> = {
           lifecycle_status: newStatus,
@@ -286,7 +313,6 @@ export function useLifecycleWorkflow() {
         if (updateError) throw updateError;
       }
 
-      // Log activity
       const activityType = action === 'approve' ? 'approval' 
         : action === 'reject' ? 'rejection'
         : action === 'send_back' ? 'send_back'
@@ -328,7 +354,6 @@ export function useLifecycleWorkflow() {
 
     setIsLoading(true);
     try {
-      // Check rate limit (once per 24 hours)
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: recentNudges, error: nudgeCheckError } = await supabase
         .from('lease_nudges')
@@ -344,7 +369,6 @@ export function useLifecycleWorkflow() {
         return false;
       }
 
-      // Record the nudge
       const { error: nudgeError } = await supabase
         .from('lease_nudges')
         .insert({
@@ -356,7 +380,6 @@ export function useLifecycleWorkflow() {
 
       if (nudgeError) throw nudgeError;
 
-      // Log activity
       await supabase.from('lease_activity_log').insert({
         lease_id: leaseId,
         user_id: user.id,
@@ -387,7 +410,6 @@ export function useLifecycleWorkflow() {
 
     setIsLoading(true);
     try {
-      // Upload file to storage
       const storagePath = `${workspace.id}/${leaseId}/${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from('leases')
@@ -395,7 +417,6 @@ export function useLifecycleWorkflow() {
 
       if (uploadError) throw uploadError;
 
-      // Update lease with file info
       const { error: updateError } = await supabase
         .from('leases')
         .update({
@@ -406,7 +427,6 @@ export function useLifecycleWorkflow() {
 
       if (updateError) throw updateError;
 
-      // Log activity
       await supabase.from('lease_activity_log').insert({
         lease_id: leaseId,
         user_id: user.id,
@@ -442,7 +462,6 @@ export function useLifecycleWorkflow() {
 
     setIsLoading(true);
     try {
-      // Update lease status to approved (pending final execution)
       const { error: leaseError } = await supabase
         .from('leases')
         .update({
@@ -452,7 +471,6 @@ export function useLifecycleWorkflow() {
 
       if (leaseError) throw leaseError;
 
-      // Assign execution approvers
       const approverInserts = approverIds.map(approverId => ({
         lease_id: leaseId,
         approver_id: approverId,
@@ -465,7 +483,6 @@ export function useLifecycleWorkflow() {
 
       if (approversError) throw approversError;
 
-      // Log activity
       await supabase.from('lease_activity_log').insert({
         lease_id: leaseId,
         user_id: user.id,
