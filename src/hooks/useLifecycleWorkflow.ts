@@ -11,7 +11,7 @@ import type {
   LeaseApprover,
   LeaseActivityLog,
 } from '@/types/lifecycle';
-import { LIFECYCLE_TRANSITIONS } from '@/types/lifecycle';
+import { getApprovalRequirements, getInitialStatusAfterSubmission } from '@/lib/approvalRouting';
 
 interface CreateDraftLeaseInput {
   category: LeaseCategory;
@@ -38,7 +38,7 @@ export function useLifecycleWorkflow() {
 
   const isBusinessPlan = workspace?.plan === 'business';
 
-  // Create a draft lease
+  // Create a lease request and route it based on workspace approval config
   const createDraftLease = useCallback(async (input: CreateDraftLeaseInput): Promise<string | null> => {
     if (!user || !workspace) {
       toast.error('You must be logged in');
@@ -52,24 +52,63 @@ export function useLifecycleWorkflow() {
 
     setIsLoading(true);
     try {
+      // Determine initial lifecycle status via workspace approval routing
+      const [rolesResult, wsResult] = await Promise.all([
+        supabase
+          .from('workspace_roles')
+          .select('role')
+          .eq('workspace_id', workspace.id),
+        (supabase as any)
+          .from('workspaces')
+          .select('approval_threshold')
+          .eq('id', workspace.id)
+          .single(),
+      ]);
+
+      const roles = (rolesResult.data || []).map((r: any) => r.role as string);
+      const hasManagerApprovers = roles.includes('manager_approver');
+      const hasFinancialApprovers = roles.includes('financial_approver');
+      const approvalThreshold: number | null = wsResult.data?.approval_threshold ?? null;
+
+      // Use estimated max commitment for routing; if not provided, treat as zero
+      const estimatedCommitment =
+        (input.estimatedMonthlyCostMax ?? input.estimatedMonthlyCostMin ?? 0) *
+        (input.estimatedTermMax || input.estimatedTermMin || 12);
+
+      const requirements = getApprovalRequirements({
+        totalCashCommitment: estimatedCommitment,
+        approvalThreshold,
+        hasManagerApprovers,
+        hasFinancialApprovers,
+        covenantFlagged: false,
+      });
+
+      const initialStatus = getInitialStatusAfterSubmission(requirements);
+      const now = new Date().toISOString();
+
       const { data, error } = await supabase
         .from('leases')
         .insert({
           user_id: user.id,
+          requestor_id: user.id,
+          lease_owner_id: user.id,
           workspace_id: workspace.id,
-          lifecycle_status: 'draft',
-          category: input.workflowCategory || input.category,
+          lifecycle_status: initialStatus,
+          category: input.category,
+          asset_type: input.category,
           business_unit: input.businessUnit,
+          requesting_department: input.businessUnit,
+          request_title: `${input.workflowCategory || 'New Lease'} — ${input.businessUnit}`,
           estimated_term_min: input.estimatedTermMin,
           estimated_term_max: input.estimatedTermMax,
           estimated_monthly_cost_min: input.estimatedMonthlyCostMin,
           estimated_monthly_cost_max: input.estimatedMonthlyCostMax,
           notes: input.notes,
-          lease_owner_id: user.id,
-          filename: `Draft - ${input.businessUnit || input.category}`,
-          status: 'draft',
+          filename: `Request - ${input.businessUnit || input.category}`,
           lease_type: input.workflowLeaseType,
           parent_lease_id: input.parentLeaseId,
+          uploaded_at: now,
+          submitted_for_approval_at: now,
         })
         .select('id')
         .single();
@@ -81,15 +120,26 @@ export function useLifecycleWorkflow() {
         lease_id: data.id,
         user_id: user.id,
         activity_type: 'created',
-        to_status: 'draft',
-        details: { category: input.category, business_unit: input.businessUnit },
+        to_status: initialStatus,
+        details: {
+          category: input.category,
+          business_unit: input.businessUnit,
+          initial_status: initialStatus,
+          requires_manager: requirements.requiresManagerApproval,
+          requires_financial: requirements.requiresFinancialApproval,
+        },
       });
 
-      toast.success('Draft lease created');
+      const statusMessages: Record<string, string> = {
+        submitted: 'Request submitted — awaiting manager review',
+        under_review: 'Request submitted — awaiting financial review',
+        approved: 'Request auto-approved (no approvers configured)',
+      };
+      toast.success(statusMessages[initialStatus] || 'Lease request submitted');
       return data.id;
     } catch (error) {
-      console.error('Error creating draft lease:', error);
-      toast.error('Failed to create draft lease');
+      console.error('Error creating lease request:', error);
+      toast.error('Failed to submit lease request');
       return null;
     } finally {
       setIsLoading(false);
@@ -114,7 +164,7 @@ export function useLifecycleWorkflow() {
       const { error: leaseError } = await supabase
         .from('leases')
         .update({
-          lifecycle_status: 'pending_internal_approval',
+          lifecycle_status: 'submitted',
           submitted_for_approval_at: new Date().toISOString(),
         })
         .eq('id', input.leaseId);
@@ -139,8 +189,7 @@ export function useLifecycleWorkflow() {
         lease_id: input.leaseId,
         user_id: user.id,
         activity_type: 'status_change',
-        from_status: 'draft',
-        to_status: 'pending_internal_approval',
+        to_status: 'submitted',
       });
 
       toast.success('Lease submitted for approval');
@@ -189,16 +238,12 @@ export function useLifecycleWorkflow() {
       // Determine new status based on action
       if (action === 'approve') {
         if (approvalType === 'internal') {
-          newStatus = 'lease_candidate';
+          newStatus = 'under_review';
         } else {
-          newStatus = 'active';
+          newStatus = 'approved';
         }
       } else if (action === 'send_back') {
-        if (approvalType === 'internal') {
-          newStatus = 'draft';
-        } else {
-          newStatus = 'lease_candidate';
-        }
+        newStatus = 'submitted';
       } else if (action === 'reject') {
         newStatus = 'rejected';
       }
@@ -224,10 +269,11 @@ export function useLifecycleWorkflow() {
         };
 
         if (action === 'approve' && approvalType === 'internal') {
-          updateData.internal_approved_at = new Date().toISOString();
+          updateData.manager_approved_by = user.id;
+          updateData.manager_approved_at = new Date().toISOString();
         } else if (action === 'approve' && approvalType === 'execution') {
-          updateData.execution_approved_at = new Date().toISOString();
-          updateData.activated_at = new Date().toISOString();
+          updateData.financial_approved_by = user.id;
+          updateData.financial_approved_at = new Date().toISOString();
         } else if (action === 'reject') {
           updateData.rejection_reason = comment;
         }
@@ -238,16 +284,6 @@ export function useLifecycleWorkflow() {
           .eq('id', leaseId);
 
         if (updateError) throw updateError;
-      }
-
-      // Mark this approver as having approved (if approve action)
-      if (action === 'approve') {
-        await supabase
-          .from('lease_approvers')
-          .update({ approved_at: new Date().toISOString() })
-          .eq('lease_id', leaseId)
-          .eq('approver_id', user.id)
-          .eq('approval_type', approvalType);
       }
 
       // Log activity
@@ -339,7 +375,7 @@ export function useLifecycleWorkflow() {
     }
   }, [user]);
 
-  // Upload document to lease (for lease_candidate stage)
+  // Upload document to lease
   const uploadLeaseDocument = useCallback(async (
     leaseId: string,
     file: File
@@ -406,11 +442,11 @@ export function useLifecycleWorkflow() {
 
     setIsLoading(true);
     try {
-      // Update lease status
+      // Update lease status to approved (pending final execution)
       const { error: leaseError } = await supabase
         .from('leases')
         .update({
-          lifecycle_status: 'pending_execution_approval',
+          lifecycle_status: 'approved',
         })
         .eq('id', leaseId);
 
@@ -434,8 +470,7 @@ export function useLifecycleWorkflow() {
         lease_id: leaseId,
         user_id: user.id,
         activity_type: 'status_change',
-        from_status: 'lease_candidate',
-        to_status: 'pending_execution_approval',
+        to_status: 'approved',
       });
 
       toast.success('Lease submitted for execution approval');

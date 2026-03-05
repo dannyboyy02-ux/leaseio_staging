@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,7 +61,9 @@ export default function Login() {
       description: t('auth.success.signed_in'),
     });
     
-    navigate('/app/dashboard');
+    const params = new URLSearchParams(location.search);
+    const next = params.get('next');
+    navigate(next || '/app/dashboard');
   };
 
   return (
@@ -113,7 +116,7 @@ export default function Login() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
