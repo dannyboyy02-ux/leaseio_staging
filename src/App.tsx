@@ -23,6 +23,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 
 // App pages (protected)
 import Onboarding from "./pages/app/Onboarding";
+import LeaseDetail from "./pages/app/LeaseDetail";
 import LeaseReview from "./pages/app/LeaseReview";
 import ApprovalQueue from "./pages/app/ApprovalQueue";
 import FinancialReview from "./pages/app/FinancialReview";
@@ -107,8 +108,18 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                {/* Lease detail — pilot intake view */}
                 <Route
                   path="/app/leases/:leaseId"
+                  element={
+                    <ProtectedRoute>
+                      <LeaseDetail />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* OCR field review — preserved at /review sub-route */}
+                <Route
+                  path="/app/leases/:leaseId/review"
                   element={
                     <ProtectedRoute>
                       <LeaseReview />
