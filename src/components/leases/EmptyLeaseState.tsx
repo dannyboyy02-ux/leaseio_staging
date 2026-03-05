@@ -13,9 +13,10 @@ export function EmptyLeaseState({ onNewRequest }: EmptyLeaseStateProps) {
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-6">
           <FileText className="h-10 w-10 text-muted-foreground" />
         </div>
-        <h3 className="text-xl font-semibold mb-2">No lease requests yet</h3>
+        <h3 className="text-xl font-semibold mb-2">No executed leases yet</h3>
         <p className="text-muted-foreground max-w-md mb-6">
-          Submit a lease request to kick off your approval workflow and start tracking commitments.
+          Leases appear here once they’ve been approved and executed through the workflow.
+          Submit a request to get started.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 max-w-2xl">
