@@ -8,11 +8,22 @@ import { format, differenceInDays } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
+import { calculateLease } from '@/lib/leaseCalculations';
+
+// Default discount rate used when lease or workspace does not specify one.
+// 5% is a reasonable mid-market incremental borrowing rate for ASC 842 purposes.
+const PORTFOLIO_DISCOUNT_RATE_DEFAULT = 5.0;
 
 interface PipelineData {
   pendingCount: number;
   totalCashCommitment: number;
   covenantFlaggedCount: number;
+}
+
+interface PortfolioAnalytics {
+  totalPVLiability: number;       // sum of pvLiability for non-index leases
+  indexBasedLeaseCount: number;   // count of leases where escalation_type = 'index'
+  indexBasedLeasePV: number;      // sum of pvLiability for index leases at escalation_rate=0 (floor)
 }
 
 interface FinancialData {
@@ -26,6 +37,8 @@ interface FinancialData {
     dueDate: Date;
     daysUntil: number;
   } | null;
+  portfolio: PortfolioAnalytics;
+  indexLeaseNames: string[];
 }
 
 function formatCurrency(amount: number, language: string): string {
@@ -67,6 +80,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
   });
 
   // Active portfolio: executed + active leases
+  // Step 2: select term_months so we can prefer it over date derivation
   const { data, isLoading } = useQuery({
     queryKey: ['financial-summary', workspace?.id],
     enabled: !!workspace?.id,
@@ -75,7 +89,8 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         .from('leases')
         .select(
           'id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
-          'lease_start, lease_end, executed_expiry_date, extracted_json'
+          'lease_start, lease_end, executed_expiry_date, extracted_json, ' +
+          'term_months, escalation_rate, escalation_type, needs_escalation_review, discount_rate'
         )
         .eq('workspace_id', workspace!.id)
         .in('lifecycle_status', ['executed', 'active']);
@@ -138,12 +153,73 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         };
       }
 
+      // ----------------------------------------------------------------
+      // Steps 2 + 4 — Portfolio PV Liability analytics
+      //
+      // calcLeasePV: prefers term_months (Step 2); falls back to date
+      // derivation. Uses escalation_rate and escalation_type only —
+      // never references rent_escalation_type (parsing boundary).
+      // ----------------------------------------------------------------
+      const calcLeasePV = (lease: any, escalationRateOverride?: number): number => {
+        const monthly =
+          Number(lease.executed_monthly_payment) ||
+          Number(lease.current_monthly_rent) ||
+          Number(lease.monthly_payment) ||
+          0;
+        if (!monthly) return 0;
+
+        // Step 2: prefer term_months; fall back to date derivation
+        const termMonths: number =
+          typeof lease.term_months === 'number' && lease.term_months > 0
+            ? lease.term_months
+            : lease.lease_start && lease.lease_end
+            ? Math.max(
+                1,
+                Math.round(
+                  (new Date(lease.lease_end).getTime() - new Date(lease.lease_start).getTime()) /
+                    (365.25 / 12 * 24 * 60 * 60 * 1000)
+                )
+              )
+            : 12;
+
+        const startDate: string = lease.lease_start ?? new Date().toISOString().slice(0, 10);
+
+        // escalationRateOverride is used for index leases (explicit 0 = floor estimate)
+        const escalationRate: number =
+          escalationRateOverride !== undefined
+            ? escalationRateOverride
+            : Number(lease.escalation_rate) || 0;
+
+        const discountRate: number =
+          Number(lease.discount_rate) || PORTFOLIO_DISCOUNT_RATE_DEFAULT;
+
+        try {
+          return calculateLease({ monthlyPayment: monthly, termMonths, startDate, escalationRate, discountRate }).pvLiability;
+        } catch {
+          return 0;
+        }
+      };
+
+      // Step 3 / naming: use pvLiability; aggregate per contract
+      const indexLeases    = activeLeases.filter(l => (l as any).escalation_type === 'index');
+      const nonIndexLeases = activeLeases.filter(l => (l as any).escalation_type !== 'index');
+
+      const totalPVLiability  = nonIndexLeases.reduce((sum, l) => sum + calcLeasePV(l), 0);
+      // Index leases: explicit 0 override — baseline floor, NOT a projection
+      const indexBasedLeasePV = indexLeases.reduce((sum, l) => sum + calcLeasePV(l, 0), 0);
+      const indexBasedLeaseCount = indexLeases.length;
+      const indexLeaseNames = indexLeases.map(l =>
+        getPropertyDisplayName(l.extracted_json as Record<string, unknown> | null, l.filename, 'Property')
+      );
+
       return {
         totalMonthlyRent,
         annualObligation: totalMonthlyRent * 12,
         activeLeaseCount: activeLeases.length,
         expiringCount,
         nextPayment,
+        portfolio: { totalPVLiability, indexBasedLeaseCount, indexBasedLeasePV },
+        indexLeaseNames,
       };
     },
   });
@@ -219,10 +295,10 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
     },
     {
       label: t('dashboard.next_payment_due'),
-      value: data?.nextPayment ? formatCurrency(data.nextPayment.amount, language) : '—',
+      value: data?.nextPayment ? formatCurrency(data.nextPayment.amount, language) : '\u2014',
       icon: CalendarClock,
       description: data?.nextPayment
-        ? `${format(data.nextPayment.dueDate, 'MMM d')} · ${data.nextPayment.daysUntil} ${t('dashboard.days')}`
+        ? `${format(data.nextPayment.dueDate, 'MMM d')} \u00b7 ${data.nextPayment.daysUntil} ${t('dashboard.days')}`
         : t('dashboard.no_upcoming_payments'),
       highlight: !!(data?.nextPayment && data.nextPayment.daysUntil <= 7),
     },
@@ -234,7 +310,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
       highlight: false,
     },
     {
-      label: 'Expiring ≤ 90 Days',
+      label: 'Expiring \u2264 90 Days',
       value: String(data?.expiringCount || 0),
       icon: AlertTriangle,
       description: (data?.expiringCount || 0) > 0 ? 'require attention' : 'all clear',
@@ -329,6 +405,49 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
           </div>
         </CardContent>
       </Card>
+
+      {/* Step 5 — PV Liability Disclosure
+          Two honest numbers side by side. The CFO must immediately see
+          whether the top-line figure is complete or excludes index leases. */}
+      {(data?.portfolio.indexBasedLeaseCount ?? 0) > 0 && (
+        <Card className="border-l-4 border-l-amber-400 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4" />
+              Index-Based Escalation \u2014 Review Required
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-8 sm:grid-cols-2 mb-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Projected PV liability</p>
+                <p className="text-2xl font-bold font-display">
+                  {formatCurrency(data!.portfolio.totalPVLiability, language)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">fixed-rate leases only</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Index-based leases (not projected)</p>
+                <p className="text-2xl font-bold font-display text-amber-600 dark:text-amber-400">
+                  {formatCurrency(data!.portfolio.indexBasedLeasePV, language)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">baseline rent \u00b7 CPI projection not applied</p>
+              </div>
+            </div>
+            <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
+              {data!.portfolio.indexBasedLeaseCount} lease{data!.portfolio.indexBasedLeaseCount !== 1 ? 's' : ''} with index-based escalation require manual review:
+            </p>
+            <ul className="space-y-1">
+              {data!.indexLeaseNames.map((name, i) => (
+                <li key={i} className="text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                  {name}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
