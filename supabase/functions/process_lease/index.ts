@@ -153,6 +153,118 @@ function safeDate(input: string | null | undefined): string | null {
   return null;
 }
 
+function extractValue(field: any): any {
+  if (field && typeof field === 'object' && 'value' in field) return field.value;
+  return field;
+}
+
+function extractConfidence(field: any): number | null {
+  if (field && typeof field === 'object' && 'confidence' in field) return field.confidence;
+  return null;
+}
+
+function validateMonthlyRent(value: number | null): { valid: boolean; issue?: string; suggestion?: string } {
+  if (value === null) return { valid: true };
+  if (value < 0) return { valid: false, issue: 'Negative rent', suggestion: 'Check if credit/refund instead' };
+  if (value < 100) return { valid: false, issue: `Low rent ($${value})`, suggestion: 'Verify monthly not daily/hourly' };
+  if (value > 500000) return { valid: false, issue: `High rent ($${value.toLocaleString()})`, suggestion: 'Check if annual not monthly or $/sqft' };
+  return { valid: true };
+}
+
+function validateDate(dateStr: string | null): { valid: boolean; issue?: string } {
+  if (!dateStr) return { valid: true };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return { valid: false, issue: 'Invalid format' };
+  const year = new Date(dateStr).getFullYear();
+  if (year < 1950 || year > 2100) return { valid: false, issue: `Year ${year} out of range` };
+  return { valid: true };
+}
+
+function validateSquareFootage(value: number | null): { valid: boolean; issue?: string } {
+  if (value === null) return { valid: true };
+  if (value < 0) return { valid: false, issue: 'Negative sqft' };
+  if (value < 100) return { valid: false, issue: 'Too small (< 100)' };
+  if (value > 10000000) return { valid: false, issue: 'Too large (> 10M)' };
+  return { valid: true };
+}
+
+function validateAddress(address: string | null): { valid: boolean; issue?: string } {
+  if (!address) return { valid: true };
+  const hasCity = /,\s*[A-Z][a-z]+/.test(address);
+  const hasState = /\b[A-Z]{2}\b/.test(address);
+  const hasZip = /\b\d{5}(-\d{4})?\b/.test(address);
+  if (!hasCity && !hasState && !hasZip) return { valid: false, issue: 'Incomplete address - missing city/state/ZIP' };
+  return { valid: true };
+}
+
+function validateLeaseData(data: any): { warnings: string[]; suggestions: string[] } {
+  const warnings: string[] = [];
+  const suggestions: string[] = [];
+  const rentCheck = validateMonthlyRent(extractValue(data.current_monthly_rent));
+  if (!rentCheck.valid) { warnings.push(rentCheck.issue || 'Rent validation failed'); if (rentCheck.suggestion) suggestions.push(rentCheck.suggestion); }
+  const addressCheck = validateAddress(extractValue(data.property_address));
+  if (!addressCheck.valid) warnings.push(addressCheck.issue || 'Address incomplete');
+  const startCheck = validateDate(extractValue(data.lease_start));
+  if (!startCheck.valid) warnings.push(`Start: ${startCheck.issue}`);
+  const endCheck = validateDate(extractValue(data.lease_end));
+  if (!endCheck.valid) warnings.push(`End: ${endCheck.issue}`);
+  const leaseStart = extractValue(data.lease_start);
+  const leaseEnd = extractValue(data.lease_end);
+  if (leaseStart && leaseEnd && new Date(leaseEnd) <= new Date(leaseStart)) warnings.push('End must be after start');
+  const sqftCheck = validateSquareFootage(extractValue(data.square_footage));
+  if (!sqftCheck.valid) warnings.push(`Sqft: ${sqftCheck.issue}`);
+  if (!extractValue(data.landlord_name)) warnings.push('Missing landlord');
+  if (!extractValue(data.tenant_name)) warnings.push('Missing tenant');
+  return { warnings, suggestions };
+}
+
+/**
+ * Step 1 — Escalation Rate Normalization
+ *
+ * Parsing boundary: rent_escalation_type is parsed ONLY here, inside process_lease.
+ * All downstream code (analytics, dashboard, reports) must use escalation_rate
+ * and escalation_type exclusively. Never parse rent_escalation_type elsewhere.
+ *
+ * ASC 842 hard rule: CPI/index leases must NEVER be silently defaulted to 0.
+ * escalationRate is returned as null for index leases to make the gap explicit.
+ */
+function normalizeEscalation(rentEscalationTypeRaw: string | null): {
+  escalationType: string;
+  escalationRate: number | null;
+  needsEscalationReview: boolean;
+} {
+  if (rentEscalationTypeRaw) {
+    const raw = rentEscalationTypeRaw.trim();
+
+    // Extract numeric percent (e.g. "3% annual", "2.5%", "fixed 3%")
+    const percentMatch = raw.match(/(\d+(?:\.\d+)?)\s*%/);
+    if (percentMatch) {
+      return {
+        escalationType: 'percent',
+        escalationRate: parseFloat(percentMatch[1]),
+        needsEscalationReview: false,
+      };
+    }
+
+    // Detect CPI / index-based escalation
+    // ASC 842: these must not be defaulted to 0 — flag for manual review
+    const cpiPattern = /\b(cpi|index|consumer\s+price|inflation[- ]based)\b/i;
+    if (cpiPattern.test(raw)) {
+      return {
+        escalationType: 'index',
+        escalationRate: null, // explicitly null — never silently 0
+        needsEscalationReview: true,
+      };
+    }
+  }
+
+  // No escalation information found
+  return {
+    escalationType: 'none',
+    escalationRate: 0,
+    needsEscalationReview: false,
+  };
+}
+
 async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
   console.log('[Azure DI] Starting document analysis...');
   const analyzeUrl = `${AZURE_DI_ENDPOINT}/documentintelligence/documentModels/prebuilt-layout:analyze?api-version=2024-11-30`;
@@ -647,70 +759,6 @@ Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
   throw lastError || new Error('All OpenAI extraction attempts failed');
 }
 
-function extractValue(field: any): any {
-  if (field && typeof field === 'object' && 'value' in field) return field.value;
-  return field;
-}
-
-function extractConfidence(field: any): number | null {
-  if (field && typeof field === 'object' && 'confidence' in field) return field.confidence;
-  return null;
-}
-
-function validateMonthlyRent(value: number | null): { valid: boolean; issue?: string; suggestion?: string } {
-  if (value === null) return { valid: true };
-  if (value < 0) return { valid: false, issue: 'Negative rent', suggestion: 'Check if credit/refund instead' };
-  if (value < 100) return { valid: false, issue: `Low rent ($${value})`, suggestion: 'Verify monthly not daily/hourly' };
-  if (value > 500000) return { valid: false, issue: `High rent ($${value.toLocaleString()})`, suggestion: 'Check if annual not monthly or $/sqft' };
-  return { valid: true };
-}
-
-function validateDate(dateStr: string | null): { valid: boolean; issue?: string } {
-  if (!dateStr) return { valid: true };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return { valid: false, issue: 'Invalid format' };
-  const year = new Date(dateStr).getFullYear();
-  if (year < 1950 || year > 2100) return { valid: false, issue: `Year ${year} out of range` };
-  return { valid: true };
-}
-
-function validateSquareFootage(value: number | null): { valid: boolean; issue?: string } {
-  if (value === null) return { valid: true };
-  if (value < 0) return { valid: false, issue: 'Negative sqft' };
-  if (value < 100) return { valid: false, issue: 'Too small (< 100)' };
-  if (value > 10000000) return { valid: false, issue: 'Too large (> 10M)' };
-  return { valid: true };
-}
-
-function validateAddress(address: string | null): { valid: boolean; issue?: string } {
-  if (!address) return { valid: true };
-  const hasCity = /,\s*[A-Z][a-z]+/.test(address);
-  const hasState = /\b[A-Z]{2}\b/.test(address);
-  const hasZip = /\b\d{5}(-\d{4})?\b/.test(address);
-  if (!hasCity && !hasState && !hasZip) return { valid: false, issue: 'Incomplete address - missing city/state/ZIP' };
-  return { valid: true };
-}
-
-function validateLeaseData(data: any): { warnings: string[]; suggestions: string[] } {
-  const warnings: string[] = [];
-  const suggestions: string[] = [];
-  const rentCheck = validateMonthlyRent(extractValue(data.current_monthly_rent));
-  if (!rentCheck.valid) { warnings.push(rentCheck.issue || 'Rent validation failed'); if (rentCheck.suggestion) suggestions.push(rentCheck.suggestion); }
-  const addressCheck = validateAddress(extractValue(data.property_address));
-  if (!addressCheck.valid) warnings.push(addressCheck.issue || 'Address incomplete');
-  const startCheck = validateDate(extractValue(data.lease_start));
-  if (!startCheck.valid) warnings.push(`Start: ${startCheck.issue}`);
-  const endCheck = validateDate(extractValue(data.lease_end));
-  if (!endCheck.valid) warnings.push(`End: ${endCheck.issue}`);
-  const leaseStart = extractValue(data.lease_start);
-  const leaseEnd = extractValue(data.lease_end);
-  if (leaseStart && leaseEnd && new Date(leaseEnd) <= new Date(leaseStart)) warnings.push('End must be after start');
-  const sqftCheck = validateSquareFootage(extractValue(data.square_footage));
-  if (!sqftCheck.valid) warnings.push(`Sqft: ${sqftCheck.issue}`);
-  if (!extractValue(data.landlord_name)) warnings.push('Missing landlord');
-  if (!extractValue(data.tenant_name)) warnings.push('Missing tenant');
-  return { warnings, suggestions };
-}
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -746,9 +794,7 @@ serve(async (req) => {
     const file = formData.get('file') as File;
     const leaseType = formData.get('leaseType') as string || 'master';
     const parentLeaseId = formData.get('parentLeaseId') as string | null;
-    // Phase 4: extraction mode. Defaults to 'pipeline' — zero breaking changes to existing callers.
     const extractionMode = (formData.get('extractionMode') as string) || 'pipeline';
-    // Phase 4: existing lease ID — required when extractionMode === 'executed'
     const targetLeaseId = formData.get('leaseId') as string | null;
 
     if (!file) {
@@ -779,7 +825,6 @@ serve(async (req) => {
 
     // ================================================================
     // PHASE 4 — EXECUTED MODE
-    // Branches here. All pipeline code below is UNTOUCHED.
     // ================================================================
     if (extractionMode === 'executed') {
       if (!targetLeaseId || !isValidUUID(targetLeaseId)) {
@@ -789,7 +834,6 @@ serve(async (req) => {
         });
       }
 
-      // Fetch existing lease (need pipeline terms for variance + auth check)
       const { data: existingLease, error: fetchError } = await supabaseAdmin
         .from('leases')
         .select('id, user_id, workspace_id, lifecycle_status, current_monthly_rent, monthly_payment, lease_start, lease_end, tenant_name, landlord_name, model_locked')
@@ -803,7 +847,6 @@ serve(async (req) => {
         });
       }
 
-      // Authorization: owner always allowed; otherwise check workspace role
       if (existingLease.user_id !== user.id) {
         if (existingLease.workspace_id) {
           const { data: roleData } = await supabaseAdmin
@@ -826,7 +869,6 @@ serve(async (req) => {
         }
       }
 
-      // Guard: cannot upload to a locked record
       if (existingLease.model_locked) {
         return new Response(JSON.stringify({ error: 'Cannot upload executed document on a locked lease record.' }), {
           status: 409,
@@ -834,7 +876,6 @@ serve(async (req) => {
         });
       }
 
-      // Build storage path: {workspace_id|user_id}/{leaseId}/executed/{timestamp}-{filename}
       const timestamp = Date.now();
       const bucketPrefix = existingLease.workspace_id
         ? `${existingLease.workspace_id}/${targetLeaseId}/executed`
@@ -848,7 +889,6 @@ serve(async (req) => {
       if (uploadError) throw new Error(`Failed to upload executed document: ${uploadError.message}`);
       console.log('[process_lease] Executed document uploaded to storage');
 
-      // Activity log: executed_uploaded
       await supabaseAdmin.from('lease_activity_log').insert({
         lease_id: targetLeaseId,
         user_id: user.id,
@@ -856,7 +896,6 @@ serve(async (req) => {
         details: { filename: sanitizedFilename, storage_path: executedStoragePath },
       });
 
-      // Azure DI OCR
       let executedText: string;
       try {
         executedText = await analyzeWithAzureDI(fileBytes);
@@ -866,7 +905,6 @@ serve(async (req) => {
         throw new Error(`Executed document analysis failed: ${msg}`);
       }
 
-      // OpenAI extraction (reuses identical function)
       let leaseData: LeaseExtractionResult;
       try {
         leaseData = await extractLeaseDataWithOpenAI(executedText);
@@ -875,7 +913,6 @@ serve(async (req) => {
         throw new Error(`Executed AI extraction failed: ${msg}`);
       }
 
-      // Map to executed_* fields
       const execMonthlyPayment   = extractValue(leaseData.current_monthly_rent) as number | null;
       const execCommencementDate = safeDate(extractValue(leaseData.lease_start));
       const execExpiryDate       = safeDate(extractValue(leaseData.lease_end));
@@ -884,7 +921,6 @@ serve(async (req) => {
       const execRentReviewClause = extractValue(leaseData.escalation_clauses) as string | null;
       const execBreakClause      = extractValue(leaseData.termination_clauses) as string | null;
 
-      // Per-field confidence summary for executed_extraction_confidence column
       const execFieldMap: [string, any][] = [
         ['monthly_payment',    leaseData.current_monthly_rent],
         ['commencement_date',  leaseData.lease_start],
@@ -900,29 +936,22 @@ serve(async (req) => {
         if (conf !== null) executedConfidence[key] = conf;
       }
 
-      // Compute variance against pipeline terms
       const pipelineMonthly = (existingLease.current_monthly_rent ?? existingLease.monthly_payment ?? null) as number | null;
-
       const varianceMonthly = execMonthlyPayment !== null && pipelineMonthly !== null
         ? execMonthlyPayment - pipelineMonthly : null;
-
       const varianceCommencementDays = execCommencementDate && existingLease.lease_start
         ? Math.round((new Date(execCommencementDate).getTime() - new Date(existingLease.lease_start as string).getTime()) / 86400000)
         : null;
-
       const varianceExpiryDays = execExpiryDate && existingLease.lease_end
         ? Math.round((new Date(execExpiryDate).getTime() - new Date(existingLease.lease_end as string).getTime()) / 86400000)
         : null;
-
       const varianceTenantMatch = execTenantName && existingLease.tenant_name
         ? execTenantName.toLowerCase().trim() === (existingLease.tenant_name as string).toLowerCase().trim()
         : null;
-
       const varianceLandlordMatch = execLandlordName && existingLease.landlord_name
         ? execLandlordName.toLowerCase().trim() === (existingLease.landlord_name as string).toLowerCase().trim()
         : null;
 
-      // Write executed + variance fields to the existing lease row
       const { error: updateError } = await supabaseAdmin
         .from('leases')
         .update({
@@ -949,7 +978,6 @@ serve(async (req) => {
 
       if (updateError) throw new Error(`Failed to update lease with executed data: ${updateError.message}`);
 
-      // Activity log: executed_terms_extracted
       await supabaseAdmin.from('lease_activity_log').insert({
         lease_id: targetLeaseId,
         user_id: user.id,
@@ -993,7 +1021,7 @@ serve(async (req) => {
     }
 
     // ================================================================
-    // PIPELINE MODE — original code UNCHANGED below this line
+    // PIPELINE MODE
     // ================================================================
 
     if (!ALLOWED_LEASE_TYPES.includes(leaseType as typeof ALLOWED_LEASE_TYPES[number])) {
@@ -1057,6 +1085,15 @@ serve(async (req) => {
       (leaseData as any)._validation_suggestions = validationSuggestions;
     }
 
+    // ----------------------------------------------------------------
+    // Step 1 — Escalation normalization
+    // Parse rent_escalation_type exactly once here.
+    // Downstream code must use escalation_type and escalation_rate only.
+    // ----------------------------------------------------------------
+    const rawRentEscalationType = extractValue(leaseData.rent_escalation_type) as string | null;
+    const { escalationType, escalationRate, needsEscalationReview } = normalizeEscalation(rawRentEscalationType);
+    console.log(`[process_lease] Escalation normalized: type=${escalationType}, rate=${escalationRate}, review=${needsEscalationReview}`);
+
     const { error: updateError } = await supabaseAdmin
       .from('leases')
       .update({
@@ -1068,7 +1105,10 @@ serve(async (req) => {
         base_rent_amount: extractValue(leaseData.base_rent_amount),
         base_rent_frequency: extractValue(leaseData.base_rent_frequency),
         current_monthly_rent: extractValue(leaseData.current_monthly_rent),
-        rent_escalation_type: extractValue(leaseData.rent_escalation_type),
+        rent_escalation_type: rawRentEscalationType, // stored for reference; use escalation_type downstream
+        escalation_type: escalationType,
+        escalation_rate: escalationRate,
+        needs_escalation_review: needsEscalationReview,
         square_footage: extractValue(leaseData.square_footage),
         extracted_json: leaseData,
         processed_at: new Date().toISOString(),
