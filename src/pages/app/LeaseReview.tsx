@@ -1065,6 +1065,10 @@ export default function LeaseReview() {
             }
             actions={
               <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
+                  Approval Queue
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
                 {lifecycleStatus === 'submitted' && (
                   <Button onClick={() => updateLifecycleStatus('under_review')}>Move to Under Review</Button>
                 )}
@@ -1549,6 +1553,10 @@ export default function LeaseReview() {
           }
           actions={
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
+                Approval Queue
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
               {/* Upload Amendment button - only for master leases */}
               {isMasterLease && !isProcessing && (
                 <UploadAmendmentDialog
