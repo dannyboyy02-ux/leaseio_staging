@@ -52,6 +52,9 @@ interface LeaseRow {
 type SortField = 'property' | 'landlord' | 'monthly_rent' | 'lease_start' | 'lease_end' | 'sqft';
 type SortDirection = 'asc' | 'desc';
 
+// Statuses that represent in-flight (awaiting action) leases
+const IN_FLIGHT_STATUSES = new Set(['submitted', 'under_review', 'approved']);
+
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -89,7 +92,7 @@ export default function Leases() {
           'lease_start, lease_end, executed_expiry_date, square_footage, ' +
           'executed_monthly_payment, current_monthly_rent, monthly_payment, extracted_json'
         )
-        .in('lifecycle_status', ['executed', 'active', 'expired'])
+        .in('lifecycle_status', ['submitted', 'under_review', 'approved', 'executed', 'active', 'expired'])
         .order('lease_end', { ascending: true });
 
       if (error) throw error;
@@ -165,7 +168,7 @@ export default function Leases() {
   };
 
   const getExpirationBadge = (days: number | null) => {
-    if (days === null) return <span className="text-muted-foreground">—</span>;
+    if (days === null) return <span className="text-muted-foreground">&mdash;</span>;
     if (days < 0) return <Badge variant="destructive">Expired</Badge>;
     if (days <= 30) return <Badge variant="destructive">{days}d</Badge>;
     if (days <= 60) return <Badge className="bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-100">{days}d</Badge>;
@@ -173,10 +176,10 @@ export default function Leases() {
     return <span className="text-sm text-muted-foreground">{days}d</span>;
   };
 
-  const formatSqFt = (sqft: number | null) => (sqft ? `${sqft.toLocaleString()} SF` : '—');
+  const formatSqFt = (sqft: number | null) => (sqft ? `${sqft.toLocaleString()} SF` : '\u2014');
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '—';
+    if (!dateStr) return '\u2014';
     try {
       return format(parseISO(dateStr), 'MMM d, yyyy');
     } catch {
@@ -197,7 +200,7 @@ export default function Leases() {
   const headerSubtitle = useMemo(() => {
     if (totalMonthlyRent > 0) {
       const count = activeLeases.length;
-      return `${formatCurrency(totalMonthlyRent)} / mo · ${count} ${count === 1 ? 'lease' : 'leases'}`;
+      return `${formatCurrency(totalMonthlyRent)} / mo \u00b7 ${count} ${count === 1 ? 'lease' : 'leases'}`;
     }
     return `${leases.length} ${leases.length === 1 ? 'lease' : 'leases'}`;
   }, [totalMonthlyRent, activeLeases, leases]);
@@ -285,7 +288,7 @@ export default function Leases() {
               <div className="relative w-full sm:w-[320px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by property or landlord…"
+                  placeholder="Search by property or landlord\u2026"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -364,20 +367,24 @@ export default function Leases() {
                       const leaseEnd = getLeaseEnd(lease);
                       const daysUntil = getDaysUntilExpiration(leaseEnd);
                       const monthlyRent = getMonthlyRent(lease);
+                      const isInFlight = IN_FLIGHT_STATUSES.has(lease.lifecycle_status || '');
                       return (
                         <TableRow
                           key={lease.id}
-                          className="cursor-pointer hover:bg-muted/50"
+                          className={cn(
+                            'cursor-pointer hover:bg-muted/50',
+                            isInFlight && 'bg-muted/20'
+                          )}
                           onClick={() => navigate(`/app/leases/${lease.id}`)}
                         >
                           <TableCell className="font-medium">
                             <span className="truncate max-w-[240px] block">{getPropertyAddress(lease)}</span>
                           </TableCell>
                           <TableCell className="hidden md:table-cell text-muted-foreground">
-                            {lease.landlord_name || '—'}
+                            {lease.landlord_name || '\u2014'}
                           </TableCell>
                           <TableCell className="tabular-nums font-medium">
-                            {monthlyRent > 0 ? formatCurrency(monthlyRent) : '—'}
+                            {monthlyRent > 0 ? formatCurrency(monthlyRent) : '\u2014'}
                           </TableCell>
                           <TableCell className="hidden sm:table-cell text-muted-foreground">
                             {formatDate(lease.lease_start)}

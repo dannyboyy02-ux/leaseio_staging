@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bell,
   User,
+  Users,
   ChevronRight,
   LogOut,
   Building2,
@@ -36,6 +37,7 @@ import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import {
   canAccessReportsDataQuality,
   canAccessWorkspaceSettings,
+  canManageWorkspaceMembers,
   canAccessApprovals,
   isSubmitterOnly,
 } from '@/lib/authorization';
@@ -60,8 +62,9 @@ const toolsItems = [
 ];
 
 const settingsNavItems = [
-  { title: 'nav.workspace', href: '/app/settings/workspace', icon: Building2 },
-  { title: 'nav.account', href: '/app/settings/account', icon: User },
+  { title: 'nav.workspace', href: '/app/settings/workspace', icon: Building2, requiresAdmin: false },
+  { title: 'Team', href: '/app/settings/workspace', icon: Users, requiresAdmin: true, overrideTitle: 'Team' },
+  { title: 'nav.account', href: '/app/settings/account', icon: User, requiresAdmin: false },
 ];
 
 export function AppSidebar() {
@@ -203,6 +206,9 @@ export function AppSidebar() {
     if (item.title === 'nav.workspace') {
       return canAccessWorkspaceSettings(userRole);
     }
+    if (item.requiresAdmin) {
+      return canManageWorkspaceMembers(userRole);
+    }
     return true;
   });
 
@@ -247,7 +253,7 @@ export function AppSidebar() {
           </p>
           <div className="space-y-1">
             {filteredToolsItems.map(renderNavItem)}
-            {/* Approvals — hidden for submitter-only users */}
+            {/* Approvals \u2014 hidden for submitter-only users */}
             {showApprovals && !hideApprovalsForSubmitterOnly && (
               <Link
                 to="/app/approvals"
@@ -281,11 +287,11 @@ export function AppSidebar() {
           <div className="space-y-1">
             {filteredSettingsNavItems.map((item) => {
               const isActive = location.pathname === item.href;
-              const translatedTitle = t(item.title);
+              const translatedTitle = item.overrideTitle || t(item.title);
               
               return (
                 <Link
-                  key={item.href}
+                  key={item.title}
                   to={item.href}
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',

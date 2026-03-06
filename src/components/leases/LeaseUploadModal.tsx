@@ -266,7 +266,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
 
   const handleViewLease = () => {
     handleClose();
-    navigate(`/app/leases/${resultLeaseId}`);
+    navigate(`/app/leases/${resultLeaseId}/review`);
   };
 
   const handleRetry = () => {
@@ -515,7 +515,6 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
               <Button 
                 variant="outline" 
                 onClick={() => {
-                  // Reset state for another upload
                   setFile(null);
                   setLeaseType('master');
                   setParentLeaseId('');
@@ -528,7 +527,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
                 Yes, Upload Another
               </Button>
               <Button variant="accent" onClick={handleViewLease} className="flex-1">
-                No, Review Lease
+                Review Extracted Data
               </Button>
             </div>
           </div>
