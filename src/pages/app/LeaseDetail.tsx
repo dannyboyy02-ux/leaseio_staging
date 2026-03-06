@@ -33,7 +33,7 @@ interface LeaseFull {
   needs_escalation_review: boolean | null;
   lifecycle_status: string;
   notes: string | null;
-  created_at: string;
+  uploaded_at: string; // leases table uses uploaded_at, not created_at
   // discount_rate lives on workspaces, not leases — fetched separately via wsSettings
 }
 
@@ -96,7 +96,7 @@ export default function LeaseDetail() {
           'id, tenant_name, request_title, requesting_department, lease_start, lease_end,' +
           'term_months, monthly_payment, current_monthly_rent, executed_monthly_payment,' +
           'escalation_type, escalation_rate, needs_escalation_review, lifecycle_status,' +
-          'notes, created_at'
+          'notes, uploaded_at'
         )
         .eq('id', leaseId!)
         .single();
@@ -240,7 +240,7 @@ export default function LeaseDetail() {
             {statusLabel}
           </span>
           <span className="text-xs text-muted-foreground">
-            Submitted {format(new Date(lease.created_at), 'MMM d, yyyy')}
+            Created {format(new Date(lease.uploaded_at), 'MMM d, yyyy')}
           </span>
         </div>
 
