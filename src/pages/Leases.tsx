@@ -177,10 +177,10 @@ export default function Leases() {
     return <span className="text-sm text-muted-foreground">{days}d</span>;
   };
 
-  const formatSqFt = (sqft: number | null) => (sqft ? `${sqft.toLocaleString()} SF` : '\u2014');
+  const formatSqFt = (sqft: number | null) => (sqft ? `${sqft.toLocaleString()} SF` : '—');
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '\u2014';
+    if (!dateStr) return '—';
     try {
       return format(parseISO(dateStr), 'MMM d, yyyy');
     } catch {
@@ -201,7 +201,7 @@ export default function Leases() {
   const headerSubtitle = useMemo(() => {
     if (totalMonthlyRent > 0) {
       const count = activeLeases.length;
-      return `${formatCurrency(totalMonthlyRent)} / mo \u00b7 ${count} ${count === 1 ? 'lease' : 'leases'}`;
+      return `${formatCurrency(totalMonthlyRent)} / mo · ${count} ${count === 1 ? 'lease' : 'leases'}`;
     }
     return `${leases.length} ${leases.length === 1 ? 'lease' : 'leases'}`;
   }, [totalMonthlyRent, activeLeases, leases]);
@@ -289,7 +289,7 @@ export default function Leases() {
               <div className="relative w-full sm:w-[320px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by property or landlord\u2026"
+                  placeholder="Search by property or landlord..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -382,10 +382,10 @@ export default function Leases() {
                             <span className="truncate max-w-[240px] block">{getPropertyAddress(lease)}</span>
                           </TableCell>
                           <TableCell className="hidden md:table-cell text-muted-foreground">
-                            {lease.landlord_name || '\u2014'}
+                            {lease.landlord_name || '—'}
                           </TableCell>
                           <TableCell className="tabular-nums font-medium">
-                            {monthlyRent > 0 ? formatCurrency(monthlyRent) : '\u2014'}
+                            {monthlyRent > 0 ? formatCurrency(monthlyRent) : '—'}
                           </TableCell>
                           <TableCell className="hidden sm:table-cell text-muted-foreground">
                             {formatDate(lease.lease_start)}

@@ -32,9 +32,9 @@ interface LeaseFull {
   escalation_rate: number | null;
   needs_escalation_review: boolean | null;
   lifecycle_status: string;
-  discount_rate: number | null;
   notes: string | null;
   created_at: string;
+  // discount_rate lives on workspaces, not leases — fetched separately via wsSettings
 }
 
 // ------------------------------------------------------------------ helpers
@@ -80,8 +80,13 @@ export default function LeaseDetail() {
   const { workspace } = useApp();
   const navigate = useNavigate();
 
-  // Fetch lease
-  const { data: lease, isLoading: leaseLoading } = useQuery({
+  // Fetch lease — discount_rate intentionally excluded (column does not exist on leases)
+  const {
+    data: lease,
+    isLoading: leaseLoading,
+    isError: leaseError,
+    error: leaseQueryError,
+  } = useQuery({
     queryKey: ['lease-detail', leaseId],
     enabled: !!leaseId,
     queryFn: async (): Promise<LeaseFull> => {
@@ -91,7 +96,7 @@ export default function LeaseDetail() {
           'id, tenant_name, request_title, requesting_department, lease_start, lease_end,' +
           'term_months, monthly_payment, current_monthly_rent, executed_monthly_payment,' +
           'escalation_type, escalation_rate, needs_escalation_review, lifecycle_status,' +
-          'discount_rate, notes, created_at'
+          'notes, created_at'
         )
         .eq('id', leaseId!)
         .single();
@@ -100,7 +105,7 @@ export default function LeaseDetail() {
     },
   });
 
-  // Fetch workspace IBR (discount_rate)
+  // Fetch workspace IBR (discount_rate lives on workspaces, not leases)
   const { data: wsSettings } = useQuery({
     queryKey: ['workspace-ibr', workspace?.id],
     enabled: !!workspace?.id,
@@ -139,7 +144,8 @@ export default function LeaseDetail() {
 
     const startDate = lease.lease_start ?? new Date().toISOString().slice(0, 10);
     const escalationRate = Number(lease.escalation_rate) || 0;
-    const discountRate = Number(wsSettings?.discount_rate) || Number(lease.discount_rate) || 5.5;
+    // discount_rate sourced from workspace IBR; fall back to 5.5% ASC 842 default
+    const discountRate = Number(wsSettings?.discount_rate) || 5.5;
 
     try {
       return {
@@ -165,6 +171,24 @@ export default function LeaseDetail() {
             <Skeleton className="h-64" />
             <Skeleton className="h-64" />
           </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // ---------------------------------------------------------------- error / not found
+  if (leaseError) {
+    const isNotFound = (leaseQueryError as any)?.code === 'PGRST116';
+    return (
+      <AppLayout>
+        <AppHeader title={isNotFound ? 'Lease not found' : 'Failed to load lease'} />
+        <div className="p-6">
+          <p className="text-muted-foreground">
+            {isNotFound
+              ? "This lease does not exist or you don't have access to it."
+              : 'There was an error loading this lease. Please try again.'}
+          </p>
+          <Button className="mt-4" onClick={() => navigate(-1)}>Go back</Button>
         </div>
       </AppLayout>
     );
@@ -325,7 +349,7 @@ export default function LeaseDetail() {
               {metrics ? (
                 <div className="space-y-4">
                   <Metric
-                    label="PV Liability (ASC 842)"
+                    label="PV Liability (ASC 842)"
                     value={fmt$(metrics.pvLiability)}
                     sub={`at ${metrics.discountRate.toFixed(2)}% IBR`}
                   />
@@ -337,7 +361,7 @@ export default function LeaseDetail() {
                   <Metric
                     label="Normalized Monthly Cost"
                     value={`${fmt$(metrics.straightLineExpense)} / mo`}
-                    sub="straight-line (ASC 842 operating)"
+                    sub="straight-line (ASC 842 operating)"
                   />
                   <Metric
                     label="Cash vs. P&L at Midpoint"

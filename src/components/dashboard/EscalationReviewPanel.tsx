@@ -101,7 +101,7 @@ export function EscalationReviewPanel() {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
             <AlertTriangle className="h-4 w-4" />
-            Escalation Clauses \u2014 Review Required
+            Escalation Clauses &mdash; Review Required
             <Badge variant="secondary" className="ml-auto text-xs">
               {leases.length}
             </Badge>
@@ -183,7 +183,7 @@ export function EscalationReviewPanel() {
               )}
               {newEscalationType === 'index' && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  CPI/Index escalation \u2014 rent schedule will use baseline rent until a fixed rate is set.
+                  CPI/Index escalation &mdash; rent schedule will use baseline rent until a fixed rate is set.
                 </p>
               )}
             </div>
@@ -191,7 +191,7 @@ export function EscalationReviewPanel() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingLease(null)}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving\u2026' : 'Save'}
+              {saving ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>

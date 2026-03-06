@@ -71,6 +71,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
   });
 
   // Active portfolio: executed + active leases
+  // Note: discount_rate is on workspaces, not leases — not selected here
   const { data, isLoading } = useQuery({
     queryKey: ['financial-summary', workspace?.id],
     enabled: !!workspace?.id,
@@ -80,7 +81,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         .select(
           'id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
           'lease_start, lease_end, executed_expiry_date, extracted_json, ' +
-          'term_months, escalation_rate, escalation_type, needs_escalation_review, discount_rate'
+          'term_months, escalation_rate, escalation_type, needs_escalation_review'
         )
         .eq('workspace_id', workspace!.id)
         .in('lifecycle_status', ['executed', 'active']);
@@ -255,10 +256,10 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
     },
     {
       label: t('dashboard.next_payment_due'),
-      value: data?.nextPayment ? formatCurrency(data.nextPayment.amount, language) : '\u2014',
+      value: data?.nextPayment ? formatCurrency(data.nextPayment.amount, language) : '—',
       icon: CalendarClock,
       description: data?.nextPayment
-        ? `${format(data.nextPayment.dueDate, 'MMM d')} \u00b7 ${data.nextPayment.daysUntil} ${t('dashboard.days')}`
+        ? `${format(data.nextPayment.dueDate, 'MMM d')} · ${data.nextPayment.daysUntil} ${t('dashboard.days')}`
         : t('dashboard.no_upcoming_payments'),
       highlight: !!(data?.nextPayment && data.nextPayment.daysUntil <= 7),
     },
@@ -270,7 +271,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
       highlight: false,
     },
     {
-      label: 'Expiring \u2264 90 Days',
+      label: 'Expiring ≤ 90 Days',
       value: String(data?.expiringCount || 0),
       icon: AlertTriangle,
       description: (data?.expiringCount || 0) > 0 ? 'require attention' : 'all clear',
@@ -280,7 +281,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
 
   return (
     <div className="space-y-4 animate-fade-up">
-      {/* Pipeline card — only shown when there are pending leases */}
+      {/* Pipeline card */}
       {(pipeline?.pendingCount ?? 0) > 0 && (
         <Card className="border-warning/30 bg-warning/5">
           <CardHeader className="pb-3">
@@ -366,7 +367,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         </CardContent>
       </Card>
 
-      {/* Portfolio Health — always shown when active leases exist */}
+      {/* Portfolio Health */}
       {(data?.activeLeaseCount ?? 0) > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -393,7 +394,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
                 <p className="text-xs text-muted-foreground mt-0.5">across active portfolio</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Expiring \u2264 90 Days</p>
+                <p className="text-sm text-muted-foreground">Expiring &le; 90 Days</p>
                 <p className={`text-2xl font-bold font-display ${
                   (data?.expiringCount ?? 0) > 0 ? 'text-warning' : ''
                 }`}>
@@ -408,13 +409,13 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         </Card>
       )}
 
-      {/* PV Liability Disclosure — shown when index leases are present */}
+      {/* PV Liability Disclosure */}
       {(data?.portfolio.indexBasedLeaseCount ?? 0) > 0 && (
         <Card className="border-l-4 border-l-amber-400 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
               <AlertTriangle className="h-4 w-4" />
-              Index-Based Escalation \u2014 Review Required
+              Index-Based Escalation &mdash; Review Required
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -431,7 +432,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
                 <p className="text-2xl font-bold font-display text-amber-600 dark:text-amber-400">
                   {formatCurrency(data!.portfolio.indexBasedLeasePV, language)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">baseline rent \u00b7 CPI projection not applied</p>
+                <p className="text-xs text-muted-foreground mt-0.5">baseline rent &middot; CPI projection not applied</p>
               </div>
             </div>
             <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
