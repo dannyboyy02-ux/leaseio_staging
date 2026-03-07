@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { sendInviteEmail, generateInviteToken } from "../_shared/resend.ts";
 
-// Secure CORS configuration
 const ALLOWED_ORIGINS = [
   'https://theleaseio.com',
   'https://www.theleaseio.com',
@@ -13,15 +13,12 @@ const ALLOWED_ORIGINS = [
 ];
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  const isLovablePreview = requestOrigin && (
-    requestOrigin.includes('lovableproject.com') ||
-    requestOrigin.includes('lovable.app')
-  );
-  const isProductionDomain = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin);
-  const isAllowed = isProductionDomain || isLovablePreview;
-  
+  const isAllowed =
+    requestOrigin &&
+    (ALLOWED_ORIGINS.includes(requestOrigin) ||
+      requestOrigin.includes('lovableproject.com') ||
+      requestOrigin.includes('lovable.app'));
   const origin = isAllowed ? requestOrigin : ALLOWED_ORIGINS[0];
-    
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -30,183 +27,221 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   };
 }
 
-// Default CORS headers for backwards compatibility
-const corsHeaders = getCorsHeaders(null);
+function okRes(corsHeaders: Record<string, string>, code: string, message: string, data: unknown = {}) {
+  return new Response(JSON.stringify({ ok: true, code, message, data }), {
+    status: 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
 
-// HTML escape function to prevent XSS in email templates
-function escapeHtml(text: string): string {
-  const map: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  };
-  return text.replace(/[&<>"']/g, m => map[m]);
+function errRes(corsHeaders: Record<string, string>, code: string, message: string, status = 200) {
+  return new Response(JSON.stringify({ ok: false, code, message }), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
+
+  if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    if (!resendApiKey) throw new Error("RESEND_API_KEY is not set");
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
+    if (!resendApiKey) {
+      return errRes(corsHeaders, 'DB_ERROR', 'RESEND_API_KEY not set', 500);
+    }
 
-    const supabaseClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      { auth: { persistSession: false } }
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } },
     );
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header provided");
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
+    // --- Authenticate caller ---
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) return errRes(corsHeaders, 'UNAUTHORIZED', 'No authorization header', 401);
+    const token = authHeader.replace('Bearer ', '');
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !userData.user) return errRes(corsHeaders, 'UNAUTHORIZED', 'Invalid token', 401);
     const user = userData.user;
-    if (!user) throw new Error("User not authenticated");
 
     const { emails, role, workspaceId, workspaceName } = await req.json();
-    
-    if (!emails || !Array.isArray(emails) || emails.length === 0) {
-      throw new Error("At least one email is required");
-    }
 
-    if (!workspaceId) {
-      throw new Error("Workspace ID is required");
-    }
+    if (!Array.isArray(emails) || emails.length === 0)
+      return errRes(corsHeaders, 'INVALID_REQUEST', 'At least one email required', 400);
+    if (!workspaceId)
+      return errRes(corsHeaders, 'INVALID_REQUEST', 'workspaceId required', 400);
 
-    // SECURITY: Verify the authenticated user is the workspace owner
-    // Only workspace owners should be able to send invitations
-    const { data: workspace, error: wsError } = await supabaseClient
-      .from("workspaces")
-      .select("owner_id")
-      .eq("id", workspaceId)
+    // --- Authorize: owner OR admin ---
+    const { data: workspace, error: wsError } = await supabaseAdmin
+      .from('workspaces')
+      .select('owner_id, name')
+      .eq('id', workspaceId)
       .single();
+    if (wsError || !workspace) return errRes(corsHeaders, 'NOT_FOUND', 'Workspace not found', 404);
 
-    if (wsError || !workspace) {
-      throw new Error("Workspace not found");
+    const isOwner = workspace.owner_id === user.id;
+    if (!isOwner) {
+      const { data: membership } = await supabaseAdmin
+        .from('workspace_members')
+        .select('role')
+        .eq('workspace_id', workspaceId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (membership?.role !== 'admin') {
+        return errRes(corsHeaders, 'UNAUTHORIZED', 'Only workspace owners or admins may send invitations', 403);
+      }
     }
 
-    if (workspace.owner_id !== user.id) {
-      throw new Error("Only workspace owners can send invitations");
-    }
+    const wsName = workspaceName ?? workspace.name ?? 'Workspace';
+    const origin = req.headers.get('origin') || 'https://theleaseio.com';
 
-    const origin = req.headers.get("origin") || "https://leaseio.app";
-    const results = [];
+    const results: Array<{ email: string; ok: boolean; code: string; message: string }> = [];
 
-    for (const email of emails) {
+    for (const rawEmail of emails) {
+      const email = String(rawEmail).trim().toLowerCase();
+
       try {
-        // Check if already invited or member
-        const { data: existingInvite } = await supabaseClient
-          .from("workspace_members")
-          .select("id")
-          .eq("workspace_id", workspaceId)
-          .eq("invited_email", email.toLowerCase())
+        // 1. Fast-path: check for active membership by invited_email.
+        //    Catches the common case where a known email was previously invited.
+        //    Uses .filter() — safe PostgREST not.is serialization.
+        const { data: activeMemberByEmail } = await supabaseAdmin
+          .from('workspace_members')
+          .select('id')
+          .eq('workspace_id', workspaceId)
+          .eq('invited_email', email)
+          .filter('user_id', 'not.is', 'null')
           .maybeSingle();
 
-        if (existingInvite) {
-          results.push({ email, success: false, error: "Already invited" });
+        if (activeMemberByEmail) {
+          results.push({ email, ok: false, code: 'ALREADY_MEMBER', message: 'Already a member' });
           continue;
         }
 
-        // Check if user exists
-        const { data: existingProfile } = await supabaseClient
-          .from("profiles")
-          .select("id")
-          .eq("email", email.toLowerCase())
+        // 2. Check for existing pending invite in invite_tokens
+        const { data: existingInvite } = await supabaseAdmin
+          .from('invite_tokens')
+          .select('id, token, expires_at')
+          .eq('workspace_id', workspaceId)
+          .eq('email', email)
+          .is('accepted_at', null)
+          .maybeSingle();
+
+        if (existingInvite) {
+          // RESEND path — email FIRST, update DB only after confirmed send
+          const inviteUrl = `${origin}/accept-invite?token=${existingInvite.token}`;
+          const sendResult = await sendInviteEmail({ resendApiKey, to: email, workspaceName: wsName, role, inviteUrl });
+          if (!sendResult.sent) {
+            results.push({ email, ok: false, code: 'API_ERROR', message: sendResult.error ?? 'Email send failed' });
+            continue;
+          }
+          // Email confirmed — now extend expiry
+          await supabaseAdmin
+            .from('invite_tokens')
+            .update({ expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() })
+            .eq('id', existingInvite.id);
+          results.push({ email, ok: true, code: 'INVITE_RESENT', message: 'Invitation resent' });
+          continue;
+        }
+
+        // 3. Check if user already has a profile (existing LeaseIO account)
+        const { data: existingProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('email', email)
           .maybeSingle();
 
         if (existingProfile) {
-          // Add directly as member
-          const { error: memberError } = await supabaseClient
-            .from("workspace_members")
+          // Guard: check for existing membership by user_id — more reliable than invited_email,
+          // which may be null, stale, or absent for members added via other paths.
+          const { data: existingMemberById } = await supabaseAdmin
+            .from('workspace_members')
+            .select('id')
+            .eq('workspace_id', workspaceId)
+            .eq('user_id', existingProfile.id)
+            .maybeSingle();
+
+          if (existingMemberById) {
+            results.push({ email, ok: false, code: 'ALREADY_MEMBER', message: 'Already a member' });
+            continue;
+          }
+
+          // Add directly as member — no email needed
+          const { error: memberError } = await supabaseAdmin
+            .from('workspace_members')
             .insert({
               workspace_id: workspaceId,
               user_id: existingProfile.id,
               role,
-              invited_email: email.toLowerCase(),
+              invited_email: email,
               invited_at: new Date().toISOString(),
               accepted_at: new Date().toISOString(),
             });
 
-          if (memberError) throw memberError;
-          results.push({ email, success: true, added: true });
-        } else {
-          // Create pending invite
-          const { data: invite, error: inviteError } = await supabaseClient
-            .from("invite_tokens")
-            .insert({
-              workspace_id: workspaceId,
-              email: email.toLowerCase(),
-              role,
-            })
-            .select()
-            .single();
-
-          if (inviteError) throw inviteError;
-
-          // Send invitation email
-          const inviteUrl = `${origin}/accept-invite?token=${invite.token}`;
-          
-          const emailRes = await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${resendApiKey}`,
-            },
-            body: JSON.stringify({
-              from: "LeaseIO <notifications@theleaseio.com>",
-              to: [email],
-              subject: `You've been invited to join ${escapeHtml(workspaceName)} on LeaseIO`,
-              html: `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2>You've been invited to join a workspace</h2>
-                  <p>You've been invited to join <strong>${escapeHtml(workspaceName)}</strong> on LeaseIO as a ${escapeHtml(role)}.</p>
-                  <p style="margin: 24px 0;">
-                    <a href="${inviteUrl}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
-                      Accept Invitation
-                    </a>
-                  </p>
-                  <p style="color: #666; font-size: 14px;">This invitation expires in 7 days.</p>
-                  <p style="color: #666; font-size: 14px;">If you didn't expect this invitation, you can ignore this email.</p>
-                </div>
-              `,
-            }),
-          });
-
-          if (!emailRes.ok) {
-            console.error("Email send error:", await emailRes.text());
-            results.push({ email, success: true, emailSent: false });
+          if (memberError) {
+            results.push({ email, ok: false, code: 'DB_ERROR', message: memberError.message });
           } else {
-            results.push({ email, success: true, emailSent: true });
+            results.push({ email, ok: true, code: 'MEMBER_ADDED', message: 'User added directly' });
           }
+          continue;
         }
-      } catch (err) {
-        const errMessage = err instanceof Error ? err.message : String(err);
-        console.error(`Error inviting ${email}:`, errMessage);
-        results.push({ email, success: false, error: errMessage });
+
+        // 4. NEW INVITE path — generate token in app code, send email FIRST, write DB after
+        const inviteToken = generateInviteToken();
+        const inviteUrl = `${origin}/accept-invite?token=${inviteToken}`;
+
+        const sendResult = await sendInviteEmail({ resendApiKey, to: email, workspaceName: wsName, role, inviteUrl });
+        if (!sendResult.sent) {
+          results.push({ email, ok: false, code: 'API_ERROR', message: sendResult.error ?? 'Email send failed' });
+          continue;
+        }
+
+        // Email confirmed — now write the DB row
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { error: insertError } = await supabaseAdmin
+          .from('invite_tokens')
+          .insert({ workspace_id: workspaceId, email, role, token: inviteToken, expires_at: expiresAt });
+
+        if (insertError) {
+          console.error('[send-invite] DB insert failed after confirmed send:', insertError);
+          results.push({
+            email,
+            ok: false,
+            code: 'DB_COMMIT_FAILED_AFTER_SEND',
+            message: 'Email sent but invite record could not be saved',
+          });
+          continue;
+        }
+
+        results.push({ email, ok: true, code: 'INVITE_SENT', message: 'Invitation sent' });
+
+      } catch (innerErr) {
+        const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+        console.error(`[send-invite] Error processing ${email}:`, msg);
+        results.push({ email, ok: false, code: 'DB_ERROR', message: msg });
       }
     }
-    const successCount = results.filter(r => r.success).length;
-    
-    return new Response(JSON.stringify({ 
-      success: successCount > 0,
-      results,
-      message: `${successCount} of ${emails.length} invitations processed`
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+
+    const successCount = results.filter((r) => r.ok).length;
+    return new Response(
+      JSON.stringify({
+        ok: successCount > 0,
+        code: successCount > 0 ? 'PARTIAL_SUCCESS' : 'ALL_FAILED',
+        message: `${successCount} of ${emails.length} invitations processed`,
+        data: { results },
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[SEND-INVITE] Error:", errorMessage);
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[send-invite] Unhandled error:', msg);
+    return new Response(JSON.stringify({ ok: false, code: 'DB_ERROR', message: msg }), {
       status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });

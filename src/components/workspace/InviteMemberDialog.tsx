@@ -114,35 +114,34 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
         return;
       }
 
-      if ("error" in data && data.error) {
-        console.error("send-invite returned error:", data.error);
-        toast.error(typeof data.error === "string" ? data.error : "Failed to send invitations");
+      // Top-level guard: no results array and top-level failure
+      if (!data?.ok && !Array.isArray((data as any)?.data?.results)) {
+        toast.error((data as any)?.message || "Failed to send invitations");
         return;
       }
 
-      const resultsRaw = (data as any).results;
+      // New response contract: { ok, code, message, data: { results: [...] } }
+      const perEmailResults: Array<{ email: string; ok: boolean; code: string; message: string }> =
+        Array.isArray((data as any).data?.results) ? (data as any).data.results : [];
 
-      // Normalize results safely
-      const results: Array<{ email: string; success: boolean; error?: string }> = Array.isArray(resultsRaw)
-        ? resultsRaw
-        : [];
-
-      const successCount = results.filter((r) => r?.success).length;
-      const failCount = emails.length - successCount;
-
-      if (successCount > 0) {
-        toast.success(`${successCount} invitation${successCount > 1 ? "s" : ""} sent successfully`);
+      // top-level ok:false with an empty results array — surface the top-level message
+      if (perEmailResults.length === 0) {
+        toast.error((data as any).message || "Failed to send invitations");
+        return;
       }
 
-      if (failCount > 0) {
-        // If backend gave per-email failures, show them; otherwise show a generic failure
-        const failures = results.filter((r) => !r?.success);
-        if (failures.length > 0) {
-          failures.forEach((f) => toast.error(`${f.email}: ${f.error || "Failed to invite"}`));
+      const successCount = perEmailResults.filter((r) => r?.ok).length;
+
+      perEmailResults.forEach((r) => {
+        if (r.ok) {
+          if (r.code === "INVITE_RESENT") toast.success(`${r.email}: Invitation resent, expiry extended`);
+          else if (r.code === "MEMBER_ADDED") toast.success(`${r.email}: Added directly — they already have an account`);
+          else toast.success(`${r.email}: Invitation sent`);
         } else {
-          toast.error(`${failCount} invitation${failCount > 1 ? "s" : ""} failed`);
+          if (r.code === "ALREADY_MEMBER") toast.info(`${r.email}: Already a member`);
+          else toast.error(`${r.email}: ${r.message || "Failed to invite"}`);
         }
-      }
+      });
 
       // Only close dialog if at least one succeeded
       if (successCount > 0) {

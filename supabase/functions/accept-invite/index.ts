@@ -30,15 +30,13 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   };
 }
 
-// Default CORS headers for backwards compatibility
-const corsHeaders = getCorsHeaders(null);
-
 // Validate token format (hex string, 64 chars for 32 bytes)
 function isValidTokenFormat(token: string): boolean {
   return /^[a-f0-9]{64}$/i.test(token);
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -111,26 +109,31 @@ serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    // Fetch and validate invite token
+    // Fetch invite token — without accepted_at filter so we can distinguish codes
     const { data: invite, error: inviteError } = await supabaseAdmin
       .from("invite_tokens")
       .select("*")
       .eq("token", inviteToken)
-      .is("accepted_at", null)
-      .single();
+      .maybeSingle();
 
     if (inviteError || !invite) {
       return new Response(
-        JSON.stringify({ error: "Invalid or already used invitation" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ ok: false, code: "NOT_FOUND", message: "Invitation not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check if invite has expired
+    if (invite.accepted_at !== null) {
+      return new Response(
+        JSON.stringify({ ok: false, code: "ALREADY_ACCEPTED", message: "Invitation has already been accepted" }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (new Date(invite.expires_at) < new Date()) {
       return new Response(
-        JSON.stringify({ error: "Invitation has expired" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ ok: false, code: "EXPIRED_INVITE", message: "Invitation has expired" }),
+        { status: 410, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -172,7 +175,7 @@ serve(async (req) => {
         .eq("id", invite.id);
 
       return new Response(
-        JSON.stringify({ success: true, message: "You are already a member of this workspace" }),
+        JSON.stringify({ ok: true, code: "ALREADY_MEMBER", message: "You are already a member of this workspace", workspaceId: invite.workspace_id, workspaceName: workspace.name }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -225,12 +228,7 @@ serve(async (req) => {
     console.log(`[ACCEPT-INVITE] User ${user.id} joined workspace ${invite.workspace_id}`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: "Successfully joined workspace",
-        workspaceId: invite.workspace_id,
-        workspaceName: workspace.name
-      }),
+      JSON.stringify({ ok: true, code: "JOINED", message: "Successfully joined workspace", workspaceId: invite.workspace_id, workspaceName: workspace.name }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

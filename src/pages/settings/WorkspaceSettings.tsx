@@ -25,6 +25,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
 import { MemberRoleSelect } from '@/components/workspace/MemberRoleSelect';
+import { PendingInvitesList } from '@/components/workspace/PendingInvitesList';
 import { WorkspaceRole } from '@/types';
 import type { FunctionalRole } from '@/types/lifecycle';
 import { Link } from 'react-router-dom';
@@ -214,6 +215,19 @@ export default function WorkspaceSettings() {
       }) || [];
     },
     enabled: !!workspace?.id,
+  });
+
+  const { data: pendingInvites = [], refetch: refetchPending } = useQuery({
+    queryKey: ['pending-invites', workspace?.id],
+    queryFn: async () => {
+      if (!workspace?.id) return [];
+      const { data, error } = await supabase.functions.invoke('list-pending-invites', {
+        body: { workspaceId: workspace.id },
+      });
+      if (error || !data?.ok) return [];
+      return data.data?.invites || [];
+    },
+    enabled: !!workspace?.id && canManageMembers,
   });
 
   const handleSaveGeneral = async () => {
@@ -469,6 +483,18 @@ export default function WorkspaceSettings() {
                   )}
                 </CardContent>
               </Card>
+
+              {pendingInvites.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Pending Invitations</CardTitle>
+                    <CardDescription>Invitations that have not yet been accepted.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <PendingInvitesList invites={pendingInvites} onRefresh={refetchPending} />
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Approval Roles — only shown when multiple members exist */}
               {members && members.length > 1 && (
@@ -737,7 +763,7 @@ export default function WorkspaceSettings() {
           open={inviteDialogOpen}
           onOpenChange={setInviteDialogOpen}
           workspaceId={workspace.id}
-          onInviteSent={() => refetchMembers()}
+          onInviteSent={() => { refetchMembers(); refetchPending(); }}
         />
       )}
     </AppLayout>
