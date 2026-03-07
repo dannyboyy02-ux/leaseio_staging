@@ -24,6 +24,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 // App pages (protected)
 import Onboarding from "./pages/app/Onboarding";
 import LeaseReview from "./pages/app/LeaseReview";
+import Portfolio from "./pages/app/Portfolio";
 import ApprovalQueue from "./pages/app/ApprovalQueue";
 import FinancialReview from "./pages/app/FinancialReview";
 import ImportHistory from "./pages/app/ImportHistory";
@@ -130,6 +131,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <FinancialReview />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/portfolio"
+                  element={
+                    <ProtectedRoute>
+                      <Portfolio />
                     </ProtectedRoute>
                   }
                 />

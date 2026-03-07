@@ -4,18 +4,14 @@ import {
   LayoutDashboard,
   FileText,
   BarChart3,
-  Bell,
   User,
-  Users,
   ChevronRight,
   LogOut,
-  Building2,
   HelpCircle,
   Lock,
-  Upload,
   Sparkles,
-  Activity,
-  ClipboardList,
+  Layers,
+  Settings,
   ClipboardCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -35,36 +31,22 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import {
-  canAccessReportsDataQuality,
   canAccessWorkspaceSettings,
-  canManageWorkspaceMembers,
   canAccessApprovals,
   isSubmitterOnly,
 } from '@/lib/authorization';
 import { supabase } from '@/integrations/supabase/client';
 
-// Portfolio section items
-const portfolioItems = [
-  { title: 'nav.dashboard', href: '/app/dashboard', icon: LayoutDashboard },
-  { title: 'nav.leases', href: '/app/leases', icon: FileText },
-  { title: 'nav.imports', href: '/app/imports', icon: Upload, overrideTitle: 'Upload Lease' },
+// Top nav items — rendered before Approvals
+const topNavItems = [
+  { title: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
+  { title: 'Leases',    href: '/app/leases',     icon: FileText },
 ];
 
-// Reports & Analytics section items
-const reportsItems = [
-  { title: 'nav.reports', href: '/app/reports', icon: BarChart3, requiresBusiness: true },
-  { title: 'nav.data_quality', href: '/app/reports/data-quality', icon: Activity },
-];
-
-// Tools section items
-const toolsItems = [
-  { title: 'nav.notifications', href: '/app/notifications', icon: Bell },
-];
-
-const settingsNavItems = [
-  { title: 'nav.workspace', href: '/app/settings/workspace', icon: Building2, requiresAdmin: false },
-  { title: 'Team', href: '/app/settings/workspace', icon: Users, requiresAdmin: true, overrideTitle: 'Team' },
-  { title: 'nav.account', href: '/app/settings/account', icon: User, requiresAdmin: false },
+// Bottom nav items — rendered after Approvals
+const bottomNavItems = [
+  { title: 'Portfolio', href: '/app/portfolio', icon: Layers },
+  { title: 'Reports',   href: '/app/reports',   icon: BarChart3, requiresBusiness: true },
 ];
 
 export function AppSidebar() {
@@ -161,15 +143,9 @@ export function AppSidebar() {
   const showApprovals = canAccessApprovals(userFunctionalRoles) || isAdmin;
   const hideApprovalsForSubmitterOnly = isSubmitterOnly(userFunctionalRoles);
 
-  const renderNavItem = (item: typeof portfolioItems[0] & { requiresBusiness?: boolean; requiresAdmin?: boolean }) => {
+  const renderNavItem = (item: { title: string; href: string; icon: React.ComponentType<{ className?: string }>; requiresBusiness?: boolean }) => {
     const isActive = location.pathname === item.href;
     const isLocked = item.requiresBusiness && !canAccessFeature('business');
-    const isAdminOnly = item.requiresAdmin;
-    const translatedTitle = item.overrideTitle || t(item.title);
-    
-    // Hide admin-only items from non-admins
-    if (isAdminOnly && !isAdmin) return null;
-    
     return (
       <Link
         key={item.href}
@@ -184,7 +160,7 @@ export function AppSidebar() {
         onClick={(e) => isLocked && e.preventDefault()}
       >
         <item.icon className="h-5 w-5" />
-        <span className="flex-1">{translatedTitle}</span>
+        <span className="flex-1">{item.title}</span>
         {isLocked && <Lock className="h-4 w-4" />}
         {item.requiresBusiness && !isLocked && (
           <Badge variant="business" className="text-[10px] px-1.5">Business</Badge>
@@ -193,24 +169,9 @@ export function AppSidebar() {
     );
   };
 
-  const filteredReportsItems = reportsItems.filter((item) => {
-    if (item.title === 'nav.data_quality') {
-      return canAccessReportsDataQuality(userRole);
-    }
-    return true;
-  });
-
-  const filteredToolsItems = toolsItems;
-
-  const filteredSettingsNavItems = settingsNavItems.filter((item) => {
-    if (item.title === 'nav.workspace') {
-      return canAccessWorkspaceSettings(userRole);
-    }
-    if (item.requiresAdmin) {
-      return canManageWorkspaceMembers(userRole);
-    }
-    return true;
-  });
+  const settingsHref = canAccessWorkspaceSettings(userRole)
+    ? '/app/settings/workspace'
+    : '/app/settings/account';
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground flex flex-col">
@@ -224,88 +185,52 @@ export function AppSidebar() {
         </span>
       </Link>
 
-      {/* Main Navigation */}
-      <nav className="flex-1 overflow-y-auto py-6 px-3 scrollbar-thin">
-        {/* Portfolio Section */}
-        <div className="mb-6">
-          <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
-            {t('nav.portfolio')}
-          </p>
-          <div className="space-y-1">
-            {portfolioItems.map(renderNavItem)}
-          </div>
-        </div>
+      {/* Main Navigation — flat list, no section labels */}
+      <nav className="flex-1 py-6 px-3">
+        <div className="space-y-1">
+          {/* Dashboard, Leases */}
+          {topNavItems.map(renderNavItem)}
 
-        {/* Reports & Analytics Section */}
-        <div className="mb-6">
-          <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
-            {t('nav.reports_analytics')}
-          </p>
-          <div className="space-y-1">
-            {filteredReportsItems.map(renderNavItem)}
-          </div>
-        </div>
-
-        {/* Tools Section */}
-        <div className="mb-6">
-          <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
-            {t('nav.tools')}
-          </p>
-          <div className="space-y-1">
-            {filteredToolsItems.map(renderNavItem)}
-            {/* Approvals \u2014 hidden for submitter-only users */}
-            {showApprovals && !hideApprovalsForSubmitterOnly && (
-              <Link
-                to="/app/approvals"
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                  location.pathname === '/app/approvals'
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-                )}
-              >
-                <ClipboardCheck className="h-5 w-5" />
-                <span className="flex-1">Approvals</span>
-                {approvalBadge > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="text-[10px] h-5 min-w-[1.25rem] px-1.5 flex items-center justify-center"
-                  >
-                    {approvalBadge}
-                  </Badge>
-                )}
-              </Link>
-            )}
-          </div>
-        </div>
-
-        {/* Settings Section */}
-        <div>
-          <p className="px-3 text-xs font-medium uppercase tracking-wider text-sidebar-muted mb-2">
-            {t('nav.settings')}
-          </p>
-          <div className="space-y-1">
-            {filteredSettingsNavItems.map((item) => {
-              const isActive = location.pathname === item.href;
-              const translatedTitle = item.overrideTitle || t(item.title);
-              
-              return (
-                <Link
-                  key={item.title}
-                  to={item.href}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                    isActive
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                  )}
+          {/* Approvals — hidden for submitter-only users; badge unchanged */}
+          {showApprovals && !hideApprovalsForSubmitterOnly && (
+            <Link
+              to="/app/approvals"
+              className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                location.pathname === '/app/approvals'
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+              )}
+            >
+              <ClipboardCheck className="h-5 w-5" />
+              <span className="flex-1">Approvals</span>
+              {approvalBadge > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="text-[10px] h-5 min-w-[1.25rem] px-1.5 flex items-center justify-center"
                 >
-                  <item.icon className="h-5 w-5" />
-                  <span>{translatedTitle}</span>
-                </Link>
-              );
-            })}
-          </div>
+                  {approvalBadge}
+                </Badge>
+              )}
+            </Link>
+          )}
+
+          {/* Portfolio, Reports */}
+          {bottomNavItems.map(renderNavItem)}
+
+          {/* Settings — single entry point */}
+          <Link
+            to={settingsHref}
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+              location.pathname.startsWith('/app/settings')
+                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+            )}
+          >
+            <Settings className="h-5 w-5" />
+            <span className="flex-1">Settings</span>
+          </Link>
         </div>
       </nav>
 

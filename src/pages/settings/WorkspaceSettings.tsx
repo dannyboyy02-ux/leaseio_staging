@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, CreditCard, TrendingUp, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -30,7 +30,6 @@ import type { FunctionalRole } from '@/types/lifecycle';
 import { Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  canAccessWorkspaceBilling,
   canAccessWorkspaceDefaults,
   canAccessWorkspaceProfile,
   canEditWorkspaceSettings,
@@ -70,15 +69,13 @@ export default function WorkspaceSettings() {
   const canEdit = canEditWorkspaceSettings(userRole);
   const canManageMembers = canManageWorkspaceMembers(userRole);
   const canAccessDefaults = canAccessWorkspaceDefaults(userRole);
-  const canAccessBilling = canAccessWorkspaceBilling(userRole);
   const canAccessProfile = canAccessWorkspaceProfile(userRole);
 
   const tabs = [
-    { id: 'profile', label: t('workspace.profile'), icon: Building2, visible: canAccessProfile },
-    { id: 'members', label: t('workspace.users_access'), icon: Users, visible: canManageMembers },
-    { id: 'roles', label: 'Team & Roles', icon: ShieldCheck, visible: canManageMembers },
-    { id: 'defaults', label: t('workspace.defaults'), icon: Bell, visible: canAccessDefaults },
-    { id: 'billing', label: t('workspace.billing_plan'), icon: CreditCard, visible: canAccessBilling },
+    { id: 'profile',       label: 'Company Profile', icon: Building2,  visible: canAccessProfile },
+    { id: 'users',         label: 'Users',            icon: Users,      visible: canManageMembers },
+    { id: 'notifications', label: 'Notifications',    icon: Bell,       visible: canAccessDefaults },
+    { id: 'financial',     label: 'Financial',        icon: TrendingUp, visible: canAccessDefaults },
   ].filter((tab) => tab.visible);
 
   const defaultTab = tabs[0]?.id ?? 'profile';
@@ -361,9 +358,9 @@ export default function WorkspaceSettings() {
             </Card>
           </TabsContent>
 
-          {/* Members */}
+          {/* Users — member list + approval roles (hidden for single-user workspaces) */}
           {canManageMembers && (
-            <TabsContent value="members" className="space-y-6">
+            <TabsContent value="users" className="space-y-6">
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -395,6 +392,30 @@ export default function WorkspaceSettings() {
                       <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
                       <p>{t('workspace.no_members')}</p>
                       <p className="text-sm">{t('workspace.only_one')}</p>
+                    </div>
+                  ) : members.length === 1 ? (
+                    // Single-user simplification: show Admin role only, hide role configuration
+                    <div>
+                      <div className="flex items-center justify-between py-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarFallback>
+                              {members[0].name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{members[0].name}</p>
+                            <p className="text-sm text-muted-foreground">{members[0].email}</p>
+                          </div>
+                        </div>
+                        <Badge variant="default" className="flex items-center gap-1">
+                          <Crown className="h-3 w-3" />
+                          Admin
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Add team members to configure roles and approval workflows.
+                      </p>
                     </div>
                   ) : (
                     <div className="divide-y divide-border">
@@ -448,143 +469,134 @@ export default function WorkspaceSettings() {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
-          )}
 
-          {/* Team & Roles */}
-          {canManageMembers && (
-            <TabsContent value="roles" className="space-y-6">
-              {!hasFinancialApprover && rolesLoaded && (
-                <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:bg-amber-950/20 dark:border-amber-700">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No Financial Approver assigned</p>
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                      At least one team member must be designated as a Financial Approver. Without one, submitted commitments cannot proceed through financial review.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Approval Roles</CardTitle>
-                  <CardDescription>
-                    Assign functional approval roles to team members. A user can hold multiple roles.
-                    These are separate from workspace access levels (Admin / Editor / Viewer).
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {membersLoading || !rolesLoaded ? (
-                    <div className="space-y-4">
-                      {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <Skeleton className="h-10 w-10 rounded-full" />
-                          <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-32" />
-                            <Skeleton className="h-3 w-48" />
-                          </div>
+              {/* Approval Roles — only shown when multiple members exist */}
+              {members && members.length > 1 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Approval Roles</CardTitle>
+                    <CardDescription>
+                      Assign functional approval roles to team members. A user can hold multiple roles.
+                      These are separate from workspace access levels (Admin / Editor / Viewer).
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {!hasFinancialApprover && rolesLoaded && (
+                      <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:bg-amber-950/20 dark:border-amber-700 mb-4">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No Financial Approver assigned</p>
+                          <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                            At least one team member must be designated as a Financial Approver. Without one, submitted commitments cannot proceed through financial review.
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  ) : !members || members.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>No team members yet. Invite members first.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {/* Header row */}
-                      <div className="hidden sm:grid grid-cols-[1fr_120px_140px_150px_100px] gap-4 px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        <span>Member</span>
-                        <span className="text-center">Submitter</span>
-                        <span className="text-center">Manager Approver</span>
-                        <span className="text-center">Financial Approver</span>
-                        <span className="text-center">Admin</span>
                       </div>
-                      <div className="divide-y divide-border rounded-lg border">
-                        {members.map((member) => {
-                          const roles = memberRoles[member.user_id] || new Set<FunctionalRole>();
-                          const isOwner = member.user_id === workspace?.ownerId;
-                          const initials = member.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2);
-                          return (
-                            <div
-                              key={member.id}
-                              className="grid grid-cols-1 sm:grid-cols-[1fr_120px_140px_150px_100px] gap-3 sm:gap-4 items-center px-3 py-3"
-                            >
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="text-sm font-medium">{member.name}</p>
-                                  <p className="text-xs text-muted-foreground">{member.email}</p>
-                                </div>
-                              </div>
-
-                              {/* Mobile labels + Checkboxes */}
-                              <div className="flex flex-wrap gap-4 sm:contents">
-                                {(
-                                  [
-                                    { role: 'submitter' as FunctionalRole, label: 'Submitter' },
-                                    { role: 'manager_approver' as FunctionalRole, label: 'Manager Approver' },
-                                    { role: 'financial_approver' as FunctionalRole, label: 'Financial Approver' },
-                                    { role: 'admin' as FunctionalRole, label: 'Admin' },
-                                  ] as const
-                                ).map(({ role, label }) => (
-                                  <div key={role} className="flex sm:justify-center items-center gap-2">
-                                    <span className="text-xs text-muted-foreground sm:hidden">{label}:</span>
-                                    <Checkbox
-                                      id={`${member.user_id}-${role}`}
-                                      checked={roles.has(role)}
-                                      onCheckedChange={() => {
-                                        if (canEdit && !isOwner) toggleFunctionalRole(member.user_id, role);
-                                      }}
-                                      disabled={!canEdit || isOwner}
-                                      aria-label={`${label} for ${member.name}`}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-
-                              {isOwner && (
-                                <div className="sm:col-span-4 flex items-center">
-                                  <Badge variant="default" className="flex items-center gap-1 text-xs">
-                                    <Crown className="h-3 w-3" />
-                                    Owner — all roles
-                                  </Badge>
-                                </div>
-                              )}
+                    )}
+                    {membersLoading || !rolesLoaded ? (
+                      <div className="space-y-4">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="flex items-center gap-3">
+                            <Skeleton className="h-10 w-10 rounded-full" />
+                            <div className="flex-1 space-y-2">
+                              <Skeleton className="h-4 w-32" />
+                              <Skeleton className="h-3 w-48" />
                             </div>
-                          );
-                        })}
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="space-y-2">
+                        {/* Header row */}
+                        <div className="hidden sm:grid grid-cols-[1fr_100px_160px_170px_100px] gap-4 px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          <span>Member</span>
+                          <span className="text-center">User</span>
+                          <span className="text-center">Approver — Manager</span>
+                          <span className="text-center">Approver — Financial</span>
+                          <span className="text-center">Admin</span>
+                        </div>
+                        <div className="divide-y divide-border rounded-lg border">
+                          {members.map((member) => {
+                            const roles = memberRoles[member.user_id] || new Set<FunctionalRole>();
+                            const isOwner = member.user_id === workspace?.ownerId;
+                            const initials = member.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2);
+                            return (
+                              <div
+                                key={member.id}
+                                className="grid grid-cols-1 sm:grid-cols-[1fr_100px_160px_170px_100px] gap-3 sm:gap-4 items-center px-3 py-3"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <p className="text-sm font-medium">{member.name}</p>
+                                    <p className="text-xs text-muted-foreground">{member.email}</p>
+                                  </div>
+                                </div>
 
-                  <div className="mt-6 flex items-center gap-3">
-                    <Button
-                      variant="accent"
-                      onClick={handleSaveRoles}
-                      disabled={!canEdit || isSavingRoles}
-                    >
-                      {isSavingRoles ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4 mr-2" />
-                      )}
-                      {isSavingRoles ? 'Saving…' : 'Save Roles'}
-                    </Button>
-                    {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
-                  </div>
-                </CardContent>
-              </Card>
+                                {/* Mobile labels + Checkboxes */}
+                                <div className="flex flex-wrap gap-4 sm:contents">
+                                  {(
+                                    [
+                                      { role: 'submitter' as FunctionalRole, label: 'User' },
+                                      { role: 'manager_approver' as FunctionalRole, label: 'Approver — Manager' },
+                                      { role: 'financial_approver' as FunctionalRole, label: 'Approver — Financial' },
+                                      { role: 'admin' as FunctionalRole, label: 'Admin' },
+                                    ] as const
+                                  ).map(({ role, label }) => (
+                                    <div key={role} className="flex sm:justify-center items-center gap-2">
+                                      <span className="text-xs text-muted-foreground sm:hidden">{label}:</span>
+                                      <Checkbox
+                                        id={`${member.user_id}-${role}`}
+                                        checked={roles.has(role)}
+                                        onCheckedChange={() => {
+                                          if (canEdit && !isOwner) toggleFunctionalRole(member.user_id, role);
+                                        }}
+                                        disabled={!canEdit || isOwner}
+                                        aria-label={`${label} for ${member.name}`}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {isOwner && (
+                                  <div className="sm:col-span-4 flex items-center">
+                                    <Badge variant="default" className="flex items-center gap-1 text-xs">
+                                      <Crown className="h-3 w-3" />
+                                      Owner — all roles
+                                    </Badge>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-6 flex items-center gap-3">
+                      <Button
+                        variant="accent"
+                        onClick={handleSaveRoles}
+                        disabled={!canEdit || isSavingRoles}
+                      >
+                        {isSavingRoles ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        {isSavingRoles ? 'Saving…' : 'Save Roles'}
+                      </Button>
+                      {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
           )}
 
-          {/* Defaults */}
+          {/* Notifications */}
           {canAccessDefaults && (
-            <TabsContent value="defaults" className="space-y-6">
+            <TabsContent value="notifications" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle>{t('workspace.notification_settings')}</CardTitle>
@@ -619,8 +631,12 @@ export default function WorkspaceSettings() {
                   {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
                 </CardContent>
               </Card>
+            </TabsContent>
+          )}
 
-              {/* Financial Configuration */}
+          {/* Financial */}
+          {canAccessDefaults && (
+            <TabsContent value="financial" className="space-y-6">
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -650,12 +666,12 @@ export default function WorkspaceSettings() {
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Incremental borrowing rate used for lease liability calculations (ASC 842). Default: 5.5%.
+                      Incremental borrowing rate used for lease liability calculations. Default: 5.5%.
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="covenant-threshold">Covenant Threshold ($)</Label>
+                    <Label htmlFor="covenant-threshold">Lease Liability Alert ($)</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                       <Input
@@ -671,7 +687,7 @@ export default function WorkspaceSettings() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Total finance lease liability limit from your debt agreement. Commitments that would exceed this trigger a warning.
+                      Total portfolio lease liability limit. Commitments that exceed this threshold trigger a portfolio risk alert.
                     </p>
                   </div>
 
@@ -709,23 +725,6 @@ export default function WorkspaceSettings() {
                     {isSavingFinancial ? t('workspace.saving') : 'Save Financial Config'}
                   </Button>
                   {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
-
-          {/* Billing & Plan */}
-          {canAccessBilling && (
-            <TabsContent value="billing" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t('workspace.billing_plan')}</CardTitle>
-                  <CardDescription>{t('workspace.billing_desc')}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button variant="accent" asChild>
-                    <Link to="/app/settings/account">{t('workspace.manage_billing')}</Link>
-                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>
