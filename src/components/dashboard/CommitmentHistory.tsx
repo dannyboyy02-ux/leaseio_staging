@@ -31,7 +31,7 @@ export function CommitmentHistory() {
         .from('leases')
         .select('calc_total_commitment, created_at')
         .eq('workspace_id', workspace.id)
-        .not('calc_total_commitment', 'is', null);
+        .filter('calc_total_commitment', 'not.is', 'null');
 
       if (!leases?.length) { setLoading(false); return; }
 

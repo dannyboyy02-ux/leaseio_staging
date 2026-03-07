@@ -89,7 +89,7 @@ export default function ExtractionAnalytics() {
       const { data: leasesData, error: leasesError } = await supabase
         .from("leases")
         .select("id, avg_confidence_score")
-        .not("processed_at", "is", null);
+        .filter("processed_at", "not.is", "null");
 
       if (leasesError) throw leasesError;
 

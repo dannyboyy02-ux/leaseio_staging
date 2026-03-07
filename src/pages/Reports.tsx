@@ -78,12 +78,12 @@ export default function Reports() {
           .from('leases')
           .select('lifecycle_status')
           .eq('workspace_id', workspace!.id)
-          .not('lifecycle_status', 'is', null),
+          .filter('lifecycle_status', 'not.is', 'null'),
         supabase
           .from('leases')
           .select('id, filename, tenant_name, variance_monthly_payment, monthly_payment, executed_monthly_payment')
           .eq('workspace_id', workspace!.id)
-          .not('variance_monthly_payment', 'is', null)
+          .filter('variance_monthly_payment', 'not.is', 'null')
           .order('variance_monthly_payment', { ascending: false })
           .limit(5),
       ]);

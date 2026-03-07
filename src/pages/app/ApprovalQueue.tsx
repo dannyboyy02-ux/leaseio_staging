@@ -303,7 +303,7 @@ export default function ApprovalQueue() {
 
       const { data: reviewedData } = await baseQuery()
         .or(`manager_approved_by.eq.${user.id},financial_approved_by.eq.${user.id}`)
-        .not('lifecycle_status', 'in', '("submitted","under_review")')
+        .not('lifecycle_status', 'in', '(submitted,under_review)')
         .order('uploaded_at', { ascending: false })
         .limit(50);
 
