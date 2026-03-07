@@ -208,14 +208,19 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                {/* Data Quality — blocked in production; dev-only internal tool */}
                 <Route
                   path="/app/reports/data-quality"
                   element={
-                    <ProtectedRoute>
-                      <RequireRole allow={canAccessReportsDataQuality}>
-                        <ExtractionAnalytics />
-                      </RequireRole>
-                    </ProtectedRoute>
+                    import.meta.env.DEV ? (
+                      <ProtectedRoute>
+                        <RequireRole allow={canAccessReportsDataQuality}>
+                          <ExtractionAnalytics />
+                        </RequireRole>
+                      </ProtectedRoute>
+                    ) : (
+                      <Navigate to="/app/dashboard" replace />
+                    )
                   }
                 />
                 <Route
