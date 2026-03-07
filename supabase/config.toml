@@ -11,3 +11,15 @@ verify_jwt = false
 
 [functions.accept-invite]
 verify_jwt = false
+
+[functions.list-pending-invites]
+verify_jwt = false
+
+[functions.send-invite]
+verify_jwt = false
+
+[functions.resend-invite]
+verify_jwt = false
+
+[functions.revoke-invite]
+verify_jwt = false
