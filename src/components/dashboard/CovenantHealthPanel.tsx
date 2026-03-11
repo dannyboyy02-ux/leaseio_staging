@@ -37,7 +37,7 @@ export function CovenantHealthPanel() {
           .eq('workspace_id', workspace.id)
           .eq('covenant_flagged', true)
           .in('lifecycle_status', ['active', 'executed'])
-          .order('created_at', { ascending: false })
+          .order('uploaded_at', { ascending: false })
           .limit(5),
       ]);
 

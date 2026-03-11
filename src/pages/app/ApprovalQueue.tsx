@@ -47,8 +47,7 @@ interface QueueLease {
   manager_approved_by: string | null;
   manager_approved_at: string | null;
   financial_approved_by: string | null;
-  created_at: string;
-  uploaded_at: string | null;
+  uploaded_at: string;
   requestorEmail?: string;
   requestorName?: string;
 }
@@ -148,7 +147,7 @@ function LeaseQueueCard({
             </span>
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {format(new Date(lease.uploaded_at || lease.created_at), 'MMM d, yyyy')}
+              {format(new Date(lease.uploaded_at), 'MMM d, yyyy')}
             </span>
           </div>
 
@@ -269,7 +268,7 @@ export default function ApprovalQueue() {
             'id, request_title, tenant_name, requesting_department, asset_type,' +
             'monthly_payment, term_months, calc_total_commitment, covenant_flagged,' +
             'lifecycle_status, financial_returned_to_submitter, manager_approved_by,' +
-            'manager_approved_at, financial_approved_by, created_at, uploaded_at, requestor_id',
+            'manager_approved_at, financial_approved_by, uploaded_at, requestor_id',
           )
           .eq('workspace_id', workspace.id);
 

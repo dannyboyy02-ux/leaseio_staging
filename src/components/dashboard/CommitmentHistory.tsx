@@ -29,7 +29,7 @@ export function CommitmentHistory() {
 
       const { data: leases } = await supabase
         .from('leases')
-        .select('calc_total_commitment, created_at')
+        .select('calc_total_commitment, uploaded_at')
         .eq('workspace_id', workspace.id)
         .filter('calc_total_commitment', 'not.is', 'null');
 
@@ -37,7 +37,7 @@ export function CommitmentHistory() {
 
       const byMonth: Record<string, number> = {};
       leases.forEach((l) => {
-        const d = new Date(l.created_at);
+        const d = new Date(l.uploaded_at);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         byMonth[key] = (byMonth[key] || 0) + Number(l.calc_total_commitment);
       });
