@@ -36,8 +36,8 @@ export function ModelLockConfirmation({ leaseId, disabled, onSuccess }: ModelLoc
         .eq('id', leaseId);
       if (updateError) throw new Error(`Lock failed: ${updateError.message}`);
       await supabase.from('lease_activity_log').insert({
-        lease_id: leaseId, user_id: user.id, activity_type: 'model_locked',
-        from_status: 'executed', to_status: 'active', details: { locked_at: now },
+        lease_id: leaseId, user_id: user.id, activity_type: 'status_change',
+        from_status: 'executed', to_status: 'active', details: { action: 'model_locked', locked_at: now },
       });
       toast.success('Model locked — lease is now Active');
       setOpen(false);

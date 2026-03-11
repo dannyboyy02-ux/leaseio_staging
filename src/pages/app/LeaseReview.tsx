@@ -348,10 +348,10 @@ export default function LeaseReview() {
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
         user_id: user.id,
-        activity_type: 'resubmitted',
+        activity_type: 'status_change',
         from_status: 'submitted',
         to_status: newStatus,
-        details: { monthly_payment: monthlyPayment, term_months: termMonths },
+        details: { action: 'resubmitted', monthly_payment: monthlyPayment, term_months: termMonths },
       } as any);
 
       toast.success('Resubmitted for review');

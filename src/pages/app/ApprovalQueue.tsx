@@ -310,7 +310,7 @@ export default function ApprovalQueue() {
         .from('lease_activity_log')
         .select('lease_id')
         .eq('user_id', user.id)
-        .in('activity_type', ['manager_rejected', 'financial_rejected', 'financial_returned'] as any);
+        .in('activity_type', ['rejection', 'send_back']);
 
       const actedLeaseIds = [...new Set((activityRows || []).map((a: any) => a.lease_id))];
       let actedLeases: any[] = [];
@@ -374,10 +374,10 @@ export default function ApprovalQueue() {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: user.id,
-          activity_type: 'manager_approved',
+          activity_type: 'approval',
           from_status: 'submitted',
           to_status: 'under_review',
-          details: { role: 'manager_approver' },
+          details: { role: 'manager_approver', action: 'manager_approved' },
         } as any);
 
         const { data: finRoles } = await (supabase as any)
@@ -435,10 +435,10 @@ export default function ApprovalQueue() {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: user.id,
-          activity_type: 'manager_rejected',
+          activity_type: 'rejection',
           from_status: 'submitted',
           to_status: 'rejected',
-          details: { role: 'manager_approver', reason: rejectReason.trim() },
+          details: { role: 'manager_approver', action: 'manager_rejected', reason: rejectReason.trim() },
         } as any);
       } else {
         await supabase
@@ -453,10 +453,10 @@ export default function ApprovalQueue() {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: user.id,
-          activity_type: 'financial_rejected',
+          activity_type: 'rejection',
           from_status: 'under_review',
           to_status: 'rejected',
-          details: { role: 'financial_approver', reason: rejectReason.trim() },
+          details: { role: 'financial_approver', action: 'financial_rejected', reason: rejectReason.trim() },
         } as any);
       }
 

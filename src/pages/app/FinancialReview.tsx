@@ -234,11 +234,12 @@ export default function FinancialReview() {
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
         user_id: user.id,
-        activity_type: 'financial_approved',
+        activity_type: 'approval',
         from_status: 'under_review',
         to_status: 'approved',
         details: {
           role: 'financial_approver',
+          action: 'financial_approved',
           classification,
           covenant_headroom: covenantHeadroom,
         },
@@ -285,10 +286,10 @@ export default function FinancialReview() {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: user.id,
-          activity_type: 'financial_returned',
+          activity_type: 'send_back',
           from_status: 'under_review',
           to_status: 'submitted',
-          details: { role: 'financial_approver', reason: rejectReason.trim() },
+          details: { role: 'financial_approver', action: 'financial_returned', reason: rejectReason.trim() },
         } as any);
 
         await supabase.from('lease_activity_log').insert({
@@ -315,10 +316,10 @@ export default function FinancialReview() {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: user.id,
-          activity_type: 'financial_rejected',
+          activity_type: 'rejection',
           from_status: 'under_review',
           to_status: 'rejected',
-          details: { role: 'financial_approver', reason: rejectReason.trim() },
+          details: { role: 'financial_approver', action: 'financial_rejected', reason: rejectReason.trim() },
         } as any);
 
         await supabase.from('lease_activity_log').insert({

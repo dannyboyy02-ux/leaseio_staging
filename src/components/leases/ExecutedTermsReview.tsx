@@ -140,8 +140,8 @@ export function ExecutedTermsReview({ leaseId, pipelineTerms, executedTerms, can
       const { error: updErr } = await supabase.from('leases').update({ [DB_COLUMN_MAP[field]]: parsed }).eq('id', leaseId);
       if (updErr) throw new Error(`Update failed: ${updErr.message}`);
       await supabase.from('lease_activity_log').insert({
-        lease_id: leaseId, user_id: user.id, activity_type: 'executed_terms_edited',
-        details: { field, original: original !== null ? String(original) : null, edited: parsed !== null ? String(parsed) : null, reason: editReason.trim() },
+        lease_id: leaseId, user_id: user.id, activity_type: 'status_change',
+        details: { action: 'executed_terms_edited', field, original: original !== null ? String(original) : null, edited: parsed !== null ? String(parsed) : null, reason: editReason.trim() },
       });
       toast.success(`${FIELD_LABELS[field]} updated`);
       cancelEdit();
