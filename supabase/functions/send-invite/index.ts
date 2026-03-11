@@ -63,9 +63,12 @@ serve(async (req) => {
     // --- Authenticate caller ---
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return errRes(corsHeaders, 'UNAUTHORIZED', 'No authorization header', 401);
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !userData.user) return errRes(corsHeaders, 'UNAUTHORIZED', 'Invalid token', 401);
+    if (userError || !userData.user) {
+      console.error('[send-invite] getUser failed:', userError?.message);
+      return errRes(corsHeaders, 'UNAUTHORIZED', 'Invalid token', 401);
+    }
     const user = userData.user;
 
     const { emails, role, workspaceId, workspaceName } = await req.json();
@@ -81,9 +84,14 @@ serve(async (req) => {
       .select('owner_id, name')
       .eq('id', workspaceId)
       .single();
-    if (wsError || !workspace) return errRes(corsHeaders, 'NOT_FOUND', 'Workspace not found', 404);
+    if (wsError || !workspace) {
+      console.error('[send-invite] workspace lookup failed:', wsError?.message, 'workspaceId:', workspaceId);
+      return errRes(corsHeaders, 'NOT_FOUND', 'Workspace not found', 404);
+    }
 
     const isOwner = workspace.owner_id === user.id;
+    console.log('[send-invite] auth check — user.id:', user.id, 'owner_id:', workspace.owner_id, 'isOwner:', isOwner);
+
     if (!isOwner) {
       const { data: membership } = await supabaseAdmin
         .from('workspace_members')
@@ -91,6 +99,7 @@ serve(async (req) => {
         .eq('workspace_id', workspaceId)
         .eq('user_id', user.id)
         .maybeSingle();
+      console.log('[send-invite] membership role:', membership?.role ?? 'none');
       if (membership?.role !== 'admin') {
         return errRes(corsHeaders, 'UNAUTHORIZED', 'Only workspace owners or admins may send invitations', 403);
       }
