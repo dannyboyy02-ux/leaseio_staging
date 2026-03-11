@@ -45,7 +45,7 @@ export function ParentLeaseCombobox({
         const { data, error } = await supabase
           .from('leases')
           .select('id, filename, tenant_name, landlord_name, lease_end')
-          .eq('lifecycle_status', 'Posted')
+          .eq('lifecycle_status', 'active')
           .eq('workspace_id', workspace.id)
           .order('uploaded_at', { ascending: false });
 

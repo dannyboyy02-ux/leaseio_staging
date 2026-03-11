@@ -91,7 +91,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         const { data, error } = await supabase
           .from('leases')
           .select('id, tenant_name, landlord_name, lease_start, lease_end')
-          .eq('lifecycle_status', 'Posted')
+          .eq('lifecycle_status', 'active')
           .order('uploaded_at', { ascending: false });
         
         if (error) {
