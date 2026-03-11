@@ -837,7 +837,6 @@ export default function LeaseReview() {
         lease_start: form.lease_start || null,
         lease_end: form.lease_end || null,
         base_rent_amount: form.base_rent_amount || null,
-        status: 'Posted',
         lifecycle_status: 'active',
         confirmed_sections: confirmedSections,
         audit_log: JSON.parse(JSON.stringify(auditLog)),
