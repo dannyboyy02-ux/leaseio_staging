@@ -39,7 +39,7 @@ export async function sendInviteEmail(opts: SendInviteEmailOpts): Promise<SendRe
         Authorization: `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: 'LeaseIO <notifications@theleaseio.com>',
+        from: Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <notifications@theleaseio.com>',
         to: [to],
         subject: `You've been invited to join ${escapeHtml(workspaceName)} on LeaseIO`,
         html: `
