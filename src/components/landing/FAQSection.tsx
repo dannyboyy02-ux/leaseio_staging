@@ -14,7 +14,6 @@ export function FAQSection() {
     'ai_extraction',
     'edit_data',
     'document_limit',
-    'quickbooks',
     'data_ownership',
     'security',
     'multiple_users',

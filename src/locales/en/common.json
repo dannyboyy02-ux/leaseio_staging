@@ -148,10 +148,6 @@
         "q": "What happens if I hit my document limit?",
         "a": "You won't be able to upload new documents until you upgrade your plan or your billing period resets. Existing documents remain fully accessible."
       },
-      "quickbooks": {
-        "q": "How does QuickBooks integration work?",
-        "a": "Available on the Business plan, you connect your QuickBooks Online account via OAuth. Choose whether you're a lessor (creates invoices) or lessee (creates bills), match vendors/customers, and we'll automatically create transactions based on your rent schedule."
-      },
       "data_ownership": {
         "q": "Who owns my data?",
         "a": "You do. Your documents and extracted data belong to you. You can export everything at any time, and if you close your account, we delete your data within 30 days."

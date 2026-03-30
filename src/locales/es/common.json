@@ -148,10 +148,6 @@
         "q": "¿Qué pasa si alcanzo mi límite de documentos?",
         "a": "No podrá subir nuevos documentos hasta que actualice su plan o su período de facturación se reinicie. Los documentos existentes permanecen totalmente accesibles."
       },
-      "quickbooks": {
-        "q": "¿Cómo funciona la integración con QuickBooks?",
-        "a": "Disponible en el plan Business, conecta su cuenta de QuickBooks Online vía OAuth. Elija si es arrendador (crea facturas) o arrendatario (crea cuentas por pagar), haga coincidir proveedores/clientes, y crearemos automáticamente transacciones basadas en su calendario de renta."
-      },
       "data_ownership": {
         "q": "¿Quién es dueño de mis datos?",
         "a": "Usted. Sus documentos y datos extraídos le pertenecen. Puede exportar todo en cualquier momento, y si cierra su cuenta, eliminamos sus datos dentro de 30 días."

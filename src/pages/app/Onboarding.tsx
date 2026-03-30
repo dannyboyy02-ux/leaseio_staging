@@ -16,7 +16,7 @@ import { useAppTranslation } from '@/hooks/useAppTranslation';
 export default function Onboarding() {
   const [step, setStep] = useState(1);
   const [workspaceName, setWorkspaceName] = useState('');
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('starter');
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('free');
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -62,7 +62,7 @@ export default function Onboarding() {
           name: workspaceName.trim(),
           owner_id: user.id,
           plan: selectedPlan,
-          document_limit: planConfig.documentLimit,
+          document_limit: planConfig.maxActiveLeases,
         })
         .select()
         .single();
@@ -206,7 +206,7 @@ export default function Onboarding() {
                             : `$${plan.price.monthly}${t('onboarding_flow.per_month')}`}
                         </div>
                         <div className="text-sm text-primary font-medium mb-3">
-                          {plan.documentLimit} {plan.documentLimit === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
+                          {plan.maxActiveLeases === -1 ? 'Unlimited' : plan.maxActiveLeases} {plan.maxActiveLeases === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
                         </div>
                         <ul className="space-y-1">
                           {plan.featureKeys.slice(0, 3).map((featureKey) => (
@@ -257,8 +257,8 @@ export default function Onboarding() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{t('onboarding_flow.document_limit')}</span>
                     <span className="font-medium text-foreground">
-                      {selectedPlanConfig.documentLimit}{' '}
-                      {selectedPlanConfig.documentLimit === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
+                      {selectedPlanConfig.maxActiveLeases === -1 ? 'Unlimited' : selectedPlanConfig.maxActiveLeases}{' '}
+                      {selectedPlanConfig.maxActiveLeases === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
                     </span>
                   </div>
                   {selectedPlanConfig.price.monthly > 0 && (

@@ -127,17 +127,6 @@ export interface SecurityLogEntry {
   createdAt: string;
 }
 
-export interface QuickBooksConnection {
-  id: string;
-  workspaceId: string;
-  realmId: string;
-  role: 'lessor' | 'lessee';
-  isActive: boolean;
-  lastSyncAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // Navigation types
 export interface NavItem {
   title: string;

@@ -28,7 +28,7 @@ export default function Support() {
             </CardHeader>
             <CardContent>
               <Button variant="outline" asChild>
-                <a href="mailto:support@leaseflow.ai">
+                <a href="mailto:support@theleaseio.com">
                   {t('support.contact_email')}
                   <ExternalLink className="ml-2 h-4 w-4" />
                 </a>
