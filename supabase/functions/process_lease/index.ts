@@ -796,6 +796,7 @@ serve(async (req) => {
     const parentLeaseId = formData.get('parentLeaseId') as string | null;
     const extractionMode = (formData.get('extractionMode') as string) || 'pipeline';
     const targetLeaseId = formData.get('leaseId') as string | null;
+    const workspaceIdFromRequest = formData.get('workspaceId') as string | null;
 
     if (!file) {
       return new Response(JSON.stringify({ error: 'No file provided' }), {
@@ -1038,12 +1039,25 @@ serve(async (req) => {
       });
     }
 
+    // Resolve workspace_id: prefer request param, fall back to user's first membership
+    let resolvedWorkspaceId: string | null = workspaceIdFromRequest || null;
+    if (!resolvedWorkspaceId) {
+      const { data: membership } = await supabaseAdmin
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .single();
+      resolvedWorkspaceId = membership?.workspace_id ?? null;
+    }
+    console.log(`[process_lease] Resolved workspace_id: ${resolvedWorkspaceId}`);
+
     const leaseId = crypto.randomUUID();
     const storagePath = `${user.id}/${leaseId}/${sanitizedFilename}`;
 
     const { error: insertError } = await supabaseAdmin
       .from('leases')
-      .insert({ id: leaseId, user_id: user.id, filename: sanitizedFilename, storage_path: storagePath, status: 'Processing', intake_source: 'manual_upload' });
+      .insert({ id: leaseId, user_id: user.id, workspace_id: resolvedWorkspaceId, filename: sanitizedFilename, storage_path: storagePath, status: 'Processing', intake_source: 'manual_upload' });
 
     if (insertError) throw new Error(`Failed to create lease record: ${insertError.message}`);
     console.log(`[process_lease] Created lease record: ${leaseId}`);
