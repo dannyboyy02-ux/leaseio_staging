@@ -58,7 +58,7 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
       'plan.feature.unlimited_users',
       'plan.feature.unlimited_leases',
       'plan.feature.unlimited_abstraction',
-      'plan.feature.asc842_reports',
+      'plan.feature.audit_package',
       'plan.feature.role_based_access',
       'plan.feature.bulk_upload',
       'plan.feature.export_integrations',

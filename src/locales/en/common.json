@@ -32,23 +32,23 @@
       "get_started": "Get Started"
     },
     "hero": {
-      "badge": "Lease Visibility for Growing Companies",
-      "headline": "Every lease. Every department.",
-      "headline_accent": "One platform.",
-      "subheadline": "Departments initiate leases without finance knowing. LeaseIO captures every lease request before it's signed, giving finance real-time pipeline visibility and ASC 842 compliance confidence.",
-      "cta_trial": "Start Free",
+      "badge": "AI-Powered Lease Intelligence for Finance Teams",
+      "headline": "Send us your leases.",
+      "headline_accent": "We'll tell you what's in them.",
+      "subheadline": "Departments sign leases without finance knowing. LeaseIO catches every lease — before or after it's signed — abstracts the key terms with AI, and gives finance an audit-defensible repository. Your team just confirms and acts.",
+      "cta_trial": "Get Started Free",
       "cta_signin": "Sign In",
       "trust_setup": "5-minute setup",
-      "trust_ai": "AI-powered abstraction",
+      "trust_ai": "AI reads your leases in seconds",
       "trust_security": "Bank-grade security",
-      "demo_coming": "Interactive Demo Coming Soon"
+      "demo_coming": "See how LeaseIO reads a lease in 60 seconds"
     },
     "features": {
-      "title": "Built for how companies actually manage leases",
-      "subtitle": "From initial request to ASC 842 compliance — one platform connects every department to finance.",
+      "title": "Finance awareness, not just document storage",
+      "subtitle": "Every lease ends up in the repository — abstracted, confirmed, and audit-ready — regardless of how it arrived.",
       "ai_extraction": {
         "title": "Lease Request Intake",
-        "desc": "Any department can log a lease request in seconds — no document required. Finance sees it immediately."
+        "desc": "Any department can log a lease request before signing. Finance reviews and approves. No lease commitment happens without visibility."
       },
       "deadline_tracking": {
         "title": "Pipeline Visibility",
@@ -56,15 +56,15 @@
       },
       "rent_schedule": {
         "title": "AI Document Abstraction",
-        "desc": "Upload executed documents and AI extracts key terms, dates, rent schedules, and obligations automatically."
+        "desc": "Upload a signed lease. AI extracts parties, dates, rent, escalations, renewal options, and risks — in seconds, not hours."
       },
       "notifications": {
         "title": "Multi-Department Notifications",
-        "desc": "Finance gets notified on new requests. Requestors get updates on status changes. Everyone stays aligned."
+        "desc": "Finance gets notified on new requests. Requestors get updates on status changes. Everyone stays aligned without email chains."
       },
       "rent_roll": {
-        "title": "ASC 842 Compliance Ready",
-        "desc": "Active leases flow directly into your compliance repository. Never miss a commencement date or unrecorded obligation."
+        "title": "Audit-Defensible Repository",
+        "desc": "Every lease is abstracted, confirmed by a human, and stored with a full audit trail. Hand your auditor a complete lease population in one click."
       },
       "security": {
         "title": "Secure & Private",
@@ -88,7 +88,7 @@
       },
       "step4": {
         "title": "Stay Compliant",
-        "desc": "Abstracted leases enter your active repository. Finance has full visibility for ASC 842 reporting."
+        "desc": "Abstracted leases enter your active repository. Finance has a complete, audit-defensible lease population."
       }
     },
     "pricing": {
@@ -683,7 +683,7 @@
       "unlimited_users": "Unlimited users",
       "unlimited_leases": "Unlimited active leases",
       "unlimited_abstraction": "Unlimited AI abstraction",
-      "asc842_reports": "ASC 842 compliance reports",
+      "audit_package": "Audit-ready lease population export",
       "role_based_access": "Role-based access control",
       "bulk_upload": "Bulk document upload",
       "export_integrations": "Export integrations"

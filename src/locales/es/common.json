@@ -32,23 +32,23 @@
       "get_started": "Comenzar"
     },
     "hero": {
-      "badge": "Visibilidad de Arrendamientos para Empresas en Crecimiento",
-      "headline": "Cada arrendamiento. Cada departamento.",
-      "headline_accent": "Una sola plataforma.",
-      "subheadline": "Los departamentos inician arrendamientos sin que finanzas lo sepa. LeaseIO captura cada solicitud antes de la firma y brinda visibilidad del pipeline en tiempo real y confianza para ASC 842.",
-      "cta_trial": "Comenzar Gratis",
+      "badge": "Inteligencia de Arrendamientos con IA para Equipos de Finanzas",
+      "headline": "Envíenos sus contratos.",
+      "headline_accent": "Le diremos qué contienen.",
+      "subheadline": "Los departamentos firman arrendamientos sin que finanzas lo sepa. LeaseIO captura cada contrato — antes o después de la firma — extrae los términos clave con IA y le da a finanzas un repositorio defendible ante auditoría. Su equipo solo confirma y actúa.",
+      "cta_trial": "Comience Gratis",
       "cta_signin": "Iniciar Sesión",
       "trust_setup": "Configuración en 5 minutos",
-      "trust_ai": "Abstracción con IA",
+      "trust_ai": "La IA lee sus contratos en segundos",
       "trust_security": "Seguridad nivel bancario",
-      "demo_coming": "Demo interactiva próximamente"
+      "demo_coming": "Vea cómo LeaseIO lee un contrato en 60 segundos"
     },
     "features": {
-      "title": "Diseñado para cómo las empresas gestionan arrendamientos",
-      "subtitle": "Desde la solicitud inicial hasta el cumplimiento ASC 842: una plataforma conecta a todos los departamentos con finanzas.",
+      "title": "Conciencia financiera, no solo almacenamiento de documentos",
+      "subtitle": "Cada arrendamiento termina en el repositorio — abstraído, confirmado y listo para auditoría — sin importar cómo llegó.",
       "ai_extraction": {
         "title": "Ingreso de Solicitudes",
-        "desc": "Cualquier departamento puede registrar una solicitud en segundos, sin documento. Finanzas la ve al instante."
+        "desc": "Cualquier departamento puede registrar una solicitud antes de firmar. Finanzas revisa y aprueba. Ningún compromiso ocurre sin visibilidad."
       },
       "deadline_tracking": {
         "title": "Visibilidad del Pipeline",
@@ -56,15 +56,15 @@
       },
       "rent_schedule": {
         "title": "Abstracción de Documentos con IA",
-        "desc": "Cargue contratos ejecutados y la IA extrae términos, fechas, rentas y obligaciones automáticamente."
+        "desc": "Cargue un contrato firmado. La IA extrae partes, fechas, rentas, escalaciones, opciones de renovación y riesgos — en segundos."
       },
       "notifications": {
         "title": "Notificaciones Multidepartamentales",
-        "desc": "Finanzas recibe alertas de nuevas solicitudes y los solicitantes reciben actualizaciones de estado."
+        "desc": "Finanzas recibe alertas de nuevas solicitudes. Los solicitantes reciben actualizaciones de estado. Todos alineados sin cadenas de correos."
       },
       "rent_roll": {
-        "title": "Listo para Cumplimiento ASC 842",
-        "desc": "Los arrendamientos activos pasan directamente a su repositorio de cumplimiento."
+        "title": "Repositorio Defendible ante Auditoría",
+        "desc": "Cada arrendamiento es abstraído, confirmado por una persona y almacenado con historial completo. Entregue a su auditor la población completa en un clic."
       },
       "security": {
         "title": "Seguro y Privado",
@@ -88,7 +88,7 @@
       },
       "step4": {
         "title": "Mantener Cumplimiento",
-        "desc": "Los arrendamientos abstraídos entran al repositorio activo para reportes ASC 842."
+        "desc": "Los arrendamientos abstraídos entran al repositorio activo. Finanzas tiene una población completa y defendible ante auditoría."
       }
     },
     "pricing": {
@@ -683,7 +683,7 @@
       "unlimited_users": "Usuarios ilimitados",
       "unlimited_leases": "Arrendamientos activos ilimitados",
       "unlimited_abstraction": "Abstracción con IA ilimitada",
-      "asc842_reports": "Reportes de cumplimiento ASC 842",
+      "audit_package": "Exportación de población de arrendamientos lista para auditoría",
       "role_based_access": "Control de acceso por roles",
       "bulk_upload": "Carga masiva de documentos",
       "export_integrations": "Integraciones de exportación"
