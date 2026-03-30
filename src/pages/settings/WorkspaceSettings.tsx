@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle, Package } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import { WorkspaceRole } from '@/types';
 import type { FunctionalRole } from '@/types/lifecycle';
 import { Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import {
   canAccessWorkspaceDefaults,
   canAccessWorkspaceProfile,
@@ -56,6 +57,8 @@ export default function WorkspaceSettings() {
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
   const [isSavingFinancial, setIsSavingFinancial] = useState(false);
   const [isSavingRoles, setIsSavingRoles] = useState(false);
+  const [backdoorEnabled, setBackdoorEnabled] = useState(false);
+  const [isSavingBackdoor, setIsSavingBackdoor] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   // Phase 2 — functional roles state: map of user_id → Set<FunctionalRole>
@@ -71,12 +74,14 @@ export default function WorkspaceSettings() {
   const canManageMembers = canManageWorkspaceMembers(userRole);
   const canAccessDefaults = canAccessWorkspaceDefaults(userRole);
   const canAccessProfile = canAccessWorkspaceProfile(userRole);
+  const isAdmin = userRole === 'admin';
 
   const tabs = [
     { id: 'profile',       label: 'Company Profile', icon: Building2,  visible: canAccessProfile },
     { id: 'users',         label: 'Users',            icon: Users,      visible: canManageMembers },
     { id: 'notifications', label: 'Notifications',    icon: Bell,       visible: canAccessDefaults },
     { id: 'financial',     label: 'Financial',        icon: TrendingUp, visible: canAccessDefaults },
+    { id: 'onboarding',    label: 'Onboarding',       icon: Package,    visible: isAdmin },
   ].filter((tab) => tab.visible);
 
   const defaultTab = tabs[0]?.id ?? 'profile';
@@ -94,7 +99,7 @@ export default function WorkspaceSettings() {
     if (!workspace?.id) return;
     supabase
       .from('workspaces')
-      .select('discount_rate, covenant_threshold, approval_threshold')
+      .select('discount_rate, covenant_threshold, approval_threshold, backdoor_enabled')
       .eq('id', workspace.id)
       .single()
       .then(({ data }) => {
@@ -106,6 +111,7 @@ export default function WorkspaceSettings() {
               : ''
           );
           setApprovalThreshold(String((data as any).approval_threshold ?? 0));
+          setBackdoorEnabled((data as any).backdoor_enabled ?? false);
         }
       });
   }, [workspace?.id]);
@@ -291,6 +297,25 @@ export default function WorkspaceSettings() {
       toast.error('Failed to save financial configuration');
     } finally {
       setIsSavingFinancial(false);
+    }
+  };
+
+  const handleSaveBackdoor = async (value: boolean) => {
+    if (!workspace?.id) return;
+    setIsSavingBackdoor(true);
+    try {
+      const { error } = await supabase
+        .from('workspaces')
+        .update({ backdoor_enabled: value } as any)
+        .eq('id', workspace.id);
+      if (error) throw error;
+      setBackdoorEnabled(value);
+      toast.success('Onboarding settings saved');
+    } catch (error) {
+      console.error('Error saving backdoor toggle:', error);
+      toast.error('Failed to save onboarding settings');
+    } finally {
+      setIsSavingBackdoor(false);
     }
   };
 
@@ -751,6 +776,41 @@ export default function WorkspaceSettings() {
                     {isSavingFinancial ? t('workspace.saving') : 'Save Financial Config'}
                   </Button>
                   {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+          {/* Onboarding — admin only */}
+          {isAdmin && (
+            <TabsContent value="onboarding" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Package className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <CardTitle>Historical Portfolio Loader</CardTitle>
+                      <CardDescription>
+                        Enable a simplified form for loading existing leases during onboarding.
+                        Turn off when your portfolio is loaded.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Portfolio Loader</Label>
+                      <p className="text-xs text-muted-foreground">
+                        When enabled, shows the historical portfolio intake form to workspace members.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={backdoorEnabled}
+                      onCheckedChange={(value) => handleSaveBackdoor(value)}
+                      disabled={isSavingBackdoor}
+                      aria-label="Enable historical portfolio loader"
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

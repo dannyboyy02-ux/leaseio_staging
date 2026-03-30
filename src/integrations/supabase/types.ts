@@ -14,6 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_rules: {
+        Row: {
+          alert_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          threshold_days: number | null
+          threshold_value: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          threshold_days?: number | null
+          threshold_value?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          threshold_days?: number | null
+          threshold_value?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_rules_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      executed_term_edits: {
+        Row: {
+          edited_at: string
+          edited_by: string
+          edited_value: string | null
+          field_name: string
+          id: string
+          lease_id: string
+          original_value: string | null
+          reason: string | null
+        }
+        Insert: {
+          edited_at?: string
+          edited_by: string
+          edited_value?: string | null
+          field_name: string
+          id?: string
+          lease_id: string
+          original_value?: string | null
+          reason?: string | null
+        }
+        Update: {
+          edited_at?: string
+          edited_by?: string
+          edited_value?: string | null
+          field_name?: string
+          id?: string
+          lease_id?: string
+          original_value?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "executed_term_edits_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "executed_term_edits_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       field_corrections: {
         Row: {
           ai_confidence: number | null
@@ -446,34 +535,71 @@ export type Database = {
         Row: {
           activated_at: string | null
           approver_email: string | null
+          asset_type: string | null
           audit_log: Json | null
           avg_confidence_score: number | null
           base_rent_amount: string | null
           base_rent_frequency: string | null
           business_unit: string | null
+          calc_cash_pl_delta: number | null
+          calc_pv_liability: number | null
+          calc_straight_line_exp: number | null
+          calc_total_commitment: number | null
           category: string | null
           confidence_scores: Json | null
           confirmed_sections: string[]
+          covenant_flagged: boolean | null
           current_monthly_rent: number | null
           error_message: string | null
+          escalation_rate: number | null
+          escalation_type: string | null
           estimated_monthly_cost_max: number | null
           estimated_monthly_cost_min: number | null
           estimated_term_max: number | null
           estimated_term_min: number | null
-          expected_start_date: string | null
+          executed_break_clause: string | null
+          executed_commencement_date: string | null
+          executed_document_url: string | null
+          executed_expiry_date: string | null
+          executed_extracted_json: Json | null
+          executed_extraction_confidence: Json | null
+          executed_filename: string | null
+          executed_landlord_name: string | null
+          executed_monthly_payment: number | null
+          executed_rent_review_clause: string | null
+          executed_storage_path: string | null
+          executed_tenant_name: string | null
+          executed_uploaded_at: string | null
+          executed_uploaded_by: string | null
           execution_approved_at: string | null
+          expected_start_date: string | null
           extracted_json: Json | null
           filename: string
+          financial_approved_at: string | null
+          financial_approved_by: string | null
+          financial_rejection_reason: string | null
+          financial_returned_to_submitter: boolean | null
           id: string
           initializer_id: string | null
           internal_approved_at: string | null
           landlord_name: string | null
           last_nudged_at: string | null
+          lease_classification: string | null
+          lease_classification_set_at: string | null
+          lease_classification_set_by: string | null
           lease_end: string | null
           lease_owner_id: string | null
           lease_start: string | null
           lease_type: string | null
           lifecycle_status: string | null
+          manager_approved_at: string | null
+          manager_approved_by: string | null
+          manager_rejection_reason: string | null
+          model_locked: boolean
+          model_locked_at: string | null
+          model_locked_by: string | null
+          monthly_payment: number | null
+          needs_escalation_review: boolean | null
           notes: string | null
           parent_lease_id: string | null
           processed_at: string | null
@@ -489,43 +615,91 @@ export type Database = {
           status_changed_at: string | null
           storage_path: string | null
           submitted_for_approval_at: string | null
+          summary_last_viewed_at: string | null
+          summary_share_token: string | null
+          summary_shared_at: string | null
           tenant_name: string | null
-          vendor_name: string | null
+          term_months: number | null
           uploaded_at: string
           user_id: string
+          variance_commencement_days: number | null
+          variance_expiry_days: number | null
+          variance_landlord_name_match: boolean | null
+          variance_monthly_payment: number | null
+          variance_reviewed_at: string | null
+          variance_reviewed_by: string | null
+          variance_tenant_name_match: boolean | null
+          vendor_name: string | null
           workspace_id: string | null
         }
         Insert: {
           activated_at?: string | null
           approver_email?: string | null
+          asset_type?: string | null
           audit_log?: Json | null
           avg_confidence_score?: number | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
           business_unit?: string | null
+          calc_cash_pl_delta?: number | null
+          calc_pv_liability?: number | null
+          calc_straight_line_exp?: number | null
+          calc_total_commitment?: number | null
           category?: string | null
           confidence_scores?: Json | null
           confirmed_sections?: string[]
+          covenant_flagged?: boolean | null
           current_monthly_rent?: number | null
           error_message?: string | null
+          escalation_rate?: number | null
+          escalation_type?: string | null
           estimated_monthly_cost_max?: number | null
           estimated_monthly_cost_min?: number | null
           estimated_term_max?: number | null
           estimated_term_min?: number | null
-          expected_start_date?: string | null
+          executed_break_clause?: string | null
+          executed_commencement_date?: string | null
+          executed_document_url?: string | null
+          executed_expiry_date?: string | null
+          executed_extracted_json?: Json | null
+          executed_extraction_confidence?: Json | null
+          executed_filename?: string | null
+          executed_landlord_name?: string | null
+          executed_monthly_payment?: number | null
+          executed_rent_review_clause?: string | null
+          executed_storage_path?: string | null
+          executed_tenant_name?: string | null
+          executed_uploaded_at?: string | null
+          executed_uploaded_by?: string | null
           execution_approved_at?: string | null
+          expected_start_date?: string | null
           extracted_json?: Json | null
           filename: string
+          financial_approved_at?: string | null
+          financial_approved_by?: string | null
+          financial_rejection_reason?: string | null
+          financial_returned_to_submitter?: boolean | null
           id?: string
           initializer_id?: string | null
           internal_approved_at?: string | null
           landlord_name?: string | null
           last_nudged_at?: string | null
+          lease_classification?: string | null
+          lease_classification_set_at?: string | null
+          lease_classification_set_by?: string | null
           lease_end?: string | null
           lease_owner_id?: string | null
           lease_start?: string | null
           lease_type?: string | null
           lifecycle_status?: string | null
+          manager_approved_at?: string | null
+          manager_approved_by?: string | null
+          manager_rejection_reason?: string | null
+          model_locked?: boolean
+          model_locked_at?: string | null
+          model_locked_by?: string | null
+          monthly_payment?: number | null
+          needs_escalation_review?: boolean | null
           notes?: string | null
           parent_lease_id?: string | null
           processed_at?: string | null
@@ -541,43 +715,91 @@ export type Database = {
           status_changed_at?: string | null
           storage_path?: string | null
           submitted_for_approval_at?: string | null
+          summary_last_viewed_at?: string | null
+          summary_share_token?: string | null
+          summary_shared_at?: string | null
           tenant_name?: string | null
-          vendor_name?: string | null
+          term_months?: number | null
           uploaded_at?: string
           user_id: string
+          variance_commencement_days?: number | null
+          variance_expiry_days?: number | null
+          variance_landlord_name_match?: boolean | null
+          variance_monthly_payment?: number | null
+          variance_reviewed_at?: string | null
+          variance_reviewed_by?: string | null
+          variance_tenant_name_match?: boolean | null
+          vendor_name?: string | null
           workspace_id?: string | null
         }
         Update: {
           activated_at?: string | null
           approver_email?: string | null
+          asset_type?: string | null
           audit_log?: Json | null
           avg_confidence_score?: number | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
           business_unit?: string | null
+          calc_cash_pl_delta?: number | null
+          calc_pv_liability?: number | null
+          calc_straight_line_exp?: number | null
+          calc_total_commitment?: number | null
           category?: string | null
           confidence_scores?: Json | null
           confirmed_sections?: string[]
+          covenant_flagged?: boolean | null
           current_monthly_rent?: number | null
           error_message?: string | null
+          escalation_rate?: number | null
+          escalation_type?: string | null
           estimated_monthly_cost_max?: number | null
           estimated_monthly_cost_min?: number | null
           estimated_term_max?: number | null
           estimated_term_min?: number | null
-          expected_start_date?: string | null
+          executed_break_clause?: string | null
+          executed_commencement_date?: string | null
+          executed_document_url?: string | null
+          executed_expiry_date?: string | null
+          executed_extracted_json?: Json | null
+          executed_extraction_confidence?: Json | null
+          executed_filename?: string | null
+          executed_landlord_name?: string | null
+          executed_monthly_payment?: number | null
+          executed_rent_review_clause?: string | null
+          executed_storage_path?: string | null
+          executed_tenant_name?: string | null
+          executed_uploaded_at?: string | null
+          executed_uploaded_by?: string | null
           execution_approved_at?: string | null
+          expected_start_date?: string | null
           extracted_json?: Json | null
           filename?: string
+          financial_approved_at?: string | null
+          financial_approved_by?: string | null
+          financial_rejection_reason?: string | null
+          financial_returned_to_submitter?: boolean | null
           id?: string
           initializer_id?: string | null
           internal_approved_at?: string | null
           landlord_name?: string | null
           last_nudged_at?: string | null
+          lease_classification?: string | null
+          lease_classification_set_at?: string | null
+          lease_classification_set_by?: string | null
           lease_end?: string | null
           lease_owner_id?: string | null
           lease_start?: string | null
           lease_type?: string | null
           lifecycle_status?: string | null
+          manager_approved_at?: string | null
+          manager_approved_by?: string | null
+          manager_rejection_reason?: string | null
+          model_locked?: boolean
+          model_locked_at?: string | null
+          model_locked_by?: string | null
+          monthly_payment?: number | null
+          needs_escalation_review?: boolean | null
           notes?: string | null
           parent_lease_id?: string | null
           processed_at?: string | null
@@ -593,10 +815,21 @@ export type Database = {
           status_changed_at?: string | null
           storage_path?: string | null
           submitted_for_approval_at?: string | null
+          summary_last_viewed_at?: string | null
+          summary_share_token?: string | null
+          summary_shared_at?: string | null
           tenant_name?: string | null
-          vendor_name?: string | null
+          term_months?: number | null
           uploaded_at?: string
           user_id?: string
+          variance_commencement_days?: number | null
+          variance_expiry_days?: number | null
+          variance_landlord_name_match?: boolean | null
+          variance_monthly_payment?: number | null
+          variance_reviewed_at?: string | null
+          variance_reviewed_by?: string | null
+          variance_tenant_name_match?: boolean | null
+          vendor_name?: string | null
           workspace_id?: string | null
         }
         Relationships: [
@@ -615,13 +848,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "leases_requestor_id_fkey"
-            columns: ["requestor_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "leases_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -630,6 +856,64 @@ export type Database = {
           },
           {
             foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          alert_type: string
+          body: string
+          created_at: string
+          id: string
+          lease_id: string | null
+          read_at: string | null
+          title: string
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          alert_type: string
+          body: string
+          created_at?: string
+          id?: string
+          lease_id?: string | null
+          read_at?: string | null
+          title: string
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          alert_type?: string
+          body?: string
+          created_at?: string
+          id?: string
+          lease_id?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -796,6 +1080,45 @@ export type Database = {
           },
         ]
       }
+      summary_views: {
+        Row: {
+          id: string
+          lease_id: string
+          referrer: string | null
+          viewed_at: string | null
+          viewer_ip: string | null
+        }
+        Insert: {
+          id?: string
+          lease_id: string
+          referrer?: string | null
+          viewed_at?: string | null
+          viewer_ip?: string | null
+        }
+        Update: {
+          id?: string
+          lease_id?: string
+          referrer?: string | null
+          viewed_at?: string | null
+          viewer_ip?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "summary_views_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "summary_views_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_approvers: {
         Row: {
           created_at: string
@@ -872,11 +1195,46 @@ export type Database = {
           },
         ]
       }
+      workspace_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_roles_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspaces: {
         Row: {
+          approval_threshold: number | null
           billing_interval: string
+          covenant_threshold: number | null
           created_at: string
           default_notification_days: number
+          discount_rate: number | null
           document_limit: number
           documents_used: number
           id: string
@@ -887,9 +1245,12 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approval_threshold?: number | null
           billing_interval?: string
+          covenant_threshold?: number | null
           created_at?: string
           default_notification_days?: number
+          discount_rate?: number | null
           document_limit?: number
           documents_used?: number
           id?: string
@@ -900,9 +1261,12 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approval_threshold?: number | null
           billing_interval?: string
+          covenant_threshold?: number | null
           created_at?: string
           default_notification_days?: number
+          discount_rate?: number | null
           document_limit?: number
           documents_used?: number
           id?: string
@@ -936,7 +1300,6 @@ export type Database = {
           review_field_count: number | null
           status: string | null
           tenant_name: string | null
-          vendor_name: string | null
           uploaded_at: string | null
           user_id: string | null
           workspace_id: string | null
@@ -950,7 +1313,6 @@ export type Database = {
           review_field_count?: never
           status?: string | null
           tenant_name?: string | null
-          vendor_name?: string | null
           uploaded_at?: string | null
           user_id?: string | null
           workspace_id?: string | null
@@ -964,19 +1326,11 @@ export type Database = {
           review_field_count?: never
           status?: string | null
           tenant_name?: string | null
-          vendor_name?: string | null
           uploaded_at?: string | null
           user_id?: string | null
           workspace_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "leases_requestor_id_fkey"
-            columns: ["requestor_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "leases_user_id_fkey"
             columns: ["user_id"]
@@ -996,11 +1350,11 @@ export type Database = {
     }
     Functions: {
       approve_field: {
-        Args: { p_field_name: string; p_lease_id: string; p_user_id: string }
+        Args: { p_field_name: string; p_lease_id: string }
         Returns: boolean
       }
       finalize_lease_approval: {
-        Args: { p_lease_id: string; p_user_id: string }
+        Args: { p_lease_id: string }
         Returns: boolean
       }
       get_workspace_role: {
@@ -1030,7 +1384,6 @@ export type Database = {
           p_field_name: string
           p_lease_id: string
           p_original_value: string
-          p_user_id: string
           p_user_notes?: string
         }
         Returns: string

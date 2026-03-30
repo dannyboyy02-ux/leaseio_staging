@@ -78,6 +78,7 @@ export interface LifecycleLease {
   calcCashPlDelta: number | null;
   leaseClassification: 'operating' | 'finance' | 'pending' | null;
   covenantFlagged: boolean;
+  intakeSource: 'request_workflow' | 'email_intake' | 'backdoor' | 'manual_upload';
   // Extracted data (for executed and beyond)
   tenantName: string | null;
   landlordName: string | null;

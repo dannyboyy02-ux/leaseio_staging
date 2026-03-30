@@ -70,6 +70,8 @@ export interface Lease {
   rentAmount?: number;
   rentFrequency?: 'monthly' | 'quarterly' | 'annually';
   
+  intakeSource?: 'request_workflow' | 'email_intake' | 'backdoor' | 'manual_upload';
+
   // Confidence scores (AI)
   extractionConfidence?: number;
   

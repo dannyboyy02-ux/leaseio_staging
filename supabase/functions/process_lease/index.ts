@@ -1043,7 +1043,7 @@ serve(async (req) => {
 
     const { error: insertError } = await supabaseAdmin
       .from('leases')
-      .insert({ id: leaseId, user_id: user.id, filename: sanitizedFilename, storage_path: storagePath, status: 'Processing' });
+      .insert({ id: leaseId, user_id: user.id, filename: sanitizedFilename, storage_path: storagePath, status: 'Processing', intake_source: 'manual_upload' });
 
     if (insertError) throw new Error(`Failed to create lease record: ${insertError.message}`);
     console.log(`[process_lease] Created lease record: ${leaseId}`);

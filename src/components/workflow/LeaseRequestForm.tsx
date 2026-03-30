@@ -257,6 +257,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           calc_straight_line_exp: calcs?.straightLineExpense ?? null,
           calc_cash_pl_delta: calcs?.cashPLDelta ?? null,
           lifecycle_status: initialStatus,
+          intake_source: 'request_workflow',
           // Lease requests don't go through AI abstraction — set Ready so the
           // processing spinner never fires when landing on the detail page.
           status: 'Ready',
