@@ -31,6 +31,7 @@ import type { FunctionalRole } from '@/types/lifecycle';
 import { Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
+import { calculateLease } from '@/lib/leaseCalculations';
 import {
   canAccessWorkspaceDefaults,
   canAccessWorkspaceProfile,
@@ -44,6 +45,61 @@ const timezones = [
   { value: 'America/Denver', label: 'Mountain Time (MT)' },
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
 ];
+
+async function recomputeWorkspaceLeaseFinancials(workspaceId: string, discountRate: number) {
+  const { data: leases, error } = await supabase
+    .from('leases')
+    .select(
+      'id, executed_monthly_payment, current_monthly_rent, monthly_payment, lease_start, term_months, escalation_rate'
+    )
+    .eq('workspace_id', workspaceId);
+
+  if (error) throw error;
+
+  const updates = (leases || []).map((lease) => {
+    const monthlyPayment =
+      Number((lease as any).executed_monthly_payment) ||
+      Number((lease as any).current_monthly_rent) ||
+      Number((lease as any).monthly_payment) ||
+      0;
+
+    const termMonths = Number((lease as any).term_months) || 0;
+    const startDate = (lease as any).lease_start;
+    const escalationRate = Number((lease as any).escalation_rate) || 0;
+
+    if (!monthlyPayment || !termMonths || !startDate) {
+      return supabase
+        .from('leases')
+        .update({
+          calc_total_commitment: null,
+          calc_pv_liability: null,
+          calc_straight_line_exp: null,
+          calc_cash_pl_delta: null,
+        } as any)
+        .eq('id', lease.id);
+    }
+
+    const calcs = calculateLease({
+      monthlyPayment,
+      termMonths,
+      startDate,
+      escalationRate,
+      discountRate,
+    });
+
+    return supabase
+      .from('leases')
+      .update({
+        calc_total_commitment: calcs.totalCashCommitment,
+        calc_pv_liability: calcs.pvLiability,
+        calc_straight_line_exp: calcs.straightLineExpense,
+        calc_cash_pl_delta: calcs.cashPLDelta,
+      } as any)
+      .eq('id', lease.id);
+  });
+
+  await Promise.all(updates);
+}
 
 export default function WorkspaceSettings() {
   const { workspace, refreshProfile, userRole } = useApp();
@@ -282,15 +338,22 @@ export default function WorkspaceSettings() {
     if (!workspace?.id) { toast.error('No workspace found'); return; }
     setIsSavingFinancial(true);
     try {
+      const parsedDiscountRate = parseFloat(discountRate);
+      if (!(parsedDiscountRate > 0 && parsedDiscountRate <= 50)) {
+        toast.error('Discount rate must be greater than 0 and no more than 50.');
+        return;
+      }
+
       const { error } = await supabase
         .from('workspaces')
         .update({
-          discount_rate: parseFloat(discountRate) || 5.5,
+          discount_rate: parsedDiscountRate,
           covenant_threshold: covenantThreshold ? parseFloat(covenantThreshold) : null,
           approval_threshold: parseFloat(approvalThreshold) || 0,
         } as any)
         .eq('id', workspace.id);
       if (error) throw error;
+      await recomputeWorkspaceLeaseFinancials(workspace.id, parsedDiscountRate);
       toast.success('Financial configuration saved!');
     } catch (error) {
       console.error('Error saving financial config:', error);

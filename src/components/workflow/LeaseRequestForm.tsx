@@ -71,10 +71,15 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   const [file, setFile] = useState<File | null>(null);
   const [calcs, setCalcs] = useState<LeaseCalculations | null>(null);
   const [hasApprovers, setHasApprovers] = useState<boolean | null>(null);
+  const [approvalRoleState, setApprovalRoleState] = useState({
+    hasManagerApprovers: false,
+    hasFinancialApprovers: false,
+  });
   const [workspaceSettings, setWorkspaceSettings] = useState<{
     discountRate: number;
+    approvalThreshold: number | null;
     covenantThreshold: number | null;
-  }>({ discountRate: 5.5, covenantThreshold: null });
+  }>({ discountRate: 5.5, approvalThreshold: null, covenantThreshold: null });
 
   const form = useForm<LeaseRequestFormValues>({
     resolver: zodResolver(leaseRequestSchema),
@@ -96,13 +101,14 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     if (!open || !workspace?.id) return;
     supabase
       .from('workspaces')
-      .select('discount_rate, covenant_threshold')
+      .select('discount_rate, covenant_threshold, approval_threshold')
       .eq('id', workspace.id)
       .single()
       .then(({ data }) => {
         if (data) {
           setWorkspaceSettings({
             discountRate: (data as any).discount_rate ?? 5.5,
+            approvalThreshold: (data as any).approval_threshold ?? null,
             covenantThreshold: (data as any).covenant_threshold ?? null,
           });
         }
@@ -111,11 +117,16 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     // Check if workspace has any approval roles configured
     (supabase as any)
       .from('workspace_roles')
-      .select('role', { count: 'exact', head: true })
+      .select('role')
       .eq('workspace_id', workspace.id)
       .in('role', ['manager_approver', 'financial_approver'])
-      .then(({ count }: { count: number | null }) => {
-        setHasApprovers((count ?? 0) > 0);
+      .then(({ data }: { data: Array<{ role: string }> | null }) => {
+        const roles = data || [];
+        setHasApprovers(roles.length > 0);
+        setApprovalRoleState({
+          hasManagerApprovers: roles.some((row) => row.role === 'manager_approver'),
+          hasFinancialApprovers: roles.some((row) => row.role === 'financial_approver'),
+        });
       });
   }, [open, workspace?.id]);
 
@@ -124,6 +135,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
       setFile(null);
       setCalcs(null);
       setHasApprovers(null);
+      setApprovalRoleState({ hasManagerApprovers: false, hasFinancialApprovers: false });
       form.reset();
     }
   }, [open, form]);
@@ -173,6 +185,27 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   const canSubmit = useMemo(
     () => !isSubmitting && !!user && !!workspace,
     [isSubmitting, user, workspace],
+  );
+
+  const approvalPreview = useMemo(() => {
+    return getApprovalRequirements({
+      totalCashCommitment: calcs?.totalCashCommitment ?? 0,
+      approvalThreshold: workspaceSettings.approvalThreshold,
+      hasManagerApprovers: approvalRoleState.hasManagerApprovers,
+      hasFinancialApprovers: approvalRoleState.hasFinancialApprovers,
+      covenantFlagged,
+    });
+  }, [
+    approvalRoleState.hasFinancialApprovers,
+    approvalRoleState.hasManagerApprovers,
+    calcs?.totalCashCommitment,
+    covenantFlagged,
+    workspaceSettings.approvalThreshold,
+  ]);
+
+  const previewStatus = useMemo(
+    () => getInitialStatusAfterSubmission(approvalPreview),
+    [approvalPreview],
   );
 
   const notifyRoleHolders = async (leaseId: string, role: string, message: string) => {
@@ -356,6 +389,28 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
             </div>
           </div>
         )}
+
+        <div className="mx-4 mt-4 rounded-lg border border-border bg-muted/30 p-3">
+          <p className="text-sm font-medium">Approval route preview</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <Badge variant="outline">Submit</Badge>
+            {approvalPreview.requiresManagerApproval && <Badge variant="secondary">Manager review</Badge>}
+            {approvalPreview.requiresFinancialApproval && <Badge variant="secondary">Financial review</Badge>}
+            <Badge variant={previewStatus === 'approved' ? 'default' : 'outline'}>
+              {previewStatus === 'approved' ? 'Auto-approved' : 'Posted after approval'}
+            </Badge>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {approvalPreview.requiresFinancialApproval
+              ? covenantFlagged
+                ? 'Financial review is required because this request is covenant-flagged.'
+                : workspaceSettings.approvalThreshold != null &&
+                  (calcs?.totalCashCommitment ?? 0) >= workspaceSettings.approvalThreshold
+                ? `Financial review is required because the total commitment meets or exceeds the $${Math.round(workspaceSettings.approvalThreshold).toLocaleString()} threshold.`
+                : 'Financial review is required based on your workspace approval settings.'
+              : 'No additional reviewers are required with the current values.'}
+          </p>
+        </div>
 
         <div className="px-4 pb-4 overflow-y-auto">
           <Form {...form}>

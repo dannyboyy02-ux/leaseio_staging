@@ -11,8 +11,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
 import { canManageWorkspaceMembers } from '@/lib/authorization';
 
-const DISMISSED_KEY = 'leaseio.onboarding_dismissed';
-
 interface OnboardingStep {
   id: string;
   titleKey: string;
@@ -65,11 +63,23 @@ export function OnboardingChecklist() {
   const canManageMembers = canManageWorkspaceMembers(userRole);
   
   useEffect(() => {
-    const wasDismissed = localStorage.getItem(DISMISSED_KEY);
-    if (wasDismissed === 'true') {
-      setDismissed(true);
-    }
-  }, []);
+    if (!user?.id || !workspace?.id) return;
+
+    const loadPreferences = async () => {
+      const { data } = await (supabase as any)
+        .from('user_preferences')
+        .select('onboarding_dismissed_at')
+        .eq('user_id', user.id)
+        .eq('workspace_id', workspace.id)
+        .maybeSingle();
+
+      if (data?.onboarding_dismissed_at) {
+        setDismissed(true);
+      }
+    };
+
+    loadPreferences();
+  }, [user?.id, workspace?.id]);
 
   useEffect(() => {
     if (dismissed || !user?.id) return;
@@ -127,9 +137,18 @@ export function OnboardingChecklist() {
     checkProgress();
   }, [user?.id, workspace?.id, dismissed]);
 
-  const handleDismiss = () => {
+  const handleDismiss = async () => {
     setDismissed(true);
-    localStorage.setItem(DISMISSED_KEY, 'true');
+    if (!user?.id || !workspace?.id) return;
+
+    await (supabase as any)
+      .from('user_preferences')
+      .upsert({
+        user_id: user.id,
+        workspace_id: workspace.id,
+        onboarding_dismissed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,workspace_id' });
   };
   
   if (dismissed) return null;

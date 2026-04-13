@@ -1,27 +1,17 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, ChevronRight, AlertCircle, TrendingUp, Clock, DollarSign, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { differenceInDays, format } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
-
-const DISMISSED_EVENTS_KEY = 'leaseio.dismissed_events';
-
-function getDismissedEvents(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(DISMISSED_EVENTS_KEY) || '[]');
-  } catch {
-    return [];
-  }
-}
 
 interface UpcomingEvent {
   id: string;
@@ -45,14 +35,8 @@ function formatCurrency(amount: number, language: string): string {
 
 export function UpcomingEvents() {
   const { t, language } = useLanguage();
-  const { workspace } = useApp();
-  const [dismissedIds, setDismissedIds] = useState<string[]>(getDismissedEvents);
-
-  const dismissEvent = (id: string) => {
-    const updated = [...dismissedIds, id];
-    setDismissedIds(updated);
-    localStorage.setItem(DISMISSED_EVENTS_KEY, JSON.stringify(updated));
-  };
+  const { workspace, user } = useApp();
+  const queryClient = useQueryClient();
 
   const eventConfig = {
     renewal:    { icon: Clock,        variant: 'info' as const,        labelKey: 'dashboard.renewal' },
@@ -61,7 +45,39 @@ export function UpcomingEvents() {
     payment:    { icon: DollarSign,   variant: 'default' as const,     labelKey: 'dashboard.payment' },
   };
 
-  const { data: events, isLoading } = useQuery({
+  const { data: dismissedIds = [] } = useQuery({
+    queryKey: ['dismissed-events', workspace?.id, user?.id],
+    enabled: !!workspace?.id && !!user?.id,
+    queryFn: async (): Promise<string[]> => {
+      const { data, error } = await (supabase as any)
+        .from('dismissed_events')
+        .select('event_key')
+        .eq('workspace_id', workspace!.id)
+        .eq('user_id', user!.id);
+
+      if (error) throw error;
+      return (data || []).map((row: { event_key: string }) => row.event_key);
+    },
+  });
+
+  const dismissEvent = async (eventKey: string) => {
+    if (!workspace?.id || !user?.id) return;
+    const { error } = await (supabase as any)
+      .from('dismissed_events')
+      .upsert({
+        user_id: user.id,
+        workspace_id: workspace.id,
+        event_key: eventKey,
+        dismissed_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,workspace_id,event_key' });
+
+    if (!error) {
+      await queryClient.invalidateQueries({ queryKey: ['dismissed-events', workspace.id, user.id] });
+      await refetchEvents();
+    }
+  };
+
+  const { data: events, isLoading, refetch: refetchEvents } = useQuery({
     queryKey: ['upcoming-events', workspace?.id],
     enabled: !!workspace?.id,
     queryFn: async (): Promise<UpcomingEvent[]> => {
@@ -101,7 +117,7 @@ export function UpcomingEvents() {
 
           if (daysUntil >= 0 && daysUntil <= 90) {
             upcomingEvents.push({
-              id: `exp-${lease.id}`,
+              id: `expiry:${lease.id}:${expiryRaw}`,
               type: 'expiration',
               titleKey: 'dashboard.lease_expires',
               property,
@@ -109,11 +125,9 @@ export function UpcomingEvents() {
               daysUntil,
               leaseId: lease.id,
             });
-          }
-
-          if (daysUntil >= 30 && daysUntil <= 180) {
+          } else if (daysUntil >= 30 && daysUntil <= 180) {
             upcomingEvents.push({
-              id: `ren-${lease.id}`,
+              id: `renewal:${lease.id}:${expiryRaw}`,
               type: 'renewal',
               titleKey: 'dashboard.renewal_window_opens',
               property,
@@ -128,7 +142,7 @@ export function UpcomingEvents() {
           const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
           const daysUntilPayment = differenceInDays(nextMonth, now);
           upcomingEvents.push({
-            id: `pay-${lease.id}`,
+            id: `payment:${lease.id}:${nextMonth.toISOString().slice(0, 10)}`,
             type: 'payment',
             titleKey: 'dashboard.rent_payment_due',
             property,
@@ -144,7 +158,10 @@ export function UpcomingEvents() {
     },
   });
 
-  const visibleEvents = (events || []).filter((e) => !dismissedIds.includes(e.id));
+  const visibleEvents = useMemo(
+    () => (events || []).filter((e) => !dismissedIds.includes(e.id)),
+    [dismissedIds, events],
+  );
 
   if (isLoading) {
     return (

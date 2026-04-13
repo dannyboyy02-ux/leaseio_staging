@@ -1,6 +1,11 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+import {
+  analyzeWithAzureDI as runAzureDI,
+  enforceWorkspaceRateLimit,
+  repairJsonObject,
+} from "../_shared/audit.ts";
 
 // Secure CORS configuration
 const ALLOWED_ORIGINS = [
@@ -31,9 +36,6 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   };
 }
 
-// Default CORS headers for backwards compatibility
-const corsHeaders = getCorsHeaders(null);
-
 // Azure Document Intelligence
 const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');
 const AZURE_DI_KEY = Deno.env.get('AZURE_DI_KEY');
@@ -41,6 +43,8 @@ const AZURE_DI_KEY = Deno.env.get('AZURE_DI_KEY');
 // OpenAI
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
+const OPENAI_MAX_TOKENS = Number(Deno.env.get('OPENAI_MAX_TOKENS') || '8000');
+const AZURE_DI_MODEL = Deno.env.get('AZURE_DI_MODEL') || 'prebuilt-layout';
 
 // Supabase
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -266,60 +270,70 @@ function normalizeEscalation(rentEscalationTypeRaw: string | null): {
 }
 
 async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
-  console.log('[Azure DI] Starting document analysis...');
-  const analyzeUrl = `${AZURE_DI_ENDPOINT}/documentintelligence/documentModels/prebuilt-layout:analyze?api-version=2024-11-30`;
-  const analyzeResponse = await fetch(analyzeUrl, {
-    method: 'POST',
-    headers: { 'Ocp-Apim-Subscription-Key': AZURE_DI_KEY!, 'Content-Type': 'application/pdf' },
-    body: new Blob([pdfBytes], { type: 'application/pdf' }),
+  return await runAzureDI(pdfBytes, {
+    endpoint: AZURE_DI_ENDPOINT!,
+    apiKey: AZURE_DI_KEY!,
+    model: AZURE_DI_MODEL,
+    logPrefix: 'process_lease',
   });
-  if (!analyzeResponse.ok) {
-    const errorText = await analyzeResponse.text();
-    throw new Error(`Azure DI analyze failed: ${analyzeResponse.status} - ${errorText}`);
-  }
-  const operationLocation = analyzeResponse.headers.get('Operation-Location');
-  if (!operationLocation) throw new Error('Azure DI did not return Operation-Location header');
-  console.log('[Azure DI] Polling for results...');
-  let result = null;
-  let attempts = 0;
-  const maxAttempts = 60;
-  while (attempts < maxAttempts) {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    const pollResponse = await fetch(operationLocation, {
-      headers: { 'Ocp-Apim-Subscription-Key': AZURE_DI_KEY! },
-    });
-    if (!pollResponse.ok) {
-      const errorText = await pollResponse.text();
-      throw new Error(`Azure DI poll failed: ${pollResponse.status}`);
+}
+
+function normalizeConfidenceScore(value: number): number {
+  const normalized = value <= 1 ? value * 100 : value;
+  return Math.min(Math.max(normalized, 0), 100);
+}
+
+async function resolveAuthorizedWorkspaceId(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+  requestedWorkspaceId: string | null,
+): Promise<string | null> {
+  if (requestedWorkspaceId) {
+    if (!isValidUUID(requestedWorkspaceId)) {
+      throw new Error('Invalid workspace ID format.');
     }
-    const pollResult = await pollResponse.json();
-    if (pollResult.status === 'succeeded') { result = pollResult.analyzeResult; break; }
-    else if (pollResult.status === 'failed') throw new Error(`Azure DI analysis failed: ${JSON.stringify(pollResult.error)}`);
-    attempts++;
+
+    const { data: ownedWorkspace, error: ownedError } = await supabaseAdmin
+      .from('workspaces')
+      .select('id')
+      .eq('id', requestedWorkspaceId)
+      .eq('owner_id', userId)
+      .maybeSingle();
+
+    if (ownedError) throw new Error(`Failed to validate workspace ownership: ${ownedError.message}`);
+    if (ownedWorkspace) return ownedWorkspace.id;
+
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('workspace_id', requestedWorkspaceId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (membershipError) throw new Error(`Failed to validate workspace membership: ${membershipError.message}`);
+    if (!membership) throw new Error('Unauthorized workspace access.');
+    return membership.workspace_id;
   }
-  if (!result) throw new Error('Azure DI analysis timed out');
-  console.log(`[Azure DI] Extracted ${result.pages?.length || 0} pages`);
-  let extractedText = '';
-  if (result.paragraphs) {
-    for (const paragraph of result.paragraphs) extractedText += paragraph.content + '\n\n';
-  }
-  if (result.tables) {
-    for (const table of result.tables) {
-      extractedText += '\n[TABLE]\n';
-      const rows: Record<number, Record<number, string>> = {};
-      for (const cell of table.cells) {
-        if (!rows[cell.rowIndex]) rows[cell.rowIndex] = {};
-        rows[cell.rowIndex][cell.columnIndex] = cell.content;
-      }
-      for (const rowIdx of Object.keys(rows).map(Number).sort((a, b) => a - b)) {
-        const row = rows[rowIdx];
-        const cells = Object.keys(row).map(Number).sort((a, b) => a - b).map(colIdx => row[colIdx]);
-        extractedText += cells.join(' | ') + '\n';
-      }
-      extractedText += '[/TABLE]\n\n';
-    }
-  }
-  return extractedText;
+
+  const { data: ownedWorkspace, error: ownedError } = await supabaseAdmin
+    .from('workspaces')
+    .select('id')
+    .eq('owner_id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (ownedError) throw new Error(`Failed to resolve workspace ownership: ${ownedError.message}`);
+  if (ownedWorkspace) return ownedWorkspace.id;
+
+  const { data: membership, error: membershipError } = await supabaseAdmin
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (membershipError) throw new Error(`Failed to resolve workspace membership: ${membershipError.message}`);
+  return membership?.workspace_id ?? null;
 }
 
 async function extractLeaseDataWithOpenAI(documentText: string): Promise<LeaseExtractionResult> {
@@ -660,41 +674,13 @@ COMMON EXTRACTION ERRORS TO AVOID:
 
 Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
 
-  function extractJsonFromResponse(content: string): object {
-    let jsonStr = content;
-    if (content.includes('```json')) {
-      const match = content.match(/```json\s*([\s\S]*?)\s*```/);
-      if (match) jsonStr = match[1];
-    } else if (content.includes('```')) {
-      const match = content.match(/```\s*([\s\S]*?)\s*```/);
-      if (match) jsonStr = match[1];
-    }
-    const trimmed = jsonStr.trim();
-    const firstBrace = trimmed.indexOf('{');
-    const lastBrace = trimmed.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      jsonStr = trimmed.substring(firstBrace, lastBrace + 1);
-    }
-    jsonStr = jsonStr
-      .replace(/,\s*}/g, '}')
-      .replace(/,\s*]/g, ']')
-      .replace(/[\x00-\x1F\x7F]/g, ' ')
-      .replace(/\n\s*\n/g, '\n');
+  async function extractJsonFromResponse(content: string): Promise<object> {
     try {
-      return JSON.parse(jsonStr.trim());
-    } catch (e) {
-      console.log('[OpenAI] First parse attempt failed, trying cleanup...');
-      const fixedJson = jsonStr
-        .replace(/(\w+)\s*:/g, '"$1":')
-        .replace(/:\s*'([^']*)'/g, ':"$1"')
-        .replace(/""/g, '"');
-      try {
-        return JSON.parse(fixedJson.trim());
-      } catch (e2) {
-        console.error('[OpenAI] JSON cleanup failed:', e2);
-        console.error('[OpenAI] Failed content preview:', jsonStr.substring(0, 500));
-        throw e;
-      }
+      return await repairJsonObject(content);
+    } catch (error) {
+      console.error('[OpenAI] JSON repair failed:', error);
+      console.error('[OpenAI] Failed content preview:', content.substring(0, 500));
+      throw error;
     }
   }
 
@@ -712,7 +698,7 @@ Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
             { role: 'user', content: `Please analyze this lease document and extract the key information:\n\n${documentText}` }
           ],
           temperature: attempt === 0 ? 0.1 : 0.0,
-          max_tokens: 4000,
+          max_tokens: OPENAI_MAX_TOKENS,
           response_format: { type: "json_object" },
         }),
       });
@@ -743,7 +729,7 @@ Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
       console.log('[OpenAI] Raw response:', content.substring(0, 500));
       console.log(`[OpenAI] Tokens - prompt: ${data.usage?.prompt_tokens || 'N/A'}, completion: ${data.usage?.completion_tokens || 'N/A'}`);
       try {
-        const parsed = extractJsonFromResponse(content);
+        const parsed = await extractJsonFromResponse(content);
         console.log('[OpenAI] Successfully parsed JSON response');
         return parsed as LeaseExtractionResult;
       } catch (parseError) {
@@ -760,6 +746,9 @@ Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
 }
 
 serve(async (req) => {
+  const requestOrigin = req.headers.get('origin');
+  const corsHeaders = getCorsHeaders(requestOrigin);
+
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -856,7 +845,7 @@ serve(async (req) => {
             .eq('workspace_id', existingLease.workspace_id)
             .eq('user_id', user.id)
             .single();
-          if (!roleData || !['financial_approver', 'admin', 'editor'].includes(roleData.role)) {
+          if (!roleData || !['financial_approver', 'admin'].includes(roleData.role)) {
             return new Response(JSON.stringify({ error: 'Unauthorized to upload executed document for this lease.' }), {
               status: 403,
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -876,6 +865,14 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
+      const rateLimitResponse = await enforceWorkspaceRateLimit(
+        supabaseAdmin,
+        existingLease.workspace_id,
+        'process_lease',
+        requestOrigin,
+      );
+      if (rateLimitResponse) return rateLimitResponse;
 
       const timestamp = Date.now();
       const bucketPrefix = existingLease.workspace_id
@@ -934,7 +931,7 @@ serve(async (req) => {
       const executedConfidence: Record<string, number> = {};
       for (const [key, field] of execFieldMap) {
         const conf = extractConfidence(field);
-        if (conf !== null) executedConfidence[key] = conf;
+        if (conf !== null) executedConfidence[key] = normalizeConfidenceScore(conf);
       }
 
       const pipelineMonthly = (existingLease.current_monthly_rent ?? existingLease.monthly_payment ?? null) as number | null;
@@ -1039,18 +1036,34 @@ serve(async (req) => {
       });
     }
 
-    // Resolve workspace_id: prefer request param, fall back to user's first membership
-    let resolvedWorkspaceId: string | null = workspaceIdFromRequest || null;
-    if (!resolvedWorkspaceId) {
-      const { data: membership } = await supabaseAdmin
-        .from('workspace_members')
-        .select('workspace_id')
-        .eq('user_id', user.id)
-        .limit(1)
-        .single();
-      resolvedWorkspaceId = membership?.workspace_id ?? null;
+    let resolvedWorkspaceId: string | null;
+    try {
+      resolvedWorkspaceId = await resolveAuthorizedWorkspaceId(
+        supabaseAdmin,
+        user.id,
+        workspaceIdFromRequest,
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Workspace validation failed.';
+      const status = errorMessage === 'Invalid workspace ID format.'
+        ? 400
+        : errorMessage === 'Unauthorized workspace access.'
+        ? 403
+        : 500;
+      return new Response(JSON.stringify({ error: errorMessage }), {
+        status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     console.log(`[process_lease] Resolved workspace_id: ${resolvedWorkspaceId}`);
+
+    const rateLimitResponse = await enforceWorkspaceRateLimit(
+      supabaseAdmin,
+      resolvedWorkspaceId,
+      'process_lease',
+      requestOrigin,
+    );
+    if (rateLimitResponse) return rateLimitResponse;
 
     const leaseId = crypto.randomUUID();
     const storagePath = `${user.id}/${leaseId}/${sanitizedFilename}`;
@@ -1136,7 +1149,13 @@ serve(async (req) => {
     for (const fieldName of fieldsToTrack) {
       const fieldData = (leaseData as any)[fieldName];
       const confidence = extractConfidence(fieldData);
-      if (confidence !== null) confidenceEntries.push({ lease_id: leaseId, field_name: fieldName, confidence_score: Math.min(confidence, 1.0) });
+      if (confidence !== null) {
+        confidenceEntries.push({
+          lease_id: leaseId,
+          field_name: fieldName,
+          confidence_score: normalizeConfidenceScore(confidence),
+        });
+      }
     }
     if (confidenceEntries.length > 0) {
       const { error: confError } = await supabaseAdmin.from('lease_field_confidence').upsert(confidenceEntries, { onConflict: 'lease_id,field_name' });
@@ -1145,6 +1164,7 @@ serve(async (req) => {
     }
 
     if (leaseData.rent_schedule && leaseData.rent_schedule.length > 0) {
+      await supabaseAdmin.from('rent_schedules').delete().eq('lease_id', leaseId);
       const rentScheduleToInsert = leaseData.rent_schedule
         .filter(period => period.period_start)
         .map(period => ({
@@ -1163,6 +1183,7 @@ serve(async (req) => {
     }
 
     if (leaseData.risks && leaseData.risks.length > 0) {
+      await supabaseAdmin.from('risks').delete().eq('lease_id', leaseId);
       const risksToInsert = leaseData.risks.map(risk => ({
         lease_id: leaseId,
         title: risk.title,

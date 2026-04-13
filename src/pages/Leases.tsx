@@ -27,11 +27,11 @@ import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { cn } from '@/lib/utils';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface LeaseRow {
   id: string;
@@ -52,6 +52,7 @@ interface LeaseRow {
 
 type SortField = 'property' | 'landlord' | 'monthly_rent' | 'lease_start' | 'lease_end' | 'sqft';
 type SortDirection = 'asc' | 'desc';
+type LeaseView = 'active' | 'approval';
 
 // Statuses that represent in-flight (awaiting action) leases
 const IN_FLIGHT_STATUSES = new Set(['submitted', 'under_review', 'approved']);
@@ -75,6 +76,7 @@ export default function Leases() {
   const [expirationFilter, setExpirationFilter] = useState('all');
   const [sortField, setSortField] = useState<SortField>('lease_end');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [leaseView, setLeaseView] = useState<LeaseView>('active');
   const [leases, setLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -193,6 +195,11 @@ export default function Leases() {
     [leases],
   );
 
+  const inApprovalLeases = useMemo(
+    () => leases.filter((l) => IN_FLIGHT_STATUSES.has(l.lifecycle_status || '')),
+    [leases],
+  );
+
   const totalMonthlyRent = useMemo(
     () => activeLeases.reduce((sum, l) => sum + getMonthlyRent(l), 0),
     [activeLeases],
@@ -207,7 +214,8 @@ export default function Leases() {
   }, [totalMonthlyRent, activeLeases, leases]);
 
   const filteredAndSortedLeases = useMemo(() => {
-    const result = leases.filter((lease) => {
+    const sourceLeases = leaseView === 'active' ? activeLeases : inApprovalLeases;
+    const result = sourceLeases.filter((lease) => {
       const searchLower = searchQuery.toLowerCase();
       const matchesSearch =
         !searchQuery ||
@@ -261,7 +269,7 @@ export default function Leases() {
     });
 
     return result;
-  }, [leases, searchQuery, expirationFilter, sortField, sortDirection]);
+  }, [activeLeases, expirationFilter, inApprovalLeases, leaseView, searchQuery, sortField, sortDirection]);
 
   return (
     <AppLayout>
@@ -286,6 +294,16 @@ export default function Leases() {
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Tabs value={leaseView} onValueChange={(value) => setLeaseView(value as LeaseView)}>
+                <TabsList>
+                  <TabsTrigger value="active">
+                    Active Portfolio ({activeLeases.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="approval">
+                    In Approval ({inApprovalLeases.length})
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
               <div className="relative w-full sm:w-[320px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -368,14 +386,10 @@ export default function Leases() {
                       const leaseEnd = getLeaseEnd(lease);
                       const daysUntil = getDaysUntilExpiration(leaseEnd);
                       const monthlyRent = getMonthlyRent(lease);
-                      const isInFlight = IN_FLIGHT_STATUSES.has(lease.lifecycle_status || '');
                       return (
                         <TableRow
                           key={lease.id}
-                          className={cn(
-                            'cursor-pointer hover:bg-muted/50',
-                            isInFlight && 'bg-muted/20'
-                          )}
+                          className="cursor-pointer hover:bg-muted/50"
                           onClick={() => navigate(`/app/leases/${lease.id}`)}
                         >
                           <TableCell className="font-medium">

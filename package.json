@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:supabase-types": "node scripts/check-supabase-types.mjs",
+    "smoke:security": "node scripts/smoke-audit-hardening.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

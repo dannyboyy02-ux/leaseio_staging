@@ -19,6 +19,21 @@ export interface LeaseCalculations {
   endDate: string;             // ISO date string
 }
 
+function parseIsoDateUtc(date: string): Date {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+}
+
+function addUtcMonths(date: Date, months: number): Date {
+  return new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth() + months,
+      date.getUTCDate(),
+    ),
+  );
+}
+
 /**
  * Calculate financial impact for a lease.
  *
@@ -71,8 +86,8 @@ export function calculateLease(inputs: LeaseInputs): LeaseCalculations {
   const cashPLDelta = cumulativeCash - cumulativeSL;
 
   // End date: startDate + termMonths calendar months
-  const start = new Date(startDate);
-  const end = new Date(start.getFullYear(), start.getMonth() + termMonths, start.getDate());
+  const start = parseIsoDateUtc(startDate);
+  const end = addUtcMonths(start, termMonths);
   const endDate = end.toISOString().slice(0, 10);
 
   return {
