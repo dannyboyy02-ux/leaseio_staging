@@ -31,7 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
   terminated:   'hsl(var(--muted-foreground))',
 };
 
-interface StatusCount { status: string; count: number; }
+interface StatusCommitment { status: string; commitment: number; }
 interface VarianceLease {
   id: string;
   filename: string | null;
@@ -66,7 +66,7 @@ export default function Reports() {
   const isEditor = userRole === 'editor';
   const canExport = canExportReports(userRole);
 
-  const [statusData, setStatusData] = useState<StatusCount[]>([]);
+  const [statusData, setStatusData] = useState<StatusCommitment[]>([]);
   const [varianceLeases, setVarianceLeases] = useState<VarianceLease[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
 
@@ -76,7 +76,7 @@ export default function Reports() {
       const [{ data: leases }, { data: variance }] = await Promise.all([
         supabase
           .from('leases')
-          .select('lifecycle_status')
+          .select('lifecycle_status, calc_total_commitment')
           .eq('workspace_id', workspace!.id)
           .filter('lifecycle_status', 'not.is', 'null'),
         supabase
@@ -89,15 +89,15 @@ export default function Reports() {
       ]);
 
       if (leases) {
-        const counts: Record<string, number> = {};
+        const commitments: Record<string, number> = {};
         leases.forEach((l) => {
           const s = l.lifecycle_status ?? 'unknown';
-          counts[s] = (counts[s] || 0) + 1;
+          commitments[s] = (commitments[s] || 0) + (Number((l as any).calc_total_commitment) || 0);
         });
         setStatusData(
-          Object.entries(counts)
+          Object.entries(commitments)
             .sort(([, a], [, b]) => b - a)
-            .map(([status, count]) => ({ status, count }))
+            .map(([status, commitment]) => ({ status, commitment }))
         );
       }
 
@@ -157,7 +157,12 @@ export default function Reports() {
               return true;
             })
             .map((report, index) => (
-              <Card key={report.id} variant="interactive" className="animate-fade-up" style={{ animationDelay: `${index * 50}ms` }}>
+              <Card
+                key={report.id}
+                variant={report.href ? 'interactive' : 'default'}
+                className="animate-fade-up"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
                 <CardHeader>
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -170,9 +175,9 @@ export default function Reports() {
                   <CardDescription className="mb-4">{t(report.descKey)}</CardDescription>
                   <div className="flex gap-2">
                     <Button variant="secondary" className="flex-1" asChild={!!report.href}>
-                      {report.href ? <Link to={report.href}>{t('reports.view_report')}</Link> : t('reports.view_report')}
+                      {report.href ? <Link to={report.href}>{t('reports.view_report')}</Link> : <span>Coming soon</span>}
                     </Button>
-                    <Button variant="ghost" size="icon" disabled={!canExport}>
+                    <Button variant="ghost" size="icon" disabled={!canExport || !report.href}>
                       <Download className="h-4 w-4" />
                     </Button>
                   </div>
@@ -185,7 +190,7 @@ export default function Reports() {
         <Card className="mt-8">
           <CardHeader>
             <CardTitle>{t('reports.monthly_overview')}</CardTitle>
-            <CardDescription>Lease count by lifecycle status across your portfolio</CardDescription>
+            <CardDescription>Total commitment by lifecycle status across your portfolio</CardDescription>
           </CardHeader>
           <CardContent>
             {chartLoading ? (
@@ -206,12 +211,26 @@ export default function Reports() {
                     tickFormatter={(s) => s.replace('_', ' ')}
                   />
                   <YAxis
-                    allowDecimals={false}
+                    tickFormatter={(value: number) =>
+                      new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        notation: 'compact',
+                        maximumFractionDigits: 1,
+                      }).format(value)
+                    }
                     tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                    width={32}
+                    width={72}
                   />
                   <Tooltip
-                    formatter={(val: number) => [val, 'Leases']}
+                    formatter={(val: number) => [
+                      new Intl.NumberFormat('en-US', {
+                        style: 'currency',
+                        currency: 'USD',
+                        maximumFractionDigits: 0,
+                      }).format(val),
+                      'Commitment',
+                    ]}
                     labelFormatter={(l) => String(l).replace('_', ' ')}
                     contentStyle={{
                       background: 'hsl(var(--popover))',
@@ -220,7 +239,7 @@ export default function Reports() {
                       fontSize: 12,
                     }}
                   />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  <Bar dataKey="commitment" radius={[4, 4, 0, 0]}>
                     {statusData.map((entry) => (
                       <Cell
                         key={entry.status}

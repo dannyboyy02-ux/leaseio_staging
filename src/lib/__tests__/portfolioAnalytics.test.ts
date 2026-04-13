@@ -162,7 +162,7 @@ describe('Scenario 5: mixed portfolio aggregation', () => {
       { escalation_type: 'percent', current_monthly_rent: 5000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 3,   discount_rate: 5 },
       { escalation_type: 'index',   current_monthly_rent: 3000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0,   discount_rate: 5 },
     ];
-    const result = computePortfolioMetrics(leases);
+    const result = computePortfolioMetrics(leases, { discountRate: 5 });
     const percentOnly = calculateLease({ monthlyPayment: 5000, termMonths: 24, startDate: '2026-01-01', escalationRate: 3, discountRate: 5 });
     expect(result.totalPVLiability).toBeCloseTo(percentOnly.pvLiability, 0);
     expect(result.indexBasedLeaseCount).toBe(1);
@@ -175,7 +175,7 @@ describe('Scenario 5: mixed portfolio aggregation', () => {
       { escalation_type: 'none',    current_monthly_rent: 2000, term_months: 12, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
       { escalation_type: 'index',   current_monthly_rent: 6000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
     ];
-    const result = computePortfolioMetrics(leases);
+    const result = computePortfolioMetrics(leases, { discountRate: 5 });
     expect(result.indexBasedLeaseCount).toBe(1);
     expect(result.indexBasedLeasePV).toBeGreaterThan(0);
     const expected = [
@@ -260,7 +260,7 @@ describe('Scenario 9: parsing boundary — downstream uses escalation_type only'
       { escalation_type: 'index',   current_monthly_rent: 3000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
       { escalation_type: 'none',    current_monthly_rent: 2000, term_months: 12, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
     ];
-    const result = computePortfolioMetrics(leases);
+    const result = computePortfolioMetrics(leases, { discountRate: 5 });
     // Only 2 non-index leases contribute to totalPVLiability
     expect(result.indexBasedLeaseCount).toBe(1);
     // totalPVLiability must exclude the index lease
@@ -306,9 +306,43 @@ describe('ASC 842 hard rules', () => {
   });
 
   it('computePortfolioMetrics result has correct property names', () => {
-    const result = computePortfolioMetrics([]);
+    const result = computePortfolioMetrics([], { discountRate: 5 });
     expect(result).toHaveProperty('totalPVLiability');
     expect(result).toHaveProperty('indexBasedLeaseCount');
     expect(result).toHaveProperty('indexBasedLeasePV');
+    expect(result).toHaveProperty('excludedLeaseCount');
+  });
+});
+
+describe('Additional audit regressions', () => {
+  it('excludes leases with no term information from PV totals', () => {
+    const result = computePortfolioMetrics(
+      [
+        {
+          escalation_type: 'none',
+          current_monthly_rent: 5000,
+          lease_start: null,
+          lease_end: null,
+          term_months: null,
+          escalation_rate: 0,
+        },
+      ],
+      { discountRate: 5 },
+    );
+
+    expect(result.totalPVLiability).toBe(0);
+    expect(result.excludedLeaseCount).toBe(1);
+  });
+
+  it('matches a golden PV value for a simple 12-month lease', () => {
+    const result = calculateLease({
+      monthlyPayment: 1000,
+      termMonths: 12,
+      startDate: '2026-01-01',
+      escalationRate: 0,
+      discountRate: 5,
+    });
+
+    expect(result.pvLiability).toBeCloseTo(11688.17, 2);
   });
 });

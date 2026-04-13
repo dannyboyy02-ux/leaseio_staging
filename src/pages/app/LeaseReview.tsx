@@ -809,6 +809,39 @@ export default function LeaseReview() {
         audit_log: JSON.parse(JSON.stringify(auditLog)),
       };
 
+      const monthlyPayment =
+        updateData.current_monthly_rent ??
+        lease.current_monthly_rent ??
+        lease.monthly_payment ??
+        null;
+      const termMonths = lease.term_months ?? null;
+      const startDate = updateData.lease_start ?? lease.lease_start ?? null;
+      const escalationRate = lease.escalation_rate ?? 0;
+
+      if (monthlyPayment && termMonths && startDate && lease.workspace_id) {
+        const { calculateLease } = await import('@/lib/leaseCalculations');
+        const wsResult = await (supabase as any)
+          .from('workspaces')
+          .select('discount_rate')
+          .eq('id', lease.workspace_id)
+          .single();
+        const discountRate = wsResult.data?.discount_rate ?? 5.5;
+        const calcs = calculateLease({
+          monthlyPayment: Number(monthlyPayment),
+          termMonths: Number(termMonths),
+          startDate,
+          escalationRate: Number(escalationRate) || 0,
+          discountRate,
+        });
+
+        Object.assign(updateData, {
+          calc_total_commitment: calcs.totalCashCommitment,
+          calc_pv_liability: calcs.pvLiability,
+          calc_straight_line_exp: calcs.straightLineExpense,
+          calc_cash_pl_delta: calcs.cashPLDelta,
+        });
+      }
+
       const { error } = await supabase
         .from("leases")
         .update(updateData)

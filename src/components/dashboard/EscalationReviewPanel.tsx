@@ -67,7 +67,7 @@ export function EscalationReviewPanel() {
     try {
       const escalationType = newEscalationType === 'none' ? null : newEscalationType;
       const escalationRate =
-        newEscalationType === 'fixed' && newEscalationRate ? Number(newEscalationRate) : null;
+        newEscalationType === 'percent' && newEscalationRate ? Number(newEscalationRate) : null;
 
       const { error } = await supabase
         .from('leases')
@@ -163,12 +163,12 @@ export function EscalationReviewPanel() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="fixed">Fixed %</SelectItem>
+                    <SelectItem value="percent">Percent</SelectItem>
                     <SelectItem value="index">CPI / Index</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {newEscalationType === 'fixed' && (
+              {newEscalationType === 'percent' && (
                 <div className="space-y-2">
                   <Label>Annual Escalation Rate (%)</Label>
                   <Input

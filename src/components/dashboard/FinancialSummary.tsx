@@ -22,6 +22,7 @@ interface FinancialData {
   activeLeaseCount: number;
   expiringCount: number;
   avgRemainingTermMonths: number;
+  workspaceDiscountRate: number | null;
   nextPayment: {
     amount: number;
     property: string;
@@ -76,19 +77,28 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
     queryKey: ['financial-summary', workspace?.id],
     enabled: !!workspace?.id,
     queryFn: async (): Promise<FinancialData> => {
-      const { data: leases, error } = await supabase
-        .from('leases')
-        .select(
-          'id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
-          'lease_start, lease_end, executed_expiry_date, extracted_json, ' +
-          'term_months, escalation_rate, escalation_type, needs_escalation_review'
-        )
-        .eq('workspace_id', workspace!.id)
-        .in('lifecycle_status', ['executed', 'active']);
+      const [{ data: leases, error }, { data: workspaceSettings, error: workspaceError }] = await Promise.all([
+        supabase
+          .from('leases')
+          .select(
+            'id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
+            'lease_start, lease_end, executed_expiry_date, extracted_json, ' +
+            'term_months, escalation_rate, escalation_type, needs_escalation_review'
+          )
+          .eq('workspace_id', workspace!.id)
+          .in('lifecycle_status', ['executed', 'active']),
+        supabase
+          .from('workspaces')
+          .select('discount_rate')
+          .eq('id', workspace!.id)
+          .single(),
+      ]);
 
       if (error) throw error;
+      if (workspaceError) throw workspaceError;
 
       const activeLeases = leases || [];
+      const workspaceDiscountRate = (workspaceSettings as any)?.discount_rate ?? null;
       const now = new Date();
       const in90Days = new Date(now.getTime() + 90 * 86_400_000);
 
@@ -159,7 +169,9 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
       }
 
       // Portfolio PV analytics — delegated to pure module
-      const portfolio = computePortfolioMetrics(activeLeases as any[]);
+      const portfolio = computePortfolioMetrics(activeLeases as any[], {
+        discountRate: workspaceDiscountRate,
+      });
 
       // Index lease display names — UI concern, stays here
       const indexLeaseNames = activeLeases
@@ -178,6 +190,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         activeLeaseCount: activeLeases.length,
         expiringCount,
         avgRemainingTermMonths,
+        workspaceDiscountRate,
         nextPayment,
         portfolio,
         indexLeaseNames,
@@ -383,7 +396,11 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
                 <p className="text-2xl font-bold font-display">
                   {formatCurrency(data!.portfolio.totalPVLiability, language)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">present value of all lease obligations</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {data?.workspaceDiscountRate
+                    ? `discounted at ${data.workspaceDiscountRate}%`
+                    : 'set a workspace discount rate to calculate PV'}
+                </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Avg Remaining Term</p>
@@ -394,17 +411,18 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
                 <p className="text-xs text-muted-foreground mt-0.5">across active portfolio</p>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Expiring &le; 90 Days</p>
-                <p className={`text-2xl font-bold font-display ${
-                  (data?.expiringCount ?? 0) > 0 ? 'text-warning' : ''
-                }`}>
-                  {data!.expiringCount}
+                <p className="text-sm text-muted-foreground">Annual Obligation</p>
+                <p className="text-2xl font-bold font-display">
+                  {formatCurrency(data!.annualObligation, language)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {(data?.expiringCount ?? 0) > 0 ? 'require attention' : 'no upcoming expirations'}
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">current annualized rent run rate</p>
               </div>
             </div>
+            {(data?.portfolio.excludedLeaseCount ?? 0) > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-4">
+                {data!.portfolio.excludedLeaseCount} lease{data!.portfolio.excludedLeaseCount !== 1 ? 's' : ''} excluded from PV analytics because term data is incomplete.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}

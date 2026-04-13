@@ -89,7 +89,7 @@ export interface RentRollEntry {
   startDate: string;
   endDate: string;
   amount: number;
-  escalationType?: 'fixed' | 'step' | 'cpi';
+  escalationType?: 'percent' | 'index' | 'none';
   escalationValue?: number;
   notes?: string;
   createdAt: string;
