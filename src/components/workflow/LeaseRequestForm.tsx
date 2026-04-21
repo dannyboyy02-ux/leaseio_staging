@@ -42,9 +42,11 @@ const leaseRequestSchema = z.object({
   description: z.string().trim().min(3, 'Description is required'),
   vendor: z.string().trim().optional(),
   requestingDepartment: z.string().trim().min(2, 'Requesting department is required'),
-  monthlyPayment: z.coerce.number().positive('Monthly payment is required'),
-  termMonths: z.coerce.number().int().min(1).max(360, 'Term must be 1\u2013360 months'),
-  startDate: z.string().min(1, 'Start date is required'),
+  // These three are optional — AI will extract them from the uploaded document.
+  // Filling them in unlocks the financial impact preview and approval routing.
+  monthlyPayment: z.coerce.number().positive().optional(),
+  termMonths: z.coerce.number().int().min(1).max(360).optional(),
+  startDate: z.string().optional(),
   escalationRate: z.coerce.number().min(0).default(0),
   covenantFlagged: z.boolean().default(false),
 });
@@ -279,8 +281,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           asset_type: values.assetType,
           requesting_department: values.requestingDepartment,
           vendor_name: values.vendor || null,
-          monthly_payment: values.monthlyPayment,
-          term_months: values.termMonths,
+          monthly_payment: values.monthlyPayment ?? null,
+          term_months: values.termMonths ?? null,
           lease_start: values.startDate || null,
           escalation_rate: values.escalationRate ?? 0,
           covenant_flagged: values.covenantFlagged,
@@ -521,7 +523,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Monthly Payment <span className="text-destructive">*</span>
+                        Monthly Payment
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">(AI will extract from document)</span>
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
@@ -555,7 +558,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Term (months) <span className="text-destructive">*</span>
+                          Term (months)
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">(AI will extract)</span>
                         </FormLabel>
                         <FormControl>
                           <Input
@@ -608,7 +612,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Start Date <span className="text-destructive">*</span>
+                        Start Date
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">(AI will extract)</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="date" {...field} />

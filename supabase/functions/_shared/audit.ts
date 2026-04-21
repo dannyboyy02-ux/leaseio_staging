@@ -86,11 +86,13 @@ export async function analyzeWithAzureDI(
     apiKey,
     model = "prebuilt-layout",
     logPrefix,
+    includePageDelimiters = false,
   }: {
     endpoint: string;
     apiKey: string;
     model?: string;
     logPrefix: string;
+    includePageDelimiters?: boolean;
   },
 ): Promise<string> {
   const startedAt = Date.now();
@@ -156,7 +158,15 @@ export async function analyzeWithAzureDI(
 
   let extractedText = "";
   if (result.paragraphs) {
+    let currentPage = 0;
     for (const paragraph of result.paragraphs) {
+      if (includePageDelimiters) {
+        const pageNum = paragraph.boundingRegions?.[0]?.pageNumber ?? currentPage;
+        if (pageNum !== currentPage) {
+          extractedText += `\n[PAGE ${pageNum}]\n`;
+          currentPage = pageNum;
+        }
+      }
       extractedText += `${paragraph.content}\n\n`;
     }
   }

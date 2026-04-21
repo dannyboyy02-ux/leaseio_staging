@@ -73,7 +73,7 @@
     },
     "how": {
       "title": "How it works",
-      "subtitle": "From lease request to compliance-ready in four steps.",
+      "subtitle": "From lease request to audit-ready repository in four steps.",
       "step1": {
         "title": "Log a Request",
         "desc": "Operations, facilities, or any department logs a lease request with basic details. No document needed."
@@ -87,7 +87,7 @@
         "desc": "When the lease is signed, upload the executed document. AI extracts all key terms automatically."
       },
       "step4": {
-        "title": "Stay Compliant",
+        "title": "Own Your Repository",
         "desc": "Abstracted leases enter your active repository. Finance has a complete, audit-defensible lease population."
       }
     },

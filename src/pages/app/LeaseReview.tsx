@@ -48,6 +48,7 @@ import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog
 import { AmendmentsList } from "@/components/leases/AmendmentsList";
 import { AmendmentChanges } from "@/components/leases/AmendmentChanges";
 import { ActivityTimeline } from "@/components/lifecycle/ActivityTimeline";
+import { PdfViewer } from "@/components/leases/PdfViewer";
 import { LifecycleStatusBadge } from "@/components/lifecycle/LifecycleStatusBadge";
 import { SummaryShareControls } from '@/components/summary/SummaryShareControls';
 import { UploadExecutedDocumentDialog } from "@/components/leases/UploadExecutedDocumentDialog";
@@ -137,8 +138,8 @@ export default function LeaseReview() {
   const [approving, setApproving] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [basePdfUrl, setBasePdfUrl] = useState<string | null>(null);
   const [isPdfCollapsed, setIsPdfCollapsed] = useState(false);
+  const [targetPage, setTargetPage] = useState<number | undefined>(undefined);
   const [verifiedFields, setVerifiedFields] = useState<Set<string>>(new Set());
   const [confirmedSections, setConfirmedSections] = useState<string[]>([]);
   
@@ -619,9 +620,13 @@ export default function LeaseReview() {
 
       // Get PDF URL
       if (data.storage_path) {
-        const { data: urlData } = await supabase.storage.from("leases").createSignedUrl(data.storage_path, 3600);
+        const { data: urlData, error: urlError } = await supabase.storage
+          .from("leases")
+          .createSignedUrl(data.storage_path, 3600);
+        if (urlError) {
+          console.error('[LeaseReview] Failed to get PDF URL:', urlError.message);
+        }
         setPdfUrl(urlData?.signedUrl || null);
-        setBasePdfUrl(urlData?.signedUrl || null);
       }
       setLoading(false);
     }
@@ -704,8 +709,8 @@ export default function LeaseReview() {
   }, [lease?.parent_lease_id]);
 
   const jumpToPage = (page?: number) => {
-    if (!page || !basePdfUrl) return;
-    setPdfUrl(`${basePdfUrl}#page=${page}`);
+    if (!page) return;
+    setTargetPage(page);
     if (isPdfCollapsed) setIsPdfCollapsed(false);
   };
 
@@ -797,14 +802,20 @@ export default function LeaseReview() {
     try {
       // Build update object with only valid lease columns
       const updateData: Record<string, any> = {
-        landlord_name: form.landlord_name || null,
-        tenant_name: form.tenant_name || null,
-        lease_start: form.lease_start || null,
-        lease_end: form.lease_end || null,
-        base_rent_amount: form.base_rent_amount || null,
-        current_monthly_rent: form.current_monthly_rent ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null : null,
-        square_footage: form.square_footage ? parseFloat(form.square_footage) || null : null,
-        rent_escalation_type: form.rent_escalation_type || null,
+        landlord_name:          form.landlord_name          || null,
+        tenant_name:            form.tenant_name            || null,
+        property_address:       form.property_address       || null,
+        lease_start:            form.lease_start            || null,
+        lease_end:              form.lease_end              || null,
+        rent_commencement_date: form.rent_commencement_date || null,
+        base_rent_amount:       form.base_rent_amount       || null,
+        current_monthly_rent:   form.current_monthly_rent ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null : null,
+        square_footage:         form.square_footage ? parseFloat(form.square_footage) || null : null,
+        security_deposit:       form.security_deposit       || null,
+        renewal_options:        form.renewal_options        || null,
+        escalation_clauses:     form.escalation_clauses     || null,
+        termination_clauses:    form.termination_clauses    || null,
+        rent_escalation_type:   form.rent_escalation_type   || null,
         confirmed_sections: confirmedSections,
         audit_log: JSON.parse(JSON.stringify(auditLog)),
       };
@@ -865,11 +876,17 @@ export default function LeaseReview() {
     setPosting(true);
     try {
       const updateData: Record<string, any> = {
-        landlord_name: form.landlord_name || null,
-        tenant_name: form.tenant_name || null,
-        lease_start: form.lease_start || null,
-        lease_end: form.lease_end || null,
-        base_rent_amount: form.base_rent_amount || null,
+        landlord_name:          form.landlord_name          || null,
+        tenant_name:            form.tenant_name            || null,
+        property_address:       form.property_address       || null,
+        lease_start:            form.lease_start            || null,
+        lease_end:              form.lease_end              || null,
+        rent_commencement_date: form.rent_commencement_date || null,
+        base_rent_amount:       form.base_rent_amount       || null,
+        security_deposit:       form.security_deposit       || null,
+        renewal_options:        form.renewal_options        || null,
+        escalation_clauses:     form.escalation_clauses     || null,
+        termination_clauses:    form.termination_clauses    || null,
         lifecycle_status: 'active',
         confirmed_sections: confirmedSections,
         audit_log: JSON.parse(JSON.stringify(auditLog)),
@@ -903,14 +920,20 @@ export default function LeaseReview() {
     try {
       // First save any pending edits
       const updateData: Record<string, any> = {
-        landlord_name: form.landlord_name || null,
-        tenant_name: form.tenant_name || null,
-        lease_start: form.lease_start || null,
-        lease_end: form.lease_end || null,
-        base_rent_amount: form.base_rent_amount || null,
-        current_monthly_rent: form.current_monthly_rent ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null : null,
-        square_footage: form.square_footage ? parseFloat(form.square_footage) || null : null,
-        rent_escalation_type: form.rent_escalation_type || null,
+        landlord_name:          form.landlord_name          || null,
+        tenant_name:            form.tenant_name            || null,
+        property_address:       form.property_address       || null,
+        lease_start:            form.lease_start            || null,
+        lease_end:              form.lease_end              || null,
+        rent_commencement_date: form.rent_commencement_date || null,
+        base_rent_amount:       form.base_rent_amount       || null,
+        current_monthly_rent:   form.current_monthly_rent ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null : null,
+        square_footage:         form.square_footage ? parseFloat(form.square_footage) || null : null,
+        security_deposit:       form.security_deposit       || null,
+        renewal_options:        form.renewal_options        || null,
+        escalation_clauses:     form.escalation_clauses     || null,
+        termination_clauses:    form.termination_clauses    || null,
+        rent_escalation_type:   form.rent_escalation_type   || null,
         confirmed_sections: confirmedSections,
         audit_log: JSON.parse(JSON.stringify(auditLog)),
       };
@@ -1688,13 +1711,7 @@ export default function LeaseReview() {
                     <ChevronLeft size={16} />
                   </Button>
                 </div>
-                {pdfUrl ? (
-                  <iframe src={pdfUrl} className="w-full h-full border-none" title="Lease PDF" />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                    Document stream unavailable
-                  </div>
-                )}
+                <PdfViewer url={pdfUrl} targetPage={targetPage} />
               </div>
             </ResizablePanel>
 

@@ -50,6 +50,11 @@ serve(async (req) => {
       throw new Error("Missing required environment variables");
     }
 
+    // Use service role client for all operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false },
+    });
+
     // Verify user is authenticated
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -59,15 +64,9 @@ serve(async (req) => {
       );
     }
 
-    // Create client with user's auth token to get their identity
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
-    });
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const { data: claimsData, error: claimsError } = await supabaseAdmin.auth.getUser(token);
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getUser(token);
-    
     if (claimsError || !claimsData?.user) {
       return new Response(
         JSON.stringify({ error: "Invalid authentication" }),
@@ -104,11 +103,6 @@ serve(async (req) => {
       );
     }
 
-    // Use service role client for privileged operations
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
-      auth: { persistSession: false },
-    });
-
     // Fetch invite token — without accepted_at filter so we can distinguish codes
     const { data: invite, error: inviteError } = await supabaseAdmin
       .from("invite_tokens")
@@ -124,6 +118,20 @@ serve(async (req) => {
     }
 
     if (invite.accepted_at !== null) {
+      const { data: alreadyMember } = await supabaseAdmin
+        .from("workspace_members")
+        .select("id")
+        .eq("workspace_id", invite.workspace_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (alreadyMember) {
+        return new Response(
+          JSON.stringify({ ok: true, code: "ALREADY_MEMBER", workspaceId: invite.workspace_id }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ ok: false, code: "ALREADY_ACCEPTED", message: "Invitation has already been accepted" }),
         { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -138,6 +146,7 @@ serve(async (req) => {
     }
 
     // Verify email matches the invited email
+    console.log('[accept-invite] email-check', { inviteEmail: invite.email, userEmail, match: invite.email.toLowerCase() === userEmail });
     if (invite.email.toLowerCase() !== userEmail) {
       return new Response(
         JSON.stringify({ error: "This invitation was sent to a different email address" }),

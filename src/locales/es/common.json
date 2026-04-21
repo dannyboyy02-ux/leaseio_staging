@@ -73,7 +73,7 @@
     },
     "how": {
       "title": "Cómo funciona",
-      "subtitle": "De solicitud a cumplimiento en cuatro pasos.",
+      "subtitle": "De solicitud de arrendamiento a repositorio auditado en cuatro pasos.",
       "step1": {
         "title": "Registrar Solicitud",
         "desc": "Operaciones, facilities o cualquier área registra la solicitud con datos básicos."
@@ -87,7 +87,7 @@
         "desc": "Cuando se firme el contrato, cárguelo y la IA extraerá los términos clave."
       },
       "step4": {
-        "title": "Mantener Cumplimiento",
+        "title": "Construya su Repositorio",
         "desc": "Los arrendamientos abstraídos entran al repositorio activo. Finanzas tiene una población completa y defendible ante auditoría."
       }
     },
