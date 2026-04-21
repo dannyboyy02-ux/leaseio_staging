@@ -1456,6 +1456,55 @@ serve(async (req) => {
 
     if (updateError) throw new Error(`Failed to update lease: ${updateError.message}`);
 
+    // Recalculate financial projections using AI-extracted values so the
+    // portfolio numbers stay accurate even when the request form was left blank.
+    if (extractedStart && termMonths && termMonths > 0) {
+      const rawRent = extractValue(leaseData.current_monthly_rent);
+      const monthlyRent = typeof rawRent === 'number'
+        ? rawRent
+        : typeof rawRent === 'string'
+          ? parseFloat(rawRent.replace(/[^0-9.]/g, '')) || 0
+          : 0;
+
+      if (monthlyRent > 0) {
+        const { data: wsData } = await supabaseAdmin
+          .from('workspaces')
+          .select('discount_rate')
+          .eq('id', resolvedWorkspaceId)
+          .single();
+        const discountRate: number = (wsData as any)?.discount_rate ?? 5.5;
+        const annualEscRate: number = escalationRate ?? 0;
+
+        // Replicate leaseCalculations.ts logic inline (no TS imports in Deno edge fn)
+        const monthlyDiscountRate = Math.pow(1 + discountRate / 100, 1 / 12) - 1;
+        const payments: number[] = [];
+        for (let m = 1; m <= termMonths; m++) {
+          const yearIndex = Math.floor((m - 1) / 12);
+          payments.push(monthlyRent * Math.pow(1 + annualEscRate / 100, yearIndex));
+        }
+        const calcTotalCommitment = payments.reduce((s, p) => s + p, 0);
+        const calcPvLiability = payments.reduce((s, p, idx) => s + p / Math.pow(1 + monthlyDiscountRate, idx + 1), 0);
+        const calcStraightLineExp = calcTotalCommitment / termMonths;
+        const midpoint = Math.max(1, Math.floor(termMonths / 2));
+        const calcCashPlDelta = payments.slice(0, midpoint).reduce((s, p) => s + p, 0) - calcStraightLineExp * midpoint;
+
+        const { error: calcUpdateError } = await supabaseAdmin
+          .from('leases')
+          .update({
+            calc_total_commitment:  Math.round(calcTotalCommitment * 100) / 100,
+            calc_pv_liability:      Math.round(calcPvLiability * 100) / 100,
+            calc_straight_line_exp: Math.round(calcStraightLineExp * 100) / 100,
+            calc_cash_pl_delta:     Math.round(calcCashPlDelta * 100) / 100,
+          })
+          .eq('id', leaseId);
+        if (calcUpdateError) {
+          console.error('[process_lease] Failed to update calc fields:', calcUpdateError.message);
+        } else {
+          console.log(`[process_lease] Recalculated financials: total=${calcTotalCommitment.toFixed(2)}, pv=${calcPvLiability.toFixed(2)}`);
+        }
+      }
+    }
+
     const fieldsToTrack = ['landlord_name', 'tenant_name', 'property_address', 'lease_start', 'lease_end', 'square_footage', 'current_monthly_rent', 'rent_escalation_type'];
     const confidenceEntries: { lease_id: string; field_name: string; confidence_score: number }[] = [];
     for (const fieldName of fieldsToTrack) {
