@@ -2,24 +2,18 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const ALLOWED_ORIGINS = [
-  'https://theleaseio.com',
-  'https://www.theleaseio.com',
-  'https://app.theleaseio.com',
-  'https://theleaseio.lovable.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
+  'https://theleaseio.com', 'https://www.theleaseio.com', 'https://app.theleaseio.com',
+  'https://theleaseio.lovable.app', 'http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173',
 ];
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  const isAllowed =
-    requestOrigin &&
-    (ALLOWED_ORIGINS.includes(requestOrigin) ||
-      requestOrigin.includes('lovableproject.com') ||
-      requestOrigin.includes('lovable.app'));
-  const origin = isAllowed ? requestOrigin : ALLOWED_ORIGINS[0];
+  const isAllowed = requestOrigin && (
+    ALLOWED_ORIGINS.includes(requestOrigin) ||
+    requestOrigin.includes('lovableproject.com') ||
+    requestOrigin.includes('lovable.app')
+  );
   return {
-    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Origin': isAllowed ? requestOrigin : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
     'Access-Control-Max-Age': '86400',
@@ -28,10 +22,7 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
 
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get('origin'));
-
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const supabaseAdmin = createClient(
@@ -51,7 +42,7 @@ serve(async (req) => {
 
     const { data: invite, error: inviteError } = await supabaseAdmin
       .from('invite_tokens')
-      .select('email, role, expires_at, accepted_at, workspace_id')
+      .select('email, first_name, last_name, role, expires_at, accepted_at, workspace_id')
       .eq('token', token)
       .maybeSingle();
 
@@ -63,23 +54,28 @@ serve(async (req) => {
     }
 
     const { data: workspace } = await supabaseAdmin
-      .from('workspaces')
-      .select('name')
-      .eq('id', invite.workspace_id)
-      .single();
+      .from('workspaces').select('name').eq('id', invite.workspace_id).single();
 
-    const expired = new Date(invite.expires_at) < new Date();
+    const expired  = new Date(invite.expires_at) < new Date();
     const accepted = invite.accepted_at !== null;
-    const workspaceName = workspace?.name ?? 'a workspace';
+
+    // Check if the invited email already has a LeaseIO account
+    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
+    const userExists = users.some(
+      (u) => u.email?.toLowerCase() === invite.email.toLowerCase()
+    );
 
     return new Response(
       JSON.stringify({
         ok: true,
-        email: invite.email,
-        workspaceName,
-        role: invite.role,
+        email:         invite.email,
+        first_name:    invite.first_name ?? null,
+        last_name:     invite.last_name  ?? null,
+        workspaceName: workspace?.name ?? 'a workspace',
+        role:          invite.role,
         expired,
         accepted,
+        user_exists:   userExists,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
