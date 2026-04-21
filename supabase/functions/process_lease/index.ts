@@ -1419,24 +1419,38 @@ serve(async (req) => {
     const { escalationType, escalationRate, needsEscalationReview } = normalizeEscalation(rawRentEscalationType);
     console.log(`[process_lease] Escalation normalized: type=${escalationType}, rate=${escalationRate}, review=${needsEscalationReview}`);
 
+    // Derive term_months from extracted dates
+    const extractedStart = safeDate(extractValue(leaseData.lease_start));
+    const extractedEnd   = safeDate(extractValue(leaseData.lease_end));
+    const termMonths = extractedStart && extractedEnd
+      ? Math.round((new Date(extractedEnd).getTime() - new Date(extractedStart).getTime()) / (86400 * 30.4375 * 1000))
+      : null;
+
     const { error: updateError } = await supabaseAdmin
       .from('leases')
       .update({
         status: 'Ready',
-        landlord_name: extractValue(leaseData.landlord_name),
-        tenant_name: extractValue(leaseData.tenant_name),
-        lease_start: safeDate(extractValue(leaseData.lease_start)),
-        lease_end: safeDate(extractValue(leaseData.lease_end)),
-        base_rent_amount: extractValue(leaseData.base_rent_amount),
-        base_rent_frequency: extractValue(leaseData.base_rent_frequency),
-        current_monthly_rent: extractValue(leaseData.current_monthly_rent),
-        rent_escalation_type: rawRentEscalationType, // stored for reference; use escalation_type downstream
-        escalation_type: escalationType,
-        escalation_rate: escalationRate,
+        landlord_name:          extractValue(leaseData.landlord_name),
+        tenant_name:            extractValue(leaseData.tenant_name),
+        property_address:       extractValue(leaseData.property_address),
+        lease_start:            extractedStart,
+        lease_end:              extractedEnd,
+        rent_commencement_date: safeDate(extractValue(leaseData.rent_commencement_date)),
+        base_rent_amount:       extractValue(leaseData.base_rent_amount),
+        base_rent_frequency:    extractValue(leaseData.base_rent_frequency),
+        current_monthly_rent:   extractValue(leaseData.current_monthly_rent),
+        security_deposit:       extractValue(leaseData.security_deposit),
+        renewal_options:        extractValue(leaseData.renewal_options),
+        escalation_clauses:     extractValue(leaseData.escalation_clauses),
+        termination_clauses:    extractValue(leaseData.termination_clauses),
+        rent_escalation_type:   rawRentEscalationType, // stored for reference; use escalation_type downstream
+        escalation_type:        escalationType,
+        escalation_rate:        escalationRate,
         needs_escalation_review: needsEscalationReview,
-        square_footage: extractValue(leaseData.square_footage),
-        extracted_json: leaseData,
-        processed_at: new Date().toISOString(),
+        square_footage:         extractValue(leaseData.square_footage),
+        term_months:            termMonths,
+        extracted_json:         leaseData,
+        processed_at:           new Date().toISOString(),
       })
       .eq('id', leaseId);
 
