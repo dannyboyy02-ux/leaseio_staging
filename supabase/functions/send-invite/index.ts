@@ -1,6 +1,74 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { sendInviteEmail, generateInviteToken } from "../_shared/resend.ts";
+// --- Inlined helpers (no ../_shared/ import — MCP deploy cannot resolve relative paths) ---
+
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+async function sendInviteEmail(opts: {
+  resendApiKey: string;
+  to: string;
+  workspaceName: string;
+  role: string;
+  inviteUrl: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  const { resendApiKey, to, workspaceName, role, inviteUrl } = opts;
+  try {
+    console.log('[resend] send-attempt', { to, hasInviteUrl: !!inviteUrl && inviteUrl.length > 0 });
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resendApiKey}`,
+      },
+      body: JSON.stringify({
+        from: Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
+        to: [to],
+        subject: `You've been invited to join ${escapeHtml(workspaceName)} on LeaseIO`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>You've been invited to join a workspace</h2>
+            <p>You've been invited to join <strong>${escapeHtml(workspaceName)}</strong> on LeaseIO as a ${escapeHtml(role)}.</p>
+            <p style="margin: 24px 0;">
+              <a href="${inviteUrl}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+                Accept Invitation
+              </a>
+            </p>
+            <p style="color: #666; font-size: 14px;">This invitation expires in 7 days.</p>
+            <p style="color: #666; font-size: 14px;">If you didn't expect this invitation, you can ignore this email.</p>
+          </div>
+        `,
+        text: `You've been invited to join ${workspaceName} on LeaseIO as a ${role}.\n\nAccept your invitation here: ${inviteUrl}\n\nThis invitation expires in 7 days.`,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '(no body)');
+      console.error('[resend] API error:', res.status, body);
+      return { sent: false, error: `Resend returned ${res.status}` };
+    }
+    return { sent: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[resend] fetch error:', msg);
+    return { sent: false, error: msg };
+  }
+}
+
+function generateInviteToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 const ALLOWED_ORIGINS = [
   'https://theleaseio.com',
@@ -62,9 +130,12 @@ serve(async (req) => {
 
     // --- Authenticate caller ---
     const authHeader = req.headers.get('Authorization');
+    console.log('[send-invite] auth-header', { present: !!authHeader, prefix: authHeader?.slice(0, 20) ?? 'none' });
     if (!authHeader) return errRes(corsHeaders, 'UNAUTHORIZED', 'No authorization header', 401);
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    console.log('[send-invite] token-check', { length: token.length, startsWithEyJ: token.startsWith('eyJ') });
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+    console.log('[send-invite] getUser-result', { hasError: !!userError, errorMsg: userError?.message ?? null, hasUser: !!userData?.user?.id });
     if (userError || !userData.user) {
       console.error('[send-invite] getUser failed:', userError?.message);
       return errRes(corsHeaders, 'UNAUTHORIZED', 'Invalid token', 401);

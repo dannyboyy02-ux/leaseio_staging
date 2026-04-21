@@ -32,6 +32,8 @@ export async function sendInviteEmail(opts: SendInviteEmailOpts): Promise<SendRe
   const { resendApiKey, to, workspaceName, role, inviteUrl } = opts;
 
   try {
+    console.log('[resend] send-attempt', { to, hasInviteUrl: !!inviteUrl && inviteUrl.length > 0 });
+
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -39,7 +41,7 @@ export async function sendInviteEmail(opts: SendInviteEmailOpts): Promise<SendRe
         Authorization: `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <notifications@theleaseio.com>',
+        from: Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
         to: [to],
         subject: `You've been invited to join ${escapeHtml(workspaceName)} on LeaseIO`,
         html: `
@@ -55,6 +57,7 @@ export async function sendInviteEmail(opts: SendInviteEmailOpts): Promise<SendRe
             <p style="color: #666; font-size: 14px;">If you didn't expect this invitation, you can ignore this email.</p>
           </div>
         `,
+        text: `You've been invited to join ${workspaceName} on LeaseIO as a ${role}.\n\nAccept your invitation here: ${inviteUrl}\n\nThis invitation expires in 7 days.`,
       }),
     });
 
