@@ -36,15 +36,13 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   };
 }
 
-// Azure Document Intelligence
+// Azure Document Intelligence (OCR layer)
 const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');
 const AZURE_DI_KEY = Deno.env.get('AZURE_DI_KEY');
-
-// OpenAI
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
-const OPENAI_MAX_TOKENS = Number(Deno.env.get('OPENAI_MAX_TOKENS') || '8000');
 const AZURE_DI_MODEL = Deno.env.get('AZURE_DI_MODEL') || 'prebuilt-layout';
+
+// Anthropic (intelligence layer)
+const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 
 // Supabase
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -269,12 +267,13 @@ function normalizeEscalation(rentEscalationTypeRaw: string | null): {
   };
 }
 
-async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
+async function analyzeWithAzureDI(pdfBytes: ArrayBuffer, includePageDelimiters = false): Promise<string> {
   return await runAzureDI(pdfBytes, {
     endpoint: AZURE_DI_ENDPOINT!,
     apiKey: AZURE_DI_KEY!,
     model: AZURE_DI_MODEL,
     logPrefix: 'process_lease',
+    includePageDelimiters,
   });
 }
 
@@ -336,7 +335,306 @@ async function resolveAuthorizedWorkspaceId(
   return membership?.workspace_id ?? null;
 }
 
+// ================================================================
+// ANTHROPIC TWO-PASS EXTRACTION
+// ================================================================
+
+interface PageMap {
+  parties: number[];
+  financials: number[];
+  escalation: number[];
+  renewal: number[];
+  termination: number[];
+  covenants: number[];
+  key_dates: number[];
+  total_pages: number;
+}
+
+async function callAnthropicAPI(
+  model: string,
+  system: string,
+  userContent: string,
+  maxTokens: number,
+): Promise<string> {
+  const maxRetries = 2;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY!,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          system,
+          messages: [{ role: 'user', content: userContent }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Anthropic] Request failed (attempt ${attempt + 1}): ${errorText}`);
+        lastError = new Error(`Anthropic API error: ${response.status} - ${errorText}`);
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+        throw lastError;
+      }
+
+      const data = await response.json();
+      const content = data.content?.[0]?.text;
+      if (!content) {
+        lastError = new Error('Anthropic response missing content');
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+        throw lastError;
+      }
+
+      console.log(`[Anthropic:${model}] tokens in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
+      return content;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+    }
+  }
+  throw lastError || new Error('All Anthropic API attempts failed');
+}
+
+async function callHaikuForPageMap(documentText: string): Promise<PageMap> {
+  console.log('[Haiku] Building page map...');
+  const system = `You are a lease document classifier. Your only job is to identify which pages contain specific types of information. Do not extract values — only identify page locations.
+
+Return a JSON object with these arrays of 1-indexed page numbers:
+- "parties": pages with landlord name, tenant name, or property address
+- "financials": pages with base rent amounts, monthly rent, security deposit
+- "escalation": pages with rent escalation clauses, CPI language, step increases
+- "renewal": pages with renewal or extension options
+- "termination": pages with termination, break clauses, early exit provisions
+- "covenants": pages with assignment restrictions, use restrictions, insurance requirements
+- "key_dates": pages with material deadlines, option exercise dates
+- "total_pages": total page count as a number
+
+Return ONLY valid JSON. Empty array if a category has no relevant pages. Pages may appear in multiple categories.`;
+
+  const content = await callAnthropicAPI(
+    'claude-haiku-4-5-20251001',
+    system,
+    `Map this lease document:\n\n${documentText}`,
+    1024,
+  );
+
+  try {
+    const parsed = await repairJsonObject(content) as any;
+    console.log('[Haiku] Page map:', JSON.stringify(parsed));
+    return {
+      parties:     Array.isArray(parsed.parties)     ? parsed.parties     : [],
+      financials:  Array.isArray(parsed.financials)  ? parsed.financials  : [],
+      escalation:  Array.isArray(parsed.escalation)  ? parsed.escalation  : [],
+      renewal:     Array.isArray(parsed.renewal)      ? parsed.renewal     : [],
+      termination: Array.isArray(parsed.termination) ? parsed.termination : [],
+      covenants:   Array.isArray(parsed.covenants)   ? parsed.covenants   : [],
+      key_dates:   Array.isArray(parsed.key_dates)   ? parsed.key_dates   : [],
+      total_pages: typeof parsed.total_pages === 'number' ? parsed.total_pages : 0,
+    };
+  } catch (error) {
+    console.error('[Haiku] Page map parse failed, using full-document fallback:', error);
+    const pageNums = [...(documentText.matchAll(/\[PAGE (\d+)\]/g))].map(m => parseInt(m[1]));
+    const totalPages = pageNums.length > 0 ? Math.max(...pageNums) : 1;
+    const all = Array.from({ length: totalPages }, (_, i) => i + 1);
+    return { parties: all, financials: all, escalation: all, renewal: all, termination: all, covenants: all, key_dates: all, total_pages: totalPages };
+  }
+}
+
+function slicePagesByNumbers(documentText: string, pageNumbers: number[]): string {
+  if (pageNumbers.length === 0) return documentText;
+  const pageSet = new Set(pageNumbers);
+  const segments = documentText.split(/(\[PAGE \d+\])/);
+  let result = '';
+  let currentPage = 1;
+  let inTarget = pageSet.has(1);
+  for (const segment of segments) {
+    const m = segment.match(/\[PAGE (\d+)\]/);
+    if (m) {
+      currentPage = parseInt(m[1]);
+      inTarget = pageSet.has(currentPage);
+      if (inTarget) result += segment;
+    } else if (inTarget) {
+      result += segment;
+    }
+  }
+  return result.trim() || documentText;
+}
+
+function buildPageGroups(pageMap: PageMap): { groupA: number[]; groupB: number[]; groupC: number[] } {
+  const totalPages = pageMap.total_pages || 999;
+  const withBuffer = (pages: number[]) => {
+    const s = new Set<number>();
+    pages.forEach(p => { s.add(p - 1); s.add(p); s.add(p + 1); });
+    return Array.from(s).filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+  };
+  return {
+    groupA: withBuffer([...pageMap.parties, ...pageMap.financials, ...pageMap.key_dates]),
+    groupB: withBuffer([...pageMap.escalation, ...pageMap.renewal, ...pageMap.termination]),
+    groupC: withBuffer(pageMap.covenants),
+  };
+}
+
+const CORE_SYSTEM = `You are an expert commercial lease abstraction specialist. Extract the following fields from the provided pages only.
+
+TERM MAPPINGS:
+- "Base Rent" / "Minimum Rent" / "Fixed Rent" / "Monthly Rent" → current_monthly_rent
+- "Commencement Date" / "Effective Date" / "Start Date" → lease_start
+- "Expiration Date" / "Termination Date" / "End Date" / "Term End" → lease_end
+- "Landlord" / "Lessor" / "Owner" (interchangeable)
+- "Tenant" / "Lessee" / "Renter" (interchangeable)
+- "Premises" / "Demised Premises" / "Leased Premises" → property_address
+- "NRA" / "Rentable Square Feet" / "RSF" → square_footage
+- "Security Deposit" / "Damage Deposit" / "Good Faith Deposit"
+
+RULES:
+1. Extract ONLY what is explicitly stated. NEVER guess or infer.
+2. If not found: value null, confidence 0.0
+3. Dates in YYYY-MM-DD. Numbers without $ or commas.
+4. If multiple rent periods exist, extract ALL in rent_schedule.
+5. DO NOT confuse security deposit with first month's rent.
+6. DO NOT use placeholder dates like TBD.
+7. Prefer rentable/RSF square footage over usable.
+
+Return ONLY valid JSON:
+{
+  "landlord_name": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "tenant_name": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "property_address": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "lease_start": {"value": "YYYY-MM-DD|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "lease_end": {"value": "YYYY-MM-DD|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "square_footage": {"value": null,"confidence":0.0,"page":1,"source_text":"quote"},
+  "current_monthly_rent": {"value": null,"confidence":0.0,"page":1,"source_text":"quote"},
+  "rent_commencement_date": {"value": "YYYY-MM-DD|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "base_rent_amount": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "base_rent_frequency": {"value": "monthly|quarterly|annually|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "security_deposit": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "rent_schedule": [{"period_start":"YYYY-MM-DD","period_end":"YYYY-MM-DD|null","monthly_amount":null,"annual_amount":null,"notes":"string","confidence":0.0}],
+  "key_dates": [{"date":"YYYY-MM-DD","description":"string","confidence":0.0}]
+}`;
+
+const CLAUSES_SYSTEM = `You are an expert commercial lease abstraction specialist. Extract clause information from the provided pages only.
+
+TERM MAPPINGS:
+- "CPI" / "Consumer Price Index" / "inflation-based" → index escalation
+- "Fixed Increase" / "Step Rent" / "3% annual" → percent escalation
+- "Option to Renew" / "Extension Option" → renewal_options
+- "Early Termination" / "Break Clause" → termination_clauses
+
+RULES:
+1. Extract ONLY what is explicitly stated. If not found: value null, confidence 0.0.
+2. Quote exact terms and notice periods.
+3. DO NOT default CPI/index leases to a percent — describe them as index-based.
+
+Return ONLY valid JSON:
+{
+  "rent_escalation_type": {"value": "e.g. '3% annual'|'CPI adjustment'|'None'|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "escalation_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "renewal_options": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "termination_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"}
+}`;
+
+const RISKS_SYSTEM = `You are an expert commercial lease risk analyst. Identify risks from the provided pages only.
+
+Flag these issues:
+- Rent escalations exceeding 5% annually (HIGH)
+- Automatic renewal without advance notice requirement (MEDIUM-HIGH)
+- Personal guarantee requirements (MEDIUM)
+- Restrictions on assignment or subletting (MEDIUM)
+- Unclear or missing termination provisions (MEDIUM)
+- Landlord can terminate without cause (HIGH)
+- Missing force majeure clauses (LOW-MEDIUM)
+- Ambiguous rent calculation methodology (MEDIUM)
+
+Return ONLY valid JSON:
+{
+  "risks": [{"title":"string","severity":"low|medium|high","explanation":"string","citation_snippet":"quote","citation_page":1,"confidence":0.0}]
+}`;
+
+async function extractLeaseDataWithClaude(documentText: string): Promise<LeaseExtractionResult> {
+  console.log('[Claude] Starting two-pass extraction...');
+
+  // Pass 1: Haiku page map
+  const pageMap = await callHaikuForPageMap(documentText);
+
+  // Build page groups with ±1 buffer
+  const { groupA, groupB, groupC } = buildPageGroups(pageMap);
+  console.log(`[Claude] Groups — A:${groupA.length}pp B:${groupB.length}pp C:${groupC.length}pp`);
+
+  const textA = slicePagesByNumbers(documentText, groupA);
+  const textB = groupB.length > 0 ? slicePagesByNumbers(documentText, groupB) : documentText;
+  const textC = groupC.length > 0 ? slicePagesByNumbers(documentText, groupC) : textB;
+
+  // Pass 2: Parallel Opus extraction
+  const [rawA, rawB, rawC] = await Promise.all([
+    callAnthropicAPI('claude-opus-4-6', CORE_SYSTEM,    `Extract core lease terms from these pages:\n\n${textA}`, 6144),
+    callAnthropicAPI('claude-opus-4-6', CLAUSES_SYSTEM, `Extract clause information from these pages:\n\n${textB}`, 4096),
+    callAnthropicAPI('claude-opus-4-6', RISKS_SYSTEM,   `Identify risks from these pages:\n\n${textC}`,            4096),
+  ]);
+
+  console.log('[Claude] All Opus calls complete, merging...');
+
+  const [parsedA, parsedB, parsedC] = await Promise.all([
+    repairJsonObject(rawA),
+    repairJsonObject(rawB),
+    repairJsonObject(rawC),
+  ]);
+
+  const merged = { ...(parsedA as any), ...(parsedB as any) } as any;
+  const risksData = (parsedC as any).risks || [];
+
+  // Haiku/Opus disagreement warnings
+  const haikuWarnings: string[] = [];
+  if (pageMap.financials.length > 0 && !extractValue(merged.current_monthly_rent)) {
+    haikuWarnings.push(`Haiku mapped rent to pages [${pageMap.financials.join(',')}] but Opus found nothing — review required`);
+  }
+  if (pageMap.parties.length > 0 && !extractValue(merged.landlord_name)) {
+    haikuWarnings.push(`Haiku mapped parties to pages [${pageMap.parties.join(',')}] but landlord not found`);
+  }
+  if (haikuWarnings.length > 0) {
+    merged._haiku_warnings = haikuWarnings;
+    console.log('[Claude] Haiku/Opus disagreements:', haikuWarnings);
+  }
+
+  merged._extraction_model = 'claude-opus-4-6';
+  merged._haiku_page_map = pageMap;
+
+  return {
+    landlord_name:         merged.landlord_name         || null,
+    tenant_name:           merged.tenant_name           || null,
+    property_address:      merged.property_address      || null,
+    lease_start:           merged.lease_start           || null,
+    lease_end:             merged.lease_end             || null,
+    square_footage:        merged.square_footage        || null,
+    current_monthly_rent:  merged.current_monthly_rent  || null,
+    rent_escalation_type:  merged.rent_escalation_type  || null,
+    rent_schedule:         merged.rent_schedule         || [],
+    rent_commencement_date:merged.rent_commencement_date|| null,
+    base_rent_amount:      merged.base_rent_amount      || null,
+    base_rent_frequency:   merged.base_rent_frequency   || null,
+    security_deposit:      merged.security_deposit      || null,
+    renewal_options:       merged.renewal_options       || null,
+    escalation_clauses:    merged.escalation_clauses    || null,
+    termination_clauses:   merged.termination_clauses   || null,
+    key_dates:             merged.key_dates             || [],
+    risks:                 risksData,
+  };
+}
+
+// Legacy stub — kept only for executed mode until that path is migrated
 async function extractLeaseDataWithOpenAI(documentText: string): Promise<LeaseExtractionResult> {
+  console.log('[OpenAI→Claude] Redirecting to Claude extraction...');
+  return extractLeaseDataWithClaude(documentText);
+}
+
+// Original OpenAI implementation below — retained for reference, not called
+async function _extractLeaseDataWithOpenAI_DEPRECATED(documentText: string): Promise<LeaseExtractionResult> {
   console.log('[OpenAI] Extracting lease data...');
   const systemPrompt = `You are an expert commercial lease abstraction specialist with 20+ years of experience analyzing real estate and equipment leases. Your task is to extract key information with the highest possible accuracy.
 
@@ -896,7 +1194,7 @@ serve(async (req) => {
 
       let executedText: string;
       try {
-        executedText = await analyzeWithAzureDI(fileBytes);
+        executedText = await analyzeWithAzureDI(fileBytes, true); // true = include [PAGE N] markers
         console.log(`[process_lease] Executed: extracted ${executedText.length} characters`);
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -905,7 +1203,7 @@ serve(async (req) => {
 
       let leaseData: LeaseExtractionResult;
       try {
-        leaseData = await extractLeaseDataWithOpenAI(executedText);
+        leaseData = await extractLeaseDataWithClaude(executedText);
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Executed AI extraction failed: ${msg}`);
@@ -1087,7 +1385,7 @@ serve(async (req) => {
 
     let extractedText: string;
     try {
-      extractedText = await analyzeWithAzureDI(fileBytes);
+      extractedText = await analyzeWithAzureDI(fileBytes, true); // true = include [PAGE N] markers
       console.log(`[process_lease] Extracted ${extractedText.length} characters`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1097,7 +1395,7 @@ serve(async (req) => {
 
     let leaseData: LeaseExtractionResult;
     try {
-      leaseData = await extractLeaseDataWithOpenAI(extractedText);
+      leaseData = await extractLeaseDataWithClaude(extractedText);
       console.log('[process_lease] Lease data extracted:', JSON.stringify(leaseData).substring(0, 500));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
