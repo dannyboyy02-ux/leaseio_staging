@@ -535,7 +535,7 @@ function buildPageGroups(pageMap: PageMap): { groupA: number[]; groupB: number[]
   };
 }
 
-const CORE_SYSTEM = `You are an expert commercial lease abstraction specialist. Extract the following fields from the provided pages only.
+const COMBINED_SYSTEM = `You are an expert commercial lease abstraction specialist and risk analyst. Extract all fields from the provided lease document in a single pass.
 
 TERM MAPPINGS:
 - "Base Rent" / "Minimum Rent" / "Fixed Rent" / "Monthly Rent" → current_monthly_rent
@@ -546,6 +546,10 @@ TERM MAPPINGS:
 - "Premises" / "Demised Premises" / "Leased Premises" → property_address
 - "NRA" / "Rentable Square Feet" / "RSF" → square_footage
 - "Security Deposit" / "Damage Deposit" / "Good Faith Deposit"
+- "CPI" / "Consumer Price Index" / "inflation-based" → index escalation
+- "Fixed Increase" / "Step Rent" / "3% annual" → percent escalation
+- "Option to Renew" / "Extension Option" → renewal_options
+- "Early Termination" / "Break Clause" → termination_clauses
 
 RULES:
 1. Extract ONLY what is explicitly stated. NEVER guess or infer.
@@ -555,6 +559,17 @@ RULES:
 5. DO NOT confuse security deposit with first month's rent.
 6. DO NOT use placeholder dates like TBD.
 7. Prefer rentable/RSF square footage over usable.
+8. DO NOT default CPI/index leases to a percent — describe them as index-based.
+
+RISK FLAGS TO IDENTIFY:
+- Rent escalations exceeding 5% annually (HIGH)
+- Automatic renewal without advance notice requirement (MEDIUM-HIGH)
+- Personal guarantee requirements (MEDIUM)
+- Restrictions on assignment or subletting (MEDIUM)
+- Unclear or missing termination provisions (MEDIUM)
+- Landlord can terminate without cause (HIGH)
+- Missing force majeure clauses (LOW-MEDIUM)
+- Ambiguous rent calculation methodology (MEDIUM)
 
 Return ONLY valid JSON:
 {
@@ -569,45 +584,12 @@ Return ONLY valid JSON:
   "base_rent_amount": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
   "base_rent_frequency": {"value": "monthly|quarterly|annually|null","confidence":0.0,"page":1,"source_text":"quote"},
   "security_deposit": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
-  "rent_schedule": [{"period_start":"YYYY-MM-DD","period_end":"YYYY-MM-DD|null","monthly_amount":null,"annual_amount":null,"notes":"string","confidence":0.0}],
-  "key_dates": [{"date":"YYYY-MM-DD","description":"string","confidence":0.0}]
-}`;
-
-const CLAUSES_SYSTEM = `You are an expert commercial lease abstraction specialist. Extract clause information from the provided pages only.
-
-TERM MAPPINGS:
-- "CPI" / "Consumer Price Index" / "inflation-based" → index escalation
-- "Fixed Increase" / "Step Rent" / "3% annual" → percent escalation
-- "Option to Renew" / "Extension Option" → renewal_options
-- "Early Termination" / "Break Clause" → termination_clauses
-
-RULES:
-1. Extract ONLY what is explicitly stated. If not found: value null, confidence 0.0.
-2. Quote exact terms and notice periods.
-3. DO NOT default CPI/index leases to a percent — describe them as index-based.
-
-Return ONLY valid JSON:
-{
   "rent_escalation_type": {"value": "e.g. '3% annual'|'CPI adjustment'|'None'|null","confidence":0.0,"page":1,"source_text":"quote"},
   "escalation_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
   "renewal_options": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
-  "termination_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"}
-}`;
-
-const RISKS_SYSTEM = `You are an expert commercial lease risk analyst. Identify risks from the provided pages only.
-
-Flag these issues:
-- Rent escalations exceeding 5% annually (HIGH)
-- Automatic renewal without advance notice requirement (MEDIUM-HIGH)
-- Personal guarantee requirements (MEDIUM)
-- Restrictions on assignment or subletting (MEDIUM)
-- Unclear or missing termination provisions (MEDIUM)
-- Landlord can terminate without cause (HIGH)
-- Missing force majeure clauses (LOW-MEDIUM)
-- Ambiguous rent calculation methodology (MEDIUM)
-
-Return ONLY valid JSON:
-{
+  "termination_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "rent_schedule": [{"period_start":"YYYY-MM-DD","period_end":"YYYY-MM-DD|null","monthly_amount":null,"annual_amount":null,"notes":"string","confidence":0.0}],
+  "key_dates": [{"date":"YYYY-MM-DD","description":"string","confidence":0.0}],
   "risks": [{"title":"string","severity":"low|medium|high","explanation":"string","citation_snippet":"quote","citation_page":1,"confidence":0.0}]
 }`;
 
@@ -621,28 +603,25 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
   const { groupA, groupB, groupC } = buildPageGroups(pageMap);
   console.log(`[Claude] Groups — A:${groupA.length}pp B:${groupB.length}pp C:${groupC.length}pp total:${pageMap.total_pages}`);
 
-  // Page focus instructions for each Opus call — full PDF sent, model focuses on relevant pages
-  const focusA = groupA.length > 0 ? ` Focus on pages: ${groupA.join(', ')}.` : '';
-  const focusB = groupB.length > 0 ? ` Focus on pages: ${groupB.join(', ')}.` : '';
-  const focusC = groupC.length > 0 ? ` Focus on pages: ${groupC.join(', ')}.` : '';
+  // Combine all page hints into a single focus instruction
+  const allPages = [...new Set([...groupA, ...groupB, ...groupC])].sort((a, b) => a - b);
+  const focusHint = allPages.length > 0 ? ` Key pages identified: ${allPages.join(', ')}.` : '';
 
-  // Pass 2: Parallel Opus extraction (native PDF)
-  const [rawA, rawB, rawC] = await Promise.all([
-    callAnthropicAPIWithPDF('claude-opus-4-6', CORE_SYSTEM,    pdfBase64, `Extract core lease terms.${focusA}`,    6144),
-    callAnthropicAPIWithPDF('claude-opus-4-6', CLAUSES_SYSTEM, pdfBase64, `Extract clause information.${focusB}`, 4096),
-    callAnthropicAPIWithPDF('claude-opus-4-6', RISKS_SYSTEM,   pdfBase64, `Identify risks.${focusC}`,             4096),
-  ]);
+  // Pass 2: Single Opus call — sends PDF once, extracts everything in one pass
+  // This avoids parallel calls that would exceed the 30k input TPM rate limit.
+  console.log('[Claude] Sending single combined Opus extraction call...');
+  const rawCombined = await callAnthropicAPIWithPDF(
+    'claude-opus-4-6',
+    COMBINED_SYSTEM,
+    pdfBase64,
+    `Extract all lease terms, clauses, and risks from this document.${focusHint}`,
+    8192,
+  );
 
-  console.log('[Claude] All Opus calls complete, merging...');
+  console.log('[Claude] Opus call complete, parsing...');
 
-  const [parsedA, parsedB, parsedC] = await Promise.all([
-    repairJsonObject(rawA),
-    repairJsonObject(rawB),
-    repairJsonObject(rawC),
-  ]);
-
-  const merged = { ...(parsedA as any), ...(parsedB as any) } as any;
-  const risksData = (parsedC as any).risks || [];
+  const merged = await repairJsonObject(rawCombined) as any;
+  const risksData = merged.risks || [];
 
   // Haiku/Opus disagreement warnings
   const haikuWarnings: string[] = [];
