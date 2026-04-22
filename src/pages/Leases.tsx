@@ -22,6 +22,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
+import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
+import { AddLeaseDialog } from '@/components/leases/AddLeaseDialog';
 import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
@@ -70,7 +72,9 @@ export default function Leases() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [addLeaseDialogOpen, setAddLeaseDialogOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<LeaseRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [expirationFilter, setExpirationFilter] = useState('all');
@@ -277,9 +281,9 @@ export default function Leases() {
         title={t('leases.title')}
         subtitle={headerSubtitle}
         actions={
-          <Button variant="accent" onClick={() => setCreateDrawerOpen(true)}>
+          <Button variant="accent" onClick={() => setAddLeaseDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            New Request
+            Add Lease
           </Button>
         }
       />
@@ -290,7 +294,7 @@ export default function Leases() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : leases.length === 0 ? (
-          <EmptyLeaseState onNewRequest={() => setCreateDrawerOpen(true)} />
+          <EmptyLeaseState onAddLease={() => setAddLeaseDialogOpen(true)} />
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -457,6 +461,13 @@ export default function Leases() {
         )}
       </div>
 
+      <AddLeaseDialog
+        open={addLeaseDialogOpen}
+        onOpenChange={setAddLeaseDialogOpen}
+        onRequestApproval={() => setCreateDrawerOpen(true)}
+        onUploadDocument={() => setUploadModalOpen(true)}
+      />
+
       <LeaseRequestForm
         open={createDrawerOpen}
         onOpenChange={setCreateDrawerOpen}
@@ -468,6 +479,12 @@ export default function Leases() {
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDeleteConfirm}
         leaseName={selectedLease?.filename || ''}
+      />
+
+      <LeaseUploadModal
+        open={uploadModalOpen}
+        onOpenChange={setUploadModalOpen}
+        onSuccess={(leaseId) => { fetchLeases(); navigate(`/app/leases/${leaseId}`); }}
       />
     </AppLayout>
   );

@@ -3,10 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface EmptyLeaseStateProps {
-  onNewRequest: () => void;
+  onAddLease: () => void;
 }
 
-export function EmptyLeaseState({ onNewRequest }: EmptyLeaseStateProps) {
+export function EmptyLeaseState({ onAddLease }: EmptyLeaseStateProps) {
   return (
     <Card className="border-2 border-dashed border-border">
       <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -45,9 +45,9 @@ export function EmptyLeaseState({ onNewRequest }: EmptyLeaseStateProps) {
           </div>
         </div>
 
-        <Button variant="accent" size="lg" onClick={onNewRequest}>
+        <Button variant="accent" size="lg" onClick={onAddLease}>
           <Plus className="h-5 w-5 mr-2" />
-          New Request
+          Add Lease
           <ArrowRight className="h-5 w-5 ml-2" />
         </Button>
       </CardContent>
