@@ -1508,6 +1508,7 @@ serve(async (req) => {
       .from('leases')
       .update({
         status: 'Ready',
+        lifecycle_status:       'executed',
         parent_lease_id:        parentLeaseId || null,
         landlord_name:          extractValue(leaseData.landlord_name),
         tenant_name:            extractValue(leaseData.tenant_name),
