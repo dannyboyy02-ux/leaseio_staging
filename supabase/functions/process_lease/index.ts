@@ -590,8 +590,58 @@ Return ONLY valid JSON:
   "termination_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
   "rent_schedule": [{"period_start":"YYYY-MM-DD","period_end":"YYYY-MM-DD|null","monthly_amount":null,"annual_amount":null,"notes":"string","confidence":0.0}],
   "key_dates": [{"date":"YYYY-MM-DD","description":"string","confidence":0.0}],
-  "risks": [{"title":"string","severity":"low|medium|high","explanation":"string","citation_snippet":"quote","citation_page":1,"confidence":0.0}]
+  "risks": [{"title":"string","severity":"low|medium|high","explanation":"string","citation_snippet":"quote","citation_page":1,"confidence":0.0}],
+  "uncertain_fields": ["list field names where you encountered ambiguous, cross-referenced, or multi-hop language — e.g. 'escalation_clauses', 'renewal_options', 'termination_clauses', 'risks'"],
+  "complex_clause_flags": ["list complex clause types identified — e.g. 'percentage_rent', 'snda_provision', 'ground_rent', 'sale_leaseback', 'cpi_floor_cap', 'exhibit_cross_reference', 'personal_guarantee']"
 }`;
+
+// System prompt for the conditional Opus pass — targets only uncertain/complex fields
+const OPUS_TARGETED_SYSTEM = `You are an expert commercial lease abstraction specialist. A prior extraction pass has already captured most lease fields. Your task is to re-examine ONLY the fields explicitly listed in the user prompt, which had low confidence or complex language.
+
+Apply maximum precision. For each field requested:
+- Read the relevant clause language carefully, including any cross-references to exhibits or addendums
+- Resolve ambiguous language (e.g. CPI floor/cap mechanics, multi-hop references, percentage rent formulas)
+- If a field genuinely cannot be determined, return null — do not guess
+
+Return ONLY valid JSON using the same schema as the original extraction (each field as {value, confidence, page, source_text}). Include only the fields explicitly listed in the prompt, plus an updated "risks" array if complex clause types were flagged.`;
+
+// Fields that can have low confidence and trigger Opus fallback
+const OPUS_FALLBACK_FIELDS = [
+  'escalation_clauses',
+  'rent_escalation_type',
+  'renewal_options',
+  'termination_clauses',
+  'security_deposit',
+];
+
+function getUncertainFields(merged: any, threshold: number): string[] {
+  return OPUS_FALLBACK_FIELDS.filter(field => {
+    const fieldData = merged[field];
+    if (!fieldData || typeof fieldData !== 'object') return false;
+    const conf = fieldData.confidence;
+    // Only flag if a value was extracted but with low confidence (ambiguous, not just missing)
+    return typeof conf === 'number' && conf < threshold && extractValue(fieldData) !== null;
+  });
+}
+
+function mergeOpusOverrides(sonnetMerged: any, opusMerged: any, targetFields: string[], hadComplexFlags: boolean): void {
+  for (const field of targetFields) {
+    if (opusMerged[field] !== undefined && extractValue(opusMerged[field]) !== null) {
+      const opusConf = opusMerged[field]?.confidence ?? 0;
+      const sonnetConf = sonnetMerged[field]?.confidence ?? 0;
+      // Only override if Opus is more confident
+      if (opusConf >= sonnetConf) {
+        sonnetMerged[field] = opusMerged[field];
+        console.log(`[Claude] Opus override: ${field} (${sonnetConf.toFixed(2)} → ${opusConf.toFixed(2)})`);
+      }
+    }
+  }
+  // Override risks when complex clause flags triggered the call — Opus risk analysis is deeper
+  if (hadComplexFlags && opusMerged.risks && opusMerged.risks.length > 0) {
+    sonnetMerged.risks = opusMerged.risks;
+    console.log(`[Claude] Opus risks override: ${opusMerged.risks.length} risks`);
+  }
+}
 
 async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtractionResult> {
   console.log('[Claude] Starting two-pass native-PDF extraction...');
@@ -607,9 +657,9 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
   const allPages = [...new Set([...groupA, ...groupB, ...groupC])].sort((a, b) => a - b);
   const focusHint = allPages.length > 0 ? ` Key pages identified: ${allPages.join(', ')}.` : '';
 
-  // Pass 2: Single Opus call — sends PDF once, extracts everything in one pass
-  // This avoids parallel calls that would exceed the 30k input TPM rate limit.
-  console.log('[Claude] Sending single combined Opus extraction call...');
+  // Pass 2: Sonnet extraction — single combined call, sends PDF once
+  // Avoids parallel calls that would exceed the 30k input TPM rate limit.
+  console.log('[Claude] Sending Sonnet extraction call...');
   const rawCombined = await callAnthropicAPIWithPDF(
     'claude-sonnet-4-6',
     COMBINED_SYSTEM,
@@ -618,25 +668,62 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
     8192,
   );
 
-  console.log('[Claude] Opus call complete, parsing...');
+  console.log('[Claude] Sonnet extraction complete, parsing...');
 
   const merged = await repairJsonObject(rawCombined) as any;
-  const risksData = merged.risks || [];
 
-  // Haiku/Opus disagreement warnings
+  // Pass 3 (conditional): Opus fallback for uncertain/complex fields
+  // Fires only when Sonnet signals low confidence (<0.70) on clause fields
+  // or flags complex clause types that benefit from deeper analysis.
+  const uncertainFields = getUncertainFields(merged, 0.70);
+  const complexFlags: string[] = merged.complex_clause_flags || [];
+  const hadComplexFlags = complexFlags.length > 0;
+
+  if (uncertainFields.length > 0 || hadComplexFlags) {
+    console.log(`[Claude] Opus fallback triggered — uncertain: [${uncertainFields.join(', ')}], complex: [${complexFlags.join(', ')}]`);
+
+    const clausePageHints: number[] = [
+      ...pageMap.escalation,
+      ...pageMap.renewal,
+      ...pageMap.termination,
+      ...pageMap.covenants,
+    ];
+    const uniqueClausePages = [...new Set(clausePageHints)].sort((a, b) => a - b);
+    const pageHint = uniqueClausePages.length > 0 ? ` Focus on pages: ${uniqueClausePages.join(', ')}.` : '';
+    const fieldsList = [...new Set([...uncertainFields, ...(hadComplexFlags ? ['risks'] : [])])].join(', ');
+
+    try {
+      const rawOpus = await callAnthropicAPIWithPDF(
+        'claude-opus-4-6',
+        OPUS_TARGETED_SYSTEM,
+        pdfBase64,
+        `Re-extract these specific fields with maximum precision: ${fieldsList}.${pageHint} Complex clause types flagged: ${complexFlags.join(', ') || 'none'}.`,
+        4096,
+      );
+      const opusMerged = await repairJsonObject(rawOpus) as any;
+      mergeOpusOverrides(merged, opusMerged, uncertainFields, hadComplexFlags);
+      merged._opus_fallback_fields = uncertainFields;
+      merged._opus_complex_flags = complexFlags;
+    } catch (opusErr) {
+      // Non-fatal — Sonnet results stand if Opus call fails
+      console.error('[Claude] Opus fallback failed, keeping Sonnet results:', opusErr instanceof Error ? opusErr.message : opusErr);
+    }
+  }
+
+  // Haiku/Sonnet disagreement warnings
   const haikuWarnings: string[] = [];
   if (pageMap.financials.length > 0 && !extractValue(merged.current_monthly_rent)) {
-    haikuWarnings.push(`Haiku mapped rent to pages [${pageMap.financials.join(',')}] but Opus found nothing — review required`);
+    haikuWarnings.push(`Haiku mapped rent to pages [${pageMap.financials.join(',')}] but Sonnet found nothing — review required`);
   }
   if (pageMap.parties.length > 0 && !extractValue(merged.landlord_name)) {
     haikuWarnings.push(`Haiku mapped parties to pages [${pageMap.parties.join(',')}] but landlord not found`);
   }
   if (haikuWarnings.length > 0) {
     merged._haiku_warnings = haikuWarnings;
-    console.log('[Claude] Haiku/Opus disagreements:', haikuWarnings);
+    console.log('[Claude] Haiku/Sonnet disagreements:', haikuWarnings);
   }
 
-  merged._extraction_model = 'claude-opus-4-6';
+  merged._extraction_model = uncertainFields.length > 0 || hadComplexFlags ? 'sonnet+opus' : 'claude-sonnet-4-6';
   merged._haiku_page_map = pageMap;
 
   return {
@@ -657,7 +744,7 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
     escalation_clauses:    merged.escalation_clauses    || null,
     termination_clauses:   merged.termination_clauses   || null,
     key_dates:             merged.key_dates             || [],
-    risks:                 risksData,
+    risks:                 merged.risks || [],
   };
 }
 

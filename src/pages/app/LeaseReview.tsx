@@ -17,6 +17,7 @@ import {
   X,
   RotateCcw,
   ClipboardCheck,
+  Pencil,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -56,6 +57,7 @@ import { UploadExecutedDocumentDialog } from "@/components/leases/UploadExecuted
 import { ExecutedTermsReview } from "@/components/leases/ExecutedTermsReview";
 import { VarianceReport } from "@/components/leases/VarianceReport";
 import { ModelLockConfirmation } from "@/components/leases/ModelLockConfirmation";
+import { LeaseDocumentsTab } from "@/components/leases/LeaseDocumentsTab";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -171,6 +173,9 @@ export default function LeaseReview() {
   const [savingEdits, setSavingEdits] = useState(false);
 
   // Phase 2 — resubmit flow for returned leases
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
   const [resubmitDialogOpen, setResubmitDialogOpen] = useState(false);
   const [resubmitFields, setResubmitFields] = useState({
     monthlyPayment: '',
@@ -460,6 +465,22 @@ export default function LeaseReview() {
       setSavingEdits(false);
     }
   }, [lease, user, requestEdits]);
+
+  const saveRename = useCallback(async () => {
+    if (!lease) return;
+    const trimmed = renameValue.trim();
+    const { error } = await supabase
+      .from('leases')
+      .update({ request_title: trimmed || null })
+      .eq('id', lease.id);
+    if (error) {
+      toast.error('Failed to rename lease');
+      return;
+    }
+    setLease((prev: any) => prev ? { ...prev, request_title: trimmed || null } : prev);
+    setRenameDialogOpen(false);
+    toast.success('Lease renamed');
+  }, [lease, renameValue]);
 
   const handleStageDocumentUpload = useCallback(async () => {
     if (!lease || !user || !stageFile) {
@@ -1610,10 +1631,21 @@ export default function LeaseReview() {
     <AppLayout>
       <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-muted/30">
         <AppHeader
-          title="Lease Review"
+          title={
+            <div className="flex items-center gap-1.5">
+              <span>{lease.request_title || lease.property_address || lease.filename || 'Untitled Lease'}</span>
+              <button
+                onClick={() => { setRenameValue(lease.request_title || ''); setRenameDialogOpen(true); }}
+                className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                title="Rename lease"
+              >
+                <Pencil size={13} />
+              </button>
+            </div>
+          }
           subtitle={
             <div className="flex items-center gap-2">
-              <span>{lease.filename}</span>
+              <span className="text-muted-foreground">{lease.filename}</span>
               {lease.lifecycle_status && (
                 <LifecycleStatusBadge status={lease.lifecycle_status as any} />
               )}
@@ -1964,11 +1996,20 @@ export default function LeaseReview() {
 
                     {/* Amendments List - for master leases */}
                     {isMasterLease && (
-                      <AmendmentsList 
-                        parentLeaseId={lease.id} 
+                      <AmendmentsList
+                        parentLeaseId={lease.id}
                         refreshTrigger={amendmentsRefresh}
                       />
                     )}
+
+                    {/* Documents tab — original PDF, executed copy, analysis export */}
+                    <LeaseDocumentsTab
+                      leaseId={lease.id}
+                      filename={lease.filename}
+                      storagePath={lease.storage_path}
+                      executedFilename={lease.executed_filename}
+                      executedStoragePath={lease.executed_storage_path}
+                    />
 
                     <Card className="shadow-none border overflow-hidden">
                       <CardHeader className="bg-muted/30 border-b py-3">
@@ -2026,6 +2067,27 @@ export default function LeaseReview() {
           </div>
         )}
       </div>
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename Lease</DialogTitle>
+            <DialogDescription>Set a display name for this lease. Leave blank to use the filename.</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder={lease?.filename || 'Enter a name…'}
+            onKeyDown={(e) => { if (e.key === 'Enter') saveRename(); }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
+            <Button onClick={saveRename}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
