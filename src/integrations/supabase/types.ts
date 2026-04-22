@@ -55,6 +55,44 @@ export type Database = {
           },
         ]
       }
+      dismissed_events: {
+        Row: {
+          created_at: string
+          dismissed_at: string
+          event_key: string
+          expires_at: string | null
+          id: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          dismissed_at?: string
+          event_key: string
+          expires_at?: string | null
+          id?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          dismissed_at?: string
+          event_key?: string
+          expires_at?: string | null
+          id?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dismissed_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       executed_term_edits: {
         Row: {
           edited_at: string
@@ -163,7 +201,9 @@ export type Database = {
           created_at: string
           email: string
           expires_at: string
+          first_name: string | null
           id: string
+          last_name: string | null
           role: Database["public"]["Enums"]["workspace_role"]
           token: string
           workspace_id: string
@@ -173,7 +213,9 @@ export type Database = {
           created_at?: string
           email: string
           expires_at?: string
+          first_name?: string | null
           id?: string
+          last_name?: string | null
           role?: Database["public"]["Enums"]["workspace_role"]
           token?: string
           workspace_id: string
@@ -183,7 +225,9 @@ export type Database = {
           created_at?: string
           email?: string
           expires_at?: string
+          first_name?: string | null
           id?: string
+          last_name?: string | null
           role?: Database["public"]["Enums"]["workspace_role"]
           token?: string
           workspace_id?: string
@@ -551,6 +595,7 @@ export type Database = {
           covenant_flagged: boolean | null
           current_monthly_rent: number | null
           error_message: string | null
+          escalation_clauses: string | null
           escalation_rate: number | null
           escalation_type: string | null
           estimated_monthly_cost_max: number | null
@@ -581,6 +626,7 @@ export type Database = {
           financial_returned_to_submitter: boolean | null
           id: string
           initializer_id: string | null
+          intake_source: string | null
           internal_approved_at: string | null
           landlord_name: string | null
           last_nudged_at: string | null
@@ -603,13 +649,17 @@ export type Database = {
           notes: string | null
           parent_lease_id: string | null
           processed_at: string | null
+          property_address: string | null
           rejection_reason: string | null
+          renewal_options: string | null
+          rent_commencement_date: string | null
           rent_escalation_type: string | null
           request_description: string | null
           request_title: string | null
           request_urgency: string | null
           requesting_department: string | null
           requestor_id: string | null
+          security_deposit: string | null
           square_footage: number | null
           status: string
           status_changed_at: string | null
@@ -620,6 +670,7 @@ export type Database = {
           summary_shared_at: string | null
           tenant_name: string | null
           term_months: number | null
+          termination_clauses: string | null
           uploaded_at: string
           user_id: string
           variance_commencement_days: number | null
@@ -651,6 +702,7 @@ export type Database = {
           covenant_flagged?: boolean | null
           current_monthly_rent?: number | null
           error_message?: string | null
+          escalation_clauses?: string | null
           escalation_rate?: number | null
           escalation_type?: string | null
           estimated_monthly_cost_max?: number | null
@@ -681,6 +733,7 @@ export type Database = {
           financial_returned_to_submitter?: boolean | null
           id?: string
           initializer_id?: string | null
+          intake_source?: string | null
           internal_approved_at?: string | null
           landlord_name?: string | null
           last_nudged_at?: string | null
@@ -703,13 +756,17 @@ export type Database = {
           notes?: string | null
           parent_lease_id?: string | null
           processed_at?: string | null
+          property_address?: string | null
           rejection_reason?: string | null
+          renewal_options?: string | null
+          rent_commencement_date?: string | null
           rent_escalation_type?: string | null
           request_description?: string | null
           request_title?: string | null
           request_urgency?: string | null
           requesting_department?: string | null
           requestor_id?: string | null
+          security_deposit?: string | null
           square_footage?: number | null
           status?: string
           status_changed_at?: string | null
@@ -720,6 +777,7 @@ export type Database = {
           summary_shared_at?: string | null
           tenant_name?: string | null
           term_months?: number | null
+          termination_clauses?: string | null
           uploaded_at?: string
           user_id: string
           variance_commencement_days?: number | null
@@ -751,6 +809,7 @@ export type Database = {
           covenant_flagged?: boolean | null
           current_monthly_rent?: number | null
           error_message?: string | null
+          escalation_clauses?: string | null
           escalation_rate?: number | null
           escalation_type?: string | null
           estimated_monthly_cost_max?: number | null
@@ -781,6 +840,7 @@ export type Database = {
           financial_returned_to_submitter?: boolean | null
           id?: string
           initializer_id?: string | null
+          intake_source?: string | null
           internal_approved_at?: string | null
           landlord_name?: string | null
           last_nudged_at?: string | null
@@ -803,13 +863,17 @@ export type Database = {
           notes?: string | null
           parent_lease_id?: string | null
           processed_at?: string | null
+          property_address?: string | null
           rejection_reason?: string | null
+          renewal_options?: string | null
+          rent_commencement_date?: string | null
           rent_escalation_type?: string | null
           request_description?: string | null
           request_title?: string | null
           request_urgency?: string | null
           requesting_department?: string | null
           requestor_id?: string | null
+          security_deposit?: string | null
           square_footage?: number | null
           status?: string
           status_changed_at?: string | null
@@ -820,6 +884,7 @@ export type Database = {
           summary_shared_at?: string | null
           tenant_name?: string | null
           term_months?: number | null
+          termination_clauses?: string | null
           uploaded_at?: string
           user_id?: string
           variance_commencement_days?: number | null
@@ -914,6 +979,44 @@ export type Database = {
           },
           {
             foreignKeyName: "notifications_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processing_rate_limits: {
+        Row: {
+          created_at: string
+          function_name: string
+          id: string
+          request_count: number
+          updated_at: string
+          window_start: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          function_name: string
+          id?: string
+          request_count?: number
+          updated_at?: string
+          window_start: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          function_name?: string
+          id?: string
+          request_count?: number
+          updated_at?: string
+          window_start?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_rate_limits_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -1119,82 +1222,6 @@ export type Database = {
           },
         ]
       }
-      dismissed_events: {
-        Row: {
-          created_at: string
-          dismissed_at: string
-          event_key: string
-          expires_at: string | null
-          id: string
-          user_id: string
-          workspace_id: string
-        }
-        Insert: {
-          created_at?: string
-          dismissed_at?: string
-          event_key: string
-          expires_at?: string | null
-          id?: string
-          user_id: string
-          workspace_id: string
-        }
-        Update: {
-          created_at?: string
-          dismissed_at?: string
-          event_key?: string
-          expires_at?: string | null
-          id?: string
-          user_id?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "dismissed_events_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      processing_rate_limits: {
-        Row: {
-          created_at: string
-          function_name: string
-          id: string
-          request_count: number
-          updated_at: string
-          window_start: string
-          workspace_id: string
-        }
-        Insert: {
-          created_at?: string
-          function_name: string
-          id?: string
-          request_count?: number
-          updated_at?: string
-          window_start: string
-          workspace_id: string
-        }
-        Update: {
-          created_at?: string
-          function_name?: string
-          id?: string
-          request_count?: number
-          updated_at?: string
-          window_start?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "processing_rate_limits_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       user_preferences: {
         Row: {
           created_at: string
@@ -1341,6 +1368,7 @@ export type Database = {
       workspaces: {
         Row: {
           approval_threshold: number | null
+          backdoor_enabled: boolean
           billing_interval: string
           covenant_threshold: number | null
           created_at: string
@@ -1357,6 +1385,7 @@ export type Database = {
         }
         Insert: {
           approval_threshold?: number | null
+          backdoor_enabled?: boolean
           billing_interval?: string
           covenant_threshold?: number | null
           created_at?: string
@@ -1373,6 +1402,7 @@ export type Database = {
         }
         Update: {
           approval_threshold?: number | null
+          backdoor_enabled?: boolean
           billing_interval?: string
           covenant_threshold?: number | null
           created_at?: string
@@ -1468,6 +1498,7 @@ export type Database = {
         Args: { p_lease_id: string }
         Returns: boolean
       }
+      get_audit_user_id: { Args: { p_email: string }; Returns: string }
       get_workspace_role: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: Database["public"]["Enums"]["workspace_role"]

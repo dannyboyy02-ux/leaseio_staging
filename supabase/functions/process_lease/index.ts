@@ -2,7 +2,6 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 import {
-  analyzeWithAzureDI as runAzureDI,
   enforceWorkspaceRateLimit,
   repairJsonObject,
 } from "../_shared/audit.ts";
@@ -35,11 +34,6 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
     'Access-Control-Max-Age': '86400',
   };
 }
-
-// Azure Document Intelligence (OCR layer)
-const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');
-const AZURE_DI_KEY = Deno.env.get('AZURE_DI_KEY');
-const AZURE_DI_MODEL = Deno.env.get('AZURE_DI_MODEL') || 'prebuilt-layout';
 
 // Anthropic (intelligence layer)
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
@@ -267,14 +261,13 @@ function normalizeEscalation(rentEscalationTypeRaw: string | null): {
   };
 }
 
-async function analyzeWithAzureDI(pdfBytes: ArrayBuffer, includePageDelimiters = false): Promise<string> {
-  return await runAzureDI(pdfBytes, {
-    endpoint: AZURE_DI_ENDPOINT!,
-    apiKey: AZURE_DI_KEY!,
-    model: AZURE_DI_MODEL,
-    logPrefix: 'process_lease',
-    includePageDelimiters,
-  });
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 function normalizeConfidenceScore(value: number): number {
@@ -402,8 +395,71 @@ async function callAnthropicAPI(
   throw lastError || new Error('All Anthropic API attempts failed');
 }
 
-async function callHaikuForPageMap(documentText: string): Promise<PageMap> {
-  console.log('[Haiku] Building page map...');
+async function callAnthropicAPIWithPDF(
+  model: string,
+  system: string,
+  pdfBase64: string,
+  textPrompt: string,
+  maxTokens: number,
+): Promise<string> {
+  const maxRetries = 2;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY!,
+          'anthropic-version': '2023-06-01',
+          'anthropic-beta': 'pdfs-2024-09-25',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          system,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'document',
+                source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 },
+              },
+              { type: 'text', text: textPrompt },
+            ],
+          }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Anthropic PDF] Request failed (attempt ${attempt + 1}): ${errorText}`);
+        lastError = new Error(`Anthropic PDF API error: ${response.status} - ${errorText}`);
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+        throw lastError;
+      }
+
+      const data = await response.json();
+      const content = data.content?.[0]?.text;
+      if (!content) {
+        lastError = new Error('Anthropic PDF response missing content');
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+        throw lastError;
+      }
+
+      console.log(`[Anthropic PDF:${model}] tokens in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
+      return content;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+    }
+  }
+  throw lastError || new Error('All Anthropic PDF API attempts failed');
+}
+
+async function callHaikuForPageMap(pdfBase64: string): Promise<PageMap> {
+  console.log('[Haiku] Building page map from native PDF...');
   const system = `You are a lease document classifier. Your only job is to identify which pages contain specific types of information. Do not extract values — only identify page locations.
 
 Return a JSON object with these arrays of 1-indexed page numbers:
@@ -418,10 +474,11 @@ Return a JSON object with these arrays of 1-indexed page numbers:
 
 Return ONLY valid JSON. Empty array if a category has no relevant pages. Pages may appear in multiple categories.`;
 
-  const content = await callAnthropicAPI(
+  const content = await callAnthropicAPIWithPDF(
     'claude-haiku-4-5-20251001',
     system,
-    `Map this lease document:\n\n${documentText}`,
+    pdfBase64,
+    'Read this lease document and return the page map JSON.',
     1024,
   );
 
@@ -436,14 +493,11 @@ Return ONLY valid JSON. Empty array if a category has no relevant pages. Pages m
       termination: Array.isArray(parsed.termination) ? parsed.termination : [],
       covenants:   Array.isArray(parsed.covenants)   ? parsed.covenants   : [],
       key_dates:   Array.isArray(parsed.key_dates)   ? parsed.key_dates   : [],
-      total_pages: typeof parsed.total_pages === 'number' ? parsed.total_pages : 0,
+      total_pages: typeof parsed.total_pages === 'number' ? parsed.total_pages : 1,
     };
   } catch (error) {
     console.error('[Haiku] Page map parse failed, using full-document fallback:', error);
-    const pageNums = [...(documentText.matchAll(/\[PAGE (\d+)\]/g))].map(m => parseInt(m[1]));
-    const totalPages = pageNums.length > 0 ? Math.max(...pageNums) : 1;
-    const all = Array.from({ length: totalPages }, (_, i) => i + 1);
-    return { parties: all, financials: all, escalation: all, renewal: all, termination: all, covenants: all, key_dates: all, total_pages: totalPages };
+    return { parties: [], financials: [], escalation: [], renewal: [], termination: [], covenants: [], key_dates: [], total_pages: 1 };
   }
 }
 
@@ -557,25 +611,26 @@ Return ONLY valid JSON:
   "risks": [{"title":"string","severity":"low|medium|high","explanation":"string","citation_snippet":"quote","citation_page":1,"confidence":0.0}]
 }`;
 
-async function extractLeaseDataWithClaude(documentText: string): Promise<LeaseExtractionResult> {
-  console.log('[Claude] Starting two-pass extraction...');
+async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtractionResult> {
+  console.log('[Claude] Starting two-pass native-PDF extraction...');
 
-  // Pass 1: Haiku page map
-  const pageMap = await callHaikuForPageMap(documentText);
+  // Pass 1: Haiku page map (native PDF)
+  const pageMap = await callHaikuForPageMap(pdfBase64);
 
   // Build page groups with ±1 buffer
   const { groupA, groupB, groupC } = buildPageGroups(pageMap);
-  console.log(`[Claude] Groups — A:${groupA.length}pp B:${groupB.length}pp C:${groupC.length}pp`);
+  console.log(`[Claude] Groups — A:${groupA.length}pp B:${groupB.length}pp C:${groupC.length}pp total:${pageMap.total_pages}`);
 
-  const textA = slicePagesByNumbers(documentText, groupA);
-  const textB = groupB.length > 0 ? slicePagesByNumbers(documentText, groupB) : documentText;
-  const textC = groupC.length > 0 ? slicePagesByNumbers(documentText, groupC) : textB;
+  // Page focus instructions for each Opus call — full PDF sent, model focuses on relevant pages
+  const focusA = groupA.length > 0 ? ` Focus on pages: ${groupA.join(', ')}.` : '';
+  const focusB = groupB.length > 0 ? ` Focus on pages: ${groupB.join(', ')}.` : '';
+  const focusC = groupC.length > 0 ? ` Focus on pages: ${groupC.join(', ')}.` : '';
 
-  // Pass 2: Parallel Opus extraction
+  // Pass 2: Parallel Opus extraction (native PDF)
   const [rawA, rawB, rawC] = await Promise.all([
-    callAnthropicAPI('claude-opus-4-6', CORE_SYSTEM,    `Extract core lease terms from these pages:\n\n${textA}`, 6144),
-    callAnthropicAPI('claude-opus-4-6', CLAUSES_SYSTEM, `Extract clause information from these pages:\n\n${textB}`, 4096),
-    callAnthropicAPI('claude-opus-4-6', RISKS_SYSTEM,   `Identify risks from these pages:\n\n${textC}`,            4096),
+    callAnthropicAPIWithPDF('claude-opus-4-6', CORE_SYSTEM,    pdfBase64, `Extract core lease terms.${focusA}`,    6144),
+    callAnthropicAPIWithPDF('claude-opus-4-6', CLAUSES_SYSTEM, pdfBase64, `Extract clause information.${focusB}`, 4096),
+    callAnthropicAPIWithPDF('claude-opus-4-6', RISKS_SYSTEM,   pdfBase64, `Identify risks.${focusC}`,             4096),
   ]);
 
   console.log('[Claude] All Opus calls complete, merging...');
@@ -627,10 +682,9 @@ async function extractLeaseDataWithClaude(documentText: string): Promise<LeaseEx
   };
 }
 
-// Legacy stub — kept only for executed mode until that path is migrated
-async function extractLeaseDataWithOpenAI(documentText: string): Promise<LeaseExtractionResult> {
-  console.log('[OpenAI→Claude] Redirecting to Claude extraction...');
-  return extractLeaseDataWithClaude(documentText);
+// Legacy stub — unused, retained for reference only
+async function _extractLeaseDataWithOpenAI_STUB(pdfBase64: string): Promise<LeaseExtractionResult> {
+  return extractLeaseDataWithClaude(pdfBase64);
 }
 
 // Original OpenAI implementation below — retained for reference, not called
@@ -1192,18 +1246,12 @@ serve(async (req) => {
         details: { filename: sanitizedFilename, storage_path: executedStoragePath },
       });
 
-      let executedText: string;
-      try {
-        executedText = await analyzeWithAzureDI(fileBytes, true); // true = include [PAGE N] markers
-        console.log(`[process_lease] Executed: extracted ${executedText.length} characters`);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Executed document analysis failed: ${msg}`);
-      }
+      const executedPdfBase64 = arrayBufferToBase64(fileBytes);
+      console.log('[process_lease] Executed: PDF encoded for native extraction');
 
       let leaseData: LeaseExtractionResult;
       try {
-        leaseData = await extractLeaseDataWithClaude(executedText);
+        leaseData = await extractLeaseDataWithClaude(executedPdfBase64);
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Executed AI extraction failed: ${msg}`);
@@ -1383,19 +1431,12 @@ serve(async (req) => {
     }
     console.log('[process_lease] File uploaded to storage');
 
-    let extractedText: string;
-    try {
-      extractedText = await analyzeWithAzureDI(fileBytes, true); // true = include [PAGE N] markers
-      console.log(`[process_lease] Extracted ${extractedText.length} characters`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await supabaseAdmin.from('leases').update({ status: 'Failed', error_message: `Document analysis failed: ${errorMessage}` }).eq('id', leaseId);
-      throw error;
-    }
+    const pdfBase64 = arrayBufferToBase64(fileBytes);
+    console.log('[process_lease] PDF encoded for native Claude extraction');
 
     let leaseData: LeaseExtractionResult;
     try {
-      leaseData = await extractLeaseDataWithClaude(extractedText);
+      leaseData = await extractLeaseDataWithClaude(pdfBase64);
       console.log('[process_lease] Lease data extracted:', JSON.stringify(leaseData).substring(0, 500));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
