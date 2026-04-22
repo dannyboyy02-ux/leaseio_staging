@@ -123,7 +123,7 @@ export function AppSidebar() {
     email: authUser?.email || user?.email || '',
   };
 
-  const currentPlan = workspace?.plan || 'free';
+  const currentPlan = workspace?.plan || 'starter';
   const planLabel = t(`plan.${currentPlan}`);
 
   const getPlanBadgeVariant = () => {
@@ -243,7 +243,7 @@ export function AppSidebar() {
           <Sparkles className="h-5 w-5" />
           <span className="flex-1">{planLabel} Plan</span>
           <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5">
-            {currentPlan === 'free' ? 'Upgrade' : planLabel}
+            {currentPlan === 'starter' ? 'Upgrade' : planLabel}
           </Badge>
         </Link>
       </div>

@@ -36,7 +36,8 @@
       "headline": "Envíenos sus contratos.",
       "headline_accent": "Le diremos qué contienen.",
       "subheadline": "Los departamentos firman arrendamientos sin que finanzas lo sepa. LeaseIO captura cada contrato — antes o después de la firma — extrae los términos clave con IA y le da a finanzas un repositorio defendible ante auditoría. Su equipo solo confirma y actúa.",
-      "cta_trial": "Comience Gratis",
+      "cta_audit": "Inicie su Auditoría Gratuita",
+      "cta_trial": "Comenzar Prueba Gratis",
       "cta_signin": "Iniciar Sesión",
       "trust_setup": "Configuración en 5 minutos",
       "trust_ai": "La IA lee sus contratos en segundos",
@@ -650,6 +651,7 @@
     "upgrade": "Actualizar",
     "description": {
       "free": "Para equipos pequeños que inician con visibilidad de arrendamientos",
+      "starter": "Para equipos de finanzas que necesitan visibilidad y control de arrendamientos",
       "business": "Para organizaciones que necesitan gestión completa del ciclo de vida"
     },
     "feature": {
@@ -670,11 +672,10 @@
       "priority_support": "Soporte prioritario",
       "team_access": "Acceso de equipo (5 puestos)",
       "role_permissions": "Permisos basados en roles",
-      "quickbooks": "Integración con QuickBooks",
       "custom_branding": "Marca personalizada",
       "everything_starter": "Todo en Inicial",
       "everything_pro": "Todo en Pro",
-      "lease_request_intake": "Ingreso de solicitudes de arrendamiento",
+      "lease_request_intake": "Solicitudes de arrendamiento y flujo de aprobación",
       "pipeline_visibility": "Visibilidad del pipeline",
       "basic_notifications": "Notificaciones básicas",
       "status_tracking": "Seguimiento de estado",
@@ -686,7 +687,13 @@
       "audit_package": "Exportación de población de arrendamientos lista para auditoría",
       "role_based_access": "Control de acceso por roles",
       "bulk_upload": "Carga masiva de documentos",
-      "export_integrations": "Integraciones de exportación"
+      "export_integrations": "Integraciones de exportación",
+      "15_abstractions_mo": "15 abstracciones con IA/mes",
+      "50_abstractions_mo": "50 abstracciones con IA/mes",
+      "3_users": "Hasta 3 usuarios",
+      "ai_assistant": "Asistente de IA integrado (Ask Claude)",
+      "portfolio_intelligence": "Inteligencia de portafolio",
+      "amendment_comparison": "Comparación de enmiendas"
     }
   },
   "auth": {

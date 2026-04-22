@@ -1411,6 +1411,64 @@ serve(async (req) => {
     }
 
     // ----------------------------------------------------------------
+    // Amendment comparison — populate _amendment_changes
+    // Only runs when this document is an amendment to an existing lease.
+    // ----------------------------------------------------------------
+    if (parentLeaseId) {
+      try {
+        const { data: parentLease } = await supabaseAdmin
+          .from('leases')
+          .select('extracted_json')
+          .eq('id', parentLeaseId)
+          .single();
+
+        if (parentLease?.extracted_json) {
+          const parentJson = parentLease.extracted_json as Record<string, unknown>;
+          const COMPARABLE_FIELDS = [
+            'landlord_name',
+            'tenant_name',
+            'property_address',
+            'lease_start',
+            'lease_end',
+            'current_monthly_rent',
+            'rent_escalation_type',
+            'security_deposit',
+            'renewal_options',
+            'termination_clauses',
+            'escalation_clauses',
+            'square_footage',
+          ];
+
+          const amendmentChanges: Array<{
+            field: string;
+            old_value: string | null;
+            new_value: string | null;
+            change_type: 'modified' | 'added' | 'removed';
+          }> = [];
+
+          for (const field of COMPARABLE_FIELDS) {
+            const oldRaw = extractValue(parentJson[field]);
+            const newRaw = extractValue((leaseData as any)[field]);
+            const oldVal = oldRaw != null && String(oldRaw).trim() !== '' ? String(oldRaw).trim() : null;
+            const newVal = newRaw != null && String(newRaw).trim() !== '' ? String(newRaw).trim() : null;
+
+            if (oldVal === newVal) continue;
+            if (!oldVal && !newVal) continue;
+
+            const change_type: 'modified' | 'added' | 'removed' = !oldVal ? 'added' : !newVal ? 'removed' : 'modified';
+            amendmentChanges.push({ field, old_value: oldVal, new_value: newVal, change_type });
+          }
+
+          (leaseData as any)._amendment_changes = amendmentChanges;
+          console.log(`[process_lease] Amendment comparison: ${amendmentChanges.length} changes detected`);
+        }
+      } catch (err) {
+        // Non-fatal — continue without comparison data
+        console.error('[process_lease] Amendment comparison failed:', err instanceof Error ? err.message : err);
+      }
+    }
+
+    // ----------------------------------------------------------------
     // Step 1 — Escalation normalization
     // Parse rent_escalation_type exactly once here.
     // Downstream code must use escalation_type and escalation_rate only.
@@ -1430,6 +1488,7 @@ serve(async (req) => {
       .from('leases')
       .update({
         status: 'Ready',
+        parent_lease_id:        parentLeaseId || null,
         landlord_name:          extractValue(leaseData.landlord_name),
         tenant_name:            extractValue(leaseData.tenant_name),
         property_address:       extractValue(leaseData.property_address),

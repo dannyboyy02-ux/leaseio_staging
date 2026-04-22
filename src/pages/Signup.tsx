@@ -27,17 +27,15 @@ const timezones = [
 ];
 
 const PLAN_DISPLAY_NAMES: Record<string, string> = {
-  free: 'Free',
   starter: 'Starter',
-  pro: 'Pro',
   business: 'Business',
 };
 
 export default function Signup() {
   const { t } = useAppTranslation();
   const [searchParams] = useSearchParams();
-  const preselectedPlan = searchParams.get('plan') || 'free';
-  const planDisplayName = PLAN_DISPLAY_NAMES[preselectedPlan] || 'Free';
+  const preselectedPlan = searchParams.get('plan') || 'starter';
+  const planDisplayName = PLAN_DISPLAY_NAMES[preselectedPlan] || 'Starter';
   
   const [formData, setFormData] = useState({
     firstName: '',

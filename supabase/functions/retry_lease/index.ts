@@ -25,9 +25,7 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   );
   const isProductionDomain = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin);
   const isAllowed = isProductionDomain || isLovablePreview;
-  
   const origin = isAllowed ? requestOrigin : ALLOWED_ORIGINS[0];
-    
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -36,15 +34,13 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   };
 }
 
-// Azure Document Intelligence
+// Azure Document Intelligence (OCR layer)
 const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');
 const AZURE_DI_KEY = Deno.env.get('AZURE_DI_KEY');
-
-// OpenAI
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') || 'gpt-4o';
-const OPENAI_MAX_TOKENS = Number(Deno.env.get('OPENAI_MAX_TOKENS') || '16000');
 const AZURE_DI_MODEL = Deno.env.get('AZURE_DI_MODEL') || 'prebuilt-layout';
+
+// Anthropic (intelligence layer)
+const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 
 // Supabase
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -82,7 +78,6 @@ interface LeaseExtractionResult {
   risks: { title: string; severity: 'low' | 'medium' | 'high'; explanation: string; citation_snippet?: string; citation_page?: number }[];
 }
 
-// Validate UUID format
 function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
 }
@@ -91,19 +86,15 @@ function safeDate(input: string | null | undefined): string | null {
   if (!input || typeof input !== 'string') return null;
   const trimmed = input.trim();
   if (!trimmed || trimmed.includes('_')) return null;
-  
   const invalidTokens = ['tbd', 'n/a', 'unknown', 'pending', 'none', 'null', 'undefined'];
   if (invalidTokens.includes(trimmed.toLowerCase())) return null;
-  
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  
   try {
     const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (slashMatch) {
       const [, month, day, year] = slashMatch;
       return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
-    
     const monthNames: Record<string, string> = {
       'january': '01', 'jan': '01', 'february': '02', 'feb': '02',
       'march': '03', 'mar': '03', 'april': '04', 'apr': '04',
@@ -112,14 +103,12 @@ function safeDate(input: string | null | undefined): string | null {
       'october': '10', 'oct': '10', 'november': '11', 'nov': '11',
       'december': '12', 'dec': '12',
     };
-    
     const monthMatch = trimmed.match(/^([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
     if (monthMatch) {
       const [, monthStr, day, year] = monthMatch;
       const monthNum = monthNames[monthStr.toLowerCase()];
       if (monthNum) return `${year}-${monthNum}-${day.padStart(2, '0')}`;
     }
-    
     const parsed = new Date(trimmed);
     if (!isNaN(parsed.getTime())) {
       const year = parsed.getFullYear();
@@ -132,21 +121,17 @@ function safeDate(input: string | null | undefined): string | null {
   } catch (e) {
     console.log(`[safeDate] Parse error:`, e);
   }
-  
   return null;
+}
+
+function extractValue(field: any): any {
+  if (field && typeof field === 'object' && 'value' in field) return field.value;
+  return field;
 }
 
 /**
  * Escalation Rate Normalization
- *
- * Parsing boundary: rent_escalation_type is parsed ONLY in ingestion functions
- * (process_lease and retry_lease). Downstream code must use escalation_rate
- * and escalation_type exclusively.
- *
- * ASC 842 hard rule: CPI/index leases must NEVER be silently defaulted to 0.
- * escalationRate is returned as null for index leases to make the gap explicit.
- *
- * Keep this function in sync with the copy in process_lease/index.ts.
+ * Keep in sync with process_lease/index.ts.
  */
 function normalizeEscalation(rentEscalationTypeRaw: string | null): {
   escalationType: string;
@@ -155,33 +140,16 @@ function normalizeEscalation(rentEscalationTypeRaw: string | null): {
 } {
   if (rentEscalationTypeRaw) {
     const raw = rentEscalationTypeRaw.trim();
-
-    // Extract numeric percent (e.g. "3% annual", "2.5%", "fixed 3%")
     const percentMatch = raw.match(/(\d+(?:\.\d+)?)\s*%/);
     if (percentMatch) {
-      return {
-        escalationType: 'percent',
-        escalationRate: parseFloat(percentMatch[1]),
-        needsEscalationReview: false,
-      };
+      return { escalationType: 'percent', escalationRate: parseFloat(percentMatch[1]), needsEscalationReview: false };
     }
-
-    // Detect CPI / index-based escalation
     const cpiPattern = /\b(cpi|index|consumer\s+price|inflation[- ]based)\b/i;
     if (cpiPattern.test(raw)) {
-      return {
-        escalationType: 'index',
-        escalationRate: null, // explicitly null — never silently 0
-        needsEscalationReview: true,
-      };
+      return { escalationType: 'index', escalationRate: null, needsEscalationReview: true };
     }
   }
-
-  return {
-    escalationType: 'none',
-    escalationRate: 0,
-    needsEscalationReview: false,
-  };
+  return { escalationType: 'none', escalationRate: 0, needsEscalationReview: false };
 }
 
 async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
@@ -190,63 +158,289 @@ async function analyzeWithAzureDI(pdfBytes: ArrayBuffer): Promise<string> {
     apiKey: AZURE_DI_KEY!,
     model: AZURE_DI_MODEL,
     logPrefix: 'retry_lease',
+    includePageDelimiters: true,
   });
 }
 
-async function extractLeaseDataWithOpenAI(documentText: string): Promise<LeaseExtractionResult> {
-  const systemPrompt = `You are an expert commercial lease analyst. Extract key information following industry-standard lease abstraction.
+// ================================================================
+// ANTHROPIC TWO-PASS EXTRACTION (same as process_lease)
+// ================================================================
 
-Extract and return as JSON:
-- landlord_name, tenant_name, property_address
-- lease_start, lease_end (ISO format YYYY-MM-DD)
+interface PageMap {
+  parties: number[];
+  financials: number[];
+  escalation: number[];
+  renewal: number[];
+  termination: number[];
+  covenants: number[];
+  key_dates: number[];
+  total_pages: number;
+}
 
-RENT SCHEDULE (extract complete rent history):
-- current_monthly_rent: Current monthly rent (number only)
-- rent_escalation_type: How rent increases (e.g., "3% annual", "CPI", "Step increases", "None")
-- rent_commencement_date: When rent payments begin (YYYY-MM-DD)
-- rent_schedule: Array of ALL rent periods [{
-    period_start: YYYY-MM-DD,
-    period_end: YYYY-MM-DD or null,
-    monthly_amount: number,
-    annual_amount: number,
-    notes: string
-  }]
+async function callAnthropicAPI(
+  model: string,
+  system: string,
+  userContent: string,
+  maxTokens: number,
+): Promise<string> {
+  const maxRetries = 2;
+  let lastError: Error | null = null;
 
-For leases with escalations, extract EACH rent period separately.
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': ANTHROPIC_API_KEY!,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          system,
+          messages: [{ role: 'user', content: userContent }],
+        }),
+      });
 
-- base_rent_amount (string with currency), base_rent_frequency
-- security_deposit, renewal_options, escalation_clauses, termination_clauses
-- key_dates: Array of [{date, description}]
-- risks: Array of [{title, severity (low/medium/high), explanation, citation_snippet, citation_page}]
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Anthropic] Request failed (attempt ${attempt + 1}): ${errorText}`);
+        lastError = new Error(`Anthropic API error: ${response.status} - ${errorText}`);
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+        throw lastError;
+      }
 
-Return ONLY valid JSON, no markdown.`;
+      const data = await response.json();
+      const content = data.content?.[0]?.text;
+      if (!content) {
+        lastError = new Error('Anthropic response missing content');
+        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+        throw lastError;
+      }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `Analyze this lease:\n\n${documentText}` }
-      ],
-      temperature: 0.1,
-      max_tokens: OPENAI_MAX_TOKENS,
-      response_format: { type: 'json_object' },
-    }),
-  });
+      console.log(`[Anthropic:${model}] tokens in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
+      return content;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+    }
+  }
+  throw lastError || new Error('All Anthropic API attempts failed');
+}
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenAI request failed: ${response.status} - ${errorText}`);
+async function callHaikuForPageMap(documentText: string): Promise<PageMap> {
+  console.log('[Haiku] Building page map...');
+  const system = `You are a lease document classifier. Your only job is to identify which pages contain specific types of information. Do not extract values — only identify page locations.
+
+Return a JSON object with these arrays of 1-indexed page numbers:
+- "parties": pages with landlord name, tenant name, or property address
+- "financials": pages with base rent amounts, monthly rent, security deposit
+- "escalation": pages with rent escalation clauses, CPI language, step increases
+- "renewal": pages with renewal or extension options
+- "termination": pages with termination, break clauses, early exit provisions
+- "covenants": pages with assignment restrictions, use restrictions, insurance requirements
+- "key_dates": pages with material deadlines, option exercise dates
+- "total_pages": total page count as a number
+
+Return ONLY valid JSON. Empty array if a category has no relevant pages. Pages may appear in multiple categories.`;
+
+  const content = await callAnthropicAPI(
+    'claude-haiku-4-5-20251001',
+    system,
+    `Map this lease document:\n\n${documentText}`,
+    1024,
+  );
+
+  try {
+    const parsed = await repairJsonObject(content) as any;
+    console.log('[Haiku] Page map:', JSON.stringify(parsed));
+    return {
+      parties:     Array.isArray(parsed.parties)     ? parsed.parties     : [],
+      financials:  Array.isArray(parsed.financials)  ? parsed.financials  : [],
+      escalation:  Array.isArray(parsed.escalation)  ? parsed.escalation  : [],
+      renewal:     Array.isArray(parsed.renewal)      ? parsed.renewal     : [],
+      termination: Array.isArray(parsed.termination) ? parsed.termination : [],
+      covenants:   Array.isArray(parsed.covenants)   ? parsed.covenants   : [],
+      key_dates:   Array.isArray(parsed.key_dates)   ? parsed.key_dates   : [],
+      total_pages: typeof parsed.total_pages === 'number' ? parsed.total_pages : 0,
+    };
+  } catch (error) {
+    console.error('[Haiku] Page map parse failed, using full-document fallback:', error);
+    const pageNums = [...(documentText.matchAll(/\[PAGE (\d+)\]/g))].map(m => parseInt(m[1]));
+    const totalPages = pageNums.length > 0 ? Math.max(...pageNums) : 1;
+    const all = Array.from({ length: totalPages }, (_, i) => i + 1);
+    return { parties: all, financials: all, escalation: all, renewal: all, termination: all, covenants: all, key_dates: all, total_pages: totalPages };
+  }
+}
+
+function slicePagesByNumbers(documentText: string, pageNumbers: number[]): string {
+  if (pageNumbers.length === 0) return documentText;
+  const pageSet = new Set(pageNumbers);
+  const segments = documentText.split(/(\[PAGE \d+\])/);
+  let result = '';
+  let inTarget = pageSet.has(1);
+  for (const segment of segments) {
+    const m = segment.match(/\[PAGE (\d+)\]/);
+    if (m) {
+      inTarget = pageSet.has(parseInt(m[1]));
+      if (inTarget) result += segment;
+    } else if (inTarget) {
+      result += segment;
+    }
+  }
+  return result.trim() || documentText;
+}
+
+function buildPageGroups(pageMap: PageMap): { groupA: number[]; groupB: number[]; groupC: number[] } {
+  const totalPages = pageMap.total_pages || 999;
+  const withBuffer = (pages: number[]) => {
+    const s = new Set<number>();
+    pages.forEach(p => { s.add(p - 1); s.add(p); s.add(p + 1); });
+    return Array.from(s).filter(p => p >= 1 && p <= totalPages).sort((a, b) => a - b);
+  };
+  return {
+    groupA: withBuffer([...pageMap.parties, ...pageMap.financials, ...pageMap.key_dates]),
+    groupB: withBuffer([...pageMap.escalation, ...pageMap.renewal, ...pageMap.termination]),
+    groupC: withBuffer(pageMap.covenants),
+  };
+}
+
+const CORE_SYSTEM = `You are an expert commercial lease abstraction specialist. Extract the following fields from the provided pages only.
+
+TERM MAPPINGS:
+- "Base Rent" / "Minimum Rent" / "Fixed Rent" / "Monthly Rent" → current_monthly_rent
+- "Commencement Date" / "Effective Date" / "Start Date" → lease_start
+- "Expiration Date" / "Termination Date" / "End Date" / "Term End" → lease_end
+- "Landlord" / "Lessor" / "Owner" (interchangeable)
+- "Tenant" / "Lessee" / "Renter" (interchangeable)
+- "Premises" / "Demised Premises" / "Leased Premises" → property_address
+- "Security Deposit" / "Damage Deposit" / "Good Faith Deposit"
+
+RULES:
+1. Extract ONLY what is explicitly stated. NEVER guess or infer.
+2. If not found: value null, confidence 0.0
+3. Dates in YYYY-MM-DD. Numbers without $ or commas.
+4. If multiple rent periods exist, extract ALL in rent_schedule.
+5. DO NOT confuse security deposit with first month's rent.
+6. DO NOT use placeholder dates like TBD.
+
+Return ONLY valid JSON:
+{
+  "landlord_name": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "tenant_name": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "property_address": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "lease_start": {"value": "YYYY-MM-DD|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "lease_end": {"value": "YYYY-MM-DD|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "current_monthly_rent": {"value": null,"confidence":0.0,"page":1,"source_text":"quote"},
+  "rent_commencement_date": {"value": "YYYY-MM-DD|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "base_rent_amount": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "base_rent_frequency": {"value": "monthly|quarterly|annually|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "security_deposit": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "rent_schedule": [{"period_start":"YYYY-MM-DD","period_end":"YYYY-MM-DD|null","monthly_amount":null,"annual_amount":null,"notes":"string","confidence":0.0}],
+  "key_dates": [{"date":"YYYY-MM-DD","description":"string","confidence":0.0}]
+}`;
+
+const CLAUSES_SYSTEM = `You are an expert commercial lease abstraction specialist. Extract clause information from the provided pages only.
+
+TERM MAPPINGS:
+- "CPI" / "Consumer Price Index" / "inflation-based" → index escalation
+- "Fixed Increase" / "Step Rent" / "3% annual" → percent escalation
+- "Option to Renew" / "Extension Option" → renewal_options
+- "Early Termination" / "Break Clause" → termination_clauses
+
+RULES:
+1. Extract ONLY what is explicitly stated. If not found: value null, confidence 0.0.
+2. Quote exact terms and notice periods.
+3. DO NOT default CPI/index leases to a percent — describe them as index-based.
+
+Return ONLY valid JSON:
+{
+  "rent_escalation_type": {"value": "e.g. '3% annual'|'CPI adjustment'|'None'|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "escalation_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "renewal_options": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "termination_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"}
+}`;
+
+const RISKS_SYSTEM = `You are an expert commercial lease risk analyst. Identify risks from the provided pages only.
+
+Flag these issues:
+- Rent escalations exceeding 5% annually (HIGH)
+- Automatic renewal without advance notice requirement (MEDIUM-HIGH)
+- Personal guarantee requirements (MEDIUM)
+- Restrictions on assignment or subletting (MEDIUM)
+- Unclear or missing termination provisions (MEDIUM)
+- Landlord can terminate without cause (HIGH)
+- Missing force majeure clauses (LOW-MEDIUM)
+- Ambiguous rent calculation methodology (MEDIUM)
+
+Return ONLY valid JSON:
+{
+  "risks": [{"title":"string","severity":"low|medium|high","explanation":"string","citation_snippet":"quote","citation_page":1,"confidence":0.0}]
+}`;
+
+async function extractLeaseDataWithClaude(documentText: string): Promise<LeaseExtractionResult> {
+  console.log('[Claude] Starting two-pass extraction...');
+
+  const pageMap = await callHaikuForPageMap(documentText);
+  const { groupA, groupB, groupC } = buildPageGroups(pageMap);
+  console.log(`[Claude] Groups — A:${groupA.length}pp B:${groupB.length}pp C:${groupC.length}pp`);
+
+  const textA = slicePagesByNumbers(documentText, groupA);
+  const textB = groupB.length > 0 ? slicePagesByNumbers(documentText, groupB) : documentText;
+  const textC = groupC.length > 0 ? slicePagesByNumbers(documentText, groupC) : textB;
+
+  const [rawA, rawB, rawC] = await Promise.all([
+    callAnthropicAPI('claude-opus-4-6', CORE_SYSTEM,    `Extract core lease terms from these pages:\n\n${textA}`, 6144),
+    callAnthropicAPI('claude-opus-4-6', CLAUSES_SYSTEM, `Extract clause information from these pages:\n\n${textB}`, 4096),
+    callAnthropicAPI('claude-opus-4-6', RISKS_SYSTEM,   `Identify risks from these pages:\n\n${textC}`,            4096),
+  ]);
+
+  console.log('[Claude] All Opus calls complete, merging...');
+
+  const [parsedA, parsedB, parsedC] = await Promise.all([
+    repairJsonObject(rawA),
+    repairJsonObject(rawB),
+    repairJsonObject(rawC),
+  ]);
+
+  const merged = { ...(parsedA as any), ...(parsedB as any) } as any;
+  const risksData = (parsedC as any).risks || [];
+
+  const haikuWarnings: string[] = [];
+  if (pageMap.financials.length > 0 && !extractValue(merged.current_monthly_rent)) {
+    haikuWarnings.push(`Haiku mapped rent to pages [${pageMap.financials.join(',')}] but Opus found nothing — review required`);
+  }
+  if (pageMap.parties.length > 0 && !extractValue(merged.landlord_name)) {
+    haikuWarnings.push(`Haiku mapped parties to pages [${pageMap.parties.join(',')}] but landlord not found`);
+  }
+  if (haikuWarnings.length > 0) {
+    merged._haiku_warnings = haikuWarnings;
+    console.log('[Claude] Haiku/Opus disagreements:', haikuWarnings);
   }
 
-  const data = await response.json();
-  const content = data.choices[0].message.content;
-  return await repairJsonObject(content) as LeaseExtractionResult;
+  merged._extraction_model = 'claude-opus-4-6';
+  merged._haiku_page_map = pageMap;
+
+  return {
+    landlord_name:          merged.landlord_name          || null,
+    tenant_name:            merged.tenant_name            || null,
+    property_address:       merged.property_address       || null,
+    lease_start:            merged.lease_start            || null,
+    lease_end:              merged.lease_end              || null,
+    current_monthly_rent:   merged.current_monthly_rent   || null,
+    rent_escalation_type:   merged.rent_escalation_type   || null,
+    rent_schedule:          merged.rent_schedule          || [],
+    rent_commencement_date: merged.rent_commencement_date || null,
+    base_rent_amount:       merged.base_rent_amount       || null,
+    base_rent_frequency:    merged.base_rent_frequency    || null,
+    security_deposit:       merged.security_deposit       || null,
+    renewal_options:        merged.renewal_options        || null,
+    escalation_clauses:     merged.escalation_clauses     || null,
+    termination_clauses:    merged.termination_clauses    || null,
+    key_dates:              merged.key_dates              || [],
+    risks:                  risksData,
+  };
 }
 
 serve(async (req) => {
@@ -259,7 +453,7 @@ serve(async (req) => {
 
   try {
     console.log('[retry_lease] Request received');
-    
+
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
@@ -269,11 +463,11 @@ serve(async (req) => {
     }
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    
+
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } }
     });
-    
+
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -281,7 +475,7 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    
+
     console.log(`[retry_lease] User authenticated: ${user.id}`);
 
     let body: unknown;
@@ -302,23 +496,15 @@ serve(async (req) => {
     }
 
     const { leaseId } = body as { leaseId?: unknown };
-    
-    if (!leaseId) {
-      return new Response(JSON.stringify({ error: 'Missing leaseId' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
 
-    if (typeof leaseId !== 'string') {
-      return new Response(JSON.stringify({ error: 'leaseId must be a string' }), {
+    if (!leaseId || typeof leaseId !== 'string') {
+      return new Response(JSON.stringify({ error: 'leaseId must be a non-empty string' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (!isValidUUID(leaseId)) {
-      console.log(`[retry_lease] Invalid leaseId format: ${leaseId}`);
       return new Response(JSON.stringify({ error: 'Invalid leaseId format. Must be a valid UUID.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -339,34 +525,27 @@ serve(async (req) => {
       });
     }
 
+    // Permission check
     let canRetry = lease.user_id === user.id;
     if (!canRetry && lease.workspace_id) {
-      const { data: roleData, error: roleError } = await supabaseAdmin
+      const { data: roleData } = await supabaseAdmin
         .from('workspace_roles')
         .select('role')
         .eq('workspace_id', lease.workspace_id)
         .eq('user_id', user.id)
         .maybeSingle();
 
-      if (roleError) {
-        throw new Error(`Failed to validate retry permissions: ${roleError.message}`);
-      }
-
       if (roleData && ['financial_approver', 'admin'].includes(roleData.role)) {
         canRetry = true;
       }
 
       if (!canRetry) {
-        const { data: ownedWorkspace, error: ownedError } = await supabaseAdmin
+        const { data: ownedWorkspace } = await supabaseAdmin
           .from('workspaces')
           .select('id')
           .eq('id', lease.workspace_id)
           .eq('owner_id', user.id)
           .maybeSingle();
-
-        if (ownedError) {
-          throw new Error(`Failed to validate workspace ownership: ${ownedError.message}`);
-        }
 
         if (ownedWorkspace) canRetry = true;
       }
@@ -402,7 +581,7 @@ serve(async (req) => {
       .update({ status: 'Processing', error_message: null })
       .eq('id', leaseId);
 
-    // Delete derived artifacts before regenerating to prevent duplicates
+    // Clear derived artifacts before regenerating
     await supabaseAdmin.from('risks').delete().eq('lease_id', leaseId);
     await supabaseAdmin.from('rent_schedules').delete().eq('lease_id', leaseId);
 
@@ -412,9 +591,9 @@ serve(async (req) => {
       .download(lease.storage_path);
 
     if (downloadError || !fileData) {
-      await supabaseAdmin.from('leases').update({ 
-        status: 'Failed', 
-        error_message: 'Could not download file from storage' 
+      await supabaseAdmin.from('leases').update({
+        status: 'Failed',
+        error_message: 'Could not download file from storage'
       }).eq('id', leaseId);
       throw new Error('Failed to download file');
     }
@@ -422,73 +601,109 @@ serve(async (req) => {
     const fileBytes = await fileData.arrayBuffer();
     console.log(`[retry_lease] Downloaded file: ${fileBytes.byteLength} bytes`);
 
-    // Re-process with Azure DI
+    // OCR with Azure DI (with page delimiters for Haiku mapping)
     let extractedText: string;
     try {
       extractedText = await analyzeWithAzureDI(fileBytes);
       console.log(`[retry_lease] Extracted ${extractedText.length} characters`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await supabaseAdmin.from('leases').update({ 
-        status: 'Failed', 
-        error_message: `Document analysis failed: ${errorMessage}` 
+      await supabaseAdmin.from('leases').update({
+        status: 'Failed',
+        error_message: `Document analysis failed: ${errorMessage}`
       }).eq('id', leaseId);
       throw error;
     }
 
-    // Extract with OpenAI
+    // Two-pass Claude extraction
     let leaseData: LeaseExtractionResult;
     try {
-      leaseData = await extractLeaseDataWithOpenAI(extractedText);
-      console.log('[retry_lease] Data extracted successfully');
+      leaseData = await extractLeaseDataWithClaude(extractedText);
+      console.log('[retry_lease] Claude extraction complete');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      await supabaseAdmin.from('leases').update({ 
-        status: 'Failed', 
-        error_message: `AI extraction failed: ${errorMessage}` 
+      await supabaseAdmin.from('leases').update({
+        status: 'Failed',
+        error_message: `AI extraction failed: ${errorMessage}`
       }).eq('id', leaseId);
       throw error;
     }
 
-    // Normalize escalation fields — same contract as process_lease
-    // Parsing boundary: rent_escalation_type is read here and nowhere else downstream.
     const { escalationType, escalationRate, needsEscalationReview } =
-      normalizeEscalation(leaseData.rent_escalation_type);
+      normalizeEscalation(extractValue(leaseData.rent_escalation_type));
     console.log(`[retry_lease] Escalation normalized: type=${escalationType}, rate=${escalationRate}, review=${needsEscalationReview}`);
 
-    // Update lease record with normalized fields
+    const extractedStart = safeDate(extractValue(leaseData.lease_start));
+    const extractedEnd   = safeDate(extractValue(leaseData.lease_end));
+    const termMonths = extractedStart && extractedEnd
+      ? Math.round((new Date(extractedEnd).getTime() - new Date(extractedStart).getTime()) / (1000 * 60 * 60 * 24 * 30.4375))
+      : null;
+
+    // Update lease record
     await supabaseAdmin
       .from('leases')
       .update({
         status: 'Ready',
-        landlord_name: leaseData.landlord_name,
-        tenant_name: leaseData.tenant_name,
-        lease_start: safeDate(leaseData.lease_start),
-        lease_end: safeDate(leaseData.lease_end),
-        base_rent_amount: leaseData.base_rent_amount,
-        base_rent_frequency: leaseData.base_rent_frequency,
-        current_monthly_rent: leaseData.current_monthly_rent,
-        rent_escalation_type: leaseData.rent_escalation_type, // stored for reference
-        escalation_type: escalationType,
-        escalation_rate: escalationRate,
+        landlord_name:           extractValue(leaseData.landlord_name),
+        tenant_name:             extractValue(leaseData.tenant_name),
+        lease_start:             extractedStart,
+        lease_end:               extractedEnd,
+        term_months:             termMonths,
+        base_rent_amount:        extractValue(leaseData.base_rent_amount),
+        base_rent_frequency:     extractValue(leaseData.base_rent_frequency),
+        current_monthly_rent:    extractValue(leaseData.current_monthly_rent),
+        rent_escalation_type:    extractValue(leaseData.rent_escalation_type),
+        escalation_type:         escalationType,
+        escalation_rate:         escalationRate,
         needs_escalation_review: needsEscalationReview,
-        extracted_json: leaseData,
-        processed_at: new Date().toISOString(),
-        error_message: null,
+        extracted_json:          leaseData,
+        processed_at:            new Date().toISOString(),
+        error_message:           null,
       })
       .eq('id', leaseId);
+
+    // Post-extraction financial recalculation
+    if (extractedStart && termMonths && termMonths > 0) {
+      const rawRent = extractValue(leaseData.current_monthly_rent);
+      const monthlyRent = typeof rawRent === 'number' ? rawRent
+        : typeof rawRent === 'string' ? parseFloat(rawRent.replace(/[^0-9.]/g, '')) || 0 : 0;
+      if (monthlyRent > 0) {
+        const { data: wsData } = await supabaseAdmin
+          .from('workspaces').select('discount_rate').eq('id', lease.workspace_id).single();
+        const discountRate: number = (wsData as any)?.discount_rate ?? 5.5;
+        const annualEscRate: number = escalationRate ?? 0;
+        const monthlyDiscountRate = Math.pow(1 + discountRate / 100, 1 / 12) - 1;
+        const payments: number[] = [];
+        for (let m = 1; m <= termMonths; m++) {
+          const yearIndex = Math.floor((m - 1) / 12);
+          payments.push(monthlyRent * Math.pow(1 + annualEscRate / 100, yearIndex));
+        }
+        const calcTotalCommitment = payments.reduce((s, p) => s + p, 0);
+        const calcPvLiability = payments.reduce((s, p, idx) => s + p / Math.pow(1 + monthlyDiscountRate, idx + 1), 0);
+        const calcStraightLineExp = calcTotalCommitment / termMonths;
+        const midpoint = Math.max(1, Math.floor(termMonths / 2));
+        const calcCashPlDelta = payments.slice(0, midpoint).reduce((s, p) => s + p, 0) - calcStraightLineExp * midpoint;
+        await supabaseAdmin.from('leases').update({
+          calc_total_commitment:  Math.round(calcTotalCommitment * 100) / 100,
+          calc_pv_liability:      Math.round(calcPvLiability * 100) / 100,
+          calc_straight_line_exp: Math.round(calcStraightLineExp * 100) / 100,
+          calc_cash_pl_delta:     Math.round(calcCashPlDelta * 100) / 100,
+        }).eq('id', leaseId);
+        console.log(`[retry_lease] Financials recalculated: commitment=${Math.round(calcTotalCommitment)}`);
+      }
+    }
 
     // Insert rent schedule entries
     if (leaseData.rent_schedule && leaseData.rent_schedule.length > 0) {
       const rentScheduleToInsert = leaseData.rent_schedule
         .filter(period => period.period_start)
         .map(period => ({
-          lease_id: leaseId,
+          lease_id:     leaseId,
           period_start: safeDate(period.period_start),
-          period_end: safeDate(period.period_end),
+          period_end:   safeDate(period.period_end),
           monthly_amount: period.monthly_amount,
-          annual_amount: period.annual_amount,
-          notes: period.notes,
+          annual_amount:  period.annual_amount,
+          notes:          period.notes,
         }));
 
       if (rentScheduleToInsert.length > 0) {
@@ -500,12 +715,12 @@ serve(async (req) => {
     // Insert risks
     if (leaseData.risks && leaseData.risks.length > 0) {
       const risksToInsert = leaseData.risks.map(risk => ({
-        lease_id: leaseId,
-        title: risk.title,
-        severity: risk.severity,
-        explanation: risk.explanation,
+        lease_id:         leaseId,
+        title:            risk.title,
+        severity:         risk.severity,
+        explanation:      risk.explanation,
         citation_snippet: risk.citation_snippet || null,
-        citation_page: risk.citation_page || null,
+        citation_page:    risk.citation_page || null,
       }));
 
       await supabaseAdmin.from('risks').insert(risksToInsert);
@@ -514,10 +729,10 @@ serve(async (req) => {
 
     console.log('[retry_lease] Retry complete');
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    return new Response(JSON.stringify({
+      success: true,
       leaseId,
-      data: leaseData 
+      data: leaseData
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

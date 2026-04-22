@@ -37,7 +37,6 @@ const corsHeaders = getCorsHeaders(null);
 // Map Stripe product IDs to plan names
 const PRODUCT_TO_PLAN: Record<string, string> = {
   "prod_TlQhMebFLbmsbR": "starter",
-  "prod_TlQhWXE1q2JRgQ": "pro",
   "prod_TlQhRntCDhkxfK": "business",
 };
 
@@ -71,7 +70,7 @@ serve(async (req) => {
     if (customers.data.length === 0) {
       return new Response(JSON.stringify({ 
         subscribed: false, 
-        plan: "free",
+        plan: "starter",
         subscription_end: null 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -89,7 +88,7 @@ serve(async (req) => {
     if (subscriptions.data.length === 0) {
       return new Response(JSON.stringify({ 
         subscribed: false, 
-        plan: "free",
+        plan: "starter",
         subscription_end: null 
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -99,7 +98,7 @@ serve(async (req) => {
 
     const subscription = subscriptions.data[0];
     const productId = subscription.items.data[0].price.product as string;
-    const plan = PRODUCT_TO_PLAN[productId] || "starter";
+    const plan = PRODUCT_TO_PLAN[productId] ?? "starter";
     const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
 
     return new Response(JSON.stringify({
