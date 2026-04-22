@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { type ImperativePanelHandle } from "react-resizable-panels";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
 import { isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStatusBadge";
@@ -139,6 +140,7 @@ export default function LeaseReview() {
   const [reopening, setReopening] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isPdfCollapsed, setIsPdfCollapsed] = useState(false);
+  const pdfPanelRef = useRef<ImperativePanelHandle>(null);
   const [targetPage, setTargetPage] = useState<number | undefined>(undefined);
   const [verifiedFields, setVerifiedFields] = useState<Set<string>>(new Set());
   const [confirmedSections, setConfirmedSections] = useState<string[]>([]);
@@ -1029,6 +1031,28 @@ export default function LeaseReview() {
     }
   }, [lease, user]);
 
+  const handleUnlockLease = useCallback(async () => {
+    if (!lease || !user) return;
+    try {
+      const { error } = await supabase
+        .from('leases')
+        .update({ model_locked: false, lifecycle_status: 'executed' })
+        .eq('id', lease.id);
+      if (error) throw error;
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user.id,
+        activity_type: 'status_change',
+        details: { message: 'Lease unlocked for editing by admin', from_status: 'active', to_status: 'executed' },
+      });
+      toast.success('Lease unlocked — terms are editable again');
+      refetchLease();
+    } catch (err) {
+      console.error('Error unlocking lease:', err);
+      toast.error('Failed to unlock lease');
+    }
+  }, [lease, user, refetchLease]);
+
   if (loading)
     return (
       <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
@@ -1695,6 +1719,7 @@ export default function LeaseReview() {
           >
             {/* Left Panel: PDF Viewer */}
             <ResizablePanel
+              ref={pdfPanelRef}
               defaultSize={50}
               collapsible={true}
               minSize={20}
@@ -1707,7 +1732,7 @@ export default function LeaseReview() {
                   <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight">
                     Source Document
                   </span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsPdfCollapsed(true)}>
+                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }}>
                     <ChevronLeft size={16} />
                   </Button>
                 </div>
@@ -1726,7 +1751,7 @@ export default function LeaseReview() {
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 mr-2"
-                      onClick={() => setIsPdfCollapsed(false)}
+                      onClick={() => { pdfPanelRef.current?.expand(); setIsPdfCollapsed(false); }}
                     >
                       <ChevronRight size={16} />
                     </Button>
@@ -1895,6 +1920,25 @@ export default function LeaseReview() {
                           disabled={!!lease.model_locked}
                           onSuccess={refetchLease}
                         />
+                        {lease.model_locked && isAdminUser && (
+                          <Card className="shadow-none border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                            <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock for editing</p>
+                                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking returns this lease to executed status and re-enables term editing.</p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300"
+                                onClick={handleUnlockLease}
+                              >
+                                <RotateCcw size={14} className="mr-1.5" />
+                                Unlock
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        )}
                       </>
                     )}
 

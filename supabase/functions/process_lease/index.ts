@@ -611,7 +611,7 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
   // This avoids parallel calls that would exceed the 30k input TPM rate limit.
   console.log('[Claude] Sending single combined Opus extraction call...');
   const rawCombined = await callAnthropicAPIWithPDF(
-    'claude-opus-4-6',
+    'claude-sonnet-4-6',
     COMBINED_SYSTEM,
     pdfBase64,
     `Extract all lease terms, clauses, and risks from this document.${focusHint}`,

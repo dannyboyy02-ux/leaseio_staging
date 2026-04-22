@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Building2, Landmark, Layers, PieChart, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Building2, ExternalLink, Landmark, Layers, PieChart, TrendingUp } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -33,7 +34,8 @@ export default function Portfolio() {
           .select(
             'id, filename, request_title, asset_type, extracted_json, ' +
             'executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
-            'lease_start, lease_end, term_months, escalation_type, escalation_rate'
+            'lease_start, lease_end, term_months, escalation_type, escalation_rate, ' +
+            'calc_pv_liability, calc_total_commitment, landlord_name, property_address'
           )
           .eq('workspace_id', workspace!.id)
           .in('lifecycle_status', ['executed', 'active']),
@@ -104,6 +106,7 @@ export default function Portfolio() {
         assetBreakdown,
         escalationBreakdown: escalationLabels,
         indexLeaseNames,
+        leases: activeLeases,
       };
     },
   });
@@ -252,6 +255,56 @@ export default function Portfolio() {
                 </CardContent>
               </Card>
             </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Layers className="h-4 w-4" />
+                  Lease Register
+                </CardTitle>
+                <CardDescription>All active and executed leases included in portfolio calculations</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-border">
+                  {(data.leases as any[]).map((lease) => {
+                    const monthly =
+                      Number(lease.executed_monthly_payment) ||
+                      Number(lease.current_monthly_rent) ||
+                      Number(lease.monthly_payment) ||
+                      0;
+                    const displayName =
+                      lease.request_title ||
+                      lease.property_address ||
+                      lease.landlord_name ||
+                      lease.filename ||
+                      'Unnamed lease';
+                    const pvLiability = Number(lease.calc_pv_liability) || null;
+                    return (
+                      <div key={lease.id} className="flex items-center justify-between px-4 py-3 gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{displayName}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {lease.lease_start ? lease.lease_start.slice(0, 7) : '—'}
+                            {' → '}
+                            {lease.lease_end ? lease.lease_end.slice(0, 7) : '—'}
+                            {lease.escalation_type ? ` · ${lease.escalation_type}` : ''}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-semibold">{monthly ? formatCurrency(monthly) + '/mo' : '—'}</p>
+                          {pvLiability ? (
+                            <p className="text-xs text-muted-foreground">{formatCurrency(pvLiability)} PV</p>
+                          ) : null}
+                        </div>
+                        <Link to={`/app/leases/${lease.id}/review`} className="shrink-0 text-muted-foreground hover:text-foreground">
+                          <ExternalLink size={14} />
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
 
             {data.portfolio.indexBasedLeaseCount > 0 && (
               <Card className="border-l-4 border-l-amber-400">
