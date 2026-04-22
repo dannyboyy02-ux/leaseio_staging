@@ -43,6 +43,7 @@ export const SECTION_CONFIG = {
     fields: [
       { id: 'property_address', label: 'Property Address', icon: MapPin },
       { id: 'square_footage', label: 'Square Footage', icon: Building2, type: 'number' },
+      { id: 'asset_type', label: 'Asset Type', icon: Building2 },
     ],
   },
   dates: {

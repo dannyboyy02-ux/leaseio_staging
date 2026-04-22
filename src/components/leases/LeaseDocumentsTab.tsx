@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { pdf } from '@react-pdf/renderer';
 import { Download, FileText, Lock, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,10 @@ interface LeaseDocumentsTabProps {
   storagePath: string | null;
   executedFilename?: string | null;
   executedStoragePath?: string | null;
+  isLocked: boolean;
 }
+
+type AnalysisVersion = { url: string; name: string; generatedAt: string };
 
 function formatNow(): string {
   return new Date().toLocaleDateString('en-US', {
@@ -32,10 +35,19 @@ export function LeaseDocumentsTab({
   storagePath,
   executedFilename,
   executedStoragePath,
+  isLocked,
 }: LeaseDocumentsTabProps) {
   const { canAccessFeature } = useApp();
   const isBusinessPlan = canAccessFeature('business');
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [analyses, setAnalyses] = useState<AnalysisVersion[]>([]);
+
+  // Revoke blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      analyses.forEach(r => URL.revokeObjectURL(r.url));
+    };
+  }, [analyses]);
 
   const handleDownload = useCallback(async (path: string, displayName: string, bucket: string) => {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 120);
@@ -84,19 +96,18 @@ export function LeaseDocumentsTab({
       ).toBlob();
 
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${lease.display_name || 'lease'} - Analysis Report.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Analysis report downloaded');
+      const version = analyses.length + 1;
+      const name = `${lease.display_name || 'lease'} - Analysis Report v${version}.pdf`;
+
+      setAnalyses(prev => [...prev, { url, name, generatedAt }]);
+      toast.success('Analysis report ready');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to generate analysis';
       toast.error(message);
     } finally {
       setGeneratingPdf(false);
     }
-  }, [leaseId]);
+  }, [leaseId, analyses.length]);
 
   return (
     <Card className="shadow-none border overflow-hidden">
@@ -151,16 +162,40 @@ export function LeaseDocumentsTab({
           </div>
         )}
 
-        {/* Analysis PDF — Business tier only */}
-        <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="h-4 w-4 text-blue-600 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Lease Analysis Report</p>
-              <p className="text-xs text-muted-foreground">AI-generated 1–2 page summary</p>
+        {/* Generated analysis versions */}
+        {analyses.map((report) => (
+          <div key={report.url}>
+            <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="h-4 w-4 text-blue-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{report.name}</p>
+                  <p className="text-xs text-muted-foreground">Generated {report.generatedAt}</p>
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" className="shrink-0" asChild>
+                <a href={report.url} download={report.name}>
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  Download
+                </a>
+              </Button>
+            </div>
+            <div className="rounded-lg border overflow-hidden mt-2 mb-2">
+              <iframe src={report.url} className="w-full h-[600px]" title={report.name} />
             </div>
           </div>
-          {isBusinessPlan ? (
+        ))}
+
+        {/* Generate Report button — Business tier only, visible when lease is locked */}
+        {isBusinessPlan && isLocked ? (
+          <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="h-4 w-4 text-blue-600 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Lease Analysis Report</p>
+                <p className="text-xs text-muted-foreground">AI-generated 1–2 page summary</p>
+              </div>
+            </div>
             <Button
               size="sm"
               variant="outline"
@@ -175,25 +210,34 @@ export function LeaseDocumentsTab({
                 </>
               ) : (
                 <>
-                  <Download className="h-3.5 w-3.5 mr-1.5" />
-                  Generate
+                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                  Generate Report
                 </>
               )}
             </Button>
-          ) : (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" variant="outline" className="shrink-0 opacity-50" disabled>
+          </div>
+        ) : !isLocked && isBusinessPlan ? null : !isBusinessPlan ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3 opacity-60">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Sparkles className="h-4 w-4 text-blue-600 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">Lease Analysis Report</p>
+                      <p className="text-xs text-muted-foreground">AI-generated 1–2 page summary</p>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" className="shrink-0" disabled>
                     <Lock className="h-3.5 w-3.5 mr-1.5" />
                     Business
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent>Available on Business plan</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>Available on Business plan</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : null}
       </CardContent>
     </Card>
   );

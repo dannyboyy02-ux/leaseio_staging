@@ -38,6 +38,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { type ImperativePanelHandle } from "react-resizable-panels";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
 import { isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStatusBadge";
@@ -172,6 +173,9 @@ export default function LeaseReview() {
   });
   const [savingEdits, setSavingEdits] = useState(false);
 
+  // Active tab in the review panel
+  const [activeTab, setActiveTab] = useState('general');
+
   // Phase 2 — resubmit flow for returned leases
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -243,6 +247,10 @@ export default function LeaseReview() {
   // Lock editing when approved, posted, or pending approval
   const isLocked = isPosted || isPendingApproval || isApproved;
 
+  // Show PDF panel alongside tabs when lease is still editable/in-review.
+  // Hide it (full-width tabs) when the lease is active and fully locked.
+  const showPdfPanel = lifecycleStatus !== 'active' || !lease?.model_locked;
+
   // Check if all Tier-1 required fields are reviewed (either confirmed via section or verified individually)
   const allTier1FieldsReviewed = useMemo(() => {
     // A field is considered "reviewed" if:
@@ -265,16 +273,6 @@ export default function LeaseReview() {
 
   // Can approve only if: not processing, all Tier-1 fields reviewed
   const canApprove = !isProcessing && allTier1FieldsReviewed;
-
-  const lifecycleSteps = [
-    'submitted',
-    'under_review',
-    'approved',
-    'executed',
-    'active',
-  ] as const;
-
-  const currentLifecycleIndex = lifecycleSteps.findIndex((status) => status === lifecycleStatus);
 
   // Phase 2 — open resubmit dialog pre-populated with current values
   const openResubmit = () => {
@@ -372,24 +370,6 @@ export default function LeaseReview() {
       setResubmitting(false);
     }
   };
-
-  const renderStatusProgress = () => (
-    <div className="mb-4 rounded-lg border bg-background p-3">
-      <div className="grid grid-cols-5 gap-2">
-        {lifecycleSteps.map((step, idx) => {
-          const active = idx <= (currentLifecycleIndex === -1 ? -1 : currentLifecycleIndex);
-          return (
-            <div key={step} className="flex items-center gap-2">
-              <div className={cn('h-2 w-full rounded-full', active ? 'bg-primary' : 'bg-muted')} />
-              <span className={cn('text-[11px] capitalize', idx === currentLifecycleIndex ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
-                {step.replace(/_/g, ' ')}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 
   const updateLifecycleStatus = useCallback(async (newStatus: string) => {
     if (!lease || !user) return;
@@ -734,7 +714,12 @@ export default function LeaseReview() {
   const jumpToPage = (page?: number) => {
     if (!page) return;
     setTargetPage(page);
-    if (isPdfCollapsed) setIsPdfCollapsed(false);
+    if (showPdfPanel) {
+      if (isPdfCollapsed) setIsPdfCollapsed(false);
+    } else {
+      // PDF lives in the Documents tab when the panel is hidden
+      setActiveTab('documents');
+    }
   };
 
   // Handle field change with audit tracking
@@ -1641,11 +1626,6 @@ export default function LeaseReview() {
               >
                 <Pencil size={13} />
               </button>
-            </div>
-          }
-          subtitle={
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">{lease.filename}</span>
               {lease.lifecycle_status && (
                 <LifecycleStatusBadge status={lease.lifecycle_status as any} />
               )}
@@ -1653,11 +1633,6 @@ export default function LeaseReview() {
                 <Badge className="bg-green-600 text-white text-xs">
                   <CheckCircle size={12} className="mr-1" />
                   Approved
-                </Badge>
-              )}
-              {isLocked && !isApproved && (
-                <Badge variant="secondary" className="text-xs">
-                  Read-only
                 </Badge>
               )}
             </div>
@@ -1742,285 +1717,341 @@ export default function LeaseReview() {
           }
         />
 
-        <div className="px-6 pt-4">{renderStatusProgress()}</div>
-
         <div className="flex-1 px-6 overflow-hidden">
           <ResizablePanelGroup
             direction="horizontal"
             className="h-full rounded-xl border bg-background shadow-sm overflow-hidden"
           >
-            {/* Left Panel: PDF Viewer */}
-            <ResizablePanel
-              ref={pdfPanelRef}
-              defaultSize={50}
-              collapsible={true}
-              minSize={20}
-              onCollapse={() => setIsPdfCollapsed(true)}
-              onExpand={() => setIsPdfCollapsed(false)}
-              className={cn(isPdfCollapsed && "min-w-0")}
-            >
-              <div className="flex h-full flex-col bg-muted/50 relative">
-                <div className="p-2 border-b flex justify-between bg-background items-center">
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight">
-                    Source Document
-                  </span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }}>
-                    <ChevronLeft size={16} />
-                  </Button>
-                </div>
-                <PdfViewer url={pdfUrl} targetPage={targetPage} />
-              </div>
-            </ResizablePanel>
+            {/* Left Panel: PDF Viewer — shown only when lease is editable/in-review */}
+            {showPdfPanel && (
+              <>
+                <ResizablePanel
+                  ref={pdfPanelRef}
+                  defaultSize={50}
+                  collapsible={true}
+                  minSize={20}
+                  onCollapse={() => setIsPdfCollapsed(true)}
+                  onExpand={() => setIsPdfCollapsed(false)}
+                  className={cn(isPdfCollapsed && "min-w-0")}
+                >
+                  <div className="flex h-full flex-col bg-muted/50 relative">
+                    <div className="p-2 border-b flex justify-between bg-background items-center">
+                      <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight">
+                        Source Document
+                      </span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }}>
+                        <ChevronLeft size={16} />
+                      </Button>
+                    </div>
+                    <PdfViewer url={pdfUrl} targetPage={targetPage} />
+                  </div>
+                </ResizablePanel>
+                <ResizableHandle withHandle className="bg-border w-1 hover:bg-primary transition-colors" />
+              </>
+            )}
 
-            <ResizableHandle withHandle className="bg-border w-1 hover:bg-primary transition-colors" />
-
-            {/* Right Panel: Review Sections */}
-            <ResizablePanel defaultSize={50} minSize={30}>
+            {/* Right Panel: Tabbed Review */}
+            <ResizablePanel defaultSize={showPdfPanel ? 50 : 100} minSize={30}>
               <div className="flex h-full flex-col bg-background">
-                <div className="p-2 border-b flex items-center bg-background">
-                  {isPdfCollapsed && (
+
+                {/* Global banners */}
+                <div className="px-4 pt-3 space-y-2">
+                  {showPdfPanel && isPdfCollapsed && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 mr-2"
+                      className="h-6 w-6 mb-1"
                       onClick={() => { pdfPanelRef.current?.expand(); setIsPdfCollapsed(false); }}
                     >
                       <ChevronRight size={16} />
                     </Button>
                   )}
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-tight">
-                    Review &amp; Verification Panel
-                  </span>
+                  {isFailedStatus(lease?.status) && (
+                    <FailedLeaseBanner
+                      leaseId={lease.id}
+                      errorMessage={lease.error_message}
+                      storagePath={lease.storage_path}
+                      onRetrySuccess={() => window.location.reload()}
+                    />
+                  )}
+                  {needsReviewStatus(lease?.lifecycle_status) && (
+                    <NeedsReviewBanner
+                      landlordName={form.landlord_name}
+                      tenantName={form.tenant_name}
+                      leaseStart={form.lease_start}
+                      leaseEnd={form.lease_end}
+                      confidenceScores={confidenceScores}
+                    />
+                  )}
+                  {Array.isArray(extractedJson?._validation_warnings) && extractedJson._validation_warnings.length > 0 && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-amber-800 text-sm mb-1">Validation Warnings</h4>
+                          <ul className="text-sm text-amber-700 space-y-1">
+                            {extractedJson._validation_warnings.map((warning, i) => (
+                              <li key={i} className="flex items-center gap-2">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                {renderWarning(warning)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {lowConfidenceFields.length > 0 && (
-                    <Badge variant="outline" className="ml-2 text-amber-600 border-amber-400">
+                    <Badge variant="outline" className="text-amber-600 border-amber-400">
                       <AlertTriangle size={10} className="mr-1" />
                       {lowConfidenceFields.length} fields need attention
                     </Badge>
                   )}
                 </div>
 
-                <ScrollArea className="flex-1 h-full">
-                  <div className="p-6 space-y-6 max-w-2xl mx-auto pb-24">
-                    {/* Failed Lease Banner */}
-                    {isFailedStatus(lease?.status) && (
-                      <FailedLeaseBanner
-                        leaseId={lease.id}
-                        errorMessage={lease.error_message}
-                        storagePath={lease.storage_path}
-                        onRetrySuccess={() => window.location.reload()}
-                      />
-                    )}
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col px-4 pt-2">
+                  <TabsList className="shrink-0 justify-start">
+                    <TabsTrigger value="general">General Information</TabsTrigger>
+                    <TabsTrigger value="rent">Rent</TabsTrigger>
+                    <TabsTrigger value="options">Options & Clauses</TabsTrigger>
+                    <TabsTrigger value="risks">Risks</TabsTrigger>
+                    <TabsTrigger value="documents">Documents</TabsTrigger>
+                  </TabsList>
 
-                    {/* Needs Review Banner */}
-                    {needsReviewStatus(lease?.lifecycle_status) && (
-                      <NeedsReviewBanner
-                        landlordName={form.landlord_name}
-                        tenantName={form.tenant_name}
-                        leaseStart={form.lease_start}
-                        leaseEnd={form.lease_end}
-                        confidenceScores={confidenceScores}
-                      />
-                    )}
+                  <ScrollArea className="flex-1 h-full">
+                    <div className="py-4 space-y-4 max-w-2xl mx-auto pb-24">
 
-                    {/* Validation Warnings */}
-                    {Array.isArray(extractedJson?._validation_warnings) && extractedJson._validation_warnings.length > 0 && (
-                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-amber-800 text-sm mb-1">Validation Warnings</h4>
-                            <ul className="text-sm text-amber-700 space-y-1">
-                              {extractedJson._validation_warnings.map((warning, i) => (
-                                <li key={i} className="flex items-center gap-2">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                  {renderWarning(warning)}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Amendment: Parent Lease Comparison */}
-                    {isAmendment && parentLease && (
-                      <Collapsible open={showParentTerms} onOpenChange={setShowParentTerms}>
-                        <Card className="shadow-none border border-blue-200 bg-blue-50/30 overflow-hidden">
-                          <CollapsibleTrigger asChild>
-                            <CardHeader className="cursor-pointer py-3 hover:bg-blue-100/50 transition-colors">
-                              <CardTitle className="text-sm flex items-center justify-between">
-                                <span className="flex items-center gap-2 text-blue-700">
-                                  <GitBranch size={14} />
-                                  Current Terms (Parent Lease)
-                                </span>
-                                <ChevronDown className={cn("h-4 w-4 text-blue-600 transition-transform", showParentTerms && "rotate-180")} />
-                              </CardTitle>
-                            </CardHeader>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent>
-                            <CardContent className="pt-0 pb-4 grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <Label className="text-[10px] uppercase text-blue-600">Landlord</Label>
-                                <p className="font-medium">{parentLease.landlord_name || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <Label className="text-[10px] uppercase text-blue-600">Tenant</Label>
-                                <p className="font-medium">{parentLease.tenant_name || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <Label className="text-[10px] uppercase text-blue-600">Monthly Rent</Label>
-                                <p className="font-medium">
-                                  ${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount || 'N/A'}
-                                </p>
-                              </div>
-                              <div>
-                                <Label className="text-[10px] uppercase text-blue-600">Lease End</Label>
-                                <p className="font-medium">
-                                  {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}
-                                </p>
-                              </div>
-                            </CardContent>
-                          </CollapsibleContent>
-                        </Card>
-                      </Collapsible>
-                    )}
-
-                    {/* Amendment Changes - for amendment leases */}
-                    {isAmendment && extractedJson?._amendment_changes && extractedJson._amendment_changes.length > 0 && (
-                      <AmendmentChanges changes={extractedJson._amendment_changes} />
-                    )}
-
-                    {/* Section Cards */}
-                    {(Object.keys(SECTION_CONFIG) as SectionKey[]).map((sectionKey) => (
-                      <SectionCard
-                        key={sectionKey}
-                        sectionKey={sectionKey}
-                        form={form}
-                        extractedJson={extractedJson}
-                        confidenceScores={confidenceScores}
-                        verifiedFields={verifiedFields}
-                        isLocked={isLocked}
-                        onFieldChange={handleFieldChange}
-                        onFieldFocus={handleFieldFocus}
-                        onFieldBlur={trackFieldCorrection}
-                        onVerifyField={handleVerifyField}
-                        onJumpToPage={jumpToPage}
-                        confirmedSections={confirmedSections}
-                        onConfirmSection={handleConfirmSection}
-                      />
-                    ))}
-
-                    {/* Phase 4 — Executed Document Section */}
-                    {lifecycleStatus === 'executed' && (
-                      <>
-                        <ExecutedTermsReview
-                          leaseId={lease.id}
-                          pipelineTerms={{
-                            tenant_name: form.tenant_name || null,
-                            landlord_name: form.landlord_name || null,
-                            commencement_date: form.lease_start || null,
-                            expiry_date: form.lease_end || null,
-                            monthly_payment: form.current_monthly_rent || null,
-                            rent_review_clause: null,
-                            break_clause: null,
-                          }}
-                          executedTerms={{
-                            tenant_name: lease.executed_tenant_name ?? null,
-                            landlord_name: lease.executed_landlord_name ?? null,
-                            commencement_date: lease.executed_commencement_date ?? null,
-                            expiry_date: lease.executed_expiry_date ?? null,
-                            monthly_payment: lease.executed_monthly_payment != null ? String(lease.executed_monthly_payment) : null,
-                            rent_review_clause: lease.executed_rent_review_clause ?? null,
-                            break_clause: lease.executed_break_clause ?? null,
-                            confidence: (lease.executed_confidence as Record<string, number>) || {},
-                          }}
-                          canEdit={!lease.model_locked}
-                          onTermUpdated={refetchLease}
-                        />
-                        <VarianceReport
-                          leaseFilename={lease.filename || ''}
-                          pipelineMonthly={Number(lease.current_monthly_rent || lease.monthly_payment) || 0}
-                          executedMonthly={Number(lease.executed_monthly_payment) || 0}
-                          varianceMonthlyPayment={lease.variance_monthly_payment != null ? Number(lease.variance_monthly_payment) : null}
-                          varianceCommencementDays={lease.variance_commencement_days != null ? Number(lease.variance_commencement_days) : null}
-                          varianceExpiryDays={lease.variance_expiry_days != null ? Number(lease.variance_expiry_days) : null}
-                          varianceTenantNameMatch={lease.variance_tenant_name_match != null ? Boolean(lease.variance_tenant_name_match) : null}
-                          varianceLandlordNameMatch={lease.variance_landlord_name_match != null ? Boolean(lease.variance_landlord_name_match) : null}
-                        />
-                        <ModelLockConfirmation
-                          leaseId={lease.id}
-                          disabled={!!lease.model_locked}
-                          onSuccess={refetchLease}
-                        />
-                        {lease.model_locked && isAdminUser && (
-                          <Card className="shadow-none border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
-                            <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
-                              <div>
-                                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock for editing</p>
-                                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking returns this lease to executed status and re-enables term editing.</p>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300"
-                                onClick={handleUnlockLease}
-                              >
-                                <RotateCcw size={14} className="mr-1.5" />
-                                Unlock
-                              </Button>
-                            </CardContent>
-                          </Card>
+                      {/* General Information */}
+                      <TabsContent value="general" className="mt-0 space-y-4">
+                        {(['parties', 'property', 'dates'] as SectionKey[]).map((sectionKey) => (
+                          <SectionCard
+                            key={sectionKey}
+                            sectionKey={sectionKey}
+                            form={form}
+                            extractedJson={extractedJson}
+                            confidenceScores={confidenceScores}
+                            verifiedFields={verifiedFields}
+                            isLocked={isLocked}
+                            onFieldChange={handleFieldChange}
+                            onFieldFocus={handleFieldFocus}
+                            onFieldBlur={trackFieldCorrection}
+                            onVerifyField={handleVerifyField}
+                            onJumpToPage={jumpToPage}
+                            confirmedSections={confirmedSections}
+                            onConfirmSection={handleConfirmSection}
+                          />
+                        ))}
+                        {/* Amendment: Parent Lease Comparison */}
+                        {isAmendment && parentLease && (
+                          <Collapsible open={showParentTerms} onOpenChange={setShowParentTerms}>
+                            <Card className="shadow-none border border-blue-200 bg-blue-50/30 overflow-hidden">
+                              <CollapsibleTrigger asChild>
+                                <CardHeader className="cursor-pointer py-3 hover:bg-blue-100/50 transition-colors">
+                                  <CardTitle className="text-sm flex items-center justify-between">
+                                    <span className="flex items-center gap-2 text-blue-700">
+                                      <GitBranch size={14} />
+                                      Current Terms (Parent Lease)
+                                    </span>
+                                    <ChevronDown className={cn("h-4 w-4 text-blue-600 transition-transform", showParentTerms && "rotate-180")} />
+                                  </CardTitle>
+                                </CardHeader>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <CardContent className="pt-0 pb-4 grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <Label className="text-[10px] uppercase text-blue-600">Landlord</Label>
+                                    <p className="font-medium">{parentLease.landlord_name || 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] uppercase text-blue-600">Tenant</Label>
+                                    <p className="font-medium">{parentLease.tenant_name || 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] uppercase text-blue-600">Monthly Rent</Label>
+                                    <p className="font-medium">
+                                      ${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount || 'N/A'}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px] uppercase text-blue-600">Lease End</Label>
+                                    <p className="font-medium">
+                                      {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}
+                                    </p>
+                                  </div>
+                                </CardContent>
+                              </CollapsibleContent>
+                            </Card>
+                          </Collapsible>
                         )}
-                      </>
-                    )}
+                        {/* Amendment Changes */}
+                        {isAmendment && extractedJson?._amendment_changes && extractedJson._amendment_changes.length > 0 && (
+                          <AmendmentChanges changes={extractedJson._amendment_changes} />
+                        )}
+                        {/* Executed terms review (executed stage only) */}
+                        {lifecycleStatus === 'executed' && (
+                          <>
+                            <ExecutedTermsReview
+                              leaseId={lease.id}
+                              pipelineTerms={{
+                                tenant_name: form.tenant_name || null,
+                                landlord_name: form.landlord_name || null,
+                                commencement_date: form.lease_start || null,
+                                expiry_date: form.lease_end || null,
+                                monthly_payment: form.current_monthly_rent || null,
+                                rent_review_clause: null,
+                                break_clause: null,
+                              }}
+                              executedTerms={{
+                                tenant_name: lease.executed_tenant_name ?? null,
+                                landlord_name: lease.executed_landlord_name ?? null,
+                                commencement_date: lease.executed_commencement_date ?? null,
+                                expiry_date: lease.executed_expiry_date ?? null,
+                                monthly_payment: lease.executed_monthly_payment != null ? String(lease.executed_monthly_payment) : null,
+                                rent_review_clause: lease.executed_rent_review_clause ?? null,
+                                break_clause: lease.executed_break_clause ?? null,
+                                confidence: (lease.executed_confidence as Record<string, number>) || {},
+                              }}
+                              canEdit={!lease.model_locked}
+                              onTermUpdated={refetchLease}
+                            />
+                            <VarianceReport
+                              leaseFilename={lease.filename || ''}
+                              pipelineMonthly={Number(lease.current_monthly_rent || lease.monthly_payment) || 0}
+                              executedMonthly={Number(lease.executed_monthly_payment) || 0}
+                              varianceMonthlyPayment={lease.variance_monthly_payment != null ? Number(lease.variance_monthly_payment) : null}
+                              varianceCommencementDays={lease.variance_commencement_days != null ? Number(lease.variance_commencement_days) : null}
+                              varianceExpiryDays={lease.variance_expiry_days != null ? Number(lease.variance_expiry_days) : null}
+                              varianceTenantNameMatch={lease.variance_tenant_name_match != null ? Boolean(lease.variance_tenant_name_match) : null}
+                              varianceLandlordNameMatch={lease.variance_landlord_name_match != null ? Boolean(lease.variance_landlord_name_match) : null}
+                            />
+                            <ModelLockConfirmation
+                              leaseId={lease.id}
+                              disabled={!!lease.model_locked}
+                              onSuccess={refetchLease}
+                            />
+                            {lease.model_locked && isAdminUser && (
+                              <Card className="shadow-none border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                                <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock for editing</p>
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking returns this lease to executed status and re-enables term editing.</p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300"
+                                    onClick={handleUnlockLease}
+                                  >
+                                    <RotateCcw size={14} className="mr-1.5" />
+                                    Unlock
+                                  </Button>
+                                </CardContent>
+                              </Card>
+                            )}
+                          </>
+                        )}
+                      </TabsContent>
 
-                    {/* Risks Section */}
-                    <RisksSection risks={risks} onJumpToPage={jumpToPage} />
+                      {/* Rent */}
+                      <TabsContent value="rent" className="mt-0 space-y-4">
+                        {(['rent'] as SectionKey[]).map((sectionKey) => (
+                          <SectionCard
+                            key={sectionKey}
+                            sectionKey={sectionKey}
+                            form={form}
+                            extractedJson={extractedJson}
+                            confidenceScores={confidenceScores}
+                            verifiedFields={verifiedFields}
+                            isLocked={isLocked}
+                            onFieldChange={handleFieldChange}
+                            onFieldFocus={handleFieldFocus}
+                            onFieldBlur={trackFieldCorrection}
+                            onVerifyField={handleVerifyField}
+                            onJumpToPage={jumpToPage}
+                            confirmedSections={confirmedSections}
+                            onConfirmSection={handleConfirmSection}
+                          />
+                        ))}
+                        <Card className="shadow-none border overflow-hidden">
+                          <CardHeader className="bg-muted/30 border-b py-3">
+                            <CardTitle className="text-sm font-bold flex items-center gap-2">
+                              <DollarSign size={16} className="text-green-600" />
+                              Rent Schedule
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-4">
+                            <RentScheduleTable
+                              rentSchedule={rentSchedule}
+                              currentMonthlyRent={derivedInsights.currentRent}
+                              rentEscalationType={form.rent_escalation_type || null}
+                            />
+                          </CardContent>
+                        </Card>
+                      </TabsContent>
 
-                    {/* Rent Schedule */}
-                    <Card className="shadow-none border overflow-hidden">
-                      <CardHeader className="bg-muted/30 border-b py-3">
-                        <CardTitle className="text-sm font-bold flex items-center gap-2">
-                          <DollarSign size={16} className="text-green-600" />
-                          Rent Schedule
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-4">
-                        <RentScheduleTable
-                          rentSchedule={rentSchedule}
-                          currentMonthlyRent={derivedInsights.currentRent}
-                          rentEscalationType={form.rent_escalation_type || null}
+                      {/* Options & Clauses */}
+                      <TabsContent value="options" className="mt-0 space-y-4">
+                        {(['options'] as SectionKey[]).map((sectionKey) => (
+                          <SectionCard
+                            key={sectionKey}
+                            sectionKey={sectionKey}
+                            form={form}
+                            extractedJson={extractedJson}
+                            confidenceScores={confidenceScores}
+                            verifiedFields={verifiedFields}
+                            isLocked={isLocked}
+                            onFieldChange={handleFieldChange}
+                            onFieldFocus={handleFieldFocus}
+                            onFieldBlur={trackFieldCorrection}
+                            onVerifyField={handleVerifyField}
+                            onJumpToPage={jumpToPage}
+                            confirmedSections={confirmedSections}
+                            onConfirmSection={handleConfirmSection}
+                          />
+                        ))}
+                      </TabsContent>
+
+                      {/* Risks */}
+                      <TabsContent value="risks" className="mt-0">
+                        <RisksSection risks={risks} onJumpToPage={jumpToPage} />
+                      </TabsContent>
+
+                      {/* Documents */}
+                      <TabsContent value="documents" className="mt-0 space-y-4">
+                        {/* When active/locked, PDF panel is hidden — embed the viewer here */}
+                        {!showPdfPanel && pdfUrl && (
+                          <div className="rounded-lg border overflow-hidden h-[500px]">
+                            <PdfViewer url={pdfUrl} targetPage={targetPage} />
+                          </div>
+                        )}
+                        <LeaseDocumentsTab
+                          leaseId={lease.id}
+                          filename={lease.filename}
+                          storagePath={lease.storage_path}
+                          executedFilename={lease.executed_filename}
+                          executedStoragePath={lease.executed_storage_path}
+                          isLocked={!!lease.model_locked}
                         />
-                      </CardContent>
-                    </Card>
+                        {isMasterLease && (
+                          <AmendmentsList
+                            parentLeaseId={lease.id}
+                            refreshTrigger={amendmentsRefresh}
+                          />
+                        )}
+                        <Card className="shadow-none border overflow-hidden">
+                          <CardHeader className="bg-muted/30 border-b py-3">
+                            <CardTitle className="text-sm font-bold">Activity Timeline</CardTitle>
+                          </CardHeader>
+                          <CardContent className="pt-4">
+                            <ActivityTimeline leaseId={lease.id} />
+                          </CardContent>
+                        </Card>
+                      </TabsContent>
 
-                    {/* Amendments List - for master leases */}
-                    {isMasterLease && (
-                      <AmendmentsList
-                        parentLeaseId={lease.id}
-                        refreshTrigger={amendmentsRefresh}
-                      />
-                    )}
+                    </div>
+                  </ScrollArea>
+                </Tabs>
 
-                    {/* Documents tab — original PDF, executed copy, analysis export */}
-                    <LeaseDocumentsTab
-                      leaseId={lease.id}
-                      filename={lease.filename}
-                      storagePath={lease.storage_path}
-                      executedFilename={lease.executed_filename}
-                      executedStoragePath={lease.executed_storage_path}
-                    />
-
-                    <Card className="shadow-none border overflow-hidden">
-                      <CardHeader className="bg-muted/30 border-b py-3">
-                        <CardTitle className="text-sm font-bold">Activity Timeline</CardTitle>
-                      </CardHeader>
-                      <CardContent className="pt-4">
-                        <ActivityTimeline leaseId={lease.id} />
-                      </CardContent>
-                    </Card>
-                  </div>
-                </ScrollArea>
               </div>
             </ResizablePanel>
           </ResizablePanelGroup>
