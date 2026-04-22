@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, Workspace, WorkspaceRole, SubscriptionPlan } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
-import { PLANS, getPlanIndex } from "@/config/pricing";
+import { PLANS, getPlanIndex, normalizePlanId } from "@/config/pricing";
 import type { FunctionalRole } from "@/types/lifecycle";
 
 interface AppContextType {
@@ -73,7 +73,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updatedAt: profile.created_at,
       });
 
-      const plan = (profile.plan as SubscriptionPlan) || "free";
+      const plan = normalizePlanId(profile.plan);
       const planConfig = PLANS[plan];
 
 

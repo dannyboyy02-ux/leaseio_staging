@@ -36,8 +36,7 @@ const corsHeaders = getCorsHeaders(null);
 
 // Stripe price IDs for each plan
 const PRICE_IDS: Record<string, string> = {
-  starter: "price_1SntpyH03PByDjY31dGmC0E2",
-  pro: "price_1SntqFH03PByDjY3Zt7qqG7Y",
+  starter:  "price_1SntpyH03PByDjY31dGmC0E2",
   business: "price_1SntqQH03PByDjY3MrvOjOsu",
 };
 

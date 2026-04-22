@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 // Public pages
 import Landing from "./pages/Landing";
+import LeaseAudit from "./pages/LeaseAudit";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import PublicSummaryPage from "./pages/PublicSummaryPage";
@@ -62,6 +63,7 @@ const App = () => (
               <Routes>
                 {/* Public routes */}
                 <Route path="/" element={<Landing />} />
+                <Route path="/lease-audit" element={<LeaseAudit />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
 

@@ -60,8 +60,8 @@ export function PricingSection() {
                       </li>
                     ))}
                   </ul>
-                  <Button className="w-full" variant={plan.popular ? 'default' : plan.id === 'free' ? 'secondary' : 'outline'} asChild>
-                    <Link to={`/signup?plan=${plan.id}`}>{plan.id === 'free' ? t('landing.pricing.get_started') : t('landing.pricing.start_trial')}</Link>
+                  <Button className="w-full" variant={plan.popular ? 'default' : 'outline'} asChild>
+                    <Link to={`/signup?plan=${plan.id}`}>{t('landing.pricing.start_trial')}</Link>
                   </Button>
                 </CardContent>
               </Card>

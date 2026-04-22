@@ -36,7 +36,8 @@
       "headline": "Send us your leases.",
       "headline_accent": "We'll tell you what's in them.",
       "subheadline": "Departments sign leases without finance knowing. LeaseIO catches every lease — before or after it's signed — abstracts the key terms with AI, and gives finance an audit-defensible repository. Your team just confirms and acts.",
-      "cta_trial": "Get Started Free",
+      "cta_audit": "Start Your Free Lease Audit",
+      "cta_trial": "Start Free Trial",
       "cta_signin": "Sign In",
       "trust_setup": "5-minute setup",
       "trust_ai": "AI reads your leases in seconds",
@@ -650,6 +651,7 @@
     "upgrade": "Upgrade",
     "description": {
       "free": "For small teams getting started with lease visibility",
+      "starter": "For finance teams that need lease awareness and control",
       "business": "For organizations that need full lease lifecycle management"
     },
     "feature": {
@@ -670,11 +672,10 @@
       "priority_support": "Priority support",
       "team_access": "Team access (5 seats)",
       "role_permissions": "Role-based permissions",
-      "quickbooks": "QuickBooks integration",
       "custom_branding": "Custom branding",
       "everything_starter": "Everything in Starter",
       "everything_pro": "Everything in Pro",
-      "lease_request_intake": "Lease request intake",
+      "lease_request_intake": "Lease request intake & approval workflow",
       "pipeline_visibility": "Pipeline visibility",
       "basic_notifications": "Basic notifications",
       "status_tracking": "Status tracking",
@@ -686,7 +687,13 @@
       "audit_package": "Audit-ready lease population export",
       "role_based_access": "Role-based access control",
       "bulk_upload": "Bulk document upload",
-      "export_integrations": "Export integrations"
+      "export_integrations": "Export integrations",
+      "15_abstractions_mo": "15 AI abstractions/month",
+      "50_abstractions_mo": "50 AI abstractions/month",
+      "3_users": "Up to 3 users",
+      "ai_assistant": "Embedded AI assistant (Ask Claude)",
+      "portfolio_intelligence": "Portfolio intelligence",
+      "amendment_comparison": "Amendment comparison"
     }
   },
   "auth": {

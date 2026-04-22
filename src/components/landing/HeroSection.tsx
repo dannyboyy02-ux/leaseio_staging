@@ -30,13 +30,13 @@ export function HeroSection() {
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Button size="lg" asChild className="w-full sm:w-auto">
-              <Link to="/signup">
-                {t('landing.hero.cta_trial')}
+              <Link to="/lease-audit">
+                {t('landing.hero.cta_audit')}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button size="lg" variant="outline" asChild className="w-full sm:w-auto">
-              <Link to="/login">{t('landing.hero.cta_signin')}</Link>
+              <Link to="/signup">{t('landing.hero.cta_trial')}</Link>
             </Button>
           </div>
 

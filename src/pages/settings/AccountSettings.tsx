@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { PLANS, PLAN_ORDER, isUpgrade } from '@/config/pricing';
+import { PLANS, PLAN_ORDER, isUpgrade, normalizePlanId } from '@/config/pricing';
 import type { SubscriptionPlan } from '@/types';
 
 const timezones = [
@@ -236,8 +236,8 @@ export default function AccountSettings() {
 
   const handleUpgrade = async (planId: string) => {
     // If already subscribed, show confirmation first
-    const currentPlan = (workspace?.plan || 'free') as SubscriptionPlan;
-    if (currentPlan !== 'free' && isUpgrade(currentPlan, planId as SubscriptionPlan)) {
+    const currentPlan = normalizePlanId(workspace?.plan) as SubscriptionPlan;
+    if (currentPlan !== 'starter' && isUpgrade(currentPlan, planId as SubscriptionPlan)) {
       setConfirmUpgradePlan(planId);
       return;
     }
@@ -285,7 +285,7 @@ export default function AccountSettings() {
     }
   };
 
-  const currentPlan = (workspace?.plan || 'free') as SubscriptionPlan;
+  const currentPlan = normalizePlanId(workspace?.plan);
 
   return (
     <AppLayout>
@@ -584,15 +584,11 @@ export default function AccountSettings() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     {t('account.current_plan')}
-                    <Badge variant={
-                      workspace?.plan === 'business' ? 'business' : 
-                      workspace?.plan === 'pro' ? 'pro' : 
-                      'secondary'
-                    }>
+                    <Badge variant={currentPlan === 'business' ? 'business' : 'secondary'}>
                       {PLANS[currentPlan]?.name || currentPlan}
                     </Badge>
                   </CardTitle>
-                  {currentPlan !== 'free' && (
+                  {currentPlan !== 'starter' && (
                     <CardDescription>
                       {t('account.renews_on')}{' '}
                       {new Date(workspace?.renewalDate || '').toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
@@ -707,7 +703,7 @@ export default function AccountSettings() {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {plan.documentLimit} {plan.documentLimit === 1 ? t('account.lease') : t('account.leases')}
+                          {plan.maxActiveLeases === -1 ? 'Unlimited' : plan.maxActiveLeases} {plan.maxActiveLeases === 1 ? t('account.lease') : t('account.leases')}
                         </p>
                       </CardHeader>
                       <CardContent className="flex-1 flex flex-col">
@@ -737,7 +733,7 @@ export default function AccountSettings() {
                             ) : null}
                             {t('common.upgrade')}
                           </Button>
-                        ) : planId !== 'free' ? (
+                        ) : planId !== 'starter' ? (
                           <Button 
                             variant="outline" 
                             size="sm" 
@@ -759,7 +755,7 @@ export default function AccountSettings() {
             </div>
 
             {/* Cancel Subscription - only show if subscribed */}
-            {currentPlan !== 'free' && (
+            {currentPlan !== 'starter' && (
               <Card className="border-destructive/50">
                 <CardHeader>
                   <CardTitle className="text-destructive">{t('account.cancel_subscription')}</CardTitle>
