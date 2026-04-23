@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle, Package } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -126,6 +126,11 @@ export default function WorkspaceSettings() {
   const [covenantThreshold, setCovenantThreshold] = useState('');
   const [approvalThreshold, setApprovalThreshold] = useState('0');
 
+  // Lease configuration state
+  const [assetTypeConfig, setAssetTypeConfig] = useState<string[]>(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
+  const [newAssetType, setNewAssetType] = useState('');
+  const [isSavingAssetTypes, setIsSavingAssetTypes] = useState(false);
+
   const canEdit = canEditWorkspaceSettings(userRole);
   const canManageMembers = canManageWorkspaceMembers(userRole);
   const canAccessDefaults = canAccessWorkspaceDefaults(userRole);
@@ -137,6 +142,7 @@ export default function WorkspaceSettings() {
     { id: 'users',         label: 'Users',            icon: Users,      visible: canManageMembers },
     { id: 'notifications', label: 'Notifications',    icon: Bell,       visible: canAccessDefaults },
     { id: 'financial',     label: 'Financial',        icon: TrendingUp, visible: canAccessDefaults },
+    { id: 'lease_config',  label: 'Lease Configuration', icon: Settings2, visible: isAdmin },
     { id: 'onboarding',    label: 'Onboarding',       icon: Package,    visible: isAdmin },
   ].filter((tab) => tab.visible);
 
@@ -155,7 +161,7 @@ export default function WorkspaceSettings() {
     if (!workspace?.id) return;
     supabase
       .from('workspaces')
-      .select('discount_rate, covenant_threshold, approval_threshold, backdoor_enabled')
+      .select('discount_rate, covenant_threshold, approval_threshold, backdoor_enabled, asset_type_config')
       .eq('id', workspace.id)
       .single()
       .then(({ data }) => {
@@ -168,6 +174,9 @@ export default function WorkspaceSettings() {
           );
           setApprovalThreshold(String((data as any).approval_threshold ?? 0));
           setBackdoorEnabled((data as any).backdoor_enabled ?? false);
+          if (Array.isArray((data as any).asset_type_config) && (data as any).asset_type_config.length > 0) {
+            setAssetTypeConfig((data as any).asset_type_config as string[]);
+          }
         }
       });
   }, [workspace?.id]);
@@ -379,6 +388,35 @@ export default function WorkspaceSettings() {
       toast.error('Failed to save onboarding settings');
     } finally {
       setIsSavingBackdoor(false);
+    }
+  };
+
+  const handleAddAssetType = () => {
+    const trimmed = newAssetType.trim();
+    if (!trimmed || assetTypeConfig.includes(trimmed)) return;
+    setAssetTypeConfig(prev => [...prev, trimmed]);
+    setNewAssetType('');
+  };
+
+  const handleRemoveAssetType = (type: string) => {
+    setAssetTypeConfig(prev => prev.filter(t => t !== type));
+  };
+
+  const handleSaveAssetTypes = async () => {
+    if (!workspace?.id) return;
+    setIsSavingAssetTypes(true);
+    try {
+      const { error } = await supabase
+        .from('workspaces')
+        .update({ asset_type_config: assetTypeConfig } as any)
+        .eq('id', workspace.id);
+      if (error) throw error;
+      toast.success('Asset types saved');
+    } catch (error) {
+      console.error('Error saving asset types:', error);
+      toast.error('Failed to save asset types');
+    } finally {
+      setIsSavingAssetTypes(false);
     }
   };
 
@@ -843,6 +881,68 @@ export default function WorkspaceSettings() {
               </Card>
             </TabsContent>
           )}
+          {/* Lease Configuration — admin only */}
+          {isAdmin && (
+            <TabsContent value="lease_config" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Settings2 className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <CardTitle>Asset Types</CardTitle>
+                      <CardDescription>
+                        Configure the list of asset types available when classifying leases.
+                        These are used by the AI during extraction to classify the asset.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    {assetTypeConfig.map((type) => (
+                      <div key={type} className="flex items-center justify-between rounded-md border px-3 py-2">
+                        <span className="text-sm">{type}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveAssetType(type)}
+                        >
+                          <X size={12} />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add new asset type..."
+                      value={newAssetType}
+                      onChange={(e) => setNewAssetType(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddAssetType(); } }}
+                      className="text-sm"
+                    />
+                    <Button variant="outline" size="sm" onClick={handleAddAssetType} disabled={!newAssetType.trim()}>
+                      <Plus size={14} className="mr-1" />
+                      Add
+                    </Button>
+                  </div>
+                  <Button
+                    variant="accent"
+                    onClick={handleSaveAssetTypes}
+                    disabled={isSavingAssetTypes}
+                  >
+                    {isSavingAssetTypes ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {isSavingAssetTypes ? 'Saving…' : 'Save Asset Types'}
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
           {/* Onboarding — admin only */}
           {isAdmin && (
             <TabsContent value="onboarding" className="space-y-6">

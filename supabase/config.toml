@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.generate-lease-analysis]
 verify_jwt = false
+
+[functions.request-lease-unlock]
+verify_jwt = false
+
+[functions.handle-unlock-action]
+verify_jwt = false
