@@ -645,6 +645,7 @@ function mergeOpusOverrides(sonnetMerged: any, opusMerged: any, targetFields: st
 
 async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtractionResult> {
   console.log('[Claude] Starting two-pass native-PDF extraction...');
+  const extractionStart = Date.now();
 
   // Pass 1: Haiku page map (native PDF)
   const pageMap = await callHaikuForPageMap(pdfBase64);
@@ -679,8 +680,14 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
   const complexFlags: string[] = merged.complex_clause_flags || [];
   const hadComplexFlags = complexFlags.length > 0;
 
-  if (uncertainFields.length > 0 || hadComplexFlags) {
-    console.log(`[Claude] Opus fallback triggered — uncertain: [${uncertainFields.join(', ')}], complex: [${complexFlags.join(', ')}]`);
+  const elapsedMs = Date.now() - extractionStart;
+  const opusBudgetOk = elapsedMs < 85_000; // Supabase wall clock is 150s; reserve ~65s for Opus
+  if (!opusBudgetOk && (uncertainFields.length > 0 || hadComplexFlags)) {
+    console.warn(`[Claude] Opus fallback skipped — elapsed ${elapsedMs}ms exceeds 85s budget. Sonnet results stand.`);
+  }
+
+  if ((uncertainFields.length > 0 || hadComplexFlags) && opusBudgetOk) {
+    console.log(`[Claude] Opus fallback triggered — uncertain: [${uncertainFields.join(', ')}], complex: [${complexFlags.join(', ')}] (elapsed ${elapsedMs}ms)`);
 
     const clausePageHints: number[] = [
       ...pageMap.escalation,
