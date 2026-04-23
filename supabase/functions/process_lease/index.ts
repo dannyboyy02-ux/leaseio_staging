@@ -652,11 +652,10 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
   const allPages = [...new Set([...groupA, ...groupB, ...groupC])].sort((a, b) => a - b);
   const focusHint = allPages.length > 0 ? ` Key pages identified: ${allPages.join(', ')}.` : '';
 
-  // Pass 2: Sonnet extraction — single combined call, sends PDF once
-  // Avoids parallel calls that would exceed the 30k input TPM rate limit.
-  console.log('[Claude] Sending Sonnet extraction call...');
+  // Pass 2: Opus extraction — single combined call, sends PDF once
+  console.log('[Claude] Sending Opus extraction call...');
   const rawCombined = await callAnthropicAPIWithPDF(
-    'claude-sonnet-4-6',
+    'claude-opus-4-6',
     COMBINED_SYSTEM,
     pdfBase64,
     `Extract all lease terms, clauses, and risks from this document.${focusHint}`,
@@ -664,69 +663,24 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
     100_000,
   );
 
-  console.log('[Claude] Sonnet extraction complete, parsing...');
+  console.log('[Claude] Opus extraction complete, parsing...');
 
   const merged = await repairJsonObject(rawCombined) as any;
 
-  // Pass 3 (conditional): Opus fallback for uncertain/complex fields
-  // Fires only when Sonnet signals low confidence (<0.70) on clause fields
-  // or flags complex clause types that benefit from deeper analysis.
-  const uncertainFields = getUncertainFields(merged, 0.70);
-  const complexFlags: string[] = merged.complex_clause_flags || [];
-  const hadComplexFlags = complexFlags.length > 0;
-
-  const elapsedMs = Date.now() - extractionStart;
-  const opusBudgetOk = elapsedMs < 85_000; // Supabase wall clock is 150s; reserve ~65s for Opus
-  if (!opusBudgetOk && (uncertainFields.length > 0 || hadComplexFlags)) {
-    console.warn(`[Claude] Opus fallback skipped — elapsed ${elapsedMs}ms exceeds 85s budget. Sonnet results stand.`);
-  }
-
-  if ((uncertainFields.length > 0 || hadComplexFlags) && opusBudgetOk) {
-    console.log(`[Claude] Opus fallback triggered — uncertain: [${uncertainFields.join(', ')}], complex: [${complexFlags.join(', ')}] (elapsed ${elapsedMs}ms)`);
-
-    const clausePageHints: number[] = [
-      ...pageMap.escalation,
-      ...pageMap.renewal,
-      ...pageMap.termination,
-      ...pageMap.covenants,
-    ];
-    const uniqueClausePages = [...new Set(clausePageHints)].sort((a, b) => a - b);
-    const pageHint = uniqueClausePages.length > 0 ? ` Focus on pages: ${uniqueClausePages.join(', ')}.` : '';
-    const fieldsList = [...new Set([...uncertainFields, ...(hadComplexFlags ? ['risks'] : [])])].join(', ');
-
-    try {
-      const rawOpus = await callAnthropicAPIWithPDF(
-        'claude-opus-4-6',
-        OPUS_TARGETED_SYSTEM,
-        pdfBase64,
-        `Re-extract these specific fields with maximum precision: ${fieldsList}.${pageHint} Complex clause types flagged: ${complexFlags.join(', ') || 'none'}.`,
-        2048,
-        45_000,
-      );
-      const opusMerged = await repairJsonObject(rawOpus) as any;
-      mergeOpusOverrides(merged, opusMerged, uncertainFields, hadComplexFlags);
-      merged._opus_fallback_fields = uncertainFields;
-      merged._opus_complex_flags = complexFlags;
-    } catch (opusErr) {
-      // Non-fatal — Sonnet results stand if Opus call fails
-      console.error('[Claude] Opus fallback failed, keeping Sonnet results:', opusErr instanceof Error ? opusErr.message : opusErr);
-    }
-  }
-
-  // Haiku/Sonnet disagreement warnings
+  // Haiku/Opus disagreement warnings
   const haikuWarnings: string[] = [];
   if (pageMap.financials.length > 0 && !extractValue(merged.current_monthly_rent)) {
-    haikuWarnings.push(`Haiku mapped rent to pages [${pageMap.financials.join(',')}] but Sonnet found nothing — review required`);
+    haikuWarnings.push(`Haiku mapped rent to pages [${pageMap.financials.join(',')}] but Opus found nothing — review required`);
   }
   if (pageMap.parties.length > 0 && !extractValue(merged.landlord_name)) {
     haikuWarnings.push(`Haiku mapped parties to pages [${pageMap.parties.join(',')}] but landlord not found`);
   }
   if (haikuWarnings.length > 0) {
     merged._haiku_warnings = haikuWarnings;
-    console.log('[Claude] Haiku/Sonnet disagreements:', haikuWarnings);
+    console.log('[Claude] Haiku/Opus disagreements:', haikuWarnings);
   }
 
-  merged._extraction_model = uncertainFields.length > 0 || hadComplexFlags ? 'sonnet+opus' : 'claude-sonnet-4-6';
+  merged._extraction_model = 'claude-opus-4-6';
   merged._haiku_page_map = pageMap;
 
   return {

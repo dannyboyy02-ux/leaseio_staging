@@ -175,6 +175,7 @@ export default function LeaseReview() {
 
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
+  const [assetTypes, setAssetTypes] = useState<string[]>(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
 
   // Phase 2 — resubmit flow for returned leases
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -559,79 +560,88 @@ export default function LeaseReview() {
     }
   }, [lease, navigate, stageFile, user?.id]);
 
-  // Derived rent insights
+  // Derived rent insights — prefer current period from schedule over the initial extracted value
   const derivedInsights = useMemo(() => {
+    if (rentSchedule.length > 0) {
+      const today = new Date();
+      const currentPeriod = rentSchedule.find(p => {
+        const start = new Date(p.period_start);
+        const end = p.period_end ? new Date(p.period_end) : null;
+        return start <= today && (!end || end >= today);
+      });
+      if (currentPeriod?.monthly_amount) {
+        return { currentRent: currentPeriod.monthly_amount };
+      }
+    }
     const rawRent = form.base_rent_amount || form.current_monthly_rent || "0";
     const startRent = parseFloat(rawRent.toString().replace(/[^0-9.]/g, "")) || 0;
     return { currentRent: startRent };
-  }, [form.base_rent_amount, form.current_monthly_rent]);
+  }, [form.base_rent_amount, form.current_monthly_rent, rentSchedule]);
 
   useEffect(() => {
     async function init() {
-      if (!leaseId) return;
-      
-      // Fetch lease data
-      const { data, error } = await supabase.from("leases").select("*").eq("id", leaseId).single();
-      if (error) return;
+      if (!leaseId) { setLoading(false); return; }
+      try {
+        // Fetch lease data
+        const { data, error } = await supabase.from("leases").select("*").eq("id", leaseId).single();
+        if (error) { console.error('[LeaseReview] Failed to load lease:', error.message); return; }
 
-      setLease(data);
-      setRequestEdits({
-        request_title: data.request_title || '',
-        requesting_department: data.requesting_department || '',
-        request_urgency: data.request_urgency || 'standard',
-        vendor_name: data.vendor_name || '',
-        request_description: data.request_description || data.notes || '',
-      });
-      const ext = (data.extracted_json as ExtractedJson) || {};
+        setLease(data);
+        setRequestEdits({
+          request_title: data.request_title || '',
+          requesting_department: data.requesting_department || '',
+          request_urgency: data.request_urgency || 'standard',
+          vendor_name: data.vendor_name || '',
+          request_description: data.request_description || data.notes || '',
+        });
+        const ext = (data.extracted_json as ExtractedJson) || {};
 
-      // Build form from all section fields
-      const formData: Record<string, string> = {};
-      allFieldIds.forEach(fieldId => {
-        // Priority: lease column > extracted_json value
-        const leaseVal = data[fieldId];
-        const extractedVal = getExtractedFieldValue(ext[fieldId as keyof ExtractedJson]) ?? "";
-        formData[fieldId] = leaseVal != null ? String(leaseVal) : extractedVal;
-      });
-      
-      setForm(formData);
-      originalValues.current = { ...formData };
-      
-      // Load confirmed sections
-      if (data.confirmed_sections && Array.isArray(data.confirmed_sections)) {
-        setConfirmedSections(data.confirmed_sections);
-      }
-      
-      // Load existing audit log
-      if (data.audit_log && Array.isArray(data.audit_log)) {
-        setAuditLog(data.audit_log as unknown as AuditEntry[]);
-      }
+        // Build form from all section fields
+        const formData: Record<string, string> = {};
+        allFieldIds.forEach(fieldId => {
+          const leaseVal = data[fieldId];
+          const extractedVal = getExtractedFieldValue(ext[fieldId as keyof ExtractedJson]) ?? "";
+          formData[fieldId] = leaseVal != null ? String(leaseVal) : extractedVal;
+        });
 
-      // Fetch rent schedule
-      const { data: rs } = await supabase
-        .from("rent_schedules")
-        .select("*")
-        .eq("lease_id", leaseId)
-        .order("period_start");
-      setRentSchedule(rs || []);
+        setForm(formData);
+        originalValues.current = { ...formData };
 
-      // Fetch risks
-      const { data: riskData } = await supabase
-        .from("risks")
-        .select("*")
-        .eq("lease_id", leaseId);
-      setRisks(riskData || []);
-
-      // Get PDF URL
-      if (data.storage_path) {
-        const { data: urlData, error: urlError } = await supabase.storage
-          .from("leases")
-          .createSignedUrl(data.storage_path, 3600);
-        if (urlError) {
-          console.error('[LeaseReview] Failed to get PDF URL:', urlError.message);
+        if (data.confirmed_sections && Array.isArray(data.confirmed_sections)) {
+          setConfirmedSections(data.confirmed_sections);
         }
-        setPdfUrl(urlData?.signedUrl || null);
+        if (data.audit_log && Array.isArray(data.audit_log)) {
+          setAuditLog(data.audit_log as unknown as AuditEntry[]);
+        }
+
+        // Fetch rent schedule, risks, PDF URL, and workspace asset types in parallel
+        const [rsResult, riskResult, pdfResult, wsResult] = await Promise.all([
+          supabase.from("rent_schedules").select("*").eq("lease_id", leaseId).order("period_start"),
+          supabase.from("risks").select("*").eq("lease_id", leaseId),
+          data.storage_path
+            ? supabase.storage.from("leases").createSignedUrl(data.storage_path, 3600)
+            : Promise.resolve(null),
+          data.workspace_id
+            ? (supabase as any).from("workspaces").select("asset_type_config").eq("id", data.workspace_id).single()
+            : Promise.resolve(null),
+        ]);
+
+        setRentSchedule(rsResult.data || []);
+        setRisks(riskResult.data || []);
+        if (wsResult?.data?.asset_type_config && Array.isArray(wsResult.data.asset_type_config)) {
+          setAssetTypes(wsResult.data.asset_type_config as string[]);
+        }
+        if (pdfResult && 'data' in pdfResult) {
+          if ('error' in pdfResult && pdfResult.error) {
+            console.error('[LeaseReview] Failed to get PDF URL:', (pdfResult.error as any).message);
+          }
+          setPdfUrl((pdfResult.data as any)?.signedUrl || null);
+        }
+      } catch (err) {
+        console.error('[LeaseReview] init() error:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     init();
 
@@ -797,6 +807,81 @@ export default function LeaseReview() {
     }
   }, [confirmedSections, lease?.id]);
 
+  // Rent schedule: persist inline edits
+  const handleScheduleChange = useCallback(async (updated: RentScheduleEntry[]) => {
+    setRentSchedule(updated);
+    if (!leaseId) return;
+    // Upsert all rows, delete removed ones
+    const existingIds = rentSchedule.map(r => r.id);
+    const updatedIds = updated.map(r => r.id);
+    const deletedIds = existingIds.filter(id => !updatedIds.includes(id) && !id.startsWith('new-'));
+    if (deletedIds.length > 0) {
+      await supabase.from('rent_schedules').delete().in('id', deletedIds);
+    }
+    for (const row of updated) {
+      if (row.id.startsWith('new-')) {
+        const { id: _id, ...rest } = row;
+        await supabase.from('rent_schedules').insert({ ...rest, lease_id: leaseId });
+      } else {
+        await supabase.from('rent_schedules').update({
+          period_start: row.period_start,
+          period_end: row.period_end,
+          monthly_amount: row.monthly_amount,
+          annual_amount: row.annual_amount,
+          notes: row.notes,
+        }).eq('id', row.id);
+      }
+    }
+    // Re-fetch to get server-assigned IDs for new rows
+    const { data } = await supabase.from('rent_schedules').select('*').eq('lease_id', leaseId).order('period_start');
+    if (data) setRentSchedule(data);
+  }, [leaseId, rentSchedule]);
+
+  // Rent schedule: auto-generate
+  const handleGenerateSchedule = useCallback(async (mode: 'single' | 'annual') => {
+    if (!leaseId || !form.lease_start || !form.base_rent_amount) return;
+    const baseRent = parseFloat(form.base_rent_amount.replace(/[^0-9.]/g, '')) || 0;
+    if (!baseRent) { toast.error('Base rent amount is required to generate a schedule'); return; }
+    const startDate = new Date(form.lease_start);
+    const endDate = form.lease_end ? new Date(form.lease_end) : null;
+    const rows: Omit<RentScheduleEntry, 'id'>[] = [];
+    if (mode === 'single') {
+      rows.push({
+        period_start: startDate.toISOString().split('T')[0],
+        period_end: endDate ? endDate.toISOString().split('T')[0] : null,
+        monthly_amount: baseRent,
+        annual_amount: baseRent * 12,
+        notes: 'Generated — single period',
+        lease_id: leaseId,
+      } as any);
+    } else {
+      const escalationRate = lease?.escalation_rate ? Number(lease.escalation_rate) / 100 : 0;
+      if (!escalationRate) { toast.error('Escalation rate is required for annual schedule generation'); return; }
+      let current = startDate;
+      let rent = baseRent;
+      const end = endDate ?? new Date(startDate.getFullYear() + 5, startDate.getMonth(), startDate.getDate());
+      while (current < end) {
+        const next = new Date(current.getFullYear() + 1, current.getMonth(), current.getDate());
+        const periodEnd = next > end ? end : new Date(next.getTime() - 86400000);
+        rows.push({
+          period_start: current.toISOString().split('T')[0],
+          period_end: periodEnd.toISOString().split('T')[0],
+          monthly_amount: Math.round(rent * 100) / 100,
+          annual_amount: Math.round(rent * 12 * 100) / 100,
+          notes: null,
+          lease_id: leaseId,
+        } as any);
+        rent = rent * (1 + escalationRate);
+        current = next;
+      }
+    }
+    const { error } = await supabase.from('rent_schedules').insert(rows);
+    if (error) { toast.error('Failed to generate schedule'); return; }
+    const { data } = await supabase.from('rent_schedules').select('*').eq('lease_id', leaseId).order('period_start');
+    if (data) setRentSchedule(data);
+    toast.success('Rent schedule generated');
+  }, [leaseId, form.lease_start, form.lease_end, form.base_rent_amount, lease?.escalation_rate]);
+
   // Phase 4 — refetch lease from DB (used after executed doc upload or term edits)
   const refetchLease = useCallback(async () => {
     if (!leaseId) return;
@@ -812,10 +897,16 @@ export default function LeaseReview() {
       const updateData: Record<string, any> = {
         landlord_name:          form.landlord_name          || null,
         tenant_name:            form.tenant_name            || null,
+        vendor_name:            form.vendor_name            || null,
         property_address:       form.property_address       || null,
+        asset_type:             form.asset_type             || null,
+        location:               form.location               || null,
+        building:               form.building               || null,
+        region:                 form.region                 || null,
         lease_start:            form.lease_start            || null,
         lease_end:              form.lease_end              || null,
         rent_commencement_date: form.rent_commencement_date || null,
+        term_months:            form.term_months ? parseInt(form.term_months) || null : null,
         base_rent_amount:       form.base_rent_amount       || null,
         current_monthly_rent:   form.current_monthly_rent ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null : null,
         square_footage:         form.square_footage ? parseFloat(form.square_footage) || null : null,
@@ -886,10 +977,16 @@ export default function LeaseReview() {
       const updateData: Record<string, any> = {
         landlord_name:          form.landlord_name          || null,
         tenant_name:            form.tenant_name            || null,
+        vendor_name:            form.vendor_name            || null,
         property_address:       form.property_address       || null,
+        asset_type:             form.asset_type             || null,
+        location:               form.location               || null,
+        building:               form.building               || null,
+        region:                 form.region                 || null,
         lease_start:            form.lease_start            || null,
         lease_end:              form.lease_end              || null,
         rent_commencement_date: form.rent_commencement_date || null,
+        term_months:            form.term_months ? parseInt(form.term_months) || null : null,
         base_rent_amount:       form.base_rent_amount       || null,
         security_deposit:       form.security_deposit       || null,
         renewal_options:        form.renewal_options        || null,
@@ -930,10 +1027,16 @@ export default function LeaseReview() {
       const updateData: Record<string, any> = {
         landlord_name:          form.landlord_name          || null,
         tenant_name:            form.tenant_name            || null,
+        vendor_name:            form.vendor_name            || null,
         property_address:       form.property_address       || null,
+        asset_type:             form.asset_type             || null,
+        location:               form.location               || null,
+        building:               form.building               || null,
+        region:                 form.region                 || null,
         lease_start:            form.lease_start            || null,
         lease_end:              form.lease_end              || null,
         rent_commencement_date: form.rent_commencement_date || null,
+        term_months:            form.term_months ? parseInt(form.term_months) || null : null,
         base_rent_amount:       form.base_rent_amount       || null,
         current_monthly_rent:   form.current_monthly_rent ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null : null,
         square_footage:         form.square_footage ? parseFloat(form.square_footage) || null : null,
@@ -1042,7 +1145,15 @@ export default function LeaseReview() {
     try {
       const { error } = await supabase
         .from('leases')
-        .update({ model_locked: false, lifecycle_status: 'executed' })
+        .update({
+          model_locked: false,
+          lifecycle_status: 'executed',
+          unlock_requested: false,
+          unlock_requested_by: null,
+          unlock_requested_at: null,
+          unlock_action_token: null,
+          unlock_token_expires_at: null,
+        } as any)
         .eq('id', lease.id);
       if (error) throw error;
       await supabase.from('lease_activity_log').insert({
@@ -1056,6 +1167,47 @@ export default function LeaseReview() {
     } catch (err) {
       console.error('Error unlocking lease:', err);
       toast.error('Failed to unlock lease');
+    }
+  }, [lease, user, refetchLease]);
+
+  const handleDenyUnlock = useCallback(async () => {
+    if (!lease) return;
+    try {
+      const { error } = await supabase
+        .from('leases')
+        .update({
+          unlock_requested: false,
+          unlock_requested_by: null,
+          unlock_requested_at: null,
+          unlock_action_token: null,
+          unlock_token_expires_at: null,
+        } as any)
+        .eq('id', lease.id);
+      if (error) throw error;
+      toast.success('Unlock request denied');
+      refetchLease();
+    } catch (err) {
+      console.error('Error denying unlock:', err);
+      toast.error('Failed to deny unlock request');
+    }
+  }, [lease, refetchLease]);
+
+  const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
+  const handleRequestUnlock = useCallback(async () => {
+    if (!lease || !user) return;
+    setIsRequestingUnlock(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('request-lease-unlock', {
+        body: { leaseId: lease.id },
+      });
+      if (error || !data?.ok) throw new Error(error?.message || data?.error || 'Request failed');
+      toast.success('Unlock request sent to your workspace admin');
+      refetchLease();
+    } catch (err: any) {
+      console.error('Error requesting unlock:', err);
+      toast.error(err.message ?? 'Failed to send unlock request');
+    } finally {
+      setIsRequestingUnlock(false);
     }
   }, [lease, user, refetchLease]);
 
@@ -1823,7 +1975,7 @@ export default function LeaseReview() {
 
                       {/* General Information */}
                       <TabsContent value="general" className="mt-0 space-y-4">
-                        {(['parties', 'property', 'dates'] as SectionKey[]).map((sectionKey) => (
+                        {(['parties', 'vendor', 'property', 'dates'] as SectionKey[]).map((sectionKey) => (
                           <SectionCard
                             key={sectionKey}
                             sectionKey={sectionKey}
@@ -1832,6 +1984,8 @@ export default function LeaseReview() {
                             confidenceScores={confidenceScores}
                             verifiedFields={verifiedFields}
                             isLocked={isLocked}
+                            isModelLocked={!!lease?.model_locked}
+                            assetTypes={assetTypes}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
@@ -1929,7 +2083,41 @@ export default function LeaseReview() {
                               disabled={!!lease.model_locked}
                               onSuccess={refetchLease}
                             />
-                            {lease.model_locked && isAdminUser && (
+                            {lease.model_locked && isAdminUser && (lease as any).unlock_requested && (
+                              <Card className="shadow-none border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                                <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Unlock requested</p>
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                                      A team member has requested to unlock this lease for editing.
+                                      {(lease as any).unlock_requested_at && (
+                                        <> Submitted {new Date((lease as any).unlock_requested_at).toLocaleDateString()}.</>
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div className="flex gap-2 shrink-0">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="border-green-500 text-green-700 hover:bg-green-50 dark:text-green-400"
+                                      onClick={handleUnlockLease}
+                                    >
+                                      <RotateCcw size={14} className="mr-1.5" />
+                                      Approve & Unlock
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-muted-foreground"
+                                      onClick={handleDenyUnlock}
+                                    >
+                                      Deny
+                                    </Button>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )}
+                            {lease.model_locked && isAdminUser && !(lease as any).unlock_requested && (
                               <Card className="shadow-none border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
                                   <div>
@@ -1948,6 +2136,35 @@ export default function LeaseReview() {
                                 </CardContent>
                               </Card>
                             )}
+                            {lease.model_locked && !isAdminUser && (
+                              <Card className="shadow-none border">
+                                <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium">Request unlock</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {(lease as any).unlock_requested
+                                        ? 'Your unlock request is pending admin approval.'
+                                        : 'Ask your workspace admin to unlock this lease for editing.'}
+                                    </p>
+                                  </div>
+                                  {!(lease as any).unlock_requested && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="shrink-0"
+                                      onClick={handleRequestUnlock}
+                                      disabled={isRequestingUnlock}
+                                    >
+                                      {isRequestingUnlock ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <RotateCcw size={14} className="mr-1.5" />}
+                                      Request Unlock
+                                    </Button>
+                                  )}
+                                  {(lease as any).unlock_requested && (
+                                    <Badge variant="outline" className="shrink-0">Pending</Badge>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            )}
                           </>
                         )}
                       </TabsContent>
@@ -1963,6 +2180,7 @@ export default function LeaseReview() {
                             confidenceScores={confidenceScores}
                             verifiedFields={verifiedFields}
                             isLocked={isLocked}
+                            isModelLocked={!!lease?.model_locked}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
@@ -1972,21 +2190,16 @@ export default function LeaseReview() {
                             onConfirmSection={handleConfirmSection}
                           />
                         ))}
-                        <Card className="shadow-none border overflow-hidden">
-                          <CardHeader className="bg-muted/30 border-b py-3">
-                            <CardTitle className="text-sm font-bold flex items-center gap-2">
-                              <DollarSign size={16} className="text-green-600" />
-                              Rent Schedule
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-4">
-                            <RentScheduleTable
-                              rentSchedule={rentSchedule}
-                              currentMonthlyRent={derivedInsights.currentRent}
-                              rentEscalationType={form.rent_escalation_type || null}
-                            />
-                          </CardContent>
-                        </Card>
+                        <RentScheduleTable
+                          className="shadow-none"
+                          rentSchedule={rentSchedule}
+                          currentMonthlyRent={derivedInsights.currentRent}
+                          rentEscalationType={form.rent_escalation_type || null}
+                          isLocked={isLocked || !!lease?.model_locked}
+                          onScheduleChange={handleScheduleChange}
+                          onGenerateSchedule={handleGenerateSchedule}
+                          canGenerate={!!(form.lease_start && form.base_rent_amount)}
+                        />
                       </TabsContent>
 
                       {/* Options & Clauses */}
@@ -2000,6 +2213,7 @@ export default function LeaseReview() {
                             confidenceScores={confidenceScores}
                             verifiedFields={verifiedFields}
                             isLocked={isLocked}
+                            isModelLocked={!!lease?.model_locked}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}

@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
-import { 
-  Building2, 
-  Calendar, 
-  DollarSign, 
-  FileText, 
+import { useState, useRef } from 'react';
+import {
+  Building2,
+  Calendar,
+  DollarSign,
+  FileText,
   AlertTriangle,
   Users,
   MapPin,
@@ -24,7 +24,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import type { ConfidenceScores } from '@/types/workflow';
 
 // Field configuration by section
@@ -37,6 +40,13 @@ export const SECTION_CONFIG = {
       { id: 'tenant_name', label: 'Tenant', icon: Building2 },
     ],
   },
+  vendor: {
+    title: 'Payor / Vendor',
+    icon: Building2,
+    fields: [
+      { id: 'vendor_name', label: 'Vendor / Counterparty', icon: Building2 },
+    ],
+  },
   property: {
     title: 'Property',
     icon: MapPin,
@@ -44,6 +54,9 @@ export const SECTION_CONFIG = {
       { id: 'property_address', label: 'Property Address', icon: MapPin },
       { id: 'square_footage', label: 'Square Footage', icon: Building2, type: 'number' },
       { id: 'asset_type', label: 'Asset Type', icon: Building2 },
+      { id: 'location', label: 'Location', icon: MapPin },
+      { id: 'building', label: 'Building', icon: Building2 },
+      { id: 'region', label: 'Region', icon: MapPin },
     ],
   },
   dates: {
@@ -53,6 +66,7 @@ export const SECTION_CONFIG = {
       { id: 'lease_start', label: 'Lease Start', icon: Calendar, type: 'date' },
       { id: 'lease_end', label: 'Lease End', icon: Calendar, type: 'date' },
       { id: 'rent_commencement_date', label: 'Rent Commencement', icon: Calendar, type: 'date' },
+      { id: 'term_months', label: 'Lease Term', icon: Calendar, type: 'term' },
     ],
   },
   rent: {
@@ -60,7 +74,7 @@ export const SECTION_CONFIG = {
     icon: DollarSign,
     fields: [
       { id: 'current_monthly_rent', label: 'Current Monthly Rent', icon: DollarSign, type: 'number' },
-      { id: 'base_rent_amount', label: 'Base Rent Amount', icon: DollarSign },
+      { id: 'base_rent_amount', label: 'Base Rent Amount', icon: DollarSign, type: 'number' },
       { id: 'base_rent_frequency', label: 'Rent Frequency', icon: RefreshCw },
       { id: 'security_deposit', label: 'Security Deposit', icon: DollarSign, type: 'number' },
       { id: 'rent_escalation_type', label: 'Escalation Type', icon: RefreshCw },
@@ -89,9 +103,9 @@ export const ConfidenceBadge = ({ confidence }: { confidence: number | null }) =
       </Badge>
     );
   }
-  
+
   const percentage = Math.round(confidence * 100);
-  
+
   if (confidence >= 0.90) {
     return (
       <Badge variant="outline" className="text-[9px] h-4 font-medium text-green-600 border-green-400 bg-green-50">
@@ -100,7 +114,7 @@ export const ConfidenceBadge = ({ confidence }: { confidence: number | null }) =
       </Badge>
     );
   }
-  
+
   if (confidence >= 0.70) {
     return (
       <Badge variant="outline" className="text-[9px] h-4 font-medium text-amber-600 border-amber-400 bg-amber-50">
@@ -109,7 +123,7 @@ export const ConfidenceBadge = ({ confidence }: { confidence: number | null }) =
       </Badge>
     );
   }
-  
+
   return (
     <Badge variant="outline" className="text-[9px] h-4 font-medium text-red-600 border-red-400 bg-red-50">
       <XCircle size={8} className="mr-0.5" />
@@ -151,6 +165,8 @@ interface SectionCardProps {
   confidenceScores: ConfidenceScores;
   verifiedFields: Set<string>;
   isLocked: boolean;
+  isModelLocked: boolean;
+  assetTypes?: string[];
   onFieldChange: (fieldId: string, value: string) => void;
   onFieldFocus: (fieldId: string) => void;
   onFieldBlur: (fieldId: string) => void;
@@ -167,6 +183,8 @@ export function SectionCard({
   confidenceScores,
   verifiedFields,
   isLocked,
+  isModelLocked,
+  assetTypes,
   onFieldChange,
   onFieldFocus,
   onFieldBlur,
@@ -175,7 +193,9 @@ export function SectionCard({
   confirmedSections,
   onConfirmSection,
 }: SectionCardProps) {
+  const { language } = useLanguage();
   const [isEditing, setIsEditing] = useState(!isLocked);
+  const [termUnit, setTermUnit] = useState<'months' | 'years'>('months');
   const section = SECTION_CONFIG[sectionKey];
   const Icon = section.icon;
   const isConfirmed = confirmedSections.includes(sectionKey);
@@ -194,24 +214,35 @@ export function SectionCard({
     return '';
   };
 
+  // Auto-resize textarea: plain function, called as a callback ref
+  const autoResizeRef = (el: HTMLTextAreaElement | null) => {
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  };
+
+  const isCurrencyField = (fieldId: string) =>
+    fieldId.includes('rent') || fieldId.includes('deposit');
+
   return (
     <Card className={cn(
       "shadow-none border overflow-hidden",
-      isConfirmed && "border-green-300 bg-green-50/10"
+      isConfirmed && !isModelLocked && "border-green-300 bg-green-50/10"
     )}>
       <CardHeader className="bg-muted/30 border-b py-3">
         <CardTitle className="text-sm font-bold flex items-center justify-between">
           <span className="flex items-center gap-2">
             <Icon size={16} className="text-primary" />
             {section.title}
-            {isConfirmed && (
+            {isConfirmed && !isModelLocked && (
               <Badge variant="outline" className="text-green-600 border-green-400 bg-green-50 text-[9px]">
                 <Check size={8} className="mr-0.5" /> Reviewed
               </Badge>
             )}
           </span>
           <div className="flex items-center gap-2">
-            {!isConfirmed && !isLocked && (
+            {!isConfirmed && !isLocked && !isModelLocked && (
               <Button
                 variant="outline"
                 size="sm"
@@ -251,6 +282,15 @@ export function SectionCard({
           const fieldPage = getFieldPage(extractedJson, field.id);
           const value = form[field.id] || '';
           const FieldIcon = field.icon;
+          const isReadOnly = isLocked || !isEditing;
+
+          // Term field display value
+          const termMonths = parseInt(value) || 0;
+          const termDisplayValue = field.type === 'term'
+            ? (termUnit === 'years' ? (termMonths > 0 ? (termMonths / 12).toFixed(1) : '') : value)
+            : value;
+
+          // Auto-resize ref for textareas (plain function, no hook needed)
 
           return (
             <div key={field.id} className="group">
@@ -258,67 +298,197 @@ export function SectionCard({
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />
                   {field.label}
-                  <ConfidenceBadge confidence={fieldConfidence} />
+                  {!isModelLocked && <ConfidenceBadge confidence={fieldConfidence} />}
                 </Label>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                  {fieldPage && (
+                {!isModelLocked && (
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    {fieldPage && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-primary"
+                        title="Locate in PDF"
+                        onClick={() => onJumpToPage(fieldPage)}
+                      >
+                        <Target size={12} />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-primary"
-                      title="Locate in PDF"
-                      onClick={() => onJumpToPage(fieldPage)}
+                      className={cn(
+                        "h-6 w-6 transition-colors",
+                        verifiedFields.has(field.id)
+                          ? "text-green-600"
+                          : "text-muted-foreground hover:text-green-600",
+                      )}
+                      onClick={() => onVerifyField(field.id)}
                     >
-                      <Target size={12} />
+                      <ShieldCheck size={12} />
                     </Button>
-                  )}
+                  </div>
+                )}
+                {isModelLocked && fieldPage && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={cn(
-                      "h-6 w-6 transition-colors",
-                      verifiedFields.has(field.id)
-                        ? "text-green-600"
-                        : "text-muted-foreground hover:text-green-600",
-                    )}
-                    onClick={() => onVerifyField(field.id)}
+                    className="h-6 w-6 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all"
+                    title="Locate in PDF"
+                    onClick={() => onJumpToPage(fieldPage)}
                   >
-                    <ShieldCheck size={12} />
+                    <Target size={12} />
                   </Button>
-                </div>
+                )}
               </div>
-              {field.type === 'textarea' ? (
+
+              {/* Textarea (auto-resize) */}
+              {field.type === 'textarea' && (
                 <Textarea
+                  ref={autoResizeRef}
                   value={value}
-                  onChange={(e) => onFieldChange(field.id, e.target.value)}
+                  onChange={(e) => {
+                    onFieldChange(field.id, e.target.value);
+                    e.currentTarget.style.height = 'auto';
+                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                  }}
                   onFocus={() => onFieldFocus(field.id)}
                   onBlur={() => onFieldBlur(field.id)}
-                  disabled={isLocked || !isEditing}
+                  disabled={isReadOnly}
                   placeholder={`No ${field.label.toLowerCase()} extracted`}
                   className={cn(
-                    "text-sm min-h-[80px]",
+                    "text-sm resize-none overflow-hidden min-h-[60px]",
                     getFieldBorderClass(field.id),
-                    (isLocked || !isEditing) && "bg-muted/30"
+                    isReadOnly && "bg-muted/30"
                   )}
                 />
-              ) : (
+              )}
+
+              {/* Asset type Select dropdown */}
+              {field.id === 'asset_type' && assetTypes && assetTypes.length > 0 && !isReadOnly && (
+                <Select value={value} onValueChange={(v) => onFieldChange(field.id, v)}>
+                  <SelectTrigger className={cn("text-sm", getFieldBorderClass(field.id))}>
+                    <SelectValue placeholder="Select asset type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assetTypes.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Asset type read-only */}
+              {field.id === 'asset_type' && (assetTypes === undefined || assetTypes.length === 0 || isReadOnly) && (
                 <Input
-                  type={field.type === 'number' ? 'text' : field.type === 'date' ? 'date' : 'text'}
+                  type="text"
                   value={value}
                   onChange={(e) => onFieldChange(field.id, e.target.value)}
                   onFocus={() => onFieldFocus(field.id)}
                   onBlur={() => onFieldBlur(field.id)}
-                  disabled={isLocked || !isEditing}
-                  placeholder={`No ${field.label.toLowerCase()} extracted`}
+                  disabled={isReadOnly}
+                  placeholder="No asset type specified"
                   className={cn(
                     "text-sm",
                     getFieldBorderClass(field.id),
-                    (isLocked || !isEditing) && "bg-muted/30",
+                    isReadOnly && "bg-muted/30",
                     !value && "text-muted-foreground italic"
                   )}
                 />
               )}
-              {!value && (
+
+              {/* Term field with Months/Years toggle */}
+              {field.type === 'term' && (
+                <div className="flex gap-2 items-center">
+                  <Input
+                    type="number"
+                    value={termDisplayValue}
+                    onChange={(e) => {
+                      const n = parseFloat(e.target.value) || 0;
+                      onFieldChange(field.id, String(termUnit === 'years' ? Math.round(n * 12) : Math.round(n)));
+                    }}
+                    onFocus={() => onFieldFocus(field.id)}
+                    onBlur={() => onFieldBlur(field.id)}
+                    disabled={isReadOnly}
+                    placeholder="—"
+                    className={cn(
+                      "text-sm flex-1",
+                      getFieldBorderClass(field.id),
+                      isReadOnly && "bg-muted/30"
+                    )}
+                  />
+                  <div className="flex rounded-md border overflow-hidden text-xs shrink-0">
+                    <button
+                      type="button"
+                      className={cn(
+                        "px-2.5 py-1.5 transition-colors",
+                        termUnit === 'months' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'
+                      )}
+                      onClick={() => setTermUnit('months')}
+                    >Mo</button>
+                    <button
+                      type="button"
+                      className={cn(
+                        "px-2.5 py-1.5 transition-colors",
+                        termUnit === 'years' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'
+                      )}
+                      onClick={() => setTermUnit('years')}
+                    >Yr</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Number fields — formatted display when read-only, plain input when editing */}
+              {field.type === 'number' && (
+                isReadOnly ? (
+                  <div className={cn(
+                    "text-sm px-3 py-2 rounded-md border bg-muted/30",
+                    getFieldBorderClass(field.id)
+                  )}>
+                    {value
+                      ? isCurrencyField(field.id)
+                        ? formatLocalizedCurrency(parseFloat(value) || null, language)
+                        : Number(value).toLocaleString()
+                      : <span className="text-muted-foreground italic">—</span>
+                    }
+                  </div>
+                ) : (
+                  <Input
+                    type="text"
+                    value={value}
+                    onChange={(e) => onFieldChange(field.id, e.target.value)}
+                    onFocus={() => onFieldFocus(field.id)}
+                    onBlur={() => onFieldBlur(field.id)}
+                    disabled={false}
+                    placeholder={`No ${field.label.toLowerCase()} extracted`}
+                    className={cn(
+                      "text-sm",
+                      getFieldBorderClass(field.id),
+                      !value && "text-muted-foreground italic"
+                    )}
+                  />
+                )
+              )}
+
+              {/* Standard text / date fields */}
+              {field.type !== 'textarea' && field.type !== 'term' && field.type !== 'number' && field.id !== 'asset_type' && (
+                <Input
+                  type={field.type === 'date' ? 'date' : 'text'}
+                  value={value}
+                  onChange={(e) => onFieldChange(field.id, e.target.value)}
+                  onFocus={() => onFieldFocus(field.id)}
+                  onBlur={() => onFieldBlur(field.id)}
+                  disabled={isReadOnly}
+                  placeholder={`No ${field.label.toLowerCase()} extracted`}
+                  className={cn(
+                    "text-sm",
+                    getFieldBorderClass(field.id),
+                    isReadOnly && "bg-muted/30",
+                    !value && "text-muted-foreground italic"
+                  )}
+                />
+              )}
+
+              {!value && field.type !== 'term' && (
                 <p className="text-[10px] text-muted-foreground mt-1 italic">
                   Field is empty — not extracted or not present in document
                 </p>

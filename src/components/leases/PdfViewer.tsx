@@ -96,30 +96,32 @@ export function PdfViewer({ url, targetPage }: PdfViewerProps) {
       </div>
 
       {/* Document */}
-      <div className="flex-1 overflow-auto flex justify-center bg-muted/30 p-2">
-        <Document
-          file={url}
-          onLoadSuccess={onDocumentLoadSuccess}
-          onLoadError={onDocumentLoadError}
-          loading={
-            <div className="flex items-center justify-center h-32 gap-2 text-muted-foreground text-sm">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading document…
-            </div>
-          }
-        >
-          <Page
-            pageNumber={currentPage}
-            scale={scale}
-            renderTextLayer={true}
-            renderAnnotationLayer={true}
+      <div className="flex-1 overflow-auto bg-muted/30 p-2">
+        <div className="w-fit mx-auto">
+          <Document
+            file={url}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={onDocumentLoadError}
             loading={
-              <div className="flex items-center justify-center h-32">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <div className="flex items-center justify-center h-32 gap-2 text-muted-foreground text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading document…
               </div>
             }
-          />
-        </Document>
+          >
+            <Page
+              pageNumber={currentPage}
+              scale={scale}
+              renderTextLayer={true}
+              renderAnnotationLayer={true}
+              loading={
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              }
+            />
+          </Document>
+        </div>
       </div>
     </div>
   );
