@@ -401,61 +401,54 @@ async function callAnthropicAPIWithPDF(
   pdfBase64: string,
   textPrompt: string,
   maxTokens: number,
+  timeoutMs = 110_000,
 ): Promise<string> {
-  const maxRetries = 2;
+  // Single attempt — no retries on PDF calls. Under the 150s wall clock,
+  // a failed retry + sleep would exceed the budget anyway.
   let lastError: Error | null = null;
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'pdfs-2024-09-25',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        system,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 },
+            },
+            { type: 'text', text: textPrompt },
+          ],
+        }],
+      }),
+    });
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': ANTHROPIC_API_KEY!,
-          'anthropic-version': '2023-06-01',
-          'anthropic-beta': 'pdfs-2024-09-25',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          system,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'document',
-                source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 },
-              },
-              { type: 'text', text: textPrompt },
-            ],
-          }],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Anthropic PDF] Request failed (attempt ${attempt + 1}): ${errorText}`);
-        lastError = new Error(`Anthropic PDF API error: ${response.status} - ${errorText}`);
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-        throw lastError;
-      }
-
-      const data = await response.json();
-      const content = data.content?.[0]?.text;
-      if (!content) {
-        lastError = new Error('Anthropic PDF response missing content');
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-        throw lastError;
-      }
-
-      console.log(`[Anthropic PDF:${model}] tokens in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
-      return content;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
+    if (!response.ok) {
+      const errorText = await response.text();
+      lastError = new Error(`Anthropic PDF API error: ${response.status} - ${errorText}`);
+      throw lastError;
     }
+
+    const data = await response.json();
+    const content = data.content?.[0]?.text;
+    if (!content) throw new Error('Anthropic PDF response missing content');
+
+    console.log(`[Anthropic PDF:${model}] tokens in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
+    return content;
+  } catch (error) {
+    lastError = error instanceof Error ? error : new Error(String(error));
+    throw lastError;
   }
-  throw lastError || new Error('All Anthropic PDF API attempts failed');
 }
 
 async function callHaikuForPageMap(pdfBase64: string): Promise<PageMap> {
@@ -480,6 +473,7 @@ Return ONLY valid JSON. Empty array if a category has no relevant pages. Pages m
     pdfBase64,
     'Read this lease document and return the page map JSON.',
     1024,
+    30_000,
   );
 
   try {
@@ -666,7 +660,8 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
     COMBINED_SYSTEM,
     pdfBase64,
     `Extract all lease terms, clauses, and risks from this document.${focusHint}`,
-    8192,
+    4096,
+    100_000,
   );
 
   console.log('[Claude] Sonnet extraction complete, parsing...');
@@ -705,7 +700,8 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
         OPUS_TARGETED_SYSTEM,
         pdfBase64,
         `Re-extract these specific fields with maximum precision: ${fieldsList}.${pageHint} Complex clause types flagged: ${complexFlags.join(', ') || 'none'}.`,
-        4096,
+        2048,
+        45_000,
       );
       const opusMerged = await repairJsonObject(rawOpus) as any;
       mergeOpusOverrides(merged, opusMerged, uncertainFields, hadComplexFlags);
