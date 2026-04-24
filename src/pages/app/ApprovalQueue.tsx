@@ -398,12 +398,28 @@ export default function ApprovalQueue() {
           } as any);
         }
       } else {
-        navigate(`/app/leases/${lease.id}/financial-review`);
-        setApproveTarget(null);
-        return;
+        // Financial approver: transition to approved
+        await supabase
+          .from('leases')
+          .update({
+            lifecycle_status: 'approved',
+            financial_approved_by: user.id,
+            financial_approved_at: now,
+            status_changed_at: now,
+          } as any)
+          .eq('id', lease.id);
+
+        await supabase.from('lease_activity_log').insert({
+          lease_id: lease.id,
+          user_id: user.id,
+          activity_type: 'approval',
+          from_status: 'under_review',
+          to_status: 'approved',
+          details: { role: 'financial_approver', action: 'financial_approved' },
+        } as any);
       }
 
-      toast.success('Approved \u2014 forwarded to financial review');
+      toast.success(isManager ? 'Approved \u2014 forwarded to financial review' : 'Commitment approved');
       setApproveTarget(null);
       fetchLeases();
     } catch (err) {

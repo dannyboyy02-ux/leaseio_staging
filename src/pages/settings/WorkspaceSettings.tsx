@@ -213,9 +213,27 @@ export default function WorkspaceSettings() {
     });
   };
 
-  const hasFinancialApprover = Object.values(memberRoles).some((roles) =>
-    roles.has('financial_approver'),
-  );
+  // Assign a single approver role (clears existing holder first — one person per step)
+  const assignApproverRole = (role: 'manager_approver' | 'financial_approver', userId: string | null) => {
+    setMemberRoles((prev) => {
+      const next: Record<string, Set<FunctionalRole>> = {};
+      for (const [uid, roles] of Object.entries(prev)) {
+        const updated = new Set(roles);
+        updated.delete(role);
+        next[uid] = updated;
+      }
+      if (userId) {
+        if (!next[userId]) next[userId] = new Set();
+        next[userId].add(role);
+      }
+      return next;
+    });
+  };
+
+  const managerApproverId = Object.entries(memberRoles).find(([, r]) => r.has('manager_approver'))?.[0] ?? null;
+  const financialApproverId = Object.entries(memberRoles).find(([, r]) => r.has('financial_approver'))?.[0] ?? null;
+
+  const hasFinancialApprover = financialApproverId !== null;
 
   const handleSaveRoles = async () => {
     if (!canEdit) { toast.error(t('workspace.read_only')); return; }
@@ -626,58 +644,123 @@ export default function WorkspaceSettings() {
               {members && members.length > 1 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Approval Roles</CardTitle>
+                    <CardTitle>Approval Chain</CardTitle>
                     <CardDescription>
-                      Assign functional approval roles to team members. A user can hold multiple roles.
-                      These are separate from workspace access levels (Admin / Editor / Viewer).
+                      Assign one approver to each step. Lease requests flow through Manager Approval first, then Financial Approval before execution.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    {!hasFinancialApprover && rolesLoaded && (
-                      <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 dark:bg-amber-950/20 dark:border-amber-700 mb-4">
-                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No Financial Approver assigned</p>
-                          <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                            At least one team member must be designated as a Financial Approver. Without one, submitted commitments cannot proceed through financial review.
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                  <CardContent className="space-y-6">
+                    {/* Approval chain slots */}
                     {membersLoading || !rolesLoaded ? (
-                      <div className="space-y-4">
-                        {[...Array(3)].map((_, i) => (
-                          <div key={i} className="flex items-center gap-3">
-                            <Skeleton className="h-10 w-10 rounded-full" />
-                            <div className="flex-1 space-y-2">
-                              <Skeleton className="h-4 w-32" />
-                              <Skeleton className="h-3 w-48" />
-                            </div>
-                          </div>
-                        ))}
+                      <div className="space-y-3">
+                        <Skeleton className="h-16 w-full rounded-lg" />
+                        <Skeleton className="h-16 w-full rounded-lg" />
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        {/* Header row */}
-                        <div className="hidden sm:grid grid-cols-[1fr_100px_160px_170px_100px] gap-4 px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          <span>Member</span>
-                          <span className="text-center">User</span>
-                          <span className="text-center">Approver — Manager</span>
-                          <span className="text-center">Approver — Financial</span>
-                          <span className="text-center">Admin</span>
+                      <div className="space-y-3">
+                        {(
+                          [
+                            { role: 'manager_approver' as const, step: 'Step 1', label: 'Manager Approval', assignedId: managerApproverId },
+                            { role: 'financial_approver' as const, step: 'Step 2', label: 'Financial Approval', assignedId: financialApproverId },
+                          ]
+                        ).map(({ role, step, label, assignedId }) => {
+                          const assignedMember = members.find((m) => m.user_id === assignedId);
+                          const assignedInitials = assignedMember?.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2) ?? '';
+                          return (
+                            <div key={role} className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="flex-shrink-0">
+                                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{step}</p>
+                                  <p className="text-sm font-medium">{label}</p>
+                                </div>
+                                {assignedMember ? (
+                                  <div className="flex items-center gap-2 ml-2">
+                                    <Avatar className="h-7 w-7">
+                                      <AvatarFallback className="text-xs">{assignedInitials}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium truncate">{assignedMember.name}</p>
+                                      <p className="text-xs text-muted-foreground truncate">{assignedMember.email}</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground ml-2 italic">No approver assigned</p>
+                                )}
+                              </div>
+                              {canEdit && (
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <Select
+                                    value={assignedId ?? ''}
+                                    onValueChange={(val) => assignApproverRole(role, val || null)}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs w-[160px]">
+                                      <SelectValue placeholder={assignedMember ? 'Change' : 'Assign'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {members.map((m) => {
+                                        const initials = m.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2);
+                                        return (
+                                          <SelectItem key={m.user_id} value={m.user_id}>
+                                            <div className="flex items-center gap-2">
+                                              <Avatar className="h-5 w-5">
+                                                <AvatarFallback className="text-xs leading-none">{initials}</AvatarFallback>
+                                              </Avatar>
+                                              <span>{m.name}</span>
+                                            </div>
+                                          </SelectItem>
+                                        );
+                                      })}
+                                    </SelectContent>
+                                  </Select>
+                                  {assignedId && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                      onClick={() => assignApproverRole(role, null)}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {!hasFinancialApprover && rolesLoaded && (
+                          <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:bg-amber-950/20 dark:border-amber-700">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-xs text-amber-700 dark:text-amber-400">
+                              No Financial Approver assigned — commitments will stall after manager approval.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Member roles: submitter + admin */}
+                    <div>
+                      <p className="text-sm font-medium mb-1">Other Roles</p>
+                      <p className="text-xs text-muted-foreground mb-3">Control who can submit lease requests and who has admin access.</p>
+                      {membersLoading || !rolesLoaded ? (
+                        <div className="space-y-3">
+                          {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
                         </div>
+                      ) : (
                         <div className="divide-y divide-border rounded-lg border">
+                          <div className="hidden sm:grid grid-cols-[1fr_100px_100px] gap-4 px-3 pb-2 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            <span>Member</span>
+                            <span className="text-center">Submitter</span>
+                            <span className="text-center">Admin</span>
+                          </div>
                           {members.map((member) => {
                             const roles = memberRoles[member.user_id] || new Set<FunctionalRole>();
                             const isOwner = member.user_id === workspace?.ownerId;
                             const initials = member.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2);
                             return (
-                              <div
-                                key={member.id}
-                                className="grid grid-cols-1 sm:grid-cols-[1fr_100px_160px_170px_100px] gap-3 sm:gap-4 items-center px-3 py-3"
-                              >
+                              <div key={member.id} className="grid grid-cols-1 sm:grid-cols-[1fr_100px_100px] gap-3 sm:gap-4 items-center px-3 py-3">
                                 <div className="flex items-center gap-3">
-                                  <Avatar className="h-8 w-8">
+                                  <Avatar className="h-7 w-7">
                                     <AvatarFallback className="text-xs">{initials}</AvatarFallback>
                                   </Avatar>
                                   <div>
@@ -685,47 +768,35 @@ export default function WorkspaceSettings() {
                                     <p className="text-xs text-muted-foreground">{member.email}</p>
                                   </div>
                                 </div>
-
-                                {/* Mobile labels + Checkboxes */}
-                                <div className="flex flex-wrap gap-4 sm:contents">
-                                  {(
-                                    [
-                                      { role: 'submitter' as FunctionalRole, label: 'User' },
-                                      { role: 'manager_approver' as FunctionalRole, label: 'Approver — Manager' },
-                                      { role: 'financial_approver' as FunctionalRole, label: 'Approver — Financial' },
-                                      { role: 'admin' as FunctionalRole, label: 'Admin' },
-                                    ] as const
-                                  ).map(({ role, label }) => (
-                                    <div key={role} className="flex sm:justify-center items-center gap-2">
-                                      <span className="text-xs text-muted-foreground sm:hidden">{label}:</span>
-                                      <Checkbox
-                                        id={`${member.user_id}-${role}`}
-                                        checked={roles.has(role)}
-                                        onCheckedChange={() => {
-                                          if (canEdit && !isOwner) toggleFunctionalRole(member.user_id, role);
-                                        }}
-                                        disabled={!canEdit || isOwner}
-                                        aria-label={`${label} for ${member.name}`}
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
-
-                                {isOwner && (
-                                  <div className="sm:col-span-4 flex items-center">
+                                {isOwner ? (
+                                  <div className="sm:col-span-2 flex items-center">
                                     <Badge variant="default" className="flex items-center gap-1 text-xs">
                                       <Crown className="h-3 w-3" />
                                       Owner — all roles
                                     </Badge>
+                                  </div>
+                                ) : (
+                                  <div className="flex gap-6 sm:contents">
+                                    {(['submitter', 'admin'] as const).map((role) => (
+                                      <div key={role} className="flex sm:justify-center items-center gap-2">
+                                        <span className="text-xs text-muted-foreground sm:hidden capitalize">{role}:</span>
+                                        <Checkbox
+                                          checked={roles.has(role)}
+                                          onCheckedChange={() => { if (canEdit) toggleFunctionalRole(member.user_id, role); }}
+                                          disabled={!canEdit}
+                                        />
+                                      </div>
+                                    ))}
                                   </div>
                                 )}
                               </div>
                             );
                           })}
                         </div>
-                      </div>
-                    )}
-                    <div className="mt-6 flex items-center gap-3">
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3">
                       <Button
                         variant="accent"
                         onClick={handleSaveRoles}
