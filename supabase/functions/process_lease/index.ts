@@ -1425,6 +1425,14 @@ serve(async (req) => {
     }
     console.log(`[process_lease] Resolved workspace_id: ${resolvedWorkspaceId}`);
 
+    if (!resolvedWorkspaceId) {
+      return jsonResponse(
+        { error: 'No workspace found. Please complete account setup before uploading.' },
+        400,
+        requestOrigin,
+      );
+    }
+
     const rateLimitResponse = await enforceWorkspaceRateLimit(
       supabaseAdmin,
       resolvedWorkspaceId,

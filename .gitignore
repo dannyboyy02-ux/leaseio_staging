@@ -26,3 +26,8 @@ dist-ssr
 # Generated / local-only
 public/locales/
 supabase/.temp/
+
+# Environment variables (never commit secrets)
+.env
+.env.local
+.env.*.local

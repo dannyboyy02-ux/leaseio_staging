@@ -56,6 +56,38 @@ serve(async (req) => {
 
     console.log(`[DELETE-ACCOUNT] Starting deletion for user ${user.id}`);
 
+    // 0. Delete all lease files from Storage before removing DB records
+    const { data: ownedWorkspaces } = await supabaseClient
+      .from("workspaces")
+      .select("id")
+      .eq("owner_id", user.id);
+
+    const ownedWorkspaceIds = (ownedWorkspaces || []).map((w: { id: string }) => w.id);
+
+    const leaseResults = await Promise.all([
+      supabaseClient.from("leases").select("id").eq("user_id", user.id),
+      ...(ownedWorkspaceIds.length > 0
+        ? [supabaseClient.from("leases").select("id").in("workspace_id", ownedWorkspaceIds)]
+        : []),
+    ]);
+    const allLeaseIds = [
+      ...new Set(leaseResults.flatMap(r => (r.data || []).map((l: { id: string }) => l.id))),
+    ];
+
+    for (const leaseId of allLeaseIds) {
+      for (const bucket of ["leases", "executed-leases"]) {
+        const { data: files } = await supabaseClient.storage
+          .from(bucket)
+          .list(`${user.id}/${leaseId}`);
+        if (files && files.length > 0) {
+          await supabaseClient.storage
+            .from(bucket)
+            .remove(files.map((f: { name: string }) => `${user.id}/${leaseId}/${f.name}`));
+        }
+      }
+    }
+    console.log(`[DELETE-ACCOUNT] Storage cleanup complete for ${allLeaseIds.length} lease(s)`);
+
     // 1. Delete user's workspaces (will cascade to workspace_members, leases, etc.)
     const { error: workspaceError } = await supabaseClient
       .from("workspaces")

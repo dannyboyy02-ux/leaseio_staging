@@ -724,6 +724,7 @@
     "terms_of_service": "Términos de Servicio",
     "privacy_policy": "Política de Privacidad",
     "and": "y",
+    "ai_consent": "Entiendo que los documentos cargados son procesados por IA (Anthropic Claude) para extraer los términos del contrato. Nunca usamos sus datos para entrenamiento. Consulte nuestra",
     "by_signing_in": "Al iniciar sesión, acepta nuestros",
     "hero_title": "Abstracción y Operaciones de Arrendamientos con IA",
     "hero_desc": "Extraiga términos clave, automatice notificaciones y sincronice con su sistema contable. LeaseIO maneja la complejidad para que pueda enfocarse en su negocio.",
@@ -774,7 +775,8 @@
       "weak_password": "La contraseña debe tener al menos 8 caracteres.",
       "password_mismatch": "Las contraseñas no coinciden.",
       "terms_required": "Por favor acepte los Términos y Política de Privacidad.",
-      "already_registered": "Ya existe una cuenta con este correo. Por favor inicie sesión."
+      "already_registered": "Ya existe una cuenta con este correo. Por favor inicie sesión.",
+      "ai_consent_required": "Por favor, acepte el procesamiento de documentos por IA para continuar."
     },
     "success": {
       "welcome_back": "¡Bienvenido de nuevo!",
