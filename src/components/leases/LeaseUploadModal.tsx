@@ -310,6 +310,10 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         </DialogHeader>
 
         {step === 'upload' && (
+          <>
+          <p className="text-xs text-muted-foreground text-center -mt-1 mb-1">
+            Documents are processed by AI to extract key terms. We never use your data for AI training.
+          </p>
           <div
             {...getRootProps()}
             className={cn(
@@ -333,6 +337,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
               Select File
             </Button>
           </div>
+          </>
         )}
 
         {step === 'classify' && file && (

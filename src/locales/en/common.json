@@ -724,6 +724,7 @@
     "terms_of_service": "Terms of Service",
     "privacy_policy": "Privacy Policy",
     "and": "and",
+    "ai_consent": "I understand that uploaded documents are processed by AI (Anthropic Claude) to extract lease terms. We never use your data for AI training. See our",
     "by_signing_in": "By signing in, you agree to our",
     "hero_title": "AI-Powered Lease Abstraction & Operations",
     "hero_desc": "Extract key terms, automate notifications, and sync with your accounting system. LeaseIO handles the complexity so you can focus on your business.",
@@ -774,7 +775,8 @@
       "weak_password": "Password must be at least 8 characters.",
       "password_mismatch": "Passwords do not match.",
       "terms_required": "Please accept the Terms and Privacy Policy.",
-      "already_registered": "An account with this email already exists. Please sign in."
+      "already_registered": "An account with this email already exists. Please sign in.",
+      "ai_consent_required": "Please consent to AI document processing to continue."
     },
     "success": {
       "welcome_back": "Welcome back!",

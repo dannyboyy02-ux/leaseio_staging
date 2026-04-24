@@ -47,6 +47,7 @@ export default function Signup() {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
   });
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [acceptAiConsent, setAcceptAiConsent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { signUp } = useAuth();
   const navigate = useNavigate();
@@ -84,6 +85,10 @@ export default function Signup() {
     }
     if (!acceptTerms) {
       toast({ title: t('auth.errors.missing_fields'), description: t('auth.errors.terms_required'), variant: 'destructive' });
+      return false;
+    }
+    if (!acceptAiConsent) {
+      toast({ title: t('auth.errors.missing_fields'), description: t('auth.errors.ai_consent_required'), variant: 'destructive' });
       return false;
     }
     return true;
@@ -254,6 +259,19 @@ export default function Signup() {
                   {t('auth.agree_terms')}{' '}
                   <Link to="/terms" className="text-primary hover:underline">{t('auth.terms_of_service')}</Link>
                   {' '}{t('auth.and')}{' '}
+                  <Link to="/privacy" className="text-primary hover:underline">{t('auth.privacy_policy')}</Link>
+                </Label>
+              </div>
+
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="ai-consent"
+                  checked={acceptAiConsent}
+                  onCheckedChange={(checked) => setAcceptAiConsent(checked as boolean)}
+                  className="mt-1"
+                />
+                <Label htmlFor="ai-consent" className="text-sm text-muted-foreground cursor-pointer leading-relaxed">
+                  {t('auth.ai_consent')}{' '}
                   <Link to="/privacy" className="text-primary hover:underline">{t('auth.privacy_policy')}</Link>
                 </Label>
               </div>
