@@ -97,7 +97,7 @@ export async function analyzeWithAzureDI(
 ): Promise<string> {
   const startedAt = Date.now();
   const analyzeUrl =
-    `${endpoint}/documentintelligence/documentModels/${model}:analyze?api-version=2024-11-30`;
+    `${endpoint}/documentintelligence/documentModels/${model}:analyze?api-version=2024-11-30&disableContentLogging=true`;
 
   console.log(`[${logPrefix}] Azure DI starting with model ${model}`);
   const analyzeResponse = await fetch(analyzeUrl, {
