@@ -1101,7 +1101,6 @@ Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
         throw lastError;
       }
       const content = data.choices[0].message.content;
-      console.log('[OpenAI] Raw response:', content.substring(0, 500));
       console.log(`[OpenAI] Tokens - prompt: ${data.usage?.prompt_tokens || 'N/A'}, completion: ${data.usage?.completion_tokens || 'N/A'}`);
       try {
         const parsed = await extractJsonFromResponse(content);
@@ -1460,7 +1459,7 @@ serve(async (req) => {
     let leaseData: LeaseExtractionResult;
     try {
       leaseData = await extractLeaseDataWithClaude(pdfBase64);
-      console.log('[process_lease] Lease data extracted:', JSON.stringify(leaseData).substring(0, 500));
+      console.log('[process_lease] Lease data extracted successfully');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       await supabaseAdmin.from('leases').update({ status: 'Failed', error_message: `AI extraction failed: ${errorMessage}` }).eq('id', leaseId);
