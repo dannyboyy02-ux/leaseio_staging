@@ -53,7 +53,7 @@ export function SummaryStrip() {
       );
 
       // Stat 2: Pipeline Value
-      const pipelineStatuses = ['submitted', 'under_review', 'approved', 'executed'];
+      const pipelineStatuses = ['submitted', 'under_review', 'approved'];
       const pipelineLeases = leases.filter((l) =>
         pipelineStatuses.includes(l.lifecycle_status ?? '')
       );
