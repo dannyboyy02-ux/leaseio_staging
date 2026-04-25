@@ -39,12 +39,6 @@ export function ProcessingProvider({ children }: { children: ReactNode }) {
           startedAt: Date.now(),
         }));
         setJobs(recovered);
-        recovered.forEach((job) => {
-          toast.loading(`Abstracting ${job.filename}...`, {
-            id: job.leaseId,
-            duration: Infinity,
-          });
-        });
       }
     }
     recoverJobs();
@@ -76,7 +70,6 @@ export function ProcessingProvider({ children }: { children: ReactNode }) {
 
           if (lease.status === 'Ready') {
             idsToRemove.push(job.leaseId);
-            toast.dismiss(job.leaseId);
             toast.success(`${job.filename} is ready for review`, {
               duration: 10000,
               action: {
@@ -86,7 +79,6 @@ export function ProcessingProvider({ children }: { children: ReactNode }) {
             });
           } else if (lease.status === 'Failed') {
             idsToRemove.push(job.leaseId);
-            toast.dismiss(job.leaseId);
             toast.error(`Abstraction failed for ${job.filename}`);
           }
         } catch {
@@ -112,11 +104,17 @@ export function ProcessingProvider({ children }: { children: ReactNode }) {
   const startProcessing = (leaseId: string, filename: string) => {
     setJobs((prev) => {
       if (prev.some((j) => j.leaseId === leaseId)) return prev;
-      return [...prev, { leaseId, filename, startedAt: Date.now() }];
-    });
-    toast.loading(`Abstracting ${filename}...`, {
-      id: leaseId,
-      duration: Infinity,
+      const next = [...prev, { leaseId, filename, startedAt: Date.now() }];
+      const label =
+        next.length === 1
+          ? `Abstracting "${filename}"...`
+          : `Abstracting ${next.length} documents...`;
+      toast(label, {
+        id: 'abstracting-indicator',
+        duration: 3000,
+        closeButton: true,
+      });
+      return next;
     });
   };
 
