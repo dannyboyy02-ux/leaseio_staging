@@ -4,12 +4,14 @@ import { Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
-import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
-import { FinancialSummary } from '@/components/dashboard/FinancialSummary';
-import { PendingApprovalsSection } from '@/components/dashboard/PendingApprovalsSection';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
-import { CommitmentHistory } from '@/components/dashboard/CommitmentHistory';
-import { EscalationReviewPanel } from '@/components/dashboard/EscalationReviewPanel';
+import { SummaryStrip } from '@/components/dashboard/SummaryStrip';
+import { NeedsAction } from '@/components/dashboard/NeedsAction';
+import { LeasePipeline } from '@/components/dashboard/LeasePipeline';
+import { UpcomingRisks } from '@/components/dashboard/UpcomingRisks';
+import { RecentActivity } from '@/components/dashboard/RecentActivity';
+import { PipelineByDepartment } from '@/components/dashboard/PipelineByDepartment';
+import { IntakeTrend } from '@/components/dashboard/IntakeTrend';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -48,20 +50,26 @@ export default function Dashboard() {
         {/* Onboarding — auto-hides when all steps complete or dismissed */}
         <OnboardingChecklist />
 
-        {/* Action Required — at the top where it belongs; hides when nothing pending */}
-        <PendingApprovalsSection />
+        {/* KPI strip — monthly rent, pipeline value, awaiting approval, expiring */}
+        <SummaryStrip />
 
-        {/* Hero KPI tiles — shows empty state CTA when no lease data */}
-        <FinancialSummary onNewRequest={() => setCreateDrawerOpen(true)} />
+        {/* Row 1: Action queue + Pipeline funnel */}
+        <div className="grid grid-cols-2 gap-6">
+          <NeedsAction />
+          <LeasePipeline />
+        </div>
 
-        {/* Escalation Review — hides when no leases need review */}
-        <EscalationReviewPanel />
+        {/* Row 2: Upcoming risks + Recent activity & AI extractions */}
+        <div className="grid grid-cols-2 gap-6">
+          <UpcomingRisks />
+          <RecentActivity />
+        </div>
 
-        {/* Commitment trend — hides when no data */}
-        <CommitmentHistory />
-
-        {/* Upcoming Events — hides when no events */}
-        <UpcomingEvents />
+        {/* Row 3: Department breakdown + Intake trend */}
+        <div className="grid grid-cols-2 gap-6">
+          <PipelineByDepartment />
+          <IntakeTrend />
+        </div>
       </div>
 
       <LeaseRequestForm
