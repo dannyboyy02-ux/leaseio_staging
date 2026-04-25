@@ -67,6 +67,7 @@ export default function AccountSettings() {
 
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
+  const [notifyAbstractionComplete, setNotifyAbstractionComplete] = useState(true);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoggingOutOthers, setIsLoggingOutOthers] = useState(false);
@@ -105,12 +106,13 @@ export default function AccountSettings() {
       if (!authUser?.id) return;
       const { data } = await supabase
         .from('profiles')
-        .select('email_notifications_enabled, sms_notifications_enabled')
+        .select('email_notifications_enabled, sms_notifications_enabled, notify_abstraction_complete')
         .eq('id', authUser.id)
         .single();
       if (data) {
         setEmailNotifications(data.email_notifications_enabled ?? true);
         setSmsNotifications(data.sms_notifications_enabled ?? false);
+        setNotifyAbstractionComplete((data as any).notify_abstraction_complete ?? true);
       }
     }
     loadPrefs();
@@ -189,7 +191,8 @@ export default function AccountSettings() {
         .update({
           email_notifications_enabled: emailNotifications,
           sms_notifications_enabled: smsNotifications,
-        })
+          notify_abstraction_complete: notifyAbstractionComplete,
+        } as any)
         .eq('id', authUser.id);
 
       if (error) throw error;
@@ -566,6 +569,18 @@ export default function AccountSettings() {
                   <Switch
                     checked={smsNotifications}
                     onCheckedChange={setSmsNotifications}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">Abstraction complete</p>
+                    <p className="text-xs text-muted-foreground">
+                      Email me when AI finishes extracting a lease
+                    </p>
+                  </div>
+                  <Switch
+                    checked={notifyAbstractionComplete}
+                    onCheckedChange={setNotifyAbstractionComplete}
                   />
                 </div>
                 <Button variant="accent" onClick={handleSaveNotificationPrefs}>

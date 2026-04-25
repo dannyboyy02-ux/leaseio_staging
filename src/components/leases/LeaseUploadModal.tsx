@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, X, ChevronRight, HelpCircle, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, X, ChevronRight, HelpCircle, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { LeaseType } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useProcessing } from '@/contexts/ProcessingContext';
 
 interface LeaseUploadModalProps {
   open: boolean;
@@ -44,29 +44,17 @@ interface ParentLease {
   lease_end: string | null;
 }
 
-type Step = 'upload' | 'classify' | 'processing' | 'success' | 'error';
-
-type ProcessingStatus = {
-  stage: 'uploading' | 'analyzing' | 'extracting' | 'saving';
-  message: string;
-};
+type Step = 'upload' | 'classify' | 'error';
 
 export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadModalProps) {
-  const navigate = useNavigate();
+  const { startProcessing } = useProcessing();
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [leaseType, setLeaseType] = useState<LeaseType>('master');
   const [parentLeaseId, setParentLeaseId] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
-  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>({ 
-    stage: 'uploading', 
-    message: 'Uploading document...' 
-  });
   const [errorMessage, setErrorMessage] = useState<string>('');
-  const [resultLeaseId, setResultLeaseId] = useState<string>('');
-  const [pendingLeaseId, setPendingLeaseId] = useState<string | null>(null);
-  const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Real parent leases from database
   const [availableParentLeases, setAvailableParentLeases] = useState<ParentLease[]>([]);
   const [loadingParentLeases, setLoadingParentLeases] = useState(false);
@@ -111,58 +99,6 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
     fetchPostedLeases();
   }, [leaseType]);
 
-  // Polling for lease status updates
-  useEffect(() => {
-    if (!pendingLeaseId || step !== 'processing') {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-      return;
-    }
-
-    const pollStatus = async () => {
-      try {
-        const { data: lease, error } = await supabase
-          .from('leases')
-          .select('status, error_message')
-          .eq('id', pendingLeaseId)
-          .single();
-
-        if (error) return;
-
-        if (lease.status === 'Ready') {
-          setProcessingStatus({ stage: 'saving', message: 'Processing complete!' });
-          setResultLeaseId(pendingLeaseId);
-          setStep('success');
-          toast.success('Lease processed successfully!');
-          setPendingLeaseId(null);
-          if (onSuccess) {
-            onSuccess(pendingLeaseId);
-          }
-        } else if (lease.status === 'Failed') {
-          setErrorMessage(lease.error_message || 'Processing failed');
-          setStep('error');
-          toast.error('Failed to process lease');
-          setPendingLeaseId(null);
-        } else if (lease.status === 'Processing') {
-          setProcessingStatus({ stage: 'extracting', message: 'Extracting lease data...' });
-        }
-      } catch (err) {
-        console.error('Polling error:', err);
-      }
-    };
-
-    pollingRef.current = setInterval(pollStatus, 2000);
-
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
-  }, [pendingLeaseId, step]);
-
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       setFile(acceptedFiles[0]);
@@ -182,15 +118,13 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
     if (leaseType === 'amendment' && !parentLeaseId) return;
 
     setIsUploading(true);
-    setStep('processing');
-    setProcessingStatus({ stage: 'uploading', message: 'Uploading document...' });
 
     try {
       // Get the current session for auth
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         toast.error('Session expired. Please log in again.');
-        navigate('/login');
+        setIsUploading(false);
         return;
       }
 
@@ -202,15 +136,12 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         formData.append('parentLeaseId', parentLeaseId);
       }
 
-      setProcessingStatus({ stage: 'analyzing', message: 'Analyzing document with AI...' });
-
-      // Call the edge function using the Supabase client method
+      // Call the edge function
       const { data: result, error: invokeError } = await supabase.functions.invoke('process_lease', {
         body: formData,
       });
 
       if (invokeError) {
-        console.error('Edge function invocation error:', invokeError);
         throw new Error(`Failed to process lease: ${invokeError.message}`);
       }
 
@@ -218,23 +149,11 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         throw new Error(result.error || 'Failed to process lease');
       }
 
-      // If the edge function returns a leaseId, start polling for status updates
-      if (result.leaseId) {
-        setPendingLeaseId(result.leaseId);
-        setProcessingStatus({ stage: 'extracting', message: 'Extracting lease data...' });
-        
-        // If result.success is true, the processing completed synchronously
-        if (result.success) {
-          setResultLeaseId(result.leaseId);
-          setStep('success');
-          toast.success('Lease processed successfully!');
-          setPendingLeaseId(null);
-          
-          if (onSuccess) {
-            onSuccess(result.leaseId);
-          }
-        }
-        // Otherwise polling will handle success/error states
+      if (result?.leaseId) {
+        // Hand off to ProcessingContext — dismiss modal immediately
+        startProcessing(result.leaseId, file.name);
+        if (onSuccess) onSuccess(result.leaseId);
+        handleClose();
       }
 
     } catch (error) {
@@ -248,45 +167,17 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
   };
 
   const handleClose = () => {
-    if (!isUploading) {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-      setStep('upload');
-      setFile(null);
-      setLeaseType('master');
-      setParentLeaseId('');
-      setErrorMessage('');
-      setResultLeaseId('');
-      setPendingLeaseId(null);
-      onOpenChange(false);
-    }
-  };
-
-  const handleViewLease = () => {
-    handleClose();
-    navigate(`/app/leases/${resultLeaseId}/review`);
+    setStep('upload');
+    setFile(null);
+    setLeaseType('master');
+    setParentLeaseId('');
+    setErrorMessage('');
+    onOpenChange(false);
   };
 
   const handleRetry = () => {
     setStep('classify');
     setErrorMessage('');
-  };
-
-  const getProcessingIcon = () => {
-    switch (processingStatus.stage) {
-      case 'uploading':
-        return <Upload className="h-6 w-6 text-primary animate-pulse" />;
-      case 'analyzing':
-        return <FileText className="h-6 w-6 text-primary animate-pulse" />;
-      case 'extracting':
-        return <Loader2 className="h-6 w-6 text-primary animate-spin" />;
-      case 'saving':
-        return <CheckCircle className="h-6 w-6 text-primary" />;
-      default:
-        return <Loader2 className="h-6 w-6 text-primary animate-spin" />;
-    }
   };
 
   return (
@@ -296,15 +187,11 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
           <DialogTitle>
             {step === 'upload' && 'Upload Lease Document'}
             {step === 'classify' && 'Classify Document'}
-            {step === 'processing' && 'Processing Document'}
-            {step === 'success' && 'Processing Complete'}
             {step === 'error' && 'Processing Failed'}
           </DialogTitle>
           <DialogDescription>
             {step === 'upload' && 'Upload a PDF lease document to begin extraction'}
             {step === 'classify' && 'Help us understand what type of document this is'}
-            {step === 'processing' && 'Our AI is analyzing your document...'}
-            {step === 'success' && 'Your lease has been successfully extracted'}
             {step === 'error' && 'There was a problem processing your document'}
           </DialogDescription>
         </DialogHeader>
@@ -458,81 +345,9 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
                 variant="accent"
                 onClick={handleSubmit}
                 className="flex-1"
-                disabled={leaseType === 'amendment' && !parentLeaseId}
+                disabled={isUploading || (leaseType === 'amendment' && !parentLeaseId)}
               >
-                Continue <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {step === 'processing' && (
-          <div className="flex flex-col items-center py-10">
-            <div className="relative mb-6">
-              <div className="h-16 w-16 rounded-full border-4 border-muted flex items-center justify-center">
-                {getProcessingIcon()}
-              </div>
-              <div className="absolute inset-0 h-16 w-16 rounded-full border-4 border-accent border-t-transparent animate-spin" />
-            </div>
-            <p className="text-sm font-medium mb-2">{processingStatus.message}</p>
-            <p className="text-xs text-muted-foreground text-center max-w-xs">
-              {processingStatus.stage === 'uploading' && 'Securely uploading your document...'}
-              {processingStatus.stage === 'analyzing' && 'Using Azure Document Intelligence to extract text and tables...'}
-              {processingStatus.stage === 'extracting' && 'Our AI is identifying key lease terms and dates...'}
-              {processingStatus.stage === 'saving' && 'Finalizing and saving your lease data...'}
-            </p>
-            
-            {/* Progress Steps */}
-            <div className="mt-6 flex items-center gap-2">
-              <div className={cn(
-                'h-2 w-2 rounded-full transition-colors',
-                processingStatus.stage === 'uploading' ? 'bg-accent' : 'bg-accent/30'
-              )} />
-              <div className={cn(
-                'h-2 w-2 rounded-full transition-colors',
-                processingStatus.stage === 'analyzing' ? 'bg-accent' : 
-                  ['extracting', 'saving'].includes(processingStatus.stage) ? 'bg-accent/30' : 'bg-muted'
-              )} />
-              <div className={cn(
-                'h-2 w-2 rounded-full transition-colors',
-                processingStatus.stage === 'extracting' ? 'bg-accent' : 
-                  processingStatus.stage === 'saving' ? 'bg-accent/30' : 'bg-muted'
-              )} />
-              <div className={cn(
-                'h-2 w-2 rounded-full transition-colors',
-                processingStatus.stage === 'saving' ? 'bg-accent' : 'bg-muted'
-              )} />
-            </div>
-          </div>
-        )}
-
-        {step === 'success' && (
-          <div className="flex flex-col items-center py-10">
-            <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-            </div>
-            <p className="text-sm font-medium mb-2">Lease Extracted Successfully!</p>
-            <p className="text-xs text-muted-foreground text-center max-w-xs mb-4">
-              Your lease document has been analyzed and the key information has been extracted.
-            </p>
-            <p className="text-sm font-medium mb-4">Would you like to upload another lease?</p>
-            <div className="flex gap-3 w-full">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setFile(null);
-                  setLeaseType('master');
-                  setParentLeaseId('');
-                  setErrorMessage('');
-                  setResultLeaseId('');
-                  setStep('upload');
-                }} 
-                className="flex-1"
-              >
-                Yes, Upload Another
-              </Button>
-              <Button variant="accent" onClick={handleViewLease} className="flex-1">
-                Review Extracted Data
+                {isUploading ? 'Submitting...' : <><span>Continue</span> <ChevronRight className="h-4 w-4 ml-1" /></>}
               </Button>
             </div>
           </div>

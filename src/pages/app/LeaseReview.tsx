@@ -2232,12 +2232,6 @@ export default function LeaseReview() {
 
                       {/* Documents */}
                       <TabsContent value="documents" className="mt-0 space-y-4">
-                        {/* When active/locked, PDF panel is hidden — embed the viewer here */}
-                        {!showPdfPanel && pdfUrl && (
-                          <div className="rounded-lg border overflow-hidden h-[500px]">
-                            <PdfViewer url={pdfUrl} targetPage={targetPage} />
-                          </div>
-                        )}
                         <LeaseDocumentsTab
                           leaseId={lease.id}
                           filename={lease.filename}

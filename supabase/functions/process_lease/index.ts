@@ -1689,6 +1689,49 @@ serve(async (req) => {
       else console.log(`[process_lease] Inserted ${risksToInsert.length} risks`);
     }
 
+    // Fire-and-forget email notification — never throw
+    try {
+      const { data: profileData } = await supabaseAdmin
+        .from('profiles')
+        .select('notify_abstraction_complete, email_notifications_enabled')
+        .eq('id', user.id)
+        .single();
+
+      if ((profileData as any)?.notify_abstraction_complete && (profileData as any)?.email_notifications_enabled) {
+        const { data: authData } = await supabaseAdmin.auth.admin.getUserById(user.id);
+        const userEmail = authData?.user?.email;
+        if (userEmail) {
+          const siteUrl = Deno.env.get('SITE_URL') ?? 'https://theleaseio.com';
+          const displayName = extractValue(leaseData.tenant_name) || sanitizedFilename;
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
+            },
+            body: JSON.stringify({
+              from: Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
+              to: [userEmail],
+              subject: `${displayName} is ready for review`,
+              html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+                <h2>Lease ready for review</h2>
+                <p><strong>${displayName}</strong> has been abstracted by AI and is ready for your review.</p>
+                <p style="margin:24px 0">
+                  <a href="${siteUrl}/app/leases/${leaseId}/review"
+                     style="background:#2563eb;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px">
+                    Review Now →
+                  </a>
+                </p>
+              </div>`,
+              text: `${displayName} is ready for review: ${siteUrl}/app/leases/${leaseId}/review`,
+            }),
+          });
+        }
+      }
+    } catch (emailErr) {
+      console.error('[process_lease] notification email failed:', emailErr);
+    }
+
     console.log('[process_lease] Processing complete');
     return new Response(JSON.stringify({ success: true, leaseId, data: leaseData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
