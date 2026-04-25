@@ -14,17 +14,18 @@ const formatCurrency = (value: number): string =>
   }).format(value);
 
 const STAGES = [
-  { key: 'submitted',    label: 'Submitted',    color: 'bg-blue-400' },
-  { key: 'under_review', label: 'Under Review',  color: 'bg-amber-400' },
-  { key: 'approved',     label: 'Approved',      color: 'bg-purple-400' },
-  { key: 'executed',     label: 'Executed',      color: 'bg-indigo-400' },
-  { key: 'active',       label: 'Active',        color: 'bg-green-500' },
+  { key: 'submitted',    label: 'Submitted',    color: 'bg-blue-400',   href: '/app/leases?view=approval' },
+  { key: 'under_review', label: 'Under Review',  color: 'bg-amber-400',  href: '/app/leases?view=approval' },
+  { key: 'approved',     label: 'Approved',      color: 'bg-purple-400', href: '/app/leases?view=approval' },
+  { key: 'executed',     label: 'Executed',      color: 'bg-indigo-400', href: '/app/leases?view=active' },
+  { key: 'active',       label: 'Active',        color: 'bg-green-500',  href: '/app/leases?view=active' },
 ] as const;
 
 interface StageData {
   key: string;
   label: string;
   color: string;
+  href: string;
   count: number;
   annualValue: number;
 }
@@ -62,6 +63,7 @@ export function LeasePipeline() {
           key: stage.key,
           label: stage.label,
           color: stage.color,
+          href: stage.href,
           count: matching.length,
           annualValue,
         };
@@ -110,8 +112,8 @@ export function LeasePipeline() {
             {stageData.map((stage) => (
               <div
                 key={stage.key}
-                className="flex items-center gap-3 cursor-pointer hover:bg-muted/50 rounded px-2 py-1.5"
-                onClick={() => navigate('/app/leases')}
+                className="flex items-center gap-3 cursor-pointer hover:bg-muted/70 transition-colors rounded px-2 py-1.5"
+                onClick={() => navigate(stage.href)}
               >
                 <span className="w-24 text-xs text-muted-foreground shrink-0">
                   {stage.label}

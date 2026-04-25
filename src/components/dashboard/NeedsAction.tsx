@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCircle2 } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -152,8 +152,11 @@ export function NeedsAction() {
                 {pendingApprovals.map((item) => (
                   <div
                     key={item.id}
-                    className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
-                      item.daysWaiting > 5 ? 'bg-orange-50' : 'bg-muted/40'
+                    onClick={() => navigate(`/app/leases/${item.id}`)}
+                    className={`flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
+                      item.daysWaiting > 5
+                        ? 'bg-orange-50 hover:bg-orange-100'
+                        : 'bg-muted/40 hover:bg-muted/70'
                     }`}
                   >
                     <div className="min-w-0 flex-1">
@@ -172,6 +175,7 @@ export function NeedsAction() {
                         {formatCurrency(item.annualValue)}/yr
                       </p>
                     </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
                   </div>
                 ))}
               </div>

@@ -47,16 +47,18 @@ export function SummaryStrip() {
       const now = Date.now();
       const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
 
-      // Stat 1: Monthly Rent (active leases) + weighted avg $/sqft
-      const activeLeases = leases.filter((l) => l.lifecycle_status === 'active');
-      const monthlyRentSum = activeLeases.reduce(
+      // Stat 1: Monthly Rent (active + executed leases) + weighted avg $/sqft
+      const portfolioLeases = leases.filter(
+        (l) => l.lifecycle_status === 'active' || l.lifecycle_status === 'executed'
+      );
+      const monthlyRentSum = portfolioLeases.reduce(
         (sum, l) =>
           sum +
           (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0),
         0
       );
 
-      const leasesWithSqft = activeLeases.filter((l) => (l.square_footage ?? 0) > 0);
+      const leasesWithSqft = portfolioLeases.filter((l) => (l.square_footage ?? 0) > 0);
       const totalAnnualRent = leasesWithSqft.reduce(
         (sum, l) =>
           sum +
@@ -69,7 +71,7 @@ export function SummaryStrip() {
       const monthlyRentSub =
         weightedAvgPerSqft !== null
           ? `Avg ${formatCurrency(weightedAvgPerSqft)}/sqft`
-          : `${activeLeases.length} active lease${activeLeases.length !== 1 ? 's' : ''}`;
+          : `${portfolioLeases.length} portfolio lease${portfolioLeases.length !== 1 ? 's' : ''}`;
 
       // Stat 2: Pipeline Value
       const pipelineStatuses = ['submitted', 'under_review', 'approved'];
@@ -117,7 +119,9 @@ export function SummaryStrip() {
         {
           label: 'Pipeline Value',
           primary: formatCurrency(pipelineValue),
-          sub: `${pipelineLeases.length} lease${pipelineLeases.length !== 1 ? 's' : ''} in progress`,
+          sub: pipelineLeases.length === 0
+            ? 'No active requests'
+            : `${pipelineLeases.length} lease${pipelineLeases.length !== 1 ? 's' : ''} in progress`,
           accent: 'blue',
           href: '/app/leases?view=approval',
         },
