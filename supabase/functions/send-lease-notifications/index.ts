@@ -66,6 +66,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const alertsFrom = Deno.env.get('RESEND_ALERTS_FROM_EMAIL') ?? Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>';
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -185,13 +186,13 @@ serve(async (req) => {
 
       try {
         const result = await resend.emails.send({
-          from: "LeaseIO <notifications@resend.dev>",
+          from: alertsFrom,
           to: [lease.profiles!.email],
           subject,
           html,
         });
 
-        console.log(`Email sent to ${lease.profiles!.email}:`, result);
+        console.log(`Email sent for notification ${notification.id}`);
 
         // Update last_notified_at
         await supabase
