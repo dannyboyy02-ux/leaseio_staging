@@ -151,7 +151,7 @@ serve(async (req) => {
 
     // Send email to each admin
     if (resendApiKey && adminEmails.length > 0) {
-      const fromAddress = Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>';
+      const fromAddress = Deno.env.get('RESEND_APPROVALS_FROM_EMAIL') ?? Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>';
       const emailBody = JSON.stringify({
         from: fromAddress,
         to: adminEmails,

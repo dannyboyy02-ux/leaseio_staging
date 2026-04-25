@@ -27,7 +27,7 @@ async function sendInviteEmail(opts: {
         Authorization: `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
+        from: Deno.env.get('RESEND_INVITES_FROM_EMAIL') ?? Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
         to: [to],
         subject: `You've been invited to join ${escapeHtml(workspaceName)} on LeaseIO`,
         html: `

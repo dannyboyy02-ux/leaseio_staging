@@ -145,7 +145,7 @@ serve(async (req) => {
             const submitterName = [submitterProfile.first_name, submitterProfile.last_name]
               .filter(Boolean).join(' ') || 'Team';
             await resend.emails.send({
-              from: 'LeaseIO <notifications@resend.dev>',
+              from: Deno.env.get('RESEND_APPROVALS_FROM_EMAIL') ?? Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
               to: [submitterProfile.email],
               subject: `\u2705 Commitment Approved: ${lease.request_title || 'Your Request'}`,
               html: generateApprovalEmailHtml({
