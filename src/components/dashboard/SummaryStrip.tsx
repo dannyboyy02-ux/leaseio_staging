@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowUpRight } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -7,6 +9,7 @@ interface StatBox {
   primary: string;
   sub: string;
   accent?: 'blue' | 'orange' | 'red' | 'default';
+  href: string;
 }
 
 const formatCurrency = (value: number): string =>
@@ -18,6 +21,7 @@ const formatCurrency = (value: number): string =>
 
 export function SummaryStrip() {
   const { workspace } = useApp();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<StatBox[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,7 +35,7 @@ export function SummaryStrip() {
       const { data: leases } = await supabase
         .from('leases')
         .select(
-          'lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end'
+          'lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end, square_footage'
         )
         .eq('workspace_id', workspace.id);
 
@@ -43,7 +47,7 @@ export function SummaryStrip() {
       const now = Date.now();
       const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
 
-      // Stat 1: Monthly Rent (active leases)
+      // Stat 1: Monthly Rent (active leases) + weighted avg $/sqft
       const activeLeases = leases.filter((l) => l.lifecycle_status === 'active');
       const monthlyRentSum = activeLeases.reduce(
         (sum, l) =>
@@ -51,6 +55,21 @@ export function SummaryStrip() {
           (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0),
         0
       );
+
+      const leasesWithSqft = activeLeases.filter((l) => (l.square_footage ?? 0) > 0);
+      const totalAnnualRent = leasesWithSqft.reduce(
+        (sum, l) =>
+          sum +
+          (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0) * 12,
+        0
+      );
+      const totalSqft = leasesWithSqft.reduce((sum, l) => sum + (l.square_footage ?? 0), 0);
+      const weightedAvgPerSqft = totalSqft > 0 ? totalAnnualRent / totalSqft : null;
+
+      const monthlyRentSub =
+        weightedAvgPerSqft !== null
+          ? `Avg ${formatCurrency(weightedAvgPerSqft)}/sqft`
+          : `${activeLeases.length} active lease${activeLeases.length !== 1 ? 's' : ''}`;
 
       // Stat 2: Pipeline Value
       const pipelineStatuses = ['submitted', 'under_review', 'approved'];
@@ -91,26 +110,30 @@ export function SummaryStrip() {
         {
           label: 'Monthly Rent',
           primary: formatCurrency(monthlyRentSum),
-          sub: `${activeLeases.length} active lease${activeLeases.length !== 1 ? 's' : ''}`,
+          sub: monthlyRentSub,
           accent: 'default',
+          href: '/app/leases?view=active',
         },
         {
           label: 'Pipeline Value',
           primary: formatCurrency(pipelineValue),
           sub: `${pipelineLeases.length} lease${pipelineLeases.length !== 1 ? 's' : ''} in progress`,
           accent: 'blue',
+          href: '/app/leases?view=approval',
         },
         {
           label: 'Awaiting Approval',
           primary: String(awaitingCount),
           sub: `${formatCurrency(awaitingAnnualValue)} annual value`,
           accent: 'orange',
+          href: '/app/leases?view=approval',
         },
         {
           label: 'Expiring \u2264 90 Days',
           primary: String(expiringCount),
           sub: `${formatCurrency(expiringAnnualRent)} annual rent`,
           accent: 'red',
+          href: '/app/leases?view=active&expiring=90',
         },
       ]);
 
@@ -142,9 +165,13 @@ export function SummaryStrip() {
       {stats.map((box) => (
         <div
           key={box.label}
-          className={`rounded-lg border bg-card p-4 ${accentClasses[box.accent ?? 'default']}`}
+          onClick={() => navigate(box.href)}
+          className={`group rounded-lg border bg-card p-4 cursor-pointer hover:shadow-md transition-shadow ${accentClasses[box.accent ?? 'default']}`}
         >
-          <p className="text-xs text-muted-foreground">{box.label}</p>
+          <div className="flex items-start justify-between">
+            <p className="text-xs text-muted-foreground">{box.label}</p>
+            <ArrowUpRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+          </div>
           <p className="mt-1 text-2xl font-semibold tracking-tight">{box.primary}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{box.sub}</p>
         </div>

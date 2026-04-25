@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -71,16 +71,21 @@ function formatCurrency(amount: number): string {
 export default function Leases() {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addLeaseDialogOpen, setAddLeaseDialogOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<LeaseRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [expirationFilter, setExpirationFilter] = useState('all');
+  const [expirationFilter, setExpirationFilter] = useState<'all' | '30' | '90'>(
+    (['30', '90'].includes(searchParams.get('expiring') ?? '') ? searchParams.get('expiring') : 'all') as 'all' | '30' | '90'
+  );
   const [sortField, setSortField] = useState<SortField>('lease_end');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [leaseView, setLeaseView] = useState<LeaseView>('active');
+  const [leaseView, setLeaseView] = useState<LeaseView>(
+    searchParams.get('view') === 'approval' ? 'approval' : 'active'
+  );
   const [leases, setLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
 
