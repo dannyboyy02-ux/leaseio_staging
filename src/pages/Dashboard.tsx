@@ -18,12 +18,34 @@ import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { useProcessing } from '@/contexts/ProcessingContext';
 
+function AbstractingSection() {
+  const { jobs } = useProcessing();
+  if (jobs.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          AI Abstracting
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1">
+        {jobs.map((job) => (
+          <div key={job.leaseId} className="flex items-center justify-between py-1 text-sm">
+            <span className="truncate text-muted-foreground">{job.filename}</span>
+            <Badge variant="secondary" className="shrink-0">In Progress</Badge>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const { user, workspace } = useApp();
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
-  const { jobs } = useProcessing();
 
   const safeText = (v: unknown) =>
     getExtractedFieldValue(v) ??
@@ -53,24 +75,7 @@ export default function Dashboard() {
         <OnboardingChecklist />
 
         {/* AI Abstracting — shows in-progress jobs; hides when nothing in flight */}
-        {jobs.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                AI Abstracting
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              {jobs.map((job) => (
-                <div key={job.leaseId} className="flex items-center justify-between py-1 text-sm">
-                  <span className="truncate text-muted-foreground">{job.filename}</span>
-                  <Badge variant="secondary" className="shrink-0">In Progress</Badge>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
+        <AbstractingSection />
 
         {/* Action Required — at the top where it belongs; hides when nothing pending */}
         <PendingApprovalsSection />
