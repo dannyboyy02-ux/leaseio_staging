@@ -50,6 +50,11 @@ interface LeaseRow {
   current_monthly_rent: number | null;
   monthly_payment: number | null;
   extracted_json: Record<string, unknown> | null;
+  rent_schedules: {
+    period_start: string;
+    period_end: string | null;
+    monthly_amount: number;
+  }[] | null;
 }
 
 type SortField = 'property' | 'landlord' | 'monthly_rent' | 'lease_start' | 'lease_end' | 'sqft';
@@ -102,7 +107,8 @@ export default function Leases() {
         .select(
           'id, filename, status, lifecycle_status, request_title, landlord_name, ' +
           'lease_start, lease_end, executed_expiry_date, square_footage, ' +
-          'executed_monthly_payment, current_monthly_rent, monthly_payment, extracted_json'
+          'executed_monthly_payment, current_monthly_rent, monthly_payment, extracted_json, ' +
+          'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .in('lifecycle_status', ['submitted', 'under_review', 'approved', 'executed', 'active', 'expired'])
         .order('lease_end', { ascending: true });
@@ -161,11 +167,23 @@ export default function Leases() {
     return lease.request_title || getExtractedFieldValue(json?.address) || lease.filename || '';
   };
 
-  const getMonthlyRent = (lease: LeaseRow): number =>
-    Number(lease.executed_monthly_payment) ||
-    Number(lease.current_monthly_rent) ||
-    Number(lease.monthly_payment) ||
-    0;
+  const getMonthlyRent = (lease: LeaseRow): number => {
+    if (lease.rent_schedules && lease.rent_schedules.length > 0) {
+      const today = new Date();
+      const currentPeriod = lease.rent_schedules.find((p) => {
+        const start = new Date(p.period_start);
+        const end = p.period_end ? new Date(p.period_end) : null;
+        return start <= today && (!end || end >= today);
+      });
+      if (currentPeriod?.monthly_amount) return currentPeriod.monthly_amount;
+    }
+    return (
+      Number(lease.executed_monthly_payment) ||
+      Number(lease.current_monthly_rent) ||
+      Number(lease.monthly_payment) ||
+      0
+    );
+  };
 
   const getLeaseEnd = (lease: LeaseRow): string | null =>
     lease.executed_expiry_date || lease.lease_end;
