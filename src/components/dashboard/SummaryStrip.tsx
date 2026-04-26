@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
 
 interface StatBox {
   label: string;
@@ -43,7 +44,8 @@ export function SummaryStrip() {
       const { data: leases } = await supabase
         .from('leases')
         .select(
-          'lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end, square_footage'
+          'lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end, square_footage, ' +
+          'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace.id);
 
@@ -60,17 +62,13 @@ export function SummaryStrip() {
         (l) => l.lifecycle_status === 'active' || l.lifecycle_status === 'executed'
       );
       const monthlyRentSum = portfolioLeases.reduce(
-        (sum, l) =>
-          sum +
-          (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0),
+        (sum, l) => sum + getCurrentMonthlyRent((l as any).rent_schedules, l.executed_monthly_payment, l.current_monthly_rent, l.monthly_payment),
         0
       );
 
       const leasesWithSqft = portfolioLeases.filter((l) => Number(l.square_footage ?? 0) > 0);
       const totalMonthlyRent = leasesWithSqft.reduce(
-        (sum, l) =>
-          sum +
-          (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0),
+        (sum, l) => sum + getCurrentMonthlyRent((l as any).rent_schedules, l.executed_monthly_payment, l.current_monthly_rent, l.monthly_payment),
         0
       );
       const totalSqft = leasesWithSqft.reduce((sum, l) => sum + Number(l.square_footage ?? 0), 0);

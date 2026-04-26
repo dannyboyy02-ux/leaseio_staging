@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
 
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat('en-US', {
@@ -40,7 +41,8 @@ export function UpcomingRisks() {
       const { data: leases } = await supabase
         .from('leases')
         .select(
-          'id, request_title, filename, lease_end, executed_expiry_date, renewal_options, escalation_type, rent_escalation_type, executed_monthly_payment, current_monthly_rent, monthly_payment'
+          'id, request_title, filename, lease_end, executed_expiry_date, renewal_options, escalation_type, rent_escalation_type, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
+          'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace.id)
         .in('lifecycle_status', ['active', 'executed']);
@@ -74,11 +76,12 @@ export function UpcomingRisks() {
           ['index', 'cpi'].includes(escalationType) ||
           ['index', 'cpi'].includes(rentEscalationType);
 
-        const annualRent =
-          (lease.executed_monthly_payment ??
-            lease.current_monthly_rent ??
-            lease.monthly_payment ??
-            0) * 12;
+        const annualRent = getCurrentMonthlyRent(
+          (lease as any).rent_schedules,
+          lease.executed_monthly_payment,
+          lease.current_monthly_rent,
+          lease.monthly_payment,
+        ) * 12;
 
         if (
           hasRenewal &&

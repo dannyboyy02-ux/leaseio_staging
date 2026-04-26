@@ -9,6 +9,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 import { computePortfolioMetrics, type PortfolioMetrics } from '@/lib/portfolioAnalytics';
+import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
 
 interface PipelineData {
   pendingCount: number;
@@ -83,7 +84,8 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
           .select(
             'id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
             'lease_start, lease_end, executed_expiry_date, extracted_json, ' +
-            'term_months, escalation_rate, escalation_type, needs_escalation_review'
+            'term_months, escalation_rate, escalation_type, needs_escalation_review, ' +
+            'rent_schedules(period_start, period_end, monthly_amount)'
           )
           .eq('workspace_id', workspace!.id)
           .in('lifecycle_status', ['executed', 'active']),
@@ -103,12 +105,12 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
       const in90Days = new Date(now.getTime() + 90 * 86_400_000);
 
       const totalMonthlyRent = activeLeases.reduce((sum, lease) => {
-        const rent =
-          Number((lease as any).executed_monthly_payment) ||
-          Number(lease.current_monthly_rent) ||
-          Number((lease as any).monthly_payment) ||
-          0;
-        return sum + rent;
+        return sum + getCurrentMonthlyRent(
+          (lease as any).rent_schedules,
+          (lease as any).executed_monthly_payment,
+          lease.current_monthly_rent,
+          (lease as any).monthly_payment,
+        );
       }, 0);
 
       const expiringCount = activeLeases.filter((lease) => {
@@ -138,16 +140,18 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         const daysUntil = differenceInDays(nextMonth, now);
 
         const highestRentLease = activeLeases.reduce((max, lease) => {
-          const rent =
-            Number((lease as any).executed_monthly_payment) ||
-            Number(lease.current_monthly_rent) ||
-            Number((lease as any).monthly_payment) ||
-            0;
-          const maxRent =
-            Number((max as any).executed_monthly_payment) ||
-            Number(max.current_monthly_rent) ||
-            Number((max as any).monthly_payment) ||
-            0;
+          const rent = getCurrentMonthlyRent(
+            (lease as any).rent_schedules,
+            (lease as any).executed_monthly_payment,
+            lease.current_monthly_rent,
+            (lease as any).monthly_payment,
+          );
+          const maxRent = getCurrentMonthlyRent(
+            (max as any).rent_schedules,
+            (max as any).executed_monthly_payment,
+            max.current_monthly_rent,
+            (max as any).monthly_payment,
+          );
           return rent > maxRent ? lease : max;
         }, activeLeases[0]);
 

@@ -98,3 +98,37 @@ export function calculateLease(inputs: LeaseInputs): LeaseCalculations {
     endDate,
   };
 }
+
+export interface RentSchedulePeriod {
+  period_start: string;
+  period_end: string | null;
+  monthly_amount: number;
+}
+
+/**
+ * Returns the current monthly rent for a lease.
+ * Checks rent_schedules for a period covering today first,
+ * then falls back to the static extracted fields.
+ */
+export function getCurrentMonthlyRent(
+  rentSchedules: RentSchedulePeriod[] | null | undefined,
+  executedMonthlyPayment: number | null | undefined,
+  currentMonthlyRent: number | null | undefined,
+  monthlyPayment: number | null | undefined,
+): number {
+  if (rentSchedules && rentSchedules.length > 0) {
+    const today = new Date();
+    const current = rentSchedules.find((p) => {
+      const start = new Date(p.period_start);
+      const end = p.period_end ? new Date(p.period_end) : null;
+      return start <= today && (!end || end >= today);
+    });
+    if (current?.monthly_amount) return current.monthly_amount;
+  }
+  return (
+    Number(executedMonthlyPayment) ||
+    Number(currentMonthlyRent) ||
+    Number(monthlyPayment) ||
+    0
+  );
+}

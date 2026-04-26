@@ -12,6 +12,7 @@ import { differenceInDays, format } from 'date-fns';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
+import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
 
 interface UpcomingEvent {
   id: string;
@@ -87,7 +88,8 @@ export function UpcomingEvents() {
         .from('leases')
         .select(
           'id, filename, lease_end, executed_expiry_date, ' +
-          'current_monthly_rent, monthly_payment, executed_monthly_payment, extracted_json'
+          'current_monthly_rent, monthly_payment, executed_monthly_payment, extracted_json, ' +
+          'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace!.id)
         .in('lifecycle_status', ['executed', 'active']);
@@ -102,11 +104,12 @@ export function UpcomingEvents() {
           lease.filename,
         );
 
-        const monthlyRent =
-          Number((lease as any).executed_monthly_payment) ||
-          Number(lease.current_monthly_rent) ||
-          Number((lease as any).monthly_payment) ||
-          0;
+        const monthlyRent = getCurrentMonthlyRent(
+          (lease as any).rent_schedules,
+          (lease as any).executed_monthly_payment,
+          lease.current_monthly_rent,
+          (lease as any).monthly_payment,
+        );
 
         // Prefer executed_expiry_date, fall back to lease_end
         const expiryRaw = (lease as any).executed_expiry_date || lease.lease_end;
