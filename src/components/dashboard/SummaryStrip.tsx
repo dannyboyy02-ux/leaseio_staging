@@ -59,14 +59,14 @@ export function SummaryStrip() {
       );
 
       const leasesWithSqft = portfolioLeases.filter((l) => Number(l.square_footage ?? 0) > 0);
-      const totalAnnualRent = leasesWithSqft.reduce(
+      const totalMonthlyRent = leasesWithSqft.reduce(
         (sum, l) =>
           sum +
-          (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0) * 12,
+          (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0),
         0
       );
       const totalSqft = leasesWithSqft.reduce((sum, l) => sum + Number(l.square_footage ?? 0), 0);
-      const weightedAvgPerSqft = totalSqft > 0 ? totalAnnualRent / totalSqft : null;
+      const weightedAvgPerSqft = totalSqft > 0 ? totalMonthlyRent / totalSqft : null;
 
       const monthlyRentSub =
         weightedAvgPerSqft !== null
