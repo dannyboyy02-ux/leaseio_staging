@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { generateInviteToken } from "../_shared/resend.ts";
 
 const ALLOWED_ORIGINS = [
   'https://theleaseio.com', 'https://www.theleaseio.com', 'https://app.theleaseio.com',
@@ -20,13 +19,6 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   };
 }
 
-function escapeHtml(text: string): string {
-  const map: Record<string, string> = {
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
-  };
-  return text.replace(/[&<>"']/g, (m) => map[m]);
-}
-
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -34,8 +26,6 @@ serve(async (req) => {
   try {
     const supabaseUrl            = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const resendApiKey           = Deno.env.get('RESEND_API_KEY') ?? '';
-    const appUrl                 = Deno.env.get('APP_URL') ?? 'https://app.theleaseio.com';
 
     // Authenticate the requesting user
     const authHeader = req.headers.get('Authorization');
@@ -59,7 +49,7 @@ serve(async (req) => {
     const requestingUser = userData.user;
 
     const body = await req.json();
-    const { leaseId } = body;
+    const { leaseId, reason } = body as { leaseId?: string; reason?: string };
     if (!leaseId || typeof leaseId !== 'string') {
       return new Response(JSON.stringify({ error: 'leaseId is required' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -69,7 +59,7 @@ serve(async (req) => {
     // Fetch the lease
     const { data: lease, error: leaseError } = await supabaseAdmin
       .from('leases')
-      .select('id, name, workspace_id, model_locked, unlock_requested')
+      .select('id, request_title, filename, workspace_id, model_locked, lifecycle_status')
       .eq('id', leaseId)
       .single();
 
@@ -79,124 +69,74 @@ serve(async (req) => {
       });
     }
 
-    if (!(lease as any).model_locked) {
-      return new Response(JSON.stringify({ error: 'Lease is not locked' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    // Verify user is a member of the lease's workspace
+    const { data: membership } = await supabaseAdmin
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('workspace_id', (lease as any).workspace_id)
+      .eq('user_id', requestingUser.id)
+      .maybeSingle();
+
+    if (!membership) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    if ((lease as any).unlock_requested) {
-      return new Response(JSON.stringify({ error: 'Unlock already requested' }), {
+    // Only locked active leases can be unlock-requested
+    if (!(lease as any).model_locked || (lease as any).lifecycle_status !== 'active') {
+      return new Response(JSON.stringify({ error: 'Lease is not locked or not active' }), {
+        status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Prevent duplicate pending requests
+    const { data: existingRequest } = await supabaseAdmin
+      .from('lease_unlock_requests')
+      .select('id')
+      .eq('lease_id', leaseId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (existingRequest) {
+      return new Response(JSON.stringify({ error: 'An unlock request is already pending for this lease' }), {
         status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Generate token + set unlock request fields
-    const actionToken = generateInviteToken();
-    const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    // Create the unlock request
+    const requestReason = reason?.trim() || 'No reason provided';
+    const { data: unlockRequest, error: insertError } = await supabaseAdmin
+      .from('lease_unlock_requests')
+      .insert({
+        lease_id: leaseId,
+        workspace_id: (lease as any).workspace_id,
+        requested_by: requestingUser.id,
+        request_reason: requestReason,
+        status: 'pending',
+      })
+      .select('id')
+      .single();
 
-    const { error: updateError } = await supabaseAdmin
-      .from('leases')
-      .update({
-        unlock_requested: true,
-        unlock_requested_by: requestingUser.id,
-        unlock_requested_at: new Date().toISOString(),
-        unlock_action_token: actionToken,
-        unlock_token_expires_at: tokenExpiry,
-      } as any)
-      .eq('id', leaseId);
-
-    if (updateError) {
-      console.error('[request-lease-unlock] update error:', updateError.message);
-      return new Response(JSON.stringify({ error: 'Failed to record unlock request' }), {
+    if (insertError || !unlockRequest) {
+      console.error('[request-lease-unlock] insert error:', insertError?.message);
+      return new Response(JSON.stringify({ error: 'Failed to create unlock request' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Fetch requester profile for display name
-    const { data: requesterProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('first_name, last_name, email')
-      .eq('id', requestingUser.id)
-      .single();
-
-    const requesterName = requesterProfile?.first_name && requesterProfile?.last_name
-      ? `${requesterProfile.first_name} ${requesterProfile.last_name}`
-      : requesterProfile?.email ?? requestingUser.email ?? 'A team member';
-
-    // Fetch workspace admin emails
-    const { data: adminMembers } = await supabaseAdmin
-      .from('workspace_members')
-      .select('user_id')
-      .eq('workspace_id', (lease as any).workspace_id)
-      .eq('role', 'admin');
-
-    const adminUserIds = (adminMembers || []).map((m: any) => m.user_id);
-    let adminEmails: string[] = [];
-    if (adminUserIds.length > 0) {
-      const { data: adminProfiles } = await supabaseAdmin
-        .from('profiles')
-        .select('email')
-        .in('id', adminUserIds);
-      adminEmails = (adminProfiles || []).map((p: any) => p.email).filter(Boolean);
-    }
-
-    // Build action URLs
-    // Action links go directly to the edge function (self-contained HTML handler with redirect)
-    const leaseUrl = `${appUrl}/app/leases/${leaseId}`;
-    const functionsBaseUrl = `${supabaseUrl}/functions/v1`;
-    const approveUrl = `${functionsBaseUrl}/handle-unlock-action?token=${actionToken}&action=approve`;
-    const rejectUrl = `${functionsBaseUrl}/handle-unlock-action?token=${actionToken}&action=reject`;
-    const leaseName = escapeHtml((lease as any).name ?? 'Unnamed Lease');
-
-    // Send email to each admin
-    if (resendApiKey && adminEmails.length > 0) {
-      const fromAddress = Deno.env.get('RESEND_APPROVALS_FROM_EMAIL') ?? Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>';
-      const emailBody = JSON.stringify({
-        from: fromAddress,
-        to: adminEmails,
-        subject: `Unlock request for ${(lease as any).name ?? 'a lease'}`,
-        html: `
-          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Lease Unlock Request</h2>
-            <p><strong>${escapeHtml(requesterName)}</strong> has requested to unlock the lease <strong>${leaseName}</strong> for editing.</p>
-            <p><a href="${leaseUrl}" style="color: #2563eb;">View lease</a></p>
-            <p style="margin: 24px 0;">Please review and take action:</p>
-            <p>
-              <a href="${approveUrl}" style="background-color: #16a34a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-right: 12px;">
-                Approve Unlock
-              </a>
-              <a href="${rejectUrl}" style="background-color: #dc2626; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px;">
-                Reject Request
-              </a>
-            </p>
-            <p style="color: #666; font-size: 14px;">These links expire in 7 days.</p>
-          </div>
-        `,
-        text: `${requesterName} has requested to unlock "${(lease as any).name}" for editing.\n\nApprove: ${approveUrl}\nReject: ${rejectUrl}\n\nLinks expire in 7 days.`,
-      });
-
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${resendApiKey}`,
-        },
-        body: emailBody,
-      }).catch((err) => console.error('[request-lease-unlock] email error:', err));
-    } else {
-      console.warn('[request-lease-unlock] No admin emails found or no RESEND_API_KEY');
-    }
-
     // Log activity
-    await supabaseAdmin.from('lease_approval_actions').insert({
+    await supabaseAdmin.from('lease_activity_log').insert({
       lease_id: leaseId,
-      action: 'unlock_requested',
-      actor_id: requestingUser.id,
-      notes: 'Unlock request submitted',
-    } as any).catch(() => {/* non-critical */});
+      user_id: requestingUser.id,
+      activity_type: 'unlock_requested',
+      details: {
+        unlock_request_id: (unlockRequest as any).id,
+        reason: requestReason,
+      },
+    }).catch((err: any) => console.error('[request-lease-unlock] activity log error:', err));
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, requestId: (unlockRequest as any).id }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

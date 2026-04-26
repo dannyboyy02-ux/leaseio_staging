@@ -1,3 +1,4 @@
+npm warn exec The following package was not found and will be installed: supabase@2.95.3
 export type Json =
   | string
   | number
@@ -288,6 +289,13 @@ export type Database = {
             referencedRelation: "v_review_queue"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "lease_activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       lease_approval_actions: {
@@ -373,6 +381,124 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_change_set_items: {
+        Row: {
+          change_set_id: string
+          created_at: string
+          field_label: string
+          field_name: string
+          id: string
+          old_value: string | null
+          proposed_value: string | null
+          source_section: string | null
+        }
+        Insert: {
+          change_set_id: string
+          created_at?: string
+          field_label: string
+          field_name: string
+          id?: string
+          old_value?: string | null
+          proposed_value?: string | null
+          source_section?: string | null
+        }
+        Update: {
+          change_set_id?: string
+          created_at?: string
+          field_label?: string
+          field_name?: string
+          id?: string
+          old_value?: string | null
+          proposed_value?: string | null
+          source_section?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_change_set_items_change_set_id_fkey"
+            columns: ["change_set_id"]
+            isOneToOne: false
+            referencedRelation: "lease_change_sets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_change_sets: {
+        Row: {
+          change_summary: string | null
+          created_at: string
+          id: string
+          lease_id: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string | null
+          submitted_by: string
+          unlock_request_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          change_summary?: string | null
+          created_at?: string
+          id?: string
+          lease_id: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by: string
+          unlock_request_id?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          change_summary?: string | null
+          created_at?: string
+          id?: string
+          lease_id?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string
+          unlock_request_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_change_sets_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_change_sets_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_change_sets_unlock_request_id_fkey"
+            columns: ["unlock_request_id"]
+            isOneToOne: false
+            referencedRelation: "lease_unlock_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_change_sets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -575,6 +701,70 @@ export type Database = {
           },
         ]
       }
+      lease_unlock_requests: {
+        Row: {
+          created_at: string
+          id: string
+          lease_id: string
+          request_reason: string
+          requested_by: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lease_id: string
+          request_reason: string
+          requested_by: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lease_id?: string
+          request_reason?: string
+          requested_by?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_unlock_requests_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_unlock_requests_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_unlock_requests_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leases: {
         Row: {
           activated_at: string | null
@@ -584,6 +774,7 @@ export type Database = {
           avg_confidence_score: number | null
           base_rent_amount: string | null
           base_rent_frequency: string | null
+          building: string | null
           business_unit: string | null
           calc_cash_pl_delta: number | null
           calc_pv_liability: number | null
@@ -638,6 +829,7 @@ export type Database = {
           lease_start: string | null
           lease_type: string | null
           lifecycle_status: string | null
+          location: string | null
           manager_approved_at: string | null
           manager_approved_by: string | null
           manager_rejection_reason: string | null
@@ -650,6 +842,7 @@ export type Database = {
           parent_lease_id: string | null
           processed_at: string | null
           property_address: string | null
+          region: string | null
           rejection_reason: string | null
           renewal_options: string | null
           rent_commencement_date: string | null
@@ -671,6 +864,11 @@ export type Database = {
           tenant_name: string | null
           term_months: number | null
           termination_clauses: string | null
+          unlock_action_token: string | null
+          unlock_requested: boolean
+          unlock_requested_at: string | null
+          unlock_requested_by: string | null
+          unlock_token_expires_at: string | null
           uploaded_at: string
           user_id: string
           variance_commencement_days: number | null
@@ -691,6 +889,7 @@ export type Database = {
           avg_confidence_score?: number | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
+          building?: string | null
           business_unit?: string | null
           calc_cash_pl_delta?: number | null
           calc_pv_liability?: number | null
@@ -745,6 +944,7 @@ export type Database = {
           lease_start?: string | null
           lease_type?: string | null
           lifecycle_status?: string | null
+          location?: string | null
           manager_approved_at?: string | null
           manager_approved_by?: string | null
           manager_rejection_reason?: string | null
@@ -757,6 +957,7 @@ export type Database = {
           parent_lease_id?: string | null
           processed_at?: string | null
           property_address?: string | null
+          region?: string | null
           rejection_reason?: string | null
           renewal_options?: string | null
           rent_commencement_date?: string | null
@@ -778,6 +979,11 @@ export type Database = {
           tenant_name?: string | null
           term_months?: number | null
           termination_clauses?: string | null
+          unlock_action_token?: string | null
+          unlock_requested?: boolean
+          unlock_requested_at?: string | null
+          unlock_requested_by?: string | null
+          unlock_token_expires_at?: string | null
           uploaded_at?: string
           user_id: string
           variance_commencement_days?: number | null
@@ -798,6 +1004,7 @@ export type Database = {
           avg_confidence_score?: number | null
           base_rent_amount?: string | null
           base_rent_frequency?: string | null
+          building?: string | null
           business_unit?: string | null
           calc_cash_pl_delta?: number | null
           calc_pv_liability?: number | null
@@ -852,6 +1059,7 @@ export type Database = {
           lease_start?: string | null
           lease_type?: string | null
           lifecycle_status?: string | null
+          location?: string | null
           manager_approved_at?: string | null
           manager_approved_by?: string | null
           manager_rejection_reason?: string | null
@@ -864,6 +1072,7 @@ export type Database = {
           parent_lease_id?: string | null
           processed_at?: string | null
           property_address?: string | null
+          region?: string | null
           rejection_reason?: string | null
           renewal_options?: string | null
           rent_commencement_date?: string | null
@@ -885,6 +1094,11 @@ export type Database = {
           tenant_name?: string | null
           term_months?: number | null
           termination_clauses?: string | null
+          unlock_action_token?: string | null
+          unlock_requested?: boolean
+          unlock_requested_at?: string | null
+          unlock_requested_by?: string | null
+          unlock_token_expires_at?: string | null
           uploaded_at?: string
           user_id?: string
           variance_commencement_days?: number | null
@@ -1368,6 +1582,7 @@ export type Database = {
       workspaces: {
         Row: {
           approval_threshold: number | null
+          asset_type_config: Json | null
           backdoor_enabled: boolean
           billing_interval: string
           covenant_threshold: number | null
@@ -1385,6 +1600,7 @@ export type Database = {
         }
         Insert: {
           approval_threshold?: number | null
+          asset_type_config?: Json | null
           backdoor_enabled?: boolean
           billing_interval?: string
           covenant_threshold?: number | null
@@ -1402,6 +1618,7 @@ export type Database = {
         }
         Update: {
           approval_threshold?: number | null
+          asset_type_config?: Json | null
           backdoor_enabled?: boolean
           billing_interval?: string
           covenant_threshold?: number | null

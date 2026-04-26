@@ -221,12 +221,33 @@ function LeaseQueueCard({
   );
 }
 
+interface UnlockRequest {
+  id: string;
+  lease_id: string;
+  request_reason: string;
+  requested_by: string;
+  created_at: string;
+  leaseName?: string;
+  requesterName?: string;
+}
+
+interface ChangeSetForReview {
+  id: string;
+  lease_id: string;
+  change_summary: string | null;
+  submitted_at: string | null;
+  leaseName?: string;
+  submitterName?: string;
+  items: Array<{ field_label: string; old_value: string | null; proposed_value: string | null }>;
+}
+
 export default function ApprovalQueue() {
   const navigate = useNavigate();
-  const { user, workspace, userFunctionalRoles } = useApp();
+  const { user, workspace, userFunctionalRoles, userRole } = useApp();
 
   const isManagerApprover = userFunctionalRoles.includes('manager_approver');
   const isFinancialApprover = userFunctionalRoles.includes('financial_approver');
+  const isAdminUser = userRole === 'admin' || userRole === 'owner';
 
   const [pendingMyReview, setPendingMyReview] = useState<QueueLease[]>([]);
   const [allPending, setAllPending] = useState<QueueLease[]>([]);
@@ -237,6 +258,18 @@ export default function ApprovalQueue() {
   const [rejectTarget, setRejectTarget] = useState<QueueLease | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [isActing, setIsActing] = useState(false);
+
+  // Governance state
+  const [unlockRequests, setUnlockRequests] = useState<UnlockRequest[]>([]);
+  const [changeSets, setChangeSets] = useState<ChangeSetForReview[]>([]);
+  const [governanceLoading, setGovernanceLoading] = useState(false);
+  const [unlockActTarget, setUnlockActTarget] = useState<UnlockRequest | null>(null);
+  const [unlockActType, setUnlockActType] = useState<'approve' | 'reject' | null>(null);
+  const [changeSetActTarget, setChangeSetActTarget] = useState<ChangeSetForReview | null>(null);
+  const [changeSetActType, setChangeSetActType] = useState<'approve' | 'reject' | null>(null);
+  const [governanceNote, setGovernanceNote] = useState('');
+  const [isGovernanceActing, setIsGovernanceActing] = useState(false);
+  const [expandedChangeSet, setExpandedChangeSet] = useState<string | null>(null);
 
   const attachProfiles = async (leases: any[]): Promise<QueueLease[]> => {
     if (!leases.length) return [];
@@ -351,6 +384,213 @@ export default function ApprovalQueue() {
     window.addEventListener('focus', handler);
     return () => window.removeEventListener('focus', handler);
   }, [fetchLeases]);
+
+  const fetchGovernanceData = useCallback(async () => {
+    if (!workspace?.id || (!isAdminUser && !isFinancialApprover)) return;
+    setGovernanceLoading(true);
+    try {
+      const tasks: Promise<any>[] = [];
+      if (isAdminUser) {
+        tasks.push(
+          (supabase as any)
+            .from('lease_unlock_requests')
+            .select('id, lease_id, request_reason, created_at, requested_by')
+            .eq('workspace_id', workspace.id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+        );
+      } else {
+        tasks.push(Promise.resolve({ data: [] }));
+      }
+      if (isAdminUser || isFinancialApprover) {
+        tasks.push(
+          (supabase as any)
+            .from('lease_change_sets')
+            .select('id, lease_id, change_summary, submitted_at, submitted_by, lease_change_set_items(field_label, old_value, proposed_value)')
+            .eq('workspace_id', workspace.id)
+            .eq('status', 'pending_approval')
+            .order('submitted_at', { ascending: false })
+        );
+      } else {
+        tasks.push(Promise.resolve({ data: [] }));
+      }
+
+      const [unlockResult, csResult] = await Promise.all(tasks);
+
+      // Enrich unlock requests with lease names and requester names
+      const unlockRows: UnlockRequest[] = [];
+      for (const row of unlockResult.data ?? []) {
+        const [leaseRes, profileRes] = await Promise.all([
+          supabase.from('leases').select('request_title, filename').eq('id', row.lease_id).single(),
+          supabase.from('profiles').select('first_name, last_name, email').eq('id', row.requested_by).single(),
+        ]);
+        unlockRows.push({
+          ...row,
+          leaseName: (leaseRes.data as any)?.request_title ?? (leaseRes.data as any)?.filename ?? 'Unnamed lease',
+          requesterName: (profileRes.data as any)?.first_name
+            ? `${(profileRes.data as any).first_name} ${(profileRes.data as any).last_name}`
+            : (profileRes.data as any)?.email ?? 'Unknown user',
+        });
+      }
+
+      // Enrich change sets with lease names and submitter names
+      const csRows: ChangeSetForReview[] = [];
+      for (const row of csResult.data ?? []) {
+        const [leaseRes, profileRes] = await Promise.all([
+          supabase.from('leases').select('request_title, filename').eq('id', row.lease_id).single(),
+          supabase.from('profiles').select('first_name, last_name, email').eq('id', row.submitted_by).single(),
+        ]);
+        csRows.push({
+          id: row.id,
+          lease_id: row.lease_id,
+          change_summary: row.change_summary,
+          submitted_at: row.submitted_at,
+          leaseName: (leaseRes.data as any)?.request_title ?? (leaseRes.data as any)?.filename ?? 'Unnamed lease',
+          submitterName: (profileRes.data as any)?.first_name
+            ? `${(profileRes.data as any).first_name} ${(profileRes.data as any).last_name}`
+            : (profileRes.data as any)?.email ?? 'Unknown user',
+          items: row.lease_change_set_items ?? [],
+        });
+      }
+
+      setUnlockRequests(unlockRows);
+      setChangeSets(csRows);
+    } catch (err) {
+      console.error('Error fetching governance data:', err);
+    } finally {
+      setGovernanceLoading(false);
+    }
+  }, [workspace?.id, isAdminUser, isFinancialApprover]);
+
+  useEffect(() => { fetchGovernanceData(); }, [fetchGovernanceData]);
+
+  const handleUnlockAct = async () => {
+    if (!unlockActTarget || !user?.id || !unlockActType) return;
+    setIsGovernanceActing(true);
+    try {
+      const now = new Date().toISOString();
+      if (unlockActType === 'approve') {
+        // Approve the request: unlock lease, create draft change set
+        await (supabase as any)
+          .from('lease_unlock_requests')
+          .update({ status: 'approved', reviewed_by: user.id, reviewed_at: now, review_note: governanceNote || null })
+          .eq('id', unlockActTarget.id);
+
+        await supabase.from('leases').update({ model_locked: false } as any).eq('id', unlockActTarget.lease_id);
+
+        await (supabase as any)
+          .from('lease_change_sets')
+          .insert({
+            lease_id: unlockActTarget.lease_id,
+            workspace_id: workspace!.id,
+            unlock_request_id: unlockActTarget.id,
+            submitted_by: unlockActTarget.requested_by,
+            status: 'draft',
+          });
+
+        await supabase.from('lease_activity_log').insert({
+          lease_id: unlockActTarget.lease_id,
+          user_id: user.id,
+          activity_type: 'unlock_approved',
+          details: { unlock_request_id: unlockActTarget.id, note: governanceNote || null },
+        });
+        toast.success('Unlock approved — lease is now unlocked for staged editing');
+      } else {
+        await (supabase as any)
+          .from('lease_unlock_requests')
+          .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: now, review_note: governanceNote || null })
+          .eq('id', unlockActTarget.id);
+
+        await supabase.from('lease_activity_log').insert({
+          lease_id: unlockActTarget.lease_id,
+          user_id: user.id,
+          activity_type: 'unlock_rejected',
+          details: { unlock_request_id: unlockActTarget.id, note: governanceNote || null },
+        });
+        toast.success('Unlock request rejected');
+      }
+      setUnlockActTarget(null);
+      setUnlockActType(null);
+      setGovernanceNote('');
+      fetchGovernanceData();
+    } catch (err) {
+      console.error('Error acting on unlock request:', err);
+      toast.error('Action failed');
+    } finally {
+      setIsGovernanceActing(false);
+    }
+  };
+
+  const handleChangeSetAct = async () => {
+    if (!changeSetActTarget || !user?.id || !changeSetActType) return;
+    setIsGovernanceActing(true);
+    try {
+      const now = new Date().toISOString();
+      if (changeSetActType === 'approve') {
+        // Write each proposed value to the lease columns using field_name (not field_label)
+        // Items are fetched with field_label for display; we need the full items with field_name
+        const { data: fullItems } = await (supabase as any)
+          .from('lease_change_set_items')
+          .select('field_name, proposed_value')
+          .eq('change_set_id', changeSetActTarget.id);
+
+        const fieldToColumn: Record<string, string> = {
+          tenant_name: 'executed_tenant_name',
+          landlord_name: 'executed_landlord_name',
+          commencement_date: 'executed_commencement_date',
+          expiry_date: 'executed_expiry_date',
+          monthly_payment: 'executed_monthly_payment',
+          rent_review_clause: 'executed_rent_review_clause',
+          break_clause: 'executed_break_clause',
+        };
+        const leaseUpdate: Record<string, any> = {};
+        for (const item of (fullItems ?? [])) {
+          const col = fieldToColumn[item.field_name];
+          if (col) leaseUpdate[col] = item.proposed_value;
+        }
+        if (Object.keys(leaseUpdate).length > 0) {
+          await supabase.from('leases').update(leaseUpdate as any).eq('id', changeSetActTarget.lease_id);
+        }
+        // Re-lock the lease
+        await supabase.from('leases').update({ model_locked: true } as any).eq('id', changeSetActTarget.lease_id);
+
+        await (supabase as any)
+          .from('lease_change_sets')
+          .update({ status: 'approved', reviewed_by: user.id, reviewed_at: now, review_note: governanceNote || null })
+          .eq('id', changeSetActTarget.id);
+
+        await supabase.from('lease_activity_log').insert({
+          lease_id: changeSetActTarget.lease_id,
+          user_id: user.id,
+          activity_type: 'change_approved',
+          details: { change_set_id: changeSetActTarget.id, note: governanceNote || null },
+        });
+        toast.success('Changes approved and applied to lease');
+      } else {
+        await (supabase as any)
+          .from('lease_change_sets')
+          .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: now, review_note: governanceNote || null })
+          .eq('id', changeSetActTarget.id);
+
+        await supabase.from('lease_activity_log').insert({
+          lease_id: changeSetActTarget.lease_id,
+          user_id: user.id,
+          activity_type: 'change_rejected',
+          details: { change_set_id: changeSetActTarget.id, note: governanceNote || null },
+        });
+        toast.success('Changes rejected — submitter can revise or cancel');
+      }
+      setChangeSetActTarget(null);
+      setChangeSetActType(null);
+      setGovernanceNote('');
+      fetchGovernanceData();
+    } catch (err) {
+      console.error('Error acting on change set:', err);
+      toast.error('Action failed');
+    } finally {
+      setIsGovernanceActing(false);
+    }
+  };
 
   const handleApprove = async () => {
     if (!approveTarget || !user?.id) return;
@@ -544,6 +784,8 @@ export default function ApprovalQueue() {
   };
 
   const pendingCount = pendingMyReview.length;
+  const governanceCount = unlockRequests.length + changeSets.length;
+  const showGovernanceTab = isAdminUser || isFinancialApprover;
 
   return (
     <AppLayout>
@@ -554,7 +796,7 @@ export default function ApprovalQueue() {
 
       <div className="p-4 sm:p-6 max-w-3xl mx-auto">
         <Tabs defaultValue="mine">
-          <TabsList className="w-full sm:w-auto mb-6 grid grid-cols-3 sm:inline-flex">
+          <TabsList className={`w-full sm:w-auto mb-6 grid sm:inline-flex ${showGovernanceTab ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="mine" className="gap-1.5">
               Needs My Review
               {pendingCount > 0 && (
@@ -565,13 +807,240 @@ export default function ApprovalQueue() {
             </TabsTrigger>
             <TabsTrigger value="all">All Pending</TabsTrigger>
             <TabsTrigger value="reviewed">Reviewed</TabsTrigger>
+            {showGovernanceTab && (
+              <TabsTrigger value="governance" className="gap-1.5">
+                Governance
+                {governanceCount > 0 && (
+                  <Badge variant="destructive" className="text-[10px] h-4 min-w-[1.25rem] px-1">
+                    {governanceCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="mine">{renderList(pendingMyReview)}</TabsContent>
           <TabsContent value="all">{renderList(allPending, true)}</TabsContent>
           <TabsContent value="reviewed">{renderList(reviewed, true)}</TabsContent>
+
+          {showGovernanceTab && (
+            <TabsContent value="governance" className="space-y-6">
+              {governanceLoading ? (
+                <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
+              ) : (
+                <>
+                  {isAdminUser && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                        Unlock Requests ({unlockRequests.length})
+                      </p>
+                      {unlockRequests.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-6">No pending unlock requests</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {unlockRequests.map((req) => (
+                            <Card key={req.id} className="overflow-hidden">
+                              <CardContent className="p-4 space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <button
+                                      onClick={() => navigate(`/app/leases/${req.lease_id}`)}
+                                      className="text-sm font-semibold hover:underline text-left"
+                                    >
+                                      {req.leaseName}
+                                    </button>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      Requested by {req.requesterName} · {format(new Date(req.created_at), 'MMM d, yyyy')}
+                                    </p>
+                                  </div>
+                                </div>
+                                {req.request_reason && (
+                                  <p className="text-xs bg-muted/40 rounded px-2 py-1.5">
+                                    <span className="font-medium">Reason: </span>{req.request_reason}
+                                  </p>
+                                )}
+                                <div className="flex gap-2 pt-1">
+                                  <Button size="sm" variant="outline"
+                                    className="border-green-500 text-green-700 hover:bg-green-50"
+                                    onClick={() => { setUnlockActTarget(req); setUnlockActType('approve'); setGovernanceNote(''); }}
+                                  >
+                                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />Approve & Unlock
+                                  </Button>
+                                  <Button size="sm" variant="ghost"
+                                    className="text-muted-foreground"
+                                    onClick={() => { setUnlockActTarget(req); setUnlockActType('reject'); setGovernanceNote(''); }}
+                                  >
+                                    <XCircle className="h-3.5 w-3.5 mr-1.5" />Deny
+                                  </Button>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {(isAdminUser || isFinancialApprover) && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                        Change Set Approvals ({changeSets.length})
+                      </p>
+                      {changeSets.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-6">No pending change approvals</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {changeSets.map((cs) => (
+                            <Card key={cs.id} className="overflow-hidden">
+                              <CardContent className="p-4 space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <button
+                                      onClick={() => navigate(`/app/leases/${cs.lease_id}`)}
+                                      className="text-sm font-semibold hover:underline text-left"
+                                    >
+                                      {cs.leaseName}
+                                    </button>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      Submitted by {cs.submitterName}
+                                      {cs.submitted_at && <> · {format(new Date(cs.submitted_at), 'MMM d, yyyy')}</>}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    size="sm" variant="ghost"
+                                    className="text-xs gap-1 shrink-0"
+                                    onClick={() => setExpandedChangeSet(expandedChangeSet === cs.id ? null : cs.id)}
+                                  >
+                                    {expandedChangeSet === cs.id ? 'Hide' : 'View'} changes
+                                    <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expandedChangeSet === cs.id ? 'rotate-90' : ''}`} />
+                                  </Button>
+                                </div>
+                                {cs.change_summary && (
+                                  <p className="text-xs bg-muted/40 rounded px-2 py-1.5">
+                                    <span className="font-medium">Summary: </span>{cs.change_summary}
+                                  </p>
+                                )}
+                                {expandedChangeSet === cs.id && cs.items.length > 0 && (
+                                  <div className="overflow-x-auto border rounded">
+                                    <table className="w-full text-xs">
+                                      <thead>
+                                        <tr className="border-b bg-muted/40">
+                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">Field</th>
+                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">Current</th>
+                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">Proposed</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {cs.items.map((item, i) => (
+                                          <tr key={i} className="border-b last:border-0">
+                                            <td className="py-1.5 px-3 font-medium text-muted-foreground">{item.field_label}</td>
+                                            <td className="py-1.5 px-3 text-muted-foreground">{item.old_value ?? '—'}</td>
+                                            <td className="py-1.5 px-3 font-medium text-green-700">{item.proposed_value ?? '—'}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                                <div className="flex gap-2 pt-1">
+                                  <Button size="sm" variant="outline"
+                                    className="border-green-500 text-green-700 hover:bg-green-50"
+                                    onClick={() => { setChangeSetActTarget(cs); setChangeSetActType('approve'); setGovernanceNote(''); }}
+                                  >
+                                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />Approve Changes
+                                  </Button>
+                                  <Button size="sm" variant="ghost"
+                                    className="text-muted-foreground"
+                                    onClick={() => { setChangeSetActTarget(cs); setChangeSetActType('reject'); setGovernanceNote(''); }}
+                                  >
+                                    <XCircle className="h-3.5 w-3.5 mr-1.5" />Reject
+                                  </Button>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </TabsContent>
+          )}
         </Tabs>
       </div>
+
+      {/* Governance: Unlock Request Action Dialog */}
+      <Dialog
+        open={!!unlockActTarget}
+        onOpenChange={(o) => { if (!o) { setUnlockActTarget(null); setUnlockActType(null); setGovernanceNote(''); } }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {unlockActType === 'approve' ? 'Approve unlock request?' : 'Deny unlock request?'}
+            </DialogTitle>
+            <DialogDescription>
+              {unlockActType === 'approve'
+                ? `Approving will unlock "${unlockActTarget?.leaseName}" for staged editing. Changes will require financial approval before taking effect.`
+                : `Denying will keep "${unlockActTarget?.leaseName}" locked. The submitter will see the denied status.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="gov-note" className="text-sm font-medium">Note {unlockActType === 'reject' && <span className="text-muted-foreground">(optional)</span>}</Label>
+            <Textarea id="gov-note" className="mt-2" rows={2} placeholder="Optional note to the requester..."
+              value={governanceNote} onChange={(e) => setGovernanceNote(e.target.value)} />
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => { setUnlockActTarget(null); setUnlockActType(null); setGovernanceNote(''); }} disabled={isGovernanceActing}>Cancel</Button>
+            <Button
+              variant={unlockActType === 'approve' ? 'default' : 'destructive'}
+              onClick={handleUnlockAct}
+              disabled={isGovernanceActing}
+            >
+              {isGovernanceActing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {unlockActType === 'approve' ? 'Approve & Unlock' : 'Deny Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Governance: Change Set Action Dialog */}
+      <Dialog
+        open={!!changeSetActTarget}
+        onOpenChange={(o) => { if (!o) { setChangeSetActTarget(null); setChangeSetActType(null); setGovernanceNote(''); } }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {changeSetActType === 'approve' ? 'Approve proposed changes?' : 'Reject proposed changes?'}
+            </DialogTitle>
+            <DialogDescription>
+              {changeSetActType === 'approve'
+                ? `Approving will apply ${changeSetActTarget?.items.length ?? 0} field change(s) to "${changeSetActTarget?.leaseName}" and re-lock it.`
+                : `Rejecting returns the change set to the submitter for revision. The lease stays unlocked.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="cs-note" className="text-sm font-medium">
+              Note {changeSetActType === 'approve' ? <span className="text-muted-foreground">(optional)</span> : <span className="text-destructive">*</span>}
+            </Label>
+            <Textarea id="cs-note" className="mt-2" rows={3} placeholder="Reason or feedback..."
+              value={governanceNote} onChange={(e) => setGovernanceNote(e.target.value)} />
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => { setChangeSetActTarget(null); setChangeSetActType(null); setGovernanceNote(''); }} disabled={isGovernanceActing}>Cancel</Button>
+            <Button
+              variant={changeSetActType === 'approve' ? 'default' : 'destructive'}
+              onClick={handleChangeSetAct}
+              disabled={isGovernanceActing || (changeSetActType === 'reject' && !governanceNote.trim())}
+            >
+              {isGovernanceActing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {changeSetActType === 'approve' ? 'Approve & Apply' : 'Reject Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Manager Approve Confirmation Dialog */}
       <Dialog open={!!approveTarget} onOpenChange={(o) => !o && setApproveTarget(null)}>

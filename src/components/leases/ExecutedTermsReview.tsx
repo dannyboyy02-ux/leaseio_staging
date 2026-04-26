@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Pencil, X, Save, CheckCircle, Clock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +36,10 @@ export interface ExecutedTermsReviewProps {
   executedTerms: ExecutedTerms;
   canEdit: boolean;
   onTermUpdated: () => void;
+  /** When provided, saves go to lease_change_set_items instead of lease columns */
+  changeSetId?: string;
+  /** Expose staged item count to parent for submit button visibility */
+  onStagedCountChange?: (count: number) => void;
 }
 
 type FieldKey = 'tenant_name' | 'landlord_name' | 'commencement_date' | 'expiry_date' | 'monthly_payment' | 'rent_review_clause' | 'break_clause';
@@ -77,11 +81,28 @@ function ConfBadge({ score }: { score: number | undefined }) {
   return <Badge variant="outline" className="text-xs text-destructive border-destructive/30">{pct}%</Badge>;
 }
 
-export function ExecutedTermsReview({ leaseId, pipelineTerms, executedTerms, canEdit, onTermUpdated }: ExecutedTermsReviewProps) {
+export function ExecutedTermsReview({ leaseId, pipelineTerms, executedTerms, canEdit, onTermUpdated, changeSetId, onStagedCountChange }: ExecutedTermsReviewProps) {
   const [editingField, setEditingField] = useState<FieldKey | null>(null);
   const [editValue, setEditValue] = useState('');
   const [editReason, setEditReason] = useState('');
   const [saving, setSaving] = useState(false);
+  // field_name → proposed_value for staged items
+  const [stagedItems, setStagedItems] = useState<Record<string, string | null>>({});
+
+  // Load existing staged items when in staged editing mode
+  useEffect(() => {
+    if (!changeSetId) { setStagedItems({}); return; }
+    (supabase as any)
+      .from('lease_change_set_items')
+      .select('field_name, proposed_value')
+      .eq('change_set_id', changeSetId)
+      .then(({ data }: { data: Array<{ field_name: string; proposed_value: string | null }> | null }) => {
+        const map: Record<string, string | null> = {};
+        (data ?? []).forEach((item) => { map[item.field_name] = item.proposed_value; });
+        setStagedItems(map);
+        onStagedCountChange?.(Object.keys(map).length);
+      });
+  }, [changeSetId]);
 
   const getPipeline = (field: FieldKey): string | number | null => {
     switch (field) {
@@ -130,22 +151,56 @@ export function ExecutedTermsReview({ leaseId, pipelineTerms, executedTerms, can
         if (isNaN(n)) { toast.error('Monthly payment must be a number'); return; }
         parsed = n;
       }
-      const { error: auditErr } = await supabase.from('executed_term_edits').insert({
-        lease_id: leaseId, field_name: field,
-        original_value: original !== null ? String(original) : null,
-        edited_value: parsed !== null ? String(parsed) : null,
-        edited_by: user.id, reason: editReason.trim(),
-      });
-      if (auditErr) throw new Error(`Audit insert failed: ${auditErr.message}`);
-      const { error: updErr } = await supabase.from('leases').update({ [DB_COLUMN_MAP[field]]: parsed }).eq('id', leaseId);
-      if (updErr) throw new Error(`Update failed: ${updErr.message}`);
-      await supabase.from('lease_activity_log').insert({
-        lease_id: leaseId, user_id: user.id, activity_type: 'status_change',
-        details: { action: 'executed_terms_edited', field, original: original !== null ? String(original) : null, edited: parsed !== null ? String(parsed) : null, reason: editReason.trim() },
-      });
-      toast.success(`${FIELD_LABELS[field]} updated`);
-      cancelEdit();
-      onTermUpdated();
+
+      if (changeSetId) {
+        // Staged editing mode: write to change_set_items, NOT to lease columns
+        const proposedStr = parsed !== null ? String(parsed) : null;
+        const oldStr = original !== null ? String(original) : null;
+
+        // Upsert: delete existing item for this field then insert new one
+        await (supabase as any)
+          .from('lease_change_set_items')
+          .delete()
+          .eq('change_set_id', changeSetId)
+          .eq('field_name', field);
+
+        const { error: itemErr } = await (supabase as any)
+          .from('lease_change_set_items')
+          .insert({
+            change_set_id: changeSetId,
+            field_name: field,
+            field_label: FIELD_LABELS[field],
+            old_value: oldStr,
+            proposed_value: proposedStr,
+            source_section: 'executed_terms',
+          });
+        if (itemErr) throw new Error(`Stage failed: ${itemErr.message}`);
+
+        const newStaged = { ...stagedItems, [field]: proposedStr };
+        setStagedItems(newStaged);
+        onStagedCountChange?.(Object.keys(newStaged).length);
+        toast.success(`${FIELD_LABELS[field]} staged — submit changes when ready`);
+        cancelEdit();
+        onTermUpdated();
+      } else {
+        // Direct edit mode (legacy — only available without change set)
+        const { error: auditErr } = await supabase.from('executed_term_edits').insert({
+          lease_id: leaseId, field_name: field,
+          original_value: original !== null ? String(original) : null,
+          edited_value: parsed !== null ? String(parsed) : null,
+          edited_by: user.id, reason: editReason.trim(),
+        });
+        if (auditErr) throw new Error(`Audit insert failed: ${auditErr.message}`);
+        const { error: updErr } = await supabase.from('leases').update({ [DB_COLUMN_MAP[field]]: parsed }).eq('id', leaseId);
+        if (updErr) throw new Error(`Update failed: ${updErr.message}`);
+        await supabase.from('lease_activity_log').insert({
+          lease_id: leaseId, user_id: user.id, activity_type: 'status_change',
+          details: { action: 'executed_terms_edited', field, original: original !== null ? String(original) : null, edited: parsed !== null ? String(parsed) : null, reason: editReason.trim() },
+        });
+        toast.success(`${FIELD_LABELS[field]} updated`);
+        cancelEdit();
+        onTermUpdated();
+      }
     } catch (error: any) {
       toast.error(error.message || 'Failed to save edit');
     } finally {
@@ -193,7 +248,8 @@ export function ExecutedTermsReview({ leaseId, pipelineTerms, executedTerms, can
                           </div>
                           <div className="flex gap-1.5">
                             <Button size="sm" className="h-6 text-xs px-2" onClick={() => saveEdit(field)} disabled={saving}>
-                              {saving ? <Clock className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}Save
+                              {saving ? <Clock className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                              {changeSetId ? 'Stage' : 'Save'}
                             </Button>
                             <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={cancelEdit}>
                               <X className="h-3 w-3 mr-1" />Cancel
@@ -201,8 +257,13 @@ export function ExecutedTermsReview({ leaseId, pipelineTerms, executedTerms, can
                           </div>
                         </div>
                       ) : (
-                        <span className={getExecuted(field) === null ? 'text-muted-foreground/50 italic' : ''}>
-                          {fmtField(field, getExecuted(field))}
+                        <span className={`flex items-center gap-1.5 ${getExecuted(field) === null && !stagedItems[field] ? 'text-muted-foreground/50 italic' : ''}`}>
+                          {stagedItems[field] !== undefined
+                            ? fmtField(field, stagedItems[field])
+                            : fmtField(field, getExecuted(field))}
+                          {stagedItems[field] !== undefined && (
+                            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 text-blue-600 border-blue-300">Staged</Badge>
+                          )}
                         </span>
                       )}
                     </td>

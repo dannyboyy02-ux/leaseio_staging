@@ -172,6 +172,10 @@ export default function LeaseReview() {
     request_description: '',
   });
   const [savingEdits, setSavingEdits] = useState(false);
+  const [pendingUnlockRequest, setPendingUnlockRequest] = useState<any>(null);
+  const [activeChangeSet, setActiveChangeSet] = useState<any>(null);
+  const [stagedItemCount, setStagedItemCount] = useState(0);
+  const [submittingChanges, setSubmittingChanges] = useState(false);
 
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
@@ -614,8 +618,8 @@ export default function LeaseReview() {
           setAuditLog(data.audit_log as unknown as AuditEntry[]);
         }
 
-        // Fetch rent schedule, risks, PDF URL, and workspace asset types in parallel
-        const [rsResult, riskResult, pdfResult, wsResult] = await Promise.all([
+        // Fetch rent schedule, risks, PDF URL, workspace asset types, and governance state in parallel
+        const [rsResult, riskResult, pdfResult, wsResult, unlockResult, changeSetResult] = await Promise.all([
           supabase.from("rent_schedules").select("*").eq("lease_id", leaseId).order("period_start"),
           supabase.from("risks").select("*").eq("lease_id", leaseId),
           data.storage_path
@@ -624,10 +628,24 @@ export default function LeaseReview() {
           data.workspace_id
             ? (supabase as any).from("workspaces").select("asset_type_config").eq("id", data.workspace_id).single()
             : Promise.resolve(null),
+          (supabase as any)
+            .from('lease_unlock_requests')
+            .select('id, status, requested_by, request_reason, created_at')
+            .eq('lease_id', leaseId)
+            .eq('status', 'pending')
+            .maybeSingle(),
+          (supabase as any)
+            .from('lease_change_sets')
+            .select('id, status, submitted_by, change_summary, submitted_at, created_at')
+            .eq('lease_id', leaseId)
+            .in('status', ['draft', 'pending_approval'])
+            .maybeSingle(),
         ]);
 
         setRentSchedule(rsResult.data || []);
         setRisks(riskResult.data || []);
+        setPendingUnlockRequest(unlockResult.data ?? null);
+        setActiveChangeSet(changeSetResult.data ?? null);
         if (wsResult?.data?.asset_type_config && Array.isArray(wsResult.data.asset_type_config)) {
           setAssetTypes(wsResult.data.asset_type_config as string[]);
         }
@@ -885,8 +903,24 @@ export default function LeaseReview() {
   // Phase 4 — refetch lease from DB (used after executed doc upload or term edits)
   const refetchLease = useCallback(async () => {
     if (!leaseId) return;
-    const { data } = await supabase.from('leases').select('*').eq('id', leaseId).single();
+    const [{ data }, unlockResult, changeSetResult] = await Promise.all([
+      supabase.from('leases').select('*').eq('id', leaseId).single(),
+      (supabase as any)
+        .from('lease_unlock_requests')
+        .select('id, status, requested_by, request_reason, created_at')
+        .eq('lease_id', leaseId)
+        .eq('status', 'pending')
+        .maybeSingle(),
+      (supabase as any)
+        .from('lease_change_sets')
+        .select('id, status, submitted_by, change_summary, submitted_at, created_at')
+        .eq('lease_id', leaseId)
+        .in('status', ['draft', 'pending_approval'])
+        .maybeSingle(),
+    ]);
     if (data) setLease(data);
+    setPendingUnlockRequest(unlockResult.data ?? null);
+    setActiveChangeSet(changeSetResult.data ?? null);
   }, [leaseId]);
 
   // Save draft
@@ -1143,54 +1177,98 @@ export default function LeaseReview() {
   const handleUnlockLease = useCallback(async () => {
     if (!lease || !user) return;
     try {
-      const { error } = await supabase
+      // Approve the pending unlock request if one exists
+      if (pendingUnlockRequest?.id) {
+        const { error: reqError } = await (supabase as any)
+          .from('lease_unlock_requests')
+          .update({ status: 'approved', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+          .eq('id', pendingUnlockRequest.id);
+        if (reqError) throw reqError;
+      }
+
+      // Unlock the lease (lifecycle_status stays 'active')
+      const { error: leaseError } = await supabase
         .from('leases')
-        .update({
-          model_locked: false,
-          lifecycle_status: 'executed',
-          unlock_requested: false,
-          unlock_requested_by: null,
-          unlock_requested_at: null,
-          unlock_action_token: null,
-          unlock_token_expires_at: null,
-        } as any)
+        .update({ model_locked: false } as any)
         .eq('id', lease.id);
-      if (error) throw error;
+      if (leaseError) throw leaseError;
+
+      // Create an empty change set in draft state
+      const { error: csError } = await (supabase as any)
+        .from('lease_change_sets')
+        .insert({
+          lease_id: lease.id,
+          workspace_id: lease.workspace_id,
+          unlock_request_id: pendingUnlockRequest?.id ?? null,
+          submitted_by: pendingUnlockRequest?.requested_by ?? user.id,
+          status: 'draft',
+        });
+      if (csError) throw csError;
+
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
         user_id: user.id,
-        activity_type: 'status_change',
-        details: { message: 'Lease unlocked for editing by admin', from_status: 'active', to_status: 'executed' },
+        activity_type: 'unlock_approved',
+        details: { unlock_request_id: pendingUnlockRequest?.id ?? null },
       });
-      toast.success('Lease unlocked — terms are editable again');
+
+      toast.success('Lease unlocked — changes must be submitted for approval');
       refetchLease();
     } catch (err) {
       console.error('Error unlocking lease:', err);
       toast.error('Failed to unlock lease');
     }
-  }, [lease, user, refetchLease]);
+  }, [lease, user, pendingUnlockRequest, refetchLease]);
 
   const handleDenyUnlock = useCallback(async () => {
-    if (!lease) return;
+    if (!lease || !user || !pendingUnlockRequest?.id) return;
     try {
-      const { error } = await supabase
-        .from('leases')
-        .update({
-          unlock_requested: false,
-          unlock_requested_by: null,
-          unlock_requested_at: null,
-          unlock_action_token: null,
-          unlock_token_expires_at: null,
-        } as any)
-        .eq('id', lease.id);
+      const { error } = await (supabase as any)
+        .from('lease_unlock_requests')
+        .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+        .eq('id', pendingUnlockRequest.id);
       if (error) throw error;
+
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user.id,
+        activity_type: 'unlock_rejected',
+        details: { unlock_request_id: pendingUnlockRequest.id },
+      });
+
       toast.success('Unlock request denied');
       refetchLease();
     } catch (err) {
       console.error('Error denying unlock:', err);
       toast.error('Failed to deny unlock request');
     }
-  }, [lease, refetchLease]);
+  }, [lease, user, pendingUnlockRequest, refetchLease]);
+
+  const handleSubmitChanges = useCallback(async () => {
+    if (!lease || !user || !activeChangeSet?.id) return;
+    if (stagedItemCount === 0) { toast.error('No staged changes to submit'); return; }
+    setSubmittingChanges(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('lease_change_sets')
+        .update({ status: 'pending_approval', submitted_at: new Date().toISOString() })
+        .eq('id', activeChangeSet.id);
+      if (error) throw error;
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user.id,
+        activity_type: 'change_submitted',
+        details: { change_set_id: activeChangeSet.id, item_count: stagedItemCount },
+      });
+      toast.success('Changes submitted for approval');
+      refetchLease();
+    } catch (err) {
+      console.error('Error submitting changes:', err);
+      toast.error('Failed to submit changes');
+    } finally {
+      setSubmittingChanges(false);
+    }
+  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease]);
 
   const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
   const handleRequestUnlock = useCallback(async () => {
@@ -2041,8 +2119,8 @@ export default function LeaseReview() {
                         {isAmendment && extractedJson?._amendment_changes && extractedJson._amendment_changes.length > 0 && (
                           <AmendmentChanges changes={extractedJson._amendment_changes} />
                         )}
-                        {/* Executed terms review (executed stage only) */}
-                        {lifecycleStatus === 'executed' && (
+                        {/* Executed terms review (executed stage + active staged-editing) */}
+                        {(lifecycleStatus === 'executed' || lifecycleStatus === 'active') && (
                           <>
                             <ExecutedTermsReview
                               leaseId={lease.id}
@@ -2067,6 +2145,8 @@ export default function LeaseReview() {
                               }}
                               canEdit={!lease.model_locked}
                               onTermUpdated={refetchLease}
+                              changeSetId={activeChangeSet?.status === 'draft' ? activeChangeSet.id : undefined}
+                              onStagedCountChange={setStagedItemCount}
                             />
                             <VarianceReport
                               leaseFilename={lease.filename || ''}
@@ -2083,15 +2163,18 @@ export default function LeaseReview() {
                               disabled={!!lease.model_locked}
                               onSuccess={refetchLease}
                             />
-                            {lease.model_locked && isAdminUser && (lease as any).unlock_requested && (
+                            {lease.model_locked && isAdminUser && pendingUnlockRequest && (
                               <Card className="shadow-none border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
                                   <div>
                                     <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Unlock requested</p>
                                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                                       A team member has requested to unlock this lease for editing.
-                                      {(lease as any).unlock_requested_at && (
-                                        <> Submitted {new Date((lease as any).unlock_requested_at).toLocaleDateString()}.</>
+                                      {pendingUnlockRequest.request_reason && (
+                                        <> Reason: {pendingUnlockRequest.request_reason}.</>
+                                      )}
+                                      {pendingUnlockRequest.created_at && (
+                                        <> Submitted {new Date(pendingUnlockRequest.created_at).toLocaleDateString()}.</>
                                       )}
                                     </p>
                                   </div>
@@ -2117,12 +2200,12 @@ export default function LeaseReview() {
                                 </CardContent>
                               </Card>
                             )}
-                            {lease.model_locked && isAdminUser && !(lease as any).unlock_requested && (
+                            {lease.model_locked && isAdminUser && !pendingUnlockRequest && (
                               <Card className="shadow-none border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
                                   <div>
                                     <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock for editing</p>
-                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking returns this lease to executed status and re-enables term editing.</p>
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking enables staged editing — proposed changes require financial approval before taking effect.</p>
                                   </div>
                                   <Button
                                     variant="outline"
@@ -2142,12 +2225,12 @@ export default function LeaseReview() {
                                   <div>
                                     <p className="text-sm font-medium">Request unlock</p>
                                     <p className="text-xs text-muted-foreground mt-0.5">
-                                      {(lease as any).unlock_requested
+                                      {pendingUnlockRequest
                                         ? 'Your unlock request is pending admin approval.'
                                         : 'Ask your workspace admin to unlock this lease for editing.'}
                                     </p>
                                   </div>
-                                  {!(lease as any).unlock_requested && (
+                                  {!pendingUnlockRequest && (
                                     <Button
                                       variant="outline"
                                       size="sm"
@@ -2159,8 +2242,37 @@ export default function LeaseReview() {
                                       Request Unlock
                                     </Button>
                                   )}
-                                  {(lease as any).unlock_requested && (
+                                  {pendingUnlockRequest && (
                                     <Badge variant="outline" className="shrink-0">Pending</Badge>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            )}
+                            {!lease.model_locked && activeChangeSet && (
+                              <Card className="shadow-none border border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
+                                <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                                      {activeChangeSet.status === 'draft'
+                                        ? 'Unlocked for editing — changes are staged'
+                                        : 'Changes pending approval'}
+                                    </p>
+                                    <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                                      {activeChangeSet.status === 'draft'
+                                        ? `Edit the executed terms above. ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} staged.`
+                                        : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
+                                    </p>
+                                  </div>
+                                  {activeChangeSet.status === 'draft' && stagedItemCount > 0 && (
+                                    <Button
+                                      size="sm"
+                                      className="shrink-0"
+                                      onClick={handleSubmitChanges}
+                                      disabled={submittingChanges}
+                                    >
+                                      {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                                      Submit for Approval
+                                    </Button>
                                   )}
                                 </CardContent>
                               </Card>
