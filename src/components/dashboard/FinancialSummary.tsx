@@ -22,6 +22,8 @@ interface FinancialData {
   annualObligation: number;
   activeLeaseCount: number;
   expiringCount: number;
+  rentIncreaseNext90: number;
+  rentExpiringNext90: number;
   avgRemainingTermMonths: number;
   workspaceDiscountRate: number | null;
   nextPayment: {
@@ -113,12 +115,43 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         );
       }, 0);
 
+      // Rent increasing next 90 days: sum of upcoming escalations within 90 days
+      let rentIncreaseNext90 = 0;
+      for (const lease of activeLeases) {
+        const schedules: any[] = (lease as any).rent_schedules ?? [];
+        if (schedules.length === 0) continue;
+        const currentPeriod = schedules.find((p: any) => {
+          const start = new Date(p.period_start);
+          const end = p.period_end ? new Date(p.period_end) : null;
+          return start <= now && (!end || end >= now);
+        });
+        const nextPeriod = schedules.find((p: any) => {
+          const start = new Date(p.period_start);
+          return start > now && start <= in90Days;
+        });
+        if (nextPeriod && currentPeriod) {
+          const diff = nextPeriod.monthly_amount - currentPeriod.monthly_amount;
+          if (diff > 0) rentIncreaseNext90 += diff;
+        }
+      }
+
+      // Rent expiring next 90 days: monthly rent of leases ending within 90 days
+      let rentExpiringNext90 = 0;
       const expiringCount = activeLeases.filter((lease) => {
         const raw = (lease as any).executed_expiry_date || lease.lease_end;
         if (!raw) return false;
         const d = new Date(raw);
         return d >= now && d <= in90Days;
-      }).length;
+      });
+      expiringCount.forEach((lease) => {
+        rentExpiringNext90 += getCurrentMonthlyRent(
+          (lease as any).rent_schedules,
+          (lease as any).executed_monthly_payment,
+          lease.current_monthly_rent,
+          (lease as any).monthly_payment,
+        );
+      });
+      const expiringLeasesCount = expiringCount.length;
 
       // Average remaining term in months across active portfolio
       const avgRemainingTermMonths =
@@ -192,7 +225,9 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         totalMonthlyRent,
         annualObligation: totalMonthlyRent * 12,
         activeLeaseCount: activeLeases.length,
-        expiringCount,
+        expiringCount: expiringLeasesCount,
+        rentIncreaseNext90,
+        rentExpiringNext90,
         avgRemainingTermMonths,
         workspaceDiscountRate,
         nextPayment,
@@ -263,12 +298,21 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
     ? t('dashboard.active_lease')
     : t('dashboard.active_leases_count');
 
+  const rentMovementLines: string[] = [];
+  if ((data?.rentIncreaseNext90 ?? 0) > 0) {
+    rentMovementLines.push(`+${formatCurrency(data!.rentIncreaseNext90, language)}/mo increasing next 90d`);
+  }
+  if ((data?.rentExpiringNext90 ?? 0) > 0) {
+    rentMovementLines.push(`-${formatCurrency(data!.rentExpiringNext90, language)}/mo expiring next 90d`);
+  }
+
   const activeStats = [
     {
       label: t('dashboard.total_monthly_rent'),
       value: formatCurrency(data?.totalMonthlyRent || 0, language),
       icon: DollarSign,
       description: `${leaseCount} ${leaseLabel}`,
+      movement: rentMovementLines,
       highlight: false,
     },
     {
@@ -377,6 +421,9 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
                     {stat.value}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">{stat.description}</p>
+                  {(stat as any).movement?.map((line: string, i: number) => (
+                    <p key={i} className="text-xs text-muted-foreground truncate mt-0.5">{line}</p>
+                  ))}
                 </div>
               </div>
             ))}

@@ -25,6 +25,7 @@ interface PendingApproval {
 interface OtherFlag {
   label: string;
   count: number;
+  href: string;
 }
 
 export function NeedsAction() {
@@ -85,7 +86,7 @@ export function NeedsAction() {
         return now - new Date(l.status_changed_at).getTime() > fourteenDaysMs;
       }).length;
       if (stalledCount > 0) {
-        flags.push({ label: 'Stalled in review', count: stalledCount });
+        flags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/leases?view=approval' });
       }
 
       // No abstraction: status IN ['Uploaded','Processing'] AND lifecycle_status IN ['submitted','under_review']
@@ -96,7 +97,7 @@ export function NeedsAction() {
         return inLifecycle && inStatus;
       }).length;
       if (noAbstractionCount > 0) {
-        flags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount });
+        flags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval' });
       }
 
       // Executed, no doc
@@ -104,7 +105,7 @@ export function NeedsAction() {
         (l) => l.lifecycle_status === 'executed' && !l.executed_document_url
       ).length;
       if (noDocCount > 0) {
-        flags.push({ label: 'Executed \u2014 document missing', count: noDocCount });
+        flags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active' });
       }
 
       setPendingApprovals(approvals);
@@ -138,8 +139,8 @@ export function NeedsAction() {
             ))}
           </div>
         ) : totalCount === 0 ? (
-          <div className="flex flex-col items-center py-8 text-center">
-            <CheckCircle2 className="h-8 w-8 text-green-500 mb-2" />
+          <div className="flex flex-col items-center py-4 text-center">
+            <CheckCircle2 className="h-6 w-6 text-green-500 mb-1.5" />
             <p className="text-sm text-muted-foreground">No actions required</p>
           </div>
         ) : (
@@ -154,7 +155,7 @@ export function NeedsAction() {
                     key={item.id}
                     onClick={() => navigate(`/app/leases/${item.id}`)}
                     className={`flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
-                      item.daysWaiting > 5
+                      item.daysWaiting > 7
                         ? 'bg-orange-50 hover:bg-orange-100'
                         : 'bg-muted/40 hover:bg-muted/70'
                     }`}
@@ -166,7 +167,7 @@ export function NeedsAction() {
                     <div className="ml-3 shrink-0 text-right">
                       <p
                         className={`text-xs font-medium ${
-                          item.daysWaiting > 5 ? 'text-orange-600' : 'text-muted-foreground'
+                          item.daysWaiting > 7 ? 'text-orange-600' : 'text-muted-foreground'
                         }`}
                       >
                         {item.daysWaiting}d waiting
@@ -189,7 +190,8 @@ export function NeedsAction() {
                 {otherFlags.map((flag) => (
                   <div
                     key={flag.label}
-                    className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-sm"
+                    onClick={() => navigate(flag.href)}
+                    className="flex items-center justify-between rounded-md bg-muted/40 hover:bg-muted/70 px-3 py-2 text-sm cursor-pointer transition-colors"
                   >
                     <span>{flag.label}</span>
                     <Badge variant="secondary">{flag.count}</Badge>

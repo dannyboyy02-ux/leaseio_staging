@@ -29,12 +29,25 @@ interface ExtractionRow {
   processed_at: string | null;
 }
 
-function getActivityLabel(activityType: string): string {
+const LIFECYCLE_LABELS: Record<string, string> = {
+  submitted: 'Submitted for approval',
+  under_review: 'Under review',
+  approved: 'Approved',
+  executed: 'Executed',
+  active: 'Active',
+  expired: 'Expired',
+  rejected: 'Rejected',
+};
+
+function getActivityLabel(activityType: string, lifecycleStatus?: string | null): string {
   switch (activityType) {
     case 'created': return 'Lease created';
-    case 'status_change': return 'Status updated';
+    case 'status_change':
+      return lifecycleStatus && LIFECYCLE_LABELS[lifecycleStatus]
+        ? `Status \u2192 ${LIFECYCLE_LABELS[lifecycleStatus]}`
+        : 'Status updated';
     case 'document_upload': return 'Document uploaded';
-    case 'executed_uploaded': return 'Executed doc uploaded';
+    case 'executed_uploaded': return 'Executed document uploaded';
     default: return activityType;
   }
 }
@@ -106,7 +119,7 @@ export function RecentActivity() {
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
             <Inbox className="h-4 w-4" />
-            Recent Intake Activity
+            Recent Activity
           </div>
           <Button
             variant="link"
@@ -132,7 +145,7 @@ export function RecentActivity() {
                 {activityData.map((item) => {
                   const lease = item.leases;
                   const title = lease.request_title ?? lease.filename ?? 'Untitled';
-                  const label = getActivityLabel(item.activity_type);
+                  const label = getActivityLabel(item.activity_type, lease.lifecycle_status);
                   const dotColor = getDotColor(lease.lifecycle_status);
                   const relDate = getRelativeDate(item.created_at);
 

@@ -44,7 +44,7 @@ export function SummaryStrip() {
       const { data: leases } = await supabase
         .from('leases')
         .select(
-          'lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end, square_footage, ' +
+          'lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end, square_footage, executed_document_url, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace.id);
@@ -79,15 +79,13 @@ export function SummaryStrip() {
           ? `Avg ${formatCurrencyDecimals(weightedAvgPerSqft)}/sqft`
           : `${portfolioLeases.length} portfolio lease${portfolioLeases.length !== 1 ? 's' : ''}`;
 
-      // Stat 2: Pipeline Value
-      const pipelineStatuses = ['submitted', 'under_review', 'approved'];
-      const pipelineLeases = leases.filter((l) =>
-        pipelineStatuses.includes(l.lifecycle_status ?? '')
-      );
-      const pipelineValue = pipelineLeases.reduce(
-        (sum, l) => sum + (l.monthly_payment ?? 0) * 12,
-        0
-      );
+      // Stat 2: Needs Action — leases requiring human attention
+      const needsActionLeases = leases.filter((l) => {
+        if (l.lifecycle_status === 'submitted' || l.lifecycle_status === 'under_review') return true;
+        if (l.lifecycle_status === 'executed' && !(l as any).executed_document_url) return true;
+        return false;
+      });
+      const needsActionCount = needsActionLeases.length;
 
       // Stat 3: Awaiting Approval
       const awaitingLeases = leases.filter((l) => l.lifecycle_status === 'under_review');
@@ -123,13 +121,11 @@ export function SummaryStrip() {
           href: '/app/leases?view=active',
         },
         {
-          label: 'Pipeline Value',
-          primary: formatCurrency(pipelineValue),
-          sub: pipelineLeases.length === 0
-            ? 'No active requests'
-            : `${pipelineLeases.length} lease${pipelineLeases.length !== 1 ? 's' : ''} in progress`,
-          accent: 'blue',
-          href: '/app/leases?view=approval',
+          label: 'Needs Action',
+          primary: String(needsActionCount),
+          sub: needsActionCount === 0 ? 'All clear' : `${needsActionCount} item${needsActionCount !== 1 ? 's' : ''} need attention`,
+          accent: needsActionCount > 0 ? 'blue' : 'default',
+          href: '/app/leases',
         },
         {
           label: 'Awaiting Approval',

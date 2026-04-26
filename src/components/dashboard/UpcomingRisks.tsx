@@ -178,9 +178,9 @@ export function UpcomingRisks() {
             ))}
           </div>
         ) : risks.length === 0 ? (
-          <div className="flex flex-col items-center py-8 text-center">
-            <Shield className="h-8 w-8 text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground">No upcoming risks</p>
+          <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+            <Shield className="h-4 w-4 shrink-0" />
+            <span>No immediate risks detected · monitoring renewals, escalations, expirations</span>
           </div>
         ) : (
           <div>

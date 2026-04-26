@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart2 } from 'lucide-react';
+import { BarChart2, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
@@ -78,6 +78,11 @@ export function LeasePipeline() {
 
   const maxCount = Math.max(...stageData.map((s) => s.count), 1);
 
+  const approvalStages = ['submitted', 'under_review', 'approved'];
+  const bottleneckStage = stageData
+    .filter((s) => approvalStages.includes(s.key) && s.count > 0)
+    .sort((a, b) => b.count - a.count)[0]?.key ?? null;
+
   const inProgressCount = stageData
     .filter((s) => ['submitted', 'under_review', 'approved', 'executed'].includes(s.key))
     .reduce((sum, s) => sum + s.count, 0);
@@ -130,6 +135,12 @@ export function LeasePipeline() {
                 <span className="w-20 text-xs text-muted-foreground text-right shrink-0">
                   {formatCurrency(stage.annualValue)}
                 </span>
+                {stage.key === bottleneckStage && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-100 rounded px-1.5 py-0.5 shrink-0">
+                    <AlertCircle className="h-2.5 w-2.5" />
+                    Bottleneck
+                  </span>
+                )}
               </div>
             ))}
             <div className="pt-3 border-t mt-2">
