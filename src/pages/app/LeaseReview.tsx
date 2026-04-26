@@ -188,6 +188,9 @@ export default function LeaseReview() {
 
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
+  const [editingCounterparty, setEditingCounterparty] = useState(false);
+  const [savingCounterparty, setSavingCounterparty] = useState(false);
+
   const [assetTypes, setAssetTypes] = useState<string[]>(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
   const [regionOptions, setRegionOptions] = useState<string[]>([]);
@@ -473,12 +476,49 @@ export default function LeaseReview() {
       } : prev);
 
       setEditingRequest(false);
-      toast.success('Request details updated');
+      toast.success('Report attributes updated');
     } catch (err) {
       console.error('Error saving request edits:', err);
       toast.error('Failed to save changes');
     } finally {
       setSavingEdits(false);
+    }
+  }, [lease, user, requestEdits]);
+
+  const saveCounterpartyEdits = useCallback(async () => {
+    if (!lease || !user) return;
+    setSavingCounterparty(true);
+    try {
+      const { error } = await supabase
+        .from('leases')
+        .update({
+          vendor_name: requestEdits.vendor_name || null,
+          vendor_address_line1: (requestEdits.vendor_address_line1 || null) as any,
+          vendor_address_line2: (requestEdits.vendor_address_line2 || null) as any,
+          vendor_city: (requestEdits.vendor_city || null) as any,
+          vendor_state: (requestEdits.vendor_state || null) as any,
+          vendor_zip: (requestEdits.vendor_zip || null) as any,
+          vendor_phone: (requestEdits.vendor_phone || null) as any,
+        } as any)
+        .eq('id', lease.id);
+      if (error) throw error;
+      setLease((prev: any) => prev ? {
+        ...prev,
+        vendor_name: requestEdits.vendor_name,
+        vendor_address_line1: requestEdits.vendor_address_line1,
+        vendor_address_line2: requestEdits.vendor_address_line2,
+        vendor_city: requestEdits.vendor_city,
+        vendor_state: requestEdits.vendor_state,
+        vendor_zip: requestEdits.vendor_zip,
+        vendor_phone: requestEdits.vendor_phone,
+      } : prev);
+      setEditingCounterparty(false);
+      toast.success('Counterparty updated');
+    } catch (err) {
+      console.error('Error saving counterparty:', err);
+      toast.error('Failed to save counterparty');
+    } finally {
+      setSavingCounterparty(false);
     }
   }, [lease, user, requestEdits]);
 
@@ -1266,7 +1306,7 @@ export default function LeaseReview() {
         details: { unlock_request_id: pendingUnlockRequest?.id ?? null },
       });
 
-      await (supabase as any).from('lease_governance_audit').insert([
+      const { error: auditErr1 } = await (supabase as any).from('lease_governance_audit').insert([
         {
           lease_id: lease.id,
           workspace_id: lease.workspace_id,
@@ -1285,7 +1325,8 @@ export default function LeaseReview() {
           related_unlock_request_id: pendingUnlockRequest?.id ?? null,
           related_change_set_id: newCs?.id ?? null,
         },
-      ]).catch((err: any) => console.error('[LeaseReview] governance audit error:', err));
+      ]);
+      if (auditErr1) console.error('[LeaseReview] governance audit error:', auditErr1);
 
       toast.success('Lease unlocked — changes must be submitted for approval');
       refetchLease();
@@ -1311,14 +1352,15 @@ export default function LeaseReview() {
         details: { unlock_request_id: pendingUnlockRequest.id },
       });
 
-      await (supabase as any).from('lease_governance_audit').insert({
+      const { error: auditErr2 } = await (supabase as any).from('lease_governance_audit').insert({
         lease_id: lease.id,
         workspace_id: lease.workspace_id,
         event_type: 'unlock_rejected',
         actor_user_id: user.id,
         actor_email: user.email ?? null,
         related_unlock_request_id: pendingUnlockRequest.id,
-      }).catch((err: any) => console.error('[LeaseReview] governance audit error:', err));
+      });
+      if (auditErr2) console.error('[LeaseReview] governance audit error:', auditErr2);
 
       toast.success('Unlock request denied');
       refetchLease();
@@ -1375,8 +1417,8 @@ export default function LeaseReview() {
           proposed_value: item.proposed_value,
         })),
       ];
-      await (supabase as any).from('lease_governance_audit').insert(auditRows)
-        .catch((err: any) => console.error('[LeaseReview] governance audit error:', err));
+      const { error: auditErr3 } = await (supabase as any).from('lease_governance_audit').insert(auditRows);
+      if (auditErr3) console.error('[LeaseReview] governance audit error:', auditErr3);
 
       toast.success('Changes submitted for approval');
       refetchLease();
@@ -1704,13 +1746,87 @@ export default function LeaseReview() {
               </CardContent>
             </Card>
 
-            {/* Counterparty */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Internal Notes</CardTitle>
+                {!editingRequest && (
+                  <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>Edit</Button>
+                )}
+                {editingRequest && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditingRequest(false);
+                      setRequestEdits(prev => ({ ...prev, request_description: lease.request_description || (lease as any).notes || '' }));
+                    }}>Cancel</Button>
+                    <Button size="sm" disabled={savingEdits} onClick={saveRequestEdits}>
+                      {savingEdits ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+                      Save
+                    </Button>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent>
+                {editingRequest ? (
+                  <textarea
+                    rows={4}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Add internal notes..."
+                    value={requestEdits.request_description}
+                    onChange={(e) => setRequestEdits(prev => ({ ...prev, request_description: e.target.value }))}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {lease.request_description || (lease as any).notes || '\u2014'}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Counterparty — own section */}
+          <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle>Counterparty</CardTitle>
+                {!editingCounterparty && (
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    setRequestEdits(prev => ({
+                      ...prev,
+                      vendor_name: lease.vendor_name || '',
+                      vendor_address_line1: (lease as any).vendor_address_line1 || '',
+                      vendor_address_line2: (lease as any).vendor_address_line2 || '',
+                      vendor_city: (lease as any).vendor_city || '',
+                      vendor_state: (lease as any).vendor_state || '',
+                      vendor_zip: (lease as any).vendor_zip || '',
+                      vendor_phone: (lease as any).vendor_phone || '',
+                    }));
+                    setEditingCounterparty(true);
+                  }}>Edit</Button>
+                )}
+                {editingCounterparty && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditingCounterparty(false);
+                      setRequestEdits(prev => ({
+                        ...prev,
+                        vendor_name: lease.vendor_name || '',
+                        vendor_address_line1: (lease as any).vendor_address_line1 || '',
+                        vendor_address_line2: (lease as any).vendor_address_line2 || '',
+                        vendor_city: (lease as any).vendor_city || '',
+                        vendor_state: (lease as any).vendor_state || '',
+                        vendor_zip: (lease as any).vendor_zip || '',
+                        vendor_phone: (lease as any).vendor_phone || '',
+                      }));
+                    }}>Cancel</Button>
+                    <Button size="sm" disabled={savingCounterparty} onClick={saveCounterpartyEdits}>
+                      {savingCounterparty ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
+                      Save
+                    </Button>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="text-sm">
-                {editingRequest ? (
+                {editingCounterparty ? (
                   <div className="space-y-3">
                     <div>
                       <Label className="text-xs font-medium text-muted-foreground">Vendor / Counterparty Name</Label>
@@ -1774,46 +1890,15 @@ export default function LeaseReview() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-1">
-                    <p><span className="font-medium">Name:</span> {lease.vendor_name || '\u2014'}</p>
-                    {((lease as any).vendor_address_line1 || (lease as any).vendor_city) ? (
-                      <div className="text-muted-foreground">
-                        {(lease as any).vendor_address_line1 && <p>{(lease as any).vendor_address_line1}</p>}
-                        {(lease as any).vendor_address_line2 && <p>{(lease as any).vendor_address_line2}</p>}
-                        {((lease as any).vendor_city || (lease as any).vendor_state || (lease as any).vendor_zip) && (
-                          <p>
-                            {[(lease as any).vendor_city, (lease as any).vendor_state, (lease as any).vendor_zip]
-                              .filter(Boolean).join(', ')}
-                          </p>
-                        )}
-                        {(lease as any).vendor_phone && <p>{(lease as any).vendor_phone}</p>}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground text-xs">No address on file</p>
-                    )}
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                    <p className="col-span-2"><span className="font-medium">Name:</span> {lease.vendor_name || '\u2014'}</p>
+                    <p className="col-span-2"><span className="font-medium">Address Line 1:</span> {(lease as any).vendor_address_line1 || '\u2014'}</p>
+                    <p className="col-span-2"><span className="font-medium">Address Line 2:</span> {(lease as any).vendor_address_line2 || '\u2014'}</p>
+                    <p><span className="font-medium">City:</span> {(lease as any).vendor_city || '\u2014'}</p>
+                    <p><span className="font-medium">State:</span> {(lease as any).vendor_state || '\u2014'}</p>
+                    <p><span className="font-medium">Zip:</span> {(lease as any).vendor_zip || '\u2014'}</p>
+                    <p><span className="font-medium">Phone:</span> {(lease as any).vendor_phone || '\u2014'}</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Internal Notes */}
-            <Card className="lg:col-span-1">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle>Internal Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {editingRequest ? (
-                  <textarea
-                    rows={5}
-                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    placeholder="Add internal notes..."
-                    value={requestEdits.request_description}
-                    onChange={(e) => setRequestEdits(prev => ({ ...prev, request_description: e.target.value }))}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {lease.request_description || (lease as any).notes || '\u2014'}
-                  </p>
                 )}
               </CardContent>
             </Card>
