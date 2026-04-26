@@ -19,6 +19,14 @@ const formatCurrency = (value: number): string =>
     maximumFractionDigits: 0,
   }).format(value);
 
+const formatCurrencyDecimals = (value: number): string =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+
 export function SummaryStrip() {
   const { workspace } = useApp();
   const navigate = useNavigate();
@@ -70,7 +78,7 @@ export function SummaryStrip() {
 
       const monthlyRentSub =
         weightedAvgPerSqft !== null
-          ? `Avg ${formatCurrency(weightedAvgPerSqft)}/sqft`
+          ? `Avg ${formatCurrencyDecimals(weightedAvgPerSqft)}/sqft`
           : `${portfolioLeases.length} portfolio lease${portfolioLeases.length !== 1 ? 's' : ''}`;
 
       // Stat 2: Pipeline Value
