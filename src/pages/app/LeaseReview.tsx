@@ -167,9 +167,18 @@ export default function LeaseReview() {
   const [requestEdits, setRequestEdits] = useState({
     request_title: '',
     requesting_department: '',
-    request_urgency: '',
     vendor_name: '',
     request_description: '',
+    asset_type: '',
+    region: '',
+    location: '',
+    building: '',
+    vendor_address_line1: '',
+    vendor_address_line2: '',
+    vendor_city: '',
+    vendor_state: '',
+    vendor_zip: '',
+    vendor_phone: '',
   });
   const [savingEdits, setSavingEdits] = useState(false);
   const [pendingUnlockRequest, setPendingUnlockRequest] = useState<any>(null);
@@ -180,6 +189,10 @@ export default function LeaseReview() {
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
   const [assetTypes, setAssetTypes] = useState<string[]>(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
+  const [regionOptions, setRegionOptions] = useState<string[]>([]);
+  const [locationOptions, setLocationOptions] = useState<string[]>([]);
+  const [buildingOptions, setBuildingOptions] = useState<string[]>([]);
 
   // Phase 2 — resubmit flow for returned leases
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -415,11 +428,20 @@ export default function LeaseReview() {
         .update({
           request_title: requestEdits.request_title || null,
           requesting_department: requestEdits.requesting_department || null,
-          request_urgency: requestEdits.request_urgency || 'standard',
           vendor_name: requestEdits.vendor_name || null,
           request_description: requestEdits.request_description || null,
           notes: requestEdits.request_description || null,
-        })
+          asset_type: (requestEdits.asset_type || null) as any,
+          region: (requestEdits.region || null) as any,
+          location: (requestEdits.location || null) as any,
+          building: (requestEdits.building || null) as any,
+          vendor_address_line1: (requestEdits.vendor_address_line1 || null) as any,
+          vendor_address_line2: (requestEdits.vendor_address_line2 || null) as any,
+          vendor_city: (requestEdits.vendor_city || null) as any,
+          vendor_state: (requestEdits.vendor_state || null) as any,
+          vendor_zip: (requestEdits.vendor_zip || null) as any,
+          vendor_phone: (requestEdits.vendor_phone || null) as any,
+        } as any)
         .eq('id', lease.id);
 
       if (error) throw error;
@@ -435,10 +457,19 @@ export default function LeaseReview() {
         ...prev,
         request_title: requestEdits.request_title,
         requesting_department: requestEdits.requesting_department,
-        request_urgency: requestEdits.request_urgency,
         vendor_name: requestEdits.vendor_name,
         request_description: requestEdits.request_description,
         notes: requestEdits.request_description,
+        asset_type: requestEdits.asset_type,
+        region: requestEdits.region,
+        location: requestEdits.location,
+        building: requestEdits.building,
+        vendor_address_line1: requestEdits.vendor_address_line1,
+        vendor_address_line2: requestEdits.vendor_address_line2,
+        vendor_city: requestEdits.vendor_city,
+        vendor_state: requestEdits.vendor_state,
+        vendor_zip: requestEdits.vendor_zip,
+        vendor_phone: requestEdits.vendor_phone,
       } : prev);
 
       setEditingRequest(false);
@@ -594,9 +625,18 @@ export default function LeaseReview() {
         setRequestEdits({
           request_title: data.request_title || '',
           requesting_department: data.requesting_department || '',
-          request_urgency: data.request_urgency || 'standard',
           vendor_name: data.vendor_name || '',
           request_description: data.request_description || data.notes || '',
+          asset_type: (data as any).asset_type || '',
+          region: (data as any).region || '',
+          location: (data as any).location || '',
+          building: (data as any).building || '',
+          vendor_address_line1: (data as any).vendor_address_line1 || '',
+          vendor_address_line2: (data as any).vendor_address_line2 || '',
+          vendor_city: (data as any).vendor_city || '',
+          vendor_state: (data as any).vendor_state || '',
+          vendor_zip: (data as any).vendor_zip || '',
+          vendor_phone: (data as any).vendor_phone || '',
         });
         const ext = (data.extracted_json as ExtractedJson) || {};
 
@@ -626,7 +666,7 @@ export default function LeaseReview() {
             ? supabase.storage.from("leases").createSignedUrl(data.storage_path, 3600)
             : Promise.resolve(null),
           data.workspace_id
-            ? (supabase as any).from("workspaces").select("asset_type_config").eq("id", data.workspace_id).single()
+            ? (supabase as any).from("workspaces").select("asset_type_config, department_options, region_options, location_options, building_options").eq("id", data.workspace_id).single()
             : Promise.resolve(null),
           (supabase as any)
             .from('lease_unlock_requests')
@@ -648,6 +688,18 @@ export default function LeaseReview() {
         setActiveChangeSet(changeSetResult.data ?? null);
         if (wsResult?.data?.asset_type_config && Array.isArray(wsResult.data.asset_type_config)) {
           setAssetTypes(wsResult.data.asset_type_config as string[]);
+        }
+        if (wsResult?.data?.department_options && Array.isArray(wsResult.data.department_options)) {
+          setDepartmentOptions(wsResult.data.department_options as string[]);
+        }
+        if (wsResult?.data?.region_options && Array.isArray(wsResult.data.region_options)) {
+          setRegionOptions(wsResult.data.region_options as string[]);
+        }
+        if (wsResult?.data?.location_options && Array.isArray(wsResult.data.location_options)) {
+          setLocationOptions(wsResult.data.location_options as string[]);
+        }
+        if (wsResult?.data?.building_options && Array.isArray(wsResult.data.building_options)) {
+          setBuildingOptions(wsResult.data.building_options as string[]);
         }
         if (pdfResult && 'data' in pdfResult) {
           if ('error' in pdfResult && pdfResult.error) {
@@ -1528,10 +1580,24 @@ export default function LeaseReview() {
           )}
 
           <div className="grid gap-4 lg:grid-cols-3">
+            {/* Report Attributes */}
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle>Request Details</CardTitle>
-                {(lifecycleStatus === 'submitted' || lifecycleStatus === 'under_review') && !editingRequest && (
+                <div className="flex items-center gap-2">
+                  <CardTitle>Report Attributes</CardTitle>
+                  {!editingRequest && !lease.requesting_department && (
+                    <button
+                      className="text-xs text-amber-600 border border-amber-400 rounded-full px-2 py-0.5 hover:bg-amber-50 transition-colors"
+                      onClick={() => {
+                        setEditingRequest(true);
+                        setTimeout(() => document.getElementById('report-attr-department')?.focus(), 50);
+                      }}
+                    >
+                      + Add Department
+                    </button>
+                  )}
+                </div>
+                {!editingRequest && (
                   <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>Edit</Button>
                 )}
                 {editingRequest && (
@@ -1541,9 +1607,18 @@ export default function LeaseReview() {
                       setRequestEdits({
                         request_title: lease.request_title || '',
                         requesting_department: lease.requesting_department || '',
-                        request_urgency: lease.request_urgency || 'standard',
                         vendor_name: lease.vendor_name || '',
                         request_description: lease.request_description || lease.notes || '',
+                        asset_type: (lease as any).asset_type || '',
+                        region: (lease as any).region || '',
+                        location: (lease as any).location || '',
+                        building: (lease as any).building || '',
+                        vendor_address_line1: (lease as any).vendor_address_line1 || '',
+                        vendor_address_line2: (lease as any).vendor_address_line2 || '',
+                        vendor_city: (lease as any).vendor_city || '',
+                        vendor_state: (lease as any).vendor_state || '',
+                        vendor_zip: (lease as any).vendor_zip || '',
+                        vendor_phone: (lease as any).vendor_phone || '',
                       });
                     }}>Cancel</Button>
                     <Button size="sm" disabled={savingEdits} onClick={saveRequestEdits}>
@@ -1553,39 +1628,92 @@ export default function LeaseReview() {
                   </div>
                 )}
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
+              <CardContent className="text-sm">
                 {editingRequest ? (
-                  <>
-                    <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Title</Label>
-                      <input
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <Label className="text-xs font-medium text-muted-foreground">Asset Type</Label>
+                      <select
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={requestEdits.request_title}
-                        onChange={(e) => setRequestEdits(prev => ({ ...prev, request_title: e.target.value }))}
+                        value={requestEdits.asset_type}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, asset_type: e.target.value }))}
+                      >
+                        <option value="">— Select —</option>
+                        {assetTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Region</Label>
+                      <input
+                        list="region-options"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.region}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, region: e.target.value }))}
                       />
+                      <datalist id="region-options">
+                        {regionOptions.map((o) => <option key={o} value={o} />)}
+                      </datalist>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Location</Label>
+                      <input
+                        list="location-options"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.location}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, location: e.target.value }))}
+                      />
+                      <datalist id="location-options">
+                        {locationOptions.map((o) => <option key={o} value={o} />)}
+                      </datalist>
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Building</Label>
+                      <input
+                        list="building-options"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.building}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, building: e.target.value }))}
+                      />
+                      <datalist id="building-options">
+                        {buildingOptions.map((o) => <option key={o} value={o} />)}
+                      </datalist>
                     </div>
                     <div>
                       <Label className="text-xs font-medium text-muted-foreground">Department</Label>
                       <input
+                        id="report-attr-department"
+                        list="department-options"
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         value={requestEdits.requesting_department}
                         onChange={(e) => setRequestEdits(prev => ({ ...prev, requesting_department: e.target.value }))}
                       />
+                      <datalist id="department-options">
+                        {departmentOptions.map((o) => <option key={o} value={o} />)}
+                      </datalist>
                     </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                    <p><span className="font-medium">Asset Type:</span> {(lease as any).asset_type || '\u2014'}</p>
+                    <p><span className="font-medium">Region:</span> {(lease as any).region || '\u2014'}</p>
+                    <p><span className="font-medium">Location:</span> {(lease as any).location || '\u2014'}</p>
+                    <p><span className="font-medium">Building:</span> {(lease as any).building || '\u2014'}</p>
+                    <p className="col-span-2"><span className="font-medium">Department:</span> {lease.requesting_department || '\u2014'}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Counterparty */}
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Counterparty</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm">
+                {editingRequest ? (
+                  <div className="space-y-3">
                     <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Urgency</Label>
-                      <select
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={requestEdits.request_urgency}
-                        onChange={(e) => setRequestEdits(prev => ({ ...prev, request_urgency: e.target.value }))}
-                      >
-                        <option value="low">Low</option>
-                        <option value="standard">Standard</option>
-                        <option value="urgent">Urgent</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Vendor / Counterparty</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">Vendor / Counterparty Name</Label>
                       <input
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         value={requestEdits.vendor_name}
@@ -1593,23 +1721,99 @@ export default function LeaseReview() {
                       />
                     </div>
                     <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Description / Notes</Label>
-                      <textarea
-                        rows={3}
+                      <Label className="text-xs font-medium text-muted-foreground">Address Line 1</Label>
+                      <input
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={requestEdits.request_description}
-                        onChange={(e) => setRequestEdits(prev => ({ ...prev, request_description: e.target.value }))}
+                        value={requestEdits.vendor_address_line1}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_address_line1: e.target.value }))}
                       />
                     </div>
-                  </>
+                    <div>
+                      <Label className="text-xs font-medium text-muted-foreground">Address Line 2</Label>
+                      <input
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={requestEdits.vendor_address_line2}
+                        onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_address_line2: e.target.value }))}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs font-medium text-muted-foreground">City</Label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={requestEdits.vendor_city}
+                          onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_city: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium text-muted-foreground">State</Label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={requestEdits.vendor_state}
+                          onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_state: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs font-medium text-muted-foreground">Zip Code</Label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={requestEdits.vendor_zip}
+                          onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_zip: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium text-muted-foreground">Phone</Label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={requestEdits.vendor_phone}
+                          onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_phone: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  <>
-                    <p><span className="font-medium">Title:</span> {lease.request_title || '\u2014'}</p>
-                    <p><span className="font-medium">Department:</span> {lease.requesting_department || '\u2014'}</p>
-                    <p><span className="font-medium">Urgency:</span> <span className="capitalize">{lease.request_urgency || 'standard'}</span></p>
-                    <p><span className="font-medium">Vendor:</span> {lease.vendor_name || '\u2014'}</p>
-                    <p><span className="font-medium">Notes:</span> {lease.request_description || lease.notes || '\u2014'}</p>
-                  </>
+                  <div className="space-y-1">
+                    <p><span className="font-medium">Name:</span> {lease.vendor_name || '\u2014'}</p>
+                    {((lease as any).vendor_address_line1 || (lease as any).vendor_city) ? (
+                      <div className="text-muted-foreground">
+                        {(lease as any).vendor_address_line1 && <p>{(lease as any).vendor_address_line1}</p>}
+                        {(lease as any).vendor_address_line2 && <p>{(lease as any).vendor_address_line2}</p>}
+                        {((lease as any).vendor_city || (lease as any).vendor_state || (lease as any).vendor_zip) && (
+                          <p>
+                            {[(lease as any).vendor_city, (lease as any).vendor_state, (lease as any).vendor_zip]
+                              .filter(Boolean).join(', ')}
+                          </p>
+                        )}
+                        {(lease as any).vendor_phone && <p>{(lease as any).vendor_phone}</p>}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-xs">No address on file</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Internal Notes */}
+            <Card className="lg:col-span-1">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Internal Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {editingRequest ? (
+                  <textarea
+                    rows={5}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Add internal notes..."
+                    value={requestEdits.request_description}
+                    onChange={(e) => setRequestEdits(prev => ({ ...prev, request_description: e.target.value }))}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {lease.request_description || (lease as any).notes || '\u2014'}
+                  </p>
                 )}
               </CardContent>
             </Card>

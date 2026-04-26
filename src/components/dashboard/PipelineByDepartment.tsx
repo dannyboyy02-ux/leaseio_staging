@@ -123,7 +123,7 @@ export function PipelineByDepartment() {
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : depts.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">No department data yet.</p>
+          <p className="text-sm text-muted-foreground text-center py-8">No department data yet — open any lease and set its Department to start seeing breakdown here.</p>
         ) : (
           <div className="space-y-3">
             {depts.map((dept) => (

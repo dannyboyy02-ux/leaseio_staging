@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -131,6 +131,22 @@ export default function WorkspaceSettings() {
   const [newAssetType, setNewAssetType] = useState('');
   const [isSavingAssetTypes, setIsSavingAssetTypes] = useState(false);
 
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
+  const [newDepartmentOption, setNewDepartmentOption] = useState('');
+  const [isSavingDepartments, setIsSavingDepartments] = useState(false);
+
+  const [regionOptions, setRegionOptions] = useState<string[]>([]);
+  const [newRegionOption, setNewRegionOption] = useState('');
+  const [isSavingRegions, setIsSavingRegions] = useState(false);
+
+  const [locationOptions, setLocationOptions] = useState<string[]>([]);
+  const [newLocationOption, setNewLocationOption] = useState('');
+  const [isSavingLocations, setIsSavingLocations] = useState(false);
+
+  const [buildingOptions, setBuildingOptions] = useState<string[]>([]);
+  const [newBuildingOption, setNewBuildingOption] = useState('');
+  const [isSavingBuildings, setIsSavingBuildings] = useState(false);
+
   const canEdit = canEditWorkspaceSettings(userRole);
   const canManageMembers = canManageWorkspaceMembers(userRole);
   const canAccessDefaults = canAccessWorkspaceDefaults(userRole);
@@ -161,7 +177,7 @@ export default function WorkspaceSettings() {
     if (!workspace?.id) return;
     supabase
       .from('workspaces')
-      .select('discount_rate, covenant_threshold, approval_threshold, backdoor_enabled, asset_type_config')
+      .select('discount_rate, covenant_threshold, approval_threshold, backdoor_enabled, asset_type_config, department_options, region_options, location_options, building_options')
       .eq('id', workspace.id)
       .single()
       .then(({ data }) => {
@@ -177,6 +193,10 @@ export default function WorkspaceSettings() {
           if (Array.isArray((data as any).asset_type_config) && (data as any).asset_type_config.length > 0) {
             setAssetTypeConfig((data as any).asset_type_config as string[]);
           }
+          if (Array.isArray((data as any).department_options)) setDepartmentOptions((data as any).department_options as string[]);
+          if (Array.isArray((data as any).region_options)) setRegionOptions((data as any).region_options as string[]);
+          if (Array.isArray((data as any).location_options)) setLocationOptions((data as any).location_options as string[]);
+          if (Array.isArray((data as any).building_options)) setBuildingOptions((data as any).building_options as string[]);
         }
       });
   }, [workspace?.id]);
@@ -437,6 +457,39 @@ export default function WorkspaceSettings() {
       setIsSavingAssetTypes(false);
     }
   };
+
+  const makeOptionListHandlers = (
+    options: string[],
+    setOptions: Dispatch<SetStateAction<string[]>>,
+    setNew: Dispatch<SetStateAction<string>>,
+    setIsSaving: Dispatch<SetStateAction<boolean>>,
+    dbColumn: string,
+  ) => ({
+    handleAdd: (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed || options.includes(trimmed)) return;
+      setOptions(prev => [...prev, trimmed]);
+      setNew('');
+    },
+    handleRemove: (item: string) => setOptions(prev => prev.filter(o => o !== item)),
+    handleSave: async (latest: string[]) => {
+      if (!workspace?.id) return;
+      setIsSaving(true);
+      try {
+        const { error } = await supabase
+          .from('workspaces')
+          .update({ [dbColumn]: latest } as any)
+          .eq('id', workspace.id);
+        if (error) throw error;
+        toast.success('Options saved');
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to save options');
+      } finally {
+        setIsSaving(false);
+      }
+    },
+  });
 
   const handleRemoveMember = async (memberId: string) => {
     try {
@@ -1011,6 +1064,74 @@ export default function WorkspaceSettings() {
                   </Button>
                 </CardContent>
               </Card>
+
+              {/* Departments */}
+              {(['Departments', 'Regions', 'Locations', 'Buildings'] as const).map((label) => {
+                const configs: Record<string, { options: string[]; newVal: string; setOptions: Dispatch<SetStateAction<string[]>>; setNew: Dispatch<SetStateAction<string>>; isSaving: boolean; setIsSaving: Dispatch<SetStateAction<boolean>>; dbColumn: string }> = {
+                  Departments: { options: departmentOptions, newVal: newDepartmentOption, setOptions: setDepartmentOptions, setNew: setNewDepartmentOption, isSaving: isSavingDepartments, setIsSaving: setIsSavingDepartments, dbColumn: 'department_options' },
+                  Regions:     { options: regionOptions,     newVal: newRegionOption,     setOptions: setRegionOptions,     setNew: setNewRegionOption,     isSaving: isSavingRegions,     setIsSaving: setIsSavingRegions,     dbColumn: 'region_options' },
+                  Locations:   { options: locationOptions,   newVal: newLocationOption,   setOptions: setLocationOptions,   setNew: setNewLocationOption,   isSaving: isSavingLocations,   setIsSaving: setIsSavingLocations,   dbColumn: 'location_options' },
+                  Buildings:   { options: buildingOptions,   newVal: newBuildingOption,   setOptions: setBuildingOptions,   setNew: setNewBuildingOption,   isSaving: isSavingBuildings,   setIsSaving: setIsSavingBuildings,   dbColumn: 'building_options' },
+                };
+                const cfg = configs[label];
+                const handlers = makeOptionListHandlers(cfg.options, cfg.setOptions, cfg.setNew, cfg.setIsSaving, cfg.dbColumn);
+                return (
+                  <Card key={label}>
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <Settings2 className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <CardTitle>{label}</CardTitle>
+                          <CardDescription>
+                            Configure the available options for the {label.toLowerCase().slice(0, -1)} field on leases. Users can also type a custom value.
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        {cfg.options.map((item) => (
+                          <div key={item} className="flex items-center justify-between rounded-md border px-3 py-2">
+                            <span className="text-sm">{item}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              onClick={() => handlers.handleRemove(item)}
+                            >
+                              <X size={12} />
+                            </Button>
+                          </div>
+                        ))}
+                        {cfg.options.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No options configured — the field will accept free text.</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder={`Add new ${label.toLowerCase().slice(0, -1)}…`}
+                          value={cfg.newVal}
+                          onChange={(e) => cfg.setNew(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handlers.handleAdd(cfg.newVal); } }}
+                          className="text-sm"
+                        />
+                        <Button variant="outline" size="sm" onClick={() => handlers.handleAdd(cfg.newVal)} disabled={!cfg.newVal.trim()}>
+                          <Plus size={14} className="mr-1" />
+                          Add
+                        </Button>
+                      </div>
+                      <Button
+                        variant="accent"
+                        onClick={() => handlers.handleSave(cfg.options)}
+                        disabled={cfg.isSaving}
+                      >
+                        {cfg.isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                        {cfg.isSaving ? 'Saving…' : `Save ${label}`}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </TabsContent>
           )}
 

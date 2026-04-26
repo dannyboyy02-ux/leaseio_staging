@@ -12,6 +12,8 @@ import { UpcomingRisks } from '@/components/dashboard/UpcomingRisks';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { PipelineByDepartment } from '@/components/dashboard/PipelineByDepartment';
 import { IntakeTrend } from '@/components/dashboard/IntakeTrend';
+import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
+import { EscalationReviewPanel } from '@/components/dashboard/EscalationReviewPanel';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -53,10 +55,13 @@ export default function Dashboard() {
         {/* KPI strip — monthly rent, pipeline value, awaiting approval, expiring */}
         <SummaryStrip />
 
-        {/* Row 1: Action queue + Pipeline funnel */}
-        <div className="grid grid-cols-2 gap-6">
-          <NeedsAction />
-          <LeasePipeline />
+        {/* Escalation alerts — only renders when needs_escalation_review leases exist */}
+        <EscalationReviewPanel />
+
+        {/* Row 1: Action queue (wide) + Pipeline funnel (narrow) */}
+        <div className="grid grid-cols-3 gap-6">
+          <div className="col-span-2"><NeedsAction /></div>
+          <div className="col-span-1"><LeasePipeline /></div>
         </div>
 
         {/* Row 2: Upcoming risks + Recent activity & AI extractions */}
@@ -64,6 +69,9 @@ export default function Dashboard() {
           <UpcomingRisks />
           <RecentActivity />
         </div>
+
+        {/* Upcoming lease events — renewals, expirations, payments */}
+        <UpcomingEvents />
 
         {/* Row 3: Department breakdown + Intake trend */}
         <div className="grid grid-cols-2 gap-6">

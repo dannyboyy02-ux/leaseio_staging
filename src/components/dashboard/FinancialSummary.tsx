@@ -443,7 +443,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
           <CardContent>
             <div className="grid gap-6 sm:grid-cols-3">
               <div>
-                <p className="text-sm text-muted-foreground">PV Liability (ASC 842)</p>
+                <p className="text-sm text-muted-foreground">Present Value Liability</p>
                 <p className="text-2xl font-bold font-display">
                   {formatCurrency(data!.portfolio.totalPVLiability, language)}
                 </p>

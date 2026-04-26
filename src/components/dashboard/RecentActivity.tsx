@@ -97,13 +97,16 @@ export function RecentActivity() {
           .in('activity_type', ['created', 'status_change', 'document_upload', 'executed_uploaded'])
           .order('created_at', { ascending: false })
           .limit(10),
-        supabase
-          .from('leases')
-          .select('id, request_title, filename, avg_confidence_score, model_locked, status, processed_at')
-          .eq('workspace_id', workspace.id)
-          .in('status', ['Ready', 'Processing'])
-          .order('processed_at', { ascending: false, nullsFirst: false })
-          .limit(5),
+        (() => {
+          const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          return supabase
+            .from('leases')
+            .select('id, request_title, filename, avg_confidence_score, model_locked, status, processed_at')
+            .eq('workspace_id', workspace.id)
+            .or(`status.eq.Ready,and(status.eq.Processing,uploaded_at.gte.${cutoff})`)
+            .order('processed_at', { ascending: false, nullsFirst: false })
+            .limit(5);
+        })(),
       ]);
 
       setActivityData((activityResult.data as unknown as ActivityRow[]) ?? []);

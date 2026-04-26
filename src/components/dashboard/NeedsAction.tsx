@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import type React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight, CheckSquare, Clock, FileSearch, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ interface OtherFlag {
   label: string;
   count: number;
   href: string;
+  icon: React.ElementType;
 }
 
 export function NeedsAction() {
@@ -86,7 +88,7 @@ export function NeedsAction() {
         return now - new Date(l.status_changed_at).getTime() > fourteenDaysMs;
       }).length;
       if (stalledCount > 0) {
-        flags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/leases?view=approval' });
+        flags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/leases?view=approval', icon: Clock });
       }
 
       // No abstraction: status IN ['Uploaded','Processing'] AND lifecycle_status IN ['submitted','under_review']
@@ -97,7 +99,7 @@ export function NeedsAction() {
         return inLifecycle && inStatus;
       }).length;
       if (noAbstractionCount > 0) {
-        flags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval' });
+        flags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval', icon: FileSearch });
       }
 
       // Executed, no doc
@@ -105,7 +107,7 @@ export function NeedsAction() {
         (l) => l.lifecycle_status === 'executed' && !l.executed_document_url
       ).length;
       if (noDocCount > 0) {
-        flags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active' });
+        flags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active', icon: Upload });
       }
 
       setPendingApprovals(approvals);
@@ -119,7 +121,7 @@ export function NeedsAction() {
   const totalCount = pendingApprovals.length + otherFlags.filter((f) => f.count > 0).length;
 
   return (
-    <Card>
+    <Card className="border-l-4 border-l-orange-400">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
@@ -160,18 +162,17 @@ export function NeedsAction() {
                         : 'bg-muted/40 hover:bg-muted/70'
                     }`}
                   >
+                    <CheckSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{item.title}</p>
                       <p className="text-xs text-muted-foreground">{item.department}</p>
                     </div>
-                    <div className="ml-3 shrink-0 text-right">
-                      <p
-                        className={`text-xs font-medium ${
-                          item.daysWaiting > 7 ? 'text-orange-600' : 'text-muted-foreground'
-                        }`}
-                      >
-                        {item.daysWaiting}d waiting
-                      </p>
+                    <div className="ml-3 shrink-0 text-right flex items-center gap-2">
+                      {item.daysWaiting > 7 ? (
+                        <Badge variant="destructive" className="text-xs">Overdue</Badge>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">{item.daysWaiting}d waiting</p>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         {formatCurrency(item.annualValue)}/yr
                       </p>
@@ -193,7 +194,10 @@ export function NeedsAction() {
                     onClick={() => navigate(flag.href)}
                     className="flex items-center justify-between rounded-md bg-muted/40 hover:bg-muted/70 px-3 py-2 text-sm cursor-pointer transition-colors"
                   >
-                    <span>{flag.label}</span>
+                    <div className="flex items-center gap-2">
+                      <flag.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span>{flag.label}</span>
+                    </div>
                     <Badge variant="secondary">{flag.count}</Badge>
                   </div>
                 ))}

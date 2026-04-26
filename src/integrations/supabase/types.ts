@@ -973,7 +973,13 @@ export type Database = {
           variance_reviewed_at: string | null
           variance_reviewed_by: string | null
           variance_tenant_name_match: boolean | null
+          vendor_address_line1: string | null
+          vendor_address_line2: string | null
+          vendor_city: string | null
           vendor_name: string | null
+          vendor_phone: string | null
+          vendor_state: string | null
+          vendor_zip: string | null
           workspace_id: string | null
         }
         Insert: {
@@ -1088,7 +1094,13 @@ export type Database = {
           variance_reviewed_at?: string | null
           variance_reviewed_by?: string | null
           variance_tenant_name_match?: boolean | null
+          vendor_address_line1?: string | null
+          vendor_address_line2?: string | null
+          vendor_city?: string | null
           vendor_name?: string | null
+          vendor_phone?: string | null
+          vendor_state?: string | null
+          vendor_zip?: string | null
           workspace_id?: string | null
         }
         Update: {
@@ -1203,7 +1215,13 @@ export type Database = {
           variance_reviewed_at?: string | null
           variance_reviewed_by?: string | null
           variance_tenant_name_match?: boolean | null
+          vendor_address_line1?: string | null
+          vendor_address_line2?: string | null
+          vendor_city?: string | null
           vendor_name?: string | null
+          vendor_phone?: string | null
+          vendor_state?: string | null
+          vendor_zip?: string | null
           workspace_id?: string | null
         }
         Relationships: [
@@ -1680,16 +1698,20 @@ export type Database = {
           asset_type_config: Json | null
           backdoor_enabled: boolean
           billing_interval: string
+          building_options: Json
           covenant_threshold: number | null
           created_at: string
           default_notification_days: number
+          department_options: Json
           discount_rate: number | null
           document_limit: number
           documents_used: number
           id: string
+          location_options: Json
           name: string
           owner_id: string
           plan: string
+          region_options: Json
           timezone: string
           updated_at: string
         }
@@ -1698,16 +1720,20 @@ export type Database = {
           asset_type_config?: Json | null
           backdoor_enabled?: boolean
           billing_interval?: string
+          building_options?: Json
           covenant_threshold?: number | null
           created_at?: string
           default_notification_days?: number
+          department_options?: Json
           discount_rate?: number | null
           document_limit?: number
           documents_used?: number
           id?: string
+          location_options?: Json
           name: string
           owner_id: string
           plan?: string
+          region_options?: Json
           timezone?: string
           updated_at?: string
         }
@@ -1716,16 +1742,20 @@ export type Database = {
           asset_type_config?: Json | null
           backdoor_enabled?: boolean
           billing_interval?: string
+          building_options?: Json
           covenant_threshold?: number | null
           created_at?: string
           default_notification_days?: number
+          department_options?: Json
           discount_rate?: number | null
           document_limit?: number
           documents_used?: number
           id?: string
+          location_options?: Json
           name?: string
           owner_id?: string
           plan?: string
+          region_options?: Json
           timezone?: string
           updated_at?: string
         }
