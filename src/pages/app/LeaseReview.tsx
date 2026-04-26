@@ -1194,7 +1194,7 @@ export default function LeaseReview() {
       if (leaseError) throw leaseError;
 
       // Create an empty change set in draft state
-      const { error: csError } = await (supabase as any)
+      const { data: newCs, error: csError } = await (supabase as any)
         .from('lease_change_sets')
         .insert({
           lease_id: lease.id,
@@ -1202,7 +1202,9 @@ export default function LeaseReview() {
           unlock_request_id: pendingUnlockRequest?.id ?? null,
           submitted_by: pendingUnlockRequest?.requested_by ?? user.id,
           status: 'draft',
-        });
+        })
+        .select('id')
+        .single();
       if (csError) throw csError;
 
       await supabase.from('lease_activity_log').insert({
@@ -1211,6 +1213,27 @@ export default function LeaseReview() {
         activity_type: 'unlock_approved',
         details: { unlock_request_id: pendingUnlockRequest?.id ?? null },
       });
+
+      await (supabase as any).from('lease_governance_audit').insert([
+        {
+          lease_id: lease.id,
+          workspace_id: lease.workspace_id,
+          event_type: 'unlock_approved',
+          actor_user_id: user.id,
+          actor_email: user.email ?? null,
+          related_unlock_request_id: pendingUnlockRequest?.id ?? null,
+          related_change_set_id: newCs?.id ?? null,
+        },
+        {
+          lease_id: lease.id,
+          workspace_id: lease.workspace_id,
+          event_type: 'change_set_created',
+          actor_user_id: user.id,
+          actor_email: user.email ?? null,
+          related_unlock_request_id: pendingUnlockRequest?.id ?? null,
+          related_change_set_id: newCs?.id ?? null,
+        },
+      ]).catch((err: any) => console.error('[LeaseReview] governance audit error:', err));
 
       toast.success('Lease unlocked — changes must be submitted for approval');
       refetchLease();
@@ -1236,6 +1259,15 @@ export default function LeaseReview() {
         details: { unlock_request_id: pendingUnlockRequest.id },
       });
 
+      await (supabase as any).from('lease_governance_audit').insert({
+        lease_id: lease.id,
+        workspace_id: lease.workspace_id,
+        event_type: 'unlock_rejected',
+        actor_user_id: user.id,
+        actor_email: user.email ?? null,
+        related_unlock_request_id: pendingUnlockRequest.id,
+      }).catch((err: any) => console.error('[LeaseReview] governance audit error:', err));
+
       toast.success('Unlock request denied');
       refetchLease();
     } catch (err) {
@@ -1254,12 +1286,46 @@ export default function LeaseReview() {
         .update({ status: 'pending_approval', submitted_at: new Date().toISOString() })
         .eq('id', activeChangeSet.id);
       if (error) throw error;
+
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
         user_id: user.id,
         activity_type: 'change_submitted',
         details: { change_set_id: activeChangeSet.id, item_count: stagedItemCount },
       });
+
+      // Governance audit — one change_set_submitted row + one field_change_staged per item
+      const { data: stagedItems } = await (supabase as any)
+        .from('lease_change_set_items')
+        .select('field_name, field_label, old_value, proposed_value')
+        .eq('change_set_id', activeChangeSet.id);
+
+      const auditRows: any[] = [
+        {
+          lease_id: lease.id,
+          workspace_id: lease.workspace_id,
+          event_type: 'change_set_submitted',
+          actor_user_id: user.id,
+          actor_email: user.email ?? null,
+          related_change_set_id: activeChangeSet.id,
+          change_summary: `${stagedItemCount} field(s) submitted for approval`,
+        },
+        ...((stagedItems ?? []) as any[]).map((item: any) => ({
+          lease_id: lease.id,
+          workspace_id: lease.workspace_id,
+          event_type: 'field_change_staged',
+          actor_user_id: user.id,
+          actor_email: user.email ?? null,
+          related_change_set_id: activeChangeSet.id,
+          field_name: item.field_name,
+          field_label: item.field_label,
+          old_value: item.old_value,
+          proposed_value: item.proposed_value,
+        })),
+      ];
+      await (supabase as any).from('lease_governance_audit').insert(auditRows)
+        .catch((err: any) => console.error('[LeaseReview] governance audit error:', err));
+
       toast.success('Changes submitted for approval');
       refetchLease();
     } catch (err) {

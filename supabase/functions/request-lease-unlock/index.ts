@@ -125,18 +125,28 @@ serve(async (req) => {
       });
     }
 
-    // Log activity
+    const requestId = (unlockRequest as any).id;
+
+    // Log to activity log
     await supabaseAdmin.from('lease_activity_log').insert({
       lease_id: leaseId,
       user_id: requestingUser.id,
       activity_type: 'unlock_requested',
-      details: {
-        unlock_request_id: (unlockRequest as any).id,
-        reason: requestReason,
-      },
+      details: { unlock_request_id: requestId, reason: requestReason },
     }).catch((err: any) => console.error('[request-lease-unlock] activity log error:', err));
 
-    return new Response(JSON.stringify({ ok: true, requestId: (unlockRequest as any).id }), {
+    // Log to governance audit (append-only, denormalized)
+    await supabaseAdmin.from('lease_governance_audit').insert({
+      lease_id: leaseId,
+      workspace_id: (lease as any).workspace_id,
+      event_type: 'unlock_requested',
+      actor_user_id: requestingUser.id,
+      actor_email: requestingUser.email ?? null,
+      related_unlock_request_id: requestId,
+      change_summary: requestReason,
+    }).catch((err: any) => console.error('[request-lease-unlock] governance audit error:', err));
+
+    return new Response(JSON.stringify({ ok: true, requestId }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

@@ -1,4 +1,3 @@
-npm warn exec The following package was not found and will be installed: supabase@2.95.3
 export type Json =
   | string
   | number
@@ -544,6 +543,102 @@ export type Database = {
             columns: ["lease_id"]
             isOneToOne: false
             referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_governance_audit: {
+        Row: {
+          actor_email: string | null
+          actor_user_id: string | null
+          cancellation_reason: string | null
+          change_summary: string | null
+          created_at: string
+          event_type: string
+          field_label: string | null
+          field_name: string | null
+          final_value: string | null
+          id: string
+          lease_id: string
+          old_value: string | null
+          proposed_value: string | null
+          rejection_reason: string | null
+          related_change_set_id: string | null
+          related_unlock_request_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          actor_email?: string | null
+          actor_user_id?: string | null
+          cancellation_reason?: string | null
+          change_summary?: string | null
+          created_at?: string
+          event_type: string
+          field_label?: string | null
+          field_name?: string | null
+          final_value?: string | null
+          id?: string
+          lease_id: string
+          old_value?: string | null
+          proposed_value?: string | null
+          rejection_reason?: string | null
+          related_change_set_id?: string | null
+          related_unlock_request_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          actor_email?: string | null
+          actor_user_id?: string | null
+          cancellation_reason?: string | null
+          change_summary?: string | null
+          created_at?: string
+          event_type?: string
+          field_label?: string | null
+          field_name?: string | null
+          final_value?: string | null
+          id?: string
+          lease_id?: string
+          old_value?: string | null
+          proposed_value?: string | null
+          rejection_reason?: string | null
+          related_change_set_id?: string | null
+          related_unlock_request_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_related_change_set_id_fkey"
+            columns: ["related_change_set_id"]
+            isOneToOne: false
+            referencedRelation: "lease_change_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_related_unlock_request_id_fkey"
+            columns: ["related_unlock_request_id"]
+            isOneToOne: false
+            referencedRelation: "lease_unlock_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -1647,6 +1742,65 @@ export type Database = {
           total_corrections: number | null
         }
         Relationships: []
+      }
+      v_governance_audit_report: {
+        Row: {
+          actor_email: string | null
+          actor_user_id: string | null
+          cancellation_reason: string | null
+          change_summary: string | null
+          event_timestamp: string | null
+          event_type: string | null
+          field_label: string | null
+          field_name: string | null
+          final_value: string | null
+          id: string | null
+          lease_id: string | null
+          lease_name: string | null
+          old_value: string | null
+          proposed_value: string | null
+          rejection_reason: string | null
+          related_change_set_id: string | null
+          related_unlock_request_id: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_related_change_set_id_fkey"
+            columns: ["related_change_set_id"]
+            isOneToOne: false
+            referencedRelation: "lease_change_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_related_unlock_request_id_fkey"
+            columns: ["related_unlock_request_id"]
+            isOneToOne: false
+            referencedRelation: "lease_unlock_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       v_review_queue: {
         Row: {
