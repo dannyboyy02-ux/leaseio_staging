@@ -44,7 +44,8 @@ export type ActivityType =
   | 'unlock_approved'
   | 'unlock_rejected'
   | 'change_approved'
-  | 'change_rejected';
+  | 'change_rejected'
+  | 'change_canceled';
 
 export type FunctionalRole = 'submitter' | 'manager_approver' | 'financial_approver' | 'admin';
 

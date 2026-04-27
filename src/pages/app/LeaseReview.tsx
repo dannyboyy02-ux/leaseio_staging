@@ -18,6 +18,7 @@ import {
   RotateCcw,
   ClipboardCheck,
   Pencil,
+  Unlock,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -188,8 +189,8 @@ export default function LeaseReview() {
 
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
-  const [editingCounterparty, setEditingCounterparty] = useState(false);
-  const [savingCounterparty, setSavingCounterparty] = useState(false);
+  const [cancelChangeSetDialogOpen, setCancelChangeSetDialogOpen] = useState(false);
+  const [cancelingChangeSet, setCancelingChangeSet] = useState(false);
 
   const [assetTypes, setAssetTypes] = useState<string[]>(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
@@ -267,6 +268,9 @@ export default function LeaseReview() {
   const isPosted = lifecycleStatus === 'active';
   // Lock editing when approved, posted, or pending approval
   const isLocked = isPosted || isPendingApproval || isApproved;
+
+  // Active lease unlocked for staged editing
+  const isUnlockedForEditing = isPosted && !lease?.model_locked && activeChangeSet?.status === 'draft';
 
   // Show PDF panel alongside tabs when lease is still editable/in-review.
   // Hide it (full-width tabs) when the lease is active and fully locked.
@@ -485,42 +489,50 @@ export default function LeaseReview() {
     }
   }, [lease, user, requestEdits]);
 
-  const saveCounterpartyEdits = useCallback(async () => {
-    if (!lease || !user) return;
-    setSavingCounterparty(true);
+  const refreshStagedItemCount = useCallback(async () => {
+    if (!activeChangeSet?.id) return;
+    const { count } = await (supabase as any)
+      .from('lease_change_set_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('change_set_id', activeChangeSet.id);
+    setStagedItemCount(count ?? 0);
+  }, [activeChangeSet?.id]);
+
+  const stageFieldChange = useCallback(async (changeSetId: string, fieldName: string, fieldLabel: string, oldValue: string | null, newValue: string) => {
+    if (!newValue || oldValue === newValue) return;
+    const { error } = await (supabase as any)
+      .from('lease_change_set_items')
+      .upsert({
+        change_set_id: changeSetId,
+        field_name: fieldName,
+        field_label: fieldLabel,
+        old_value: String(oldValue ?? ''),
+        proposed_value: newValue,
+        source_section: 'section_card',
+      }, { onConflict: 'change_set_id,field_name' });
+    if (error) console.error('[LeaseReview] stage field error:', error);
+    else await refreshStagedItemCount();
+  }, [refreshStagedItemCount]);
+
+  const handleCancelChangeSet = useCallback(async () => {
+    if (!lease || !user || !activeChangeSet?.id) return;
+    setCancelingChangeSet(true);
     try {
-      const { error } = await supabase
-        .from('leases')
-        .update({
-          vendor_name: requestEdits.vendor_name || null,
-          vendor_address_line1: (requestEdits.vendor_address_line1 || null) as any,
-          vendor_address_line2: (requestEdits.vendor_address_line2 || null) as any,
-          vendor_city: (requestEdits.vendor_city || null) as any,
-          vendor_state: (requestEdits.vendor_state || null) as any,
-          vendor_zip: (requestEdits.vendor_zip || null) as any,
-          vendor_phone: (requestEdits.vendor_phone || null) as any,
-        } as any)
-        .eq('id', lease.id);
+      const { data, error } = await supabase.functions.invoke('lease-governance-action', {
+        body: { action: 'cancel_change_set', changeSetId: activeChangeSet.id },
+      });
       if (error) throw error;
-      setLease((prev: any) => prev ? {
-        ...prev,
-        vendor_name: requestEdits.vendor_name,
-        vendor_address_line1: requestEdits.vendor_address_line1,
-        vendor_address_line2: requestEdits.vendor_address_line2,
-        vendor_city: requestEdits.vendor_city,
-        vendor_state: requestEdits.vendor_state,
-        vendor_zip: requestEdits.vendor_zip,
-        vendor_phone: requestEdits.vendor_phone,
-      } : prev);
-      setEditingCounterparty(false);
-      toast.success('Counterparty updated');
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setCancelChangeSetDialogOpen(false);
+      toast.success('Changes discarded. Lease re-locked.');
+      refetchLease();
     } catch (err) {
-      console.error('Error saving counterparty:', err);
-      toast.error('Failed to save counterparty');
+      console.error('Error canceling change set:', err);
+      toast.error('Failed to discard changes');
     } finally {
-      setSavingCounterparty(false);
+      setCancelingChangeSet(false);
     }
-  }, [lease, user, requestEdits]);
+  }, [lease, user, activeChangeSet, refetchLease]);
 
   const saveRename = useCallback(async () => {
     if (!lease) return;
@@ -863,12 +875,20 @@ export default function LeaseReview() {
   const trackFieldCorrection = useCallback(async (fieldId: string) => {
     const originalValue = originalValues.current[fieldId];
     const currentValue = form[fieldId];
-    
+
     if (originalValue === currentValue || !lease?.id) return;
-    
+
+    // Stage change when unlocked for governance editing
+    if (isUnlockedForEditing && activeChangeSet?.id) {
+      const fieldLabel = Object.values(SECTION_CONFIG)
+        .flatMap(s => s.fields)
+        .find(f => f.id === fieldId)?.label ?? fieldId;
+      await stageFieldChange(activeChangeSet.id, fieldId, fieldLabel, originalValue ?? null, currentValue);
+    }
+
     const extractedJson = lease?.extracted_json as ExtractedJson | null;
     const fieldConfidence = getFieldConfidence(extractedJson, fieldId);
-    
+
     await supabase.from('field_corrections').insert({
       lease_id: lease.id,
       field_name: fieldId,
@@ -877,9 +897,9 @@ export default function LeaseReview() {
       ai_confidence: fieldConfidence,
       correction_type: !originalValue ? 'add_missing' : !currentValue ? 'delete_wrong' : 'edit'
     });
-    
+
     originalValues.current[fieldId] = currentValue;
-  }, [form, lease?.id, lease?.extracted_json]);
+  }, [form, lease?.id, lease?.extracted_json, isUnlockedForEditing, activeChangeSet?.id, stageFieldChange]);
 
   // Track low-confidence field focus
   const handleFieldFocus = useCallback((fieldId: string) => {
@@ -1269,66 +1289,15 @@ export default function LeaseReview() {
   const handleUnlockLease = useCallback(async () => {
     if (!lease || !user) return;
     try {
-      // Approve the pending unlock request if one exists
-      if (pendingUnlockRequest?.id) {
-        const { error: reqError } = await (supabase as any)
-          .from('lease_unlock_requests')
-          .update({ status: 'approved', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
-          .eq('id', pendingUnlockRequest.id);
-        if (reqError) throw reqError;
-      }
-
-      // Unlock the lease (lifecycle_status stays 'active')
-      const { error: leaseError } = await supabase
-        .from('leases')
-        .update({ model_locked: false } as any)
-        .eq('id', lease.id);
-      if (leaseError) throw leaseError;
-
-      // Create an empty change set in draft state
-      const { data: newCs, error: csError } = await (supabase as any)
-        .from('lease_change_sets')
-        .insert({
-          lease_id: lease.id,
-          workspace_id: lease.workspace_id,
-          unlock_request_id: pendingUnlockRequest?.id ?? null,
-          submitted_by: pendingUnlockRequest?.requested_by ?? user.id,
-          status: 'draft',
-        })
-        .select('id')
-        .single();
-      if (csError) throw csError;
-
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user.id,
-        activity_type: 'unlock_approved',
-        details: { unlock_request_id: pendingUnlockRequest?.id ?? null },
+      const { data, error } = await supabase.functions.invoke('lease-governance-action', {
+        body: pendingUnlockRequest?.id
+          ? { action: 'approve_unlock_request', unlockRequestId: pendingUnlockRequest.id }
+          : { action: 'direct_unlock', leaseId: lease.id },
       });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
 
-      const { error: auditErr1 } = await (supabase as any).from('lease_governance_audit').insert([
-        {
-          lease_id: lease.id,
-          workspace_id: lease.workspace_id,
-          event_type: 'unlock_approved',
-          actor_user_id: user.id,
-          actor_email: user.email ?? null,
-          related_unlock_request_id: pendingUnlockRequest?.id ?? null,
-          related_change_set_id: newCs?.id ?? null,
-        },
-        {
-          lease_id: lease.id,
-          workspace_id: lease.workspace_id,
-          event_type: 'change_set_created',
-          actor_user_id: user.id,
-          actor_email: user.email ?? null,
-          related_unlock_request_id: pendingUnlockRequest?.id ?? null,
-          related_change_set_id: newCs?.id ?? null,
-        },
-      ]);
-      if (auditErr1) console.error('[LeaseReview] governance audit error:', auditErr1);
-
-      toast.success('Lease unlocked — changes must be submitted for approval');
+      toast.success('Lease unlocked - changes must be submitted for approval');
       refetchLease();
     } catch (err) {
       console.error('Error unlocking lease:', err);
@@ -1339,28 +1308,11 @@ export default function LeaseReview() {
   const handleDenyUnlock = useCallback(async () => {
     if (!lease || !user || !pendingUnlockRequest?.id) return;
     try {
-      const { error } = await (supabase as any)
-        .from('lease_unlock_requests')
-        .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
-        .eq('id', pendingUnlockRequest.id);
+      const { data, error } = await supabase.functions.invoke('lease-governance-action', {
+        body: { action: 'reject_unlock_request', unlockRequestId: pendingUnlockRequest.id },
+      });
       if (error) throw error;
-
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user.id,
-        activity_type: 'unlock_rejected',
-        details: { unlock_request_id: pendingUnlockRequest.id },
-      });
-
-      const { error: auditErr2 } = await (supabase as any).from('lease_governance_audit').insert({
-        lease_id: lease.id,
-        workspace_id: lease.workspace_id,
-        event_type: 'unlock_rejected',
-        actor_user_id: user.id,
-        actor_email: user.email ?? null,
-        related_unlock_request_id: pendingUnlockRequest.id,
-      });
-      if (auditErr2) console.error('[LeaseReview] governance audit error:', auditErr2);
+      if ((data as any)?.error) throw new Error((data as any).error);
 
       toast.success('Unlock request denied');
       refetchLease();
@@ -1508,6 +1460,11 @@ export default function LeaseReview() {
   const isManagerApprover = (userFunctionalRoles ?? []).includes('manager_approver');
   const isFinancialApprover = (userFunctionalRoles ?? []).includes('financial_approver');
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
+  const canShareFinancialSummary = Boolean(
+    lease?.calc_total_commitment &&
+    isAdminUser &&
+    ['approved', 'executed', 'active'].includes(lease?.lifecycle_status || ''),
+  );
 
   let nextStepBanner: { type: 'action' | 'info'; message: string } | null = null;
   if (lifecycleStatus === 'submitted') {
@@ -1569,8 +1526,6 @@ export default function LeaseReview() {
               </div>
             }
           />
-
-          {renderStatusProgress()}
 
           {/* Role-aware next-step guidance */}
           {nextStepBanner && (
@@ -1783,127 +1738,7 @@ export default function LeaseReview() {
             </Card>
           </div>
 
-          {/* Counterparty — own section */}
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle>Counterparty</CardTitle>
-                {!editingCounterparty && (
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    setRequestEdits(prev => ({
-                      ...prev,
-                      vendor_name: lease.vendor_name || '',
-                      vendor_address_line1: (lease as any).vendor_address_line1 || '',
-                      vendor_address_line2: (lease as any).vendor_address_line2 || '',
-                      vendor_city: (lease as any).vendor_city || '',
-                      vendor_state: (lease as any).vendor_state || '',
-                      vendor_zip: (lease as any).vendor_zip || '',
-                      vendor_phone: (lease as any).vendor_phone || '',
-                    }));
-                    setEditingCounterparty(true);
-                  }}>Edit</Button>
-                )}
-                {editingCounterparty && (
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => {
-                      setEditingCounterparty(false);
-                      setRequestEdits(prev => ({
-                        ...prev,
-                        vendor_name: lease.vendor_name || '',
-                        vendor_address_line1: (lease as any).vendor_address_line1 || '',
-                        vendor_address_line2: (lease as any).vendor_address_line2 || '',
-                        vendor_city: (lease as any).vendor_city || '',
-                        vendor_state: (lease as any).vendor_state || '',
-                        vendor_zip: (lease as any).vendor_zip || '',
-                        vendor_phone: (lease as any).vendor_phone || '',
-                      }));
-                    }}>Cancel</Button>
-                    <Button size="sm" disabled={savingCounterparty} onClick={saveCounterpartyEdits}>
-                      {savingCounterparty ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                      Save
-                    </Button>
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent className="text-sm">
-                {editingCounterparty ? (
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Vendor / Counterparty Name</Label>
-                      <input
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={requestEdits.vendor_name}
-                        onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_name: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Address Line 1</Label>
-                      <input
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={requestEdits.vendor_address_line1}
-                        onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_address_line1: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Address Line 2</Label>
-                      <input
-                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={requestEdits.vendor_address_line2}
-                        onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_address_line2: e.target.value }))}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-xs font-medium text-muted-foreground">City</Label>
-                        <input
-                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={requestEdits.vendor_city}
-                          onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_city: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs font-medium text-muted-foreground">State</Label>
-                        <input
-                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={requestEdits.vendor_state}
-                          onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_state: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Zip Code</Label>
-                        <input
-                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={requestEdits.vendor_zip}
-                          onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_zip: e.target.value }))}
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-xs font-medium text-muted-foreground">Phone</Label>
-                        <input
-                          className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                          value={requestEdits.vendor_phone}
-                          onChange={(e) => setRequestEdits(prev => ({ ...prev, vendor_phone: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                    <p className="col-span-2"><span className="font-medium">Name:</span> {lease.vendor_name || '\u2014'}</p>
-                    <p className="col-span-2"><span className="font-medium">Address Line 1:</span> {(lease as any).vendor_address_line1 || '\u2014'}</p>
-                    <p className="col-span-2"><span className="font-medium">Address Line 2:</span> {(lease as any).vendor_address_line2 || '\u2014'}</p>
-                    <p><span className="font-medium">City:</span> {(lease as any).vendor_city || '\u2014'}</p>
-                    <p><span className="font-medium">State:</span> {(lease as any).vendor_state || '\u2014'}</p>
-                    <p><span className="font-medium">Zip:</span> {(lease as any).vendor_zip || '\u2014'}</p>
-                    <p><span className="font-medium">Phone:</span> {(lease as any).vendor_phone || '\u2014'}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
+          <Card>
               <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {lease.storage_path && lease.filename && (
@@ -1972,8 +1807,7 @@ export default function LeaseReview() {
                   />
                 )}
               </CardContent>
-            </Card>
-          </div>
+          </Card>
 
           {(lease.monthly_payment || lease.term_months) && (
             <div className="grid gap-4 lg:grid-cols-2">
@@ -2099,7 +1933,7 @@ export default function LeaseReview() {
             </div>
           )}
 
-          {lease.calc_total_commitment && (
+          {canShareFinancialSummary && (
             <SummaryShareControls
               leaseId={lease.id}
               lifecycleStatus={lease.lifecycle_status || ''}
@@ -2397,6 +2231,7 @@ export default function LeaseReview() {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col px-4 pt-2">
                   <TabsList className="shrink-0 justify-start">
                     <TabsTrigger value="general">General Information</TabsTrigger>
+                    <TabsTrigger value="vendor">Vendor / Counterparty</TabsTrigger>
                     <TabsTrigger value="rent">Rent</TabsTrigger>
                     <TabsTrigger value="options">Options & Clauses</TabsTrigger>
                     <TabsTrigger value="risks">Risks</TabsTrigger>
@@ -2408,7 +2243,7 @@ export default function LeaseReview() {
 
                       {/* General Information */}
                       <TabsContent value="general" className="mt-0 space-y-4">
-                        {(['parties', 'vendor', 'property', 'dates'] as SectionKey[]).map((sectionKey) => (
+                        {(['parties', 'property', 'dates'] as SectionKey[]).map((sectionKey) => (
                           <SectionCard
                             key={sectionKey}
                             sectionKey={sectionKey}
@@ -2416,7 +2251,7 @@ export default function LeaseReview() {
                             extractedJson={extractedJson}
                             confidenceScores={confidenceScores}
                             verifiedFields={verifiedFields}
-                            isLocked={isLocked}
+                            isLocked={isLocked && !isUnlockedForEditing}
                             isModelLocked={!!lease?.model_locked}
                             assetTypes={assetTypes}
                             onFieldChange={handleFieldChange}
@@ -2618,22 +2453,62 @@ export default function LeaseReview() {
                                         : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
                                     </p>
                                   </div>
-                                  {activeChangeSet.status === 'draft' && stagedItemCount > 0 && (
-                                    <Button
-                                      size="sm"
-                                      className="shrink-0"
-                                      onClick={handleSubmitChanges}
-                                      disabled={submittingChanges}
-                                    >
-                                      {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-                                      Submit for Approval
-                                    </Button>
-                                  )}
+                                  <div className="flex gap-2 shrink-0">
+                                    {activeChangeSet.status === 'draft' && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                                        onClick={() => {
+                                          if (stagedItemCount > 0) {
+                                            setCancelChangeSetDialogOpen(true);
+                                          } else {
+                                            handleCancelChangeSet();
+                                          }
+                                        }}
+                                        disabled={cancelingChangeSet}
+                                      >
+                                        {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Unlock size={14} className="mr-1.5" />}
+                                        Discard &amp; Re-lock
+                                      </Button>
+                                    )}
+                                    {activeChangeSet.status === 'draft' && stagedItemCount > 0 && (
+                                      <Button
+                                        size="sm"
+                                        className="shrink-0"
+                                        onClick={handleSubmitChanges}
+                                        disabled={submittingChanges}
+                                      >
+                                        {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                                        Submit for Approval
+                                      </Button>
+                                    )}
+                                  </div>
                                 </CardContent>
                               </Card>
                             )}
                           </>
                         )}
+                      </TabsContent>
+
+                      {/* Vendor / Counterparty */}
+                      <TabsContent value="vendor" className="mt-0 space-y-4">
+                        <SectionCard
+                          sectionKey="vendor"
+                          form={form}
+                          extractedJson={extractedJson}
+                          confidenceScores={confidenceScores}
+                          verifiedFields={verifiedFields}
+                          isLocked={isLocked && !isUnlockedForEditing}
+                          isModelLocked={!!lease?.model_locked}
+                          onFieldChange={handleFieldChange}
+                          onFieldFocus={handleFieldFocus}
+                          onFieldBlur={trackFieldCorrection}
+                          onVerifyField={handleVerifyField}
+                          onJumpToPage={jumpToPage}
+                          confirmedSections={confirmedSections}
+                          onConfirmSection={handleConfirmSection}
+                        />
                       </TabsContent>
 
                       {/* Rent */}
@@ -2791,6 +2666,31 @@ export default function LeaseReview() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
             <Button onClick={saveRename}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Discard Changes Confirmation Dialog */}
+      <Dialog open={cancelChangeSetDialogOpen} onOpenChange={setCancelChangeSetDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Discard Changes &amp; Re-lock</DialogTitle>
+            <DialogDescription>
+              This will discard all {stagedItemCount} staged change{stagedItemCount !== 1 ? 's' : ''} and re-lock the lease. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelChangeSetDialogOpen(false)} disabled={cancelingChangeSet}>
+              Keep Editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancelChangeSet}
+              disabled={cancelingChangeSet}
+            >
+              {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Discard &amp; Re-lock
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

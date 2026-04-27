@@ -41,10 +41,16 @@ export const SECTION_CONFIG = {
     ],
   },
   vendor: {
-    title: 'Payor / Vendor',
+    title: 'Vendor / Counterparty',
     icon: Building2,
     fields: [
       { id: 'vendor_name', label: 'Vendor / Counterparty', icon: Building2 },
+      { id: 'vendor_address_line1', label: 'Address Line 1', icon: MapPin },
+      { id: 'vendor_address_line2', label: 'Address Line 2', icon: MapPin },
+      { id: 'vendor_city', label: 'City', icon: MapPin },
+      { id: 'vendor_state', label: 'State', icon: MapPin },
+      { id: 'vendor_zip', label: 'Zip Code', icon: MapPin },
+      { id: 'vendor_phone', label: 'Phone', icon: Building2 },
     ],
   },
   property: {

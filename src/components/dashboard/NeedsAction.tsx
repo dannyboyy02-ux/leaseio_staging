@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCircle2, ChevronRight, CheckSquare, Clock, FileSearch, Upload } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight, CheckSquare, Clock, FileSearch, Upload, Unlock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,11 +30,17 @@ interface OtherFlag {
   icon: React.ElementType;
 }
 
+interface UnlockedLease {
+  leaseId: string;
+  leaseName: string;
+}
+
 export function NeedsAction() {
   const { workspace } = useApp();
   const navigate = useNavigate();
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [otherFlags, setOtherFlags] = useState<OtherFlag[]>([]);
+  const [unlockedLeases, setUnlockedLeases] = useState<UnlockedLease[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,18 +50,34 @@ export function NeedsAction() {
         return;
       }
 
-      const { data: leases } = await supabase
-        .from('leases')
-        .select(
-          'id, request_title, filename, requesting_department, monthly_payment, submitted_for_approval_at, status_changed_at, status, executed_document_url, lifecycle_status'
-        )
-        .eq('workspace_id', workspace.id)
-        .in('lifecycle_status', ['under_review', 'executed', 'submitted']);
+      const [leasesResult, draftChangeSetsResult] = await Promise.all([
+        supabase
+          .from('leases')
+          .select(
+            'id, request_title, filename, requesting_department, monthly_payment, submitted_for_approval_at, status_changed_at, status, executed_document_url, lifecycle_status'
+          )
+          .eq('workspace_id', workspace.id)
+          .in('lifecycle_status', ['under_review', 'executed', 'submitted']),
+        (supabase as any)
+          .from('lease_change_sets')
+          .select('id, lease_id, leases!inner(request_title, filename, lifecycle_status, workspace_id)')
+          .eq('status', 'draft')
+          .eq('leases.lifecycle_status', 'active')
+          .eq('leases.workspace_id', workspace.id)
+          .limit(10),
+      ]);
 
+      const leases = leasesResult.data;
       if (!leases) {
         setLoading(false);
         return;
       }
+
+      const unlocked: UnlockedLease[] = ((draftChangeSetsResult.data ?? []) as any[]).map((cs: any) => ({
+        leaseId: cs.lease_id,
+        leaseName: cs.leases?.request_title || cs.leases?.filename || 'Unnamed lease',
+      }));
+      setUnlockedLeases(unlocked);
 
       const now = Date.now();
       const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
@@ -118,7 +140,7 @@ export function NeedsAction() {
     fetchData();
   }, [workspace?.id]);
 
-  const totalCount = pendingApprovals.length + otherFlags.filter((f) => f.count > 0).length;
+  const totalCount = pendingApprovals.length + otherFlags.filter((f) => f.count > 0).length + unlockedLeases.length;
 
   return (
     <Card className="border-l-4 border-l-orange-400">
@@ -176,6 +198,28 @@ export function NeedsAction() {
                       <p className="text-xs text-muted-foreground">
                         {formatCurrency(item.annualValue)}/yr
                       </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {unlockedLeases.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Unlocked for Editing
+                </p>
+                {unlockedLeases.map((item) => (
+                  <div
+                    key={item.leaseId}
+                    onClick={() => navigate(`/app/leases/${item.leaseId}`)}
+                    className="flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 transition-colors"
+                  >
+                    <Unlock className="h-4 w-4 shrink-0 text-blue-500" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{item.leaseName}</p>
+                      <p className="text-xs text-muted-foreground">Draft changes pending submission</p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
                   </div>

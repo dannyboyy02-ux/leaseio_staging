@@ -70,6 +70,7 @@ const ACTIVITY_CONFIG: Record<ActivityType, {
   unlock_rejected:  { icon: Lock,        label: 'Unlock Rejected',   colorClass: 'text-destructive' },
   change_approved:  { icon: CheckCircle, label: 'Changes Approved',  colorClass: 'text-success' },
   change_rejected:  { icon: XCircle,     label: 'Changes Rejected',  colorClass: 'text-destructive' },
+  change_canceled:  { icon: XCircle,     label: 'Changes Discarded', colorClass: 'text-muted-foreground' },
 };
 
 export function ActivityTimeline({ leaseId, className }: ActivityTimelineProps) {
