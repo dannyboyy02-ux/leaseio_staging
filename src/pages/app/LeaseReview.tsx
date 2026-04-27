@@ -514,25 +514,6 @@ export default function LeaseReview() {
     else await refreshStagedItemCount();
   }, [refreshStagedItemCount]);
 
-  const handleCancelChangeSet = useCallback(async () => {
-    if (!lease || !user || !activeChangeSet?.id) return;
-    setCancelingChangeSet(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('lease-governance-action', {
-        body: { action: 'cancel_change_set', changeSetId: activeChangeSet.id },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      setCancelChangeSetDialogOpen(false);
-      toast.success('Changes discarded. Lease re-locked.');
-      refetchLease();
-    } catch (err) {
-      console.error('Error canceling change set:', err);
-      toast.error('Failed to discard changes');
-    } finally {
-      setCancelingChangeSet(false);
-    }
-  }, [lease, user, activeChangeSet, refetchLease]);
 
   const saveRename = useCallback(async () => {
     if (!lease) return;
@@ -1034,6 +1015,26 @@ export default function LeaseReview() {
     setPendingUnlockRequest(unlockResult.data ?? null);
     setActiveChangeSet(changeSetResult.data ?? null);
   }, [leaseId]);
+
+  const handleCancelChangeSet = useCallback(async () => {
+    if (!lease || !user || !activeChangeSet?.id) return;
+    setCancelingChangeSet(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('lease-governance-action', {
+        body: { action: 'cancel_change_set', changeSetId: activeChangeSet.id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setCancelChangeSetDialogOpen(false);
+      toast.success('Changes discarded. Lease re-locked.');
+      refetchLease();
+    } catch (err) {
+      console.error('Error canceling change set:', err);
+      toast.error('Failed to discard changes');
+    } finally {
+      setCancelingChangeSet(false);
+    }
+  }, [lease, user, activeChangeSet, refetchLease]);
 
   // Save draft
   const handleSync = async () => {
