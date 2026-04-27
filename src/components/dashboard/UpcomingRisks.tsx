@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Shield } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { cn } from '@/lib/utils';
 import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
 
 const formatCurrency = (value: number): string =>
@@ -25,11 +24,20 @@ interface Risk {
   annualRent: number;
 }
 
+type FilterType = 'all' | 'auto_renewal' | 'expiring' | 'cpi_escalation';
+
+const CHIP_LABELS: Record<FilterType, string> = {
+  all: 'All',
+  auto_renewal: 'Auto-Renew',
+  expiring: 'Expiring',
+  cpi_escalation: 'CPI',
+};
+
 export function UpcomingRisks() {
   const { workspace } = useApp();
-  const navigate = useNavigate();
   const [risks, setRisks] = useState<Risk[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
 
   useEffect(() => {
     async function fetchData() {
@@ -152,22 +160,14 @@ export function UpcomingRisks() {
     fetchData();
   }, [workspace?.id]);
 
+  const filteredRisks = activeFilter === 'all' ? risks : risks.filter((r) => r.riskType === activeFilter);
+
   return (
     <Card className="border-amber-200">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            Upcoming Risks
-          </div>
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs"
-            onClick={() => navigate('/app/leases')}
-          >
-            Calendar view
-          </Button>
+        <CardTitle className="flex items-center gap-2 text-sm font-medium">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          Upcoming Risks
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -184,7 +184,28 @@ export function UpcomingRisks() {
           </div>
         ) : (
           <div>
-            {risks.map((risk, index) => (
+            <div className="flex gap-1 flex-wrap mb-3">
+              {(Object.keys(CHIP_LABELS) as FilterType[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setActiveFilter(f)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+                    activeFilter === f
+                      ? 'bg-foreground text-background border-foreground'
+                      : 'border-border text-muted-foreground hover:border-foreground/50',
+                  )}
+                >
+                  {CHIP_LABELS[f]}
+                </button>
+              ))}
+            </div>
+            {filteredRisks.length === 0 ? (
+              <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+                <Shield className="h-4 w-4 shrink-0" />
+                <span>No {CHIP_LABELS[activeFilter].toLowerCase()} risks detected</span>
+              </div>
+            ) : filteredRisks.map((risk, index) => (
               <div
                 key={`${risk.leaseId}-${risk.riskType}-${index}`}
                 className="flex items-center gap-3 py-2 border-b last:border-0"

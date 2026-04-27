@@ -34,6 +34,7 @@ import NewLease from "./pages/app/NewLease";
 import ExtractionAnalytics from "./pages/app/ExtractionAnalytics";
 import AuditLog from "./pages/app/AuditLog";
 import Support from "./pages/app/Support";
+import NeedsActionPage from "./pages/app/NeedsActionPage";
 import Dashboard from "./pages/Dashboard";
 import Leases from "./pages/Leases";
 import Notifications from "./pages/Notifications";
@@ -63,7 +64,14 @@ const App = () => (
               <Routes>
                 {/* Public routes */}
                 <Route path="/" element={<Landing />} />
-                <Route path="/lease-audit" element={<LeaseAudit />} />
+                <Route
+                  path="/lease-audit"
+                  element={
+                    <ProtectedRoute>
+                      <LeaseAudit />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
 
@@ -240,6 +248,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Support />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/needs-action"
+                  element={
+                    <ProtectedRoute>
+                      <NeedsActionPage />
                     </ProtectedRoute>
                   }
                 />

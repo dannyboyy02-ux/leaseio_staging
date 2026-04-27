@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, ChevronRight, AlertCircle, TrendingUp, Clock, DollarSign, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, AlertCircle, TrendingUp, Clock, DollarSign, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,10 +34,21 @@ function formatCurrency(amount: number, language: string): string {
   }).format(amount);
 }
 
+const DOT_COLORS: Record<string, string> = {
+  payment:    'bg-blue-500',
+  expiration: 'bg-red-500',
+  renewal:    'bg-indigo-500',
+  escalation: 'bg-amber-500',
+};
+
 export function UpcomingEvents() {
   const { t, language } = useLanguage();
   const { workspace, user } = useApp();
   const queryClient = useQueryClient();
+
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
   const eventConfig = {
     renewal:    { icon: Clock,        variant: 'info' as const,        labelKey: 'dashboard.renewal' },
@@ -157,7 +168,7 @@ export function UpcomingEvents() {
         }
       }
 
-      return upcomingEvents.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 5);
+      return upcomingEvents.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 50);
     },
   });
 
@@ -209,16 +220,154 @@ export function UpcomingEvents() {
             <Calendar className="h-4 w-4" />
             {t('dashboard.upcoming_events')}
           </CardTitle>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/app/notifications">
-              {t('dashboard.view_all')} <ChevronRight className="h-4 w-4 ml-1" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setViewMode('list')}
+            >
+              List
+            </Button>
+            <Button
+              variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => { setViewMode('calendar'); setSelectedDay(null); }}
+            >
+              <Calendar className="h-3.5 w-3.5 mr-1" />
+              Cal
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
+        {viewMode === 'calendar' ? (() => {
+          const year = calendarMonth.getFullYear();
+          const month = calendarMonth.getMonth();
+          const firstDay = new Date(year, month, 1).getDay();
+          const daysInMonth = new Date(year, month + 1, 0).getDate();
+          const cells: (number | null)[] = [
+            ...Array(firstDay).fill(null),
+            ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+          ];
+          const today = new Date();
+
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => { setCalendarMonth(new Date(year, month - 1, 1)); setSelectedDay(null); }}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm font-medium">{format(calendarMonth, 'MMMM yyyy')}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => { setCalendarMonth(new Date(year, month + 1, 1)); setSelectedDay(null); }}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-0.5">
+                {['Su','Mo','Tu','We','Th','Fr','Sa'].map((d) => (
+                  <div key={d} className="text-[10px] font-medium text-muted-foreground text-center py-1">{d}</div>
+                ))}
+                {cells.map((day, i) => {
+                  if (day === null) return <div key={`e-${i}`} />;
+                  const eventsOnDay = visibleEvents.filter((e) => {
+                    const d = e.date;
+                    return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+                  });
+                  const isSelected =
+                    selectedDay?.getFullYear() === year &&
+                    selectedDay?.getMonth() === month &&
+                    selectedDay?.getDate() === day;
+                  const isToday =
+                    today.getFullYear() === year &&
+                    today.getMonth() === month &&
+                    today.getDate() === day;
+                  return (
+                    <div
+                      key={day}
+                      onClick={() => eventsOnDay.length > 0 ? setSelectedDay(isSelected ? null : new Date(year, month, day)) : undefined}
+                      className={cn(
+                        'flex flex-col items-center py-1 rounded text-xs',
+                        eventsOnDay.length > 0 ? 'cursor-pointer hover:bg-muted/50' : 'cursor-default',
+                        isSelected && 'bg-muted',
+                        isToday && 'font-semibold',
+                      )}
+                    >
+                      <span>{day}</span>
+                      {eventsOnDay.length > 0 && (
+                        <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center">
+                          {eventsOnDay.slice(0, 3).map((e, ei) => (
+                            <span key={ei} className={cn('w-1.5 h-1.5 rounded-full', DOT_COLORS[e.type])} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex gap-3 flex-wrap pt-1 border-t">
+                {[
+                  { type: 'payment',    label: 'Payment',    color: 'bg-blue-500' },
+                  { type: 'expiration', label: 'Expiry',     color: 'bg-red-500' },
+                  { type: 'renewal',    label: 'Renewal',    color: 'bg-indigo-500' },
+                  { type: 'escalation', label: 'Escalation', color: 'bg-amber-500' },
+                ].map(({ type, label, color }) => (
+                  <div key={type} className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span className={cn('w-2 h-2 rounded-full', color)} />
+                    {label}
+                  </div>
+                ))}
+              </div>
+
+              {selectedDay && (() => {
+                const dayEvents = visibleEvents.filter((e) => {
+                  const d = e.date;
+                  return (
+                    d.getFullYear() === selectedDay.getFullYear() &&
+                    d.getMonth() === selectedDay.getMonth() &&
+                    d.getDate() === selectedDay.getDate()
+                  );
+                });
+                return (
+                  <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
+                    <p className="text-xs font-medium">{format(selectedDay, 'MMMM d, yyyy')}</p>
+                    {dayEvents.map((event) => {
+                      const config = eventConfig[event.type];
+                      const EventIcon = config.icon;
+                      return (
+                        <Link
+                          key={event.id}
+                          to={`/app/leases/${event.leaseId}`}
+                          className="flex items-center gap-2 text-sm hover:bg-muted/50 rounded px-1 py-0.5"
+                        >
+                          <EventIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span className="flex-1 truncate">{event.property}</span>
+                          <Badge variant={config.variant} className="text-[10px]">
+                            {t(config.labelKey)}
+                          </Badge>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          );
+        })() : (
         <div className="space-y-3">
-          {visibleEvents.map((event, index) => {
+          {visibleEvents.slice(0, 5).map((event, index) => {
             const config = eventConfig[event.type];
             const EventIcon = config.icon;
             const isUrgent = event.daysUntil <= 7;
@@ -290,6 +439,7 @@ export function UpcomingEvents() {
             );
           })}
         </div>
+        )}
       </CardContent>
     </Card>
   );

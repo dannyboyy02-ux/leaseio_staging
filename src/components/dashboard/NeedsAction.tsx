@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCircle2, ChevronRight, CheckSquare, Clock, FileSearch, Upload, Unlock } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight, ChevronDown, CheckSquare, Clock, FileSearch, Upload, Unlock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 
@@ -42,6 +43,10 @@ export function NeedsAction() {
   const [otherFlags, setOtherFlags] = useState<OtherFlag[]>([]);
   const [unlockedLeases, setUnlockedLeases] = useState<UnlockedLease[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  const toggleSection = (key: string) =>
+    setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
     async function fetchData() {
@@ -171,10 +176,16 @@ export function NeedsAction() {
           <div className="space-y-4">
             {pendingApprovals.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  Pending Approvals
-                </p>
-                {pendingApprovals.map((item) => (
+                <button
+                  className="flex items-center gap-1 w-full mb-2"
+                  onClick={() => toggleSection('approvals')}
+                >
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex-1 text-left">
+                    Pending Approvals
+                  </p>
+                  <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', collapsed.approvals && 'rotate-180')} />
+                </button>
+                {!collapsed.approvals && pendingApprovals.map((item) => (
                   <div
                     key={item.id}
                     onClick={() => navigate(`/app/leases/${item.id}`)}
@@ -207,10 +218,16 @@ export function NeedsAction() {
 
             {unlockedLeases.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  Unlocked for Editing
-                </p>
-                {unlockedLeases.map((item) => (
+                <button
+                  className="flex items-center gap-1 w-full mb-2"
+                  onClick={() => toggleSection('unlocked')}
+                >
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex-1 text-left">
+                    Unlocked for Editing
+                  </p>
+                  <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', collapsed.unlocked && 'rotate-180')} />
+                </button>
+                {!collapsed.unlocked && unlockedLeases.map((item) => (
                   <div
                     key={item.leaseId}
                     onClick={() => navigate(`/app/leases/${item.leaseId}`)}
@@ -229,10 +246,16 @@ export function NeedsAction() {
 
             {otherFlags.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  Other Flags
-                </p>
-                {otherFlags.map((flag) => (
+                <button
+                  className="flex items-center gap-1 w-full mb-2"
+                  onClick={() => toggleSection('flags')}
+                >
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex-1 text-left">
+                    Other Flags
+                  </p>
+                  <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', collapsed.flags && 'rotate-180')} />
+                </button>
+                {!collapsed.flags && otherFlags.map((flag) => (
                   <div
                     key={flag.label}
                     onClick={() => navigate(flag.href)}
@@ -253,7 +276,7 @@ export function NeedsAction() {
                 variant="link"
                 size="sm"
                 className="h-auto p-0 text-xs"
-                onClick={() => navigate('/app/leases')}
+                onClick={() => navigate('/app/needs-action')}
               >
                 View all
               </Button>
