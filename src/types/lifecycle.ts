@@ -38,7 +38,13 @@ export type ActivityType =
   | 'executed_terms_extracted'
   | 'executed_terms_edited'
   | 'classification_resolved'
-  | 'model_locked';
+  | 'model_locked'
+  // Governance workflow
+  | 'change_submitted'
+  | 'unlock_approved'
+  | 'unlock_rejected'
+  | 'change_approved'
+  | 'change_rejected';
 
 export type FunctionalRole = 'submitter' | 'manager_approver' | 'financial_approver' | 'admin';
 

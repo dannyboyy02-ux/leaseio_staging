@@ -13,8 +13,10 @@ import {
   CheckCircle,
   XCircle,
   Lock,
+  Unlock,
   Pencil,
   ScanText,
+  Send,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -62,6 +64,12 @@ const ACTIVITY_CONFIG: Record<ActivityType, {
   executed_terms_edited: { icon: Pencil, label: 'Executed Term Edited', colorClass: 'text-warning' },
   classification_resolved: { icon: CheckCircle, label: 'Classification Resolved', colorClass: 'text-success' },
   model_locked: { icon: Lock, label: 'Model Locked', colorClass: 'text-success' },
+  // Governance workflow
+  change_submitted: { icon: Send,        label: 'Changes Submitted', colorClass: 'text-info' },
+  unlock_approved:  { icon: Unlock,      label: 'Unlock Approved',   colorClass: 'text-success' },
+  unlock_rejected:  { icon: Lock,        label: 'Unlock Rejected',   colorClass: 'text-destructive' },
+  change_approved:  { icon: CheckCircle, label: 'Changes Approved',  colorClass: 'text-success' },
+  change_rejected:  { icon: XCircle,     label: 'Changes Rejected',  colorClass: 'text-destructive' },
 };
 
 export function ActivityTimeline({ leaseId, className }: ActivityTimelineProps) {
@@ -142,7 +150,11 @@ export function ActivityTimeline({ leaseId, className }: ActivityTimelineProps) 
   return (
     <div className={cn('space-y-4', className)}>
       {activities.map((activity, index) => {
-        const config = ACTIVITY_CONFIG[activity.activityType];
+        const config = ACTIVITY_CONFIG[activity.activityType] ?? {
+          icon: FileText,
+          label: activity.activityType,
+          colorClass: 'text-muted-foreground',
+        };
         const Icon = config.icon;
         const isLast = index === activities.length - 1;
 

@@ -49,12 +49,20 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? ""
   );
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    { auth: { persistSession: false } }
+  );
 
   try {
-    const { planId } = await req.json();
+    const { planId, workspaceId } = await req.json();
     
     if (!planId || !PRICE_IDS[planId]) {
       throw new Error(`Invalid plan: ${planId}`);
+    }
+    if (!workspaceId) {
+      throw new Error("workspaceId is required");
     }
 
     const authHeader = req.headers.get("Authorization")!;
@@ -62,6 +70,32 @@ serve(async (req) => {
     const { data } = await supabaseClient.auth.getUser(token);
     const user = data.user;
     if (!user?.email) throw new Error("User not authenticated or email not available");
+
+    const { data: workspace, error: workspaceError } = await supabaseAdmin
+      .from("workspaces")
+      .select("id, owner_id")
+      .eq("id", workspaceId)
+      .maybeSingle();
+
+    if (workspaceError || !workspace) {
+      throw new Error("Workspace not found");
+    }
+
+    let canManageBilling = workspace.owner_id === user.id;
+    if (!canManageBilling) {
+      const { data: membership } = await supabaseAdmin
+        .from("workspace_members")
+        .select("role")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+      canManageBilling = Boolean(membership);
+    }
+
+    if (!canManageBilling) {
+      throw new Error("You do not have permission to manage billing for this workspace");
+    }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
@@ -89,8 +123,13 @@ serve(async (req) => {
       success_url: `${origin}/app/settings/account?tab=subscription&checkout=success`,
       cancel_url: `${origin}/app/settings/account?tab=subscription&checkout=canceled`,
       metadata: {
-        user_id: user.id,
         plan_id: planId,
+      },
+      subscription_data: {
+        metadata: {
+          workspace_id: workspaceId,
+          plan_id: planId,
+        },
       },
     });
 
