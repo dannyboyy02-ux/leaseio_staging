@@ -65,8 +65,7 @@ export function OnboardingChecklist() {
   
   useEffect(() => {
     if (!user?.id || !workspace?.id) {
-      setLoadingPrefs(false);
-      return;
+      return; // stay hidden while auth context loads
     }
 
     const loadPreferences = async () => {
