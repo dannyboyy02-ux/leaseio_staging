@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import {
@@ -133,6 +134,7 @@ export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
   const { user, userRole, userFunctionalRoles } = useApp();
+  const queryClient = useQueryClient();
   
   const [lease, setLease] = useState<any | null>(null);
   const [risks, setRisks] = useState<Risk[]>([]);
@@ -1028,6 +1030,7 @@ export default function LeaseReview() {
       setCancelChangeSetDialogOpen(false);
       toast.success('Changes discarded. Lease re-locked.');
       refetchLease();
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
     } catch (err) {
       console.error('Error canceling change set:', err);
       toast.error('Failed to discard changes');

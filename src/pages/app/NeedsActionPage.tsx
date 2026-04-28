@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCircle2, ChevronDown, CheckSquare, Clock, FileSearch, Upload, Unlock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -39,54 +40,42 @@ interface UnlockedLease {
 export default function NeedsActionPage() {
   const { workspace } = useApp();
   const navigate = useNavigate();
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
-  const [otherFlags, setOtherFlags] = useState<OtherFlag[]>([]);
-  const [unlockedLeases, setUnlockedLeases] = useState<UnlockedLease[]>([]);
-  const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const toggleSection = (key: string) =>
     setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  useEffect(() => {
-    async function fetchData() {
-      if (!workspace?.id) {
-        setLoading(false);
-        return;
-      }
-
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['needs-action', workspace?.id],
+    enabled: !!workspace?.id,
+    queryFn: async () => {
       const [leasesResult, draftChangeSetsResult] = await Promise.all([
         supabase
           .from('leases')
           .select(
             'id, request_title, filename, requesting_department, monthly_payment, submitted_for_approval_at, status_changed_at, status, executed_document_url, lifecycle_status'
           )
-          .eq('workspace_id', workspace.id)
+          .eq('workspace_id', workspace!.id)
           .in('lifecycle_status', ['under_review', 'executed', 'submitted']),
         (supabase as any)
           .from('lease_change_sets')
           .select('id, lease_id, leases!inner(request_title, filename, lifecycle_status, workspace_id)')
           .eq('status', 'draft')
           .eq('leases.lifecycle_status', 'active')
-          .eq('leases.workspace_id', workspace.id),
+          .eq('leases.workspace_id', workspace!.id),
       ]);
 
-      const leases = leasesResult.data;
-      if (!leases) {
-        setLoading(false);
-        return;
-      }
+      const leases = leasesResult.data ?? [];
 
-      const unlocked: UnlockedLease[] = ((draftChangeSetsResult.data ?? []) as any[]).map((cs: any) => ({
+      const unlockedLeases: UnlockedLease[] = ((draftChangeSetsResult.data ?? []) as any[]).map((cs: any) => ({
         leaseId: cs.lease_id,
         leaseName: cs.leases?.request_title || cs.leases?.filename || 'Unnamed lease',
       }));
-      setUnlockedLeases(unlocked);
 
       const now = Date.now();
       const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
 
-      const approvals: PendingApproval[] = leases
+      const pendingApprovals: PendingApproval[] = leases
         .filter((l) => l.lifecycle_status === 'under_review')
         .map((l) => {
           const referenceDate = l.submitted_for_approval_at ?? l.status_changed_at;
@@ -103,7 +92,7 @@ export default function NeedsActionPage() {
         })
         .sort((a, b) => b.daysWaiting - a.daysWaiting);
 
-      const flags: OtherFlag[] = [];
+      const otherFlags: OtherFlag[] = [];
 
       const stalledCount = leases.filter((l) => {
         if (l.lifecycle_status !== 'under_review') return false;
@@ -111,7 +100,7 @@ export default function NeedsActionPage() {
         return now - new Date(l.status_changed_at).getTime() > fourteenDaysMs;
       }).length;
       if (stalledCount > 0) {
-        flags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/leases?view=approval', icon: Clock });
+        otherFlags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/leases?view=approval', icon: Clock });
       }
 
       const noAbstractionCount = leases.filter((l) => {
@@ -120,23 +109,23 @@ export default function NeedsActionPage() {
         return inLifecycle && inStatus;
       }).length;
       if (noAbstractionCount > 0) {
-        flags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval', icon: FileSearch });
+        otherFlags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval', icon: FileSearch });
       }
 
       const noDocCount = leases.filter(
         (l) => l.lifecycle_status === 'executed' && !l.executed_document_url
       ).length;
       if (noDocCount > 0) {
-        flags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active', icon: Upload });
+        otherFlags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active', icon: Upload });
       }
 
-      setPendingApprovals(approvals);
-      setOtherFlags(flags);
-      setLoading(false);
-    }
+      return { pendingApprovals, unlockedLeases, otherFlags };
+    },
+  });
 
-    fetchData();
-  }, [workspace?.id]);
+  const pendingApprovals = data?.pendingApprovals ?? [];
+  const unlockedLeases   = data?.unlockedLeases   ?? [];
+  const otherFlags       = data?.otherFlags       ?? [];
 
   const totalCount = pendingApprovals.length + otherFlags.filter((f) => f.count > 0).length + unlockedLeases.length;
 
