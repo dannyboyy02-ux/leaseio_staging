@@ -4,6 +4,7 @@ import { Calendar, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Trending
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -49,7 +50,13 @@ export function UpcomingEvents() {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
+    expiration: true,
+    renewal: true,
+    payment: true,
+    escalation: true,
+  });
+  const [drawerGroup, setDrawerGroup] = useState<UpcomingEvent['type'] | null>(null);
 
   const toggleGroup = (type: string) =>
     setCollapsedGroups((prev) => ({ ...prev, [type]: !prev[type] }));
@@ -265,7 +272,10 @@ export function UpcomingEvents() {
     return `${days} ${t('dashboard.days')}`;
   };
 
+  const drawerEvents = drawerGroup ? visibleEvents.filter((e) => e.type === drawerGroup) : [];
+
   return (
+    <>
     <Card className="animate-fade-up" style={{ animationDelay: '50ms' }}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
@@ -449,57 +459,70 @@ export function UpcomingEvents() {
                     Dismiss all
                   </button>
                 </div>
-                {!isCollapsed && (
-                  <div>
-                    {events.map((event) => {
-                      const isUrgent = event.daysUntil <= 7;
-                      const isWarning = event.daysUntil <= 30;
-                      return (
-                        <div
-                          key={event.id}
-                          className={cn(
-                            'flex items-center border-t transition-all group',
-                            isUrgent && 'bg-destructive/5',
-                          )}
-                        >
-                          <Link
-                            to={`/app/leases/${event.leaseId}`}
+                {!isCollapsed && (() => {
+                  const ITEMS_PER_GROUP = 5;
+                  const displayedEvents = events.slice(0, ITEMS_PER_GROUP);
+                  const hasMore = events.length > ITEMS_PER_GROUP;
+                  return (
+                    <div>
+                      {displayedEvents.map((event) => {
+                        const isUrgent = event.daysUntil <= 7;
+                        const isWarning = event.daysUntil <= 30;
+                        return (
+                          <div
+                            key={event.id}
                             className={cn(
-                              'flex items-center gap-3 p-3 flex-1 min-w-0 hover:bg-muted/50 transition-all',
-                              isUrgent && 'hover:bg-destructive/10',
+                              'flex items-center border-t transition-all group',
+                              isUrgent && 'bg-destructive/5',
                             )}
                           >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{event.property}</p>
-                              <div className="flex items-center gap-2 text-xs">
-                                <span className={cn(
-                                  isUrgent  ? 'text-destructive font-medium' :
-                                  isWarning ? 'text-warning' :
-                                              'text-muted-foreground',
-                                )}>
-                                  {getDaysLabel(event.daysUntil)}
-                                </span>
-                                {event.amount && (
-                                  <><span className="text-muted-foreground">·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}/mo</span></>
-                                )}
+                            <Link
+                              to={`/app/leases/${event.leaseId}`}
+                              className={cn(
+                                'flex items-center gap-3 p-3 flex-1 min-w-0 hover:bg-muted/50 transition-all',
+                                isUrgent && 'hover:bg-destructive/10',
+                              )}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{event.property}</p>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className={cn(
+                                    isUrgent  ? 'text-destructive font-medium' :
+                                    isWarning ? 'text-warning' :
+                                                'text-muted-foreground',
+                                  )}>
+                                    {getDaysLabel(event.daysUntil)}
+                                  </span>
+                                  {event.amount && (
+                                    <><span className="text-muted-foreground">·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}/mo</span></>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                            <span className="text-xs text-muted-foreground shrink-0">
-                              {format(event.date, 'MMM d')}
-                            </span>
-                          </Link>
-                          <button
-                            onClick={() => dismissEvents([event.id])}
-                            className="p-2 mr-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
-                            title="Dismiss"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                {format(event.date, 'MMM d')}
+                              </span>
+                            </Link>
+                            <button
+                              onClick={() => dismissEvents([event.id])}
+                              className="p-2 mr-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                              title="Dismiss"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {hasMore && (
+                        <button
+                          onClick={() => setDrawerGroup(type)}
+                          className="w-full py-2 text-xs text-center text-muted-foreground hover:text-foreground border-t transition-colors"
+                        >
+                          Show all {events.length} →
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -507,5 +530,51 @@ export function UpcomingEvents() {
         )}
       </CardContent>
     </Card>
+
+    <Sheet open={!!drawerGroup} onOpenChange={(open) => !open && setDrawerGroup(null)}>
+      <SheetContent side="right" className="w-[400px] sm:w-[480px] overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>
+            {drawerGroup ? GROUP_META[drawerGroup].label : ''} ({drawerEvents.length})
+          </SheetTitle>
+        </SheetHeader>
+        <div className="mt-4 space-y-1">
+          {drawerEvents.map((event) => {
+            const isUrgent = event.daysUntil <= 7;
+            const isWarning = event.daysUntil <= 30;
+            return (
+              <Link
+                key={event.id}
+                to={`/app/leases/${event.leaseId}`}
+                onClick={() => setDrawerGroup(null)}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-all',
+                  isUrgent && 'bg-destructive/5 hover:bg-destructive/10',
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{event.property}</p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className={cn(
+                      isUrgent  ? 'text-destructive font-medium' :
+                      isWarning ? 'text-warning' :
+                                  'text-muted-foreground',
+                    )}>
+                      {getDaysLabel(event.daysUntil)}
+                    </span>
+                    {event.amount && (
+                      <><span className="text-muted-foreground">·</span>
+                      <span className="font-medium text-foreground">{formatCurrency(event.amount, language)}/mo</span></>
+                    )}
+                  </div>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">{format(event.date, 'MMM d')}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </SheetContent>
+    </Sheet>
+    </>
   );
 }
