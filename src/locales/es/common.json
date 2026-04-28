@@ -211,6 +211,7 @@
     "lease_expires": "Arrendamiento vence",
     "renewal_window_opens": "Ventana de renovación abre",
     "rent_payment_due": "Pago de renta pendiente",
+    "cpi_adjustment_due": "Ajuste CPI Pendiente",
     "properties": "propiedades"
   },
   "lease": {

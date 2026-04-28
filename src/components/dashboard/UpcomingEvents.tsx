@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, ChevronLeft, ChevronRight, AlertCircle, TrendingUp, Clock, DollarSign, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, TrendingUp, Clock, DollarSign, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,10 @@ export function UpcomingEvents() {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (type: string) =>
+    setCollapsedGroups((prev) => ({ ...prev, [type]: !prev[type] }));
 
   const eventConfig = {
     renewal:    { icon: Clock,        variant: 'info' as const,        labelKey: 'dashboard.renewal' },
@@ -72,19 +76,19 @@ export function UpcomingEvents() {
     },
   });
 
-  const dismissEvent = async (eventKey: string) => {
-    if (!workspace?.id || !user?.id) return;
+  const dismissEvents = async (eventKeys: string[]) => {
+    if (!workspace?.id || !user?.id || eventKeys.length === 0) return;
+    const rows = eventKeys.map((k) => ({
+      user_id: user!.id,
+      workspace_id: workspace!.id,
+      event_key: k,
+      dismissed_at: new Date().toISOString(),
+    }));
     const { error } = await (supabase as any)
       .from('dismissed_events')
-      .upsert({
-        user_id: user.id,
-        workspace_id: workspace.id,
-        event_key: eventKey,
-        dismissed_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,workspace_id,event_key' });
-
+      .upsert(rows, { onConflict: 'user_id,workspace_id,event_key' });
     if (!error) {
-      await queryClient.invalidateQueries({ queryKey: ['dismissed-events', workspace.id, user.id] });
+      await queryClient.invalidateQueries({ queryKey: ['dismissed-events', workspace!.id, user!.id] });
       await refetchEvents();
     }
   };
@@ -98,7 +102,7 @@ export function UpcomingEvents() {
       const { data: leases, error } = await supabase
         .from('leases')
         .select(
-          'id, filename, lease_end, executed_expiry_date, ' +
+          'id, filename, lease_end, executed_expiry_date, escalation_type, rent_escalation_type, commencement_date, lease_start, ' +
           'current_monthly_rent, monthly_payment, executed_monthly_payment, extracted_json, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
@@ -166,6 +170,34 @@ export function UpcomingEvents() {
             amount: monthlyRent,
           });
         }
+
+        // Escalation: CPI/index leases — next anniversary of commencement date
+        const escType = ((lease as any).escalation_type ?? '').toLowerCase();
+        const rentEscType = ((lease as any).rent_escalation_type ?? '').toLowerCase();
+        const isCpi = ['index', 'cpi'].includes(escType) || ['index', 'cpi'].includes(rentEscType);
+        if (isCpi) {
+          const commencementRaw = (lease as any).commencement_date || (lease as any).lease_start;
+          if (commencementRaw) {
+            const commencement = new Date(commencementRaw);
+            const thisYear = now.getFullYear();
+            let nextAnniversary = new Date(thisYear, commencement.getMonth(), commencement.getDate());
+            if (nextAnniversary <= now) {
+              nextAnniversary = new Date(thisYear + 1, commencement.getMonth(), commencement.getDate());
+            }
+            const daysUntil = differenceInDays(nextAnniversary, now);
+            if (daysUntil <= 365) {
+              upcomingEvents.push({
+                id: `escalation:${lease.id}:${nextAnniversary.toISOString().slice(0, 10)}`,
+                type: 'escalation',
+                titleKey: 'dashboard.cpi_adjustment_due',
+                property,
+                date: nextAnniversary,
+                daysUntil,
+                leaseId: lease.id,
+              });
+            }
+          }
+        }
       }
 
       return upcomingEvents.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 50);
@@ -203,8 +235,26 @@ export function UpcomingEvents() {
     );
   }
 
+  const GROUP_ORDER: UpcomingEvent['type'][] = ['expiration', 'renewal', 'payment', 'escalation'];
+  const GROUP_META: Record<string, { label: string; subtotal: (evs: UpcomingEvent[]) => string }> = {
+    expiration: { label: 'Expirations', subtotal: (evs) => `${evs.length} lease${evs.length !== 1 ? 's' : ''}` },
+    renewal:    { label: 'Renewals',    subtotal: (evs) => `${evs.length} lease${evs.length !== 1 ? 's' : ''}` },
+    payment: {
+      label: 'Payments',
+      subtotal: (evs) => {
+        const total = evs.reduce((s, e) => s + (e.amount ?? 0), 0);
+        return `${evs.length} lease${evs.length !== 1 ? 's' : ''} · ${formatCurrency(total, language)}/mo`;
+      },
+    },
+    escalation: { label: 'Escalations', subtotal: (evs) => `${evs.length} lease${evs.length !== 1 ? 's' : ''}` },
+  };
+
+  const groups = GROUP_ORDER
+    .map((type) => ({ type, events: visibleEvents.filter((e) => e.type === type) }))
+    .filter((g) => g.events.length > 0);
+
   // Hide entirely when there are no events — don't show an empty card to new users
-  if (visibleEvents.length === 0) return null;
+  if (groups.length === 0) return null;
 
   const getDaysLabel = (days: number) => {
     if (days === 0) return t('dashboard.today');
@@ -366,75 +416,87 @@ export function UpcomingEvents() {
             </div>
           );
         })() : (
-        <div className="space-y-3">
-          {visibleEvents.slice(0, 5).map((event, index) => {
-            const config = eventConfig[event.type];
-            const EventIcon = config.icon;
-            const isUrgent = event.daysUntil <= 7;
-            const isWarning = event.daysUntil <= 30;
-
+        <div className="space-y-2">
+          {groups.map(({ type, events }) => {
+            const groupConfig = eventConfig[type];
+            const GroupIcon = groupConfig.icon;
+            const isCollapsed = !!collapsedGroups[type];
             return (
-              <div
-                key={event.id}
-                className={cn(
-                  'flex items-center rounded-lg transition-all animate-fade-up group',
-                  isUrgent && 'bg-destructive/5',
-                )}
-                style={{ animationDelay: `${(index + 1) * 50}ms` }}
-              >
-                <Link
-                  to={`/app/leases/${event.leaseId}`}
-                  className={cn(
-                    'flex items-start gap-4 p-3 flex-1 min-w-0 rounded-lg hover:bg-muted/50 transition-all',
-                    isUrgent && 'hover:bg-destructive/10',
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-                      config.variant === 'info'        && 'bg-info/10 text-info',
-                      config.variant === 'warning'     && 'bg-warning/10 text-warning',
-                      config.variant === 'destructive' && 'bg-destructive/10 text-destructive',
-                      config.variant === 'default'     && 'bg-primary/10 text-primary',
-                    )}
+              <div key={type} className="rounded-lg border overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/30">
+                  <button
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                    onClick={() => toggleGroup(type)}
                   >
-                    <EventIcon className="h-5 w-5" />
+                    <GroupIcon className={cn(
+                      'h-4 w-4 shrink-0',
+                      groupConfig.variant === 'destructive' && 'text-destructive',
+                      groupConfig.variant === 'info'        && 'text-info',
+                      groupConfig.variant === 'warning'     && 'text-warning',
+                      groupConfig.variant === 'default'     && 'text-primary',
+                    )} />
+                    <span className="text-sm font-medium">{GROUP_META[type].label}</span>
+                    <span className="text-xs text-muted-foreground flex-1 truncate ml-1">{GROUP_META[type].subtotal(events)}</span>
+                    <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', isCollapsed && 'rotate-180')} />
+                  </button>
+                  <button
+                    onClick={() => dismissEvents(events.map((e) => e.id))}
+                    className="text-xs text-muted-foreground hover:text-foreground shrink-0 ml-1"
+                  >
+                    Dismiss all
+                  </button>
+                </div>
+                {!isCollapsed && (
+                  <div>
+                    {events.map((event) => {
+                      const isUrgent = event.daysUntil <= 7;
+                      const isWarning = event.daysUntil <= 30;
+                      return (
+                        <div
+                          key={event.id}
+                          className={cn(
+                            'flex items-center border-t transition-all group',
+                            isUrgent && 'bg-destructive/5',
+                          )}
+                        >
+                          <Link
+                            to={`/app/leases/${event.leaseId}`}
+                            className={cn(
+                              'flex items-center gap-3 p-3 flex-1 min-w-0 hover:bg-muted/50 transition-all',
+                              isUrgent && 'hover:bg-destructive/10',
+                            )}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{event.property}</p>
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className={cn(
+                                  isUrgent  ? 'text-destructive font-medium' :
+                                  isWarning ? 'text-warning' :
+                                              'text-muted-foreground',
+                                )}>
+                                  {getDaysLabel(event.daysUntil)}
+                                </span>
+                                {event.amount && (
+                                  <><span className="text-muted-foreground">·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}/mo</span></>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-xs text-muted-foreground shrink-0">
+                              {format(event.date, 'MMM d')}
+                            </span>
+                          </Link>
+                          <button
+                            onClick={() => dismissEvents([event.id])}
+                            className="p-2 mr-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+                            title="Dismiss"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Badge variant={config.variant} className="text-[10px]">
-                        {t(config.labelKey)}
-                      </Badge>
-                      <span
-                        className={cn(
-                          'text-xs',
-                          isUrgent  ? 'text-destructive font-medium' :
-                          isWarning ? 'text-warning' :
-                                      'text-muted-foreground',
-                        )}
-                      >
-                        {getDaysLabel(event.daysUntil)}
-                      </span>
-                    </div>
-                    <p className="text-sm font-medium truncate">{t(event.titleKey)}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="truncate">{event.property}</span>
-                      {event.amount && (
-                        <><span>·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}</span></>
-                      )}
-                    </div>
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {format(event.date, 'MMM d')}
-                  </span>
-                </Link>
-                <button
-                  onClick={() => dismissEvent(event.id)}
-                  className="p-2 mr-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
-                  title="Dismiss"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                )}
               </div>
             );
           })}

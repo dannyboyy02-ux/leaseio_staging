@@ -211,6 +211,7 @@
     "lease_expires": "Lease expires",
     "renewal_window_opens": "Renewal window opens",
     "rent_payment_due": "Rent payment due",
+    "cpi_adjustment_due": "CPI Adjustment Due",
     "properties": "properties"
   },
   "lease": {
