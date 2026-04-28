@@ -102,7 +102,7 @@ export function UpcomingEvents() {
       const { data: leases, error } = await supabase
         .from('leases')
         .select(
-          'id, filename, lease_end, executed_expiry_date, escalation_type, rent_escalation_type, commencement_date, lease_start, ' +
+          'id, filename, lease_end, executed_expiry_date, escalation_type, rent_escalation_type, executed_commencement_date, rent_commencement_date, lease_start, ' +
           'current_monthly_rent, monthly_payment, executed_monthly_payment, extracted_json, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
@@ -176,7 +176,10 @@ export function UpcomingEvents() {
         const rentEscType = ((lease as any).rent_escalation_type ?? '').toLowerCase();
         const isCpi = ['index', 'cpi'].includes(escType) || ['index', 'cpi'].includes(rentEscType);
         if (isCpi) {
-          const commencementRaw = (lease as any).commencement_date || (lease as any).lease_start;
+          const commencementRaw =
+            (lease as any).executed_commencement_date ||
+            (lease as any).rent_commencement_date ||
+            (lease as any).lease_start;
           if (commencementRaw) {
             const commencement = new Date(commencementRaw);
             const thisYear = now.getFullYear();
