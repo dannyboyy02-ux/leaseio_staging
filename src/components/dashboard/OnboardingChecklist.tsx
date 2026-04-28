@@ -56,6 +56,7 @@ const stepDefinitions: OnboardingStep[] = [
 
 export function OnboardingChecklist() {
   const [dismissed, setDismissed] = useState(false);
+  const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const { user, workspace, userRole } = useApp();
@@ -63,18 +64,25 @@ export function OnboardingChecklist() {
   const canManageMembers = canManageWorkspaceMembers(userRole);
   
   useEffect(() => {
-    if (!user?.id || !workspace?.id) return;
+    if (!user?.id || !workspace?.id) {
+      setLoadingPrefs(false);
+      return;
+    }
 
     const loadPreferences = async () => {
-      const { data } = await (supabase as any)
-        .from('user_preferences')
-        .select('onboarding_dismissed_at')
-        .eq('user_id', user.id)
-        .eq('workspace_id', workspace.id)
-        .maybeSingle();
+      try {
+        const { data } = await (supabase as any)
+          .from('user_preferences')
+          .select('onboarding_dismissed_at')
+          .eq('user_id', user.id)
+          .eq('workspace_id', workspace.id)
+          .maybeSingle();
 
-      if (data?.onboarding_dismissed_at) {
-        setDismissed(true);
+        if (data?.onboarding_dismissed_at) {
+          setDismissed(true);
+        }
+      } finally {
+        setLoadingPrefs(false);
       }
     };
 
@@ -151,6 +159,7 @@ export function OnboardingChecklist() {
       }, { onConflict: 'user_id,workspace_id' });
   };
   
+  if (loadingPrefs) return null;
   if (dismissed) return null;
 
   const visibleSteps = canManageMembers
