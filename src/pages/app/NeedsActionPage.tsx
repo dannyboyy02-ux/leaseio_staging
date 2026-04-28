@@ -45,9 +45,10 @@ export default function NeedsActionPage() {
   const toggleSection = (key: string) =>
     setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const { data, isLoading: loading } = useQuery({
+  const { data, isPending: loading } = useQuery({
     queryKey: ['needs-action', workspace?.id],
     enabled: !!workspace?.id,
+    refetchInterval: 30_000,
     queryFn: async () => {
       const [leasesResult, draftChangeSetsResult] = await Promise.all([
         supabase

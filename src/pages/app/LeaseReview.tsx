@@ -1030,11 +1030,11 @@ export default function LeaseReview() {
       setCancelChangeSetDialogOpen(false);
       toast.success('Changes discarded. Lease re-locked.');
       refetchLease();
-      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
     } catch (err) {
       console.error('Error canceling change set:', err);
       toast.error('Failed to discard changes');
     } finally {
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       setCancelingChangeSet(false);
     }
   }, [lease, user, activeChangeSet, refetchLease]);
