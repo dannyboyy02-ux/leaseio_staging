@@ -10,15 +10,19 @@ interface Props {
   lifecycleStatus: string;
 }
 
-export function SummaryShareControls({ leaseId }: Props) {
+const SHAREABLE_STATUSES = new Set(['approved', 'executed', 'active']);
+
+export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
   const [loading, setLoading] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [viewCount, setViewCount] = useState<number>(0);
   const [copied, setCopied] = useState(false);
+  const canShare = SHAREABLE_STATUSES.has(lifecycleStatus);
 
   // On mount: check if token already exists
   useEffect(() => {
+    if (!canShare) return;
     (supabase as any)
       .from('leases')
       .select('summary_share_token, summary_shared_at')
@@ -37,7 +41,9 @@ export function SummaryShareControls({ leaseId }: Props) {
           setViewCount(count || 0);
         }
       });
-  }, [leaseId]);
+  }, [leaseId, canShare]);
+
+  if (!canShare) return null;
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -71,7 +77,7 @@ export function SummaryShareControls({ leaseId }: Props) {
         <Share2 className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-semibold">Share Financial Impact Summary</span>
         <span className="text-xs text-muted-foreground ml-1">
-          Anyone with the link can view — no login required
+          Anyone with the link can view - no login required
         </span>
       </div>
 

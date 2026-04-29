@@ -33,6 +33,8 @@ export interface Workspace {
   plan: SubscriptionPlan;
   maxActiveLeases: number;
   activeLeasesUsed: number;
+  documentLimit: number;
+  documentsUsed: number;
   timezone: string;
   defaultNotificationDays: number;
   createdAt: string;

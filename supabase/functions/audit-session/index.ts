@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { getCorsHeaders, jsonResponse } from "../_shared/audit.ts";
+import { enforceWorkspaceRateLimit, getCorsHeaders, jsonResponse } from "../_shared/audit.ts";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_AUDIT_DOCS = 5;
@@ -62,8 +62,24 @@ serve(async (req) => {
     auth: { persistSession: false },
   });
 
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return jsonResponse({ error: "Unauthorized" }, 401, origin);
+  }
+
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(bearerToken);
+  if (authError || !userData?.user) {
+    return jsonResponse({ error: "Invalid authentication" }, 401, origin);
+  }
+
+  const userId = userData.user.id;
+  const email = (userData.user.email ?? "").trim().toLowerCase();
+  if (!email) {
+    return jsonResponse({ error: "Authenticated user email is required" }, 400, origin);
+  }
+
   // --- Parse multipart form ---
-  let email: string;
   let workspaceId: string | null;
   let fileBytes: Uint8Array;
   let filename: string;
@@ -74,13 +90,9 @@ serve(async (req) => {
       return jsonResponse({ error: "Expected multipart/form-data" }, 400, origin);
     }
     const form = await req.formData();
-    email       = ((form.get("email") as string) ?? "").trim().toLowerCase();
     workspaceId = (form.get("workspaceId") as string) || null;
     const file  = form.get("file") as File | null;
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return jsonResponse({ error: "A valid email is required" }, 400, origin);
-    }
     if (!file) return jsonResponse({ error: "A PDF file is required" }, 400, origin);
 
     const buf = await file.arrayBuffer();
@@ -95,29 +107,6 @@ serve(async (req) => {
     }
   } catch {
     return jsonResponse({ error: "Failed to parse request" }, 400, origin);
-  }
-
-  // --- Find or create user ---
-  let userId: string;
-  try {
-    const { data: existingId } = await supabaseAdmin.rpc("get_audit_user_id", { p_email: email });
-    if (existingId) {
-      userId = existingId as string;
-    } else {
-      const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        email_confirm: true,
-        user_metadata: { audit_user: true },
-      });
-      if (createErr || !created?.user) {
-        console.error("[audit-session] createUser failed:", createErr?.message);
-        return jsonResponse({ error: "Failed to create session. Please try again." }, 500, origin);
-      }
-      userId = created.user.id;
-    }
-  } catch (err) {
-    console.error("[audit-session] user lookup error:", err);
-    return jsonResponse({ error: "Failed to initialize session" }, 500, origin);
   }
 
   // --- Find or create audit workspace ---
@@ -181,6 +170,15 @@ serve(async (req) => {
     );
   }
 
+  const rateLimitResponse = await enforceWorkspaceRateLimit(
+    supabaseAdmin,
+    resolvedWorkspaceId,
+    "audit-session",
+    origin,
+    MAX_AUDIT_DOCS,
+  );
+  if (rateLimitResponse) return rateLimitResponse;
+
   // --- Extract with Claude (native PDF beta) ---
   let extracted: Record<string, unknown>;
   try {
@@ -229,7 +227,7 @@ serve(async (req) => {
     } catch {
       const match = cleaned.match(/\{[\s\S]*\}/);
       if (!match) {
-        console.error("[audit-session] Could not parse Claude response:", cleaned.slice(0, 200));
+        console.error("[audit-session] Could not parse Claude response as JSON");
         return jsonResponse({ error: "Failed to parse extraction result" }, 500, origin);
       }
       extracted = JSON.parse(match[0]);
@@ -239,7 +237,9 @@ serve(async (req) => {
     return jsonResponse({ error: "Document analysis failed. Please try again." }, 500, origin);
   }
 
-  console.log(`[audit-session] Extracted lease data for ${email}: ${JSON.stringify(extracted).slice(0, 200)}`);
+  console.log(
+    `[audit-session] Extraction complete for user=${userId}, workspace=${resolvedWorkspaceId}, fields=${Object.keys(extracted).length}`,
+  );
 
   // --- Upload file to storage ---
   const leaseId    = crypto.randomUUID();

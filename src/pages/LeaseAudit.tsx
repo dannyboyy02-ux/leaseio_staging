@@ -5,11 +5,10 @@ import {
   Building2, TrendingUp, AlertTriangle, Sparkles, Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 const MAX_DOCS = 5;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -64,8 +63,7 @@ function capitalize(s: string | null): string {
 
 export default function LeaseAudit() {
   const [step, setStep] = useState<Step>('collect');
-  const [email, setEmail] = useState('');
-  const [emailError, setEmailError] = useState('');
+  const [formError, setFormError] = useState('');
   const [files, setFiles] = useState<FileItem[]>([]);
   const [dragging, setDragging] = useState(false);
   const [leases, setLeases] = useState<ExtractedLease[]>([]);
@@ -90,18 +88,17 @@ export default function LeaseAudit() {
     addFiles(e.dataTransfer.files);
   };
 
-  const validateEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-
   const startAudit = async () => {
-    if (!validateEmail(email)) {
-      setEmailError('Please enter a valid email address.');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      setFormError('Please sign in before starting an audit.');
       return;
     }
     if (files.length === 0) {
-      setEmailError('Please upload at least one PDF.');
+      setFormError('Please upload at least one PDF.');
       return;
     }
-    setEmailError('');
+    setFormError('');
     setStep('processing');
 
     let currentWorkspaceId: string | null = workspaceId;
@@ -113,14 +110,16 @@ export default function LeaseAudit() {
       );
 
       const form = new FormData();
-      form.append('email', email);
       form.append('file', files[i].file);
       if (currentWorkspaceId) form.append('workspaceId', currentWorkspaceId);
 
       try {
         const res = await fetch(FUNCTION_URL, {
           method: 'POST',
-          headers: { apikey: SUPABASE_ANON_KEY },
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${session.access_token}`,
+          },
           body: form,
         });
         const data = await res.json();
@@ -196,9 +195,7 @@ export default function LeaseAudit() {
       <main className="max-w-3xl mx-auto px-4 py-12">
         {step === 'collect' && (
           <CollectStep
-            email={email}
-            setEmail={setEmail}
-            emailError={emailError}
+            formError={formError}
             files={files}
             dragging={dragging}
             setDragging={setDragging}
@@ -233,12 +230,10 @@ export default function LeaseAudit() {
 // STEP 1 — Collect
 // =====================================================================
 function CollectStep({
-  email, setEmail, emailError, files, dragging, setDragging,
+  formError, files, dragging, setDragging,
   onDrop, addFiles, removeFile, fileInputRef, onStart,
 }: {
-  email: string;
-  setEmail: (v: string) => void;
-  emailError: string;
+  formError: string;
   files: FileItem[];
   dragging: boolean;
   setDragging: (v: boolean) => void;
@@ -253,34 +248,18 @@ function CollectStep({
       <div className="text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium mb-4">
           <Sparkles className="h-3.5 w-3.5" />
-          Free — no account required
+          Authenticated audit workspace
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-3">
           Your free lease audit
         </h1>
         <p className="text-muted-foreground max-w-xl mx-auto">
-          Upload up to {MAX_DOCS} lease PDFs. Claude reads each one and tells you what's in them — monthly obligations, key dates, escalation terms, and risks.
+          Upload up to {MAX_DOCS} lease PDFs. Claude reads each one and tells you what's in them - monthly obligations, key dates, escalation terms, and risks.
         </p>
       </div>
 
       <Card>
         <CardContent className="pt-6 space-y-5">
-          {/* Email */}
-          <div className="space-y-1.5">
-            <Label htmlFor="audit-email">Your work email</Label>
-            <Input
-              id="audit-email"
-              type="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={cn(emailError && 'border-destructive')}
-            />
-            {emailError && (
-              <p className="text-xs text-destructive">{emailError}</p>
-            )}
-          </div>
-
           {/* Dropzone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -336,6 +315,9 @@ function CollectStep({
             Analyze My Leases
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
+          {formError && (
+            <p className="text-xs text-destructive text-center">{formError}</p>
+          )}
         </CardContent>
       </Card>
 

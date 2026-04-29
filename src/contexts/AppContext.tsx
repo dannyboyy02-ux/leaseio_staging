@@ -12,7 +12,6 @@ interface AppContextType {
   setWorkspace: (workspace: Workspace | null) => void;
   userRole: WorkspaceRole | "owner" | null;
   setUserRole: (role: WorkspaceRole | "owner" | null) => void;
-  /** Phase 2 functional roles from workspace_roles table */
   userFunctionalRoles: FunctionalRole[];
   setUserFunctionalRoles: (roles: FunctionalRole[]) => void;
   isAuthenticated: boolean;
@@ -21,9 +20,22 @@ interface AppContextType {
   refreshProfile: () => Promise<void>;
   canAccessFeature: (requiredPlan: SubscriptionPlan) => boolean;
   hasPermission: (permission: "billing" | "integrations" | "members" | "leases" | "export") => boolean;
-  /** Returns true if user holds any of the specified functional roles */
   hasFunctionalRole: (role: FunctionalRole | FunctionalRole[]) => boolean;
 }
+
+type WorkspaceRow = {
+  id: string;
+  name: string | null;
+  owner_id: string;
+  plan: string | null;
+  document_limit: number | null;
+  documents_used: number | null;
+  timezone: string | null;
+  default_notification_days: number | null;
+  created_at: string;
+  updated_at: string | null;
+  subscription_period_end?: string | null;
+};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -31,7 +43,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const { user: authUser, isLoading: authLoading } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [userRole, setUserRole] = useState<WorkspaceRole | "owner" | null>("owner");
+  const [userRole, setUserRole] = useState<WorkspaceRole | "owner" | null>(null);
   const [userFunctionalRoles, setUserFunctionalRoles] = useState<FunctionalRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -48,17 +60,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // IMPORTANT: select current_workspace_id if it exists; if it doesn't, this still works
-      const { data: profile, error } = await supabase.from("profiles").select("*").eq("id", authUser.id).single();
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
 
-      if (error) {
+      if (error || !profile) {
         console.error("Error fetching profile:", error);
-        setIsLoading(false);
-        return;
-      }
-
-      if (!profile) {
-        setIsLoading(false);
+        setUser(null);
+        setWorkspace(null);
+        setUserRole(null);
+        setUserFunctionalRoles([]);
         return;
       }
 
@@ -73,92 +86,133 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updatedAt: profile.created_at,
       });
 
-      const plan = normalizePlanId(profile.plan);
-      const planConfig = PLANS[plan];
+      const workspaceSelect =
+        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at, subscription_period_end";
 
-
-      const { count: activeLeasesCount } = await supabase
-        .from('leases')
-        .select('id', { count: 'exact', head: true })
-        .eq('workspace_id', (profile as any).current_workspace_id || profile.id)
-        .eq('lifecycle_status', 'active');
-
-      // ---- NEW: try to load real workspace if profile.current_workspace_id exists ----
+      let resolvedWorkspace: WorkspaceRow | null = null;
+      let resolvedRole: WorkspaceRole | "owner" | null = null;
       const currentWorkspaceId = (profile as any).current_workspace_id as string | null | undefined;
 
       if (currentWorkspaceId) {
-        const { data: ws, error: wsError } = await supabase
+        const { data: ws, error: wsError } = await (supabase as any)
           .from("workspaces")
-          .select("id, name, owner_id, timezone, default_notification_days, created_at, updated_at")
+          .select(workspaceSelect)
           .eq("id", currentWorkspaceId)
-          .single();
+          .maybeSingle();
 
         if (!wsError && ws) {
-          // Resolve role
-          if (ws.owner_id === authUser.id) {
-            setUserRole("owner");
-          } else {
-            const { data: memberRow } = await supabase
-              .from("workspace_members")
-              .select("role")
-              .eq("workspace_id", ws.id)
-              .eq("user_id", authUser.id)
-              .maybeSingle();
-
-            setUserRole((memberRow?.role as WorkspaceRole) || null);
-          }
-
-          setWorkspace({
-            id: ws.id,
-            name: ws.name || profile.company_name || "My Workspace",
-            ownerId: ws.owner_id,
-            plan,
-            maxActiveLeases: planConfig?.maxActiveLeases ?? 5,
-            activeLeasesUsed: activeLeasesCount || 0,
-            timezone: ws.timezone || profile.timezone || "America/New_York",
-            defaultNotificationDays: ws.default_notification_days ?? 90,
-            createdAt: ws.created_at || profile.created_at,
-            renewalDate:
-              profile.subscription_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: ws.updated_at || ws.created_at || profile.created_at,
-          });
-
-          // Load functional roles (Phase 2) — gracefully handle missing table
-          try {
-            const { data: functionalRoleRows } = await (supabase as any)
-              .from('workspace_roles')
-              .select('role')
-              .eq('workspace_id', ws.id)
-              .eq('user_id', authUser.id);
-            setUserFunctionalRoles((functionalRoleRows || []).map((r: any) => r.role as FunctionalRole));
-          } catch {
-            setUserFunctionalRoles([]);
-          }
-
-          setIsLoading(false);
-          return;
-        } else {
-          console.warn("Could not load workspaces row for current_workspace_id, falling back:", wsError);
+          resolvedWorkspace = ws as WorkspaceRow;
+        } else if (wsError) {
+          console.warn("Could not load current workspace:", wsError);
         }
       }
 
-      // ---- FALLBACK: original behavior (prevents downtime) ----
-      setUserRole("owner");
+      if (!resolvedWorkspace) {
+        const { data: ownedWorkspace } = await (supabase as any)
+          .from("workspaces")
+          .select(workspaceSelect)
+          .eq("owner_id", authUser.id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (ownedWorkspace) resolvedWorkspace = ownedWorkspace as WorkspaceRow;
+      }
+
+      if (!resolvedWorkspace) {
+        const { data: membership } = await (supabase as any)
+          .from("workspace_members")
+          .select("workspace_id, role")
+          .eq("user_id", authUser.id)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (membership?.workspace_id) {
+          const { data: memberWorkspace } = await (supabase as any)
+            .from("workspaces")
+            .select(workspaceSelect)
+            .eq("id", membership.workspace_id)
+            .maybeSingle();
+
+          if (memberWorkspace) {
+            resolvedWorkspace = memberWorkspace as WorkspaceRow;
+            resolvedRole = membership.role as WorkspaceRole;
+          }
+        }
+      }
+
+      if (!resolvedWorkspace) {
+        setWorkspace(null);
+        setUserRole(null);
+        setUserFunctionalRoles([]);
+        return;
+      }
+
+      if (resolvedWorkspace.owner_id === authUser.id) {
+        resolvedRole = "owner";
+      } else if (!resolvedRole) {
+        const { data: memberRow } = await (supabase as any)
+          .from("workspace_members")
+          .select("role")
+          .eq("workspace_id", resolvedWorkspace.id)
+          .eq("user_id", authUser.id)
+          .maybeSingle();
+        resolvedRole = (memberRow?.role as WorkspaceRole) || null;
+      }
+
+      if (currentWorkspaceId !== resolvedWorkspace.id) {
+        await (supabase as any)
+          .from("profiles")
+          .update({ current_workspace_id: resolvedWorkspace.id })
+          .eq("id", authUser.id);
+      }
+
+      const plan = normalizePlanId(resolvedWorkspace.plan);
+      const planConfig = PLANS[plan];
+      const documentLimit =
+        resolvedWorkspace.document_limit ?? planConfig?.maxActiveLeases ?? 15;
+
+      const { count: activeLeasesCount } = await supabase
+        .from("leases")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", resolvedWorkspace.id)
+        .eq("lifecycle_status", "active");
+
+      setUserRole(resolvedRole);
       setWorkspace({
-        id: profile.id,
-        name: profile.company_name || "My Workspace",
-        ownerId: profile.id,
+        id: resolvedWorkspace.id,
+        name: resolvedWorkspace.name || profile.company_name || "My Workspace",
+        ownerId: resolvedWorkspace.owner_id,
         plan,
-        maxActiveLeases: planConfig?.maxActiveLeases ?? 5,
+        maxActiveLeases: documentLimit,
         activeLeasesUsed: activeLeasesCount || 0,
-        timezone: profile.timezone || "America/New_York",
-        defaultNotificationDays: 90,
-        createdAt: profile.created_at,
-        renewalDate: profile.subscription_period_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: profile.created_at,
+        documentLimit,
+        documentsUsed: resolvedWorkspace.documents_used ?? 0,
+        timezone: resolvedWorkspace.timezone || profile.timezone || "America/New_York",
+        defaultNotificationDays: resolvedWorkspace.default_notification_days ?? 90,
+        createdAt: resolvedWorkspace.created_at || profile.created_at,
+        renewalDate:
+          resolvedWorkspace.subscription_period_end ||
+          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        updatedAt:
+          resolvedWorkspace.updated_at || resolvedWorkspace.created_at || profile.created_at,
       });
+
+      try {
+        const { data: functionalRoleRows } = await (supabase as any)
+          .from("workspace_roles")
+          .select("role")
+          .eq("workspace_id", resolvedWorkspace.id)
+          .eq("user_id", authUser.id);
+        setUserFunctionalRoles((functionalRoleRows || []).map((r: any) => r.role as FunctionalRole));
+      } catch {
+        setUserFunctionalRoles([]);
+      }
     } catch (err) {
       console.error("Error in fetchProfile:", err);
+      setWorkspace(null);
+      setUserRole(null);
+      setUserFunctionalRoles([]);
     } finally {
       setIsLoading(false);
     }

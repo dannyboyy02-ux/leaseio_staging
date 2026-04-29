@@ -32,3 +32,18 @@ verify_jwt = false
 
 [functions.handle-unlock-action]
 verify_jwt = false
+
+[functions.audit-session]
+verify_jwt = false
+
+[functions.generate-summary-token]
+verify_jwt = false
+
+[functions.get-summary-by-token]
+verify_jwt = false
+
+[functions.lease-governance-action]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false

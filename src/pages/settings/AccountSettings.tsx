@@ -249,12 +249,17 @@ export default function AccountSettings() {
   };
 
   const proceedWithCheckout = async (planId: string) => {
+    if (!workspace?.id) {
+      toast.error('Create or select a workspace before starting checkout.');
+      return;
+    }
+
     setIsUpgrading(planId);
     setConfirmUpgradePlan(null);
     
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { planId },
+        body: { planId, workspaceId: workspace.id },
       });
 
       if (error) throw error;

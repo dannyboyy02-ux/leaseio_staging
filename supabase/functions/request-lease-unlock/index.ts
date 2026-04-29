@@ -69,15 +69,27 @@ serve(async (req) => {
       });
     }
 
-    // Verify user is a member of the lease's workspace
-    const { data: membership } = await supabaseAdmin
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('workspace_id', (lease as any).workspace_id)
-      .eq('user_id', requestingUser.id)
+    // Verify user can access the lease workspace. Owners may not have a
+    // workspace_members row in older workspaces.
+    const { data: workspaceRow } = await supabaseAdmin
+      .from('workspaces')
+      .select('owner_id')
+      .eq('id', (lease as any).workspace_id)
       .maybeSingle();
 
-    if (!membership) {
+    const isOwner = workspaceRow?.owner_id === requestingUser.id;
+    let hasMembership = false;
+    if (!isOwner) {
+      const { data: membership } = await supabaseAdmin
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('workspace_id', (lease as any).workspace_id)
+        .eq('user_id', requestingUser.id)
+        .maybeSingle();
+      hasMembership = Boolean(membership);
+    }
+
+    if (!isOwner && !hasMembership) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

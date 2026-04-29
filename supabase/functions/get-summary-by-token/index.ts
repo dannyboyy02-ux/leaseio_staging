@@ -48,6 +48,13 @@ serve(async (req) => {
       });
     }
 
+    if (!['approved', 'executed', 'active'].includes(lease.lifecycle_status || '')) {
+      return new Response(JSON.stringify({ error: 'Not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
     // Record view (fire-and-forget style, non-blocking)
     const viewerIp =
       req.headers.get('x-forwarded-for') ||

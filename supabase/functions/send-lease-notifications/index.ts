@@ -27,14 +27,11 @@ function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
     
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
     'Access-Control-Max-Age': '86400',
   };
 }
-
-// Default CORS headers for backwards compatibility
-const corsHeaders = getCorsHeaders(null);
 
 interface LeaseNotificationRecord {
   id: string;
@@ -57,9 +54,27 @@ interface LeaseWithProfile {
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
+
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+  }
+
+  const expectedCronSecret = Deno.env.get("LEASE_NOTIFICATIONS_CRON_SECRET");
+  const providedCronSecret = req.headers.get("x-cron-secret");
+  if (!expectedCronSecret || providedCronSecret !== expectedCronSecret) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   }
 
   try {

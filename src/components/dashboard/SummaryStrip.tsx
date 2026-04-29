@@ -11,6 +11,7 @@ interface StatBox {
   sub: string;
   accent?: 'blue' | 'orange' | 'red' | 'default';
   href: string;
+  disabled?: boolean;
 }
 
 const formatCurrency = (value: number): string =>
@@ -135,6 +136,7 @@ export function SummaryStrip() {
           sub: awaitingCount === 0 ? 'none pending' : `${awaitingCount} lease${awaitingCount !== 1 ? 's' : ''} pending`,
           accent: 'orange',
           href: '/app/leases?view=approval',
+          disabled: awaitingCount === 0,
         },
         {
           label: 'Expiring \u2264 90 Days',
@@ -142,6 +144,7 @@ export function SummaryStrip() {
           sub: expiringCount > 0 ? 'require attention' : 'all clear',
           accent: 'red',
           href: '/app/leases?view=active&expiring=90',
+          disabled: expiringCount === 0,
         },
         {
           label: 'Expiring 91\u2013120 Days',
@@ -149,6 +152,7 @@ export function SummaryStrip() {
           sub: expiring91to120Count > 0 ? 'on the horizon' : 'all clear',
           accent: expiring91to120Count > 0 ? 'orange' : 'default',
           href: '/app/leases?view=active&expiring=120',
+          disabled: expiring91to120Count === 0,
         },
       ]);
 
@@ -180,12 +184,12 @@ export function SummaryStrip() {
       {stats.map((box) => (
         <div
           key={box.label}
-          onClick={() => navigate(box.href)}
-          className={`group rounded-lg border bg-card p-4 cursor-pointer hover:shadow-md transition-shadow ${accentClasses[box.accent ?? 'default']}`}
+          onClick={box.disabled ? undefined : () => navigate(box.href)}
+          className={`group rounded-lg border bg-card p-4 transition-shadow ${accentClasses[box.accent ?? 'default']} ${box.disabled ? 'cursor-default' : 'cursor-pointer hover:shadow-md'}`}
         >
           <div className="flex items-start justify-between">
             <p className="text-xs text-muted-foreground">{box.label}</p>
-            <ArrowUpRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+            {!box.disabled && <ArrowUpRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />}
           </div>
           <p className="mt-1 text-2xl font-semibold tracking-tight">{box.primary}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{box.sub}</p>

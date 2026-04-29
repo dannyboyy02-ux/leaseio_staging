@@ -84,7 +84,16 @@ serve(async (req) => {
       });
     }
 
-    // Verify user is workspace member or owner
+    const allowedLifecycleStates = new Set(['approved', 'executed', 'active']);
+    if (!allowedLifecycleStates.has(lease.lifecycle_status)) {
+      return new Response(JSON.stringify({ error: 'Financial summaries can only be shared after approval.' }), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    // Verify user is workspace owner or admin. Any member can view inside the
+    // app, but publishing a no-login financial link is an admin action.
     const { data: wsRow } = await supabase
       .from('workspaces')
       .select('owner_id')
@@ -92,19 +101,23 @@ serve(async (req) => {
       .single();
 
     const isOwner = wsRow?.owner_id === user.id;
+    let isAdminMember = false;
     if (!isOwner) {
       const { data: memberRow } = await supabase
         .from('workspace_members')
-        .select('id')
+        .select('role')
         .eq('workspace_id', lease.workspace_id)
         .eq('user_id', user.id)
+        .eq('role', 'admin')
         .maybeSingle();
-      if (!memberRow) {
-        return new Response(JSON.stringify({ error: 'Forbidden' }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        });
-      }
+      isAdminMember = Boolean(memberRow);
+    }
+
+    if (!isOwner && !isAdminMember) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
     }
 
     // Get or generate token — never regenerate if one exists

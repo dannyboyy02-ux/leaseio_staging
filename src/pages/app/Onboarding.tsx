@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +20,7 @@ export default function Onboarding() {
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('starter');
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
+  const { refreshProfile } = useApp();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t, language } = useAppTranslation();
@@ -53,7 +55,8 @@ export default function Onboarding() {
     setIsLoading(true);
 
     try {
-      const planConfig = PLANS[selectedPlan];
+      const workspacePlan: SubscriptionPlan = 'starter';
+      const planConfig = PLANS[workspacePlan];
       
       // Create workspace
       const { data: workspace, error: workspaceError } = await supabase
@@ -61,7 +64,7 @@ export default function Onboarding() {
         .insert({
           name: workspaceName.trim(),
           owner_id: user.id,
-          plan: selectedPlan,
+          plan: workspacePlan,
           document_limit: planConfig.maxActiveLeases,
         })
         .select()
@@ -80,12 +83,20 @@ export default function Onboarding() {
 
       if (memberError) throw memberError;
 
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ current_workspace_id: workspace.id } as any)
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
       toast({
         title: t('onboarding_flow.workspace_created_title'),
         description: t('onboarding_flow.workspace_created_desc'),
       });
 
-      navigate('/app/leases');
+      await refreshProfile();
+      navigate(selectedPlan === 'business' ? '/app/settings/account?tab=subscription' : '/app/leases');
     } catch (error: any) {
       toast({
         title: t('onboarding_flow.error_title'),

@@ -1156,7 +1156,8 @@ serve(async (req) => {
     const formData = await req.formData();
     const file = formData.get('file') as File;
     const leaseType = formData.get('leaseType') as string || 'master';
-    const parentLeaseId = formData.get('parentLeaseId') as string | null;
+    const rawParentLeaseId = formData.get('parentLeaseId') as string | null;
+    const parentLeaseId = rawParentLeaseId?.trim() || null;
     const extractionMode = (formData.get('extractionMode') as string) || 'pipeline';
     const targetLeaseId = formData.get('leaseId') as string | null;
     const workspaceIdFromRequest = formData.get('workspaceId') as string | null;
@@ -1397,6 +1398,20 @@ serve(async (req) => {
       });
     }
 
+    if (leaseType === 'amendment' && !parentLeaseId) {
+      return new Response(JSON.stringify({ error: 'parentLeaseId is required for amendment uploads.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (leaseType === 'master' && parentLeaseId) {
+      return new Response(JSON.stringify({ error: 'parentLeaseId is only allowed for amendment uploads.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (parentLeaseId && !isValidUUID(parentLeaseId)) {
       return new Response(JSON.stringify({ error: 'Invalid parent lease ID format.' }), {
         status: 400,
@@ -1431,6 +1446,41 @@ serve(async (req) => {
         400,
         requestOrigin,
       );
+    }
+
+    let parentLeaseForComparison: { extracted_json: Record<string, unknown> | null } | null = null;
+    if (parentLeaseId) {
+      const { data: parentLease, error: parentLeaseError } = await supabaseAdmin
+        .from('leases')
+        .select('id, workspace_id, lifecycle_status, extracted_json')
+        .eq('id', parentLeaseId)
+        .eq('workspace_id', resolvedWorkspaceId)
+        .maybeSingle();
+
+      if (parentLeaseError) {
+        return new Response(JSON.stringify({ error: `Failed to validate parent lease: ${parentLeaseError.message}` }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!parentLease) {
+        return new Response(JSON.stringify({ error: 'Parent lease not found in the selected workspace.' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if ((parentLease as any).lifecycle_status !== 'active') {
+        return new Response(JSON.stringify({ error: 'Parent lease must be active before uploading an amendment.' }), {
+          status: 422,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      parentLeaseForComparison = {
+        extracted_json: ((parentLease as any).extracted_json ?? null) as Record<string, unknown> | null,
+      };
     }
 
     const rateLimitResponse = await enforceWorkspaceRateLimit(
@@ -1485,17 +1535,10 @@ serve(async (req) => {
     // Amendment comparison — populate _amendment_changes
     // Only runs when this document is an amendment to an existing lease.
     // ----------------------------------------------------------------
-    if (parentLeaseId) {
+    if (parentLeaseForComparison?.extracted_json) {
       try {
-        const { data: parentLease } = await supabaseAdmin
-          .from('leases')
-          .select('extracted_json')
-          .eq('id', parentLeaseId)
-          .single();
-
-        if (parentLease?.extracted_json) {
-          const parentJson = parentLease.extracted_json as Record<string, unknown>;
-          const COMPARABLE_FIELDS = [
+        const parentJson = parentLeaseForComparison.extracted_json;
+        const COMPARABLE_FIELDS = [
             'landlord_name',
             'tenant_name',
             'property_address',
@@ -1508,16 +1551,16 @@ serve(async (req) => {
             'termination_clauses',
             'escalation_clauses',
             'square_footage',
-          ];
+        ];
 
-          const amendmentChanges: Array<{
-            field: string;
-            old_value: string | null;
-            new_value: string | null;
-            change_type: 'modified' | 'added' | 'removed';
-          }> = [];
+        const amendmentChanges: Array<{
+          field: string;
+          old_value: string | null;
+          new_value: string | null;
+          change_type: 'modified' | 'added' | 'removed';
+        }> = [];
 
-          for (const field of COMPARABLE_FIELDS) {
+        for (const field of COMPARABLE_FIELDS) {
             const oldRaw = extractValue(parentJson[field]);
             const newRaw = extractValue((leaseData as any)[field]);
             const oldVal = oldRaw != null && String(oldRaw).trim() !== '' ? String(oldRaw).trim() : null;
@@ -1528,11 +1571,10 @@ serve(async (req) => {
 
             const change_type: 'modified' | 'added' | 'removed' = !oldVal ? 'added' : !newVal ? 'removed' : 'modified';
             amendmentChanges.push({ field, old_value: oldVal, new_value: newVal, change_type });
-          }
-
-          (leaseData as any)._amendment_changes = amendmentChanges;
-          console.log(`[process_lease] Amendment comparison: ${amendmentChanges.length} changes detected`);
         }
+
+        (leaseData as any)._amendment_changes = amendmentChanges;
+        console.log(`[process_lease] Amendment comparison: ${amendmentChanges.length} changes detected`);
       } catch (err) {
         // Non-fatal — continue without comparison data
         console.error('[process_lease] Amendment comparison failed:', err instanceof Error ? err.message : err);
