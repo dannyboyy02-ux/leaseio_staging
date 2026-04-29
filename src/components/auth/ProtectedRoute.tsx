@@ -25,13 +25,5 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (
-    location.pathname.startsWith('/app') &&
-    location.pathname !== '/app/onboarding' &&
-    !workspace
-  ) {
-    return <Navigate to="/app/onboarding" replace />;
-  }
-
   return <>{children}</>;
 }
