@@ -641,6 +641,103 @@
     "search_placeholder": "Buscar arrendamientos, partes, propiedades...",
     "per_month_short": "mes"
   },
+  "locked_lease": {
+    "ai_extracted_badge": "Extraído por IA",
+    "ai_extracted_tooltip": "Este valor fue extraído del documento por IA y no ha sido confirmado contra un campo normalizado.",
+    "locked_badge": "Bloqueado",
+    "untitled": "Arrendamiento sin título",
+    "request_unlock": "Solicitar desbloqueo",
+    "unlock_pending": "Solicitud de desbloqueo pendiente de aprobación",
+    "admin_unlock": "Desbloquear para edición",
+    "approve_and_unlock": "Aprobar y desbloquear",
+    "deny_unlock": "Rechazar",
+    "unlock_requested_title": "Desbloqueo solicitado",
+    "unlock_requested_reason": "Motivo: {{reason}}",
+    "unlock_requested_no_reason": "Un miembro del equipo solicitó desbloquear este arrendamiento para editarlo.",
+    "toast": {
+      "unlock_requested": "Solicitud de desbloqueo enviada al administrador del espacio de trabajo",
+      "unlock_request_failed": "No se pudo enviar la solicitud de desbloqueo",
+      "unlocked": "Arrendamiento desbloqueado — los cambios deben enviarse para aprobación",
+      "unlock_failed": "No se pudo desbloquear el arrendamiento",
+      "unlock_denied": "Solicitud de desbloqueo rechazada",
+      "unlock_deny_failed": "No se pudo rechazar la solicitud de desbloqueo"
+    },
+    "key_info": {
+      "section_title": "Información clave",
+      "title": "Título",
+      "asset_type": "Tipo de activo",
+      "intake_source": "Origen de ingreso",
+      "requesting_department": "Departamento solicitante",
+      "created": "Creado",
+      "approved": "Aprobado financieramente"
+    },
+    "location": {
+      "section_title": "Ubicación",
+      "address": "Dirección",
+      "city": "Ciudad",
+      "state": "Estado / Provincia",
+      "zip": "Código postal"
+    },
+    "dates": {
+      "section_title": "Fechas / Términos del arrendamiento",
+      "commencement": "Inicio",
+      "expiration": "Vencimiento",
+      "rent_commencement": "Inicio del alquiler",
+      "term_months": "Plazo (meses)",
+      "month_to_month": "Mes a mes"
+    },
+    "rent": {
+      "section_title": "Renta / Términos de pago",
+      "schedule_title": "Cronograma de renta",
+      "monthly_payment": "Pago mensual",
+      "executed_monthly": "Pago ejecutado",
+      "security_deposit": "Depósito de garantía",
+      "total_commitment": "Compromiso total",
+      "pv_liability": "Pasivo por VP",
+      "straight_line_exp": "Gasto en línea recta"
+    },
+    "escalations": {
+      "section_title": "Escalonamientos",
+      "rate": "Tasa de escalonamiento",
+      "needs_review": "Requiere revisión",
+      "clauses": "Cláusulas de escalonamiento"
+    },
+    "options": {
+      "section_title": "Opciones y cláusulas",
+      "renewal_options": "Opciones de renovación",
+      "termination_clauses": "Cláusulas de terminación",
+      "purchase_option": "Opción de compra"
+    },
+    "vendor": {
+      "title": "Proveedor",
+      "name": "Nombre",
+      "phone": "Teléfono",
+      "address_line1": "Dirección línea 1",
+      "address_line2": "Dirección línea 2",
+      "street": "Calle",
+      "city": "Ciudad",
+      "state": "Estado",
+      "zip": "Código postal",
+      "city_state_zip": "Ciudad, Estado, Código postal",
+      "saved": "Información del proveedor actualizada",
+      "save_failed": "No se pudo actualizar la información del proveedor",
+      "empty_hint": "No hay datos de contacto del proveedor. Haga clic en Editar para agregarlos."
+    },
+    "risks": {
+      "section_title": "Riesgos",
+      "empty_hint": "No se registraron riesgos para este arrendamiento."
+    },
+    "documents": {
+      "section_title": "Documentos y enmiendas"
+    },
+    "audit": {
+      "title": "Registro de auditoría",
+      "empty_hint": "Aún no se registraron eventos de gobernanza para este arrendamiento."
+    },
+    "share": {
+      "section_title": "Compartir resumen financiero"
+    }
+  },
   "plan": {
     "free": "Gratis",
     "starter": "Inicial",
