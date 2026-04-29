@@ -11,6 +11,7 @@ import { FileText, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
+import { supabase } from '@/integrations/supabase/client';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -123,11 +124,31 @@ export default function Signup() {
       return;
     }
 
+    // Persist AI processing consent timestamp. Best-effort: failure here
+    // shouldn't block the signup flow, but if the column or RLS rejects we
+    // surface it in the console so it can be diagnosed without a user-facing
+    // toast for a non-critical recordkeeping step.
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (userId) {
+        const { error: consentError } = await (supabase as any)
+          .from('profiles')
+          .update({ ai_processing_consent_at: new Date().toISOString() })
+          .eq('id', userId);
+        if (consentError) {
+          console.warn('Failed to persist AI consent timestamp:', consentError);
+        }
+      }
+    } catch (consentErr) {
+      console.warn('AI consent persistence error (non-fatal):', consentErr);
+    }
+
     toast({
       title: t('auth.success.account_created'),
       description: t('auth.success.check_email'),
     });
-    
+
     setIsLoading(false);
     navigate('/app/onboarding');
   };

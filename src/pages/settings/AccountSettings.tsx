@@ -68,6 +68,8 @@ export default function AccountSettings() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsNotifications, setSmsNotifications] = useState(false);
   const [notifyAbstractionComplete, setNotifyAbstractionComplete] = useState(true);
+  const [aiConsentAt, setAiConsentAt] = useState<string | null>(null);
+  const [isRevokingConsent, setIsRevokingConsent] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoggingOutOthers, setIsLoggingOutOthers] = useState(false);
@@ -104,19 +106,60 @@ export default function AccountSettings() {
   useEffect(() => {
     async function loadPrefs() {
       if (!authUser?.id) return;
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from('profiles')
-        .select('email_notifications_enabled, sms_notifications_enabled, notify_abstraction_complete')
+        .select('email_notifications_enabled, sms_notifications_enabled, notify_abstraction_complete, ai_processing_consent_at')
         .eq('id', authUser.id)
         .single();
       if (data) {
         setEmailNotifications(data.email_notifications_enabled ?? true);
         setSmsNotifications(data.sms_notifications_enabled ?? false);
-        setNotifyAbstractionComplete((data as any).notify_abstraction_complete ?? true);
+        setNotifyAbstractionComplete(data.notify_abstraction_complete ?? true);
+        setAiConsentAt(data.ai_processing_consent_at ?? null);
       }
     }
     loadPrefs();
   }, [authUser?.id]);
+
+  const handleRevokeAiConsent = async () => {
+    if (!authUser?.id) return;
+    if (!confirm('Revoke AI processing consent? You can re-grant it later, but lease uploads may be blocked while revoked.')) return;
+    setIsRevokingConsent(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('profiles')
+        .update({ ai_processing_consent_at: null })
+        .eq('id', authUser.id);
+      if (error) throw error;
+      setAiConsentAt(null);
+      toast.success('AI processing consent revoked');
+    } catch (err) {
+      console.error('Error revoking AI consent:', err);
+      toast.error('Failed to revoke consent');
+    } finally {
+      setIsRevokingConsent(false);
+    }
+  };
+
+  const handleGrantAiConsent = async () => {
+    if (!authUser?.id) return;
+    setIsRevokingConsent(true);
+    try {
+      const now = new Date().toISOString();
+      const { error } = await (supabase as any)
+        .from('profiles')
+        .update({ ai_processing_consent_at: now })
+        .eq('id', authUser.id);
+      if (error) throw error;
+      setAiConsentAt(now);
+      toast.success('AI processing consent recorded');
+    } catch (err) {
+      console.error('Error granting AI consent:', err);
+      toast.error('Failed to record consent');
+    } finally {
+      setIsRevokingConsent(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     if (!authUser) {
@@ -397,6 +440,43 @@ export default function AccountSettings() {
                   )}
                   {isSaving ? t('account.saving') : t('account.save_changes')}
                 </Button>
+              </CardContent>
+            </Card>
+
+            {/* AI processing consent */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Privacy & AI processing</CardTitle>
+                <CardDescription>
+                  Uploaded lease documents are processed by Anthropic Claude to extract terms.
+                  We never use your data to train AI models.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {aiConsentAt
+                    ? `Consent recorded ${new Date(aiConsentAt).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.`
+                    : 'AI processing consent is currently revoked.'}
+                </p>
+                {aiConsentAt ? (
+                  <Button
+                    variant="outline"
+                    onClick={handleRevokeAiConsent}
+                    disabled={isRevokingConsent}
+                  >
+                    {isRevokingConsent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    Revoke consent
+                  </Button>
+                ) : (
+                  <Button
+                    variant="accent"
+                    onClick={handleGrantAiConsent}
+                    disabled={isRevokingConsent}
+                  >
+                    {isRevokingConsent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    Grant consent
+                  </Button>
+                )}
               </CardContent>
             </Card>
 
