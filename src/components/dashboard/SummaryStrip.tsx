@@ -91,10 +91,7 @@ export function SummaryStrip() {
       // Stat 3: Awaiting Approval
       const awaitingLeases = leases.filter((l) => l.lifecycle_status === 'under_review');
       const awaitingCount = awaitingLeases.length;
-      const awaitingAnnualValue = awaitingLeases.reduce(
-        (sum, l) => sum + (l.monthly_payment ?? 0) * 12,
-        0
-      );
+
 
       // Stat 4: Expiring within 90 days
       const expiringStatuses = ['active', 'executed'];
@@ -106,12 +103,6 @@ export function SummaryStrip() {
         return expiryTime > now && expiryTime - now <= ninetyDaysMs;
       });
       const expiringCount = expiringLeases.length;
-      const expiringAnnualRent = expiringLeases.reduce(
-        (sum, l) =>
-          sum +
-          (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0) * 12,
-        0
-      );
 
       // Stat 5: Expiring 91–120 days
       const expiring91to120Leases = leases.filter((l) => {
@@ -122,12 +113,6 @@ export function SummaryStrip() {
         return diff > ninetyDaysMs && diff <= oneTwentyDaysMs;
       });
       const expiring91to120Count = expiring91to120Leases.length;
-      const expiring91to120AnnualRent = expiring91to120Leases.reduce(
-        (sum, l) =>
-          sum +
-          (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0) * 12,
-        0
-      );
 
       setStats([
         {
@@ -147,21 +132,21 @@ export function SummaryStrip() {
         {
           label: 'Awaiting Approval',
           primary: String(awaitingCount),
-          sub: `${formatCurrency(awaitingAnnualValue)} annual value`,
+          sub: awaitingCount === 0 ? 'none pending' : `${awaitingCount} lease${awaitingCount !== 1 ? 's' : ''} pending`,
           accent: 'orange',
           href: '/app/leases?view=approval',
         },
         {
           label: 'Expiring \u2264 90 Days',
           primary: String(expiringCount),
-          sub: `${formatCurrency(expiringAnnualRent)} annual rent`,
+          sub: expiringCount > 0 ? 'require attention' : 'all clear',
           accent: 'red',
           href: '/app/leases?view=active&expiring=90',
         },
         {
           label: 'Expiring 91\u2013120 Days',
           primary: String(expiring91to120Count),
-          sub: `${formatCurrency(expiring91to120AnnualRent)} annual rent`,
+          sub: expiring91to120Count > 0 ? 'on the horizon' : 'all clear',
           accent: expiring91to120Count > 0 ? 'orange' : 'default',
           href: '/app/leases?view=active&expiring=120',
         },
