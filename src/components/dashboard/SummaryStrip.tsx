@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Check } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
@@ -12,6 +12,7 @@ interface StatBox {
   accent?: 'blue' | 'orange' | 'red' | 'default';
   href: string;
   disabled?: boolean;
+  onDismiss?: () => void;
 }
 
 const formatCurrency = (value: number): string =>
@@ -34,6 +35,19 @@ export function SummaryStrip() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<StatBox[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const expiringIds90Ref = useRef<string[]>([]);
+  const expiringIds120Ref = useRef<string[]>([]);
+
+  const handleDismiss = (bucket: '90' | '120') => {
+    if (!workspace?.id) return;
+    const idsRef = bucket === '90' ? expiringIds90Ref : expiringIds120Ref;
+    const key = `leaseio_dismissed_expiry${bucket}_${workspace.id}`;
+    const existing = new Set<string>(JSON.parse(localStorage.getItem(key) || '[]'));
+    idsRef.current.forEach((id) => existing.add(id));
+    localStorage.setItem(key, JSON.stringify([...existing]));
+    setRefreshKey((k) => k + 1);
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -45,7 +59,7 @@ export function SummaryStrip() {
       const { data: leases } = await supabase
         .from('leases')
         .select(
-          'lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end, square_footage, executed_document_url, ' +
+          'id, lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end, square_footage, executed_document_url, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace.id);
@@ -103,7 +117,6 @@ export function SummaryStrip() {
         const expiryTime = new Date(expiryStr).getTime();
         return expiryTime > now && expiryTime - now <= ninetyDaysMs;
       });
-      const expiringCount = expiringLeases.length;
 
       // Stat 5: Expiring 91–120 days
       const expiring91to120Leases = leases.filter((l) => {
@@ -113,7 +126,36 @@ export function SummaryStrip() {
         const diff = new Date(expiryStr).getTime() - now;
         return diff > ninetyDaysMs && diff <= oneTwentyDaysMs;
       });
-      const expiring91to120Count = expiring91to120Leases.length;
+
+      // Dismissed IDs from localStorage
+      const dismissed90 = new Set<string>(
+        JSON.parse(localStorage.getItem(`leaseio_dismissed_expiry90_${workspace.id}`) || '[]')
+      );
+      const dismissed120 = new Set<string>(
+        JSON.parse(localStorage.getItem(`leaseio_dismissed_expiry120_${workspace.id}`) || '[]')
+      );
+
+      // Store raw IDs in refs for dismiss handler
+      const allExpiring90Ids = expiringLeases.map((l: any) => l.id);
+      const allExpiring120Ids = expiring91to120Leases.map((l: any) => l.id);
+      expiringIds90Ref.current = allExpiring90Ids;
+      expiringIds120Ref.current = allExpiring120Ids;
+
+      // Prune stale dismissed IDs (leases no longer in the window)
+      const validIds90 = new Set(allExpiring90Ids);
+      const validIds120 = new Set(allExpiring120Ids);
+      const pruned90 = [...dismissed90].filter((id) => validIds90.has(id));
+      const pruned120 = [...dismissed120].filter((id) => validIds120.has(id));
+      if (pruned90.length !== dismissed90.size) {
+        localStorage.setItem(`leaseio_dismissed_expiry90_${workspace.id}`, JSON.stringify(pruned90));
+      }
+      if (pruned120.length !== dismissed120.size) {
+        localStorage.setItem(`leaseio_dismissed_expiry120_${workspace.id}`, JSON.stringify(pruned120));
+      }
+
+      // Display counts exclude dismissed IDs
+      const displayExpiring90Count = allExpiring90Ids.filter((id) => !dismissed90.has(id)).length;
+      const displayExpiring120Count = allExpiring120Ids.filter((id) => !dismissed120.has(id)).length;
 
       setStats([
         {
@@ -140,19 +182,21 @@ export function SummaryStrip() {
         },
         {
           label: 'Expiring \u2264 90 Days',
-          primary: String(expiringCount),
-          sub: expiringCount > 0 ? 'require attention' : 'all clear',
+          primary: String(displayExpiring90Count),
+          sub: displayExpiring90Count > 0 ? 'require attention' : 'all clear',
           accent: 'red',
           href: '/app/leases?view=active&expiring=90',
-          disabled: expiringCount === 0,
+          disabled: displayExpiring90Count === 0,
+          onDismiss: displayExpiring90Count > 0 ? () => handleDismiss('90') : undefined,
         },
         {
           label: 'Expiring 91\u2013120 Days',
-          primary: String(expiring91to120Count),
-          sub: expiring91to120Count > 0 ? 'on the horizon' : 'all clear',
-          accent: expiring91to120Count > 0 ? 'orange' : 'default',
+          primary: String(displayExpiring120Count),
+          sub: displayExpiring120Count > 0 ? 'on the horizon' : 'all clear',
+          accent: displayExpiring120Count > 0 ? 'orange' : 'default',
           href: '/app/leases?view=active&expiring=120',
-          disabled: expiring91to120Count === 0,
+          disabled: displayExpiring120Count === 0,
+          onDismiss: displayExpiring120Count > 0 ? () => handleDismiss('120') : undefined,
         },
       ]);
 
@@ -160,7 +204,7 @@ export function SummaryStrip() {
     }
 
     fetchData();
-  }, [workspace?.id]);
+  }, [workspace?.id, refreshKey]);
 
   if (loading) {
     return (
@@ -189,7 +233,21 @@ export function SummaryStrip() {
         >
           <div className="flex items-start justify-between">
             <p className="text-xs text-muted-foreground">{box.label}</p>
-            {!box.disabled && <ArrowUpRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />}
+            <div className="flex items-center gap-1">
+              {box.onDismiss && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); box.onDismiss!(); }}
+                  className="text-muted-foreground/40 hover:text-green-500 transition-colors"
+                  title="Mark as seen"
+                >
+                  <Check className="h-3 w-3" />
+                </button>
+              )}
+              {!box.disabled && (
+                <ArrowUpRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
+              )}
+            </div>
           </div>
           <p className="mt-1 text-2xl font-semibold tracking-tight">{box.primary}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{box.sub}</p>
