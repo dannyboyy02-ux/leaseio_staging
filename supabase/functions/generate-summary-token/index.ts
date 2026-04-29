@@ -1,29 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
-
-const ALLOWED_ORIGINS = [
-  'https://theleaseio.com',
-  'https://www.theleaseio.com',
-  'https://app.theleaseio.com',
-  'https://theleaseio.lovable.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-];
+import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 
 function getCorsHeaders(origin: string | null): Record<string, string> {
-  const isAllowed = origin && (
-    ALLOWED_ORIGINS.includes(origin) ||
-    origin.includes('lovableproject.com') ||
-    origin.includes('lovable.app')
-  );
-  return {
-    'Access-Control-Allow-Origin': isAllowed ? origin! : ALLOWED_ORIGINS[0],
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Max-Age': '86400',
-  };
+  return baseCorsHeaders(origin, "POST, OPTIONS");
 }
 
 serve(async (req) => {
@@ -62,7 +43,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { lease_id, send_email } = body;
+    const { lease_id, send_email, action } = body;
     if (!lease_id) {
       return new Response(JSON.stringify({ error: 'lease_id required' }), {
         status: 400,
@@ -73,7 +54,7 @@ serve(async (req) => {
     // Fetch lease
     const { data: lease, error: leaseError } = await supabase
       .from('leases')
-      .select('id, workspace_id, summary_share_token, summary_shared_at, request_title, requesting_department, lifecycle_status, requestor_id')
+      .select('id, workspace_id, summary_share_token, summary_shared_at, summary_share_token_expires_at, request_title, requesting_department, lifecycle_status, requestor_id')
       .eq('id', lease_id)
       .single();
 
@@ -120,17 +101,43 @@ serve(async (req) => {
       });
     }
 
-    // Get or generate token — never regenerate if one exists
+    // Revoke action: clear token + expiry. Existing share links 404 immediately.
+    if (action === 'revoke') {
+      await supabase
+        .from('leases')
+        .update({
+          summary_share_token: null,
+          summary_shared_at: null,
+          summary_share_token_expires_at: null,
+        })
+        .eq('id', lease_id);
+      return new Response(
+        JSON.stringify({ revoked: true }),
+        { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+
+    // Get or generate token. Regenerate if missing OR expired.
+    const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const expiresAtRaw = (lease as { summary_share_token_expires_at?: string | null }).summary_share_token_expires_at;
+    const isExpired = expiresAtRaw ? new Date(expiresAtRaw).getTime() <= Date.now() : false;
+
     let token: string = lease.summary_share_token;
     let generated_at: string = lease.summary_shared_at;
-    if (!token) {
+    let expires_at: string = expiresAtRaw ?? '';
+    if (!token || isExpired) {
       const uuid1 = crypto.randomUUID().replace(/-/g, '');
       const uuid2 = crypto.randomUUID().replace(/-/g, '');
       token = (uuid1 + uuid2).slice(0, 48);
       generated_at = new Date().toISOString();
+      expires_at = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
       await supabase
         .from('leases')
-        .update({ summary_share_token: token, summary_shared_at: generated_at })
+        .update({
+          summary_share_token: token,
+          summary_shared_at: generated_at,
+          summary_share_token_expires_at: expires_at,
+        })
         .eq('id', lease_id);
     }
 
@@ -157,13 +164,13 @@ serve(async (req) => {
           if (submitterProfile?.email) {
             const submitterName = [submitterProfile.first_name, submitterProfile.last_name]
               .filter(Boolean).join(' ') || 'Team';
+            // Subject and body intentionally omit request title and department
+            // to minimize deal-level metadata exposed to the email provider.
             await resend.emails.send({
               from: Deno.env.get('RESEND_APPROVALS_FROM_EMAIL') ?? Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
               to: [submitterProfile.email],
-              subject: `\u2705 Commitment Approved: ${lease.request_title || 'Your Request'}`,
+              subject: '\u2705 Your lease commitment request has been approved',
               html: generateApprovalEmailHtml({
-                requestTitle: lease.request_title || 'Lease Commitment',
-                requestingDepartment: lease.requesting_department || '',
                 submitterName,
                 shareUrl,
               }),
@@ -176,7 +183,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ url: shareUrl, token, generated_at, view_count: viewCount || 0 }),
+      JSON.stringify({ url: shareUrl, token, generated_at, expires_at, view_count: viewCount || 0 }),
       { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
     );
   } catch (err: any) {
@@ -189,13 +196,9 @@ serve(async (req) => {
 });
 
 function generateApprovalEmailHtml({
-  requestTitle,
-  requestingDepartment,
   submitterName,
   shareUrl,
 }: {
-  requestTitle: string;
-  requestingDepartment: string;
   submitterName: string;
   shareUrl: string;
 }): string {
@@ -210,10 +213,6 @@ function generateApprovalEmailHtml({
         </div>
         <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 8px;">Commitment Approved</h1>
         <p style="color: #6b7280; margin: 0 0 24px;">Hi ${submitterName}, your lease commitment request has been approved and is ready to move forward.</p>
-        <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
-          <p style="margin: 0 0 6px; font-size: 14px;"><strong>Request:</strong> ${requestTitle}</p>
-          <p style="margin: 0; font-size: 14px;"><strong>Department:</strong> ${requestingDepartment}</p>
-        </div>
         <p style="color: #374151; margin: 0 0 16px;">View the complete Financial Impact Summary including total commitment, estimated lease liability, and P&amp;L impact:</p>
         <div style="text-align: center; margin-bottom: 28px;">
           <a href="${shareUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 15px;">View Financial Impact Summary \u2192</a>

@@ -36,12 +36,24 @@ serve(async (req) => {
         'requesting_department, uploaded_at, lifecycle_status, monthly_payment, term_months, ' +
         'lease_start, escalation_rate, calc_total_commitment, calc_pv_liability, ' +
         'calc_straight_line_exp, calc_cash_pl_delta, lease_classification, covenant_flagged, ' +
-        'financial_approved_at, financial_approved_by, requestor_id'
+        'financial_approved_at, financial_approved_by, requestor_id, ' +
+        'summary_share_token_expires_at'
       )
       .eq('summary_share_token', token)
       .single();
 
     if (leaseError || !lease) {
+      return new Response(JSON.stringify({ error: 'Not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    // Token expiry — 404 (not 410) so an expired token is indistinguishable
+    // from an unknown one to a recipient. Revoked tokens are returned by setting
+    // summary_share_token = NULL, which causes the lookup above to miss.
+    const expiresAtRaw = (lease as { summary_share_token_expires_at?: string | null }).summary_share_token_expires_at;
+    if (expiresAtRaw && new Date(expiresAtRaw).getTime() <= Date.now()) {
       return new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
