@@ -1075,34 +1075,59 @@
     "last_updated": "Última actualización:",
     "section1": {
       "title": "1. Información que recopilamos",
-      "paragraph1": "Recopilamos la información que nos proporciona directamente, incluyendo su nombre, correo electrónico, nombre de la empresa e información de pago cuando se registra o se suscribe a nuestro servicio.",
-      "paragraph2": "También recopilamos los documentos de arrendamiento que sube a nuestra plataforma para proporcionar nuestros servicios de abstracción con IA."
+      "paragraph1": "Recopilamos la información que nos proporciona directamente, incluyendo su nombre, correo electrónico, nombre de la empresa, zona horaria y contraseña (almacenada únicamente como un hash con sal) cuando se registra para una cuenta.",
+      "paragraph2": "Recopilamos los documentos de arrendamiento que carga en LeaseIO y los datos estructurados que extraemos de ellos. No utilizamos analíticas, píxeles de seguimiento, herramientas de repetición de sesión ni cookies no esenciales."
     },
     "section2": {
       "title": "2. Cómo usamos su información",
       "intro": "Utilizamos la información recopilada para:",
-      "bullet1": "Proveer, mantener y mejorar nuestros servicios",
-      "bullet2": "Procesar sus documentos de arrendamiento usando tecnología de IA",
-      "bullet3": "Enviarle notificaciones sobre sus arrendamientos y su cuenta",
-      "bullet4": "Procesar pagos y enviar facturas",
-      "bullet5": "Responder a sus comentarios, preguntas y solicitudes"
+      "bullet1": "Proveer, mantener y mejorar el servicio LeaseIO",
+      "bullet2": "Procesar sus documentos de arrendamiento con IA para extraer términos estructurados",
+      "bullet3": "Enviar notificaciones transaccionales sobre sus arrendamientos, aprobaciones y cuenta",
+      "bullet4": "Procesar pagos de suscripción y enviar facturas",
+      "bullet5": "Responder a sus comentarios, preguntas y solicitudes de soporte"
     },
     "section3": {
-      "title": "3. Seguridad de los datos",
-      "paragraph1": "Implementamos medidas técnicas y organizativas apropiadas para proteger su información personal y documentos. Todos los datos se cifran en reposo con AES-256 y en tránsito con TLS 1.3."
+      "title": "3. Subprocesadores",
+      "intro": "Compartimos datos específicos con los siguientes subprocesadores, cada uno bajo un Acuerdo de Procesamiento de Datos por escrito. No vendemos sus datos ni los compartimos con ninguna parte no listada a continuación.",
+      "header_provider": "Proveedor",
+      "header_purpose": "Propósito",
+      "header_data": "Datos compartidos",
+      "anthropic_provider": "Anthropic (API de Claude)",
+      "anthropic_purpose": "Extraer términos estructurados de documentos de arrendamiento",
+      "anthropic_data": "Contenido de los documentos. Operado bajo retención cero; no se usa para entrenar los modelos de Anthropic.",
+      "azure_provider": "Azure Document Intelligence",
+      "azure_purpose": "Reconocimiento óptico de caracteres para PDF escaneados",
+      "azure_data": "Bytes del documento. El registro de contenido está deshabilitado a nivel de API.",
+      "supabase_provider": "Supabase",
+      "supabase_purpose": "Aloja nuestra base de datos, autenticación y almacenamiento de archivos",
+      "supabase_data": "Todos los datos de cuenta, metadatos de arrendamientos y documentos cargados.",
+      "stripe_provider": "Stripe",
+      "stripe_purpose": "Procesa los pagos de suscripción",
+      "stripe_data": "Correo, nombre de facturación y método de pago (nunca vemos números de tarjeta).",
+      "resend_provider": "Resend",
+      "resend_purpose": "Entrega correos transaccionales",
+      "resend_data": "Correo del destinatario y cuerpo del mensaje. Los correos de aprobación se reducen a un CTA y un enlace.",
+      "vercel_provider": "Vercel",
+      "vercel_purpose": "Aloja la aplicación web de LeaseIO",
+      "vercel_data": "Metadatos de solicitudes HTTP (no contenido de documentos)."
     },
     "section4": {
-      "title": "4. Retención de datos",
-      "paragraph1": "Conservamos su información mientras su cuenta esté activa o según sea necesario para brindarle servicios. Si cierra su cuenta, eliminaremos sus datos dentro de los 30 días, salvo que la ley requiera conservarlos por más tiempo."
+      "title": "4. Seguridad de los datos",
+      "paragraph1": "Implementamos medidas técnicas y organizativas apropiadas para proteger su información personal y documentos. Los datos se cifran en reposo a través de nuestros proveedores de nube y en tránsito mediante TLS. El acceso a sistemas de producción está restringido, auditado y protegido por políticas de seguridad a nivel de fila que limitan cada registro al espacio de trabajo al que pertenece."
     },
     "section5": {
-      "title": "5. Sus derechos",
-      "paragraph1": "Tiene derecho a acceder, corregir o eliminar su información personal en cualquier momento. Puede exportar sus datos desde la aplicación o contactando a soporte."
+      "title": "5. Retención de datos",
+      "paragraph1": "Los documentos de arrendamiento y los datos extraídos se conservan durante la vigencia de su suscripción activa. Si cancela o elimina su cuenta, eliminamos sus documentos y datos de cuenta dentro de los 30 días. Algunos registros derivados (copias de seguridad cifradas y registros de auditoría requeridos por motivos legales o contables) pueden persistir hasta 90 días adicionales antes de ser eliminados de forma permanente."
     },
     "section6": {
-      "title": "6. Contáctenos",
-      "paragraph1": "Si tiene preguntas sobre esta Política de Privacidad, contáctenos en",
-      "email": "privacy@leaseio.com"
+      "title": "6. Sus derechos",
+      "paragraph1": "Tiene derecho a acceder, corregir, exportar o eliminar su información personal. Puede eliminar su cuenta en cualquier momento desde la Configuración de la cuenta, lo que elimina permanentemente sus documentos, perfil y registro de autenticación. Para solicitudes de exportación, corrección o cualquier otra Solicitud de Acceso del Titular, escriba a privacy@theleaseio.com — respondemos dentro de 30 días según lo exige el GDPR. Los usuarios de la UE y el Reino Unido también pueden presentar una queja ante su autoridad supervisora local."
+    },
+    "section7": {
+      "title": "7. Contáctenos",
+      "paragraph1": "Si tiene preguntas sobre esta Política de Privacidad o sobre cómo manejamos sus datos, contáctenos en",
+      "email": "privacy@theleaseio.com"
     }
   },
   "terms": {

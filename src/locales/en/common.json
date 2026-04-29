@@ -1075,34 +1075,59 @@
     "last_updated": "Last updated:",
     "section1": {
       "title": "1. Information We Collect",
-      "paragraph1": "We collect information you provide directly to us, including your name, email address, company name, and payment information when you register for an account or subscribe to our service.",
-      "paragraph2": "We also collect lease documents you upload to our platform for the purpose of providing our AI-powered abstraction services."
+      "paragraph1": "We collect information you provide directly to us, including your name, email address, company name, timezone, and password (stored only as a salted hash) when you register for an account.",
+      "paragraph2": "We collect the lease documents you upload to LeaseIO and the structured data we extract from them. We do not use analytics, tracking pixels, session-replay tools, or non-essential cookies."
     },
     "section2": {
       "title": "2. How We Use Your Information",
       "intro": "We use the information we collect to:",
-      "bullet1": "Provide, maintain, and improve our services",
-      "bullet2": "Process your lease documents using AI technology",
-      "bullet3": "Send you notifications about your leases and account",
-      "bullet4": "Process payments and send invoices",
-      "bullet5": "Respond to your comments, questions, and requests"
+      "bullet1": "Provide, maintain, and improve the LeaseIO service",
+      "bullet2": "Process your lease documents using AI to extract structured terms",
+      "bullet3": "Send transactional notifications about your leases, approvals, and account",
+      "bullet4": "Process subscription payments and send invoices",
+      "bullet5": "Respond to your comments, questions, and support requests"
     },
     "section3": {
-      "title": "3. Data Security",
-      "paragraph1": "We implement appropriate technical and organizational measures to protect your personal information and documents. All data is encrypted at rest using AES-256 encryption and in transit using TLS 1.3."
+      "title": "3. Sub-processors",
+      "intro": "We share specific data with the following sub-processors, each under a written Data Processing Agreement. We do not sell your data and do not share it with any party not listed below.",
+      "header_provider": "Provider",
+      "header_purpose": "Purpose",
+      "header_data": "Data shared",
+      "anthropic_provider": "Anthropic (Claude API)",
+      "anthropic_purpose": "Extract structured terms from lease documents",
+      "anthropic_data": "Lease document content. Operated under zero data retention; not used to train Anthropic's models.",
+      "azure_provider": "Azure Document Intelligence",
+      "azure_purpose": "Optical character recognition for scanned PDFs",
+      "azure_data": "Lease document bytes. Content logging is disabled at the API level.",
+      "supabase_provider": "Supabase",
+      "supabase_purpose": "Hosts our database, authentication, and file storage",
+      "supabase_data": "All account data, lease metadata, and uploaded documents.",
+      "stripe_provider": "Stripe",
+      "stripe_purpose": "Processes subscription payments",
+      "stripe_data": "Email, billing name, and payment method (we never see card numbers).",
+      "resend_provider": "Resend",
+      "resend_purpose": "Delivers transactional emails",
+      "resend_data": "Recipient email and email body. Approval emails are minimized to a CTA and link.",
+      "vercel_provider": "Vercel",
+      "vercel_purpose": "Hosts the LeaseIO web application",
+      "vercel_data": "HTTP request metadata (no document content)."
     },
     "section4": {
-      "title": "4. Data Retention",
-      "paragraph1": "We retain your information for as long as your account is active or as needed to provide you services. If you close your account, we will delete your data within 30 days unless required by law to retain it longer."
+      "title": "4. Data Security",
+      "paragraph1": "We implement appropriate technical and organizational measures to protect your personal information and documents. Data is encrypted at rest by our cloud providers and in transit using TLS. Access to production systems is restricted, audited, and protected by row-level security policies that scope every record to the workspace it belongs to."
     },
     "section5": {
-      "title": "5. Your Rights",
-      "paragraph1": "You have the right to access, correct, or delete your personal information at any time. You can export your data through the application or by contacting support."
+      "title": "5. Data Retention",
+      "paragraph1": "Lease documents and the data extracted from them are retained for the duration of your active subscription. If you cancel or delete your account, we delete your documents and account data within 30 days. Some derivative records (encrypted backups, audit logs required for legal or accounting purposes) may persist for up to 90 additional days before being permanently purged."
     },
     "section6": {
-      "title": "6. Contact Us",
-      "paragraph1": "If you have any questions about this Privacy Policy, please contact us at",
-      "email": "privacy@leaseio.com"
+      "title": "6. Your Rights",
+      "paragraph1": "You have the right to access, correct, export, or delete your personal information. You can delete your account at any time from Account Settings, which permanently removes your documents, profile, and authentication record. For data export, correction, or any other Data Subject Access Request, email privacy@theleaseio.com — we respond within 30 days as required by GDPR. EU and UK users may also lodge a complaint with their local supervisory authority."
+    },
+    "section7": {
+      "title": "7. Contact Us",
+      "paragraph1": "If you have any questions about this Privacy Policy or how we handle your data, please contact us at",
+      "email": "privacy@theleaseio.com"
     }
   },
   "terms": {

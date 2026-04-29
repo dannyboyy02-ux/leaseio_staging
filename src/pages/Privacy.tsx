@@ -54,9 +54,29 @@ export default function Privacy() {
               <h2 className="text-2xl font-semibold text-foreground">
                 {t('privacy.section3.title')}
               </h2>
-              <p>
-                {t('privacy.section3.paragraph1')}
-              </p>
+              <p>{t('privacy.section3.intro')}</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border border-border rounded-md">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left p-3 font-semibold text-foreground">{t('privacy.section3.header_provider')}</th>
+                      <th className="text-left p-3 font-semibold text-foreground">{t('privacy.section3.header_purpose')}</th>
+                      <th className="text-left p-3 font-semibold text-foreground">{t('privacy.section3.header_data')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {['anthropic', 'azure', 'supabase', 'stripe', 'resend', 'vercel'].map((key) => (
+                      <tr key={key} className="border-t border-border">
+                        <td className="p-3 align-top font-medium text-foreground whitespace-nowrap">
+                          {t(`privacy.section3.${key}_provider`)}
+                        </td>
+                        <td className="p-3 align-top">{t(`privacy.section3.${key}_purpose`)}</td>
+                        <td className="p-3 align-top">{t(`privacy.section3.${key}_data`)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             <section className="space-y-4">
@@ -82,9 +102,18 @@ export default function Privacy() {
                 {t('privacy.section6.title')}
               </h2>
               <p>
-                {t('privacy.section6.paragraph1')}{' '}
-                <a href="mailto:privacy@leaseio.com" className="text-primary hover:underline">
-                  {t('privacy.section6.email')}
+                {t('privacy.section6.paragraph1')}
+              </p>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('privacy.section7.title')}
+              </h2>
+              <p>
+                {t('privacy.section7.paragraph1')}{' '}
+                <a href="mailto:privacy@theleaseio.com" className="text-primary hover:underline">
+                  {t('privacy.section7.email')}
                 </a>
               </p>
             </section>
