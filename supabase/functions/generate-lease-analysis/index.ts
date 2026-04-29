@@ -1,29 +1,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-
-const ALLOWED_ORIGINS = [
-  'https://theleaseio.com',
-  'https://www.theleaseio.com',
-  'https://app.theleaseio.com',
-  'https://theleaseio.lovable.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-];
+import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  const isLovablePreview = requestOrigin && (
-    requestOrigin.includes('lovableproject.com') ||
-    requestOrigin.includes('lovable.app')
-  );
-  const isAllowed = (requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin)) || isLovablePreview;
-  const origin = isAllowed ? requestOrigin! : ALLOWED_ORIGINS[0];
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Max-Age': '86400',
-  };
+  return baseCorsHeaders(requestOrigin, "POST, OPTIONS");
 }
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!;

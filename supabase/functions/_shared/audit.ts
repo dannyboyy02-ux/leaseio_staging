@@ -1,52 +1,6 @@
 import { jsonrepair } from "npm:jsonrepair@3.13.1";
 
-const ALLOWED_ORIGINS = [
-  "https://theleaseio.com",
-  "https://www.theleaseio.com",
-  "https://app.theleaseio.com",
-  "https://theleaseio.lovable.app",
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "http://127.0.0.1:5173",
-];
-
-function getAllowedOrigin(requestOrigin: string | null): string {
-  const isLovablePreview =
-    requestOrigin &&
-    (requestOrigin.includes("lovableproject.com") ||
-      requestOrigin.includes("lovable.app"));
-  const isProductionDomain =
-    requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin);
-  return isProductionDomain || isLovablePreview
-    ? requestOrigin!
-    : ALLOWED_ORIGINS[0];
-}
-
-export function getCorsHeaders(
-  requestOrigin: string | null,
-): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": getAllowedOrigin(requestOrigin),
-    "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-  };
-}
-
-export function jsonResponse(
-  payload: unknown,
-  status: number,
-  requestOrigin: string | null,
-): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      ...getCorsHeaders(requestOrigin),
-      "Content-Type": "application/json",
-    },
-  });
-}
+export { getCorsHeaders, jsonResponse } from "./cors.ts";
 
 export async function repairJsonObject(content: string): Promise<object> {
   let jsonStr = content;

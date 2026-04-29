@@ -66,19 +66,30 @@ function generateInviteToken(): string {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// CORS helpers inlined (MCP deploy cannot resolve ../_shared/ imports).
+// Strict hostname-suffix match to prevent origins like `lovable.app.evil.com`.
 const ALLOWED_ORIGINS = [
   'https://theleaseio.com', 'https://www.theleaseio.com', 'https://app.theleaseio.com',
   'https://theleaseio.lovable.app', 'http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173',
 ];
+const ALLOWED_HOST_SUFFIXES = ['.lovableproject.com', '.lovable.app'];
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  const isAllowed = requestOrigin && (
-    ALLOWED_ORIGINS.includes(requestOrigin) ||
-    requestOrigin.includes('lovableproject.com') ||
-    requestOrigin.includes('lovable.app')
-  );
+  let isAllowed = false;
+  if (requestOrigin) {
+    if (ALLOWED_ORIGINS.includes(requestOrigin)) {
+      isAllowed = true;
+    } else {
+      try {
+        const host = new URL(requestOrigin).hostname;
+        isAllowed = ALLOWED_HOST_SUFFIXES.some((s) => host.endsWith(s));
+      } catch {
+        isAllowed = false;
+      }
+    }
+  }
   return {
-    'Access-Control-Allow-Origin': isAllowed ? requestOrigin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Origin': isAllowed ? requestOrigin! : ALLOWED_ORIGINS[0],
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
     'Access-Control-Max-Age': '86400',

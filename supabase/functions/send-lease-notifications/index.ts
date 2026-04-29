@@ -4,32 +4,13 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
-// Secure CORS configuration
-const ALLOWED_ORIGINS = [
-  'https://theleaseio.com',
-  'https://www.theleaseio.com',
-  'https://app.theleaseio.com',
-  'https://theleaseio.lovable.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-];
+import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 
+// Adds x-cron-secret to allowed request headers; otherwise identical to shared helper.
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  const isLovablePreview = requestOrigin && (
-    requestOrigin.includes('lovableproject.com') ||
-    requestOrigin.includes('lovable.app')
-  );
-  const isProductionDomain = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin);
-  const isAllowed = isProductionDomain || isLovablePreview;
-  
-  const origin = isAllowed ? requestOrigin : ALLOWED_ORIGINS[0];
-    
   return {
-    'Access-Control-Allow-Origin': origin,
+    ...baseCorsHeaders(requestOrigin),
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Max-Age': '86400',
   };
 }
 
