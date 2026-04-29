@@ -5,6 +5,13 @@ import { useAuth } from "./AuthContext";
 import { PLANS, getPlanIndex, normalizePlanId } from "@/config/pricing";
 import type { FunctionalRole } from "@/types/lifecycle";
 
+export interface WorkspaceBasic {
+  id: string;
+  name: string;
+  plan: SubscriptionPlan;
+  role: WorkspaceRole | "owner";
+}
+
 interface AppContextType {
   user: User | null;
   setUser: (user: User | null) => void;
@@ -21,6 +28,8 @@ interface AppContextType {
   canAccessFeature: (requiredPlan: SubscriptionPlan) => boolean;
   hasPermission: (permission: "billing" | "integrations" | "members" | "leases" | "export") => boolean;
   hasFunctionalRole: (role: FunctionalRole | FunctionalRole[]) => boolean;
+  availableWorkspaces: WorkspaceBasic[];
+  switchWorkspace: (workspaceId: string) => Promise<void>;
 }
 
 type WorkspaceRow = {
@@ -45,6 +54,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [userRole, setUserRole] = useState<WorkspaceRole | "owner" | null>(null);
   const [userFunctionalRoles, setUserFunctionalRoles] = useState<FunctionalRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [availableWorkspaces, setAvailableWorkspaces] = useState<WorkspaceBasic[]>([]);
 
   const isAuthenticated = !!authUser;
 
@@ -205,6 +215,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } catch {
         setUserFunctionalRoles([]);
       }
+
+      // Fetch all workspaces the user can access
+      try {
+        const { data: ownedWs } = await (supabase as any)
+          .from("workspaces")
+          .select("id, name, plan")
+          .eq("owner_id", authUser.id);
+
+        const { data: membershipWs } = await (supabase as any)
+          .from("workspace_members")
+          .select("role, workspace_id, workspaces(id, name, plan)")
+          .eq("user_id", authUser.id);
+
+        const ownedIds = new Set((ownedWs ?? []).map((w: any) => w.id));
+        const all: WorkspaceBasic[] = [
+          ...(ownedWs ?? []).map((w: any) => ({
+            id: w.id,
+            name: w.name || "Unnamed",
+            plan: normalizePlanId(w.plan),
+            role: "owner" as const,
+          })),
+          ...(membershipWs ?? [])
+            .filter((m: any) => !ownedIds.has(m.workspace_id))
+            .map((m: any) => ({
+              id: m.workspace_id,
+              name: m.workspaces?.name || "Unnamed",
+              plan: normalizePlanId(m.workspaces?.plan),
+              role: m.role as WorkspaceRole,
+            })),
+        ];
+        setAvailableWorkspaces(all);
+      } catch {
+        setAvailableWorkspaces([]);
+      }
     } catch (err) {
       console.error("Error in fetchProfile:", err);
       setWorkspace(null);
@@ -216,6 +260,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshProfile = async () => {
+    await fetchProfile();
+  };
+
+  const switchWorkspace = async (workspaceId: string) => {
+    if (!authUser) return;
+    await (supabase as any)
+      .from("profiles")
+      .update({ current_workspace_id: workspaceId })
+      .eq("id", authUser.id);
     await fetchProfile();
   };
 
@@ -268,6 +321,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         canAccessFeature,
         hasPermission,
         hasFunctionalRole,
+        availableWorkspaces,
+        switchWorkspace,
       }}
     >
       {children}

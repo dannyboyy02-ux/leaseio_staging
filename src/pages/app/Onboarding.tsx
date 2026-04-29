@@ -17,13 +17,19 @@ import { useAppTranslation } from '@/hooks/useAppTranslation';
 export default function Onboarding() {
   const [step, setStep] = useState(1);
   const [workspaceName, setWorkspaceName] = useState('');
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('starter');
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('free');
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
-  const { refreshProfile } = useApp();
+  const { refreshProfile, workspace, isLoading: appLoading } = useApp();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t, language } = useAppTranslation();
+
+  useEffect(() => {
+    if (!appLoading && workspace) {
+      navigate('/app/dashboard', { replace: true });
+    }
+  }, [workspace, appLoading, navigate]);
 
   useEffect(() => {
     // Pre-fill workspace name from user metadata if available

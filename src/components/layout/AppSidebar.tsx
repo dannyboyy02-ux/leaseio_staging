@@ -13,6 +13,9 @@ import {
   Layers,
   Settings,
   ClipboardCheck,
+  Building2,
+  ChevronsUpDown,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
@@ -25,6 +28,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -52,7 +56,7 @@ const bottomNavItems = [
 export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, workspace, canAccessFeature, userRole, userFunctionalRoles } = useApp();
+  const { user, workspace, canAccessFeature, userRole, userFunctionalRoles, availableWorkspaces, switchWorkspace } = useApp();
   const { signOut, user: authUser } = useAuth();
   const { t } = useLanguage();
 
@@ -184,6 +188,41 @@ export function AppSidebar() {
           Lease<span className="text-sidebar-primary">IO</span>
         </span>
       </Link>
+
+      {/* Workspace Switcher */}
+      <div className="px-3 py-2 border-b border-sidebar-border">
+        {availableWorkspaces.length > 1 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+                <Building2 className="h-3.5 w-3.5 text-sidebar-foreground/60 shrink-0" />
+                <span className="flex-1 text-left truncate font-medium">{workspace?.name}</span>
+                <ChevronsUpDown className="h-3.5 w-3.5 text-sidebar-foreground/40 shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">Switch workspace</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {availableWorkspaces.map((ws) => (
+                <DropdownMenuItem
+                  key={ws.id}
+                  onClick={() => switchWorkspace(ws.id)}
+                  className="flex items-center gap-2"
+                >
+                  <Check className={cn("h-3.5 w-3.5", ws.id === workspace?.id ? "opacity-100" : "opacity-0")} />
+                  <span className="flex-1 truncate">{ws.name}</span>
+                  <span className="text-xs text-muted-foreground capitalize">{ws.role}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-sidebar-foreground/80">
+            <Building2 className="h-3.5 w-3.5 text-sidebar-foreground/60 shrink-0" />
+            <span className="truncate font-medium">{workspace?.name}</span>
+          </div>
+        )}
+      </div>
 
       {/* Main Navigation — flat list, no section labels */}
       <nav className="flex-1 py-6 px-3">
