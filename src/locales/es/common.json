@@ -736,6 +736,14 @@
     },
     "share": {
       "section_title": "Compartir resumen financiero"
+    },
+    "tabs": {
+      "general": "Información general",
+      "vendor": "Proveedor / Contraparte",
+      "rent": "Renta",
+      "options": "Opciones y cláusulas",
+      "risks": "Riesgos",
+      "documents": "Documentos"
     }
   },
   "plan": {

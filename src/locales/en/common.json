@@ -736,6 +736,14 @@
     },
     "share": {
       "section_title": "Share Financial Summary"
+    },
+    "tabs": {
+      "general": "General Information",
+      "vendor": "Vendor / Counterparty",
+      "rent": "Rent",
+      "options": "Options & Clauses",
+      "risks": "Risks",
+      "documents": "Documents"
     }
   },
   "plan": {

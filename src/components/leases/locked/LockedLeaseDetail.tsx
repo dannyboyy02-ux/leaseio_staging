@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
@@ -58,6 +59,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
   const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
   const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [risks, setRisks] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'risks' | 'documents'>('general');
 
   // Fetch unlock-request status, rent schedule, and risks
   useEffect(() => {
@@ -219,89 +221,111 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
           onAdminUnlock={handleAdminUnlock}
         />
 
-        <div className="max-w-6xl mx-auto px-6 py-6 space-y-4">
-          <SectionCard title={t('locked_lease.key_info.section_title')}>
-            <LabelValueGrid rows={keyInfoRows} />
-          </SectionCard>
+        <div className="max-w-6xl mx-auto px-6 py-6">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+            <TabsList className="mb-4 justify-start overflow-x-auto">
+              <TabsTrigger value="general">{t('locked_lease.tabs.general')}</TabsTrigger>
+              <TabsTrigger value="vendor">{t('locked_lease.tabs.vendor')}</TabsTrigger>
+              <TabsTrigger value="rent">{t('locked_lease.tabs.rent')}</TabsTrigger>
+              <TabsTrigger value="options">{t('locked_lease.tabs.options')}</TabsTrigger>
+              <TabsTrigger value="risks">{t('locked_lease.tabs.risks')}</TabsTrigger>
+              <TabsTrigger value="documents">{t('locked_lease.tabs.documents')}</TabsTrigger>
+            </TabsList>
 
-          <SectionCard title={t('locked_lease.location.section_title')}>
-            <LabelValueGrid rows={locationRows} />
-          </SectionCard>
+            <TabsContent value="general" className="space-y-4 mt-0">
+              <SectionCard title={t('locked_lease.key_info.section_title')}>
+                <LabelValueGrid rows={keyInfoRows} />
+              </SectionCard>
 
-          <SectionCard title={t('locked_lease.dates.section_title')}>
-            <LabelValueGrid rows={datesRows} />
-          </SectionCard>
+              <SectionCard title={t('locked_lease.location.section_title')}>
+                <LabelValueGrid rows={locationRows} />
+              </SectionCard>
 
-          <SectionCard title={t('locked_lease.rent.section_title')}>
-            <LabelValueGrid rows={rentRows} />
-            {rentSchedule.length > 0 && (
-              <div className="mt-6">
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                  {t('locked_lease.rent.schedule_title')}
-                </h4>
-                <RentScheduleTable
-                  rentSchedule={rentSchedule}
-                  currentMonthlyRent={lease.monthly_payment ?? null}
-                  rentEscalationType={lease.rent_escalation_type ?? null}
-                  isLocked={true}
-                />
-              </div>
-            )}
-          </SectionCard>
+              <SectionCard title={t('locked_lease.dates.section_title')}>
+                <LabelValueGrid rows={datesRows} />
+              </SectionCard>
 
-          <SectionCard title={t('locked_lease.escalations.section_title')}>
-            <LabelValueGrid rows={escalationRows} />
-          </SectionCard>
+              <AuditTimelineCard leaseId={lease.id} workspaceId={lease.workspace_id} />
 
-          <SectionCard title={t('locked_lease.options.section_title')}>
-            <LabelValueGrid rows={optionsRows} />
-          </SectionCard>
+              <SectionCard title={t('locked_lease.share.section_title')} defaultOpen={false}>
+                <SummaryShareControls leaseId={lease.id} lifecycleStatus={lease.lifecycle_status ?? ''} />
+              </SectionCard>
+            </TabsContent>
 
-          {/* Vendor — the only editable card when locked */}
-          <VendorCard
-            leaseId={lease.id}
-            initial={{
-              vendor_name: lease.vendor_name ?? null,
-              vendor_phone: lease.vendor_phone ?? null,
-              vendor_address_line1: lease.vendor_address_line1 ?? null,
-              vendor_address_line2: lease.vendor_address_line2 ?? null,
-              vendor_city: lease.vendor_city ?? null,
-              vendor_state: lease.vendor_state ?? null,
-              vendor_zip: lease.vendor_zip ?? null,
-            }}
-            onSaved={refetchLease}
-          />
+            <TabsContent value="vendor" className="space-y-4 mt-0">
+              {/* Vendor — the only editable card when locked */}
+              <VendorCard
+                leaseId={lease.id}
+                initial={{
+                  vendor_name: lease.vendor_name ?? null,
+                  vendor_phone: lease.vendor_phone ?? null,
+                  vendor_address_line1: lease.vendor_address_line1 ?? null,
+                  vendor_address_line2: lease.vendor_address_line2 ?? null,
+                  vendor_city: lease.vendor_city ?? null,
+                  vendor_state: lease.vendor_state ?? null,
+                  vendor_zip: lease.vendor_zip ?? null,
+                }}
+                onSaved={refetchLease}
+              />
+            </TabsContent>
 
-          <SectionCard title={t('locked_lease.risks.section_title')}>
-            {risks.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">{t('locked_lease.risks.empty_hint')}</p>
-            ) : (
-              <ul className="space-y-3">
-                {risks.map((r) => (
-                  <li key={r.id} className="border-l-2 border-amber-400 pl-3 py-1">
-                    <p className="text-sm font-medium text-foreground">{r.title || r.risk_type}</p>
-                    {r.description && <p className="text-xs text-muted-foreground mt-0.5">{r.description}</p>}
-                    {r.severity && (
-                      <span className="inline-block mt-1 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                        {r.severity}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
+            <TabsContent value="rent" className="space-y-4 mt-0">
+              <SectionCard title={t('locked_lease.rent.section_title')}>
+                <LabelValueGrid rows={rentRows} />
+                {rentSchedule.length > 0 && (
+                  <div className="mt-6">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                      {t('locked_lease.rent.schedule_title')}
+                    </h4>
+                    <RentScheduleTable
+                      rentSchedule={rentSchedule}
+                      currentMonthlyRent={lease.monthly_payment ?? null}
+                      rentEscalationType={lease.rent_escalation_type ?? null}
+                      isLocked={true}
+                    />
+                  </div>
+                )}
+              </SectionCard>
 
-          <SectionCard title={t('locked_lease.documents.section_title')}>
-            <AmendmentsList parentLeaseId={lease.id} />
-          </SectionCard>
+              <SectionCard title={t('locked_lease.escalations.section_title')}>
+                <LabelValueGrid rows={escalationRows} />
+              </SectionCard>
+            </TabsContent>
 
-          <AuditTimelineCard leaseId={lease.id} workspaceId={lease.workspace_id} />
+            <TabsContent value="options" className="space-y-4 mt-0">
+              <SectionCard title={t('locked_lease.options.section_title')}>
+                <LabelValueGrid rows={optionsRows} />
+              </SectionCard>
+            </TabsContent>
 
-          {/* Summary share controls (already-shipped feature) */}
-          <SectionCard title={t('locked_lease.share.section_title')} defaultOpen={false}>
-            <SummaryShareControls leaseId={lease.id} lifecycleStatus={lease.lifecycle_status ?? ''} />
-          </SectionCard>
+            <TabsContent value="risks" className="space-y-4 mt-0">
+              <SectionCard title={t('locked_lease.risks.section_title')}>
+                {risks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">{t('locked_lease.risks.empty_hint')}</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {risks.map((r) => (
+                      <li key={r.id} className="border-l-2 border-amber-400 pl-3 py-1">
+                        <p className="text-sm font-medium text-foreground">{r.title || r.risk_type}</p>
+                        {r.description && <p className="text-xs text-muted-foreground mt-0.5">{r.description}</p>}
+                        {r.severity && (
+                          <span className="inline-block mt-1 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                            {r.severity}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SectionCard>
+            </TabsContent>
+
+            <TabsContent value="documents" className="space-y-4 mt-0">
+              <SectionCard title={t('locked_lease.documents.section_title')}>
+                <AmendmentsList parentLeaseId={lease.id} />
+              </SectionCard>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </AppLayout>
