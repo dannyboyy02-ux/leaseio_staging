@@ -558,8 +558,6 @@
   "integrations": {
     "title": "Integraciones",
     "subtitle": "Conecte LeaseIO con sus otras herramientas",
-    "quickbooks": "QuickBooks Online",
-    "quickbooks_desc": "Sincronice pagos de arrendamiento con su sistema contable. Automatice la creación de facturas y seguimiento de pagos.",
     "email": "Notificaciones por Email",
     "email_desc": "Envíe alertas automáticas por email para renovaciones, escalaciones y vencimientos.",
     "sms": "Notificaciones SMS",

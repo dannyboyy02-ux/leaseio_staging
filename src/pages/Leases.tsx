@@ -83,8 +83,8 @@ export default function Leases() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<LeaseRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [expirationFilter, setExpirationFilter] = useState<'all' | '30' | '90'>(
-    (['30', '90'].includes(searchParams.get('expiring') ?? '') ? searchParams.get('expiring') : 'all') as 'all' | '30' | '90'
+  const [expirationFilter, setExpirationFilter] = useState<'all' | '30' | '90' | '120'>(
+    (['30', '90', '120'].includes(searchParams.get('expiring') ?? '') ? searchParams.get('expiring') : 'all') as 'all' | '30' | '90' | '120'
   );
   const [sortField, setSortField] = useState<SortField>('lease_end');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -98,6 +98,7 @@ export default function Leases() {
     { value: 'all', label: 'All leases' },
     { value: '30', label: 'Expiring in 30 days' },
     { value: '90', label: 'Expiring in 90 days' },
+    { value: '120', label: 'Expiring 91–120 days' },
   ];
 
   const fetchLeases = async () => {
@@ -252,8 +253,12 @@ export default function Leases() {
       let matchesExpiration = true;
       if (expirationFilter !== 'all') {
         const days = getDaysUntilExpiration(getLeaseEnd(lease));
-        const filterDays = parseInt(expirationFilter, 10);
-        matchesExpiration = days !== null && days >= 0 && days <= filterDays;
+        if (expirationFilter === '120') {
+          matchesExpiration = days !== null && days > 90 && days <= 120;
+        } else {
+          const filterDays = parseInt(expirationFilter, 10);
+          matchesExpiration = days !== null && days >= 0 && days <= filterDays;
+        }
       }
 
       return matchesSearch && matchesExpiration;

@@ -558,8 +558,6 @@
   "integrations": {
     "title": "Integrations",
     "subtitle": "Connect LeaseIO with your other tools",
-    "quickbooks": "QuickBooks Online",
-    "quickbooks_desc": "Sync lease payments and receivables with your accounting system. Automate invoice creation and bill tracking.",
     "email": "Email Notifications",
     "email_desc": "Send automated email alerts for renewals, escalations, and expirations.",
     "sms": "SMS Notifications",
