@@ -689,17 +689,16 @@
     "rent": {
       "section_title": "Renta / Términos de pago",
       "schedule_title": "Cronograma de renta",
-      "monthly_payment": "Pago mensual",
-      "executed_monthly": "Pago ejecutado",
+      "monthly_rent": "Renta mensual actual",
+      "annual_rent": "Renta anual",
       "security_deposit": "Depósito de garantía",
-      "total_commitment": "Compromiso total",
-      "pv_liability": "Pasivo por VP",
-      "straight_line_exp": "Gasto en línea recta"
+      "remaining_months": "Plazo restante",
+      "month": "mes",
+      "months": "meses"
     },
     "escalations": {
       "section_title": "Escalonamientos",
       "rate": "Tasa de escalonamiento",
-      "needs_review": "Requiere revisión",
       "clauses": "Cláusulas de escalonamiento"
     },
     "options": {

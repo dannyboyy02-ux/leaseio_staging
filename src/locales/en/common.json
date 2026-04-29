@@ -689,17 +689,16 @@
     "rent": {
       "section_title": "Rent / Payment Terms",
       "schedule_title": "Rent schedule",
-      "monthly_payment": "Monthly payment",
-      "executed_monthly": "Executed monthly",
+      "monthly_rent": "Current monthly rent",
+      "annual_rent": "Annual rent",
       "security_deposit": "Security deposit",
-      "total_commitment": "Total commitment",
-      "pv_liability": "PV liability",
-      "straight_line_exp": "Straight-line expense"
+      "remaining_months": "Remaining term",
+      "month": "month",
+      "months": "months"
     },
     "escalations": {
       "section_title": "Escalations",
       "rate": "Escalation rate",
-      "needs_review": "Needs review",
       "clauses": "Escalation clauses"
     },
     "options": {

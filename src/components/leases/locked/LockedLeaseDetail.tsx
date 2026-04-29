@@ -50,6 +50,37 @@ const extractedValue = (extracted: any, key: string): string | null => {
   return null;
 };
 
+/**
+ * Security deposit is stored as TEXT. Try to parse a numeric amount and
+ * format it as currency; fall back to the raw string for descriptive
+ * values like "two months' rent".
+ */
+const fmtSecurityDeposit = (raw: string | null | undefined): string | null => {
+  if (!raw) return null;
+  const cleaned = raw.replace(/[^0-9.]/g, '');
+  if (!cleaned) return raw;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n) || n <= 0) return raw;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+};
+
+/**
+ * Whole months between today and lease_end (positive only). Returns null
+ * if no end date or lease is already expired.
+ */
+const remainingMonths = (leaseEnd: string | null | undefined): number | null => {
+  if (!leaseEnd) return null;
+  const end = new Date(leaseEnd);
+  if (Number.isNaN(end.getTime())) return null;
+  const now = new Date();
+  if (end <= now) return 0;
+  const months =
+    (end.getFullYear() - now.getFullYear()) * 12 +
+    (end.getMonth() - now.getMonth()) +
+    (end.getDate() >= now.getDate() ? 0 : -1);
+  return Math.max(0, months);
+};
+
 export function LockedLeaseDetail({ lease, refetchLease }: Props) {
   const { t } = useAppTranslation();
   const { userRole } = useApp();
@@ -181,18 +212,23 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
     { label: t('locked_lease.dates.month_to_month'), value: fmtBool(lease.month_to_month, t) },
   ], [lease, t]);
 
-  const rentRows: LabelValueRow[] = useMemo(() => [
-    { label: t('locked_lease.rent.monthly_payment'), value: fmtCurrency(lease.monthly_payment) },
-    { label: t('locked_lease.rent.executed_monthly'), value: fmtCurrency(lease.executed_monthly_payment) },
-    { label: t('locked_lease.rent.security_deposit'), value: lease.security_deposit },
-    { label: t('locked_lease.rent.total_commitment'), value: fmtCurrency(lease.calc_total_commitment) },
-    { label: t('locked_lease.rent.pv_liability'), value: fmtCurrency(lease.calc_pv_liability) },
-    { label: t('locked_lease.rent.straight_line_exp'), value: fmtCurrency(lease.calc_straight_line_exp) },
-  ], [lease, t]);
+  const rentRows: LabelValueRow[] = useMemo(() => {
+    const currentMonthly = lease.current_monthly_rent ?? null;
+    const annual = currentMonthly != null ? currentMonthly * 12 : null;
+    const months = remainingMonths(lease.lease_end);
+    return [
+      { label: t('locked_lease.rent.monthly_rent'), value: fmtCurrency(currentMonthly) },
+      { label: t('locked_lease.rent.annual_rent'), value: fmtCurrency(annual) },
+      { label: t('locked_lease.rent.security_deposit'), value: fmtSecurityDeposit(lease.security_deposit) },
+      {
+        label: t('locked_lease.rent.remaining_months'),
+        value: months == null ? null : `${months} ${months === 1 ? t('locked_lease.rent.month') : t('locked_lease.rent.months')}`,
+      },
+    ];
+  }, [lease, t]);
 
   const escalationRows: LabelValueRow[] = useMemo(() => [
     { label: t('locked_lease.escalations.rate'), value: fmtPercent(lease.escalation_rate) },
-    { label: t('locked_lease.escalations.needs_review'), value: fmtBool(lease.needs_escalation_review, t) },
     { label: t('locked_lease.escalations.clauses'), value: lease.escalation_clauses, fullWidth: true },
   ], [lease, t]);
 
@@ -279,7 +315,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                     </h4>
                     <RentScheduleTable
                       rentSchedule={rentSchedule}
-                      currentMonthlyRent={lease.monthly_payment ?? null}
+                      currentMonthlyRent={lease.current_monthly_rent ?? null}
                       rentEscalationType={lease.rent_escalation_type ?? null}
                       isLocked={true}
                     />
