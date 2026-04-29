@@ -50,7 +50,7 @@ export function useNeedsAction() {
           .in('lifecycle_status', ['under_review', 'executed', 'submitted']),
         (supabase as any)
           .from('lease_change_sets')
-          .select('id, lease_id, leases!inner(request_title, filename, lifecycle_status, workspace_id)')
+          .select('id, lease_id, leases!inner(request_title, filename, lifecycle_status, workspace_id, model_locked)')
           .eq('status', 'draft')
           .eq('leases.lifecycle_status', 'active')
           .eq('leases.workspace_id', workspace!.id)
@@ -86,10 +86,12 @@ export function useNeedsAction() {
         })
         .sort((a, b) => b.daysWaiting - a.daysWaiting);
 
-      const unlockedLeases: UnlockedLease[] = ((draftChangeSetsResult.data ?? []) as any[]).map((cs: any) => ({
-        leaseId: cs.lease_id,
-        leaseName: cs.leases?.request_title || cs.leases?.filename || 'Unnamed lease',
-      }));
+      const unlockedLeases: UnlockedLease[] = ((draftChangeSetsResult.data ?? []) as any[])
+        .filter((cs: any) => !cs.leases?.model_locked)
+        .map((cs: any) => ({
+          leaseId: cs.lease_id,
+          leaseName: cs.leases?.request_title || cs.leases?.filename || 'Unnamed lease',
+        }));
 
       const otherFlags: OtherFlag[] = [];
 
