@@ -34,7 +34,6 @@ type WorkspaceRow = {
   default_notification_days: number | null;
   created_at: string;
   updated_at: string | null;
-  subscription_period_end?: string | null;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -87,7 +86,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at, subscription_period_end";
+        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -191,9 +190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         timezone: resolvedWorkspace.timezone || profile.timezone || "America/New_York",
         defaultNotificationDays: resolvedWorkspace.default_notification_days ?? 90,
         createdAt: resolvedWorkspace.created_at || profile.created_at,
-        renewalDate:
-          resolvedWorkspace.subscription_period_end ||
-          new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         updatedAt:
           resolvedWorkspace.updated_at || resolvedWorkspace.created_at || profile.created_at,
       });
