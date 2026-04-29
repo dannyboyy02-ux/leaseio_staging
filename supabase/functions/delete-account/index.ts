@@ -1,34 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
-// Secure CORS configuration
-const ALLOWED_ORIGINS = [
-  'https://theleaseio.com',
-  'https://www.theleaseio.com',
-  'https://app.theleaseio.com',
-  'https://theleaseio.lovable.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-];
-
-function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
-  const isLovablePreview = requestOrigin && (
-    requestOrigin.includes('lovableproject.com') ||
-    requestOrigin.includes('lovable.app')
-  );
-  const isProductionDomain = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin);
-  const isAllowed = isProductionDomain || isLovablePreview;
-  
-  const origin = isAllowed ? requestOrigin : ALLOWED_ORIGINS[0];
-    
-  return {
-    'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Max-Age': '86400',
-  };
-}
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // Default CORS headers for backwards compatibility
 const corsHeaders = getCorsHeaders(null);
@@ -126,6 +99,42 @@ serve(async (req) => {
 
     if (profileError) {
       console.error("[DELETE-ACCOUNT] Profile deletion error:", profileError);
+    }
+
+    // 4a. Purge PII orphans that survive workspace cascades.
+    // - invite_tokens: invitations addressed to this user's email in other workspaces
+    // - lease_governance_audit: actor_user_id FK + denormalized actor_email
+    // - lease_change_sets: drafts the user authored in workspaces they don't own
+    //   (committed change sets are part of the audit chain; their `submitted_by`
+    //   FK has no ON DELETE clause, which can block auth.admin.deleteUser for
+    //   deeply-embedded users — flagged as a follow-up to relax to ON DELETE
+    //   SET NULL across audit FKs.)
+
+    if (user.email) {
+      const { error: inviteErr } = await supabaseClient
+        .from("invite_tokens")
+        .delete()
+        .eq("email", user.email);
+      if (inviteErr) {
+        console.error("[DELETE-ACCOUNT] invite_tokens cleanup error:", inviteErr);
+      }
+    }
+
+    const { error: auditErr } = await supabaseClient
+      .from("lease_governance_audit")
+      .update({ actor_user_id: null, actor_email: null })
+      .eq("actor_user_id", user.id);
+    if (auditErr) {
+      console.error("[DELETE-ACCOUNT] governance audit anonymization error:", auditErr);
+    }
+
+    const { error: changeSetErr } = await supabaseClient
+      .from("lease_change_sets")
+      .delete()
+      .eq("submitted_by", user.id)
+      .eq("status", "draft");
+    if (changeSetErr) {
+      console.error("[DELETE-ACCOUNT] change set draft cleanup error:", changeSetErr);
     }
 
     // 5. Delete auth user
