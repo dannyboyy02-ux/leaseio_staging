@@ -65,6 +65,46 @@ const fmtSecurityDeposit = (raw: string | null | undefined): string | null => {
 };
 
 /**
+ * Find the rent-schedule entry whose period covers today and return its
+ * monthly_amount. The leases.current_monthly_rent column is unreliable —
+ * for many records it stores the initial base rent rather than the truly
+ * current figure after escalations — so the schedule is the source of
+ * truth.
+ *
+ * Falls back to the first entry if the lease hasn't started yet, or the
+ * last entry if it has expired. Returns null only if the schedule itself
+ * is empty.
+ */
+const currentRentFromSchedule = (
+  schedule: RentScheduleEntry[]
+): number | null => {
+  if (!schedule || schedule.length === 0) return null;
+  const todayMs = Date.now();
+
+  const covers = schedule.find((row) => {
+    if (!row.period_start) return false;
+    const start = new Date(row.period_start).getTime();
+    if (Number.isNaN(start) || start > todayMs) return false;
+    if (!row.period_end) return true;
+    const end = new Date(row.period_end).getTime();
+    return !Number.isNaN(end) && end >= todayMs;
+  });
+  if (covers?.monthly_amount != null) return covers.monthly_amount;
+
+  // Lease hasn't started yet → show first scheduled period
+  const firstStart = schedule[0]?.period_start
+    ? new Date(schedule[0].period_start).getTime()
+    : null;
+  if (firstStart != null && firstStart > todayMs && schedule[0]?.monthly_amount != null) {
+    return schedule[0].monthly_amount;
+  }
+
+  // Otherwise lease is past its last scheduled entry → show last period's amount
+  const last = schedule[schedule.length - 1];
+  return last?.monthly_amount ?? null;
+};
+
+/**
  * Whole months between today and lease_end (positive only). Returns null
  * if no end date or lease is already expired.
  */
@@ -212,12 +252,16 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
     { label: t('locked_lease.dates.month_to_month'), value: fmtBool(lease.month_to_month, t) },
   ], [lease, t]);
 
+  const currentMonthlyRent = useMemo(
+    () => currentRentFromSchedule(rentSchedule) ?? lease.current_monthly_rent ?? null,
+    [rentSchedule, lease.current_monthly_rent]
+  );
+
   const rentRows: LabelValueRow[] = useMemo(() => {
-    const currentMonthly = lease.current_monthly_rent ?? null;
-    const annual = currentMonthly != null ? currentMonthly * 12 : null;
+    const annual = currentMonthlyRent != null ? currentMonthlyRent * 12 : null;
     const months = remainingMonths(lease.lease_end);
     return [
-      { label: t('locked_lease.rent.monthly_rent'), value: fmtCurrency(currentMonthly) },
+      { label: t('locked_lease.rent.monthly_rent'), value: fmtCurrency(currentMonthlyRent) },
       { label: t('locked_lease.rent.annual_rent'), value: fmtCurrency(annual) },
       { label: t('locked_lease.rent.security_deposit'), value: fmtSecurityDeposit(lease.security_deposit) },
       {
@@ -225,7 +269,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
         value: months == null ? null : `${months} ${months === 1 ? t('locked_lease.rent.month') : t('locked_lease.rent.months')}`,
       },
     ];
-  }, [lease, t]);
+  }, [currentMonthlyRent, lease, t]);
 
   const escalationRows: LabelValueRow[] = useMemo(() => [
     { label: t('locked_lease.escalations.rate'), value: fmtPercent(lease.escalation_rate) },
@@ -315,7 +359,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                     </h4>
                     <RentScheduleTable
                       rentSchedule={rentSchedule}
-                      currentMonthlyRent={lease.current_monthly_rent ?? null}
+                      currentMonthlyRent={currentMonthlyRent}
                       rentEscalationType={lease.rent_escalation_type ?? null}
                       isLocked={true}
                     />
