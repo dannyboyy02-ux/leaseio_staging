@@ -390,6 +390,7 @@ export default function LeaseReview() {
       toast.success('Resubmitted for review');
       setResubmitDialogOpen(false);
       setLease((prev: any) => prev ? { ...prev, lifecycle_status: newStatus, financial_returned_to_submitter: false } : prev);
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
     } catch (err) {
       console.error(err);
       toast.error('Failed to resubmit');
@@ -426,7 +427,8 @@ export default function LeaseReview() {
     });
 
     setLease((prev: any) => (prev ? { ...prev, lifecycle_status: newStatus, status_changed_at: now } : prev));
-  }, [lease, user]);
+    queryClient.invalidateQueries({ queryKey: ['needs-action'] });
+  }, [lease, user, queryClient]);
 
   const saveRequestEdits = useCallback(async () => {
     if (!lease || !user) return;

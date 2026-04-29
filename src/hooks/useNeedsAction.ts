@@ -1,0 +1,124 @@
+import type React from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Clock, FileSearch, Upload } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useApp } from '@/contexts/AppContext';
+
+export interface PendingApproval {
+  id: string;
+  title: string;
+  department: string;
+  daysWaiting: number;
+  annualValue: number;
+}
+
+export interface UnlockedLease {
+  leaseId: string;
+  leaseName: string;
+}
+
+export interface ReturnedLease {
+  leaseId: string;
+  leaseName: string;
+  rejectionReason: string | null;
+}
+
+export interface OtherFlag {
+  label: string;
+  count: number;
+  href: string;
+  icon: React.ElementType;
+}
+
+export function useNeedsAction() {
+  const { workspace } = useApp();
+
+  return useQuery({
+    queryKey: ['needs-action', workspace?.id],
+    enabled: !!workspace?.id,
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const [leasesResult, draftChangeSetsResult] = await Promise.all([
+        supabase
+          .from('leases')
+          .select(
+            'id, request_title, filename, requesting_department, monthly_payment, ' +
+            'submitted_for_approval_at, status_changed_at, status, executed_document_url, ' +
+            'lifecycle_status, financial_returned_to_submitter, financial_rejection_reason'
+          )
+          .eq('workspace_id', workspace!.id)
+          .in('lifecycle_status', ['under_review', 'executed', 'submitted']),
+        (supabase as any)
+          .from('lease_change_sets')
+          .select('id, lease_id, leases!inner(request_title, filename, lifecycle_status, workspace_id)')
+          .eq('status', 'draft')
+          .eq('leases.lifecycle_status', 'active')
+          .eq('leases.workspace_id', workspace!.id)
+          .limit(10),
+      ]);
+
+      const leases = leasesResult.data ?? [];
+      const now = Date.now();
+      const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+
+      const returnedLeases: ReturnedLease[] = leases
+        .filter((l) => l.lifecycle_status === 'submitted' && (l as any).financial_returned_to_submitter)
+        .map((l) => ({
+          leaseId: l.id,
+          leaseName: l.request_title ?? l.filename ?? 'Unnamed lease',
+          rejectionReason: (l as any).financial_rejection_reason ?? null,
+        }));
+
+      const pendingApprovals: PendingApproval[] = leases
+        .filter((l) => l.lifecycle_status === 'under_review')
+        .map((l) => {
+          const referenceDate = l.submitted_for_approval_at ?? l.status_changed_at;
+          const daysWaiting = referenceDate
+            ? Math.floor((now - new Date(referenceDate).getTime()) / 86400000)
+            : 0;
+          return {
+            id: l.id,
+            title: l.request_title ?? l.filename ?? 'Unnamed lease',
+            department: l.requesting_department ?? 'Unknown',
+            daysWaiting,
+            annualValue: (l.monthly_payment ?? 0) * 12,
+          };
+        })
+        .sort((a, b) => b.daysWaiting - a.daysWaiting);
+
+      const unlockedLeases: UnlockedLease[] = ((draftChangeSetsResult.data ?? []) as any[]).map((cs: any) => ({
+        leaseId: cs.lease_id,
+        leaseName: cs.leases?.request_title || cs.leases?.filename || 'Unnamed lease',
+      }));
+
+      const otherFlags: OtherFlag[] = [];
+
+      const stalledCount = leases.filter((l) => {
+        if (l.lifecycle_status !== 'under_review') return false;
+        if (!l.status_changed_at) return false;
+        return now - new Date(l.status_changed_at).getTime() > fourteenDaysMs;
+      }).length;
+      if (stalledCount > 0) {
+        otherFlags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/leases?view=approval', icon: Clock });
+      }
+
+      const noAbstractionCount = leases.filter((l) => {
+        const inLifecycle = l.lifecycle_status === 'submitted' || l.lifecycle_status === 'under_review';
+        const inStatus = l.status === 'Uploaded' || l.status === 'Processing';
+        return inLifecycle && inStatus;
+      }).length;
+      if (noAbstractionCount > 0) {
+        otherFlags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval', icon: FileSearch });
+      }
+
+      const noDocCount = leases.filter(
+        (l) => l.lifecycle_status === 'executed' && !l.executed_document_url
+      ).length;
+      if (noDocCount > 0) {
+        otherFlags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active', icon: Upload });
+      }
+
+      return { pendingApprovals, unlockedLeases, returnedLeases, otherFlags };
+    },
+  });
+}

@@ -1,14 +1,11 @@
 import { useState } from 'react';
-import type React from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCircle2, ChevronRight, ChevronDown, CheckSquare, Clock, FileSearch, Upload, Unlock } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight, ChevronDown, CheckSquare, RotateCcw, Unlock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
-import { useApp } from '@/contexts/AppContext';
+import { useNeedsAction } from '@/hooks/useNeedsAction';
 
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat('en-US', {
@@ -17,120 +14,21 @@ const formatCurrency = (value: number): string =>
     maximumFractionDigits: 0,
   }).format(value);
 
-interface PendingApproval {
-  id: string;
-  title: string;
-  department: string;
-  daysWaiting: number;
-  annualValue: number;
-}
-
-interface OtherFlag {
-  label: string;
-  count: number;
-  href: string;
-  icon: React.ElementType;
-}
-
-interface UnlockedLease {
-  leaseId: string;
-  leaseName: string;
-}
-
 export function NeedsAction() {
-  const { workspace } = useApp();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const toggleSection = (key: string) =>
     setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const { data, isPending: loading } = useQuery({
-    queryKey: ['needs-action', workspace?.id],
-    enabled: !!workspace?.id,
-    refetchInterval: 30_000,
-    queryFn: async () => {
-      const [leasesResult, draftChangeSetsResult] = await Promise.all([
-        supabase
-          .from('leases')
-          .select(
-            'id, request_title, filename, requesting_department, monthly_payment, submitted_for_approval_at, status_changed_at, status, executed_document_url, lifecycle_status'
-          )
-          .eq('workspace_id', workspace!.id)
-          .in('lifecycle_status', ['under_review', 'executed', 'submitted']),
-        (supabase as any)
-          .from('lease_change_sets')
-          .select('id, lease_id, leases!inner(request_title, filename, lifecycle_status, workspace_id)')
-          .eq('status', 'draft')
-          .eq('leases.lifecycle_status', 'active')
-          .eq('leases.workspace_id', workspace!.id)
-          .limit(10),
-      ]);
-
-      const leases = leasesResult.data ?? [];
-
-      const unlockedLeases: UnlockedLease[] = ((draftChangeSetsResult.data ?? []) as any[]).map((cs: any) => ({
-        leaseId: cs.lease_id,
-        leaseName: cs.leases?.request_title || cs.leases?.filename || 'Unnamed lease',
-      }));
-
-      const now = Date.now();
-      const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
-
-      const pendingApprovals: PendingApproval[] = leases
-        .filter((l) => l.lifecycle_status === 'under_review')
-        .map((l) => {
-          const referenceDate = l.submitted_for_approval_at ?? l.status_changed_at;
-          const daysWaiting = referenceDate
-            ? Math.floor((now - new Date(referenceDate).getTime()) / 86400000)
-            : 0;
-          return {
-            id: l.id,
-            title: l.request_title ?? l.filename ?? 'Unnamed lease',
-            department: l.requesting_department ?? 'Unknown',
-            daysWaiting,
-            annualValue: (l.monthly_payment ?? 0) * 12,
-          };
-        })
-        .sort((a, b) => b.daysWaiting - a.daysWaiting);
-
-      const otherFlags: OtherFlag[] = [];
-
-      const stalledCount = leases.filter((l) => {
-        if (l.lifecycle_status !== 'under_review') return false;
-        if (!l.status_changed_at) return false;
-        return now - new Date(l.status_changed_at).getTime() > fourteenDaysMs;
-      }).length;
-      if (stalledCount > 0) {
-        otherFlags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/leases?view=approval', icon: Clock });
-      }
-
-      const noAbstractionCount = leases.filter((l) => {
-        const inLifecycle =
-          l.lifecycle_status === 'submitted' || l.lifecycle_status === 'under_review';
-        const inStatus = l.status === 'Uploaded' || l.status === 'Processing';
-        return inLifecycle && inStatus;
-      }).length;
-      if (noAbstractionCount > 0) {
-        otherFlags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval', icon: FileSearch });
-      }
-
-      const noDocCount = leases.filter(
-        (l) => l.lifecycle_status === 'executed' && !l.executed_document_url
-      ).length;
-      if (noDocCount > 0) {
-        otherFlags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active', icon: Upload });
-      }
-
-      return { pendingApprovals, unlockedLeases, otherFlags };
-    },
-  });
+  const { data, isPending: loading } = useNeedsAction();
 
   const pendingApprovals = data?.pendingApprovals ?? [];
   const unlockedLeases   = data?.unlockedLeases   ?? [];
+  const returnedLeases   = data?.returnedLeases   ?? [];
   const otherFlags       = data?.otherFlags       ?? [];
 
-  const totalCount = pendingApprovals.length + otherFlags.filter((f) => f.count > 0).length + unlockedLeases.length;
+  const totalCount = pendingApprovals.length + returnedLeases.length + otherFlags.filter((f) => f.count > 0).length + unlockedLeases.length;
 
   return (
     <Card className="border-l-4 border-l-orange-400">
@@ -194,6 +92,38 @@ export function NeedsAction() {
                       <p className="text-xs text-muted-foreground">
                         {formatCurrency(item.annualValue)}/yr
                       </p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {returnedLeases.length > 0 && (
+              <div className="space-y-1">
+                <button
+                  className="flex items-center gap-1 w-full mb-2"
+                  onClick={() => toggleSection('returned')}
+                >
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex-1 text-left">
+                    Returned for Revision
+                  </p>
+                  <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', collapsed.returned && 'rotate-180')} />
+                </button>
+                {!collapsed.returned && returnedLeases.map((item) => (
+                  <div
+                    key={item.leaseId}
+                    onClick={() => navigate(`/app/leases/${item.leaseId}`)}
+                    className="flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm bg-amber-50 hover:bg-amber-100 transition-colors"
+                  >
+                    <RotateCcw className="h-4 w-4 shrink-0 text-amber-600" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{item.leaseName}</p>
+                      {item.rejectionReason ? (
+                        <p className="text-xs text-muted-foreground truncate">"{item.rejectionReason}"</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Returned for revision</p>
+                      )}
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
                   </div>
