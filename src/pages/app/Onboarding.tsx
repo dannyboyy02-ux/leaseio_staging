@@ -55,7 +55,7 @@ export default function Onboarding() {
     setIsLoading(true);
 
     try {
-      const workspacePlan: SubscriptionPlan = 'starter';
+      const workspacePlan: SubscriptionPlan = selectedPlan;
       const planConfig = PLANS[workspacePlan];
       
       // Create workspace

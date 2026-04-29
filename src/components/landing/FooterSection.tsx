@@ -73,7 +73,7 @@ export function FooterSection() {
             <h4 className="font-semibold text-foreground mb-4">{t('landing.footer.support')}</h4>
             <ul className="space-y-2">
               <li>
-                <a href="mailto:support@leaseio.app" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <a href="mailto:support@theleaseio.com" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   {t('landing.footer.contact')}
                 </a>
               </li>

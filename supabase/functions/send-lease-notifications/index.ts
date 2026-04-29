@@ -342,7 +342,7 @@ function generateEmailHtml(
           You can manage your notification preferences from your lease review page.
         </p>
         <p style="color: #6b7280; font-size: 14px;">
-          <a href="https://leaseio.app" style="color: #2563eb;">View in LeaseIO</a>
+          <a href="https://app.theleaseio.com" style="color: #2563eb;">View in LeaseIO</a>
         </p>
       </div>
     </body>
