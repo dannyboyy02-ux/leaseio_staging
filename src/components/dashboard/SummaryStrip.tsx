@@ -55,7 +55,8 @@ export function SummaryStrip() {
       }
 
       const now = Date.now();
-      const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+      const ninetyDaysMs    = 90  * 24 * 60 * 60 * 1000;
+      const oneTwentyDaysMs = 120 * 24 * 60 * 60 * 1000;
 
       // Stat 1: Monthly Rent (active + executed leases) + weighted avg $/sqft
       const portfolioLeases = leases.filter(
@@ -112,6 +113,22 @@ export function SummaryStrip() {
         0
       );
 
+      // Stat 5: Expiring 91–120 days
+      const expiring91to120Leases = leases.filter((l) => {
+        if (!expiringStatuses.includes(l.lifecycle_status ?? '')) return false;
+        const expiryStr = l.executed_expiry_date ?? l.lease_end;
+        if (!expiryStr) return false;
+        const diff = new Date(expiryStr).getTime() - now;
+        return diff > ninetyDaysMs && diff <= oneTwentyDaysMs;
+      });
+      const expiring91to120Count = expiring91to120Leases.length;
+      const expiring91to120AnnualRent = expiring91to120Leases.reduce(
+        (sum, l) =>
+          sum +
+          (l.executed_monthly_payment ?? l.current_monthly_rent ?? l.monthly_payment ?? 0) * 12,
+        0
+      );
+
       setStats([
         {
           label: 'Monthly Rent',
@@ -141,6 +158,13 @@ export function SummaryStrip() {
           accent: 'red',
           href: '/app/leases?view=active&expiring=90',
         },
+        {
+          label: 'Expiring 91\u2013120 Days',
+          primary: String(expiring91to120Count),
+          sub: `${formatCurrency(expiring91to120AnnualRent)} annual rent`,
+          accent: expiring91to120Count > 0 ? 'orange' : 'default',
+          href: '/app/leases?view=active&expiring=120',
+        },
       ]);
 
       setLoading(false);
@@ -151,7 +175,7 @@ export function SummaryStrip() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="animate-pulse bg-muted h-20 rounded-lg" />
         ))}
@@ -167,7 +191,7 @@ export function SummaryStrip() {
   };
 
   return (
-    <div className="grid grid-cols-4 gap-4">
+    <div className="grid grid-cols-5 gap-4">
       {stats.map((box) => (
         <div
           key={box.label}

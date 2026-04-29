@@ -22,6 +22,7 @@ interface FinancialData {
   annualObligation: number;
   activeLeaseCount: number;
   expiringCount: number;
+  expiring91to120Count: number;
   rentIncreaseNext90: number;
   rentExpiringNext90: number;
   avgRemainingTermMonths: number;
@@ -104,7 +105,8 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
       const activeLeases = leases || [];
       const workspaceDiscountRate = (workspaceSettings as any)?.discount_rate ?? null;
       const now = new Date();
-      const in90Days = new Date(now.getTime() + 90 * 86_400_000);
+      const in90Days  = new Date(now.getTime() + 90  * 86_400_000);
+      const in120Days = new Date(now.getTime() + 120 * 86_400_000);
 
       const totalMonthlyRent = activeLeases.reduce((sum, lease) => {
         return sum + getCurrentMonthlyRent(
@@ -152,6 +154,15 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         );
       });
       const expiringLeasesCount = expiringCount.length;
+
+      // Leases expiring 91–120 days
+      const expiring91to120 = activeLeases.filter((lease) => {
+        const raw = (lease as any).executed_expiry_date || lease.lease_end;
+        if (!raw) return false;
+        const d = new Date(raw);
+        return d > in90Days && d <= in120Days;
+      });
+      const expiring91to120Count = expiring91to120.length;
 
       // Average remaining term in months across active portfolio
       const avgRemainingTermMonths =
@@ -226,6 +237,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         annualObligation: totalMonthlyRent * 12,
         activeLeaseCount: activeLeases.length,
         expiringCount: expiringLeasesCount,
+        expiring91to120Count,
         rentIncreaseNext90,
         rentExpiringNext90,
         avgRemainingTermMonths,
@@ -254,8 +266,8 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         </Card>
         <Card>
           <CardContent className="p-6">
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-              {[...Array(4)].map((_, i) => (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              {[...Array(5)].map((_, i) => (
                 <div key={i} className="space-y-2">
                   <Skeleton className="h-4 w-24" />
                   <Skeleton className="h-8 w-32" />
@@ -332,11 +344,18 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
       highlight: false,
     },
     {
-      label: 'Expiring ≤ 90 Days',
+      label: 'Expiring \u2264 90 Days',
       value: String(data?.expiringCount || 0),
       icon: AlertTriangle,
       description: (data?.expiringCount || 0) > 0 ? 'require attention' : 'all clear',
       highlight: (data?.expiringCount || 0) > 0,
+    },
+    {
+      label: 'Expiring 91\u2013120 Days',
+      value: String(data?.expiring91to120Count || 0),
+      icon: CalendarClock,
+      description: (data?.expiring91to120Count || 0) > 0 ? 'on the horizon' : 'all clear',
+      highlight: false,
     },
   ];
 
@@ -395,7 +414,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
       {/* Hero KPI tiles */}
       <Card className="bg-gradient-to-br from-primary/5 via-background to-accent/5 border-primary/10">
         <CardContent className="p-6">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {activeStats.map((stat, index) => (
               <div
                 key={stat.label}
