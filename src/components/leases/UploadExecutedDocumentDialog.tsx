@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
 import { FileCheck, Upload, FileText, X, Loader2, CheckCircle } from 'lucide-react';
 import {
@@ -21,6 +22,7 @@ export function UploadExecutedDocumentDialog({
   leaseFilename,
   onSuccess,
 }: UploadExecutedDocumentDialogProps) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,6 +60,7 @@ export function UploadExecutedDocumentDialog({
       const { error: statusError } = await supabase
         .from('leases').update({ lifecycle_status: 'executed' }).eq('id', leaseId);
       if (statusError) console.error('[UploadExecutedDocumentDialog] status update error:', statusError);
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
 
       setStage('done');
       toast.success('Executed document uploaded and terms extracted');

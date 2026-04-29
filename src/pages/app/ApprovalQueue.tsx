@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
@@ -243,6 +244,7 @@ interface ChangeSetForReview {
 
 export default function ApprovalQueue() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, workspace, userFunctionalRoles, userRole } = useApp();
 
   const isManagerApprover = userFunctionalRoles.includes('manager_approver');
@@ -468,86 +470,23 @@ export default function ApprovalQueue() {
     if (!unlockActTarget || !user?.id || !unlockActType) return;
     setIsGovernanceActing(true);
     try {
-      const now = new Date().toISOString();
-      if (unlockActType === 'approve') {
-        // Approve the request: unlock lease, create draft change set
-        await (supabase as any)
-          .from('lease_unlock_requests')
-          .update({ status: 'approved', reviewed_by: user.id, reviewed_at: now, review_note: governanceNote || null })
-          .eq('id', unlockActTarget.id);
+      const { data, error } = await supabase.functions.invoke('lease-governance-action', {
+        body: {
+          action: unlockActType === 'approve' ? 'approve_unlock_request' : 'reject_unlock_request',
+          unlockRequestId: unlockActTarget.id,
+          note: governanceNote || null,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
 
-        await supabase.from('leases').update({ model_locked: false } as any).eq('id', unlockActTarget.lease_id);
-
-        const { data: newCs } = await (supabase as any)
-          .from('lease_change_sets')
-          .insert({
-            lease_id: unlockActTarget.lease_id,
-            workspace_id: workspace!.id,
-            unlock_request_id: unlockActTarget.id,
-            submitted_by: unlockActTarget.requested_by,
-            status: 'draft',
-          })
-          .select('id')
-          .single();
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: unlockActTarget.lease_id,
-          user_id: user.id,
-          activity_type: 'unlock_approved',
-          details: { unlock_request_id: unlockActTarget.id, note: governanceNote || null },
-        });
-
-        await (supabase as any).from('lease_governance_audit').insert([
-          {
-            lease_id: unlockActTarget.lease_id,
-            workspace_id: workspace!.id,
-            event_type: 'unlock_approved',
-            actor_user_id: user.id,
-            actor_email: user.email ?? null,
-            related_unlock_request_id: unlockActTarget.id,
-            related_change_set_id: newCs?.id ?? null,
-            change_summary: governanceNote || null,
-          },
-          {
-            lease_id: unlockActTarget.lease_id,
-            workspace_id: workspace!.id,
-            event_type: 'change_set_created',
-            actor_user_id: user.id,
-            actor_email: user.email ?? null,
-            related_unlock_request_id: unlockActTarget.id,
-            related_change_set_id: newCs?.id ?? null,
-          },
-        ]).catch((err: any) => console.error('[ApprovalQueue] governance audit error:', err));
-
-        toast.success('Unlock approved — lease is now unlocked for staged editing');
-      } else {
-        await (supabase as any)
-          .from('lease_unlock_requests')
-          .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: now, review_note: governanceNote || null })
-          .eq('id', unlockActTarget.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: unlockActTarget.lease_id,
-          user_id: user.id,
-          activity_type: 'unlock_rejected',
-          details: { unlock_request_id: unlockActTarget.id, note: governanceNote || null },
-        });
-
-        await (supabase as any).from('lease_governance_audit').insert({
-          lease_id: unlockActTarget.lease_id,
-          workspace_id: workspace!.id,
-          event_type: 'unlock_rejected',
-          actor_user_id: user.id,
-          actor_email: user.email ?? null,
-          related_unlock_request_id: unlockActTarget.id,
-          rejection_reason: governanceNote || null,
-        }).catch((err: any) => console.error('[ApprovalQueue] governance audit error:', err));
-
-        toast.success('Unlock request rejected');
-      }
+      toast.success(unlockActType === 'approve'
+        ? 'Unlock approved - lease is now unlocked for staged editing'
+        : 'Unlock request rejected');
       setUnlockActTarget(null);
       setUnlockActType(null);
       setGovernanceNote('');
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       fetchGovernanceData();
     } catch (err) {
       console.error('Error acting on unlock request:', err);
@@ -561,117 +500,23 @@ export default function ApprovalQueue() {
     if (!changeSetActTarget || !user?.id || !changeSetActType) return;
     setIsGovernanceActing(true);
     try {
-      const now = new Date().toISOString();
-      if (changeSetActType === 'approve') {
-        // Write each proposed value to the lease columns using field_name (not field_label)
-        // Items are fetched with field_label for display; we need the full items with field_name
-        const { data: fullItems } = await (supabase as any)
-          .from('lease_change_set_items')
-          .select('field_name, proposed_value')
-          .eq('change_set_id', changeSetActTarget.id);
+      const { data, error } = await supabase.functions.invoke('lease-governance-action', {
+        body: {
+          action: changeSetActType === 'approve' ? 'approve_change_set' : 'reject_change_set',
+          changeSetId: changeSetActTarget.id,
+          note: governanceNote || null,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
 
-        const fieldToColumn: Record<string, string> = {
-          tenant_name: 'executed_tenant_name',
-          landlord_name: 'executed_landlord_name',
-          commencement_date: 'executed_commencement_date',
-          expiry_date: 'executed_expiry_date',
-          monthly_payment: 'executed_monthly_payment',
-          rent_review_clause: 'executed_rent_review_clause',
-          break_clause: 'executed_break_clause',
-        };
-        const leaseUpdate: Record<string, any> = {};
-        for (const item of (fullItems ?? [])) {
-          const col = fieldToColumn[item.field_name];
-          if (col) leaseUpdate[col] = item.proposed_value;
-        }
-        if (Object.keys(leaseUpdate).length > 0) {
-          await supabase.from('leases').update(leaseUpdate as any).eq('id', changeSetActTarget.lease_id);
-        }
-        // Re-lock the lease
-        await supabase.from('leases').update({ model_locked: true } as any).eq('id', changeSetActTarget.lease_id);
-
-        await (supabase as any)
-          .from('lease_change_sets')
-          .update({ status: 'approved', reviewed_by: user.id, reviewed_at: now, review_note: governanceNote || null })
-          .eq('id', changeSetActTarget.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: changeSetActTarget.lease_id,
-          user_id: user.id,
-          activity_type: 'change_approved',
-          details: { change_set_id: changeSetActTarget.id, note: governanceNote || null },
-        });
-
-        // Fetch full items (with old_value + field_label) for per-field audit rows
-        const { data: fullItemsForAudit } = await (supabase as any)
-          .from('lease_change_set_items')
-          .select('field_name, field_label, old_value, proposed_value')
-          .eq('change_set_id', changeSetActTarget.id);
-
-        const approvalAuditRows: any[] = [
-          {
-            lease_id: changeSetActTarget.lease_id,
-            workspace_id: workspace!.id,
-            event_type: 'change_set_approved',
-            actor_user_id: user.id,
-            actor_email: user.email ?? null,
-            related_change_set_id: changeSetActTarget.id,
-            change_summary: governanceNote || null,
-          },
-          ...((fullItemsForAudit ?? []) as any[]).map((item: any) => ({
-            lease_id: changeSetActTarget.lease_id,
-            workspace_id: workspace!.id,
-            event_type: 'field_change_committed',
-            actor_user_id: user.id,
-            actor_email: user.email ?? null,
-            related_change_set_id: changeSetActTarget.id,
-            field_name: item.field_name,
-            field_label: item.field_label,
-            old_value: item.old_value,
-            proposed_value: item.proposed_value,
-            final_value: item.proposed_value,
-          })),
-          {
-            lease_id: changeSetActTarget.lease_id,
-            workspace_id: workspace!.id,
-            event_type: 'lease_relocked',
-            actor_user_id: user.id,
-            actor_email: user.email ?? null,
-            related_change_set_id: changeSetActTarget.id,
-          },
-        ];
-        await (supabase as any).from('lease_governance_audit').insert(approvalAuditRows)
-          .catch((err: any) => console.error('[ApprovalQueue] governance audit error:', err));
-
-        toast.success('Changes approved and applied to lease');
-      } else {
-        await (supabase as any)
-          .from('lease_change_sets')
-          .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: now, review_note: governanceNote || null })
-          .eq('id', changeSetActTarget.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: changeSetActTarget.lease_id,
-          user_id: user.id,
-          activity_type: 'change_rejected',
-          details: { change_set_id: changeSetActTarget.id, note: governanceNote || null },
-        });
-
-        await (supabase as any).from('lease_governance_audit').insert({
-          lease_id: changeSetActTarget.lease_id,
-          workspace_id: workspace!.id,
-          event_type: 'change_set_rejected',
-          actor_user_id: user.id,
-          actor_email: user.email ?? null,
-          related_change_set_id: changeSetActTarget.id,
-          rejection_reason: governanceNote || null,
-        }).catch((err: any) => console.error('[ApprovalQueue] governance audit error:', err));
-
-        toast.success('Changes rejected — submitter can revise or cancel');
-      }
+      toast.success(changeSetActType === 'approve'
+        ? 'Changes approved and applied to lease'
+        : 'Changes rejected - submitter can revise or cancel');
       setChangeSetActTarget(null);
       setChangeSetActType(null);
       setGovernanceNote('');
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       fetchGovernanceData();
     } catch (err) {
       console.error('Error acting on change set:', err);
@@ -750,6 +595,7 @@ export default function ApprovalQueue() {
 
       toast.success(isManager ? 'Approved \u2014 forwarded to financial review' : 'Commitment approved');
       setApproveTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       fetchLeases();
     } catch (err) {
       console.error(err);
@@ -820,6 +666,7 @@ export default function ApprovalQueue() {
       toast.success('Request rejected');
       setRejectTarget(null);
       setRejectReason('');
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       fetchLeases();
     } catch (err) {
       console.error(err);

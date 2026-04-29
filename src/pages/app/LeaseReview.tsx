@@ -1379,6 +1379,7 @@ export default function LeaseReview() {
       if (auditErr3) console.error('[LeaseReview] governance audit error:', auditErr3);
 
       toast.success('Changes submitted for approval');
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       refetchLease();
     } catch (err) {
       console.error('Error submitting changes:', err);
