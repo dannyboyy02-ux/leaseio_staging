@@ -61,6 +61,7 @@ import { ExecutedTermsReview } from "@/components/leases/ExecutedTermsReview";
 import { VarianceReport } from "@/components/leases/VarianceReport";
 import { ModelLockConfirmation } from "@/components/leases/ModelLockConfirmation";
 import { LeaseDocumentsTab } from "@/components/leases/LeaseDocumentsTab";
+import { LockedLeaseDetail } from "@/components/leases/locked/LockedLeaseDetail";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -2036,6 +2037,13 @@ export default function LeaseReview() {
         </Dialog>
       </AppLayout>
     );
+  }
+
+  // Locked + active leases render the read-only informational layout
+  // (sectioned cards, vendor stays editable). All other states fall through
+  // to the existing workbench below.
+  if (lease?.model_locked === true && lease?.lifecycle_status === 'active') {
+    return <LockedLeaseDetail lease={lease} refetchLease={refetchLease} />;
   }
 
   return (
