@@ -516,6 +516,13 @@ TERM MAPPINGS:
 - "Fixed Increase" / "Step Rent" / "3% annual" → percent escalation
 - "Option to Renew" / "Extension Option" → renewal_options
 - "Early Termination" / "Break Clause" → termination_clauses
+- "Permitted Use" / "Use Clause" / "Permitted Purpose" → permitted_use
+- "Insurance" / "Required Coverage" / "Tenant Insurance" → insurance_requirements
+- "Repairs and Maintenance" / "Maintenance Obligations" → maintenance_responsibilities
+- "Holdover" / "Holding Over" / "Tenancy at Sufferance" → holdover_terms
+- "Assignment" / "Sublease" / "Sublet" / "Transfer" → assignment_consent
+- "Personal Guaranty" / "Guarantor" / "Corporate Guaranty" → personal_guarantees
+- "Estoppel Certificate" / "SNDA" / "Subordination" / "Non-Disturbance" → estoppel_snda
 
 RULES:
 1. Extract ONLY what is explicitly stated. NEVER guess or infer.
@@ -554,6 +561,13 @@ Return ONLY valid JSON:
   "escalation_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
   "renewal_options": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
   "termination_clauses": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "permitted_use": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "insurance_requirements": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "maintenance_responsibilities": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "holdover_terms": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "assignment_consent": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "personal_guarantees": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
+  "estoppel_snda": {"value": "string|null","confidence":0.0,"page":1,"source_text":"quote"},
   "rent_schedule": [{"period_start":"YYYY-MM-DD","period_end":"YYYY-MM-DD|null","monthly_amount":null,"annual_amount":null,"notes":"string","confidence":0.0}],
   "key_dates": [{"date":"YYYY-MM-DD","description":"string","confidence":0.0}],
   "risks": [{"title":"string","severity":"low|medium|high","explanation":"string","citation_snippet":"quote","citation_page":1,"confidence":0.0}],
@@ -578,6 +592,9 @@ const OPUS_FALLBACK_FIELDS = [
   'renewal_options',
   'termination_clauses',
   'security_deposit',
+  'permitted_use',
+  'insurance_requirements',
+  'maintenance_responsibilities',
 ];
 
 function getUncertainFields(merged: any, threshold: number): string[] {
