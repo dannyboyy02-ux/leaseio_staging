@@ -737,8 +737,33 @@
       "vendor": "Vendor / Counterparty",
       "rent": "Rent",
       "options": "Options & Clauses",
+      "obligations": "Obligations",
       "risks": "Risks",
       "documents": "Documents"
+    },
+    "obligations": {
+      "permitted_use": "Permitted Use",
+      "insurance": "Insurance Requirements",
+      "maintenance": "Maintenance Responsibilities",
+      "holdover": "Holdover",
+      "assignment": "Assignment & Sublease",
+      "guarantees": "Personal Guarantees",
+      "estoppel_snda": "Estoppel / SNDA",
+      "empty_hint": "Not yet extracted from this document. Re-run AI extraction to populate."
+    },
+    "critical_dates": {
+      "label": "Critical dates",
+      "expires_in": "Expires in",
+      "renewal_notice_in": "Renewal notice due in",
+      "next_rent_change_in": "Next rent change in",
+      "upcoming": "Upcoming",
+      "today": "today",
+      "day": "day",
+      "days": "days",
+      "month": "month",
+      "months": "months",
+      "expiration_date": "Expiration date",
+      "parsed_from": "Parsed from"
     }
   },
   "plan": {

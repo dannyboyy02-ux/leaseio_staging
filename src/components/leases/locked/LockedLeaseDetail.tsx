@@ -12,6 +12,8 @@ import { SectionCard } from './SectionCard';
 import { LabelValueGrid, type LabelValueRow } from './LabelValueGrid';
 import { VendorCard } from './VendorCard';
 import { AuditTimelineCard } from './AuditTimelineCard';
+import { CriticalDatesStrip } from './CriticalDatesStrip';
+import { ObligationsTab } from './ObligationsTab';
 
 import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/RentScheduleTable';
 import { AmendmentsList } from '@/components/leases/AmendmentsList';
@@ -198,7 +200,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
   const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
   const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [risks, setRisks] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'risks' | 'documents'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'obligations' | 'risks' | 'documents'>('general');
 
   // Fetch unlock-request status, rent schedule, and risks
   useEffect(() => {
@@ -389,6 +391,8 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
           onAdminUnlock={handleAdminUnlock}
         />
 
+        <CriticalDatesStrip lease={lease} />
+
         <div className="max-w-6xl mx-auto px-6 py-6">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
             <TabsList className="mb-4 justify-start overflow-x-auto">
@@ -396,6 +400,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
               <TabsTrigger value="vendor">{t('locked_lease.tabs.vendor')}</TabsTrigger>
               <TabsTrigger value="rent">{t('locked_lease.tabs.rent')}</TabsTrigger>
               <TabsTrigger value="options">{t('locked_lease.tabs.options')}</TabsTrigger>
+              <TabsTrigger value="obligations">{t('locked_lease.tabs.obligations')}</TabsTrigger>
               <TabsTrigger value="risks">{t('locked_lease.tabs.risks')}</TabsTrigger>
               <TabsTrigger value="documents">{t('locked_lease.tabs.documents')}</TabsTrigger>
             </TabsList>
@@ -460,6 +465,10 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
               <SectionCard title={t('locked_lease.options.section_title')}>
                 <LabelValueGrid rows={optionsRows} />
               </SectionCard>
+            </TabsContent>
+
+            <TabsContent value="obligations" className="mt-0">
+              <ObligationsTab lease={lease} />
             </TabsContent>
 
             <TabsContent value="risks" className="space-y-4 mt-0">

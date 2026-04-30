@@ -737,8 +737,33 @@
       "vendor": "Proveedor / Contraparte",
       "rent": "Renta",
       "options": "Opciones y cláusulas",
+      "obligations": "Obligaciones",
       "risks": "Riesgos",
       "documents": "Documentos"
+    },
+    "obligations": {
+      "permitted_use": "Uso permitido",
+      "insurance": "Requisitos de seguro",
+      "maintenance": "Responsabilidades de mantenimiento",
+      "holdover": "Permanencia tras vencimiento",
+      "assignment": "Cesión y subarriendo",
+      "guarantees": "Garantías personales",
+      "estoppel_snda": "Estoppel / SNDA",
+      "empty_hint": "Aún no extraído de este documento. Vuelva a ejecutar la extracción con IA para completar."
+    },
+    "critical_dates": {
+      "label": "Fechas críticas",
+      "expires_in": "Vence en",
+      "renewal_notice_in": "Aviso de renovación en",
+      "next_rent_change_in": "Próximo cambio de renta en",
+      "upcoming": "Próximo",
+      "today": "hoy",
+      "day": "día",
+      "days": "días",
+      "month": "mes",
+      "months": "meses",
+      "expiration_date": "Fecha de vencimiento",
+      "parsed_from": "Extraído de"
     }
   },
   "plan": {
