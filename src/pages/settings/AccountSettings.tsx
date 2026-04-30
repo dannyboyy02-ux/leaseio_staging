@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut } from 'lucide-react';
+import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut, Palette, Shield, Info, Settings2, Sun, Moon, Monitor, Mail } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -46,7 +47,7 @@ const timezones = [
 ];
 
 export default function AccountSettings() {
-  const { user, workspace, refreshProfile } = useApp();
+  const { user, workspace, userRole, refreshProfile } = useApp();
   const { user: authUser, signOut } = useAuth();
   const { t, language } = useLanguage();
   const navigate = useNavigate();
@@ -338,33 +339,73 @@ export default function AccountSettings() {
 
   const currentPlan = normalizePlanId(workspace?.plan);
 
+  const isAdminUser = userRole === 'admin' || userRole === 'owner';
+  const railTriggerClass =
+    'w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
+
   return (
     <AppLayout>
       <AppHeader title={t('account.title')} subtitle={t('account.subtitle')} />
 
       <div className="p-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="profile" className="gap-2">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          orientation="vertical"
+          className="flex flex-col md:flex-row gap-6"
+        >
+          {/* Vertical rail (Claude.ai-style). Collapses to a horizontal strip below md breakpoint. */}
+          <TabsList className="md:w-56 md:flex-col md:items-stretch md:bg-transparent md:p-0 md:gap-1 h-auto flex-wrap shrink-0">
+            <TabsTrigger value="profile" className={railTriggerClass}>
               <User className="h-4 w-4" />
               {t('account.profile')}
             </TabsTrigger>
-            <TabsTrigger value="security" className="gap-2">
-              <Lock className="h-4 w-4" />
-              {t('account.security')}
+            <TabsTrigger value="appearance" className={railTriggerClass}>
+              <Palette className="h-4 w-4" />
+              {t('account.appearance')}
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-2">
+            <TabsTrigger value="account" className={railTriggerClass}>
+              <Lock className="h-4 w-4" />
+              {t('account.account_tab')}
+            </TabsTrigger>
+            <TabsTrigger value="privacy" className={railTriggerClass}>
+              <Shield className="h-4 w-4" />
+              {t('account.privacy')}
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className={railTriggerClass}>
               <Bell className="h-4 w-4" />
               {t('account.notifications')}
             </TabsTrigger>
-            <TabsTrigger value="subscription" className="gap-2">
+            <TabsTrigger value="subscription" className={railTriggerClass}>
               <CreditCard className="h-4 w-4" />
               {t('account.subscription')}
             </TabsTrigger>
+
+            {isAdminUser && (
+              <>
+                <div className="hidden md:block h-px bg-border my-2" />
+                <Link
+                  to="/app/settings/workspace"
+                  className={cn(railTriggerClass, 'inline-flex items-center hover:bg-muted/60 transition-colors')}
+                >
+                  <Settings2 className="h-4 w-4" />
+                  {t('account.workspace_settings_link')}
+                </Link>
+              </>
+            )}
+
+            <div className="hidden md:block h-px bg-border my-2" />
+            <TabsTrigger value="other" className={railTriggerClass}>
+              <Info className="h-4 w-4" />
+              {t('account.other')}
+            </TabsTrigger>
           </TabsList>
 
+          {/* Content panel */}
+          <div className="flex-1 min-w-0">
+
           {/* Profile */}
-          <TabsContent value="profile" className="space-y-6">
+          <TabsContent value="profile" className="space-y-6 mt-0">
             <Card>
               <CardHeader>
                 <CardTitle>{t('account.personal_info')}</CardTitle>
@@ -442,91 +483,10 @@ export default function AccountSettings() {
                 </Button>
               </CardContent>
             </Card>
-
-            {/* AI processing consent */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Privacy & AI processing</CardTitle>
-                <CardDescription>
-                  Uploaded lease documents are processed by Anthropic Claude to extract terms.
-                  We never use your data to train AI models.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  {aiConsentAt
-                    ? `Consent recorded ${new Date(aiConsentAt).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.`
-                    : 'AI processing consent is currently revoked.'}
-                </p>
-                {aiConsentAt ? (
-                  <Button
-                    variant="outline"
-                    onClick={handleRevokeAiConsent}
-                    disabled={isRevokingConsent}
-                  >
-                    {isRevokingConsent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    Revoke consent
-                  </Button>
-                ) : (
-                  <Button
-                    variant="accent"
-                    onClick={handleGrantAiConsent}
-                    disabled={isRevokingConsent}
-                  >
-                    {isRevokingConsent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    Grant consent
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Danger Zone - Delete Account */}
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="text-destructive">{t('account.delete_account')}</CardTitle>
-                <CardDescription>
-                  {t('account.delete_account_desc')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {t('account.delete_warning')}
-                </p>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" disabled={isDeleting}>
-                      {isDeleting ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4 mr-2" />
-                      )}
-                      {t('account.delete_account')}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{t('account.delete_confirm')}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t('account.delete_confirm_desc')}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                      <AlertDialogAction 
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        onClick={handleDeleteAccount}
-                      >
-                        {t('account.delete_account')}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </CardContent>
-            </Card>
           </TabsContent>
 
-          {/* Security */}
-          <TabsContent value="security" className="space-y-6">
+          {/* Account (renamed from Security) */}
+          <TabsContent value="account" className="space-y-6 mt-0">
             <Card>
               <CardHeader>
                 <CardTitle>{t('account.change_password')}</CardTitle>
@@ -622,10 +582,48 @@ export default function AccountSettings() {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Danger Zone - Delete Account (moved here from Profile, Claude pattern) */}
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="text-destructive">{t('account.delete_account')}</CardTitle>
+                <CardDescription>{t('account.delete_account_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">{t('account.delete_warning')}</p>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" disabled={isDeleting}>
+                      {isDeleting ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-2" />
+                      )}
+                      {t('account.delete_account')}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t('account.delete_confirm')}</AlertDialogTitle>
+                      <AlertDialogDescription>{t('account.delete_confirm_desc')}</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={handleDeleteAccount}
+                      >
+                        {t('account.delete_account')}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Notifications */}
-          <TabsContent value="notifications" className="space-y-6">
+          <TabsContent value="notifications" className="space-y-6 mt-0">
             <Card>
               <CardHeader>
                 <CardTitle>{t('account.notification_prefs')}</CardTitle>
@@ -677,7 +675,7 @@ export default function AccountSettings() {
           </TabsContent>
 
           {/* Subscription */}
-          <TabsContent value="subscription" className="space-y-6">
+          <TabsContent value="subscription" className="space-y-6 mt-0">
             {/* Current Plan & Usage */}
             <div className="grid gap-6 lg:grid-cols-2">
               <Card>
@@ -877,6 +875,100 @@ export default function AccountSettings() {
               </Card>
             )}
           </TabsContent>
+
+          {/* Appearance — theme toggle */}
+          <TabsContent value="appearance" className="space-y-6 mt-0">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('account.appearance')}</CardTitle>
+                <CardDescription>{t('account.appearance_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ThemeRadio />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Privacy — AI consent (moved here from Profile) + data export + policy links */}
+          <TabsContent value="privacy" className="space-y-6 mt-0">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('account.privacy_ai_title')}</CardTitle>
+                <CardDescription>{t('account.privacy_ai_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  {aiConsentAt
+                    ? `${t('account.privacy_consent_recorded')} ${new Date(aiConsentAt).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.`
+                    : t('account.privacy_consent_revoked')}
+                </p>
+                {aiConsentAt ? (
+                  <Button variant="outline" onClick={handleRevokeAiConsent} disabled={isRevokingConsent}>
+                    {isRevokingConsent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    {t('account.privacy_revoke')}
+                  </Button>
+                ) : (
+                  <Button variant="accent" onClick={handleGrantAiConsent} disabled={isRevokingConsent}>
+                    {isRevokingConsent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    {t('account.privacy_grant')}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('account.privacy_data_export')}</CardTitle>
+                <CardDescription>{t('account.privacy_data_export_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="outline" asChild>
+                  <a href="mailto:privacy@theleaseio.com?subject=Data%20Export%20Request">
+                    <Mail className="h-4 w-4 mr-2" />
+                    {t('account.privacy_request_export')}
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('account.privacy_policies')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div>
+                  <Link to="/privacy" className="text-primary hover:underline">{t('account.privacy_policy_link')}</Link>
+                </div>
+                <div>
+                  <Link to="/terms" className="text-primary hover:underline">{t('account.terms_link')}</Link>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Other — legal links + version */}
+          <TabsContent value="other" className="space-y-6 mt-0">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('account.other')}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div>
+                  <Link to="/terms" className="text-primary hover:underline">{t('account.terms_link')}</Link>
+                </div>
+                <div>
+                  <Link to="/privacy" className="text-primary hover:underline">{t('account.privacy_policy_link')}</Link>
+                </div>
+                <div>
+                  <Link to="/app/support" className="text-primary hover:underline">{t('account.support_link')}</Link>
+                </div>
+                <div className="text-xs text-muted-foreground pt-2 border-t border-border">
+                  LeaseIO &middot; {new Date().getFullYear()}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          </div>
         </Tabs>
       </div>
 
@@ -899,5 +991,43 @@ export default function AccountSettings() {
         </AlertDialogContent>
       </AlertDialog>
     </AppLayout>
+  );
+}
+
+/**
+ * Theme picker — Light / Dark / System. Wired to next-themes (provider mounted
+ * at App root). Renders as a small button row instead of a radio fieldset for
+ * a tighter visual style closer to Claude.ai's Appearance tab.
+ */
+function ThemeRadio() {
+  const { theme, setTheme } = useTheme();
+  const options: Array<{ value: 'light' | 'dark' | 'system'; label: string; Icon: typeof Sun }> = [
+    { value: 'light', label: 'Light', Icon: Sun },
+    { value: 'dark', label: 'Dark', Icon: Moon },
+    { value: 'system', label: 'System', Icon: Monitor },
+  ];
+  const active = (theme as 'light' | 'dark' | 'system' | undefined) ?? 'system';
+  return (
+    <div className="grid grid-cols-3 gap-2 max-w-md">
+      {options.map(({ value, label, Icon }) => {
+        const selected = active === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTheme(value)}
+            className={[
+              'flex flex-col items-center justify-center gap-2 rounded-md border px-3 py-4 transition-colors',
+              selected
+                ? 'border-primary bg-primary/5 text-foreground'
+                : 'border-border hover:bg-muted/40 text-muted-foreground',
+            ].join(' ')}
+          >
+            <Icon className="h-5 w-5" />
+            <span className="text-xs font-medium">{label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
