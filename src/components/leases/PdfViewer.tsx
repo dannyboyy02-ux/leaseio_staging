@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -14,9 +14,33 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 interface PdfViewerProps {
   url: string | null;
   targetPage?: number; // when this changes, jump to that page
+  /** When set, text on the rendered page that matches this string is wrapped
+   *  in a yellow <mark> highlight so the user can see the AI extraction's
+   *  source for the field they clicked. */
+  targetHighlight?: string;
 }
 
-export function PdfViewer({ url, targetPage }: PdfViewerProps) {
+/**
+ * Build a Set of normalized "tokens" from a longer source-text snippet so the
+ * customTextRenderer can quickly decide whether a given text item should be
+ * highlighted. Strips whitespace + punctuation, lowercases, and only keeps
+ * tokens >= 3 chars to avoid highlighting tiny words (the/and/of) which would
+ * paint half the page yellow.
+ */
+function buildHighlightTokens(source: string): Set<string> {
+  const out = new Set<string>();
+  const normalized = source.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ');
+  for (const tok of normalized.split(/\s+/)) {
+    if (tok.length >= 3) out.add(tok);
+  }
+  return out;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
@@ -49,6 +73,27 @@ export function PdfViewer({ url, targetPage }: PdfViewerProps) {
 
   const prevPage = () => setCurrentPage(p => Math.max(1, p - 1));
   const nextPage = () => setCurrentPage(p => Math.min(numPages, p + 1));
+
+  const highlightTokens = useMemo(
+    () => (targetHighlight ? buildHighlightTokens(targetHighlight) : null),
+    [targetHighlight]
+  );
+
+  // react-pdf calls customTextRenderer once per text item. The signature
+  // accepts a function returning a string of HTML which gets injected into
+  // the text layer span. We wrap matched tokens in <mark>; otherwise return
+  // the raw string unchanged.
+  const customTextRenderer = useCallback(
+    ({ str }: { str: string }) => {
+      if (!highlightTokens || !str) return str;
+      const norm = str.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+      if (norm.length >= 3 && highlightTokens.has(norm)) {
+        return `<mark class="ai-source-highlight">${escapeHtml(str)}</mark>`;
+      }
+      return escapeHtml(str);
+    },
+    [highlightTokens]
+  );
   const zoomIn  = () => setScale(s => Math.min(2.5, parseFloat((s + 0.2).toFixed(1))));
   const zoomOut = () => setScale(s => Math.max(0.5, parseFloat((s - 0.2).toFixed(1))));
 
@@ -114,6 +159,7 @@ export function PdfViewer({ url, targetPage }: PdfViewerProps) {
               scale={scale}
               renderTextLayer={true}
               renderAnnotationLayer={true}
+              customTextRenderer={customTextRenderer}
               loading={
                 <div className="flex items-center justify-center h-32">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

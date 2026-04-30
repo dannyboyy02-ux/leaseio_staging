@@ -14,6 +14,7 @@ import {
   X,
   Target,
   ShieldCheck,
+  Sparkles,
   CheckCircle2,
   XCircle,
   HelpCircle,
@@ -164,6 +165,15 @@ export const getFieldPage = (extractedJson: Record<string, any> | null, fieldId:
   return field?.page;
 };
 
+// Get the AI extraction's quoted source text for the field. Used to highlight
+// the supporting clause in the PDF when the user clicks the field or the AI
+// icon next to it.
+export const getFieldSourceText = (extractedJson: Record<string, any> | null, fieldId: string): string | undefined => {
+  if (!extractedJson) return undefined;
+  const field = extractedJson[fieldId] as ExtractedField | undefined;
+  return field?.source_text;
+};
+
 interface SectionCardProps {
   sectionKey: SectionKey;
   form: Record<string, string>;
@@ -177,7 +187,7 @@ interface SectionCardProps {
   onFieldFocus: (fieldId: string) => void;
   onFieldBlur: (fieldId: string) => void;
   onVerifyField: (fieldId: string) => void;
-  onJumpToPage: (page?: number) => void;
+  onJumpToPage: (page?: number, sourceText?: string) => void;
   confirmedSections: string[];
   onConfirmSection: (sectionKey: string) => void;
 }
@@ -286,9 +296,17 @@ export function SectionCard({
         {section.fields.map((field) => {
           const fieldConfidence = getFieldConfidence(extractedJson, field.id);
           const fieldPage = getFieldPage(extractedJson, field.id);
+          const fieldSourceText = getFieldSourceText(extractedJson, field.id);
+          const isAIExtracted = fieldConfidence !== null;
           const value = form[field.id] || '';
           const FieldIcon = field.icon;
           const isReadOnly = isLocked || !isEditing;
+          const locateInPdf = () => onJumpToPage(fieldPage, fieldSourceText);
+          // Clicking/focusing the field also locates the source text in the PDF.
+          const handleFieldFocus = () => {
+            onFieldFocus(field.id);
+            if (fieldPage) locateInPdf();
+          };
 
           // Term field display value
           const termMonths = parseInt(value) || 0;
@@ -304,21 +322,22 @@ export function SectionCard({
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />
                   {field.label}
+                  {/* Always-visible AI icon when this field came from AI extraction.
+                      Click → jump to the source page AND highlight the supporting text. */}
+                  {isAIExtracted && fieldPage && (
+                    <button
+                      type="button"
+                      onClick={locateInPdf}
+                      title="AI extracted — click to highlight in source"
+                      className="inline-flex items-center justify-center h-4 w-4 rounded-full text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <Sparkles size={10} />
+                    </button>
+                  )}
                   {!isModelLocked && <ConfidenceBadge confidence={fieldConfidence} />}
                 </Label>
                 {!isModelLocked && (
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    {fieldPage && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-primary"
-                        title="Locate in PDF"
-                        onClick={() => onJumpToPage(fieldPage)}
-                      >
-                        <Target size={12} />
-                      </Button>
-                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -334,17 +353,6 @@ export function SectionCard({
                     </Button>
                   </div>
                 )}
-                {isModelLocked && fieldPage && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-all"
-                    title="Locate in PDF"
-                    onClick={() => onJumpToPage(fieldPage)}
-                  >
-                    <Target size={12} />
-                  </Button>
-                )}
               </div>
 
               {/* Textarea (auto-resize) */}
@@ -357,7 +365,7 @@ export function SectionCard({
                     e.currentTarget.style.height = 'auto';
                     e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
                   }}
-                  onFocus={() => onFieldFocus(field.id)}
+                  onFocus={handleFieldFocus}
                   onBlur={() => onFieldBlur(field.id)}
                   disabled={isReadOnly}
                   placeholder={`No ${field.label.toLowerCase()} extracted`}
@@ -389,7 +397,7 @@ export function SectionCard({
                   type="text"
                   value={value}
                   onChange={(e) => onFieldChange(field.id, e.target.value)}
-                  onFocus={() => onFieldFocus(field.id)}
+                  onFocus={handleFieldFocus}
                   onBlur={() => onFieldBlur(field.id)}
                   disabled={isReadOnly}
                   placeholder="No asset type specified"
@@ -412,7 +420,7 @@ export function SectionCard({
                       const n = parseFloat(e.target.value) || 0;
                       onFieldChange(field.id, String(termUnit === 'years' ? Math.round(n * 12) : Math.round(n)));
                     }}
-                    onFocus={() => onFieldFocus(field.id)}
+                    onFocus={handleFieldFocus}
                     onBlur={() => onFieldBlur(field.id)}
                     disabled={isReadOnly}
                     placeholder="—"
@@ -462,7 +470,7 @@ export function SectionCard({
                     type="text"
                     value={value}
                     onChange={(e) => onFieldChange(field.id, e.target.value)}
-                    onFocus={() => onFieldFocus(field.id)}
+                    onFocus={handleFieldFocus}
                     onBlur={() => onFieldBlur(field.id)}
                     disabled={false}
                     placeholder={`No ${field.label.toLowerCase()} extracted`}
@@ -481,7 +489,7 @@ export function SectionCard({
                   type={field.type === 'date' ? 'date' : 'text'}
                   value={value}
                   onChange={(e) => onFieldChange(field.id, e.target.value)}
-                  onFocus={() => onFieldFocus(field.id)}
+                  onFocus={handleFieldFocus}
                   onBlur={() => onFieldBlur(field.id)}
                   disabled={isReadOnly}
                   placeholder={`No ${field.label.toLowerCase()} extracted`}
@@ -519,7 +527,7 @@ interface Risk {
 
 interface RisksSectionProps {
   risks: Risk[];
-  onJumpToPage: (page?: number) => void;
+  onJumpToPage: (page?: number, sourceText?: string) => void;
 }
 
 export function RisksSection({ risks, onJumpToPage }: RisksSectionProps) {
@@ -585,7 +593,7 @@ export function RisksSection({ risks, onJumpToPage }: RisksSectionProps) {
                     variant="link"
                     size="sm"
                     className="h-auto p-0 ml-2 text-xs"
-                    onClick={() => onJumpToPage(risk.citation_page || undefined)}
+                    onClick={() => onJumpToPage(risk.citation_page || undefined, risk.citation_snippet || undefined)}
                   >
                     (Page {risk.citation_page})
                   </Button>

@@ -376,3 +376,17 @@
     page-break-after: avoid;
   }
 }
+
+/* AI source highlight in PdfViewer text layer.
+   The <mark> elements live inside react-pdf's text layer (which sits above
+   the canvas). We set the background and inherit the layer's transparent
+   color so the highlight overlays cleanly without changing the original
+   glyph color. */
+.react-pdf__Page__textContent mark.ai-source-highlight {
+  background-color: rgba(250, 204, 21, 0.55); /* yellow-400 @ 55% */
+  color: inherit;
+  padding: 0;
+  border-radius: 1px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}

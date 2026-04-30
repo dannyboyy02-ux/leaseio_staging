@@ -150,6 +150,7 @@ export default function LeaseReview() {
   const [isPdfCollapsed, setIsPdfCollapsed] = useState(false);
   const pdfPanelRef = useRef<ImperativePanelHandle>(null);
   const [targetPage, setTargetPage] = useState<number | undefined>(undefined);
+  const [targetHighlight, setTargetHighlight] = useState<string | undefined>(undefined);
   const [verifiedFields, setVerifiedFields] = useState<Set<string>>(new Set());
   const [confirmedSections, setConfirmedSections] = useState<string[]>([]);
   
@@ -830,9 +831,10 @@ export default function LeaseReview() {
     fetchParentLease();
   }, [lease?.parent_lease_id]);
 
-  const jumpToPage = (page?: number) => {
+  const jumpToPage = (page?: number, sourceText?: string) => {
     if (!page) return;
     setTargetPage(page);
+    setTargetHighlight(sourceText);
     if (showPdfPanel) {
       if (isPdfCollapsed) setIsPdfCollapsed(false);
     } else {
@@ -2183,7 +2185,7 @@ export default function LeaseReview() {
                         <ChevronLeft size={16} />
                       </Button>
                     </div>
-                    <PdfViewer url={pdfUrl} targetPage={targetPage} />
+                    <PdfViewer url={pdfUrl} targetPage={targetPage} targetHighlight={targetHighlight} />
                   </div>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="bg-border w-1 hover:bg-primary transition-colors" />
