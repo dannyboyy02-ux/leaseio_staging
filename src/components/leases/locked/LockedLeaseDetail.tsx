@@ -223,34 +223,36 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
 
   // ---- Section row builders --------------------------------------------------
 
-  const keyInfoRows: LabelValueRow[] = useMemo(() => [
-    { label: t('locked_lease.key_info.title'), value: lease.request_title },
-    { label: t('locked_lease.key_info.asset_type'), value: lease.asset_type },
-    { label: t('locked_lease.key_info.intake_source'), value: lease.intake_source },
-    { label: t('locked_lease.key_info.requesting_department'), value: lease.requesting_department },
-    { label: t('locked_lease.key_info.created'), value: fmtDate(lease.created_at) },
-    { label: t('locked_lease.key_info.approved'), value: fmtDate(lease.financial_approved_at) },
-  ], [lease, t]);
-
-  const locationRows: LabelValueRow[] = useMemo(() => {
+  const propertyRows: LabelValueRow[] = useMemo(() => {
     const city = extractedValue(extracted, 'city');
     const state = extractedValue(extracted, 'state');
     const zip = extractedValue(extracted, 'zip') ?? extractedValue(extracted, 'postal_code');
     return [
-      { label: t('locked_lease.location.address'), value: lease.property_address, fullWidth: true },
-      { label: t('locked_lease.location.city'), value: city, aiExtracted: !!city },
-      { label: t('locked_lease.location.state'), value: state, aiExtracted: !!state },
-      { label: t('locked_lease.location.zip'), value: zip, aiExtracted: !!zip },
+      { label: t('locked_lease.property.address'), value: lease.property_address, fullWidth: true },
+      { label: t('locked_lease.property.city'), value: city, aiExtracted: !!city },
+      { label: t('locked_lease.property.state'), value: state, aiExtracted: !!state },
+      { label: t('locked_lease.property.zip'), value: zip, aiExtracted: !!zip },
+      { label: t('locked_lease.property.asset_type'), value: lease.asset_type },
+      { label: t('locked_lease.property.requesting_department'), value: lease.requesting_department },
+      { label: t('locked_lease.property.intake_source'), value: lease.intake_source },
     ];
   }, [lease, extracted, t]);
 
-  const datesRows: LabelValueRow[] = useMemo(() => [
-    { label: t('locked_lease.dates.commencement'), value: fmtDate(lease.lease_start) },
-    { label: t('locked_lease.dates.expiration'), value: fmtDate(lease.lease_end) },
-    { label: t('locked_lease.dates.rent_commencement'), value: fmtDate(lease.rent_commencement_date) },
-    { label: t('locked_lease.dates.term_months'), value: lease.term_months },
-    { label: t('locked_lease.dates.month_to_month'), value: fmtBool(lease.month_to_month, t) },
-  ], [lease, t]);
+  const timingRows: LabelValueRow[] = useMemo(() => {
+    const months = remainingMonths(lease.lease_end);
+    const remaining = months == null
+      ? null
+      : `${months} ${months === 1 ? t('locked_lease.rent.month') : t('locked_lease.rent.months')}`;
+    return [
+      { label: t('locked_lease.timing.commencement'), value: fmtDate(lease.lease_start) },
+      { label: t('locked_lease.timing.rent_commencement'), value: fmtDate(lease.rent_commencement_date) },
+      { label: t('locked_lease.timing.expiration'), value: fmtDate(lease.lease_end) },
+      { label: t('locked_lease.timing.term_months'), value: lease.term_months },
+      { label: t('locked_lease.timing.remaining'), value: remaining },
+      { label: t('locked_lease.timing.month_to_month'), value: fmtBool(lease.month_to_month, t) },
+      { label: t('locked_lease.timing.approved'), value: fmtDate(lease.financial_approved_at) },
+    ];
+  }, [lease, t]);
 
   const currentMonthlyRent = useMemo(
     () => currentRentFromSchedule(rentSchedule) ?? lease.current_monthly_rent ?? null,
@@ -313,16 +315,12 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
             </TabsList>
 
             <TabsContent value="general" className="space-y-4 mt-0">
-              <SectionCard title={t('locked_lease.key_info.section_title')}>
-                <LabelValueGrid rows={keyInfoRows} />
+              <SectionCard title={t('locked_lease.property.section_title')}>
+                <LabelValueGrid rows={propertyRows} />
               </SectionCard>
 
-              <SectionCard title={t('locked_lease.location.section_title')}>
-                <LabelValueGrid rows={locationRows} />
-              </SectionCard>
-
-              <SectionCard title={t('locked_lease.dates.section_title')}>
-                <LabelValueGrid rows={datesRows} />
+              <SectionCard title={t('locked_lease.timing.section_title')}>
+                <LabelValueGrid rows={timingRows} />
               </SectionCard>
 
               <AuditTimelineCard leaseId={lease.id} workspaceId={lease.workspace_id} />

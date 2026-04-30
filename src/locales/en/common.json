@@ -662,29 +662,25 @@
       "unlock_denied": "Unlock request denied",
       "unlock_deny_failed": "Failed to deny unlock request"
     },
-    "key_info": {
-      "section_title": "Key Information",
-      "title": "Title",
-      "asset_type": "Asset type",
-      "intake_source": "Intake source",
-      "requesting_department": "Requesting department",
-      "created": "Created",
-      "approved": "Financially approved"
-    },
-    "location": {
-      "section_title": "Location",
-      "address": "Property address",
+    "property": {
+      "section_title": "Property",
+      "address": "Address",
       "city": "City",
       "state": "State / Province",
-      "zip": "ZIP / Postal code"
+      "zip": "ZIP / Postal code",
+      "asset_type": "Asset type",
+      "requesting_department": "Requesting department",
+      "intake_source": "Intake source"
     },
-    "dates": {
-      "section_title": "Lease Dates / Terms",
+    "timing": {
+      "section_title": "Lease Timing",
       "commencement": "Commencement",
-      "expiration": "Expiration",
       "rent_commencement": "Rent commencement",
+      "expiration": "Expiration",
       "term_months": "Term (months)",
-      "month_to_month": "Month-to-month"
+      "remaining": "Remaining term",
+      "month_to_month": "Month-to-month",
+      "approved": "Financially approved"
     },
     "rent": {
       "section_title": "Rent / Payment Terms",

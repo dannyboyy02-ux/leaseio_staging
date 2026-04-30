@@ -662,29 +662,25 @@
       "unlock_denied": "Solicitud de desbloqueo rechazada",
       "unlock_deny_failed": "No se pudo rechazar la solicitud de desbloqueo"
     },
-    "key_info": {
-      "section_title": "Información clave",
-      "title": "Título",
-      "asset_type": "Tipo de activo",
-      "intake_source": "Origen de ingreso",
-      "requesting_department": "Departamento solicitante",
-      "created": "Creado",
-      "approved": "Aprobado financieramente"
-    },
-    "location": {
-      "section_title": "Ubicación",
+    "property": {
+      "section_title": "Propiedad",
       "address": "Dirección",
       "city": "Ciudad",
       "state": "Estado / Provincia",
-      "zip": "Código postal"
+      "zip": "Código postal",
+      "asset_type": "Tipo de activo",
+      "requesting_department": "Departamento solicitante",
+      "intake_source": "Origen de ingreso"
     },
-    "dates": {
-      "section_title": "Fechas / Términos del arrendamiento",
+    "timing": {
+      "section_title": "Vigencia del arrendamiento",
       "commencement": "Inicio",
-      "expiration": "Vencimiento",
       "rent_commencement": "Inicio del alquiler",
+      "expiration": "Vencimiento",
       "term_months": "Plazo (meses)",
-      "month_to_month": "Mes a mes"
+      "remaining": "Plazo restante",
+      "month_to_month": "Mes a mes",
+      "approved": "Aprobado financieramente"
     },
     "rent": {
       "section_title": "Renta / Términos de pago",
