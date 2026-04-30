@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
@@ -476,7 +479,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                 {risks.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">{t('locked_lease.risks.empty_hint')}</p>
                 ) : (
-                  <ul className="space-y-4">
+                  <ul className="space-y-2">
                     {risks.map((r) => {
                       const sev = (r.severity ?? '').toLowerCase();
                       const sevTone =
@@ -487,39 +490,59 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                           : 'border-muted bg-muted/30 text-foreground/80';
                       const accent =
                         sev === 'high' ? 'border-red-400' : sev === 'medium' ? 'border-amber-400' : 'border-muted-foreground/40';
+                      const hasBody = !!r.explanation || !!r.citation_page || !!r.citation_snippet;
                       return (
-                        <li key={r.id} className={`border-l-2 ${accent} pl-3 py-1`}>
-                          <div className="flex items-baseline gap-2 flex-wrap">
-                            <p className="text-sm font-medium text-foreground">
-                              {r.title ?? t('locked_lease.risks.untitled')}
-                            </p>
-                            {r.severity && (
-                              <span
-                                className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${sevTone}`}
-                              >
-                                {r.severity}
-                              </span>
+                        <li key={r.id} className={`border-l-2 ${accent} pl-3`}>
+                          <Collapsible defaultOpen={false}>
+                            <CollapsibleTrigger
+                              className="w-full flex items-center justify-between gap-2 py-2 text-left hover:bg-muted/30 -ml-3 pl-3 pr-2 rounded-r transition-colors group"
+                              disabled={!hasBody}
+                            >
+                              <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+                                <p className="text-sm font-medium text-foreground">
+                                  {r.title ?? t('locked_lease.risks.untitled')}
+                                </p>
+                                {r.severity && (
+                                  <span
+                                    className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${sevTone}`}
+                                  >
+                                    {r.severity}
+                                  </span>
+                                )}
+                              </div>
+                              {hasBody && (
+                                <ChevronDown
+                                  className={cn(
+                                    'h-4 w-4 text-muted-foreground shrink-0 transition-transform',
+                                    'group-data-[state=open]:rotate-180'
+                                  )}
+                                />
+                              )}
+                            </CollapsibleTrigger>
+                            {hasBody && (
+                              <CollapsibleContent className="pb-3">
+                                {r.explanation && (
+                                  <p className="text-sm text-foreground/90 mt-1 whitespace-pre-line leading-relaxed">
+                                    {r.explanation}
+                                  </p>
+                                )}
+                                {(r.citation_page || r.citation_snippet) && (
+                                  <div className="mt-2 text-xs text-muted-foreground">
+                                    {r.citation_page && (
+                                      <span className="font-medium">
+                                        {t('locked_lease.risks.cited_on_page', { page: r.citation_page })}
+                                      </span>
+                                    )}
+                                    {r.citation_snippet && (
+                                      <blockquote className="mt-1 pl-3 border-l-2 border-muted italic text-foreground/70">
+                                        &ldquo;{r.citation_snippet}&rdquo;
+                                      </blockquote>
+                                    )}
+                                  </div>
+                                )}
+                              </CollapsibleContent>
                             )}
-                          </div>
-                          {r.explanation && (
-                            <p className="text-sm text-foreground/90 mt-1.5 whitespace-pre-line leading-relaxed">
-                              {r.explanation}
-                            </p>
-                          )}
-                          {(r.citation_page || r.citation_snippet) && (
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              {r.citation_page && (
-                                <span className="font-medium">
-                                  {t('locked_lease.risks.cited_on_page', { page: r.citation_page })}
-                                </span>
-                              )}
-                              {r.citation_snippet && (
-                                <blockquote className="mt-1 pl-3 border-l-2 border-muted italic text-foreground/70">
-                                  &ldquo;{r.citation_snippet}&rdquo;
-                                </blockquote>
-                              )}
-                            </div>
-                          )}
+                          </Collapsible>
                         </li>
                       );
                     })}
