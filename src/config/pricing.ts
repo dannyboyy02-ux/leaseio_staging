@@ -12,6 +12,7 @@ export interface PlanConfig {
   };
   maxUsers: number;
   maxActiveLeases: number;
+  maxArchivedLeases: number;
   abstractionsIncluded: number;
   overagePerDoc: number;
   featureKeys: string[];
@@ -34,6 +35,7 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
     price: { monthly: 249, annual: 2390 },
     maxUsers: 3,
     maxActiveLeases: 15,
+    maxArchivedLeases: 50,
     abstractionsIncluded: 15,
     overagePerDoc: 12,
     featureKeys: [
@@ -60,6 +62,7 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
     price: { monthly: 499, annual: 4790 },
     maxUsers: -1,
     maxActiveLeases: 50,
+    maxArchivedLeases: 250,
     abstractionsIncluded: 50,
     overagePerDoc: 10,
     featureKeys: [
