@@ -664,7 +664,7 @@
     },
     "property": {
       "section_title": "Propiedad",
-      "address": "Dirección",
+      "street": "Calle",
       "city": "Ciudad",
       "state": "Estado / Provincia",
       "zip": "Código postal",

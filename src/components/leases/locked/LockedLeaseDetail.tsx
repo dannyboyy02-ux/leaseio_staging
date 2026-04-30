@@ -50,6 +50,74 @@ const extractedValue = (extracted: any, key: string): string | null => {
   return null;
 };
 
+interface ParsedAddress {
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  /** True when the parser couldn't make sense of the input — caller should
+   *  show the raw string in the Street slot rather than throw away data. */
+  unparsed: boolean;
+}
+
+/**
+ * Best-effort US address parser. Handles formats like:
+ *   "1 Acme Plaza, Austin, TX 78701"
+ *   "1 Acme Plaza, Suite 200, Austin, TX 78701-1234"
+ *   "100 Main St" (street only)
+ *
+ * Strategy: split on commas, peel the last segment looking for "STATE ZIP"
+ * or just "ZIP", then the city, then anything before is the street. If the
+ * shape doesn't fit, return unparsed so the UI can fall back to the raw
+ * blob rather than dropping it on the floor.
+ */
+const parseUsAddress = (raw: string | null | undefined): ParsedAddress => {
+  const empty: ParsedAddress = { street: null, city: null, state: null, zip: null, unparsed: false };
+  if (!raw || !raw.trim()) return empty;
+
+  const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return { ...empty, unparsed: true };
+
+  // Single segment with no commas — probably a street-only entry.
+  if (parts.length === 1) {
+    const single = parts[0];
+    // Could still end with "STATE ZIP" if user wrote "100 Main St Austin TX 78701".
+    const withZip = /^(.*?)\s+([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/.exec(single);
+    if (withZip) return { street: withZip[1].trim(), city: null, state: withZip[2], zip: withZip[3], unparsed: false };
+    return { street: single, city: null, state: null, zip: null, unparsed: false };
+  }
+
+  let state: string | null = null;
+  let zip: string | null = null;
+  let city: string | null = null;
+  const last = parts[parts.length - 1];
+
+  // "TX 78701" or "TX 78701-1234" or just "78701"
+  const stateZip = /^([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/.exec(last);
+  const zipOnly = /^(\d{5}(?:-\d{4})?)$/.exec(last);
+  if (stateZip) {
+    state = stateZip[1];
+    zip = stateZip[2];
+  } else if (zipOnly) {
+    zip = zipOnly[1];
+  } else {
+    // Last segment isn't a state/zip pattern — bail to unparsed; preserves the raw blob.
+    return { ...empty, unparsed: true, street: raw };
+  }
+
+  if (parts.length >= 2) {
+    if (state || zip) {
+      city = parts[parts.length - 2] || null;
+    }
+  }
+
+  const streetSegments = parts.slice(0, parts.length - 2);
+  // If we only had "City, ST ZIP" with no street, streetSegments will be empty.
+  const street = streetSegments.length > 0 ? streetSegments.join(', ') : null;
+
+  return { street, city, state, zip, unparsed: false };
+};
+
 /**
  * Security deposit is stored as TEXT. Try to parse a numeric amount and
  * format it as currency; fall back to the raw string for descriptive
@@ -224,14 +292,32 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
   // ---- Section row builders --------------------------------------------------
 
   const propertyRows: LabelValueRow[] = useMemo(() => {
-    const city = extractedValue(extracted, 'city');
-    const state = extractedValue(extracted, 'state');
-    const zip = extractedValue(extracted, 'zip') ?? extractedValue(extracted, 'postal_code');
+    const parsed = parseUsAddress(lease.property_address);
+    const fallbackCity = extractedValue(extracted, 'city');
+    const fallbackState = extractedValue(extracted, 'state');
+    const fallbackZip = extractedValue(extracted, 'zip') ?? extractedValue(extracted, 'postal_code');
+
+    // Prefer parsed values from property_address; fall back to extracted_json
+    // per-field so we surface as much as we have. Track which slots came from
+    // extraction vs. the canonical column so we can show the AI badge
+    // accurately.
+    const street = parsed.street;
+    const city = parsed.city ?? fallbackCity;
+    const cityFromAi = !parsed.city && !!fallbackCity;
+    const state = parsed.state ?? fallbackState;
+    const stateFromAi = !parsed.state && !!fallbackState;
+    const zip = parsed.zip ?? fallbackZip;
+    const zipFromAi = !parsed.zip && !!fallbackZip;
+
+    // If parsing failed entirely, surface the raw blob in Street so we don't
+    // drop the data — the city/state/zip rows can still be filled by extraction.
+    const streetForUi = parsed.unparsed ? lease.property_address : street;
+
     return [
-      { label: t('locked_lease.property.address'), value: lease.property_address, fullWidth: true },
-      { label: t('locked_lease.property.city'), value: city, aiExtracted: !!city },
-      { label: t('locked_lease.property.state'), value: state, aiExtracted: !!state },
-      { label: t('locked_lease.property.zip'), value: zip, aiExtracted: !!zip },
+      { label: t('locked_lease.property.street'), value: streetForUi, fullWidth: true },
+      { label: t('locked_lease.property.city'), value: city, aiExtracted: cityFromAi },
+      { label: t('locked_lease.property.state'), value: state, aiExtracted: stateFromAi },
+      { label: t('locked_lease.property.zip'), value: zip, aiExtracted: zipFromAi },
       { label: t('locked_lease.property.asset_type'), value: lease.asset_type },
       { label: t('locked_lease.property.requesting_department'), value: lease.requesting_department },
       { label: t('locked_lease.property.intake_source'), value: lease.intake_source },

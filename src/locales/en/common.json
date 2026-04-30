@@ -664,7 +664,7 @@
     },
     "property": {
       "section_title": "Property",
-      "address": "Address",
+      "street": "Street",
       "city": "City",
       "state": "State / Province",
       "zip": "ZIP / Postal code",
