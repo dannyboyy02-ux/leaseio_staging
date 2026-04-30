@@ -15,8 +15,11 @@ import {
   Building2,
   ChevronsUpDown,
   Check,
-  Gauge,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,7 +31,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -102,6 +110,8 @@ export function AppSidebar() {
       window.removeEventListener('focus', handleFocus);
     };
   }, [workspace?.id, userFunctionalRoles]);
+
+  const { theme, setTheme } = useTheme();
 
   const handleLogout = async () => {
     await signOut();
@@ -245,8 +255,7 @@ export function AppSidebar() {
         </div>
       </nav>
 
-      {/* User Menu — single bottom-left entry, Claude-style.
-          Plan & Billing, Usage, Settings, Help all live inside the dropdown. */}
+      {/* User Menu — single bottom-left entry, Claude.ai-style. */}
       <div className="p-3 border-t border-sidebar-border">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -267,64 +276,127 @@ export function AppSidebar() {
                   {safeText(workspace?.name) || safeText(displayUser.email)}
                 </p>
               </div>
-              <ChevronsUpDown className="h-4 w-4 text-sidebar-foreground/40 shrink-0" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" side="top" className="w-64">
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium truncate">
-                  {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
-                </span>
-                <span className="text-xs text-muted-foreground truncate">
-                  {safeText(displayUser.email)}
-                </span>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5">
-                    {planLabel}
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground truncate">
-                    {safeText(workspace?.name)}
+          <DropdownMenuContent align="start" side="top" className="w-72">
+            {/* Header card — larger avatar, name + email stacked, plan + workspace beneath */}
+            <DropdownMenuLabel className="font-normal py-3">
+              <div className="flex items-start gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
+                    {safeText(displayUser.firstName)?.[0]}{safeText(displayUser.lastName)?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                  <span className="text-sm font-medium text-foreground truncate">
+                    {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
                   </span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {safeText(displayUser.email)}
+                  </span>
+                  <div className="mt-1.5 flex flex-col gap-0.5">
+                    <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5 self-start">
+                      {planLabel}
+                    </Badge>
+                    {workspace?.name && (
+                      <span className="text-[10px] text-muted-foreground truncate">
+                        {safeText(workspace.name)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </DropdownMenuLabel>
+
             <DropdownMenuSeparator />
+
+            {/* Group 1 — account & settings */}
             <DropdownMenuItem asChild>
-              <Link to="/app/settings/account" className="flex items-center gap-2 cursor-pointer">
+              <Link to="/app/settings/account" className="flex items-center gap-2 cursor-pointer font-medium">
                 <User className="h-4 w-4" />
                 {t('nav.account_settings')}
               </Link>
             </DropdownMenuItem>
             {canAccessWorkspaceSettings(userRole) && (
               <DropdownMenuItem asChild>
-                <Link to="/app/settings/workspace" className="flex items-center gap-2 cursor-pointer">
+                <Link to="/app/settings/workspace" className="flex items-center gap-2 cursor-pointer font-medium">
                   <Settings className="h-4 w-4" />
                   {t('nav.workspace_settings')}
                 </Link>
               </DropdownMenuItem>
             )}
+
+            <DropdownMenuSeparator />
+
+            {/* Group 2 — usage & plan (the Upgrade row is dynamic — see Round 1B) */}
             <DropdownMenuItem asChild>
-              <Link to="/app/usage" className="flex items-center gap-2 cursor-pointer">
-                <Gauge className="h-4 w-4" />
+              <Link to="/app/usage" className="flex items-center gap-2 cursor-pointer font-medium">
+                <BarChart3 className="h-4 w-4" />
                 {t('nav.usage')}
               </Link>
             </DropdownMenuItem>
+            {currentPlan === 'starter' ? (
+              <DropdownMenuItem asChild>
+                <Link
+                  to="/app/upgrade"
+                  className="flex items-center gap-2 cursor-pointer font-medium bg-primary/10 hover:bg-primary/15 text-primary focus:bg-primary/15 focus:text-primary"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {t('nav.upgrade_to_business')}
+                </Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem asChild>
+                <Link to="/app/upgrade" className="flex items-center gap-2 cursor-pointer font-medium">
+                  <Sparkles className="h-4 w-4" />
+                  {t('nav.manage_subscription')}
+                </Link>
+              </DropdownMenuItem>
+            )}
+
+            <DropdownMenuSeparator />
+
+            {/* Group 3 — appearance + help */}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="flex items-center gap-2 font-medium">
+                {theme === 'dark' ? (
+                  <Moon className="h-4 w-4" />
+                ) : theme === 'system' ? (
+                  <Monitor className="h-4 w-4" />
+                ) : (
+                  <Sun className="h-4 w-4" />
+                )}
+                {t('nav.theme')}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup value={theme ?? 'system'} onValueChange={setTheme}>
+                  <DropdownMenuRadioItem value="light">
+                    <Sun className="h-4 w-4 mr-2" />
+                    {t('nav.theme_light')}
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="dark">
+                    <Moon className="h-4 w-4 mr-2" />
+                    {t('nav.theme_dark')}
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="system">
+                    <Monitor className="h-4 w-4 mr-2" />
+                    {t('nav.theme_system')}
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuItem asChild>
-              <Link to="/app/upgrade" className="flex items-center gap-2 cursor-pointer">
-                <Sparkles className="h-4 w-4" />
-                {t('nav.plan_billing')}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/app/support" className="flex items-center gap-2 cursor-pointer">
+              <Link to="/app/support" className="flex items-center gap-2 cursor-pointer font-medium">
                 <HelpCircle className="h-4 w-4" />
                 {t('nav.help_support')}
               </Link>
             </DropdownMenuItem>
+
             <DropdownMenuSeparator />
+
+            {/* Group 4 — log out (neutral, not destructive — Claude pattern) */}
             <DropdownMenuItem
-              className="text-destructive focus:text-destructive cursor-pointer"
+              className="cursor-pointer font-medium text-muted-foreground focus:text-foreground"
               onClick={handleLogout}
             >
               <LogOut className="h-4 w-4 mr-2" />
