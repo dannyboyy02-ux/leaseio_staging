@@ -73,6 +73,76 @@ export default function AccountSettings() {
   const [notifyAbstractionComplete, setNotifyAbstractionComplete] = useState(true);
   const [aiConsentAt, setAiConsentAt] = useState<string | null>(null);
   const [isRevokingConsent, setIsRevokingConsent] = useState(false);
+
+  // Recent activity — pulls from lease_activity_log scoped to current user.
+  // 4 shown by default, "View more" expands to 20.
+  interface ActivityRow {
+    id: string;
+    activity_type: string;
+    from_status: string | null;
+    to_status: string | null;
+    created_at: string;
+    lease_title: string | null;
+  }
+  const [activity, setActivity] = useState<ActivityRow[]>([]);
+  const [activityExpanded, setActivityExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!authUser?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await (supabase as any)
+        .from('lease_activity_log')
+        .select('id, activity_type, from_status, to_status, created_at, lease:lease_id (request_title, filename)')
+        .eq('user_id', authUser.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (cancelled) return;
+      setActivity(
+        ((data ?? []) as any[]).map((r) => ({
+          id: r.id,
+          activity_type: r.activity_type,
+          from_status: r.from_status,
+          to_status: r.to_status,
+          created_at: r.created_at,
+          lease_title: r.lease?.request_title ?? r.lease?.filename ?? null,
+        }))
+      );
+    })();
+    return () => { cancelled = true; };
+  }, [authUser?.id]);
+
+  const formatActivityLabel = (row: ActivityRow): string => {
+    const friendly: Record<string, string> = {
+      lease_uploaded: 'Uploaded lease',
+      lease_extracted: 'AI extraction completed',
+      field_edited: 'Edited a field',
+      field_verified: 'Verified a field',
+      change_submitted: 'Submitted changes for approval',
+      change_approved: 'Approved changes',
+      change_rejected: 'Rejected changes',
+      lease_locked: 'Locked lease',
+      lease_unlocked: 'Unlocked lease',
+      lease_archived: 'Archived lease',
+      lease_unarchived: 'Unarchived lease',
+      status_changed: row.from_status && row.to_status
+        ? `Status: ${row.from_status} → ${row.to_status}`
+        : 'Status changed',
+    };
+    return friendly[row.activity_type] ?? row.activity_type.replace(/_/g, ' ');
+  };
+
+  const relativeTime = (iso: string): string => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d < 30) return `${d}d ago`;
+    return new Date(iso).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', { month: 'short', day: 'numeric' });
+  };
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoggingOutOthers, setIsLoggingOutOthers] = useState(false);
@@ -548,33 +618,52 @@ export default function AccountSettings() {
 
             <Card>
               <CardHeader>
-                <CardTitle>{t('account.security_activity')}</CardTitle>
-                <CardDescription>{t('account.review_logins')}</CardDescription>
+                <CardTitle>{t('account.recent_activity')}</CardTitle>
+                <CardDescription>{t('account.recent_activity_desc')}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between py-2 border-b border-border">
-                    <div>
-                      <p className="text-sm font-medium">Login from Chrome on macOS</p>
-                      <p className="text-xs text-muted-foreground">New York, NY • 2 hours ago</p>
-                    </div>
-                    <span className="text-xs text-success">{t('account.current_session')}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-border">
-                    <div>
-                      <p className="text-sm font-medium">Login from Safari on iOS</p>
-                      <p className="text-xs text-muted-foreground">New York, NY • 1 day ago</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <div>
-                      <p className="text-sm font-medium">{t('account.password_changed')}</p>
-                      <p className="text-xs text-muted-foreground">30 days ago</p>
-                    </div>
-                  </div>
-                </div>
-                <Button 
-                  variant="outline" 
+                {activity.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-2">
+                    {t('account.recent_activity_empty')}
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {(activityExpanded ? activity : activity.slice(0, 4)).map((row) => (
+                      <li
+                        key={row.id}
+                        className="flex items-center justify-between gap-3 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {formatActivityLabel(row)}
+                          </p>
+                          {row.lease_title && (
+                            <p className="text-xs text-muted-foreground truncate">
+                              {row.lease_title}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                          {relativeTime(row.created_at)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {activity.length > 4 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full mt-2 text-xs"
+                    onClick={() => setActivityExpanded((v) => !v)}
+                  >
+                    {activityExpanded
+                      ? t('account.recent_activity_view_less')
+                      : t('account.recent_activity_view_more', { count: activity.length - 4 })}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
                   className="w-full mt-4"
                   onClick={handleLogoutOtherSessions}
                   disabled={isLoggingOutOthers}
