@@ -17,6 +17,7 @@ import { VendorCard } from './VendorCard';
 import { AuditTimelineCard } from './AuditTimelineCard';
 import { CriticalDatesStrip } from './CriticalDatesStrip';
 import { ObligationsTab } from './ObligationsTab';
+import { ArchiveButton } from '@/components/leases/ArchiveButton';
 
 import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/RentScheduleTable';
 import { AmendmentsList } from '@/components/leases/AmendmentsList';
@@ -392,6 +393,9 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
           onApproveUnlock={handleAdminUnlock}
           onDenyUnlock={handleDenyUnlock}
           onAdminUnlock={handleAdminUnlock}
+          leaseId={lease.id}
+          isArchived={!!lease.archived}
+          onArchiveChange={refetchLease}
         />
 
         <CriticalDatesStrip lease={lease} />

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { LifecycleStatusBadge } from '@/components/lifecycle/LifecycleStatusBadge';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { ArchiveButton } from '@/components/leases/ArchiveButton';
 
 interface PendingUnlockRequest {
   id: string;
@@ -23,6 +24,10 @@ interface Props {
   onApproveUnlock: () => void;
   onDenyUnlock: () => void;
   onAdminUnlock: () => void;
+  /** Archive control props — when present, the admin archive button renders. */
+  leaseId?: string;
+  isArchived?: boolean;
+  onArchiveChange?: () => void;
 }
 
 export function LockedHeader({
@@ -36,6 +41,9 @@ export function LockedHeader({
   onApproveUnlock,
   onDenyUnlock,
   onAdminUnlock,
+  leaseId,
+  isArchived,
+  onArchiveChange,
 }: Props) {
   const navigate = useNavigate();
   const { t } = useAppTranslation();
@@ -92,6 +100,13 @@ export function LockedHeader({
                 <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                 {pendingUnlockRequest ? t('locked_lease.approve_and_unlock') : t('locked_lease.admin_unlock')}
               </Button>
+            )}
+            {leaseId && (
+              <ArchiveButton
+                leaseId={leaseId}
+                isArchived={!!isArchived}
+                onChange={onArchiveChange}
+              />
             )}
           </div>
         </div>

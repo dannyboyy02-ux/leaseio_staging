@@ -62,6 +62,7 @@ import { VarianceReport } from "@/components/leases/VarianceReport";
 import { ModelLockConfirmation } from "@/components/leases/ModelLockConfirmation";
 import { LeaseDocumentsTab } from "@/components/leases/LeaseDocumentsTab";
 import { LockedLeaseDetail } from "@/components/leases/locked/LockedLeaseDetail";
+import { ArchiveButton } from "@/components/leases/ArchiveButton";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -2077,6 +2078,11 @@ export default function LeaseReview() {
                 Approval Queue
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
+              <ArchiveButton
+                leaseId={lease.id}
+                isArchived={!!lease.archived}
+                onChange={refetchLease}
+              />
               {/* Upload Amendment button - only for master leases */}
               {isMasterLease && !isProcessing && (
                 <UploadAmendmentDialog
