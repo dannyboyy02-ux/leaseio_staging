@@ -56,13 +56,14 @@ export function SummaryStrip() {
         return;
       }
 
-      const { data: leases } = await supabase
+      const { data: leases } = await (supabase as any)
         .from('leases')
         .select(
           'id, lifecycle_status, executed_monthly_payment, current_monthly_rent, monthly_payment, executed_expiry_date, lease_end, square_footage, executed_document_url, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
-        .eq('workspace_id', workspace.id);
+        .eq('workspace_id', workspace.id)
+        .eq('archived', false);
 
       if (!leases) {
         setLoading(false);

@@ -38,6 +38,7 @@ export default function Portfolio() {
             'calc_pv_liability, calc_total_commitment, landlord_name, property_address'
           )
           .eq('workspace_id', workspace!.id)
+          .eq('archived', false)
           .in('lifecycle_status', ['executed', 'active']),
         supabase
           .from('workspaces')

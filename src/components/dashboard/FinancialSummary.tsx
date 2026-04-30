@@ -55,10 +55,11 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
     queryKey: ['pipeline-summary', workspace?.id],
     enabled: !!workspace?.id,
     queryFn: async (): Promise<PipelineData> => {
-      const { data: leases, error } = await supabase
+      const { data: leases, error } = await (supabase as any)
         .from('leases')
         .select('id, calc_total_commitment, covenant_flagged')
         .eq('workspace_id', workspace!.id)
+        .eq('archived', false)
         .in('lifecycle_status', ['submitted', 'under_review', 'approved']);
 
       if (error) throw error;
@@ -82,7 +83,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
     enabled: !!workspace?.id,
     queryFn: async (): Promise<FinancialData> => {
       const [{ data: leases, error }, { data: workspaceSettings, error: workspaceError }] = await Promise.all([
-        supabase
+        (supabase as any)
           .from('leases')
           .select(
             'id, filename, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
@@ -91,6 +92,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
             'rent_schedules(period_start, period_end, monthly_amount)'
           )
           .eq('workspace_id', workspace!.id)
+          .eq('archived', false)
           .in('lifecycle_status', ['executed', 'active']),
         supabase
           .from('workspaces')

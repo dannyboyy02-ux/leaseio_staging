@@ -297,7 +297,7 @@ export default function ApprovalQueue() {
     setLoading(true);
     try {
       const baseQuery = () =>
-        supabase
+        (supabase as any)
           .from('leases')
           .select(
             'id, request_title, tenant_name, requesting_department, asset_type,' +
@@ -305,7 +305,8 @@ export default function ApprovalQueue() {
             'lifecycle_status, financial_returned_to_submitter, manager_approved_by,' +
             'manager_approved_at, financial_approved_by, uploaded_at, requestor_id',
           )
-          .eq('workspace_id', workspace.id);
+          .eq('workspace_id', workspace.id)
+          .eq('archived', false);
 
       // Needs My Review
       const myReviewConditions: any[] = [];

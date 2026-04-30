@@ -93,6 +93,7 @@ export default function Leases() {
   );
   const [leases, setLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
 
   const expirationFilters = [
     { value: 'all', label: 'All leases' },
@@ -103,16 +104,22 @@ export default function Leases() {
 
   const fetchLeases = async () => {
     try {
-      const { data, error } = await supabase
+      let query = (supabase as any)
         .from('leases')
         .select(
           'id, filename, status, lifecycle_status, request_title, landlord_name, ' +
           'lease_start, lease_end, executed_expiry_date, square_footage, ' +
-          'executed_monthly_payment, current_monthly_rent, monthly_payment, extracted_json, ' +
+          'executed_monthly_payment, current_monthly_rent, monthly_payment, extracted_json, archived, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .in('lifecycle_status', ['submitted', 'under_review', 'approved', 'executed', 'active', 'expired'])
         .order('lease_end', { ascending: true });
+
+      if (!showArchived) {
+        query = query.eq('archived', false);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setLeases((data || []) as unknown as LeaseRow[]);
@@ -126,7 +133,9 @@ export default function Leases() {
 
   useEffect(() => {
     fetchLeases();
-  }, []);
+    // re-fetch when the archived toggle flips
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showArchived]);
 
   const handleDeleteClick = (lease: LeaseRow) => {
     setSelectedLease(lease);
@@ -355,6 +364,14 @@ export default function Leases() {
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                variant={showArchived ? 'secondary' : 'outline'}
+                size="default"
+                onClick={() => setShowArchived((v) => !v)}
+                className="w-full sm:w-auto"
+              >
+                {showArchived ? 'Hide archived' : 'Show archived'}
+              </Button>
             </div>
 
             <div className="overflow-hidden rounded-lg border border-border bg-card">

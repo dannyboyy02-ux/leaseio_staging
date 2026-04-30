@@ -106,7 +106,7 @@ export function UpcomingEvents() {
     queryFn: async (): Promise<UpcomingEvent[]> => {
       const now = new Date();
 
-      const { data: leases, error } = await supabase
+      const { data: leases, error } = await (supabase as any)
         .from('leases')
         .select(
           'id, filename, lease_end, executed_expiry_date, escalation_type, rent_escalation_type, executed_commencement_date, rent_commencement_date, lease_start, ' +
@@ -114,6 +114,7 @@ export function UpcomingEvents() {
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace!.id)
+        .eq('archived', false)
         .in('lifecycle_status', ['executed', 'active']);
 
       if (error) throw error;
