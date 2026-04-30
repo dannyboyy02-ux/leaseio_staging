@@ -14,6 +14,9 @@
     "documents": "Documents",
     "upgrade_for_more": "Upgrade for more",
     "account_settings": "Account Settings",
+    "workspace_settings": "Workspace Settings",
+    "usage": "Usage",
+    "plan_billing": "Plan & Billing",
     "help_support": "Help & Support",
     "log_out": "Log Out",
     "audit_log": "Audit Log",
@@ -21,6 +24,36 @@
     "reports_analytics": "Reports & Analytics",
     "tools": "Tools",
     "language": "Language"
+  },
+  "usage": {
+    "title": "Usage",
+    "subtitle": "Track your active and archived lease counts against your plan.",
+    "manage_subscription": "Manage subscription",
+    "active_leases": "Active leases",
+    "active_leases_desc": "Count toward your plan's active-lease limit.",
+    "archived_leases": "Archived leases",
+    "archived_leases_desc": "Retained for audit and reporting. Counts toward your archive cap.",
+    "unlimited": "Unlimited",
+    "percent_used": "{{percent}}% of your limit used",
+    "approaching_limit": "Approaching your usage limit",
+    "approaching_limit_desc": "Upgrade your plan to add more capacity for active or archived leases.",
+    "upgrade_plan": "Upgrade plan",
+    "recent_archives": "Recently archived",
+    "recent_archives_desc": "The 10 most recent archive actions in this workspace.",
+    "recent_archives_empty": "No leases have been archived yet.",
+    "untitled_lease": "Untitled lease",
+    "archived_by": "Archived by {{name}}"
+  },
+  "archive": {
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "archived_toast": "Lease archived",
+    "unarchived_toast": "Lease unarchived",
+    "failed": "Failed to update archive state",
+    "confirm_archive_title": "Archive this lease?",
+    "confirm_archive_desc": "Archiving moves the lease out of your active set. It frees an active slot but counts toward your archive cap. The lease itself is preserved and can be unarchived at any time.",
+    "confirm_unarchive_title": "Unarchive this lease?",
+    "confirm_unarchive_desc": "Unarchiving puts the lease back in the active set. It will count toward your active-lease cap again."
   },
   "landing": {
     "nav": {

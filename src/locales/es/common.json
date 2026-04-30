@@ -14,6 +14,9 @@
     "documents": "Documentos",
     "upgrade_for_more": "Actualizar para más",
     "account_settings": "Configuración de Cuenta",
+    "workspace_settings": "Configuración del Espacio",
+    "usage": "Uso",
+    "plan_billing": "Plan y Facturación",
     "help_support": "Ayuda y Soporte",
     "log_out": "Cerrar Sesión",
     "audit_log": "Registro de Auditoría",
@@ -21,6 +24,36 @@
     "reports_analytics": "Informes y Análisis",
     "tools": "Herramientas",
     "language": "Idioma"
+  },
+  "usage": {
+    "title": "Uso",
+    "subtitle": "Monitoree el conteo de arrendamientos activos y archivados frente a su plan.",
+    "manage_subscription": "Administrar suscripción",
+    "active_leases": "Arrendamientos activos",
+    "active_leases_desc": "Cuentan para el límite de arrendamientos activos de su plan.",
+    "archived_leases": "Arrendamientos archivados",
+    "archived_leases_desc": "Conservados para auditoría e informes. Cuentan para su cupo de archivados.",
+    "unlimited": "Ilimitado",
+    "percent_used": "{{percent}}% del límite utilizado",
+    "approaching_limit": "Acercándose al límite",
+    "approaching_limit_desc": "Actualice su plan para añadir más capacidad de arrendamientos activos o archivados.",
+    "upgrade_plan": "Actualizar plan",
+    "recent_archives": "Archivados recientes",
+    "recent_archives_desc": "Las 10 acciones de archivo más recientes en este espacio de trabajo.",
+    "recent_archives_empty": "Aún no se han archivado arrendamientos.",
+    "untitled_lease": "Arrendamiento sin título",
+    "archived_by": "Archivado por {{name}}"
+  },
+  "archive": {
+    "archive": "Archivar",
+    "unarchive": "Desarchivar",
+    "archived_toast": "Arrendamiento archivado",
+    "unarchived_toast": "Arrendamiento desarchivado",
+    "failed": "No se pudo actualizar el estado de archivado",
+    "confirm_archive_title": "¿Archivar este arrendamiento?",
+    "confirm_archive_desc": "Archivar mueve el arrendamiento fuera del conjunto activo. Libera un cupo activo pero cuenta para su cupo de archivados. El arrendamiento se conserva y puede desarchivarse en cualquier momento.",
+    "confirm_unarchive_title": "¿Desarchivar este arrendamiento?",
+    "confirm_unarchive_desc": "Desarchivar devuelve el arrendamiento al conjunto activo. Volverá a contar para su cupo de arrendamientos activos."
   },
   "landing": {
     "nav": {
