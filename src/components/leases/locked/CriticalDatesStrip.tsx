@@ -162,9 +162,16 @@ export function CriticalDatesStrip({ lease }: Props) {
       });
     }
 
-    // 4. Next high-confidence key_date that we haven't already covered
+    // 4. Next high-confidence key_date that we haven't already covered.
+    //    Skip entries on/after lease_end — those are post-expiration commentary
+    //    (renewal option period starts, MRV adjustment dates, expiration date
+    //    itself) and the dedicated expiration chip already conveys that signal.
     const keyDates = Array.isArray(extracted?.key_dates) ? extracted.key_dates : [];
     const claimedTimes = new Set(out.map((c) => c.date.getTime()));
+    const leaseEndDate = lease?.lease_end ? new Date(lease.lease_end) : null;
+    const leaseEndMs = leaseEndDate && !Number.isNaN(leaseEndDate.getTime())
+      ? leaseEndDate.getTime()
+      : null;
     const nextKeyDate = keyDates
       .map((entry: any) => {
         const d = entry?.date ? new Date(entry.date) : null;
@@ -175,7 +182,10 @@ export function CriticalDatesStrip({ lease }: Props) {
       })
       .filter(
         (e: any): e is { date: Date; description: string | null } =>
-          !!e && e.date > today && !claimedTimes.has(e.date.getTime())
+          !!e
+          && e.date > today
+          && !claimedTimes.has(e.date.getTime())
+          && (leaseEndMs == null || e.date.getTime() < leaseEndMs)
       )
       .sort((a: any, b: any) => a.date.getTime() - b.date.getTime())[0];
     if (nextKeyDate) {
