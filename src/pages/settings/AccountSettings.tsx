@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut, Palette, Shield, Info, Settings2, Sun, Moon, Monitor, Mail } from 'lucide-react';
+import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut, Palette, Shield, Info, Settings2, Sun, Moon, Monitor, Mail, BarChart3 } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { UsageContent } from '@/pages/app/UsageContent';
+import WorkspaceSettings from '@/pages/settings/WorkspaceSettings';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -352,10 +354,12 @@ export default function AccountSettings() {
           value={activeTab}
           onValueChange={setActiveTab}
           orientation="vertical"
-          className="flex flex-col md:flex-row gap-6"
+          className="flex flex-col md:flex-row gap-6 md:items-start"
         >
-          {/* Vertical rail (Claude.ai-style). Collapses to a horizontal strip below md breakpoint. */}
-          <TabsList className="md:w-56 md:flex-col md:items-stretch md:bg-transparent md:p-0 md:gap-1 h-auto flex-wrap shrink-0">
+          {/* Vertical rail (Claude.ai-style). Collapses to a horizontal strip below md breakpoint.
+              Override the shadcn defaults (h-10, items-center, justify-center, bg-muted, p-1) for
+              vertical mode so the rail floats to the top instead of centering its items. */}
+          <TabsList className="h-auto flex-wrap shrink-0 md:w-56 md:flex-col md:items-stretch md:justify-start md:bg-transparent md:p-0 md:gap-1">
             <TabsTrigger value="profile" className={railTriggerClass}>
               <User className="h-4 w-4" />
               {t('account.profile')}
@@ -380,17 +384,18 @@ export default function AccountSettings() {
               <CreditCard className="h-4 w-4" />
               {t('account.subscription')}
             </TabsTrigger>
+            <TabsTrigger value="usage" className={railTriggerClass}>
+              <BarChart3 className="h-4 w-4" />
+              {t('account.usage')}
+            </TabsTrigger>
 
             {isAdminUser && (
               <>
                 <div className="hidden md:block h-px bg-border my-2" />
-                <Link
-                  to="/app/settings/workspace"
-                  className={cn(railTriggerClass, 'inline-flex items-center hover:bg-muted/60 transition-colors')}
-                >
+                <TabsTrigger value="workspace" className={railTriggerClass}>
                   <Settings2 className="h-4 w-4" />
                   {t('account.workspace_settings_link')}
-                </Link>
+                </TabsTrigger>
               </>
             )}
 
@@ -401,8 +406,9 @@ export default function AccountSettings() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Content panel */}
-          <div className="flex-1 min-w-0">
+          {/* Content panel — min-h stabilizes the layout so switching tabs
+              with different content lengths doesn't make the page reflow. */}
+          <div className="flex-1 min-w-0 md:min-h-[640px]">
 
           {/* Profile */}
           <TabsContent value="profile" className="space-y-6 mt-0">
@@ -875,6 +881,18 @@ export default function AccountSettings() {
               </Card>
             )}
           </TabsContent>
+
+          {/* Usage — embedded inside Settings (Claude pattern) */}
+          <TabsContent value="usage" className="space-y-6 mt-0">
+            <UsageContent />
+          </TabsContent>
+
+          {/* Workspace — admin only, embedded inside Settings (Claude pattern) */}
+          {isAdminUser && (
+            <TabsContent value="workspace" className="mt-0">
+              <WorkspaceSettings embedded />
+            </TabsContent>
+          )}
 
           {/* Appearance — theme toggle */}
           <TabsContent value="appearance" className="space-y-6 mt-0">

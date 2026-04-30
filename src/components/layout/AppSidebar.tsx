@@ -310,53 +310,18 @@ export function AppSidebar() {
 
             <DropdownMenuSeparator />
 
-            {/* Group 1 — account & settings */}
+            {/* Settings — single entry. Usage, Workspace, Subscription, etc.
+                all live inside the Settings page now (Claude pattern). */}
             <DropdownMenuItem asChild>
               <Link to="/app/settings/account" className="flex items-center gap-2 cursor-pointer font-medium">
-                <User className="h-4 w-4" />
-                {t('nav.account_settings')}
+                <Settings className="h-4 w-4" />
+                {t('nav.settings')}
               </Link>
             </DropdownMenuItem>
-            {canAccessWorkspaceSettings(userRole) && (
-              <DropdownMenuItem asChild>
-                <Link to="/app/settings/workspace" className="flex items-center gap-2 cursor-pointer font-medium">
-                  <Settings className="h-4 w-4" />
-                  {t('nav.workspace_settings')}
-                </Link>
-              </DropdownMenuItem>
-            )}
 
             <DropdownMenuSeparator />
 
-            {/* Group 2 — usage & plan (the Upgrade row is dynamic — see Round 1B) */}
-            <DropdownMenuItem asChild>
-              <Link to="/app/usage" className="flex items-center gap-2 cursor-pointer font-medium">
-                <BarChart3 className="h-4 w-4" />
-                {t('nav.usage')}
-              </Link>
-            </DropdownMenuItem>
-            {currentPlan === 'starter' ? (
-              <DropdownMenuItem asChild>
-                <Link
-                  to="/app/upgrade"
-                  className="flex items-center gap-2 cursor-pointer font-medium bg-primary/10 hover:bg-primary/15 text-primary focus:bg-primary/15 focus:text-primary"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  {t('nav.upgrade_to_business')}
-                </Link>
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem asChild>
-                <Link to="/app/upgrade" className="flex items-center gap-2 cursor-pointer font-medium">
-                  <Sparkles className="h-4 w-4" />
-                  {t('nav.manage_subscription')}
-                </Link>
-              </DropdownMenuItem>
-            )}
-
-            <DropdownMenuSeparator />
-
-            {/* Group 3 — appearance + help */}
+            {/* Theme + help */}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex items-center gap-2 font-medium">
                 {theme === 'dark' ? (

@@ -101,7 +101,13 @@ async function recomputeWorkspaceLeaseFinancials(workspaceId: string, discountRa
   await Promise.all(updates);
 }
 
-export default function WorkspaceSettings() {
+interface WorkspaceSettingsProps {
+  /** When true, skip the outer AppLayout/AppHeader so this can render inside
+   *  another page (e.g. as a TabsContent in /app/settings/account). */
+  embedded?: boolean;
+}
+
+export default function WorkspaceSettings({ embedded = false }: WorkspaceSettingsProps = {}) {
   const { workspace, refreshProfile, userRole } = useApp();
   const { t } = useLanguage();
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
@@ -512,12 +518,9 @@ export default function WorkspaceSettings() {
     }
   };
 
-  return (
-    <AppLayout>
-      <AppHeader title={t('workspace.title')} subtitle={t('workspace.subtitle')} />
-
-      <div className="p-6">
-        <Tabs defaultValue={defaultTab}>
+  const body = (
+    <div className={embedded ? '' : 'p-6'}>
+      <Tabs defaultValue={defaultTab}>
           <TabsList className="mb-6">
             {tabs.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id} className="gap-2">
@@ -1172,7 +1175,18 @@ export default function WorkspaceSettings() {
           )}
         </Tabs>
       </div>
+  );
 
+  return (
+    <>
+      {embedded ? (
+        body
+      ) : (
+        <AppLayout>
+          <AppHeader title={t('workspace.title')} subtitle={t('workspace.subtitle')} />
+          {body}
+        </AppLayout>
+      )}
       {workspace && canManageMembers && (
         <InviteMemberDialog
           open={inviteDialogOpen}
@@ -1181,6 +1195,6 @@ export default function WorkspaceSettings() {
           onInviteSent={() => { refetchMembers(); refetchPending(); }}
         />
       )}
-    </AppLayout>
+    </>
   );
 }
