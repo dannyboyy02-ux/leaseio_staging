@@ -180,12 +180,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const planConfig = PLANS[plan];
       const documentLimit =
         resolvedWorkspace.document_limit ?? planConfig?.maxActiveLeases ?? 15;
+      const archiveLimit =
+        (resolvedWorkspace as any).max_archived_leases
+        ?? planConfig?.maxArchivedLeases
+        ?? 50;
 
-      const { count: activeLeasesCount } = await supabase
-        .from("leases")
-        .select("id", { count: "exact", head: true })
-        .eq("workspace_id", resolvedWorkspace.id)
-        .eq("lifecycle_status", "active");
+      // Active leases now exclude archived rows so an admin archive frees a
+      // slot even if lifecycle_status is still 'active'.
+      const [activeRes, archivedRes] = await Promise.all([
+        (supabase as any)
+          .from("leases")
+          .select("id", { count: "exact", head: true })
+          .eq("workspace_id", resolvedWorkspace.id)
+          .eq("lifecycle_status", "active")
+          .eq("archived", false),
+        (supabase as any)
+          .from("leases")
+          .select("id", { count: "exact", head: true })
+          .eq("workspace_id", resolvedWorkspace.id)
+          .eq("archived", true),
+      ]);
 
       setUserRole(resolvedRole);
       setWorkspace({
@@ -194,7 +208,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ownerId: resolvedWorkspace.owner_id,
         plan,
         maxActiveLeases: documentLimit,
-        activeLeasesUsed: activeLeasesCount || 0,
+        activeLeasesUsed: activeRes.count || 0,
+        maxArchivedLeases: archiveLimit,
+        archivedLeasesUsed: archivedRes.count || 0,
         documentLimit,
         documentsUsed: resolvedWorkspace.documents_used ?? 0,
         timezone: resolvedWorkspace.timezone || profile.timezone || "America/New_York",
