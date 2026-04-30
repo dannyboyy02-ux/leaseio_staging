@@ -5,7 +5,6 @@ import {
   FileText,
   BarChart3,
   User,
-  ChevronRight,
   LogOut,
   HelpCircle,
   Lock,
@@ -16,13 +15,13 @@ import {
   Building2,
   ChevronsUpDown,
   Check,
+  Gauge,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -104,16 +103,6 @@ export function AppSidebar() {
     };
   }, [workspace?.id, userFunctionalRoles]);
 
-  const usagePercent = workspace 
-    ? (workspace.activeLeasesUsed / (workspace.maxActiveLeases === -1 ? Math.max(workspace.activeLeasesUsed,1) : workspace.maxActiveLeases)) * 100 
-    : 0;
-
-  const getUsageVariant = () => {
-    if (usagePercent >= 90) return 'destructive';
-    if (usagePercent >= 75) return 'warning';
-    return 'accent';
-  };
-
   const handleLogout = async () => {
     await signOut();
     navigate('/');
@@ -172,10 +161,6 @@ export function AppSidebar() {
       </Link>
     );
   };
-
-  const settingsHref = canAccessWorkspaceSettings(userRole)
-    ? '/app/settings/workspace'
-    : '/app/settings/account';
 
   return (
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground flex flex-col">
@@ -257,63 +242,16 @@ export function AppSidebar() {
           {/* Portfolio, Reports */}
           {bottomNavItems.map(renderNavItem)}
 
-          {/* Settings — single entry point */}
-          <Link
-            to={settingsHref}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-              location.pathname.startsWith('/app/settings')
-                ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-            )}
-          >
-            <Settings className="h-5 w-5" />
-            <span className="flex-1">Settings</span>
-          </Link>
         </div>
       </nav>
 
-      {/* Plan & Billing */}
-      <div className="px-4 py-2 border-t border-sidebar-border">
-        <Link
-          to="/app/upgrade"
-          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-        >
-          <Sparkles className="h-5 w-5" />
-          <span className="flex-1">{planLabel} Plan</span>
-          <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5">
-            {currentPlan === 'starter' ? 'Upgrade' : planLabel}
-          </Badge>
-        </Link>
-      </div>
-
-      {/* Usage Meter */}
-      <div className="px-4 py-4 border-t border-sidebar-border">
-        <div className="rounded-lg bg-sidebar-accent/50 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-sidebar-foreground/80">Active Leases</span>
-            <span className="text-xs text-sidebar-foreground/60">
-              {workspace?.activeLeasesUsed} / {workspace?.maxActiveLeases === -1 ? '\u221e' : workspace?.maxActiveLeases}
-            </span>
-          </div>
-          <Progress value={usagePercent} variant={getUsageVariant()} className="h-1.5" />
-          {usagePercent >= 75 && (
-            <Link 
-              to="/app/upgrade" 
-              className="mt-2 flex items-center gap-1 text-xs text-sidebar-primary hover:underline"
-            >
-              {t('nav.upgrade_for_more')} <ChevronRight className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
-      </div>
-
-      {/* User Menu */}
+      {/* User Menu — single bottom-left entry, Claude-style.
+          Plan & Billing, Usage, Settings, Help all live inside the dropdown. */}
       <div className="p-3 border-t border-sidebar-border">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               className="w-full justify-start gap-3 px-3 h-auto py-2 text-sidebar-foreground hover:bg-sidebar-accent"
             >
               <Avatar className="h-8 w-8">
@@ -321,7 +259,7 @@ export function AppSidebar() {
                   {safeText(displayUser.firstName)?.[0]}{safeText(displayUser.lastName)?.[0]}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1 text-left">
+              <div className="flex-1 text-left min-w-0">
                 <p className="text-sm font-medium truncate">
                   {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
                 </p>
@@ -329,24 +267,63 @@ export function AppSidebar() {
                   {safeText(workspace?.name) || safeText(displayUser.email)}
                 </p>
               </div>
-              <ChevronRight className="h-4 w-4 text-sidebar-foreground/40" />
+              <ChevronsUpDown className="h-4 w-4 text-sidebar-foreground/40 shrink-0" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" side="top" className="w-64">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium truncate">
+                  {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
+                </span>
+                <span className="text-xs text-muted-foreground truncate">
+                  {safeText(displayUser.email)}
+                </span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5">
+                    {planLabel}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground truncate">
+                    {safeText(workspace?.name)}
+                  </span>
+                </div>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/app/settings/account" className="flex items-center gap-2">
+              <Link to="/app/settings/account" className="flex items-center gap-2 cursor-pointer">
                 <User className="h-4 w-4" />
                 {t('nav.account_settings')}
               </Link>
             </DropdownMenuItem>
+            {canAccessWorkspaceSettings(userRole) && (
+              <DropdownMenuItem asChild>
+                <Link to="/app/settings/workspace" className="flex items-center gap-2 cursor-pointer">
+                  <Settings className="h-4 w-4" />
+                  {t('nav.workspace_settings')}
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem asChild>
-              <Link to="/app/support" className="flex items-center gap-2">
+              <Link to="/app/usage" className="flex items-center gap-2 cursor-pointer">
+                <Gauge className="h-4 w-4" />
+                {t('nav.usage')}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/app/upgrade" className="flex items-center gap-2 cursor-pointer">
+                <Sparkles className="h-4 w-4" />
+                {t('nav.plan_billing')}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/app/support" className="flex items-center gap-2 cursor-pointer">
                 <HelpCircle className="h-4 w-4" />
                 {t('nav.help_support')}
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
+            <DropdownMenuItem
               className="text-destructive focus:text-destructive cursor-pointer"
               onClick={handleLogout}
             >
