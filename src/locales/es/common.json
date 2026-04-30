@@ -748,8 +748,6 @@
       "insurance": "Requisitos de seguro",
       "maintenance": "Responsabilidades de mantenimiento",
       "holdover": "Permanencia tras vencimiento",
-      "assignment": "Cesión y subarriendo",
-      "guarantees": "Garantías personales",
       "estoppel_snda": "Estoppel / SNDA",
       "empty_hint": "Aún no extraído de este documento. Vuelva a ejecutar la extracción con IA para completar."
     },

@@ -748,8 +748,6 @@
       "insurance": "Insurance Requirements",
       "maintenance": "Maintenance Responsibilities",
       "holdover": "Holdover",
-      "assignment": "Assignment & Sublease",
-      "guarantees": "Personal Guarantees",
       "estoppel_snda": "Estoppel / SNDA",
       "empty_hint": "Not yet extracted from this document. Re-run AI extraction to populate."
     },

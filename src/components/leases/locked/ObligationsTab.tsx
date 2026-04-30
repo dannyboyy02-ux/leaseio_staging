@@ -17,13 +17,17 @@ interface ObligationDef {
   titleKey: string;
 }
 
+// Personal guarantees and assignment/sublease consent are intentionally NOT
+// surfaced here: both are explicit entries in the AI extraction's RISK FLAGS
+// list and always appear in the Risks tab when material. The extracted data
+// still lives on the lease (extracted_json.personal_guarantees /
+// .assignment_consent) for downstream exports and audit, but we don't render
+// it twice in the locked-lease detail view.
 const OBLIGATIONS: ObligationDef[] = [
   { key: 'permitted_use', jsonKey: 'permitted_use', titleKey: 'permitted_use' },
   { key: 'insurance', jsonKey: 'insurance_requirements', titleKey: 'insurance' },
   { key: 'maintenance', jsonKey: 'maintenance_responsibilities', titleKey: 'maintenance' },
   { key: 'holdover', jsonKey: 'holdover_terms', titleKey: 'holdover' },
-  { key: 'assignment', jsonKey: 'assignment_consent', titleKey: 'assignment' },
-  { key: 'guarantees', jsonKey: 'personal_guarantees', titleKey: 'guarantees' },
   { key: 'estoppel_snda', jsonKey: 'estoppel_snda', titleKey: 'estoppel_snda' },
 ];
 
