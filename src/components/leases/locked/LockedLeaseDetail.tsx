@@ -476,18 +476,53 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                 {risks.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">{t('locked_lease.risks.empty_hint')}</p>
                 ) : (
-                  <ul className="space-y-3">
-                    {risks.map((r) => (
-                      <li key={r.id} className="border-l-2 border-amber-400 pl-3 py-1">
-                        <p className="text-sm font-medium text-foreground">{r.title || r.risk_type}</p>
-                        {r.description && <p className="text-xs text-muted-foreground mt-0.5">{r.description}</p>}
-                        {r.severity && (
-                          <span className="inline-block mt-1 text-[10px] uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                            {r.severity}
-                          </span>
-                        )}
-                      </li>
-                    ))}
+                  <ul className="space-y-4">
+                    {risks.map((r) => {
+                      const sev = (r.severity ?? '').toLowerCase();
+                      const sevTone =
+                        sev === 'high'
+                          ? 'border-red-400 bg-red-50/40 text-red-800 dark:bg-red-950/20 dark:text-red-300'
+                          : sev === 'medium'
+                          ? 'border-amber-400 bg-amber-50/40 text-amber-800 dark:bg-amber-950/20 dark:text-amber-300'
+                          : 'border-muted bg-muted/30 text-foreground/80';
+                      const accent =
+                        sev === 'high' ? 'border-red-400' : sev === 'medium' ? 'border-amber-400' : 'border-muted-foreground/40';
+                      return (
+                        <li key={r.id} className={`border-l-2 ${accent} pl-3 py-1`}>
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-foreground">
+                              {r.title ?? t('locked_lease.risks.untitled')}
+                            </p>
+                            {r.severity && (
+                              <span
+                                className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${sevTone}`}
+                              >
+                                {r.severity}
+                              </span>
+                            )}
+                          </div>
+                          {r.explanation && (
+                            <p className="text-sm text-foreground/90 mt-1.5 whitespace-pre-line leading-relaxed">
+                              {r.explanation}
+                            </p>
+                          )}
+                          {(r.citation_page || r.citation_snippet) && (
+                            <div className="mt-2 text-xs text-muted-foreground">
+                              {r.citation_page && (
+                                <span className="font-medium">
+                                  {t('locked_lease.risks.cited_on_page', { page: r.citation_page })}
+                                </span>
+                              )}
+                              {r.citation_snippet && (
+                                <blockquote className="mt-1 pl-3 border-l-2 border-muted italic text-foreground/70">
+                                  &ldquo;{r.citation_snippet}&rdquo;
+                                </blockquote>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </SectionCard>

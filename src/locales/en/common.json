@@ -720,7 +720,9 @@
     },
     "risks": {
       "section_title": "Risks",
-      "empty_hint": "No risks recorded for this lease."
+      "empty_hint": "No risks recorded for this lease.",
+      "untitled": "Untitled risk",
+      "cited_on_page": "Cited on page {{page}}"
     },
     "documents": {
       "section_title": "Documents & Amendments"

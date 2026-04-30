@@ -720,7 +720,9 @@
     },
     "risks": {
       "section_title": "Riesgos",
-      "empty_hint": "No se registraron riesgos para este arrendamiento."
+      "empty_hint": "No se registraron riesgos para este arrendamiento.",
+      "untitled": "Riesgo sin título",
+      "cited_on_page": "Citado en la página {{page}}"
     },
     "documents": {
       "section_title": "Documentos y enmiendas"
