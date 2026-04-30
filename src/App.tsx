@@ -30,6 +30,7 @@ import ApprovalQueue from "./pages/app/ApprovalQueue";
 import FinancialReview from "./pages/app/FinancialReview";
 import ImportHistory from "./pages/app/ImportHistory";
 import Upgrade from "./pages/app/Upgrade";
+import Usage from "./pages/app/Usage";
 import NewLease from "./pages/app/NewLease";
 import ExtractionAnalytics from "./pages/app/ExtractionAnalytics";
 import AuditLog from "./pages/app/AuditLog";
@@ -215,6 +216,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <Upgrade />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/usage"
+                  element={
+                    <ProtectedRoute>
+                      <Usage />
                     </ProtectedRoute>
                   }
                 />
