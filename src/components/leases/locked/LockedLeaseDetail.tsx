@@ -563,7 +563,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                   Add Risk
                 </Button>
               </div>
-              <SectionCard title={t('locked_lease.risks.section_title')}>
+              <SectionCard title={t('locked_lease.risks.section_title')} collapsible={false}>
                 {risks.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">{t('locked_lease.risks.empty_hint')}</p>
                 ) : (
