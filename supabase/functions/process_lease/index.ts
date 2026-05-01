@@ -626,6 +626,29 @@ function mergeOpusOverrides(sonnetMerged: any, opusMerged: any, targetFields: st
   }
 }
 
+/**
+ * Privacy gate. Reads profiles.ai_processing_consent_at for the calling
+ * user; throws if null. Signup records consent automatically, so all
+ * current users have it — but a revoke flow exists in Settings → Privacy
+ * and that revoke must block subsequent extractions.
+ */
+async function assertAiConsent(userId: string): Promise<void> {
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select('ai_processing_consent_at')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) {
+    console.error('[process_lease] consent check failed:', error.message);
+    throw new Error('Could not verify AI processing consent');
+  }
+  if (!data?.ai_processing_consent_at) {
+    throw new Error(
+      'AI processing consent has not been granted. Re-enable consent in Settings → Privacy before uploading documents.'
+    );
+  }
+}
+
 async function extractLeaseDataWithClaude(pdfBase64: string, workspaceId: string | null = null): Promise<LeaseExtractionResult> {
   console.log('[Claude] Starting two-pass native-PDF extraction...');
   const extractionStart = Date.now();
@@ -1282,6 +1305,9 @@ serve(async (req) => {
       const executedPdfBase64 = arrayBufferToBase64(fileBytes);
       console.log('[process_lease] Executed: PDF encoded for native extraction');
 
+      // Privacy gate before invoking AI extraction.
+      await assertAiConsent(user.id);
+
       let leaseData: LeaseExtractionResult;
       try {
         leaseData = await extractLeaseDataWithClaude(executedPdfBase64, existingLease.workspace_id ?? null);
@@ -1523,6 +1549,9 @@ serve(async (req) => {
 
     const pdfBase64 = arrayBufferToBase64(fileBytes);
     console.log('[process_lease] PDF encoded for native Claude extraction');
+
+    // Privacy gate before invoking AI extraction.
+    await assertAiConsent(user.id);
 
     let leaseData: LeaseExtractionResult;
     try {

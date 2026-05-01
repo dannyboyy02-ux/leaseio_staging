@@ -1,7 +1,14 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Public endpoint — CORS open to all origins
+// INTENTIONAL CORS DIVERGENCE FROM _shared/cors.ts:
+// This is a public, token-protected endpoint that vendors and external
+// finance reviewers access from arbitrary origins (their own webmail, a
+// CFO's iPad browser, etc). The shared helper restricts to a workspace
+// allowlist and would break the public-summary use case. Authentication
+// is enforced via the unguessable `summary_share_token` query param +
+// 30-day expiry + revocability (see line 56), NOT via origin restriction.
+// Do NOT replace this with `getCorsHeaders` from `_shared/cors.ts`.
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
