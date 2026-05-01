@@ -4,6 +4,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { findHighlightSpansForItems, type MatchSpan as SharedMatchSpan } from './pdfHighlightMatcher';
 
 // Use the bundled worker from the installed package
@@ -23,6 +24,12 @@ interface PdfViewerProps {
    *  limited liability company`). Tried FIRST so the highlight tightly hugs
    *  the abstracted words instead of the surrounding boilerplate. */
   targetValue?: string;
+  /** When true, the viewer enters "capture mode" — a floating button appears
+   *  whenever the user has selected text on the rendered page. Click → fires
+   *  `onCaptureSelection(currentPage, selectedText)` so the parent can
+   *  attach the selection to a user-added risk citation. */
+  captureMode?: boolean;
+  onCaptureSelection?: (page: number, text: string) => void;
 }
 
 function escapeHtml(s: string): string {
@@ -162,7 +169,7 @@ function isMetaSummary(s: string): boolean {
   );
 }
 
-export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: PdfViewerProps) {
+export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captureMode, onCaptureSelection }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
@@ -213,6 +220,45 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
   // and there's no single phrase to highlight. Drives the toolbar pill.
   const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'found' | 'not-found' | 'spans-sections'>('idle');
   const pageRef = useRef<any>(null);
+  // Capture-mode state: tracks the latest non-empty selection within the
+  // viewer container so a floating action button can render at the right
+  // edge of the toolbar.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pendingSelectionText, setPendingSelectionText] = useState<string>('');
+
+  // Selection listener — only active when captureMode is on.
+  useEffect(() => {
+    if (!captureMode) {
+      setPendingSelectionText('');
+      return;
+    }
+    const handler = () => {
+      const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        setPendingSelectionText('');
+        return;
+      }
+      // Only treat the selection as "live" if it actually intersects the
+      // viewer's text layer — not selections made elsewhere in the page.
+      const range = sel.getRangeAt(0);
+      const container = containerRef.current;
+      if (container && container.contains(range.commonAncestorContainer)) {
+        const text = sel.toString().trim();
+        setPendingSelectionText(text.length >= 3 ? text : '');
+      } else {
+        setPendingSelectionText('');
+      }
+    };
+    document.addEventListener('selectionchange', handler);
+    return () => document.removeEventListener('selectionchange', handler);
+  }, [captureMode]);
+
+  const confirmCapture = () => {
+    if (!pendingSelectionText || !onCaptureSelection) return;
+    onCaptureSelection(currentPage, pendingSelectionText);
+    setPendingSelectionText('');
+    if (typeof window !== 'undefined') window.getSelection()?.removeAllRanges();
+  };
 
   /**
    * Load a single page's text-content items (cached). Returns null on failure.
@@ -367,7 +413,21 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div ref={containerRef} className={cn('flex flex-col h-full', captureMode && 'ring-2 ring-amber-400/60 rounded')}>
+      {captureMode && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 shrink-0">
+          <span>Selection mode — highlight a clause in the PDF, then click <strong>Use selection</strong>.</span>
+          <Button
+            size="sm"
+            variant="default"
+            className="h-6 text-[11px] bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50"
+            disabled={!pendingSelectionText}
+            onClick={confirmCapture}
+          >
+            Use selection
+          </Button>
+        </div>
+      )}
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b bg-background shrink-0">
         <div className="flex items-center gap-1">

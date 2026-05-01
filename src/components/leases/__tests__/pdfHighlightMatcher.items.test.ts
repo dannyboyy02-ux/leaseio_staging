@@ -277,6 +277,38 @@ describe('findHighlightSpansForItems — pdfjs item fixtures', () => {
     expect(r.kind).toBe('no-candidates');
   });
 
+  it('user-typed citation snippet locates exactly in the page text layer', () => {
+    // Mirrors the "+ Risk → type citation" flow: a user-supplied snippet
+    // should match in PDF the same way as an AI-extracted citation_snippet.
+    const items: Item[] = [
+      {
+        str:
+          'Mileage overage above 12,000 miles per year shall be charged at thirty-five cents ($0.35) per excess mile.',
+      },
+    ];
+    const userTyped =
+      'Mileage overage above 12,000 miles per year shall be charged at thirty-five cents ($0.35) per excess mile.';
+    const r = findHighlightSpansForItems(items, [undefined as unknown as string, userTyped]);
+    expect(r.kind).toBe('exact-text');
+    const text = reconstructHighlight(items, r.spans);
+    expect(text).toContain('Mileage overage');
+    expect(text).toContain('per excess mile');
+  });
+
+  it('user-captured selection (highlight-in-PDF flow) round-trips exactly', () => {
+    // The capture flow grabs window.getSelection().toString() then the next
+    // render calls findHighlightSpansForItems with the exact captured string.
+    const items: Item[] = [
+      { str: 'Section 6.2(g). Hazardous Substance Condition Termination Right.' },
+      { str: 'Lessor may terminate this Lease on 60 days notice if the cost of remediation exceeds twelve months Base Rent.' },
+    ];
+    // User selected this text via window.getSelection() in the PdfViewer:
+    const captured = 'Lessor may terminate this Lease on 60 days notice if the cost of remediation exceeds twelve months Base Rent.';
+    const r = findHighlightSpansForItems(items, [undefined as unknown as string, captured]);
+    expect(r.kind).toBe('exact-text');
+    expect(r.spans.find((s) => s.itemIndex === 1)).toBeDefined();
+  });
+
   it('AIR CRE ligature glyphs (Ɵ Ʃ Ō ﬁ): "addiƟonal" / "wriƩen" / "iniƟal" still match', () => {
     // Real page-3 text from the test lease: PDF font CMap encodes "ti", "tt",
     // "ft", "fi" ligatures as single Unicode codepoints. Without the glyph map

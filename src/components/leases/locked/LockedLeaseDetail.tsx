@@ -3,7 +3,8 @@ import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, X } from 'lucide-react';
+import { ChevronDown, X, Plus } from 'lucide-react';
+import { AddRiskDialog, type PendingCitation } from '@/components/leases/AddRiskDialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -220,6 +221,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
   const [dismissTarget, setDismissTarget] = useState<any | null>(null);
   const [dismissReason, setDismissReason] = useState<string>('');
   const [dismissing, setDismissing] = useState<boolean>(false);
+  const [addRiskOpen, setAddRiskOpen] = useState<boolean>(false);
 
   const refetchRisks = useCallback(async () => {
     if (!lease?.id) return;
@@ -549,6 +551,17 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
             </TabsContent>
 
             <TabsContent value="risks" className="space-y-4 mt-0">
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => setAddRiskOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Risk
+                </Button>
+              </div>
               <SectionCard title={t('locked_lease.risks.section_title')}>
                 {risks.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">{t('locked_lease.risks.empty_hint')}</p>
@@ -690,6 +703,25 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Add Risk dialog. The locked detail view doesn't render an inline
+          PdfViewer, so the "Highlight in PDF" capture flow is unavailable —
+          users type the citation directly. */}
+      {lease?.id && (
+        <AddRiskDialog
+          open={addRiskOpen}
+          onOpenChange={setAddRiskOpen}
+          leaseId={lease.id}
+          workspaceId={lease.workspace_id ?? null}
+          captureActive={false}
+          pendingCapture={null}
+          clearPendingCapture={() => {}}
+          onRequestCapture={() => {
+            toast.info('Open the lease workbench to highlight a clause in the PDF.');
+          }}
+          onRiskAdded={refetchRisks}
+        />
+      )}
     </AppLayout>
   );
 }

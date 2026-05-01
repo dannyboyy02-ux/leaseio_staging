@@ -21,6 +21,7 @@ import {
   Pencil,
   Unlock,
   Lock,
+  Plus,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -48,6 +49,7 @@ import { isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStat
 import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
 import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
 import { SectionCard, RisksSection, SECTION_CONFIG, getFieldConfidence, type SectionKey } from "@/components/leases/LeaseReviewSections";
+import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRiskDialog";
 import { LeaseExports } from "@/components/leases/LeaseExports";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
@@ -140,6 +142,9 @@ export default function LeaseReview() {
   
   const [lease, setLease] = useState<any | null>(null);
   const [risks, setRisks] = useState<Risk[]>([]);
+  const [addRiskOpen, setAddRiskOpen] = useState<boolean>(false);
+  const [pdfCaptureMode, setPdfCaptureMode] = useState<boolean>(false);
+  const [pendingCapture, setPendingCapture] = useState<PendingCitation | null>(null);
   const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2283,7 +2288,17 @@ export default function LeaseReview() {
                         <ChevronLeft size={16} />
                       </Button>
                     </div>
-                    <PdfViewer url={pdfUrl} targetPage={targetPage} targetHighlight={targetHighlight} targetValue={targetValue} />
+                    <PdfViewer
+                      url={pdfUrl}
+                      targetPage={targetPage}
+                      targetHighlight={targetHighlight}
+                      targetValue={targetValue}
+                      captureMode={pdfCaptureMode}
+                      onCaptureSelection={(page, text) => {
+                        setPendingCapture({ page, text });
+                        setPdfCaptureMode(false);
+                      }}
+                    />
                   </div>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="bg-border w-1 hover:bg-primary transition-colors" />
@@ -2661,7 +2676,18 @@ export default function LeaseReview() {
                       </TabsContent>
 
                       {/* Risks */}
-                      <TabsContent value="risks" className="mt-0">
+                      <TabsContent value="risks" className="mt-0 space-y-2">
+                        <div className="flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                            onClick={() => setAddRiskOpen(true)}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add Risk
+                          </Button>
+                        </div>
                         <RisksSection
                           risks={risks}
                           onJumpToPage={jumpToPage}
@@ -2856,6 +2882,32 @@ export default function LeaseReview() {
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Add Risk dialog — coordinates with PdfViewer's capture mode for the
+          "Highlight in PDF" citation flow. */}
+      {lease?.id && (
+        <AddRiskDialog
+          open={addRiskOpen}
+          onOpenChange={(open) => {
+            setAddRiskOpen(open);
+            if (!open) setPdfCaptureMode(false);
+          }}
+          leaseId={lease.id}
+          workspaceId={lease.workspace_id ?? null}
+          captureActive={pdfCaptureMode}
+          pendingCapture={pendingCapture}
+          clearPendingCapture={() => setPendingCapture(null)}
+          onRequestCapture={() => setPdfCaptureMode(true)}
+          onRiskAdded={async () => {
+            const { data } = await supabase
+              .from('risks')
+              .select('*')
+              .eq('lease_id', leaseId)
+              .is('dismissed_at', null);
+            setRisks((data ?? []) as Risk[]);
+          }}
+        />
+      )}
     </AppLayout>
   );
 }
