@@ -272,7 +272,14 @@ export function SectionCard({
           const value = form[field.id] || '';
           const FieldIcon = field.icon;
           const isReadOnly = isLocked || !isEditing;
-          const locateInPdf = () => onJumpToPage(fieldPage, fieldSourceText, value || undefined);
+          // Always use the AI's ORIGINAL extracted value as the primary
+          // match target — never the form value, which the user may have
+          // edited away from what's actually in the PDF.
+          const fieldExtractedValueRaw = extractedJson?.[field.id]?.value;
+          const fieldExtractedValue = typeof fieldExtractedValueRaw === 'string' && fieldExtractedValueRaw.trim().length > 0
+            ? fieldExtractedValueRaw
+            : undefined;
+          const locateInPdf = () => onJumpToPage(fieldPage, fieldSourceText, fieldExtractedValue);
           // Clicking/focusing the field also locates the source text in the PDF.
           const handleFieldFocus = () => {
             onFieldFocus(field.id);
@@ -300,14 +307,14 @@ export function SectionCard({
                   locateInPdf();
                 }}
                 onMouseDown={(e) => e.preventDefault()}
-                title="AI extracted — click to highlight in source"
+                title={`AI extracted (page ${fieldPage}) — click to highlight source`}
                 className={cn(
-                  "absolute z-10 inline-flex items-center justify-center h-5 w-5 rounded-full",
+                  "absolute z-20 inline-flex items-center justify-center h-5 w-5 rounded-full",
                   "bg-[#CC785C]/10 text-[#CC785C] hover:bg-[#CC785C]/20 transition-colors",
                   field.type === 'textarea' ? 'right-2 top-2' : 'right-2 top-1/2 -translate-y-1/2'
                 )}
               >
-                <Sparkles size={12} className="fill-[#CC785C]/40" />
+                <Sparkles size={12} className="fill-[#CC785C]" />
               </button>
             ) : null;
 

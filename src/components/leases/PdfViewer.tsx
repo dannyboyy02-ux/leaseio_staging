@@ -29,12 +29,29 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * Normalize a string for substring matching: collapse whitespace, lowercase,
- * strip punctuation. Used to find the source phrase inside the page's
- * concatenated text without being thrown off by curly quotes / hyphenation.
+ * Normalize a single character for matching: lowercase, treat any non-letter,
+ * non-number char as a "word break" (returned as a single space). Returning
+ * '' would make the per-char index map ambiguous, so we always return one char.
+ */
+function normalizeChar(c: string): string {
+  const lower = c.toLowerCase();
+  if (/[\p{L}\p{N}]/u.test(lower)) return lower;
+  return ' ';
+}
+
+/**
+ * Normalize a whole string the same way `normalizeChar` does, char-by-char.
+ * Used for normalizing the user's target phrase before searching. Note: the
+ * resulting string may contain runs of spaces; the matcher uses `indexOf` on
+ * the same-style normalized haystack, so the runs cancel out as long as we
+ * don't collapse them on either side.
  */
 function normalizeForMatch(s: string): string {
-  return s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  let out = '';
+  for (const c of s) out += normalizeChar(c);
+  // Collapse runs of spaces to single spaces and trim — the haystack is built
+  // the same way, so both sides match.
+  return out.replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -75,7 +92,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
     setNumPages(0);
     setError(null);
     pageRef.current = null;
-    setMatchRange(null);
+    setMatchSpans(null);
   }, [url]);
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
@@ -91,11 +108,11 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
   const prevPage = () => setCurrentPage(p => Math.max(1, p - 1));
   const nextPage = () => setCurrentPage(p => Math.min(numPages, p + 1));
 
-  // Item-index range that overlaps the matched source phrase. Recomputed
-  // whenever the loaded page changes OR targetHighlight changes — clicking a
-  // different field on the same page must re-highlight, but the page itself
-  // doesn't remount, so we can't rely on onPageLoadSuccess alone.
-  const [matchRange, setMatchRange] = useState<{ start: number; end: number } | null>(null);
+  // Per-pdfjs-text-item character spans that the matcher wants highlighted.
+  // Char-level so the <mark> hugs the matched substring exactly, even when a
+  // pdfjs item contains a long line of which only a few words match.
+  type MatchSpan = { itemIndex: number; charStart: number; charEnd: number };
+  const [matchSpans, setMatchSpans] = useState<MatchSpan[] | null>(null);
   // 'searching' = waiting for page to load, 'found' = highlight rendered,
   // 'not-found' = phrase not located in this page's text layer. Drives the
   // small status pill so the user understands why a click did nothing.
@@ -104,16 +121,20 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
 
   /**
    * Try to locate one of the candidate phrases in the page's text layer.
-   * Candidates are tried in order — the first one with a non-empty exact
-   * match wins. Falls back to the longest substring of the LAST candidate
-   * (typically the broader source_text context) if no exact match found.
+   * Candidates tried in order — the first one with an exact match wins.
+   * Falls back to the longest substring of source_text only if it's long
+   * enough to be unique-ish (avoids highlighting random "limited liability"
+   * matches scattered across the page).
+   *
+   * Returns per-item character spans so the <mark> hugs matched chars
+   * within an item rather than wrapping the whole item.
    */
   const computeMatchRange = useCallback(
     async (page: any, candidates: Array<string | undefined>) => {
       if (!page) return;
       const cleaned = candidates.filter((c): c is string => typeof c === 'string' && c.trim().length > 0);
       if (cleaned.length === 0) {
-        setMatchRange(null);
+        setMatchSpans(null);
         setMatchStatus('idle');
         return;
       }
@@ -122,33 +143,63 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
         const textContent = await page.getTextContent();
         const items: Array<{ str: string }> = textContent?.items ?? [];
         if (items.length === 0) {
-          setMatchRange(null);
+          setMatchSpans(null);
           setMatchStatus('not-found');
           return;
         }
 
-        // Build a normalized concatenated string with per-item char ranges.
+        // Build a normalized concatenated string. For each char in the
+        // normalized output, store (itemIndex, originalCharIndex) so once
+        // we know the normalized [pos, end) of a match we can map back to
+        // exact char offsets within each pdfjs item's original `str`.
         let combined = '';
-        const itemRanges: Array<{ start: number; end: number }> = [];
-        for (const item of items) {
-          const piece = normalizeForMatch(item.str ?? '');
-          const start = combined.length;
-          const fragment = piece.length > 0 ? piece + ' ' : ' ';
-          combined += fragment;
-          itemRanges.push({ start, end: start + piece.length });
-        }
+        const charOriginItem: number[] = []; // length = combined.length
+        const charOriginIndex: number[] = []; // length = combined.length
 
-        const mapPosToItems = (pos: number, len: number) => {
-          const matchEnd = pos + len;
-          let startIdx = -1;
-          let endIdx = -1;
-          for (let i = 0; i < itemRanges.length; i++) {
-            const r = itemRanges[i];
-            if (r.end <= pos || r.start >= matchEnd) continue;
-            if (startIdx === -1) startIdx = i;
-            endIdx = i;
+        for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+          const original = items[itemIdx].str ?? '';
+          let lastWasSpace = combined.endsWith(' ') || combined.length === 0;
+          for (let ci = 0; ci < original.length; ci++) {
+            const norm = normalizeChar(original[ci]);
+            // Skip duplicate spaces — keep the haystack collapse-equivalent
+            // to normalizeForMatch on the target side.
+            if (norm === ' ' && lastWasSpace) continue;
+            combined += norm;
+            charOriginItem.push(itemIdx);
+            charOriginIndex.push(ci);
+            lastWasSpace = norm === ' ';
           }
-          return startIdx === -1 ? null : { start: startIdx, end: endIdx };
+          // Insert an inter-item boundary space so adjacent items don't fuse.
+          if (!lastWasSpace) {
+            combined += ' ';
+            charOriginItem.push(-1); // boundary, not part of any item
+            charOriginIndex.push(-1);
+          }
+        }
+        // Trim trailing space for cleanliness; but we don't need to mutate
+        // the parallel arrays since we never index past combined.length.
+
+        /** Translate a normalized [pos, end) range to per-item MatchSpans. */
+        const buildSpans = (pos: number, end: number): MatchSpan[] | null => {
+          if (pos < 0 || end <= pos || end > combined.length) return null;
+          const byItem = new Map<number, { min: number; max: number }>();
+          for (let i = pos; i < end; i++) {
+            const item = charOriginItem[i];
+            const orig = charOriginIndex[i];
+            if (item < 0) continue;
+            const cur = byItem.get(item);
+            if (!cur) byItem.set(item, { min: orig, max: orig });
+            else {
+              if (orig < cur.min) cur.min = orig;
+              if (orig > cur.max) cur.max = orig;
+            }
+          }
+          if (byItem.size === 0) return null;
+          const out: MatchSpan[] = [];
+          byItem.forEach((range, itemIndex) => {
+            out.push({ itemIndex, charStart: range.min, charEnd: range.max + 1 });
+          });
+          return out;
         };
 
         // Try each candidate in order: exact match first.
@@ -157,34 +208,36 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
           if (normalized.length < 3) continue;
           const pos = combined.indexOf(normalized);
           if (pos !== -1) {
-            const range = mapPosToItems(pos, normalized.length);
-            if (range) {
-              setMatchRange(range);
+            const spans = buildSpans(pos, pos + normalized.length);
+            if (spans) {
+              setMatchSpans(spans);
               setMatchStatus('found');
               return;
             }
           }
         }
 
-        // Fallback: longest-substring match on the LAST candidate (the
-        // broader source_text context — value usually doesn't have enough
-        // surrounding text to give a good fallback).
-        const fallbackTarget = normalizeForMatch(cleaned[cleaned.length - 1]);
-        const longest = findLongestPhrase(combined, fallbackTarget, 8);
+        // Strict fallback: longest-substring match on source_text (last
+        // candidate), but only if the matched substring is long enough that
+        // false positives are unlikely.
+        const fallbackSrc = cleaned[cleaned.length - 1];
+        const fallbackTarget = normalizeForMatch(fallbackSrc);
+        const minFallbackLen = Math.max(20, Math.floor(fallbackTarget.length * 0.5));
+        const longest = findLongestPhrase(combined, fallbackTarget, minFallbackLen);
         if (longest) {
-          const range = mapPosToItems(longest.start, longest.end - longest.start);
-          if (range) {
-            setMatchRange(range);
+          const spans = buildSpans(longest.start, longest.end);
+          if (spans) {
+            setMatchSpans(spans);
             setMatchStatus('found');
             return;
           }
         }
 
-        setMatchRange(null);
+        setMatchSpans(null);
         setMatchStatus('not-found');
       } catch (err) {
         console.error('[PdfViewer] Failed to compute highlight range:', err);
-        setMatchRange(null);
+        setMatchSpans(null);
         setMatchStatus('not-found');
       }
     },
@@ -209,11 +262,17 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
 
   const customTextRenderer = useCallback(
     ({ str, itemIndex }: { str: string; itemIndex: number }) => {
-      if (!matchRange || str === '') return escapeHtml(str);
-      if (itemIndex < matchRange.start || itemIndex > matchRange.end) return escapeHtml(str);
-      return `<mark class="ai-source-highlight">${escapeHtml(str)}</mark>`;
+      if (!matchSpans || str === '') return escapeHtml(str);
+      const span = matchSpans.find((s) => s.itemIndex === itemIndex);
+      if (!span) return escapeHtml(str);
+      const safeStart = Math.max(0, Math.min(span.charStart, str.length));
+      const safeEnd = Math.max(safeStart, Math.min(span.charEnd, str.length));
+      const before = str.slice(0, safeStart);
+      const hit = str.slice(safeStart, safeEnd);
+      const after = str.slice(safeEnd);
+      return `${escapeHtml(before)}<mark class="ai-source-highlight">${escapeHtml(hit)}</mark>${escapeHtml(after)}`;
     },
-    [matchRange]
+    [matchSpans]
   );
   const zoomIn  = () => setScale(s => Math.min(2.5, parseFloat((s + 0.2).toFixed(1))));
   const zoomOut = () => setScale(s => Math.max(0.5, parseFloat((s - 0.2).toFixed(1))));
