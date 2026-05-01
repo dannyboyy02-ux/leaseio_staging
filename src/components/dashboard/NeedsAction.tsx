@@ -31,7 +31,7 @@ export function NeedsAction() {
   const totalCount = pendingApprovals.length + returnedLeases.length + otherFlags.filter((f) => f.count > 0).length + unlockedLeases.length;
 
   return (
-    <Card className="border-l-4 border-l-orange-400">
+    <Card className="border-l-4 border-l-orange-400 h-full">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">

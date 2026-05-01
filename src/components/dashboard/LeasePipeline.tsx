@@ -129,7 +129,7 @@ export function LeasePipeline() {
     .reduce((sum, s) => sum + s.count, 0);
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
