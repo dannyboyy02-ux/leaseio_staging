@@ -380,6 +380,16 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
 
   const customTextRenderer = useCallback(
     ({ str, itemIndex }: { str: string; itemIndex: number }) => {
+      // In capture mode, render plain text — suppress any existing AI-source
+      // highlight (matchSpans from a previous Sparkles click). Otherwise the
+      // user enters "Highlight in PDF" with a yellow mark already painted on
+      // the page, which (a) confuses the intent of the new selection and
+      // (b) makes it visually unclear that drag-select is available.
+      // Suppressing in the renderer (vs clearing matchSpans state) avoids
+      // remounting the Page (which would happen if we cleared targetValue/
+      // targetHighlight via the Page key) and therefore preserves the user's
+      // in-flight text selection across re-renders.
+      if (captureMode) return escapeHtml(str);
       if (!matchSpans || str === '') return escapeHtml(str);
       const span = matchSpans.find((s) => s.itemIndex === itemIndex);
       if (!span) return escapeHtml(str);
@@ -390,7 +400,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
       const after = str.slice(safeEnd);
       return `${escapeHtml(before)}<mark class="ai-source-highlight">${escapeHtml(hit)}</mark>${escapeHtml(after)}`;
     },
-    [matchSpans]
+    [matchSpans, captureMode]
   );
   const zoomIn  = () => setScale(s => Math.min(2.5, parseFloat((s + 0.2).toFixed(1))));
   const zoomOut = () => setScale(s => Math.max(0.5, parseFloat((s - 0.2).toFixed(1))));
