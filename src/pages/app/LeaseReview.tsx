@@ -2900,7 +2900,7 @@ export default function LeaseReview() {
                 {adminCanSelfApprove && (
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
                     <p><strong className="text-foreground">Apply</strong> — changes take effect immediately. Recorded as self-approved by admin role.</p>
-                    <p><strong className="text-foreground">Send to approver</strong> — another admin reviews. Lease re-locks while pending.</p>
+                    <p><strong className="text-foreground">Request Approval</strong> — another admin reviews. Lease re-locks while pending.</p>
                   </div>
                 )}
                 <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
@@ -2921,10 +2921,10 @@ export default function LeaseReview() {
                           setLockConfirmDialogOpen(false);
                         }}
                         disabled={submittingChanges}
-                        title="Route the changes through another admin for approval"
+                        title="Request approval from another admin"
                         className="sm:w-auto w-full whitespace-nowrap"
                       >
-                        Send to approver
+                        Request Approval
                       </Button>
                       <Button
                         className="bg-success hover:bg-success/90 text-white sm:w-auto w-full whitespace-nowrap"
