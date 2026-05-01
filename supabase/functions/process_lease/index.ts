@@ -626,7 +626,7 @@ function mergeOpusOverrides(sonnetMerged: any, opusMerged: any, targetFields: st
   }
 }
 
-async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtractionResult> {
+async function extractLeaseDataWithClaude(pdfBase64: string, workspaceId: string | null = null): Promise<LeaseExtractionResult> {
   console.log('[Claude] Starting two-pass native-PDF extraction...');
   const extractionStart = Date.now();
 
@@ -641,13 +641,34 @@ async function extractLeaseDataWithClaude(pdfBase64: string): Promise<LeaseExtra
   const allPages = [...new Set([...groupA, ...groupB, ...groupC])].sort((a, b) => a - b);
   const focusHint = allPages.length > 0 ? ` Key pages identified: ${allPages.join(', ')}.` : '';
 
+  // Workspace-specific "risk watchlist" — risks the team has flagged as
+  // relevant on prior leases get appended to the user prompt so Opus
+  // explicitly checks for them in this lease.
+  let watchlistHint = '';
+  if (workspaceId) {
+    try {
+      const { data: tmpls } = await supabaseAdmin
+        .from('risk_templates')
+        .select('title, severity, default_explanation, asset_type')
+        .eq('workspace_id', workspaceId)
+        .eq('is_system', false);
+      if (tmpls && tmpls.length > 0) {
+        const lines = tmpls.map((t: any) => `  - [${t.severity}] ${t.title}: ${t.default_explanation}`).join('\n');
+        watchlistHint = `\n\nWORKSPACE RISK WATCHLIST — these patterns are explicitly flagged by this team and MUST be checked against this lease. If you find a clause matching any of them, include it in the risks array using the watchlist title verbatim and the supporting source quote:\n${lines}`;
+        console.log(`[Claude] Injecting ${tmpls.length} workspace watchlist templates`);
+      }
+    } catch (err) {
+      console.warn('[Claude] Could not fetch workspace risk_templates (continuing without):', (err as Error).message);
+    }
+  }
+
   // Pass 2: Opus extraction — single combined call, sends PDF once
   console.log('[Claude] Sending Opus extraction call...');
   const rawCombined = await callAnthropicAPIWithPDF(
     'claude-opus-4-6',
     COMBINED_SYSTEM,
     pdfBase64,
-    `Extract all lease terms, clauses, and risks from this document.${focusHint}`,
+    `Extract all lease terms, clauses, and risks from this document.${focusHint}${watchlistHint}`,
     4096,
     100_000,
   );
@@ -1263,7 +1284,7 @@ serve(async (req) => {
 
       let leaseData: LeaseExtractionResult;
       try {
-        leaseData = await extractLeaseDataWithClaude(executedPdfBase64);
+        leaseData = await extractLeaseDataWithClaude(executedPdfBase64, existingLease.workspace_id ?? null);
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Executed AI extraction failed: ${msg}`);
@@ -1505,7 +1526,7 @@ serve(async (req) => {
 
     let leaseData: LeaseExtractionResult;
     try {
-      leaseData = await extractLeaseDataWithClaude(pdfBase64);
+      leaseData = await extractLeaseDataWithClaude(pdfBase64, resolvedWorkspaceId ?? null);
       console.log('[process_lease] Lease data extracted successfully');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

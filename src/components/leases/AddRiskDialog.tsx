@@ -105,6 +105,11 @@ export function AddRiskDialog({
   const [citationSnippet, setCitationSnippet] = useState('');
   const [citationPage, setCitationPage] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  // When the user creates a CUSTOM risk, they can opt in to "watch for this
+  // pattern on future abstractions" — that promotes the title/severity/
+  // explanation into a workspace-scoped row in risk_templates so future
+  // process_lease runs in this workspace include it as a "must check" risk.
+  const [saveAsWatchTemplate, setSaveAsWatchTemplate] = useState<boolean>(false);
 
   // Reset form when dialog opens.
   useEffect(() => {
@@ -117,6 +122,7 @@ export function AddRiskDialog({
       setExplanation('');
       setCitationSnippet('');
       setCitationPage('');
+      setSaveAsWatchTemplate(false);
     }
   }, [open]);
 
@@ -197,9 +203,37 @@ export function AddRiskDialog({
         created_by: userId,
         risk_template_id: tab === 'template' ? pickedTemplateId : null,
       };
+      // If user opted in, promote the custom risk to a workspace template
+      // BEFORE inserting the risk row, so we can FK-link them.
+      let promotedTemplateId: string | null = null;
+      if (tab === 'custom' && saveAsWatchTemplate && workspaceId) {
+        const { data: tmplRow, error: tmplErr } = await (supabase as any)
+          .from('risk_templates')
+          .insert({
+            workspace_id: workspaceId,
+            is_system: false,
+            title: title.trim(),
+            severity,
+            default_explanation: explanation.trim(),
+            created_by: userId,
+          })
+          .select('id')
+          .single();
+        if (tmplErr) {
+          console.warn('[AddRiskDialog] could not save as template (continuing without):', tmplErr.message);
+        } else {
+          promotedTemplateId = tmplRow?.id ?? null;
+        }
+      }
+
+      const finalPayload = {
+        ...insertPayload,
+        risk_template_id: promotedTemplateId ?? insertPayload.risk_template_id,
+      };
+
       const { data: inserted, error: insertError } = await (supabase as any)
         .from('risks')
-        .insert(insertPayload)
+        .insert(finalPayload)
         .select('id')
         .single();
       if (insertError) throw insertError;
@@ -214,7 +248,8 @@ export function AddRiskDialog({
           severity,
           citation_page: pageNum,
           source: tab === 'template' ? 'template' : 'custom',
-          template_id: tab === 'template' ? pickedTemplateId : null,
+          template_id: tab === 'template' ? pickedTemplateId : promotedTemplateId,
+          promoted_to_template: !!promotedTemplateId,
         },
       });
       toast.success(`Added risk: ${title.trim()}`);
@@ -232,17 +267,22 @@ export function AddRiskDialog({
     <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
       <DialogContent
         className={cn(
-          'sm:max-w-[640px]',
+          // Fit within viewport: cap height at 90vh, scroll the body, keep
+          // header + footer anchored. Width caps so it stops growing on
+          // wide screens.
+          'sm:max-w-[640px] max-h-[90vh] flex flex-col p-0 gap-0',
           captureActive && 'opacity-50 pointer-events-none transition-opacity'
         )}
       >
-        <DialogHeader>
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Add a risk to this lease</DialogTitle>
           <DialogDescription>
             Pick a predefined risk or write your own. Cite the supporting clause so it shows up
             with a (Page N) link and Sparkles highlight just like AI-extracted risks.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-6 pt-2 pb-2 space-y-3">
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'template' | 'custom')}>
           <TabsList className="grid grid-cols-2 mb-2">
@@ -319,6 +359,30 @@ export function AddRiskDialog({
           </TabsContent>
         </Tabs>
 
+        {/* Watch-template opt-in — only meaningful for custom risks. When
+            the user picks an existing template the row is already in
+            risk_templates so this checkbox is hidden. */}
+        {tab === 'custom' && workspaceId && (
+          <div className="border rounded-md bg-muted/30 p-3 space-y-1.5">
+            <label className="flex items-start gap-2 cursor-pointer text-sm">
+              <input
+                type="checkbox"
+                checked={saveAsWatchTemplate}
+                onChange={(e) => setSaveAsWatchTemplate(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-primary cursor-pointer"
+              />
+              <span className="flex-1">
+                <span className="font-medium">Watch for this risk in future abstractions</span>
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  Saves this title, severity, and explanation as a workspace template. The AI will
+                  flag it on future leases in this workspace if it spots a matching clause.
+                  Manage templates in <span className="underline">Settings → Workspace → Risk Watchlist</span>.
+                </span>
+              </span>
+            </label>
+          </div>
+        )}
+
         <div className="space-y-3">
           <div className="grid gap-1.5">
             <Label htmlFor="risk-title">Title</Label>
@@ -390,7 +454,9 @@ export function AddRiskDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>

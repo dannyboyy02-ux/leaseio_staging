@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { RiskWatchlistManager } from '@/components/workspace/RiskWatchlistManager';
 import {
   Select,
   SelectContent,
@@ -165,6 +166,7 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
     { id: 'notifications', label: 'Notifications',    icon: Bell,       visible: canAccessDefaults },
     { id: 'financial',     label: 'Financial',        icon: TrendingUp, visible: canAccessDefaults },
     { id: 'lease_config',  label: 'Lease Configuration', icon: Settings2, visible: isAdmin },
+    { id: 'risk_watchlist',label: 'Risk Watchlist',   icon: AlertTriangle, visible: canEdit },
     { id: 'onboarding',    label: 'Onboarding',       icon: Package,    visible: isAdmin },
   ].filter((tab) => tab.visible);
 
@@ -1135,6 +1137,14 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
                   </Card>
                 );
               })}
+            </TabsContent>
+          )}
+
+          {/* Risk Watchlist — workspace-scoped templates the AI uses on every
+              future abstraction. Visible to anyone with edit permission. */}
+          {canEdit && workspace?.id && (
+            <TabsContent value="risk_watchlist" className="space-y-6">
+              <RiskWatchlistManager workspaceId={workspace.id} />
             </TabsContent>
           )}
 
