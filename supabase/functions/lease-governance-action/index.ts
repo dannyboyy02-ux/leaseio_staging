@@ -13,14 +13,60 @@ function jsonResponse(payload: unknown, status: number, origin: string | null) {
   });
 }
 
+// Maps the workbench field id (matches SECTION_CONFIG[*].fields[*].id) to
+// the lease column it writes to on apply. CRITICAL: every editable field
+// MUST be in this map. Items whose field_name isn't a key are SILENTLY
+// SKIPPED on apply — that's the bug class that lost asset_type edits and
+// caused the Portfolio to render stale values.
+//
+// The 'executed_*' entries (tenant_name, landlord_name, commencement_date,
+// expiry_date, monthly_payment, rent_review_clause, break_clause) are
+// pre-existing variance-tracking columns used when the workbench is in
+// "executed terms review" mode; they're not the live lease columns.
+// We keep them BUT also add direct-column mappings for the same fields,
+// keyed differently. The two paths don't conflict because field_name in
+// lease_change_set_items is set by the workbench section card and
+// uniquely identifies the source.
 const FIELD_TO_COLUMN: Record<string, string> = {
-  tenant_name: "executed_tenant_name",
-  landlord_name: "executed_landlord_name",
+  // --- Pre-existing executed-terms variance columns (kept for back-compat) ---
   commencement_date: "executed_commencement_date",
   expiry_date: "executed_expiry_date",
   monthly_payment: "executed_monthly_payment",
   rent_review_clause: "executed_rent_review_clause",
   break_clause: "executed_break_clause",
+
+  // --- Live lease columns (every workbench-editable scalar field) ---
+  // Parties
+  tenant_name: "tenant_name",
+  landlord_name: "landlord_name",
+  vendor_name: "vendor_name",
+
+  // Property / classification
+  asset_type: "asset_type",
+  property_address: "property_address",
+  location: "location",
+  building: "building",
+  region: "region",
+  requesting_department: "requesting_department",
+  square_footage: "square_footage",
+
+  // Dates / term
+  lease_start: "lease_start",
+  lease_end: "lease_end",
+  rent_commencement_date: "rent_commencement_date",
+  term_months: "term_months",
+
+  // Rent
+  base_rent_amount: "base_rent_amount",
+  base_rent_frequency: "base_rent_frequency",
+  current_monthly_rent: "current_monthly_rent",
+  security_deposit: "security_deposit",
+
+  // Clauses (long-form text)
+  renewal_options: "renewal_options",
+  escalation_clauses: "escalation_clauses",
+  termination_clauses: "termination_clauses",
+  rent_escalation_type: "rent_escalation_type",
 };
 
 serve(async (req) => {
@@ -389,9 +435,23 @@ serve(async (req) => {
       if (itemError) throw itemError;
 
       const leaseUpdate: Record<string, unknown> = {};
+      const unmappedFields: string[] = [];
       for (const item of (items ?? []) as Array<any>) {
         const column = FIELD_TO_COLUMN[item.field_name];
-        if (column) leaseUpdate[column] = item.proposed_value;
+        if (column) {
+          leaseUpdate[column] = item.proposed_value;
+        } else {
+          unmappedFields.push(item.field_name);
+        }
+      }
+      // If any staged item couldn't be mapped to a column, that's a bug
+      // (FIELD_TO_COLUMN is incomplete). Fail loud instead of silently
+      // dropping — silent drops were how asset_type edits got lost.
+      if (unmappedFields.length > 0) {
+        console.error('[lease-governance-action] approve: unmapped fields', unmappedFields);
+        return jsonResponse({
+          error: `Cannot apply change set — unmapped fields: ${unmappedFields.join(', ')}. Add them to FIELD_TO_COLUMN.`,
+        }, 500, origin);
       }
       leaseUpdate.model_locked = true;
 
@@ -506,9 +566,22 @@ serve(async (req) => {
 
         // Apply each staged item to the corresponding lease column.
         const leaseUpdate: Record<string, unknown> = {};
+        const unmappedFields: string[] = [];
         for (const item of items as Array<any>) {
           const column = FIELD_TO_COLUMN[item.field_name];
-          if (column) leaseUpdate[column] = item.proposed_value;
+          if (column) {
+            leaseUpdate[column] = item.proposed_value;
+          } else {
+            unmappedFields.push(item.field_name);
+          }
+        }
+        // Self-approve must also fail loud on unmapped fields — same
+        // silent-drop bug class as the approver path.
+        if (unmappedFields.length > 0) {
+          console.error('[lease-governance-action] self_approve: unmapped fields', unmappedFields);
+          return jsonResponse({
+            error: `Cannot apply change set — unmapped fields: ${unmappedFields.join(', ')}. Add them to FIELD_TO_COLUMN.`,
+          }, 500, origin);
         }
         leaseUpdate.model_locked = true;
         leaseUpdate.model_locked_at = now;
