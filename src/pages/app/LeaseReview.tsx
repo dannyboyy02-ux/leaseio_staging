@@ -513,19 +513,32 @@ export default function LeaseReview() {
   }, [activeChangeSet?.id]);
 
   const stageFieldChange = useCallback(async (changeSetId: string, fieldName: string, fieldLabel: string, oldValue: string | null, newValue: string) => {
-    if (!newValue || oldValue === newValue) return;
-    const { error } = await (supabase as any)
+    // Treat clear-to-empty as a meaningful edit when there was a value before
+    // (someone deliberately blanking a field is information). The dedupe is on
+    // "no-op" only.
+    if (oldValue === newValue) return;
+    const { data, error } = await (supabase as any)
       .from('lease_change_set_items')
       .upsert({
         change_set_id: changeSetId,
         field_name: fieldName,
         field_label: fieldLabel,
         old_value: String(oldValue ?? ''),
-        proposed_value: newValue,
+        proposed_value: newValue ?? '',
         source_section: 'section_card',
-      }, { onConflict: 'change_set_id,field_name' });
-    if (error) console.error('[LeaseReview] stage field error:', error);
-    else await refreshStagedItemCount();
+      }, { onConflict: 'change_set_id,field_name' })
+      .select('id');
+    if (error) {
+      console.error('[LeaseReview] stage field error:', error);
+      toast.error(`Could not save edit to "${fieldLabel}": ${error.message ?? 'unknown error'}`);
+      return;
+    }
+    if (!data || data.length === 0) {
+      console.warn('[LeaseReview] stage field affected 0 rows — possible RLS issue', { fieldName });
+      toast.error(`Could not save edit to "${fieldLabel}": no rows updated. Check workspace permissions.`);
+      return;
+    }
+    await refreshStagedItemCount();
   }, [refreshStagedItemCount]);
 
 
