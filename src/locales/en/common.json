@@ -721,7 +721,7 @@
     "untitled": "Untitled lease",
     "request_unlock": "Request Unlock",
     "unlock_pending": "Unlock request pending admin approval",
-    "admin_unlock": "Unlock for editing",
+    "admin_unlock": "Unlock",
     "approve_and_unlock": "Approve & Unlock",
     "deny_unlock": "Deny",
     "unlock_requested_title": "Unlock requested",

@@ -721,7 +721,7 @@
     "untitled": "Arrendamiento sin título",
     "request_unlock": "Solicitar desbloqueo",
     "unlock_pending": "Solicitud de desbloqueo pendiente de aprobación",
-    "admin_unlock": "Desbloquear para edición",
+    "admin_unlock": "Desbloquear",
     "approve_and_unlock": "Aprobar y desbloquear",
     "deny_unlock": "Rechazar",
     "unlock_requested_title": "Desbloqueo solicitado",
