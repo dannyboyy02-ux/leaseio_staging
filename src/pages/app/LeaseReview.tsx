@@ -849,8 +849,29 @@ export default function LeaseReview() {
    */
   const handleLockAction = async (mode: 'approver' | 'self_approve' = 'approver') => {
     if (!lease) return;
+    // Re-lock with staged edits — submit the change_set.
     if (activeChangeSet?.status === 'draft' && stagedItemCount > 0) {
       await handleSubmitChanges(mode);
+      return;
+    }
+    // Re-lock with NO staged edits (user unlocked but didn't change anything).
+    // Cancel the orphan draft change_set and re-lock in one server call so
+    // the lease ends up clean (model_locked=true, no dangling draft).
+    if (activeChangeSet?.status === 'draft' && stagedItemCount === 0) {
+      setSubmittingChanges(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('lease-governance-action', {
+          body: { action: 'cancel_change_set', changeSetId: activeChangeSet.id },
+        });
+        if (error) throw new Error(error.message ?? 'Lock failed');
+        if ((data as any)?.error) throw new Error((data as any).error);
+        toast.success('Lease re-locked (no changes to submit)');
+        refetchLease();
+      } catch (err: any) {
+        toast.error(`Failed to lock: ${err?.message ?? 'unknown error'}`);
+      } finally {
+        setSubmittingChanges(false);
+      }
       return;
     }
     setSubmittingChanges(true);
@@ -2139,11 +2160,7 @@ export default function LeaseReview() {
                   size="sm"
                   className="bg-success hover:bg-success/90 text-white"
                   onClick={() => setLockConfirmDialogOpen(true)}
-                  disabled={
-                    submittingChanges ||
-                    // Require staged items only when re-locking an active lease with a draft
-                    (activeChangeSet?.status === 'draft' && stagedItemCount === 0)
-                  }
+                  disabled={submittingChanges}
                 >
                   {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
                   Lock
@@ -2808,6 +2825,7 @@ export default function LeaseReview() {
         <DialogContent className="sm:max-w-md">
           {(() => {
             const isReLock = activeChangeSet?.status === 'draft' && stagedItemCount > 0;
+            const isEmptyDraftRelock = activeChangeSet?.status === 'draft' && stagedItemCount === 0;
             const adminCanSelfApprove = isReLock && isAdminUser;
             return (
               <>
@@ -2816,14 +2834,18 @@ export default function LeaseReview() {
                     <Lock className="h-5 w-5 text-success" />
                     {isReLock
                       ? `Lock and submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}`
-                      : 'Lock & activate this lease'}
+                      : isEmptyDraftRelock
+                        ? 'Re-lock this lease'
+                        : 'Lock & activate this lease'}
                   </DialogTitle>
                   <DialogDescription>
                     {isReLock
                       ? adminCanSelfApprove
                         ? 'As an admin you can apply your changes immediately, or route them through another admin for approval. Either way the lease re-locks.'
                         : 'Your staged changes will be submitted for financial approval. The lease re-locks immediately. Approved changes apply to the live record; rejected ones are reverted.'
-                      : 'This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.'}
+                      : isEmptyDraftRelock
+                        ? 'You unlocked this lease but didn\'t make any edits. Locking now will discard the empty edit session and return the lease to its prior locked state.'
+                        : 'This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.'}
                   </DialogDescription>
                 </DialogHeader>
                 {!isReLock && (
@@ -2880,13 +2902,15 @@ export default function LeaseReview() {
                       className="bg-success hover:bg-success/90 text-white"
                       onClick={async () => {
                         // Members always go through the approver queue.
+                        // Empty-draft re-lock: handleLockAction routes to its
+                        // cancel_change_set + relock branch (mode is ignored).
                         await handleLockAction('approver');
                         setLockConfirmDialogOpen(false);
                       }}
                       disabled={submittingChanges}
                     >
                       {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-                      {isReLock ? 'Submit for approval' : 'Lock & Activate'}
+                      {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Re-lock' : 'Lock & Activate'}
                     </Button>
                   )}
                 </DialogFooter>
