@@ -1038,6 +1038,34 @@ export default function AccountSettings() {
               </CardContent>
             </Card>
 
+            {/* Subject Access Request (SAR) contact — covers the rights to
+                access, correct, delete, port data, opt-out of profiling, and
+                lodge complaints with a regulator. Required by GDPR/CCPA. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('account.privacy_rights_title')}</CardTitle>
+                <CardDescription>{t('account.privacy_rights_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <ul className="text-sm text-muted-foreground space-y-1 ml-5 list-disc">
+                  <li>{t('account.privacy_right_access')}</li>
+                  <li>{t('account.privacy_right_correct')}</li>
+                  <li>{t('account.privacy_right_delete')}</li>
+                  <li>{t('account.privacy_right_portability')}</li>
+                  <li>{t('account.privacy_right_object')}</li>
+                </ul>
+                <Button variant="outline" asChild>
+                  <a href="mailto:privacy@theleaseio.com?subject=Privacy%20Rights%20Request&body=Please%20describe%20your%20request%20(access%2C%20correction%2C%20deletion%2C%20portability%2C%20or%20objection)%20and%20we'll%20respond%20within%2030%20days.">
+                    <Mail className="h-4 w-4 mr-2" />
+                    {t('account.privacy_rights_contact_btn')}
+                  </a>
+                </Button>
+                <p className="text-[11px] text-muted-foreground">
+                  {t('account.privacy_rights_response_window')}
+                </p>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>{t('account.privacy_policies')}</CardTitle>

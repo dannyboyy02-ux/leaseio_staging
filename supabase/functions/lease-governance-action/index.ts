@@ -120,11 +120,15 @@ serve(async (req) => {
     workspaceId: string;
     unlockRequestId: string | null;
     submittedBy: string;
-  }): Promise<string> {
+  }): Promise<{ id: string; created: boolean }> {
     // Reuse the existing open change set (draft or pending_approval) for this
     // lease if one exists. Without this, repeated unlocks would create
     // duplicate drafts — the frontend's maybeSingle() returns null on multiple
     // matches, which silently disables editing for the user.
+    //
+    // Return shape: { id, created }. `created=false` means we reused an
+    // existing draft; callers MUST NOT emit a `change_set_created` audit
+    // event in that case (the original create event is already in the log).
     const { data: existing } = await supabaseAdmin
       .from("lease_change_sets")
       .select("id")
@@ -134,7 +138,7 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
     if (existing && (existing as any).id) {
-      return (existing as any).id;
+      return { id: (existing as any).id, created: false };
     }
 
     const { data, error } = await supabaseAdmin
@@ -149,7 +153,7 @@ serve(async (req) => {
       .select("id")
       .single();
     if (error || !data) throw new Error(error?.message || "Failed to create change set");
-    return (data as any).id;
+    return { id: (data as any).id, created: true };
   }
 
   try {
@@ -212,7 +216,7 @@ serve(async (req) => {
         return jsonResponse({ error: "Lease is not locked and active" }, 422, origin);
       }
 
-      const changeSetId = await createDraftChangeSet({
+      const { id: changeSetId, created: changeSetCreated } = await createDraftChangeSet({
         leaseId: (unlockRequest as any).lease_id,
         workspaceId: (unlockRequest as any).workspace_id,
         unlockRequestId,
@@ -241,7 +245,7 @@ serve(async (req) => {
         change_set_id: changeSetId,
         note,
       });
-      await insertAudit([
+      const auditRows: any[] = [
         {
           lease_id: (unlockRequest as any).lease_id,
           workspace_id: (unlockRequest as any).workspace_id,
@@ -252,7 +256,12 @@ serve(async (req) => {
           related_change_set_id: changeSetId,
           change_summary: note,
         },
-        {
+      ];
+      // Only emit change_set_created if we ACTUALLY created a new draft.
+      // Reusing an existing draft would otherwise double-emit (audit posture
+      // bug surfaced by the sweep — 9 events for 7 distinct change_sets).
+      if (changeSetCreated) {
+        auditRows.push({
           lease_id: (unlockRequest as any).lease_id,
           workspace_id: (unlockRequest as any).workspace_id,
           event_type: "change_set_created",
@@ -260,8 +269,9 @@ serve(async (req) => {
           actor_email: actorEmail,
           related_unlock_request_id: unlockRequestId,
           related_change_set_id: changeSetId,
-        },
-      ]);
+        });
+      }
+      await insertAudit(auditRows);
       return jsonResponse({ ok: true, changeSetId }, 200, origin);
     }
 
@@ -282,7 +292,7 @@ serve(async (req) => {
         return jsonResponse({ error: "Lease is not locked and active" }, 422, origin);
       }
 
-      const changeSetId = await createDraftChangeSet({
+      const { id: changeSetId, created: changeSetCreated } = await createDraftChangeSet({
         leaseId,
         workspaceId: (lease as any).workspace_id,
         unlockRequestId: null,
@@ -300,7 +310,7 @@ serve(async (req) => {
         direct_admin_unlock: true,
         note,
       });
-      await insertAudit([
+      const auditRows: any[] = [
         {
           lease_id: leaseId,
           workspace_id: (lease as any).workspace_id,
@@ -310,15 +320,20 @@ serve(async (req) => {
           related_change_set_id: changeSetId,
           change_summary: note,
         },
-        {
+      ];
+      // Only emit change_set_created on actual create — same double-emit
+      // guard as the approve_unlock_request branch.
+      if (changeSetCreated) {
+        auditRows.push({
           lease_id: leaseId,
           workspace_id: (lease as any).workspace_id,
           event_type: "change_set_created",
           actor_user_id: user.id,
           actor_email: actorEmail,
           related_change_set_id: changeSetId,
-        },
-      ]);
+        });
+      }
+      await insertAudit(auditRows);
       return jsonResponse({ ok: true, changeSetId }, 200, origin);
     }
 

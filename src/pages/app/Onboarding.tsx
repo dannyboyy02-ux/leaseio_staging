@@ -17,7 +17,11 @@ import { useAppTranslation } from '@/hooks/useAppTranslation';
 export default function Onboarding() {
   const [step, setStep] = useState(1);
   const [workspaceName, setWorkspaceName] = useState('');
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('free');
+  // Match Signup default: 'starter' is the canonical entry-tier in
+  // src/config/pricing.ts (SubscriptionPlan = 'starter' | 'business').
+  // 'free' was off-spec and would fail TS narrowing; normalizePlanId
+  // would coerce it back to 'starter' anyway.
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('starter');
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const { refreshProfile, workspace, isLoading: appLoading } = useApp();

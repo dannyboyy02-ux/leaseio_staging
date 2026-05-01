@@ -9,10 +9,11 @@
 
 | Severity | Count | Disposition |
 |---|---|---|
-| HIGH | 2 | **Fixed in this round** |
-| MEDIUM | 4 | 2 fixed, 2 deferred |
-| LOW | 7 | All deferred |
+| HIGH | 2 | **Fixed** |
+| MEDIUM | 5 | **All fixed** (M-01..M-04 + L-02 reclassified after audit-log double-emit confirmed) |
+| LOW | 7 | 1 fixed (L-03 plan defaults), 1 false-positive (L-06), 5 deferred |
 | INFO | 4 | Documented only |
+| Pre-launch privacy | 4 | 1 added (SAR contact UI), 3 still need legal/product content |
 
 No production-exposure issues remain open. The repo and database are clean of stranded data, dead RLS policies, leaked secrets, and broken core workflows.
 
@@ -45,13 +46,15 @@ No production-exposure issues remain open. The repo and database are clean of st
 - `invite_tokens(workspace_id)` — pending invites list
 - `lease_governance_audit(actor_user_id)` and `(related_unlock_request_id)` — audit lookups
 
-### M-02 — `notifications` table missing DELETE policy (DEFERRED)
-**Evidence:** RLS policies cover `SELECT/INSERT/UPDATE` only. Users cannot dismiss notifications.
-**Recommendation:** Add a DELETE policy scoped to `user_id = auth.uid()`. Defer to whenever a "dismiss notification" UX is wired (no current call site).
+### M-02 — `notifications` DELETE policy (FIXED ✓)
+Migration `sweep_m02_m03_remaining_rls_guardrails` added DELETE scoped to `user_id = auth.uid() OR user_id IS NULL`.
 
-### M-03 — `lease_approvers` missing UPDATE policy (DEFERRED)
-**Evidence:** Has `SELECT/INSERT/DELETE` only. If a future feature upserts approvers, the UPDATE leg silent-fails.
-**Recommendation:** Add UPDATE policy now as a guard rail, or commit to insert-then-delete contract via comment.
+### M-03 — `lease_approvers` UPDATE policy (FIXED ✓)
+Same migration added UPDATE policy scoped to lease ownership / workspace admin.
+
+### M-05 — Audit-log `change_set_created` double-emit (FIXED ✓)
+**Evidence:** `lease_governance_audit` had 9 `change_set_created` events for only 7 distinct change_sets — and 3 of 10 change_sets had NO create event at all. Root cause: `createDraftChangeSet` correctly reuses an existing open draft when one exists, but the callers always emitted a `change_set_created` audit event regardless of whether a new row was actually inserted.
+**Fix shipped:** `createDraftChangeSet` now returns `{ id, created }`. Both `approve_unlock_request` and `direct_unlock` action branches gate the `change_set_created` audit event on `created === true`. Edge function redeployed.
 
 ---
 
@@ -61,10 +64,10 @@ No production-exposure issues remain open. The repo and database are clean of st
 |---|---|---|---|
 | L-01 | `lease_activity_log` CHECK | 18 of 24 `activity_type` enum values have zero rows. `change_submitted` vs `change_set_submitted` are duplicate naming. | Pick one naming convention. Drop unused values in a follow-up if they remain unused after another quarter. |
 | L-02 | `lease_governance_audit` CHECK | 9 of 12 `event_type` values unused. Headroom OK, but `change_set_created` count exceeds total `lease_change_sets` rows — check writer for double-emit. |
-| L-03 | `src/pages/Signup.tsx:38` and `src/pages/app/Onboarding.tsx:20` | Plan defaults inconsistent: Signup defaults to `'starter'`, Onboarding to `'free'`. | Standardize to one constant. |
+| L-03 | `src/pages/app/Onboarding.tsx:20` | **FIXED** — Plan defaults inconsistent: Signup defaults to `'starter'`, Onboarding to `'free'` (off-spec; `SubscriptionPlan = 'starter' \| 'business'`). Onboarding updated to use `'starter'`. | Closed. |
 | L-04 | `workspaces.document_limit` column | Misleading name — stores `maxActiveLeases`, not file count. | Rename to `max_active_leases` in a future migration. |
 | L-05 | 8 user-FK columns on `leases` lacking indexes | `archived_by`, `model_locked_by`, `unlock_requested_by`, etc. | Acceptable while leases <10k rows. Revisit at scale. |
-| L-06 | `alert_rules` and `workspace_approvers` redundant policies | Both have `ALL` policy + redundant `SELECT` | Drop redundant SELECT. |
+| L-06 | `alert_rules` and `workspace_approvers` policies | **FALSE POSITIVE** — those SELECT policies are NOT redundant; they're broader than the ALL policy (let workspace members read while ALL restricts to admin/owner). Dropping them would break member read access. Keep as-is. | No action. |
 | L-07 | `risk_templates` workspace-scoped count = 0 | UI was added in earlier round but no users have promoted templates yet. | Monitor over 30 days. If still zero, validate the "Watch for this" checkbox is reachable. |
 
 ---
@@ -88,10 +91,10 @@ No production-exposure issues remain open. The repo and database are clean of st
 | Account-deletion PII purge | ✓ Verified — cascades to leases, storage, profiles, workspace_members, draft change_sets, anonymizes audit actor fields |
 | Share-token expiry + revocation | ✓ Verified — 30-day TTL, revocable by setting `summary_share_token=NULL` |
 | AI consent gate at extraction | ✓ Fixed in this round (M-01) |
-| Privacy Policy `/privacy` route | Still missing — **action item for launch** |
-| Sub-processor disclosures | Not in repo — **action item for launch** |
-| Data retention policy | Not in repo — **action item for launch** |
-| SAR (subject access request) contact | Not surfaced in UI — **action item for launch** |
+| Privacy Policy `/privacy` route | ✓ Exists at `src/App.tsx:78` (Subagent C false-negative — wrong glob) |
+| Sub-processor disclosures | Still needs legal/product content — action item |
+| Data retention policy | Still needs legal/product content — action item |
+| SAR (subject access request) contact | ✓ Added — Account Settings → Privacy → "Your privacy rights" card with mailto button + 5 enumerated rights (access/correction/deletion/portability/objection) |
 
 ---
 
