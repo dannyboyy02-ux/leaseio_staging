@@ -96,7 +96,7 @@ export function RecentActivity() {
           .eq('leases.workspace_id', workspace.id)
           .in('activity_type', ['created', 'status_change', 'document_upload', 'executed_uploaded'])
           .order('created_at', { ascending: false })
-          .limit(10),
+          .limit(5),
         (() => {
           const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
           return supabase
@@ -105,7 +105,7 @@ export function RecentActivity() {
             .eq('workspace_id', workspace.id)
             .or(`status.eq.Ready,and(status.eq.Processing,uploaded_at.gte.${cutoff})`)
             .order('processed_at', { ascending: false, nullsFirst: false })
-            .limit(5);
+            .limit(4);
         })(),
       ]);
 
