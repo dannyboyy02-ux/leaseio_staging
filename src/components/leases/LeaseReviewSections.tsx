@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
-  EyeOff,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -673,14 +672,14 @@ export function RisksSection({ risks, onJumpToPage, leaseId, onRisksChanged }: R
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                      title="Dismiss this risk — it will be hidden here and excluded from all reports"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      title="Dismiss this risk — it will be removed from this lease and excluded from all reports"
                       onClick={() => {
                         setDismissTarget(risk);
                         setDismissReason('');
                       }}
                     >
-                      <EyeOff size={13} />
+                      <X size={14} />
                     </Button>
                   )}
                 </div>

@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, EyeOff } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -593,15 +593,15 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-7 w-7 opacity-0 group-hover/risk:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
-                                title="Dismiss this risk — it will be hidden and excluded from all reports"
+                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                                title="Dismiss this risk — it will be removed from this lease and excluded from all reports"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setDismissTarget(r);
                                   setDismissReason('');
                                 }}
                               >
-                                <EyeOff size={13} />
+                                <X size={14} />
                               </Button>
                             </div>
                             {hasBody && (
