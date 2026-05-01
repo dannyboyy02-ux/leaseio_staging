@@ -7,6 +7,23 @@ const LOCALE_MAP: Record<SupportedLocale, string> = {
   es: 'es-419', // Latin American Spanish
 };
 
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Date-only ISO strings (`YYYY-MM-DD`) are parsed by `new Date()` as UTC
+ * midnight, which renders as the previous day in any timezone west of UTC.
+ * This helper builds a local-zone Date instead so rendering matches the
+ * literal Y-M-D the database stored. Datetime strings keep the default path.
+ */
+export function parseToLocalDate(input: string | Date): Date {
+  if (typeof input !== 'string') return input;
+  if (ISO_DATE_ONLY.test(input)) {
+    const [y, m, d] = input.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(input);
+}
+
 /**
  * Format a date with locale-aware month names
  */
@@ -16,9 +33,9 @@ export function formatLocalizedDate(
   options?: Intl.DateTimeFormatOptions
 ): string {
   if (!dateStr) return '—';
-  
+
   try {
-    const date = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
+    const date = parseToLocalDate(dateStr);
     if (isNaN(date.getTime())) return '—';
     
     const locale = LOCALE_MAP[language];

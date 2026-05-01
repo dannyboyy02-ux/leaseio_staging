@@ -1745,7 +1745,9 @@ serve(async (req) => {
           period_start: safeDate(period.period_start),
           period_end: safeDate(period.period_end),
           monthly_amount: period.monthly_amount,
-          annual_amount: period.annual_amount,
+          annual_amount:
+            period.annual_amount ??
+            (period.monthly_amount != null ? Math.round(period.monthly_amount * 12 * 100) / 100 : null),
           notes: period.notes,
         }));
       if (rentScheduleToInsert.length > 0) {

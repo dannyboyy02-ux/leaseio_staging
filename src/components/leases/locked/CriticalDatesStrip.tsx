@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { format, differenceInCalendarDays } from 'date-fns';
+import { parseToLocalDate } from '@/lib/dateFormatters';
 import { Calendar, AlertCircle, TrendingUp, Bell } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -64,7 +65,7 @@ const renewalNoticeDeadline = (
   leaseEnd: string | null
 ): { deadline: Date | null; matchedText: string | null } => {
   if (!renewalText || !leaseEnd) return { deadline: null, matchedText: null };
-  const end = new Date(leaseEnd);
+  const end = parseToLocalDate(leaseEnd);
   if (Number.isNaN(end.getTime())) return { deadline: null, matchedText: null };
 
   const patterns = [
@@ -111,7 +112,7 @@ export function CriticalDatesStrip({ lease }: Props) {
 
     // 1. Lease expiration
     if (lease?.lease_end) {
-      const end = new Date(lease.lease_end);
+      const end = parseToLocalDate(lease.lease_end);
       if (!Number.isNaN(end.getTime()) && end >= today) {
         const days = differenceInCalendarDays(end, today);
         out.push({
@@ -146,7 +147,7 @@ export function CriticalDatesStrip({ lease }: Props) {
     const rentSchedule = Array.isArray(extracted?.rent_schedule) ? extracted.rent_schedule : [];
     const nextRentChange = rentSchedule
       .map((entry: any) => {
-        const d = entry?.period_start ? new Date(entry.period_start) : null;
+        const d = entry?.period_start ? parseToLocalDate(entry.period_start) : null;
         return d && !Number.isNaN(d.getTime()) ? { date: d, notes: entry?.notes ?? null } : null;
       })
       .filter((e: any): e is { date: Date; notes: string | null } => !!e && e.date > today)
@@ -168,13 +169,13 @@ export function CriticalDatesStrip({ lease }: Props) {
     //    itself) and the dedicated expiration chip already conveys that signal.
     const keyDates = Array.isArray(extracted?.key_dates) ? extracted.key_dates : [];
     const claimedTimes = new Set(out.map((c) => c.date.getTime()));
-    const leaseEndDate = lease?.lease_end ? new Date(lease.lease_end) : null;
+    const leaseEndDate = lease?.lease_end ? parseToLocalDate(lease.lease_end) : null;
     const leaseEndMs = leaseEndDate && !Number.isNaN(leaseEndDate.getTime())
       ? leaseEndDate.getTime()
       : null;
     const nextKeyDate = keyDates
       .map((entry: any) => {
-        const d = entry?.date ? new Date(entry.date) : null;
+        const d = entry?.date ? parseToLocalDate(entry.date) : null;
         const conf = typeof entry?.confidence === 'number' ? entry.confidence : 0;
         return d && !Number.isNaN(d.getTime()) && conf >= 0.85
           ? { date: d, description: entry?.description ?? null }

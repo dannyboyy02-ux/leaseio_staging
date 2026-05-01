@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedDate, formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedDate, formatLocalizedCurrency, parseToLocalDate } from '@/lib/dateFormatters';
 
 export interface RentScheduleEntry {
   id: string;
@@ -53,12 +53,16 @@ export function RentScheduleTable({
   const formatCurrency = (amount: number | null) => formatLocalizedCurrency(amount, language);
   const formatDate = (dateStr: string | null) => formatLocalizedDate(dateStr, language);
 
-  const today = new Date();
+  const today = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  })();
 
   const getCurrentPeriodId = () => {
     for (const period of rentSchedule) {
-      const start = new Date(period.period_start);
-      const end = period.period_end ? new Date(period.period_end) : null;
+      const start = parseToLocalDate(period.period_start);
+      const end = period.period_end ? parseToLocalDate(period.period_end) : null;
       if (start <= today && (!end || end >= today)) return period.id;
     }
     return null;
@@ -67,10 +71,10 @@ export function RentScheduleTable({
 
   const getNextIncrease = () => {
     const sorted = [...rentSchedule].sort(
-      (a, b) => new Date(a.period_start).getTime() - new Date(b.period_start).getTime()
+      (a, b) => parseToLocalDate(a.period_start).getTime() - parseToLocalDate(b.period_start).getTime()
     );
     for (const p of sorted) {
-      if (new Date(p.period_start) > today) return { date: p.period_start, amount: p.monthly_amount };
+      if (parseToLocalDate(p.period_start) > today) return { date: p.period_start, amount: p.monthly_amount };
     }
     return null;
   };
@@ -119,15 +123,21 @@ export function RentScheduleTable({
   const addRow = () => {
     if (!onScheduleChange) return;
     const lastPeriod = [...rentSchedule].sort(
-      (a, b) => new Date(a.period_start).getTime() - new Date(b.period_start).getTime()
+      (a, b) => parseToLocalDate(a.period_start).getTime() - parseToLocalDate(b.period_start).getTime()
     ).at(-1);
+    const formatLocalYmd = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
     const newStart = lastPeriod?.period_end
       ? (() => {
-          const d = new Date(lastPeriod.period_end);
+          const d = parseToLocalDate(lastPeriod.period_end);
           d.setDate(d.getDate() + 1);
-          return d.toISOString().split('T')[0];
+          return formatLocalYmd(d);
         })()
-      : new Date().toISOString().split('T')[0];
+      : formatLocalYmd(new Date());
 
     const newRow: RentScheduleEntry = {
       id: `new-${Date.now()}`,
@@ -148,7 +158,7 @@ export function RentScheduleTable({
   };
 
   const sorted = [...rentSchedule].sort(
-    (a, b) => new Date(a.period_start).getTime() - new Date(b.period_start).getTime()
+    (a, b) => parseToLocalDate(a.period_start).getTime() - parseToLocalDate(b.period_start).getTime()
   );
 
   return (
@@ -277,7 +287,10 @@ export function RentScheduleTable({
                             {formatCurrency(period.monthly_amount)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {formatCurrency(period.annual_amount)}
+                            {formatCurrency(
+                              period.annual_amount ??
+                                (period.monthly_amount != null ? period.monthly_amount * 12 : null)
+                            )}
                           </TableCell>
                           <TableCell className="text-muted-foreground">{period.notes || '—'}</TableCell>
                           {!isLocked && (

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
+import { parseToLocalDate } from '@/lib/dateFormatters';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -51,7 +52,7 @@ interface Props {
 }
 
 const fmtDate = (d: string | null | undefined) =>
-  d ? format(new Date(d), 'MMM d, yyyy') : null;
+  d ? format(parseToLocalDate(d), 'MMM d, yyyy') : null;
 
 const fmtCurrency = (n: number | null | undefined, currency = 'USD') =>
   n == null ? null : new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
@@ -171,17 +172,17 @@ const currentRentFromSchedule = (
 
   const covers = schedule.find((row) => {
     if (!row.period_start) return false;
-    const start = new Date(row.period_start).getTime();
+    const start = parseToLocalDate(row.period_start).getTime();
     if (Number.isNaN(start) || start > todayMs) return false;
     if (!row.period_end) return true;
-    const end = new Date(row.period_end).getTime();
+    const end = parseToLocalDate(row.period_end).getTime();
     return !Number.isNaN(end) && end >= todayMs;
   });
   if (covers?.monthly_amount != null) return covers.monthly_amount;
 
   // Lease hasn't started yet → show first scheduled period
   const firstStart = schedule[0]?.period_start
-    ? new Date(schedule[0].period_start).getTime()
+    ? parseToLocalDate(schedule[0].period_start).getTime()
     : null;
   if (firstStart != null && firstStart > todayMs && schedule[0]?.monthly_amount != null) {
     return schedule[0].monthly_amount;
@@ -198,7 +199,7 @@ const currentRentFromSchedule = (
  */
 const remainingMonths = (leaseEnd: string | null | undefined): number | null => {
   if (!leaseEnd) return null;
-  const end = new Date(leaseEnd);
+  const end = parseToLocalDate(leaseEnd);
   if (Number.isNaN(end.getTime())) return null;
   const now = new Date();
   if (end <= now) return 0;
