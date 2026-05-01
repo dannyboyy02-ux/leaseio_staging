@@ -265,34 +265,48 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
           return out;
         };
 
-        // Try each candidate (and its variants) in order — exact match wins.
+        // Phase 1 — try EXACT normalized-text matches across every candidate
+        // and its format variants. This handles the common case (string
+        // values, source_text, phrases) before we resort to numeric tricks.
         for (const candidate of cleaned) {
           for (const variant of expandCandidate(candidate)) {
-            // (a) Try exact normalized match first.
             const normalized = normalizeForMatch(variant);
-            if (normalized.length >= 3) {
-              const pos = combined.indexOf(normalized);
-              if (pos !== -1) {
-                const spans = buildSpans(pos, pos + normalized.length);
-                if (spans) {
-                  setMatchSpans(spans);
-                  setMatchStatus('found');
-                  return;
-                }
+            if (normalized.length < 3) continue;
+            const pos = combined.indexOf(normalized);
+            if (pos !== -1) {
+              const spans = buildSpans(pos, pos + normalized.length);
+              if (spans) {
+                setMatchSpans(spans);
+                setMatchStatus('found');
+                return;
               }
             }
-            // (b) For digit-heavy variants, try the digits-only haystack.
-            const variantDigits = variant.replace(/[^\d]/g, '');
-            if (variantDigits.length >= 3) {
-              const dpos = combinedDigits.indexOf(variantDigits);
-              if (dpos !== -1) {
-                const spans = buildSpansFromDigits(dpos, variantDigits.length);
-                if (spans) {
-                  setMatchSpans(spans);
-                  setMatchStatus('found');
-                  return;
-                }
-              }
+          }
+        }
+
+        // Phase 2 — digits-only haystack match. Only run when the candidate
+        // itself is purely numeric (e.g. square_footage = "44833", rent =
+        // "$69,491.15"). For text candidates that merely contain digits
+        // (street addresses, descriptions), this path produces garbage —
+        // matching only the digits in isolation — so we skip it there.
+        const isPurelyNumeric = (s: string): boolean => {
+          const trimmed = s.trim();
+          if (!trimmed) return false;
+          // Allow currency, decimals, percent, commas around an otherwise
+          // numeric value: $69,491.15, 44,833, 3.5%, etc.
+          return /^[$£€]?[\d,]+(?:\.\d+)?%?$/.test(trimmed);
+        };
+        for (const candidate of cleaned) {
+          if (!isPurelyNumeric(candidate)) continue;
+          const variantDigits = candidate.replace(/[^\d]/g, '');
+          if (variantDigits.length < 3) continue;
+          const dpos = combinedDigits.indexOf(variantDigits);
+          if (dpos !== -1) {
+            const spans = buildSpansFromDigits(dpos, variantDigits.length);
+            if (spans) {
+              setMatchSpans(spans);
+              setMatchStatus('found');
+              return;
             }
           }
         }
