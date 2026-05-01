@@ -2291,18 +2291,22 @@ export default function LeaseReview() {
                   Lock
                 </Button>
               )}
-              {/* Always-on toolbar — hidden while unlocked for editing so the three edit buttons stand alone on the right */}
+              {/* Archive — always visible (locked, unlocked-for-editing, or
+                  active). Mirrors the LockedHeader where Archive sits next
+                  to Unlock at the far-right of the toolbar. */}
+              <ArchiveButton
+                leaseId={lease.id}
+                isArchived={!!lease.archived}
+                onChange={refetchLease}
+              />
+              {/* Other always-on toolbar items — hidden while unlocked for
+                  editing so the three edit buttons can take focus. */}
               {!(!lease.model_locked && activeChangeSet?.status === 'draft') && (
                 <>
                   <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
                     Approval Queue
                     <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
-                  <ArchiveButton
-                    leaseId={lease.id}
-                    isArchived={!!lease.archived}
-                    onChange={refetchLease}
-                  />
                   {/* Upload Amendment button - only for master leases */}
                   {isMasterLease && !isProcessing && (
                     <UploadAmendmentDialog

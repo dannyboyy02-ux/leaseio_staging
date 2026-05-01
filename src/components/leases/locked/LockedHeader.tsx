@@ -50,7 +50,7 @@ export function LockedHeader({
 
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border">
-      <div className="max-w-6xl mx-auto px-6 py-4">
+      <div className="w-full px-6 py-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="flex items-start gap-3 min-w-0">
             <Button
