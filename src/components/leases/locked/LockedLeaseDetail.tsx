@@ -3,7 +3,20 @@ import { format } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, EyeOff } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -204,6 +217,59 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
   const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
   const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [risks, setRisks] = useState<any[]>([]);
+  const [dismissTarget, setDismissTarget] = useState<any | null>(null);
+  const [dismissReason, setDismissReason] = useState<string>('');
+  const [dismissing, setDismissing] = useState<boolean>(false);
+
+  const refetchRisks = useCallback(async () => {
+    if (!lease?.id) return;
+    const { data } = await supabase
+      .from('risks')
+      .select('*')
+      .eq('lease_id', lease.id)
+      .is('dismissed_at', null);
+    setRisks((data ?? []) as any[]);
+  }, [lease?.id]);
+
+  const handleConfirmDismiss = useCallback(async () => {
+    if (!dismissTarget || !lease?.id) return;
+    setDismissing(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id ?? null;
+      const reasonTrimmed = dismissReason.trim() || null;
+      const { error: upErr } = await (supabase as any)
+        .from('risks')
+        .update({
+          dismissed_at: new Date().toISOString(),
+          dismissed_by: userId,
+          dismissed_reason: reasonTrimmed,
+        })
+        .eq('id', dismissTarget.id);
+      if (upErr) throw upErr;
+      await (supabase as any).from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: userId,
+        activity_type: 'risk_dismissed',
+        details: {
+          risk_id: dismissTarget.id,
+          risk_title: dismissTarget.title,
+          severity: dismissTarget.severity,
+          citation_page: dismissTarget.citation_page,
+          reason: reasonTrimmed,
+        },
+      });
+      toast.success(`Dismissed risk: ${dismissTarget.title}`);
+      setDismissTarget(null);
+      setDismissReason('');
+      await refetchRisks();
+    } catch (err: any) {
+      console.error('[LockedLeaseDetail] dismiss risk failed:', err);
+      toast.error(`Could not dismiss risk: ${err?.message ?? 'unknown error'}`);
+    } finally {
+      setDismissing(false);
+    }
+  }, [dismissTarget, dismissReason, lease?.id, refetchRisks]);
   const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'obligations' | 'risks' | 'documents'>('general');
 
   // Fetch unlock-request status, rent schedule, and risks
@@ -220,7 +286,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
             .eq('status', 'pending')
             .maybeSingle(),
           supabase.from('rent_schedules').select('*').eq('lease_id', lease.id).order('period_start'),
-          supabase.from('risks').select('*').eq('lease_id', lease.id),
+          supabase.from('risks').select('*').eq('lease_id', lease.id).is('dismissed_at', null),
         ]);
         if (cancelled) return;
         setPendingUnlockRequest((unlockRes.data ?? null) as PendingUnlockRequest | null);
@@ -496,33 +562,48 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                         sev === 'high' ? 'border-red-400' : sev === 'medium' ? 'border-amber-400' : 'border-muted-foreground/40';
                       const hasBody = !!r.explanation || !!r.citation_page || !!r.citation_snippet;
                       return (
-                        <li key={r.id} className={`border-l-2 ${accent} pl-3`}>
+                        <li key={r.id} className={`border-l-2 ${accent} pl-3 group/risk`}>
                           <Collapsible defaultOpen={false}>
-                            <CollapsibleTrigger
-                              className="w-full flex items-center justify-between gap-2 py-2 text-left hover:bg-muted/30 -ml-3 pl-3 pr-2 rounded-r transition-colors group"
-                              disabled={!hasBody}
-                            >
-                              <div className="flex items-baseline gap-2 flex-wrap min-w-0">
-                                <p className="text-sm font-medium text-foreground">
-                                  {r.title ?? t('locked_lease.risks.untitled')}
-                                </p>
-                                {r.severity && (
-                                  <span
-                                    className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${sevTone}`}
-                                  >
-                                    {r.severity}
-                                  </span>
-                                )}
-                              </div>
-                              {hasBody && (
-                                <ChevronDown
-                                  className={cn(
-                                    'h-4 w-4 text-muted-foreground shrink-0 transition-transform',
-                                    'group-data-[state=open]:rotate-180'
+                            <div className="flex items-center gap-1">
+                              <CollapsibleTrigger
+                                className="flex-1 flex items-center justify-between gap-2 py-2 text-left hover:bg-muted/30 -ml-3 pl-3 pr-2 rounded-r transition-colors group"
+                                disabled={!hasBody}
+                              >
+                                <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+                                  <p className="text-sm font-medium text-foreground">
+                                    {r.title ?? t('locked_lease.risks.untitled')}
+                                  </p>
+                                  {r.severity && (
+                                    <span
+                                      className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border ${sevTone}`}
+                                    >
+                                      {r.severity}
+                                    </span>
                                   )}
-                                />
-                              )}
-                            </CollapsibleTrigger>
+                                </div>
+                                {hasBody && (
+                                  <ChevronDown
+                                    className={cn(
+                                      'h-4 w-4 text-muted-foreground shrink-0 transition-transform',
+                                      'group-data-[state=open]:rotate-180'
+                                    )}
+                                  />
+                                )}
+                              </CollapsibleTrigger>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 opacity-0 group-hover/risk:opacity-100 transition-opacity text-muted-foreground hover:text-destructive shrink-0"
+                                title="Dismiss this risk — it will be hidden and excluded from all reports"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDismissTarget(r);
+                                  setDismissReason('');
+                                }}
+                              >
+                                <EyeOff size={13} />
+                              </Button>
+                            </div>
                             {hasBody && (
                               <CollapsibleContent className="pb-3">
                                 {r.explanation && (
@@ -563,6 +644,48 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
           </Tabs>
         </div>
       </div>
+
+      <AlertDialog
+        open={!!dismissTarget}
+        onOpenChange={(open) => {
+          if (!open && !dismissing) {
+            setDismissTarget(null);
+            setDismissReason('');
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dismiss this risk?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="block mb-1">{dismissTarget?.title}</strong>
+              Once dismissed, this risk will be hidden and excluded from every report,
+              export, and analysis surface for this lease. The action is logged in the
+              audit trail.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Reason (optional)</Label>
+            <Textarea
+              value={dismissReason}
+              onChange={(e) => setDismissReason(e.target.value)}
+              placeholder="e.g. Standard provision in our portfolio; no action needed"
+              rows={3}
+              disabled={dismissing}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={dismissing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDismiss}
+              disabled={dismissing}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {dismissing ? 'Dismissing…' : 'Dismiss risk'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

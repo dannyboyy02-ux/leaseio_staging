@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
+  EyeOff,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
@@ -547,9 +560,74 @@ interface Risk {
 interface RisksSectionProps {
   risks: Risk[];
   onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
+  /** Lease the risks belong to. Required to dismiss; if omitted, dismiss UI is hidden. */
+  leaseId?: string;
+  /** Called after a successful dismiss so the parent can re-fetch risks. */
+  onRisksChanged?: () => void;
 }
 
-export function RisksSection({ risks, onJumpToPage }: RisksSectionProps) {
+export function RisksSection({ risks, onJumpToPage, leaseId, onRisksChanged }: RisksSectionProps) {
+  const [dismissTarget, setDismissTarget] = useState<Risk | null>(null);
+  const [dismissReason, setDismissReason] = useState<string>('');
+  const [dismissing, setDismissing] = useState<boolean>(false);
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity.toLowerCase()) {
+      case 'high':
+        return 'bg-red-100 text-red-700 border-red-300';
+      case 'medium':
+        return 'bg-amber-100 text-amber-700 border-amber-300';
+      case 'low':
+        return 'bg-blue-100 text-blue-700 border-blue-300';
+      default:
+        return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const handleConfirmDismiss = async () => {
+    if (!dismissTarget || !leaseId) return;
+    setDismissing(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id ?? null;
+      const reasonTrimmed = dismissReason.trim() || null;
+
+      const { error: updateError } = await (supabase as any)
+        .from('risks')
+        .update({
+          dismissed_at: new Date().toISOString(),
+          dismissed_by: userId,
+          dismissed_reason: reasonTrimmed,
+        })
+        .eq('id', dismissTarget.id);
+      if (updateError) throw updateError;
+
+      // Audit log entry — keeps reporting and compliance trail intact.
+      await (supabase as any).from('lease_activity_log').insert({
+        lease_id: leaseId,
+        user_id: userId,
+        activity_type: 'risk_dismissed',
+        details: {
+          risk_id: dismissTarget.id,
+          risk_title: dismissTarget.title,
+          severity: dismissTarget.severity,
+          citation_page: dismissTarget.citation_page,
+          reason: reasonTrimmed,
+        },
+      });
+
+      toast.success(`Dismissed risk: ${dismissTarget.title}`);
+      setDismissTarget(null);
+      setDismissReason('');
+      onRisksChanged?.();
+    } catch (err: any) {
+      console.error('[RisksSection] dismiss failed:', err);
+      toast.error(`Could not dismiss risk: ${err?.message ?? 'unknown error'}`);
+    } finally {
+      setDismissing(false);
+    }
+  };
+
   if (!risks || risks.length === 0) {
     return (
       <Card className="shadow-none border overflow-hidden">
@@ -568,60 +646,109 @@ export function RisksSection({ risks, onJumpToPage }: RisksSectionProps) {
     );
   }
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case 'high':
-        return 'bg-red-100 text-red-700 border-red-300';
-      case 'medium':
-        return 'bg-amber-100 text-amber-700 border-amber-300';
-      case 'low':
-        return 'bg-blue-100 text-blue-700 border-blue-300';
-      default:
-        return 'bg-muted text-muted-foreground';
-    }
-  };
+  const canDismiss = !!leaseId;
 
   return (
-    <Card className="shadow-none border overflow-hidden">
-      <CardHeader className="bg-muted/30 border-b py-3">
-        <CardTitle className="text-sm font-bold flex items-center gap-2">
-          <AlertTriangle size={16} className="text-amber-600" />
-          Risks
-          <Badge variant="outline" className="ml-1">
-            {risks.length}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-3">
-        {risks.map((risk) => (
-          <div key={risk.id} className="rounded-lg border p-3 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <h4 className="font-medium text-sm">{risk.title}</h4>
-              <Badge className={cn("text-[10px]", getSeverityColor(risk.severity))}>
-                {risk.severity}
-              </Badge>
-            </div>
-            {risk.explanation && (
-              <p className="text-sm text-muted-foreground">{risk.explanation}</p>
-            )}
-            {risk.citation_snippet && (
-              <div className="text-xs bg-muted/50 p-2 rounded italic">
-                "{risk.citation_snippet}"
-                {risk.citation_page && (
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="h-auto p-0 ml-2 text-xs"
-                    onClick={() => onJumpToPage(risk.citation_page || undefined, risk.citation_snippet || undefined)}
-                  >
-                    (Page {risk.citation_page})
-                  </Button>
-                )}
+    <>
+      <Card className="shadow-none border overflow-hidden">
+        <CardHeader className="bg-muted/30 border-b py-3">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-600" />
+            Risks
+            <Badge variant="outline" className="ml-1">
+              {risks.length}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4 space-y-3">
+          {risks.map((risk) => (
+            <div key={risk.id} className="rounded-lg border p-3 space-y-2 group">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="font-medium text-sm">{risk.title}</h4>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Badge className={cn('text-[10px]', getSeverityColor(risk.severity))}>
+                    {risk.severity}
+                  </Badge>
+                  {canDismiss && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                      title="Dismiss this risk — it will be hidden here and excluded from all reports"
+                      onClick={() => {
+                        setDismissTarget(risk);
+                        setDismissReason('');
+                      }}
+                    >
+                      <EyeOff size={13} />
+                    </Button>
+                  )}
+                </div>
               </div>
-            )}
+              {risk.explanation && (
+                <p className="text-sm text-muted-foreground">{risk.explanation}</p>
+              )}
+              {risk.citation_snippet && (
+                <div className="text-xs bg-muted/50 p-2 rounded italic">
+                  "{risk.citation_snippet}"
+                  {risk.citation_page && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 ml-2 text-xs"
+                      onClick={() => onJumpToPage(risk.citation_page || undefined, risk.citation_snippet || undefined)}
+                    >
+                      (Page {risk.citation_page})
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <AlertDialog
+        open={!!dismissTarget}
+        onOpenChange={(open) => {
+          if (!open && !dismissing) {
+            setDismissTarget(null);
+            setDismissReason('');
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dismiss this risk?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong className="block mb-1">{dismissTarget?.title}</strong>
+              Once dismissed, this risk will be hidden from the workbench and excluded from
+              every report, export, and analysis surface for this lease. The action is logged
+              in the audit trail.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">Reason (optional)</Label>
+            <Textarea
+              value={dismissReason}
+              onChange={(e) => setDismissReason(e.target.value)}
+              placeholder="e.g. Standard provision in our portfolio; no action needed"
+              rows={3}
+              disabled={dismissing}
+            />
           </div>
-        ))}
-      </CardContent>
-    </Card>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={dismissing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDismiss}
+              disabled={dismissing}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {dismissing ? 'Dismissing…' : 'Dismiss risk'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

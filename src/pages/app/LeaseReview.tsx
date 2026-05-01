@@ -703,7 +703,7 @@ export default function LeaseReview() {
         // Fetch rent schedule, risks, PDF URL, workspace asset types, and governance state in parallel
         const [rsResult, riskResult, pdfResult, wsResult, unlockResult, changeSetResult] = await Promise.all([
           supabase.from("rent_schedules").select("*").eq("lease_id", leaseId).order("period_start"),
-          supabase.from("risks").select("*").eq("lease_id", leaseId),
+          supabase.from("risks").select("*").eq("lease_id", leaseId).is("dismissed_at", null),
           data.storage_path
             ? supabase.storage.from("leases").createSignedUrl(data.storage_path, 3600)
             : Promise.resolve(null),
@@ -2662,7 +2662,19 @@ export default function LeaseReview() {
 
                       {/* Risks */}
                       <TabsContent value="risks" className="mt-0">
-                        <RisksSection risks={risks} onJumpToPage={jumpToPage} />
+                        <RisksSection
+                          risks={risks}
+                          onJumpToPage={jumpToPage}
+                          leaseId={lease?.id}
+                          onRisksChanged={async () => {
+                            const { data } = await supabase
+                              .from('risks')
+                              .select('*')
+                              .eq('lease_id', leaseId)
+                              .is('dismissed_at', null);
+                            setRisks((data ?? []) as Risk[]);
+                          }}
+                        />
                       </TabsContent>
 
                       {/* Documents */}

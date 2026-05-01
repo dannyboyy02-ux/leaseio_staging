@@ -119,11 +119,14 @@ serve(async (req) => {
       .eq('lease_id', leaseId)
       .order('period_start');
 
-    // Fetch risks
+    // Fetch risks. Dismissed risks are excluded from all reporting surfaces:
+    // a user dismissed them as a deliberate signal that they shouldn't appear
+    // in audit reports, exports, or downstream summaries.
     const { data: risks } = await supabaseAdmin
       .from('risks')
       .select('title, severity, explanation, citation_snippet, citation_page')
       .eq('lease_id', leaseId)
+      .is('dismissed_at', null)
       .order('severity');
 
     // Build the structured data payload for Sonnet
