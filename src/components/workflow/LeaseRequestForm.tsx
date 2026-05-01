@@ -642,49 +642,6 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
 
               <Separator />
 
-              {/* ——— Financial Review ——— */}
-              <div className="space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Financial Review
-                </p>
-
-                <FormField
-                  control={form.control}
-                  name="covenantFlagged"
-                  render={({ field }) => (
-                    <FormItem className="flex items-start gap-3 space-y-0">
-                      <FormControl>
-                        <input
-                          type="checkbox"
-                          id="covenant-flagged"
-                          checked={field.value}
-                          onChange={(e) => field.onChange(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 rounded border-input accent-primary"
-                        />
-                      </FormControl>
-                      <label
-                        htmlFor="covenant-flagged"
-                        className="text-sm font-normal cursor-pointer leading-snug"
-                      >
-                        This commitment may impact financial covenants
-                      </label>
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Classification:</span>
-                  <Badge
-                    variant="outline"
-                    className="text-amber-600 border-amber-400/60 bg-amber-50 dark:bg-amber-950/20"
-                  >
-                    Pending Financial Review
-                  </Badge>
-                </div>
-              </div>
-
-              <Separator />
-
               {/* ——— Document ——— */}
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
