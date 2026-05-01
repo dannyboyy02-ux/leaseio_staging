@@ -460,6 +460,9 @@ serve(async (req) => {
       // The frontend chooses the mode based on userRole; we re-validate here.
       const changeSetId = body?.changeSetId as string | undefined;
       const mode = (body?.mode as string | undefined) ?? "approver";
+      // Optional in 'approver' mode: the specific user_id the submitter
+      // wants to approve. Server validates the target is a workspace admin.
+      const requestedApproverId = body?.requestedApproverId as string | undefined;
       if (!changeSetId) return jsonResponse({ error: "changeSetId is required" }, 400, origin);
       if (mode !== "approver" && mode !== "self_approve") {
         return jsonResponse({ error: "Invalid mode (expected 'approver' or 'self_approve')" }, 400, origin);
@@ -572,7 +575,30 @@ serve(async (req) => {
         return jsonResponse({ ok: true, mode: "self_approve", applied: items.length }, 200, origin);
       }
 
-      // mode === 'approver' — standard pending_approval flow.
+      // mode === 'approver' — standard pending_approval flow. Optional
+      // requested_approver_id targets a specific admin reviewer; if
+      // provided, server-validates the target is a workspace admin.
+      let validatedApproverId: string | null = null;
+      if (requestedApproverId) {
+        const { data: targetMembership } = await supabaseAdmin
+          .from("workspace_members")
+          .select("role")
+          .eq("workspace_id", workspaceId)
+          .eq("user_id", requestedApproverId)
+          .maybeSingle();
+        const { data: targetOwnedWs } = await supabaseAdmin
+          .from("workspaces")
+          .select("id")
+          .eq("id", workspaceId)
+          .eq("owner_id", requestedApproverId)
+          .maybeSingle();
+        const isAdminOrOwner = (targetMembership && (targetMembership as any).role === 'admin') || !!targetOwnedWs;
+        if (!isAdminOrOwner) {
+          return jsonResponse({ error: "Requested approver must be a workspace admin or owner" }, 400, origin);
+        }
+        validatedApproverId = requestedApproverId;
+      }
+
       const { error: csSubmitError } = await supabaseAdmin
         .from("lease_change_sets")
         .update({
@@ -580,6 +606,7 @@ serve(async (req) => {
           self_approved: false,
           submitted_by: user.id,
           submitted_at: now,
+          requested_approver_id: validatedApproverId,
         })
         .eq("id", changeSetId);
       if (csSubmitError) throw csSubmitError;
@@ -597,6 +624,7 @@ serve(async (req) => {
       await logActivity(leaseId, "change_set_submitted", {
         change_set_id: changeSetId,
         item_count: items.length,
+        requested_approver_id: validatedApproverId,
       });
       await insertAudit([
         {

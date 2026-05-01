@@ -203,6 +203,12 @@ export default function LeaseReview() {
   const [cancelChangeSetDialogOpen, setCancelChangeSetDialogOpen] = useState(false);
   const [lockConfirmDialogOpen, setLockConfirmDialogOpen] = useState(false);
   const [cancelingChangeSet, setCancelingChangeSet] = useState(false);
+  // Approver candidates for "Request Approval" flow. Populated when the
+  // Lock dialog opens with a draft change_set; combines workspace admins
+  // and any explicit workspace_approvers, excludes the current user.
+  type ApproverCandidate = { id: string; label: string; isOwner: boolean };
+  const [approverCandidates, setApproverCandidates] = useState<ApproverCandidate[]>([]);
+  const [selectedApproverId, setSelectedApproverId] = useState<string | null>(null);
 
   const [assetTypes, setAssetTypes] = useState<string[]>(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
@@ -860,11 +866,81 @@ export default function LeaseReview() {
    * - Otherwise: initial activation. Sets lifecycle_status=active, model_locked=true,
    *   model_locked_at, model_locked_by.
    */
-  const handleLockAction = async (mode: 'approver' | 'self_approve' = 'approver') => {
+  // Load approver candidates whenever the Lock confirm dialog opens with a
+  // draft change_set. Sourced from: workspace owner + workspace_members
+  // role='admin' + explicit workspace_approvers entries. Self-excluded.
+  useEffect(() => {
+    if (!lockConfirmDialogOpen) return;
+    if (!lease?.workspace_id) return;
+    if (!(activeChangeSet?.status === 'draft' && stagedItemCount > 0)) {
+      setApproverCandidates([]);
+      setSelectedApproverId(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: ws } = await (supabase as any)
+          .from('workspaces')
+          .select('owner_id')
+          .eq('id', lease.workspace_id)
+          .maybeSingle();
+        const { data: members } = await (supabase as any)
+          .from('workspace_members')
+          .select('user_id, role')
+          .eq('workspace_id', lease.workspace_id)
+          .eq('role', 'admin');
+        const { data: explicit } = await (supabase as any)
+          .from('workspace_approvers')
+          .select('user_id')
+          .eq('workspace_id', lease.workspace_id);
+        const ids = new Set<string>();
+        if (ws?.owner_id) ids.add(ws.owner_id);
+        for (const m of (members ?? []) as any[]) ids.add(m.user_id);
+        for (const e of (explicit ?? []) as any[]) ids.add(e.user_id);
+        if (user?.id) ids.delete(user.id); // can't request from yourself
+        const idArr = Array.from(ids);
+        if (idArr.length === 0) {
+          // Fallback: no other admins exist. Show the current user as the
+          // only option so the flow isn't blocked. (User typically picks
+          // Apply instead in this case, but keep the path open.)
+          if (user?.id) idArr.push(user.id);
+        }
+        const { data: profiles } = idArr.length
+          ? await (supabase as any)
+              .from('profiles')
+              .select('id, first_name, last_name, email')
+              .in('id', idArr)
+          : { data: [] };
+        const ownerId = ws?.owner_id ?? null;
+        const candidates: ApproverCandidate[] = (profiles ?? []).map((p: any) => {
+          const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+          const label = name ? `${name} (${p.email})` : p.email;
+          return { id: p.id, label, isOwner: p.id === ownerId };
+        });
+        // Stable order: owner first, then alphabetical by label.
+        candidates.sort((a, b) => {
+          if (a.isOwner && !b.isOwner) return -1;
+          if (!a.isOwner && b.isOwner) return 1;
+          return a.label.localeCompare(b.label);
+        });
+        if (!cancelled) {
+          setApproverCandidates(candidates);
+          // Default to the first non-self candidate (owner if present).
+          setSelectedApproverId(candidates[0]?.id ?? null);
+        }
+      } catch (err) {
+        console.error('[LeaseReview] failed to load approver candidates:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [lockConfirmDialogOpen, lease?.workspace_id, activeChangeSet?.status, stagedItemCount, user?.id]);
+
+  const handleLockAction = async (mode: 'approver' | 'self_approve' = 'approver', requestedApproverId: string | null = null) => {
     if (!lease) return;
     // Re-lock with staged edits — submit the change_set.
     if (activeChangeSet?.status === 'draft' && stagedItemCount > 0) {
-      await handleSubmitChanges(mode);
+      await handleSubmitChanges(mode, requestedApproverId);
       return;
     }
     // Re-lock with NO staged edits (user unlocked but didn't change anything).
@@ -1461,13 +1537,18 @@ export default function LeaseReview() {
    * the Lock confirm dialog. The edge function re-validates on the server
    * — that's the trust boundary, the frontend role check is UX only.
    */
-  const handleSubmitChanges = useCallback(async (mode: 'approver' | 'self_approve' = 'approver') => {
+  const handleSubmitChanges = useCallback(async (mode: 'approver' | 'self_approve' = 'approver', requestedApproverId: string | null = null) => {
     if (!lease || !user || !activeChangeSet?.id) return;
     if (stagedItemCount === 0) { toast.error('No staged changes to submit'); return; }
     setSubmittingChanges(true);
     try {
       const { data, error } = await supabase.functions.invoke('lease-governance-action', {
-        body: { action: 'submit_change_set', changeSetId: activeChangeSet.id, mode },
+        body: {
+          action: 'submit_change_set',
+          changeSetId: activeChangeSet.id,
+          mode,
+          requestedApproverId: mode === 'approver' ? requestedApproverId : null,
+        },
       });
       if (error) throw new Error(error.message ?? 'Submit failed');
       if ((data as any)?.error) throw new Error((data as any).error);
@@ -2903,6 +2984,34 @@ export default function LeaseReview() {
                     <p><strong className="text-foreground">Request Approval</strong> — another admin reviews. Lease re-locks while pending.</p>
                   </div>
                 )}
+                {/* Approver picker for the Request Approval flow. Always shown
+                    when there are staged edits, so admin AND member submitters
+                    can target a specific reviewer. Falls back to the current
+                    user as a single option if no other admins exist. */}
+                {isReLock && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="approver-select" className="text-xs font-medium text-muted-foreground">
+                      {approverCandidates.length === 1 && approverCandidates[0].id === user?.id
+                        ? 'Approver (no other admins available — pick Apply instead, or self-target):'
+                        : 'Send approval request to:'}
+                    </Label>
+                    <Select
+                      value={selectedApproverId ?? undefined}
+                      onValueChange={(v) => setSelectedApproverId(v)}
+                    >
+                      <SelectTrigger id="approver-select" className="h-9 text-sm">
+                        <SelectValue placeholder="Choose an approver" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {approverCandidates.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.label}{c.isOwner ? ' — Owner' : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
                   {isReLock
                     ? 'This action is irreversible from this screen. To make further edits later, request another unlock.'
@@ -2917,11 +3026,13 @@ export default function LeaseReview() {
                       <Button
                         variant="outline"
                         onClick={async () => {
-                          await handleLockAction('approver');
+                          await handleLockAction('approver', selectedApproverId);
                           setLockConfirmDialogOpen(false);
                         }}
-                        disabled={submittingChanges}
-                        title="Request approval from another admin"
+                        disabled={submittingChanges || !selectedApproverId}
+                        title={selectedApproverId
+                          ? 'Request approval from the selected admin'
+                          : 'Pick an approver above first'}
                         className="sm:w-auto w-full whitespace-nowrap"
                       >
                         Request Approval
@@ -2943,13 +3054,18 @@ export default function LeaseReview() {
                     <Button
                       className="bg-success hover:bg-success/90 text-white"
                       onClick={async () => {
-                        // Members always go through the approver queue.
+                        // Members always go through the approver queue with
+                        // the selected admin recipient.
                         // Empty-draft re-lock: handleLockAction routes to its
-                        // cancel_change_set + relock branch (mode is ignored).
-                        await handleLockAction('approver');
+                        // cancel_change_set + relock branch (mode + approver
+                        // ignored).
+                        await handleLockAction('approver', selectedApproverId);
                         setLockConfirmDialogOpen(false);
                       }}
-                      disabled={submittingChanges}
+                      disabled={submittingChanges || (isReLock && !selectedApproverId)}
+                      title={isReLock && !selectedApproverId
+                        ? 'Pick an approver above first'
+                        : undefined}
                     >
                       {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
                       {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Re-lock' : 'Lock & Activate'}
