@@ -847,10 +847,10 @@ export default function LeaseReview() {
    * - Otherwise: initial activation. Sets lifecycle_status=active, model_locked=true,
    *   model_locked_at, model_locked_by.
    */
-  const handleLockAction = async () => {
+  const handleLockAction = async (mode: 'approver' | 'self_approve' = 'approver') => {
     if (!lease) return;
     if (activeChangeSet?.status === 'draft' && stagedItemCount > 0) {
-      await handleSubmitChanges();
+      await handleSubmitChanges(mode);
       return;
     }
     setSubmittingChanges(true);
@@ -1392,88 +1392,41 @@ export default function LeaseReview() {
     }
   }, [lease, user, pendingUnlockRequest, refetchLease]);
 
-  const handleSubmitChanges = useCallback(async () => {
+  /**
+   * Lock-with-edits: routes the staged change_set through the centralized
+   * `lease-governance-action` edge function. Two modes:
+   *   - 'approver'      → standard pending_approval queue (any role).
+   *   - 'self_approve'  → admin-only soft bypass: changes apply immediately,
+   *                        change_set marked self_approved=true with full
+   *                        audit trail (auditors filter on this column).
+   * The frontend selects the mode based on userRole + the user's choice in
+   * the Lock confirm dialog. The edge function re-validates on the server
+   * — that's the trust boundary, the frontend role check is UX only.
+   */
+  const handleSubmitChanges = useCallback(async (mode: 'approver' | 'self_approve' = 'approver') => {
     if (!lease || !user || !activeChangeSet?.id) return;
     if (stagedItemCount === 0) { toast.error('No staged changes to submit'); return; }
     setSubmittingChanges(true);
     try {
-      const submittedAt = new Date().toISOString();
-      const { error } = await (supabase as any)
-        .from('lease_change_sets')
-        .update({ status: 'pending_approval', submitted_at: submittedAt })
-        .eq('id', activeChangeSet.id);
-      if (error) throw error;
-
-      // Re-lock the lease NOW. The change_set going to pending_approval
-      // means the proposed edits are awaiting financial approval, but the
-      // underlying lease fields are still the OLD values and must be
-      // protected from further edits during the approval wait. Without this
-      // step the lease stayed model_locked=false, the "Locked" detail view
-      // never engaged, and the user was stranded in a half-locked workbench
-      // with no Save/Cancel/Lock controls visible.
-      const { data: relockedRows, error: relockErr } = await (supabase as any)
-        .from('leases')
-        .update({
-          model_locked: true,
-          model_locked_at: submittedAt,
-          model_locked_by: user.id,
-        })
-        .eq('id', lease.id)
-        .select('id');
-      if (relockErr) throw new Error(`Re-lock failed: ${relockErr.message}`);
-      if (!relockedRows || relockedRows.length === 0) {
-        throw new Error('Re-lock affected 0 rows — likely a permissions issue.');
-      }
-
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user.id,
-        activity_type: 'change_submitted',
-        details: { change_set_id: activeChangeSet.id, item_count: stagedItemCount, relocked: true },
+      const { data, error } = await supabase.functions.invoke('lease-governance-action', {
+        body: { action: 'submit_change_set', changeSetId: activeChangeSet.id, mode },
       });
-
-      // Governance audit — one change_set_submitted row + one field_change_staged per item
-      const { data: stagedItems } = await (supabase as any)
-        .from('lease_change_set_items')
-        .select('field_name, field_label, old_value, proposed_value')
-        .eq('change_set_id', activeChangeSet.id);
-
-      const auditRows: any[] = [
-        {
-          lease_id: lease.id,
-          workspace_id: lease.workspace_id,
-          event_type: 'change_set_submitted',
-          actor_user_id: user.id,
-          actor_email: user.email ?? null,
-          related_change_set_id: activeChangeSet.id,
-          change_summary: `${stagedItemCount} field(s) submitted for approval`,
-        },
-        ...((stagedItems ?? []) as any[]).map((item: any) => ({
-          lease_id: lease.id,
-          workspace_id: lease.workspace_id,
-          event_type: 'field_change_staged',
-          actor_user_id: user.id,
-          actor_email: user.email ?? null,
-          related_change_set_id: activeChangeSet.id,
-          field_name: item.field_name,
-          field_label: item.field_label,
-          old_value: item.old_value,
-          proposed_value: item.proposed_value,
-        })),
-      ];
-      const { error: auditErr3 } = await (supabase as any).from('lease_governance_audit').insert(auditRows);
-      if (auditErr3) console.error('[LeaseReview] governance audit error:', auditErr3);
-
-      toast.success('Changes submitted for approval — lease re-locked');
+      if (error) throw new Error(error.message ?? 'Submit failed');
+      if ((data as any)?.error) throw new Error((data as any).error);
+      if (mode === 'self_approve') {
+        toast.success('Changes applied — self-approved by admin role');
+      } else {
+        toast.success('Changes submitted for approval — lease re-locked');
+      }
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       refetchLease();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error submitting changes:', err);
-      toast.error('Failed to submit changes');
+      toast.error(`Failed to submit changes: ${err?.message ?? 'unknown error'}`);
     } finally {
       setSubmittingChanges(false);
     }
-  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease]);
+  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease, queryClient]);
 
   const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
   const handleRequestUnlock = useCallback(async () => {
@@ -2855,6 +2808,7 @@ export default function LeaseReview() {
         <DialogContent className="sm:max-w-md">
           {(() => {
             const isReLock = activeChangeSet?.status === 'draft' && stagedItemCount > 0;
+            const adminCanSelfApprove = isReLock && isAdminUser;
             return (
               <>
                 <DialogHeader>
@@ -2866,7 +2820,9 @@ export default function LeaseReview() {
                   </DialogTitle>
                   <DialogDescription>
                     {isReLock
-                      ? 'Your staged changes will be submitted for financial approval. The lease re-locks immediately. Approved changes apply to the live record; rejected ones are reverted.'
+                      ? adminCanSelfApprove
+                        ? 'As an admin you can apply your changes immediately, or route them through another admin for approval. Either way the lease re-locks.'
+                        : 'Your staged changes will be submitted for financial approval. The lease re-locks immediately. Approved changes apply to the live record; rejected ones are reverted.'
                       : 'This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.'}
                   </DialogDescription>
                 </DialogHeader>
@@ -2878,26 +2834,61 @@ export default function LeaseReview() {
                     <li>A lock event is written to the activity log</li>
                   </ul>
                 )}
+                {adminCanSelfApprove && (
+                  <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+                    <p><strong className="text-foreground">Apply now</strong> — changes take effect immediately. The audit trail records this as <em>self-approved by admin role</em>.</p>
+                    <p><strong className="text-foreground">Send to approver</strong> — another admin reviews. Lease re-locks while pending; underlying values stay unchanged until approved.</p>
+                  </div>
+                )}
                 <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
                   {isReLock
                     ? 'This action is irreversible from this screen. To make further edits later, request another unlock.'
                     : 'You can request to unlock the record after activation, but each unlock requires a new approval cycle.'}
                 </div>
-                <DialogFooter>
+                <DialogFooter className="gap-2 sm:gap-2">
                   <Button variant="outline" onClick={() => setLockConfirmDialogOpen(false)} disabled={submittingChanges}>
                     Cancel
                   </Button>
-                  <Button
-                    className="bg-success hover:bg-success/90 text-white"
-                    onClick={async () => {
-                      await handleLockAction();
-                      setLockConfirmDialogOpen(false);
-                    }}
-                    disabled={submittingChanges}
-                  >
-                    {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-                    {isReLock ? 'Lock & Submit' : 'Lock & Activate'}
-                  </Button>
+                  {adminCanSelfApprove ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          await handleLockAction('approver');
+                          setLockConfirmDialogOpen(false);
+                        }}
+                        disabled={submittingChanges}
+                        title="Route the changes through another admin for approval"
+                      >
+                        Send to approver
+                      </Button>
+                      <Button
+                        className="bg-success hover:bg-success/90 text-white"
+                        onClick={async () => {
+                          await handleLockAction('self_approve');
+                          setLockConfirmDialogOpen(false);
+                        }}
+                        disabled={submittingChanges}
+                        title="Apply changes immediately and record self-approval in the audit trail"
+                      >
+                        {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
+                        Apply now (self-approve)
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      className="bg-success hover:bg-success/90 text-white"
+                      onClick={async () => {
+                        // Members always go through the approver queue.
+                        await handleLockAction('approver');
+                        setLockConfirmDialogOpen(false);
+                      }}
+                      disabled={submittingChanges}
+                    >
+                      {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
+                      {isReLock ? 'Submit for approval' : 'Lock & Activate'}
+                    </Button>
+                  )}
                 </DialogFooter>
               </>
             );

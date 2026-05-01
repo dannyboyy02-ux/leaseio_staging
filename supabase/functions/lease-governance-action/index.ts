@@ -437,6 +437,179 @@ serve(async (req) => {
       return jsonResponse({ ok: true }, 200, origin);
     }
 
+    if (action === "submit_change_set") {
+      // Server-side trust boundary for the Lock-with-edits flow. Two modes:
+      //   - 'approver'     → standard pending_approval queue (any role).
+      //   - 'self_approve' → admin-only soft bypass: changes apply immediately,
+      //                       audit trail flags self_approved=true.
+      // The frontend chooses the mode based on userRole; we re-validate here.
+      const changeSetId = body?.changeSetId as string | undefined;
+      const mode = (body?.mode as string | undefined) ?? "approver";
+      if (!changeSetId) return jsonResponse({ error: "changeSetId is required" }, 400, origin);
+      if (mode !== "approver" && mode !== "self_approve") {
+        return jsonResponse({ error: "Invalid mode (expected 'approver' or 'self_approve')" }, 400, origin);
+      }
+
+      const { data: changeSet, error: changeSetError } = await supabaseAdmin
+        .from("lease_change_sets")
+        .select("id, lease_id, workspace_id, submitted_by, status")
+        .eq("id", changeSetId)
+        .maybeSingle();
+      if (changeSetError || !changeSet) return jsonResponse({ error: "Change set not found" }, 404, origin);
+      if ((changeSet as any).status !== "draft") {
+        return jsonResponse({ error: "Only draft change sets can be submitted" }, 409, origin);
+      }
+
+      const isSubmitter = (changeSet as any).submitted_by === user.id;
+      const isAdminUser = await isWorkspaceAdmin((changeSet as any).workspace_id);
+      if (!isSubmitter && !isAdminUser) {
+        return jsonResponse({ error: "Forbidden — only the submitter or a workspace admin may submit this change set" }, 403, origin);
+      }
+
+      const { data: items, error: itemError } = await supabaseAdmin
+        .from("lease_change_set_items")
+        .select("field_name, field_label, old_value, proposed_value")
+        .eq("change_set_id", changeSetId);
+      if (itemError) throw itemError;
+      if (!items || items.length === 0) {
+        return jsonResponse({ error: "Change set has no items to submit" }, 409, origin);
+      }
+
+      const now = new Date().toISOString();
+      const leaseId = (changeSet as any).lease_id as string;
+      const workspaceId = (changeSet as any).workspace_id as string;
+
+      if (mode === "self_approve") {
+        // Trust boundary: must be a workspace admin. Frontend role checks
+        // are advisory; this is the authoritative gate.
+        if (!isAdminUser) {
+          return jsonResponse({ error: "Self-approval requires workspace admin role" }, 403, origin);
+        }
+
+        // Apply each staged item to the corresponding lease column.
+        const leaseUpdate: Record<string, unknown> = {};
+        for (const item of items as Array<any>) {
+          const column = FIELD_TO_COLUMN[item.field_name];
+          if (column) leaseUpdate[column] = item.proposed_value;
+        }
+        leaseUpdate.model_locked = true;
+        leaseUpdate.model_locked_at = now;
+        leaseUpdate.model_locked_by = user.id;
+
+        const { error: leaseUpdateError } = await supabaseAdmin
+          .from("leases")
+          .update(leaseUpdate as any)
+          .eq("id", leaseId);
+        if (leaseUpdateError) throw leaseUpdateError;
+
+        const { error: csUpdateError } = await supabaseAdmin
+          .from("lease_change_sets")
+          .update({
+            status: "approved",
+            self_approved: true,
+            submitted_by: user.id,
+            submitted_at: now,
+            reviewed_by: user.id,
+            reviewed_at: now,
+            review_note: "Self-approved by admin role",
+          })
+          .eq("id", changeSetId);
+        if (csUpdateError) throw csUpdateError;
+
+        await logActivity(leaseId, "change_set_self_approved", {
+          change_set_id: changeSetId,
+          item_count: items.length,
+          actor_user_id: user.id,
+        });
+        await insertAudit([
+          {
+            lease_id: leaseId,
+            workspace_id: workspaceId,
+            event_type: "change_set_self_approved",
+            actor_user_id: user.id,
+            actor_email: actorEmail,
+            related_change_set_id: changeSetId,
+            change_summary: `${items.length} field(s) self-approved by admin`,
+          },
+          ...((items ?? []) as Array<any>).map((item) => ({
+            lease_id: leaseId,
+            workspace_id: workspaceId,
+            event_type: "field_change_committed",
+            actor_user_id: user.id,
+            actor_email: actorEmail,
+            related_change_set_id: changeSetId,
+            field_name: item.field_name,
+            field_label: item.field_label,
+            old_value: item.old_value,
+            proposed_value: item.proposed_value,
+            final_value: item.proposed_value,
+          })),
+          {
+            lease_id: leaseId,
+            workspace_id: workspaceId,
+            event_type: "lease_relocked",
+            actor_user_id: user.id,
+            actor_email: actorEmail,
+            related_change_set_id: changeSetId,
+          },
+        ]);
+
+        return jsonResponse({ ok: true, mode: "self_approve", applied: items.length }, 200, origin);
+      }
+
+      // mode === 'approver' — standard pending_approval flow.
+      const { error: csSubmitError } = await supabaseAdmin
+        .from("lease_change_sets")
+        .update({
+          status: "pending_approval",
+          self_approved: false,
+          submitted_by: user.id,
+          submitted_at: now,
+        })
+        .eq("id", changeSetId);
+      if (csSubmitError) throw csSubmitError;
+
+      const { error: relockError } = await supabaseAdmin
+        .from("leases")
+        .update({
+          model_locked: true,
+          model_locked_at: now,
+          model_locked_by: user.id,
+        })
+        .eq("id", leaseId);
+      if (relockError) throw relockError;
+
+      await logActivity(leaseId, "change_set_submitted", {
+        change_set_id: changeSetId,
+        item_count: items.length,
+      });
+      await insertAudit([
+        {
+          lease_id: leaseId,
+          workspace_id: workspaceId,
+          event_type: "change_set_submitted",
+          actor_user_id: user.id,
+          actor_email: actorEmail,
+          related_change_set_id: changeSetId,
+          change_summary: `${items.length} field(s) submitted for approval`,
+        },
+        ...((items ?? []) as Array<any>).map((item) => ({
+          lease_id: leaseId,
+          workspace_id: workspaceId,
+          event_type: "field_change_staged",
+          actor_user_id: user.id,
+          actor_email: actorEmail,
+          related_change_set_id: changeSetId,
+          field_name: item.field_name,
+          field_label: item.field_label,
+          old_value: item.old_value,
+          proposed_value: item.proposed_value,
+        })),
+      ]);
+
+      return jsonResponse({ ok: true, mode: "approver", queued: items.length }, 200, origin);
+    }
+
     if (action === "cancel_change_set") {
       const changeSetId = body?.changeSetId as string | undefined;
       if (!changeSetId) return jsonResponse({ error: "changeSetId is required" }, 400, origin);
