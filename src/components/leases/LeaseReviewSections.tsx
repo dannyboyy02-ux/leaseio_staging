@@ -190,6 +190,10 @@ interface SectionCardProps {
   onJumpToPage: (page?: number, sourceText?: string) => void;
   confirmedSections: string[];
   onConfirmSection: (sectionKey: string) => void;
+  /** When true, suppress the per-field confidence badge. Set after a lease
+   *  has been initially activated — confidence is a review-time signal, not
+   *  relevant once the lease is in production use. */
+  hideConfidence?: boolean;
 }
 
 export function SectionCard({
@@ -208,6 +212,7 @@ export function SectionCard({
   onJumpToPage,
   confirmedSections,
   onConfirmSection,
+  hideConfidence = false,
 }: SectionCardProps) {
   const { language } = useLanguage();
   const [isEditing, setIsEditing] = useState(!isLocked);
@@ -322,25 +327,37 @@ export function SectionCard({
 
           // Auto-resize ref for textareas (plain function, no hook needed)
 
+          // Sparkles affordance — rendered inside the input on the right.
+          // Anthropic/Claude brand orange (#CC785C). Click jumps to + highlights
+          // the source phrase in the PDF.
+          const sparklesAffordance =
+            isAIExtracted && fieldPage ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  locateInPdf();
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                title="AI extracted — click to highlight in source"
+                className={cn(
+                  "absolute z-10 inline-flex items-center justify-center h-5 w-5 rounded-full",
+                  "bg-[#CC785C]/10 text-[#CC785C] hover:bg-[#CC785C]/20 transition-colors",
+                  field.type === 'textarea' ? 'right-2 top-2' : 'right-2 top-1/2 -translate-y-1/2'
+                )}
+              >
+                <Sparkles size={12} className="fill-[#CC785C]/40" />
+              </button>
+            ) : null;
+
           return (
             <div key={field.id} className="group">
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />
                   {field.label}
-                  {/* Always-visible AI icon when this field came from AI extraction.
-                      Click → jump to the source page AND highlight the supporting text. */}
-                  {isAIExtracted && fieldPage && (
-                    <button
-                      type="button"
-                      onClick={locateInPdf}
-                      title="AI extracted — click to highlight in source"
-                      className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary transition-colors"
-                    >
-                      <Sparkles size={12} className="fill-primary/30" />
-                    </button>
-                  )}
-                  {!isModelLocked && <ConfidenceBadge confidence={fieldConfidence} />}
+                  {!isModelLocked && !hideConfidence && <ConfidenceBadge confidence={fieldConfidence} />}
                 </Label>
                 {!isModelLocked && (
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -363,79 +380,94 @@ export function SectionCard({
 
               {/* Textarea (auto-resize) */}
               {field.type === 'textarea' && (
-                <Textarea
-                  ref={autoResizeRef}
-                  value={value}
-                  onChange={(e) => {
-                    onFieldChange(field.id, e.target.value);
-                    e.currentTarget.style.height = 'auto';
-                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                  }}
-                  onFocus={handleFieldFocus}
-                  onBlur={() => onFieldBlur(field.id)}
-                  disabled={isReadOnly}
-                  placeholder={`No ${field.label.toLowerCase()} extracted`}
-                  className={cn(
-                    "text-sm resize-none overflow-hidden min-h-[60px]",
-                    getFieldBorderClass(field.id),
-                    isReadOnly && "bg-muted/30"
-                  )}
-                />
+                <div className="relative">
+                  <Textarea
+                    ref={autoResizeRef}
+                    value={value}
+                    onChange={(e) => {
+                      onFieldChange(field.id, e.target.value);
+                      e.currentTarget.style.height = 'auto';
+                      e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                    }}
+                    onFocus={handleFieldFocus}
+                    onBlur={() => onFieldBlur(field.id)}
+                    disabled={isReadOnly}
+                    placeholder={`No ${field.label.toLowerCase()} extracted`}
+                    className={cn(
+                      "text-sm resize-none overflow-hidden min-h-[60px]",
+                      sparklesAffordance && "pr-10",
+                      getFieldBorderClass(field.id),
+                      isReadOnly && "bg-muted/30"
+                    )}
+                  />
+                  {sparklesAffordance}
+                </div>
               )}
 
               {/* Asset type Select dropdown */}
               {field.id === 'asset_type' && assetTypes && assetTypes.length > 0 && !isReadOnly && (
-                <Select value={value} onValueChange={(v) => onFieldChange(field.id, v)}>
-                  <SelectTrigger className={cn("text-sm", getFieldBorderClass(field.id))}>
-                    <SelectValue placeholder="Select asset type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assetTypes.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Select value={value} onValueChange={(v) => onFieldChange(field.id, v)}>
+                    <SelectTrigger className={cn("text-sm", sparklesAffordance && "pr-10", getFieldBorderClass(field.id))}>
+                      <SelectValue placeholder="Select asset type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assetTypes.map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {sparklesAffordance}
+                </div>
               )}
 
               {/* Asset type read-only */}
               {field.id === 'asset_type' && (assetTypes === undefined || assetTypes.length === 0 || isReadOnly) && (
-                <Input
-                  type="text"
-                  value={value}
-                  onChange={(e) => onFieldChange(field.id, e.target.value)}
-                  onFocus={handleFieldFocus}
-                  onBlur={() => onFieldBlur(field.id)}
-                  disabled={isReadOnly}
-                  placeholder="No asset type specified"
-                  className={cn(
-                    "text-sm",
-                    getFieldBorderClass(field.id),
-                    isReadOnly && "bg-muted/30",
-                    !value && "text-muted-foreground italic"
-                  )}
-                />
+                <div className="relative">
+                  <Input
+                    type="text"
+                    value={value}
+                    onChange={(e) => onFieldChange(field.id, e.target.value)}
+                    onFocus={handleFieldFocus}
+                    onBlur={() => onFieldBlur(field.id)}
+                    disabled={isReadOnly}
+                    placeholder="No asset type specified"
+                    className={cn(
+                      "text-sm",
+                      sparklesAffordance && "pr-10",
+                      getFieldBorderClass(field.id),
+                      isReadOnly && "bg-muted/30",
+                      !value && "text-muted-foreground italic"
+                    )}
+                  />
+                  {sparklesAffordance}
+                </div>
               )}
 
               {/* Term field with Months/Years toggle */}
               {field.type === 'term' && (
                 <div className="flex gap-2 items-center">
-                  <Input
-                    type="number"
-                    value={termDisplayValue}
-                    onChange={(e) => {
-                      const n = parseFloat(e.target.value) || 0;
-                      onFieldChange(field.id, String(termUnit === 'years' ? Math.round(n * 12) : Math.round(n)));
-                    }}
-                    onFocus={handleFieldFocus}
-                    onBlur={() => onFieldBlur(field.id)}
-                    disabled={isReadOnly}
-                    placeholder="—"
-                    className={cn(
-                      "text-sm flex-1",
-                      getFieldBorderClass(field.id),
-                      isReadOnly && "bg-muted/30"
-                    )}
-                  />
+                  <div className="relative flex-1">
+                    <Input
+                      type="number"
+                      value={termDisplayValue}
+                      onChange={(e) => {
+                        const n = parseFloat(e.target.value) || 0;
+                        onFieldChange(field.id, String(termUnit === 'years' ? Math.round(n * 12) : Math.round(n)));
+                      }}
+                      onFocus={handleFieldFocus}
+                      onBlur={() => onFieldBlur(field.id)}
+                      disabled={isReadOnly}
+                      placeholder="—"
+                      className={cn(
+                        "text-sm",
+                        sparklesAffordance && "pr-10",
+                        getFieldBorderClass(field.id),
+                        isReadOnly && "bg-muted/30"
+                      )}
+                    />
+                    {sparklesAffordance}
+                  </div>
                   <div className="flex rounded-md border overflow-hidden text-xs shrink-0">
                     <button
                       type="button"
@@ -461,7 +493,8 @@ export function SectionCard({
               {field.type === 'number' && (
                 isReadOnly ? (
                   <div className={cn(
-                    "text-sm px-3 py-2 rounded-md border bg-muted/30",
+                    "relative text-sm px-3 py-2 rounded-md border bg-muted/30",
+                    sparklesAffordance && "pr-10",
                     getFieldBorderClass(field.id)
                   )}>
                     {value
@@ -470,42 +503,51 @@ export function SectionCard({
                         : Number(value).toLocaleString()
                       : <span className="text-muted-foreground italic">—</span>
                     }
+                    {sparklesAffordance}
                   </div>
                 ) : (
-                  <Input
-                    type="text"
-                    value={value}
-                    onChange={(e) => onFieldChange(field.id, e.target.value)}
-                    onFocus={handleFieldFocus}
-                    onBlur={() => onFieldBlur(field.id)}
-                    disabled={false}
-                    placeholder={`No ${field.label.toLowerCase()} extracted`}
-                    className={cn(
-                      "text-sm",
-                      getFieldBorderClass(field.id),
-                      !value && "text-muted-foreground italic"
-                    )}
-                  />
+                  <div className="relative">
+                    <Input
+                      type="text"
+                      value={value}
+                      onChange={(e) => onFieldChange(field.id, e.target.value)}
+                      onFocus={handleFieldFocus}
+                      onBlur={() => onFieldBlur(field.id)}
+                      disabled={false}
+                      placeholder={`No ${field.label.toLowerCase()} extracted`}
+                      className={cn(
+                        "text-sm",
+                        sparklesAffordance && "pr-10",
+                        getFieldBorderClass(field.id),
+                        !value && "text-muted-foreground italic"
+                      )}
+                    />
+                    {sparklesAffordance}
+                  </div>
                 )
               )}
 
               {/* Standard text / date fields */}
               {field.type !== 'textarea' && field.type !== 'term' && field.type !== 'number' && field.id !== 'asset_type' && (
-                <Input
-                  type={field.type === 'date' ? 'date' : 'text'}
-                  value={value}
-                  onChange={(e) => onFieldChange(field.id, e.target.value)}
-                  onFocus={handleFieldFocus}
-                  onBlur={() => onFieldBlur(field.id)}
-                  disabled={isReadOnly}
-                  placeholder={`No ${field.label.toLowerCase()} extracted`}
-                  className={cn(
-                    "text-sm",
-                    getFieldBorderClass(field.id),
-                    isReadOnly && "bg-muted/30",
-                    !value && "text-muted-foreground italic"
-                  )}
-                />
+                <div className="relative">
+                  <Input
+                    type={field.type === 'date' ? 'date' : 'text'}
+                    value={value}
+                    onChange={(e) => onFieldChange(field.id, e.target.value)}
+                    onFocus={handleFieldFocus}
+                    onBlur={() => onFieldBlur(field.id)}
+                    disabled={isReadOnly}
+                    placeholder={`No ${field.label.toLowerCase()} extracted`}
+                    className={cn(
+                      "text-sm",
+                      sparklesAffordance && "pr-10",
+                      getFieldBorderClass(field.id),
+                      isReadOnly && "bg-muted/30",
+                      !value && "text-muted-foreground italic"
+                    )}
+                  />
+                  {sparklesAffordance}
+                </div>
               )}
 
               {!value && field.type !== 'term' && (

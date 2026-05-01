@@ -2282,6 +2282,7 @@ export default function LeaseReview() {
                             verifiedFields={verifiedFields}
                             isLocked={isLocked && !isUnlockedForEditing}
                             isModelLocked={!!lease?.model_locked}
+                            hideConfidence={lifecycleStatus === 'active'}
                             assetTypes={assetTypes}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
@@ -2530,6 +2531,7 @@ export default function LeaseReview() {
                           verifiedFields={verifiedFields}
                           isLocked={isLocked && !isUnlockedForEditing}
                           isModelLocked={!!lease?.model_locked}
+                          hideConfidence={lifecycleStatus === 'active'}
                           onFieldChange={handleFieldChange}
                           onFieldFocus={handleFieldFocus}
                           onFieldBlur={trackFieldCorrection}
@@ -2552,6 +2554,7 @@ export default function LeaseReview() {
                             verifiedFields={verifiedFields}
                             isLocked={isLocked}
                             isModelLocked={!!lease?.model_locked}
+                            hideConfidence={lifecycleStatus === 'active'}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
@@ -2585,6 +2588,7 @@ export default function LeaseReview() {
                             verifiedFields={verifiedFields}
                             isLocked={isLocked}
                             isModelLocked={!!lease?.model_locked}
+                            hideConfidence={lifecycleStatus === 'active'}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
