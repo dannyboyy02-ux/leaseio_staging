@@ -264,22 +264,38 @@ export function AddRiskDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
+    <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)} modal={!captureActive}>
       <DialogContent
+        // When capture is active we go non-modal AND shrink to a docked
+        // corner card. This frees the PDF text layer for native text
+        // selection (Radix's modal overlay otherwise blocks all pointer
+        // events behind the dialog, which is why the previous version
+        // looked clickable but actually wasn't).
         className={cn(
-          // Fit within viewport: cap height at 90vh, scroll the body, keep
-          // header + footer anchored. Width caps so it stops growing on
-          // wide screens.
-          'sm:max-w-[640px] max-h-[90vh] flex flex-col p-0 gap-0',
-          captureActive && 'opacity-50 pointer-events-none transition-opacity'
+          'flex flex-col p-0 gap-0',
+          !captureActive && 'sm:max-w-[640px] max-h-[90vh]',
+          captureActive && [
+            // Detach from center, dock to bottom-right, smaller footprint.
+            'fixed top-auto bottom-4 right-4 left-auto translate-x-0 translate-y-0',
+            'w-[360px] max-w-[calc(100vw-2rem)] max-h-[60vh]',
+            'shadow-xl border-amber-300 ring-2 ring-amber-200',
+          ],
         )}
       >
+        {captureActive && (
+          <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-[12px] text-amber-900 flex items-center gap-2 shrink-0">
+            <span className="font-medium">Selecting in PDF</span>
+            <span className="text-amber-800">— highlight any text, then click <strong>Use selection</strong> in the PDF toolbar.</span>
+          </div>
+        )}
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Add a risk to this lease</DialogTitle>
-          <DialogDescription>
-            Pick a predefined risk or write your own. Cite the supporting clause so it shows up
-            with a (Page N) link and Sparkles highlight just like AI-extracted risks.
-          </DialogDescription>
+          {!captureActive && (
+            <DialogDescription>
+              Pick a predefined risk or write your own. Cite the supporting clause so it shows up
+              with a (Page N) link and Sparkles highlight just like AI-extracted risks.
+            </DialogDescription>
+          )}
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 pt-2 pb-2 space-y-3">
