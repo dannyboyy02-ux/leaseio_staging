@@ -72,6 +72,80 @@ function findLongestPhrase(haystack: string, target: string, minChars = 12): { s
   return null;
 }
 
+const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Generate textual variants for an ISO-8601 date so it can match how the
+ * date is actually written in the PDF (e.g. "March 1, 2023" or "3/1/2023").
+ * Returns [] if the input doesn't look like an ISO date.
+ */
+function expandDateVariants(s: string): string[] {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
+  if (!m) return [];
+  const [, y, mo, d] = m;
+  const monthIdx = parseInt(mo, 10) - 1;
+  const dayNum = parseInt(d, 10);
+  if (monthIdx < 0 || monthIdx > 11 || dayNum < 1 || dayNum > 31) return [];
+  const full = MONTHS_FULL[monthIdx];
+  const abbr = MONTHS_ABBR[monthIdx];
+  const year = y;
+  return [
+    `${full} ${dayNum}, ${year}`,
+    `${full} ${dayNum} ${year}`,
+    `${abbr} ${dayNum}, ${year}`,
+    `${abbr}. ${dayNum}, ${year}`,
+    `${parseInt(mo, 10)}/${dayNum}/${year}`,
+    `${mo}/${d}/${year}`,
+    `${parseInt(mo, 10)}-${dayNum}-${year}`,
+    `${dayNum} ${full} ${year}`,
+  ];
+}
+
+/**
+ * Some short or extremely common single-token values (like "monthly",
+ * "yes", "annual") would match dozens of times across a lease and the
+ * resulting highlight would be useless or wrong. We skip them as primary
+ * targets and rely on source_text matching instead.
+ */
+const GENERIC_SINGLE_WORDS = new Set([
+  'yes', 'no', 'true', 'false', 'na', 'n/a',
+  'monthly', 'annual', 'annually', 'quarterly', 'weekly', 'daily', 'biweekly', 'bi-weekly',
+  'fixed', 'variable', 'none',
+  'active', 'inactive', 'pending', 'expired',
+]);
+
+function isTooGenericValue(s: string): boolean {
+  const t = s.trim().toLowerCase();
+  // Single word, common label.
+  if (!/\s/.test(t) && GENERIC_SINGLE_WORDS.has(t)) return true;
+  return false;
+}
+
+/**
+ * Some source_text fields are AI meta-summaries (e.g. "Multiple termination
+ * provisions across Paragraphs 2.3, 3.3, ..."). These don't appear verbatim
+ * in the PDF, so highlighting is impossible. Detect and surface a clearer
+ * "spans multiple sections" signal rather than silently failing.
+ */
+function isPurelyNumeric(s: string): boolean {
+  const trimmed = s.trim();
+  if (!trimmed) return false;
+  return /^[$£€]?[\d,]+(?:\.\d+)?%?$/.test(trimmed);
+}
+
+function isMetaSummary(s: string): boolean {
+  if (!s) return false;
+  const t = s.toLowerCase();
+  return (
+    /^multiple\b.*\bacross\s+paragraphs?\b/i.test(s) ||
+    /^see\s+paragraphs?\b/i.test(s) ||
+    /^n\s*\/\s*a\b/i.test(s) ||
+    /^paragraphs?\s+\d/.test(t) ||
+    /\bsee\s+(paragraph|exhibit|schedule|attached)\b/i.test(s)
+  );
+}
+
 export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -114,9 +188,10 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
   type MatchSpan = { itemIndex: number; charStart: number; charEnd: number };
   const [matchSpans, setMatchSpans] = useState<MatchSpan[] | null>(null);
   // 'searching' = waiting for page to load, 'found' = highlight rendered,
-  // 'not-found' = phrase not located in this page's text layer. Drives the
-  // small status pill so the user understands why a click did nothing.
-  const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'found' | 'not-found'>('idle');
+  // 'not-found' = phrase not located in this page's text layer,
+  // 'spans-sections' = source_text is a meta-summary (e.g. "across Paragraphs 9.3, 9.4")
+  // and there's no single phrase to highlight. Drives the toolbar pill.
+  const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'found' | 'not-found' | 'spans-sections'>('idle');
   const pageRef = useRef<any>(null);
 
   /**
@@ -203,11 +278,17 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
         };
 
         // Expand each candidate into match variants. For numeric values,
-        // add comma-formatted (44,833) and digit-only (44833) variants
-        // so a stored value of 44833 matches "44,833" in the PDF.
+        // add comma-formatted (44,833) and digit-only (44833) variants. For
+        // ISO dates, add textual representations ("March 1, 2023" etc.) so
+        // a stored value of "2023-03-01" matches what the PDF actually says.
+        // CRITICAL: digit-only variants ONLY for candidates that are
+        // themselves purely numeric — otherwise an address like
+        // "3 Latitude Way, Corona, CA 92881" synthesizes "392881" and
+        // Phase 1 would match those random digits in sequence anywhere
+        // they appear, highlighting just the street number and zip.
         const expandCandidate = (c: string): string[] => {
           const out = new Set<string>([c]);
-          // If the candidate is purely numeric, add a comma-grouped variant.
+          for (const dv of expandDateVariants(c)) out.add(dv);
           if (/^-?\d+(\.\d+)?$/.test(c.trim())) {
             const n = Number(c);
             if (Number.isFinite(n)) {
@@ -216,10 +297,10 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
               out.add(Math.round(n).toLocaleString('en-US'));
             }
           }
-          // If the candidate contains digits with grouping/decimals, add a
-          // digits-only variant (so "$69,491.15" can match "6949115").
-          const digitsOnly = c.replace(/[^\d]/g, '');
-          if (digitsOnly.length >= 3) out.add(digitsOnly);
+          if (isPurelyNumeric(c)) {
+            const digitsOnly = c.replace(/[^\d]/g, '');
+            if (digitsOnly.length >= 3) out.add(digitsOnly);
+          }
           return Array.from(out).filter((s) => s.trim().length > 0);
         };
 
@@ -265,10 +346,23 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
           return out;
         };
 
+        // Phase 0 — short-circuit: if the only candidate is a meta-summary
+        // ("Multiple ... across Paragraphs ..."), don't try to highlight
+        // (it won't appear verbatim in the PDF) and surface a clear pill.
+        const lastCandidate = cleaned[cleaned.length - 1];
+        const allCandidatesMeta = cleaned.every((c) => isMetaSummary(c));
+        if (allCandidatesMeta || (cleaned.length === 1 && isMetaSummary(lastCandidate))) {
+          setMatchSpans(null);
+          setMatchStatus('spans-sections');
+          return;
+        }
+
         // Phase 1 — try EXACT normalized-text matches across every candidate
-        // and its format variants. This handles the common case (string
-        // values, source_text, phrases) before we resort to numeric tricks.
+        // and its format variants. Skip overly-generic single-word values
+        // (like "monthly") that would match indiscriminately — let source_text
+        // win for those.
         for (const candidate of cleaned) {
+          if (isTooGenericValue(candidate)) continue;
           for (const variant of expandCandidate(candidate)) {
             const normalized = normalizeForMatch(variant);
             if (normalized.length < 3) continue;
@@ -289,13 +383,6 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
         // "$69,491.15"). For text candidates that merely contain digits
         // (street addresses, descriptions), this path produces garbage —
         // matching only the digits in isolation — so we skip it there.
-        const isPurelyNumeric = (s: string): boolean => {
-          const trimmed = s.trim();
-          if (!trimmed) return false;
-          // Allow currency, decimals, percent, commas around an otherwise
-          // numeric value: $69,491.15, 44,833, 3.5%, etc.
-          return /^[$£€]?[\d,]+(?:\.\d+)?%?$/.test(trimmed);
-        };
         for (const candidate of cleaned) {
           if (!isPurelyNumeric(candidate)) continue;
           const variantDigits = candidate.replace(/[^\d]/g, '');
@@ -411,13 +498,22 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
                     ? 'ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground'
                     : matchStatus === 'not-found'
                       ? 'ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200'
-                      : 'hidden'
+                      : matchStatus === 'spans-sections'
+                        ? 'ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'hidden'
               }
-              title={matchStatus === 'not-found' ? `Source not located on this page: "${(targetValue || targetHighlight || '').slice(0, 60)}…"` : undefined}
+              title={
+                matchStatus === 'not-found'
+                  ? `Source not located on this page: "${(targetValue || targetHighlight || '').slice(0, 60)}…"`
+                  : matchStatus === 'spans-sections'
+                    ? `The AI flagged this as spanning multiple sections; no single phrase to highlight.`
+                    : undefined
+              }
             >
               {matchStatus === 'found' && 'Source highlighted'}
               {matchStatus === 'searching' && 'Searching…'}
               {matchStatus === 'not-found' && 'Source not located on this page'}
+              {matchStatus === 'spans-sections' && 'Source spans multiple sections'}
             </span>
           )}
         </div>
