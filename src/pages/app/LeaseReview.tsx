@@ -20,6 +20,7 @@ import {
   ClipboardCheck,
   Pencil,
   Unlock,
+  Lock,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -195,6 +196,7 @@ export default function LeaseReview() {
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
   const [cancelChangeSetDialogOpen, setCancelChangeSetDialogOpen] = useState(false);
+  const [lockConfirmDialogOpen, setLockConfirmDialogOpen] = useState(false);
   const [cancelingChangeSet, setCancelingChangeSet] = useState(false);
 
   const [assetTypes, setAssetTypes] = useState<string[]>(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
@@ -2470,8 +2472,8 @@ export default function LeaseReview() {
                             )}
                             {!lease.model_locked && activeChangeSet && (
                               <Card className="shadow-none border border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
-                                <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
-                                  <div>
+                                <CardContent className="py-3 px-4 flex items-center justify-between gap-4 flex-wrap">
+                                  <div className="min-w-0">
                                     <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
                                       {activeChangeSet.status === 'draft'
                                         ? 'Unlocked for editing — changes are staged'
@@ -2483,37 +2485,36 @@ export default function LeaseReview() {
                                         : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
                                     </p>
                                   </div>
-                                  <div className="flex gap-2 shrink-0">
-                                    {activeChangeSet.status === 'draft' && (
+                                  {activeChangeSet.status === 'draft' && (
+                                    <div className="flex gap-2 shrink-0">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => toast.success('Draft saved — changes are staged automatically as you type')}
+                                      >
+                                        Save Draft
+                                      </Button>
                                       <Button
                                         size="sm"
                                         variant="outline"
                                         className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                                        onClick={() => {
-                                          if (stagedItemCount > 0) {
-                                            setCancelChangeSetDialogOpen(true);
-                                          } else {
-                                            handleCancelChangeSet();
-                                          }
-                                        }}
+                                        onClick={() => setCancelChangeSetDialogOpen(true)}
                                         disabled={cancelingChangeSet}
                                       >
-                                        {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Unlock size={14} className="mr-1.5" />}
-                                        Discard &amp; Re-lock
+                                        {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                                        Cancel
                                       </Button>
-                                    )}
-                                    {activeChangeSet.status === 'draft' && stagedItemCount > 0 && (
                                       <Button
                                         size="sm"
-                                        className="shrink-0"
-                                        onClick={handleSubmitChanges}
-                                        disabled={submittingChanges}
+                                        className="shrink-0 bg-success hover:bg-success/90 text-white"
+                                        onClick={() => setLockConfirmDialogOpen(true)}
+                                        disabled={submittingChanges || stagedItemCount === 0}
                                       >
-                                        {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-                                        Submit for Approval
+                                        {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
+                                        Lock
                                       </Button>
-                                    )}
-                                  </div>
+                                    </div>
+                                  )}
                                 </CardContent>
                               </Card>
                             )}
@@ -2703,13 +2704,13 @@ export default function LeaseReview() {
         </DialogContent>
       </Dialog>
 
-      {/* Discard Changes Confirmation Dialog */}
+      {/* Cancel Confirmation Dialog */}
       <Dialog open={cancelChangeSetDialogOpen} onOpenChange={setCancelChangeSetDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Discard Changes &amp; Re-lock</DialogTitle>
+            <DialogTitle>Cancel changes?</DialogTitle>
             <DialogDescription>
-              This will discard all {stagedItemCount} staged change{stagedItemCount !== 1 ? 's' : ''} and re-lock the lease. This cannot be undone.
+              Are you sure you want to cancel? Your changes will not be saved and the lease will lock.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -2722,7 +2723,41 @@ export default function LeaseReview() {
               disabled={cancelingChangeSet}
             >
               {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Discard &amp; Re-lock
+              Yes, cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lock Confirmation Dialog — submits the change set for approval and re-locks. */}
+      <Dialog open={lockConfirmDialogOpen} onOpenChange={setLockConfirmDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-success" />
+              Lock and submit {stagedItemCount} change{stagedItemCount !== 1 ? 's' : ''}
+            </DialogTitle>
+            <DialogDescription>
+              Your staged changes will be submitted for financial approval. The lease re-locks immediately. Approved changes apply to the live record; rejected ones are reverted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
+            This action is irreversible from this screen. To make further edits later, request another unlock.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLockConfirmDialogOpen(false)} disabled={submittingChanges}>
+              Keep Editing
+            </Button>
+            <Button
+              className="bg-success hover:bg-success/90 text-white"
+              onClick={async () => {
+                await handleSubmitChanges();
+                setLockConfirmDialogOpen(false);
+              }}
+              disabled={submittingChanges || stagedItemCount === 0}
+            >
+              {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
+              Lock &amp; Submit
             </Button>
           </DialogFooter>
         </DialogContent>

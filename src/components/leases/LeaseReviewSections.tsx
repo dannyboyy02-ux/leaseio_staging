@@ -258,49 +258,9 @@ export function SectionCard({
       isConfirmed && !isModelLocked && "border-green-300 bg-green-50/10"
     )}>
       <CardHeader className="bg-muted/30 border-b py-3">
-        <CardTitle className="text-sm font-bold flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <Icon size={16} className="text-primary" />
-            {section.title}
-            {isConfirmed && !isModelLocked && (
-              <Badge variant="outline" className="text-green-600 border-green-400 bg-green-50 text-[9px]">
-                <Check size={8} className="mr-0.5" /> Reviewed
-              </Badge>
-            )}
-          </span>
-          <div className="flex items-center gap-2">
-            {!isConfirmed && !isLocked && !isModelLocked && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onConfirmSection(sectionKey)}
-                className="h-7 text-xs text-green-600 border-green-400 hover:bg-green-50"
-              >
-                <Check size={12} className="mr-1" />
-                Mark Reviewed
-              </Button>
-            )}
-            {!isLocked && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsEditing(!isEditing)}
-                className="h-7"
-              >
-                {isEditing ? (
-                  <>
-                    <X size={12} className="mr-1" />
-                    Done
-                  </>
-                ) : (
-                  <>
-                    <Pencil size={12} className="mr-1" />
-                    Edit
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
+        <CardTitle className="text-sm font-bold flex items-center gap-2">
+          <Icon size={16} className="text-primary" />
+          {section.title}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
