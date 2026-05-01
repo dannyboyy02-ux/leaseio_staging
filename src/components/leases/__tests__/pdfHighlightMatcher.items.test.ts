@@ -276,4 +276,27 @@ describe('findHighlightSpansForItems — pdfjs item fixtures', () => {
     const r = findHighlightSpansForItems([{ str: 'something' }], []);
     expect(r.kind).toBe('no-candidates');
   });
+
+  it('AIR CRE ligature glyphs (Ɵ Ʃ Ō ﬁ): "addiƟonal" / "wriƩen" / "iniƟal" still match', () => {
+    // Real page-3 text from the test lease: PDF font CMap encodes "ti", "tt",
+    // "ft", "fi" ligatures as single Unicode codepoints. Without the glyph map
+    // the fuzzy matcher's small per-token edit budget can't bridge the gap on
+    // short tokens like "Ɵmes" → "times".
+    const items: Item[] = [
+      {
+        str:
+          'during the term of this Lease, Lessee shall, upon wriƩen request from Lessor, deposit addiƟonal monies with Lessor so that the total amount of the Security Deposit shall at all Ɵmes bear the same proporƟon to the increased Base Rent as the iniƟal Security Deposit bore to the iniƟal Base Rent.',
+      },
+    ];
+    const citation =
+      'If the Base Rent increases during the term of this Lease, Lessee shall, upon written request from Lessor, deposit additional monies with Lessor so that the total amount of the Security Deposit shall at all times bear the same proportion to the increased Base Rent as the initial Security Deposit bore to the initial Base Rent.';
+    const r = findHighlightSpansForItems(items, [undefined as unknown as string, citation]);
+    expect(r.kind).toBe('exact-text');
+    expect(r.spans.length).toBeGreaterThan(0);
+    const text = reconstructHighlight(items, r.spans);
+    // Highlight should cover the bulk of the citation text actually present
+    // on the page (the "If the Base Rent increases" prefix lives on page 2).
+    expect(text).toContain('Security Deposit');
+    expect(text).toContain('Base Rent');
+  });
 });

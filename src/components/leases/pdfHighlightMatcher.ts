@@ -20,8 +20,32 @@ export const MONTHS_ABBR = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
+/**
+ * Single-codepoint Unicode glyphs that PDF text layers (esp. AIR CRE
+ * lease templates) emit instead of multi-char ligatures. Each maps to a
+ * single ASCII proxy char — lossy on purpose, so the per-char origin map
+ * stays 1:1 and fuzzy matching can bridge the missing letter with one
+ * insert/delete instead of failing outright.
+ *
+ * Examples in real lease text:
+ *   "wriƩen"     (Ʃ) → "writen"   (target "written"   — Lev 1, matches)
+ *   "addiƟonal"  (Ɵ) → "addtonal" (target "additional"— Lev 2, matches)
+ *   "Ɵmes"       (Ɵ) → "tmes"     (target "times"     — Lev 1, matches)
+ *   "iniƟal"     (Ɵ) → "intal"    (target "initial"   — Lev 2, matches)
+ *   "aŌer"       (Ō) → "afer"     (target "after"     — Lev 1, matches)
+ */
+const PDF_LIGATURE_GLYPHS: Record<string, string> = {
+  'Ɵ': 't', 'ɵ': 't', // Ɵ ɵ — used for "ti" ligature
+  'Ʃ': 't', 'ʃ': 't', // Ʃ ʃ — used for "tt" ligature
+  'Ō': 'f', 'ō': 'f', // Ō ō — used for "ft" ligature
+  'ﬀ': 'f', 'ﬁ': 'f', 'ﬂ': 'f', 'ﬃ': 'f', 'ﬄ': 'f', // ﬀ ﬁ ﬂ ﬃ ﬄ
+  'ﬅ': 's', 'ﬆ': 's', // ﬅ ﬆ — st ligatures
+};
+
 export function normalizeChar(c: string): string {
+  if (c in PDF_LIGATURE_GLYPHS) return PDF_LIGATURE_GLYPHS[c];
   const lower = c.toLowerCase();
+  if (lower in PDF_LIGATURE_GLYPHS) return PDF_LIGATURE_GLYPHS[lower];
   if (/[\p{L}\p{N}]/u.test(lower)) return lower;
   return ' ';
 }
