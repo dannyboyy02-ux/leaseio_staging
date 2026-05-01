@@ -96,7 +96,7 @@ export function RecentActivity() {
           .eq('leases.workspace_id', workspace.id)
           .in('activity_type', ['created', 'status_change', 'document_upload', 'executed_uploaded'])
           .order('created_at', { ascending: false })
-          .limit(4),
+          .limit(3),
         (() => {
           const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
           return supabase

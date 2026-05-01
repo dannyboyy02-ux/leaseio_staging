@@ -153,7 +153,10 @@ export function UpcomingRisks() {
         return 0;
       });
 
-      setRisks(sorted.slice(0, 10));
+      // Cap at 5 to match the dashboard's tight density (Recent Activity = 3,
+      // AI Extractions = 4). Beyond this users go to the dedicated Risks
+      // surfaces (Reports / per-lease Risks tab) for the full list.
+      setRisks(sorted.slice(0, 5));
       setLoading(false);
     }
 
@@ -205,7 +208,7 @@ export function UpcomingRisks() {
                 <Shield className="h-4 w-4 shrink-0" />
                 <span>No {CHIP_LABELS[activeFilter].toLowerCase()} risks detected</span>
               </div>
-            ) : filteredRisks.map((risk, index) => (
+            ) : filteredRisks.slice(0, 5).map((risk, index) => (
               <div
                 key={`${risk.leaseId}-${risk.riskType}-${index}`}
                 className="flex items-center gap-3 py-2 border-b last:border-0"
