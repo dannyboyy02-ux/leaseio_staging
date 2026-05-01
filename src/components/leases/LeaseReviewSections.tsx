@@ -591,15 +591,21 @@ export function RisksSection({ risks, onJumpToPage, leaseId, onRisksChanged }: R
       const userId = userData?.user?.id ?? null;
       const reasonTrimmed = dismissReason.trim() || null;
 
-      const { error: updateError } = await (supabase as any)
+      const { data: updatedRows, error: updateError } = await (supabase as any)
         .from('risks')
         .update({
           dismissed_at: new Date().toISOString(),
           dismissed_by: userId,
           dismissed_reason: reasonTrimmed,
         })
-        .eq('id', dismissTarget.id);
+        .eq('id', dismissTarget.id)
+        .select('id');
       if (updateError) throw updateError;
+      // Defend against silent 0-row updates from a future RLS gap — without
+      // this check, RLS could swallow the write and the toast would lie.
+      if (!updatedRows || updatedRows.length === 0) {
+        throw new Error('No rows updated — likely a permissions issue. Contact your workspace admin.');
+      }
 
       // Audit log entry — keeps reporting and compliance trail intact.
       await (supabase as any).from('lease_activity_log').insert({

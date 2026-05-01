@@ -238,15 +238,19 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id ?? null;
       const reasonTrimmed = dismissReason.trim() || null;
-      const { error: upErr } = await (supabase as any)
+      const { data: updatedRows, error: upErr } = await (supabase as any)
         .from('risks')
         .update({
           dismissed_at: new Date().toISOString(),
           dismissed_by: userId,
           dismissed_reason: reasonTrimmed,
         })
-        .eq('id', dismissTarget.id);
+        .eq('id', dismissTarget.id)
+        .select('id');
       if (upErr) throw upErr;
+      if (!updatedRows || updatedRows.length === 0) {
+        throw new Error('No rows updated — likely a permissions issue. Contact your workspace admin.');
+      }
       await (supabase as any).from('lease_activity_log').insert({
         lease_id: lease.id,
         user_id: userId,
