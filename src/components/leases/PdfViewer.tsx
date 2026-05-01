@@ -14,10 +14,14 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 interface PdfViewerProps {
   url: string | null;
   targetPage?: number; // when this changes, jump to that page
-  /** When set, text on the rendered page that matches this string is wrapped
-   *  in a yellow <mark> highlight so the user can see the AI extraction's
-   *  source for the field they clicked. */
+  /** Surrounding-clause context the AI quoted as the source of the field
+   *  (e.g. `Five Degrees, LLC, a California limited liability company ("Lessor")`).
+   *  Used as a fallback target if `targetValue` cannot be located verbatim. */
   targetHighlight?: string;
+  /** The actual extracted field value (e.g. `Five Degrees, LLC, a California
+   *  limited liability company`). Tried FIRST so the highlight tightly hugs
+   *  the abstracted words instead of the surrounding boilerplate. */
+  targetValue?: string;
 }
 
 function escapeHtml(s: string): string {
@@ -51,7 +55,7 @@ function findLongestPhrase(haystack: string, target: string, minChars = 12): { s
   return null;
 }
 
-export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) {
+export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
@@ -98,95 +102,110 @@ export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) 
   const [matchStatus, setMatchStatus] = useState<'idle' | 'searching' | 'found' | 'not-found'>('idle');
   const pageRef = useRef<any>(null);
 
-  const computeMatchRange = useCallback(async (page: any, phrase?: string) => {
-    if (!page) return;
-    if (!phrase) {
-      setMatchRange(null);
-      setMatchStatus('idle');
-      return;
-    }
-    setMatchStatus('searching');
-    try {
-      const textContent = await page.getTextContent();
-      const items: Array<{ str: string }> = textContent?.items ?? [];
-      if (items.length === 0) {
+  /**
+   * Try to locate one of the candidate phrases in the page's text layer.
+   * Candidates are tried in order — the first one with a non-empty exact
+   * match wins. Falls back to the longest substring of the LAST candidate
+   * (typically the broader source_text context) if no exact match found.
+   */
+  const computeMatchRange = useCallback(
+    async (page: any, candidates: Array<string | undefined>) => {
+      if (!page) return;
+      const cleaned = candidates.filter((c): c is string => typeof c === 'string' && c.trim().length > 0);
+      if (cleaned.length === 0) {
         setMatchRange(null);
-        setMatchStatus('not-found');
+        setMatchStatus('idle');
         return;
       }
-
-      // Build a normalized concatenated string with per-item char ranges.
-      let combined = '';
-      const itemRanges: Array<{ start: number; end: number }> = [];
-      for (const item of items) {
-        const piece = normalizeForMatch(item.str ?? '');
-        const start = combined.length;
-        // Pad with a single space between items so adjacent words don't fuse.
-        const fragment = piece.length > 0 ? piece + ' ' : ' ';
-        combined += fragment;
-        itemRanges.push({ start, end: start + piece.length });
-      }
-
-      const normalizedTarget = normalizeForMatch(phrase);
-      if (normalizedTarget.length < 4) {
-        setMatchRange(null);
-        setMatchStatus('not-found');
-        return;
-      }
-
-      // Try a full-phrase match first; fall back to the longest substring.
-      let pos = combined.indexOf(normalizedTarget);
-      let matchLen = normalizedTarget.length;
-      if (pos === -1) {
-        const longest = findLongestPhrase(combined, normalizedTarget, 8);
-        if (!longest) {
+      setMatchStatus('searching');
+      try {
+        const textContent = await page.getTextContent();
+        const items: Array<{ str: string }> = textContent?.items ?? [];
+        if (items.length === 0) {
           setMatchRange(null);
           setMatchStatus('not-found');
           return;
         }
-        pos = longest.start;
-        matchLen = longest.end - longest.start;
-      }
 
-      // Map char range back to item indices.
-      const matchEnd = pos + matchLen;
-      let startIdx = -1;
-      let endIdx = -1;
-      for (let i = 0; i < itemRanges.length; i++) {
-        const r = itemRanges[i];
-        if (r.end <= pos || r.start >= matchEnd) continue;
-        if (startIdx === -1) startIdx = i;
-        endIdx = i;
-      }
-      if (startIdx === -1) {
+        // Build a normalized concatenated string with per-item char ranges.
+        let combined = '';
+        const itemRanges: Array<{ start: number; end: number }> = [];
+        for (const item of items) {
+          const piece = normalizeForMatch(item.str ?? '');
+          const start = combined.length;
+          const fragment = piece.length > 0 ? piece + ' ' : ' ';
+          combined += fragment;
+          itemRanges.push({ start, end: start + piece.length });
+        }
+
+        const mapPosToItems = (pos: number, len: number) => {
+          const matchEnd = pos + len;
+          let startIdx = -1;
+          let endIdx = -1;
+          for (let i = 0; i < itemRanges.length; i++) {
+            const r = itemRanges[i];
+            if (r.end <= pos || r.start >= matchEnd) continue;
+            if (startIdx === -1) startIdx = i;
+            endIdx = i;
+          }
+          return startIdx === -1 ? null : { start: startIdx, end: endIdx };
+        };
+
+        // Try each candidate in order: exact match first.
+        for (const candidate of cleaned) {
+          const normalized = normalizeForMatch(candidate);
+          if (normalized.length < 3) continue;
+          const pos = combined.indexOf(normalized);
+          if (pos !== -1) {
+            const range = mapPosToItems(pos, normalized.length);
+            if (range) {
+              setMatchRange(range);
+              setMatchStatus('found');
+              return;
+            }
+          }
+        }
+
+        // Fallback: longest-substring match on the LAST candidate (the
+        // broader source_text context — value usually doesn't have enough
+        // surrounding text to give a good fallback).
+        const fallbackTarget = normalizeForMatch(cleaned[cleaned.length - 1]);
+        const longest = findLongestPhrase(combined, fallbackTarget, 8);
+        if (longest) {
+          const range = mapPosToItems(longest.start, longest.end - longest.start);
+          if (range) {
+            setMatchRange(range);
+            setMatchStatus('found');
+            return;
+          }
+        }
+
         setMatchRange(null);
         setMatchStatus('not-found');
-      } else {
-        setMatchRange({ start: startIdx, end: endIdx });
-        setMatchStatus('found');
+      } catch (err) {
+        console.error('[PdfViewer] Failed to compute highlight range:', err);
+        setMatchRange(null);
+        setMatchStatus('not-found');
       }
-    } catch (err) {
-      console.error('[PdfViewer] Failed to compute highlight range:', err);
-      setMatchRange(null);
-      setMatchStatus('not-found');
-    }
-  }, []);
+    },
+    []
+  );
 
   const onPageLoadSuccess = useCallback(
     async (page: any) => {
       pageRef.current = page;
-      await computeMatchRange(page, targetHighlight);
+      await computeMatchRange(page, [targetValue, targetHighlight]);
     },
-    [computeMatchRange, targetHighlight]
+    [computeMatchRange, targetValue, targetHighlight]
   );
 
-  // Re-run the matcher when targetHighlight changes for the SAME page —
+  // Re-run the matcher when either highlight target changes for the SAME page —
   // the Page doesn't remount, so onPageLoadSuccess won't fire again on its own.
   useEffect(() => {
     if (pageRef.current) {
-      computeMatchRange(pageRef.current, targetHighlight);
+      computeMatchRange(pageRef.current, [targetValue, targetHighlight]);
     }
-  }, [targetHighlight, computeMatchRange]);
+  }, [targetValue, targetHighlight, computeMatchRange]);
 
   const customTextRenderer = useCallback(
     ({ str, itemIndex }: { str: string; itemIndex: number }) => {
@@ -230,7 +249,7 @@ export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) 
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={nextPage} disabled={currentPage >= numPages}>
             <ChevronRight size={14} />
           </Button>
-          {targetHighlight && (
+          {(targetValue || targetHighlight) && (
             <span
               className={
                 matchStatus === 'found'
@@ -241,7 +260,7 @@ export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) 
                       ? 'ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200'
                       : 'hidden'
               }
-              title={matchStatus === 'not-found' ? `Source phrase not located on this page: "${targetHighlight.slice(0, 60)}…"` : undefined}
+              title={matchStatus === 'not-found' ? `Source not located on this page: "${(targetValue || targetHighlight || '').slice(0, 60)}…"` : undefined}
             >
               {matchStatus === 'found' && 'Source highlighted'}
               {matchStatus === 'searching' && 'Searching…'}
@@ -275,7 +294,7 @@ export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) 
             }
           >
             <Page
-              key={`page-${currentPage}-hl-${targetHighlight ?? ''}`}
+              key={`page-${currentPage}-v-${targetValue ?? ''}-hl-${targetHighlight ?? ''}`}
               pageNumber={currentPage}
               scale={scale}
               renderTextLayer={true}

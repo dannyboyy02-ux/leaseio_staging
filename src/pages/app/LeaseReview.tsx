@@ -151,6 +151,7 @@ export default function LeaseReview() {
   const pdfPanelRef = useRef<ImperativePanelHandle>(null);
   const [targetPage, setTargetPage] = useState<number | undefined>(undefined);
   const [targetHighlight, setTargetHighlight] = useState<string | undefined>(undefined);
+  const [targetValue, setTargetValue] = useState<string | undefined>(undefined);
   const [verifiedFields, setVerifiedFields] = useState<Set<string>>(new Set());
   const [confirmedSections, setConfirmedSections] = useState<string[]>([]);
   
@@ -880,10 +881,11 @@ export default function LeaseReview() {
     }
   };
 
-  const jumpToPage = (page?: number, sourceText?: string) => {
+  const jumpToPage = (page?: number, sourceText?: string, value?: string) => {
     if (!page) return;
     setTargetPage(page);
     setTargetHighlight(sourceText);
+    setTargetValue(value);
     if (showPdfPanel) {
       if (isPdfCollapsed) setIsPdfCollapsed(false);
     } else {
@@ -2167,40 +2169,45 @@ export default function LeaseReview() {
                   Lock
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
-                Approval Queue
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-              <ArchiveButton
-                leaseId={lease.id}
-                isArchived={!!lease.archived}
-                onChange={refetchLease}
-              />
-              {/* Upload Amendment button - only for master leases */}
-              {isMasterLease && !isProcessing && (
-                <UploadAmendmentDialog
-                  parentLeaseId={lease.id}
-                  parentFilename={lease.filename}
-                  onSuccess={() => setAmendmentsRefresh(prev => prev + 1)}
-                />
+              {/* Always-on toolbar — hidden while unlocked for editing so the three edit buttons stand alone on the right */}
+              {!(!lease.model_locked && activeChangeSet?.status === 'draft') && (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
+                    Approval Queue
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                  <ArchiveButton
+                    leaseId={lease.id}
+                    isArchived={!!lease.archived}
+                    onChange={refetchLease}
+                  />
+                  {/* Upload Amendment button - only for master leases */}
+                  {isMasterLease && !isProcessing && (
+                    <UploadAmendmentDialog
+                      parentLeaseId={lease.id}
+                      parentFilename={lease.filename}
+                      onSuccess={() => setAmendmentsRefresh(prev => prev + 1)}
+                    />
+                  )}
+                  <LeaseExports
+                    lease={{
+                      id: lease.id,
+                      filename: lease.filename,
+                      extracted_json: extractedJson,
+                      landlord_name: lease.landlord_name,
+                      tenant_name: lease.tenant_name,
+                      lease_start: lease.lease_start,
+                      lease_end: lease.lease_end,
+                      base_rent_amount: lease.base_rent_amount,
+                      current_monthly_rent: lease.current_monthly_rent,
+                      status: lease.status,
+                      lifecycle_status: lease.lifecycle_status,
+                    }}
+                    formValues={form}
+                    rentSchedule={rentSchedule}
+                  />
+                </>
               )}
-              <LeaseExports
-                lease={{
-                  id: lease.id,
-                  filename: lease.filename,
-                  extracted_json: extractedJson,
-                  landlord_name: lease.landlord_name,
-                  tenant_name: lease.tenant_name,
-                  lease_start: lease.lease_start,
-                  lease_end: lease.lease_end,
-                  base_rent_amount: lease.base_rent_amount,
-                  current_monthly_rent: lease.current_monthly_rent,
-                  status: lease.status,
-                  lifecycle_status: lease.lifecycle_status,
-                }}
-                formValues={form}
-                rentSchedule={rentSchedule}
-              />
               {isPendingApproval && (
                 <NudgeApproverButton 
                   leaseId={lease.id}
@@ -2276,7 +2283,7 @@ export default function LeaseReview() {
                         <ChevronLeft size={16} />
                       </Button>
                     </div>
-                    <PdfViewer url={pdfUrl} targetPage={targetPage} targetHighlight={targetHighlight} />
+                    <PdfViewer url={pdfUrl} targetPage={targetPage} targetHighlight={targetHighlight} targetValue={targetValue} />
                   </div>
                 </ResizablePanel>
                 <ResizableHandle withHandle className="bg-border w-1 hover:bg-primary transition-colors" />

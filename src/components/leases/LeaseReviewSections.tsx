@@ -187,7 +187,7 @@ interface SectionCardProps {
   onFieldFocus: (fieldId: string) => void;
   onFieldBlur: (fieldId: string) => void;
   onVerifyField: (fieldId: string) => void;
-  onJumpToPage: (page?: number, sourceText?: string) => void;
+  onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
   confirmedSections: string[];
   onConfirmSection: (sectionKey: string) => void;
   /** When true, suppress the per-field confidence badge. Set after a lease
@@ -272,7 +272,7 @@ export function SectionCard({
           const value = form[field.id] || '';
           const FieldIcon = field.icon;
           const isReadOnly = isLocked || !isEditing;
-          const locateInPdf = () => onJumpToPage(fieldPage, fieldSourceText);
+          const locateInPdf = () => onJumpToPage(fieldPage, fieldSourceText, value || undefined);
           // Clicking/focusing the field also locates the source text in the PDF.
           const handleFieldFocus = () => {
             onFieldFocus(field.id);
@@ -535,7 +535,7 @@ interface Risk {
 
 interface RisksSectionProps {
   risks: Risk[];
-  onJumpToPage: (page?: number, sourceText?: string) => void;
+  onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
 }
 
 export function RisksSection({ risks, onJumpToPage }: RisksSectionProps) {
