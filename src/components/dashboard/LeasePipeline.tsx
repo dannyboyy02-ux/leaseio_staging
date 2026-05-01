@@ -1,24 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-const formatCurrency = (value: number): string =>
-  new Intl.NumberFormat('en-US', {
+/**
+ * Compact currency formatter — `$1.2M`, `$870K`, `$1.4B`. Keeps stage rows
+ * narrow so the pipeline doesn't overflow on portfolios with $10M+ totals.
+ */
+const formatCompactCurrency = (value: number): string => {
+  if (!Number.isFinite(value) || value === 0) return '$0';
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
+    notation: 'compact',
+    compactDisplay: 'short',
+    maximumFractionDigits: 1,
   }).format(value);
+};
+
+// "Active" in the pipeline = activated within this lookback window. Older
+// active leases stay in the Portfolio dashboard but drop off the pipeline,
+// which is meant to surface what's currently in motion — not the whole
+// portfolio. 90 days = roughly one quarter of finance review cadence.
+const ACTIVE_LOOKBACK_DAYS = 90;
 
 const STAGES = [
-  { key: 'submitted',    label: 'Submitted',    color: 'bg-blue-400',   href: '/app/leases?view=approval' },
-  { key: 'under_review', label: 'Under Review',  color: 'bg-amber-400',  href: '/app/leases?view=approval' },
-  { key: 'approved',     label: 'Approved',      color: 'bg-purple-400', href: '/app/leases?view=approval' },
-  { key: 'executed',     label: 'Executed',      color: 'bg-indigo-400', href: '/app/leases?view=active' },
-  { key: 'active',       label: 'Active',        color: 'bg-green-500',  href: '/app/leases?view=active' },
+  { key: 'submitted',    label: 'Submitted',                            color: 'bg-blue-400',   href: '/app/leases?view=approval' },
+  { key: 'under_review', label: 'Under Review',                          color: 'bg-amber-400',  href: '/app/leases?view=approval' },
+  { key: 'approved',     label: 'Approved',                              color: 'bg-purple-400', href: '/app/leases?view=approval' },
+  { key: 'executed',     label: 'Executed',                              color: 'bg-indigo-400', href: '/app/leases?view=active' },
+  { key: 'active',       label: `Active (${ACTIVE_LOOKBACK_DAYS}d)`,    color: 'bg-green-500',  href: '/app/leases?view=active' },
 ] as const;
 
 interface StageData {
@@ -33,30 +48,41 @@ interface StageData {
 export function LeasePipeline() {
   const { workspace } = useApp();
   const navigate = useNavigate();
-  const [stageData, setStageData] = useState<StageData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    async function fetchData() {
-      if (!workspace?.id) {
-        setLoading(false);
-        return;
-      }
-
+  // Live data: useQuery refetches on window focus + every 60s, and a
+  // postgres-changes subscription invalidates on any leases table mutation
+  // for this workspace so the dashboard reflects state changes immediately
+  // (lock/unlock/approve/lifecycle transitions).
+  const { data: stageData = [], isLoading } = useQuery<StageData[]>({
+    queryKey: ['lease-pipeline', workspace?.id],
+    enabled: !!workspace?.id,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    queryFn: async () => {
+      if (!workspace?.id) return [];
       const { data: leases } = await supabase
         .from('leases')
-        .select('lifecycle_status, monthly_payment')
+        .select('lifecycle_status, monthly_payment, activated_at')
         .eq('workspace_id', workspace.id);
-
-      if (!leases) {
-        setLoading(false);
-        return;
-      }
-
-      const derived: StageData[] = STAGES.map((stage) => {
-        const matching = leases.filter((l) => l.lifecycle_status === stage.key);
+      if (!leases) return [];
+      const cutoff = Date.now() - ACTIVE_LOOKBACK_DAYS * 86_400_000;
+      return STAGES.map((stage) => {
+        const matching = leases.filter((l) => {
+          if (l.lifecycle_status !== stage.key) return false;
+          if (stage.key === 'active') {
+            // Only "recently activated" leases stay in the pipeline view.
+            // If activated_at is null (legacy data), treat as not in scope —
+            // those belong in the Portfolio dashboard, not the pipeline.
+            const ts = (l as any).activated_at as string | null;
+            if (!ts) return false;
+            return new Date(ts).getTime() >= cutoff;
+          }
+          return true;
+        });
         const annualValue = matching.reduce(
-          (sum, l) => sum + (l.monthly_payment ?? 0) * 12,
+          (sum, l) => sum + ((l as any).monthly_payment ?? 0) * 12,
           0
         );
         return {
@@ -68,13 +94,28 @@ export function LeasePipeline() {
           annualValue,
         };
       });
+    },
+  });
 
-      setStageData(derived);
-      setLoading(false);
-    }
-
-    fetchData();
-  }, [workspace?.id]);
+  // Realtime subscription — any insert/update/delete on the workspace's
+  // leases invalidates the query so the pipeline reflects state immediately
+  // (no need to wait for the 60s refetch on lifecycle transitions).
+  useEffect(() => {
+    if (!workspace?.id) return;
+    const channel = supabase
+      .channel(`lease-pipeline-${workspace.id}`)
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'leases', filter: `workspace_id=eq.${workspace.id}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['lease-pipeline', workspace.id] });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [workspace?.id, queryClient]);
 
   const maxCount = Math.max(...stageData.map((s) => s.count), 1);
 
@@ -106,7 +147,7 @@ export function LeasePipeline() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {loading ? (
+        {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="animate-pulse bg-muted h-7 rounded" />
@@ -120,7 +161,7 @@ export function LeasePipeline() {
                 className="flex items-center gap-3 cursor-pointer hover:bg-muted/70 transition-colors rounded px-2 py-1.5"
                 onClick={() => navigate(stage.href)}
               >
-                <span className="w-24 text-xs text-muted-foreground shrink-0">
+                <span className="w-28 text-xs text-muted-foreground shrink-0">
                   {stage.label}
                 </span>
                 <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
@@ -132,8 +173,15 @@ export function LeasePipeline() {
                 <span className="w-6 text-xs font-medium text-right shrink-0">
                   {stage.count}
                 </span>
-                <span className="w-20 text-xs text-muted-foreground text-right shrink-0">
-                  {formatCurrency(stage.annualValue)}
+                <span
+                  className="w-14 text-xs text-muted-foreground text-right shrink-0 tabular-nums"
+                  title={new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    maximumFractionDigits: 0,
+                  }).format(stage.annualValue)}
+                >
+                  {formatCompactCurrency(stage.annualValue)}
                 </span>
                 {stage.key === bottleneckStage && (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-100 rounded px-1.5 py-0.5 shrink-0">
@@ -143,9 +191,12 @@ export function LeasePipeline() {
                 )}
               </div>
             ))}
-            <div className="pt-3 border-t mt-2">
+            <div className="pt-3 border-t mt-2 flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 Total in progress: {inProgressCount} lease{inProgressCount !== 1 ? 's' : ''}
+              </p>
+              <p className="text-[10px] text-muted-foreground italic">
+                Active row tracks the last {ACTIVE_LOOKBACK_DAYS} days. Mature leases live in the Portfolio.
               </p>
             </div>
           </div>
