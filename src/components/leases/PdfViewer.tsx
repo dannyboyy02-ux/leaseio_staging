@@ -168,13 +168,14 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
   const [scale, setScale] = useState<number>(1.0);
   const [error, setError] = useState<string | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(600);
-
-  // Jump to page when parent requests it
-  useEffect(() => {
-    if (targetPage && targetPage >= 1 && targetPage <= numPages) {
-      setCurrentPage(targetPage);
-    }
-  }, [targetPage, numPages]);
+  // Holds the pdfjs Document proxy so we can fetch any page's text content
+  // for cross-page source search (handles AI page-citation errors).
+  const pdfDocRef = useRef<any>(null);
+  // Cache page text content so cross-page search doesn't re-fetch.
+  const pageItemsCache = useRef<Map<number, Array<{ str: string; hasEOL?: boolean }>>>(new Map());
+  // Tracks the page where the match landed (may differ from targetPage if
+  // the AI cited the wrong page and the matcher found the source elsewhere).
+  const [foundOnPage, setFoundOnPage] = useState<number | null>(null);
 
   // Reset on new document
   useEffect(() => {
@@ -183,10 +184,14 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
     setError(null);
     pageRef.current = null;
     setMatchSpans(null);
+    setFoundOnPage(null);
+    pdfDocRef.current = null;
+    pageItemsCache.current.clear();
   }, [url]);
 
-  const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
+  const onDocumentLoadSuccess = useCallback((doc: any) => {
+    pdfDocRef.current = doc;
+    setNumPages(doc.numPages);
     setError(null);
   }, []);
 
@@ -210,75 +215,122 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
   const pageRef = useRef<any>(null);
 
   /**
-   * Compute the highlight by delegating to the shared matcher, which is
-   * the single source of truth used by both the production component and
-   * the E2E test harness. The matcher handles:
-   *   - exact text + format variants (dates, currency, comma-grouping)
-   *   - digits-only fallback for numeric values
-   *   - token-fuzzy matching for pdfjs font-glyph artifacts (e.g. "LaƟtude")
-   *   - intra-word vs line-break boundary detection (uses item.hasEOL)
-   *   - meta-summary detection (e.g. "Multiple ... across Paragraphs ...")
-   *   - longest-substring fallback as last resort
+   * Load a single page's text-content items (cached). Returns null on failure.
    */
-  const computeMatchRange = useCallback(
-    async (page: any, candidates: Array<string | undefined>) => {
-      if (!page) return;
-      const hasAny = candidates.some((c) => typeof c === 'string' && c.trim().length > 0);
-      if (!hasAny) {
-        setMatchSpans(null);
-        setMatchStatus('idle');
-        return;
-      }
-      setMatchStatus('searching');
+  const getPageItems = useCallback(
+    async (pageNumber: number): Promise<Array<{ str: string; hasEOL?: boolean }> | null> => {
+      const cache = pageItemsCache.current;
+      if (cache.has(pageNumber)) return cache.get(pageNumber)!;
+      const doc = pdfDocRef.current;
+      if (!doc) return null;
+      if (pageNumber < 1 || pageNumber > doc.numPages) return null;
       try {
-        const textContent = await page.getTextContent();
-        const items: Array<{ str: string; hasEOL?: boolean }> = (textContent?.items ?? []).map((i: any) => ({
-          str: i.str ?? '',
-          hasEOL: i.hasEOL ?? false,
-        }));
-        if (items.length === 0) {
-          setMatchSpans(null);
-          setMatchStatus('not-found');
-          return;
-        }
-
-        const result = findHighlightSpansForItems(items, candidates);
-
-        if (result.kind === 'spans-sections') {
-          setMatchSpans(null);
-          setMatchStatus('spans-sections');
-          return;
-        }
-        if (result.kind === 'no-candidates' || result.kind === 'not-found' || result.spans.length === 0) {
-          setMatchSpans(null);
-          setMatchStatus('not-found');
-          return;
-        }
-        setMatchSpans(result.spans);
-        setMatchStatus('found');
-      } catch (err) {
-        console.error('[PdfViewer] Failed to compute highlight range:', err);
-        setMatchSpans(null);
-        setMatchStatus('not-found');
+        const page = await doc.getPage(pageNumber);
+        const tc = await page.getTextContent();
+        const items = (tc?.items ?? [])
+          .filter((i: any) => 'str' in i)
+          .map((i: any) => ({ str: i.str ?? '', hasEOL: i.hasEOL ?? false }));
+        cache.set(pageNumber, items);
+        return items;
+      } catch {
+        return null;
       }
     },
     []
   );
 
-  const onPageLoadSuccess = useCallback(
-    async (page: any) => {
-      pageRef.current = page;
-      await computeMatchRange(page, [targetValue, targetHighlight]);
+  /**
+   * Cross-page search. Tries the cited page first, then expands outward
+   * (±1, ±2, ...) until a meaningful match (exact-text or digits-only or
+   * longest-substring) is found. Returns {page, spans, kind} or null.
+   *
+   * If the AI cited the wrong page (a known pipeline-side issue), this
+   * automatically navigates the user to where the source actually is so
+   * HITL verification still works.
+   */
+  const searchAcrossPages = useCallback(
+    async (citedPage: number, candidates: Array<string | undefined>): Promise<{ page: number; spans: SharedMatchSpan[]; kind: 'found' | 'spans-sections' | 'not-found' } | null> => {
+      const doc = pdfDocRef.current;
+      if (!doc) return null;
+      const total = doc.numPages as number;
+
+      // Build search order: cited page first, then expanding outward.
+      const order: number[] = [citedPage];
+      for (let delta = 1; delta < total; delta++) {
+        if (citedPage - delta >= 1) order.push(citedPage - delta);
+        if (citedPage + delta <= total) order.push(citedPage + delta);
+      }
+
+      // Track best result seen so we can degrade gracefully.
+      let bestSpansSections: number | null = null;
+      // Try each page; first 'found' wins, fall back to 'spans-sections'
+      // from the cited page if no real match anywhere.
+      for (const p of order) {
+        const items = await getPageItems(p);
+        if (!items || items.length === 0) continue;
+        const result = findHighlightSpansForItems(items, candidates);
+        if (
+          (result.kind === 'exact-text' || result.kind === 'digits-only' || result.kind === 'longest-substring') &&
+          result.spans.length > 0
+        ) {
+          return { page: p, spans: result.spans, kind: 'found' };
+        }
+        if (result.kind === 'spans-sections' && bestSpansSections === null) {
+          bestSpansSections = p;
+        }
+      }
+      if (bestSpansSections !== null) {
+        return { page: bestSpansSections, spans: [], kind: 'spans-sections' };
+      }
+      return { page: citedPage, spans: [], kind: 'not-found' };
     },
-    [computeMatchRange, targetValue, targetHighlight]
+    [getPageItems]
   );
 
-  // No useEffect on [targetValue, targetHighlight] — the <Page> `key` already
-  // includes both, so any change to either remounts the Page and re-fires
-  // onPageLoadSuccess against the fresh page object. A second computeMatchRange
-  // path here would race with onPageLoadSuccess and clobber a valid match
-  // (the previous bug: highlight briefly appears, then vanishes when the
-  // useEffect runs against a stale pageRef and sets matchSpans to null).
+  // When parent updates the targets, search across pages and navigate to
+  // wherever the source actually is. Replaces the previous "jump only to
+  // cited page" effect — now we ALSO follow up by searching neighbors and
+  // the rest of the document if the cited page has nothing.
+  useEffect(() => {
+    if (!targetPage || numPages === 0) return;
+    const candidates: Array<string | undefined> = [targetValue, targetHighlight];
+    const hasAny = candidates.some((c) => typeof c === 'string' && c.trim().length > 0);
+    if (!hasAny) {
+      // No highlight requested — just jump to the cited page.
+      setCurrentPage(targetPage);
+      setMatchSpans(null);
+      setMatchStatus('idle');
+      setFoundOnPage(null);
+      return;
+    }
+    setMatchStatus('searching');
+    let cancelled = false;
+    (async () => {
+      const result = await searchAcrossPages(targetPage, candidates);
+      if (cancelled || !result) return;
+      setCurrentPage(result.page);
+      setFoundOnPage(result.kind === 'found' ? result.page : null);
+      if (result.kind === 'found') {
+        setMatchSpans(result.spans);
+        setMatchStatus('found');
+      } else if (result.kind === 'spans-sections') {
+        setMatchSpans(null);
+        setMatchStatus('spans-sections');
+      } else {
+        setMatchSpans(null);
+        setMatchStatus('not-found');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [targetPage, targetValue, targetHighlight, numPages, searchAcrossPages]);
+
+  // Page-load is now a no-op for matching — the cross-page search effect
+  // above is the single source of truth that runs the matcher and sets
+  // matchSpans/matchStatus before we navigate. We just hold a ref so the
+  // page object is reachable for any future single-page API.
+  const onPageLoadSuccess = useCallback(async (page: any) => {
+    pageRef.current = page;
+  }, []);
 
   const customTextRenderer = useCallback(
     ({ str, itemIndex }: { str: string; itemIndex: number }) => {
@@ -343,15 +395,19 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
               }
               title={
                 matchStatus === 'not-found'
-                  ? `Source not located on this page: "${(targetValue || targetHighlight || '').slice(0, 60)}…"`
+                  ? `Source not located anywhere in this document: "${(targetValue || targetHighlight || '').slice(0, 60)}…"`
                   : matchStatus === 'spans-sections'
                     ? `The AI flagged this as spanning multiple sections; no single phrase to highlight.`
-                    : undefined
+                    : matchStatus === 'found' && targetPage && foundOnPage && foundOnPage !== targetPage
+                      ? `AI cited page ${targetPage}; located on page ${foundOnPage} instead.`
+                      : undefined
               }
             >
-              {matchStatus === 'found' && 'Source highlighted'}
+              {matchStatus === 'found' && (foundOnPage && targetPage && foundOnPage !== targetPage
+                ? `Source highlighted (page ${foundOnPage}, AI cited ${targetPage})`
+                : 'Source highlighted')}
               {matchStatus === 'searching' && 'Searching…'}
-              {matchStatus === 'not-found' && 'Source not located on this page'}
+              {matchStatus === 'not-found' && 'Source not located in document'}
               {matchStatus === 'spans-sections' && 'Source spans multiple sections'}
             </span>
           )}

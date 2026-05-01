@@ -178,11 +178,14 @@ export function findFuzzyTokenRun(haystack: string, target: string): { start: nu
     }
   }
 
-  // Require a meaningful proportion of the target to be covered. 70% is
-  // strict enough to reject coincidental partial matches (e.g. matching
-  // "Corona, CA, 92881" of an address that has nothing to do with "Latitude
-  // Way"), but loose enough to tolerate a font-glyph error or two.
-  const minRequired = Math.max(3, Math.floor(tTokens.length * 0.7));
+  // Require a meaningful proportion of the target to be covered. 60% with
+  // ceil() and a floor of 4 absolute tokens handles AI source quotes with
+  // interjections (e.g. "(collectively, 'assign or assignment')" inside a
+  // long quote — fuzzy gets ~21/32 tokens consecutive) while still rejecting
+  // coincidental partial matches (a short address like "3 Latitude Way,
+  // Corona, CA 92881" must match >= 4 of its 6 tokens, not just the trailing
+  // "Corona, CA, 92881" of an unrelated address).
+  const minRequired = Math.max(4, Math.ceil(tTokens.length * 0.6));
   if (best && best.count >= minRequired) {
     return { start: best.start, end: best.end, matchedTokens: best.count };
   }
@@ -522,15 +525,20 @@ export function findHighlightSpansForItems(
   // ("LaƟtude" vs "Latitude"), OCR variations, intra-word splits, and
   // minor punctuation drift. Tries candidates in their original order
   // (value first, source_text second), preferring the value's tighter
-  // match over source_text's broader context.
+  // match over source_text's broader context. For ellipsis-bridged AI
+  // quotes ("Lessee shall not... or sublet..."), each non-trivial segment
+  // is tried as its own fuzzy target.
   for (const candidate of cleaned) {
     if (isTooGenericValue(candidate)) continue;
     if (isMetaSummary(candidate)) continue;
-    const fuzzy = findFuzzyTokenRun(h.combined, candidate);
-    if (fuzzy) {
-      const spans = spansFromNormalizedRange(h, fuzzy.start, fuzzy.end);
-      if (spans.length > 0) {
-        return { kind: 'exact-text', candidate, variant: candidate, spans };
+    const fuzzyTries = [candidate, ...expandEllipsisSegments(candidate)];
+    for (const target of fuzzyTries) {
+      const fuzzy = findFuzzyTokenRun(h.combined, target);
+      if (fuzzy) {
+        const spans = spansFromNormalizedRange(h, fuzzy.start, fuzzy.end);
+        if (spans.length > 0) {
+          return { kind: 'exact-text', candidate, variant: target, spans };
+        }
       }
     }
   }
