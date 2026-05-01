@@ -4,6 +4,7 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { findHighlightSpansForItems, type MatchSpan as SharedMatchSpan } from './pdfHighlightMatcher';
 
 // Use the bundled worker from the installed package
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -200,8 +201,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
   // Per-pdfjs-text-item character spans that the matcher wants highlighted.
   // Char-level so the <mark> hugs the matched substring exactly, even when a
   // pdfjs item contains a long line of which only a few words match.
-  type MatchSpan = { itemIndex: number; charStart: number; charEnd: number };
-  const [matchSpans, setMatchSpans] = useState<MatchSpan[] | null>(null);
+  const [matchSpans, setMatchSpans] = useState<SharedMatchSpan[] | null>(null);
   // 'searching' = waiting for page to load, 'found' = highlight rendered,
   // 'not-found' = phrase not located in this page's text layer,
   // 'spans-sections' = source_text is a meta-summary (e.g. "across Paragraphs 9.3, 9.4")
@@ -210,20 +210,21 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
   const pageRef = useRef<any>(null);
 
   /**
-   * Try to locate one of the candidate phrases in the page's text layer.
-   * Candidates tried in order — the first one with an exact match wins.
-   * Falls back to the longest substring of source_text only if it's long
-   * enough to be unique-ish (avoids highlighting random "limited liability"
-   * matches scattered across the page).
-   *
-   * Returns per-item character spans so the <mark> hugs matched chars
-   * within an item rather than wrapping the whole item.
+   * Compute the highlight by delegating to the shared matcher, which is
+   * the single source of truth used by both the production component and
+   * the E2E test harness. The matcher handles:
+   *   - exact text + format variants (dates, currency, comma-grouping)
+   *   - digits-only fallback for numeric values
+   *   - token-fuzzy matching for pdfjs font-glyph artifacts (e.g. "LaƟtude")
+   *   - intra-word vs line-break boundary detection (uses item.hasEOL)
+   *   - meta-summary detection (e.g. "Multiple ... across Paragraphs ...")
+   *   - longest-substring fallback as last resort
    */
   const computeMatchRange = useCallback(
     async (page: any, candidates: Array<string | undefined>) => {
       if (!page) return;
-      const cleaned = candidates.filter((c): c is string => typeof c === 'string' && c.trim().length > 0);
-      if (cleaned.length === 0) {
+      const hasAny = candidates.some((c) => typeof c === 'string' && c.trim().length > 0);
+      if (!hasAny) {
         setMatchSpans(null);
         setMatchStatus('idle');
         return;
@@ -231,207 +232,30 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
       setMatchStatus('searching');
       try {
         const textContent = await page.getTextContent();
-        const items: Array<{ str: string }> = textContent?.items ?? [];
+        const items: Array<{ str: string; hasEOL?: boolean }> = (textContent?.items ?? []).map((i: any) => ({
+          str: i.str ?? '',
+          hasEOL: i.hasEOL ?? false,
+        }));
         if (items.length === 0) {
           setMatchSpans(null);
           setMatchStatus('not-found');
           return;
         }
 
-        // Build a normalized concatenated string. For each char in the
-        // normalized output, store (itemIndex, originalCharIndex) so once
-        // we know the normalized [pos, end) of a match we can map back to
-        // exact char offsets within each pdfjs item's original `str`.
-        let combined = '';
-        const charOriginItem: number[] = []; // length = combined.length
-        const charOriginIndex: number[] = []; // length = combined.length
+        const result = findHighlightSpansForItems(items, candidates);
 
-        for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
-          const original = items[itemIdx].str ?? '';
-          let lastWasSpace = combined.endsWith(' ') || combined.length === 0;
-          for (let ci = 0; ci < original.length; ci++) {
-            const norm = normalizeChar(original[ci]);
-            // Skip duplicate spaces — keep the haystack collapse-equivalent
-            // to normalizeForMatch on the target side.
-            if (norm === ' ' && lastWasSpace) continue;
-            combined += norm;
-            charOriginItem.push(itemIdx);
-            charOriginIndex.push(ci);
-            lastWasSpace = norm === ' ';
-          }
-          // Insert an inter-item boundary space so adjacent items don't fuse.
-          if (!lastWasSpace) {
-            combined += ' ';
-            charOriginItem.push(-1); // boundary, not part of any item
-            charOriginIndex.push(-1);
-          }
-        }
-        // Trim trailing space for cleanliness; but we don't need to mutate
-        // the parallel arrays since we never index past combined.length.
-
-        /** Translate a normalized [pos, end) range to per-item MatchSpans. */
-        const buildSpans = (pos: number, end: number): MatchSpan[] | null => {
-          if (pos < 0 || end <= pos || end > combined.length) return null;
-          const byItem = new Map<number, { min: number; max: number }>();
-          for (let i = pos; i < end; i++) {
-            const item = charOriginItem[i];
-            const orig = charOriginIndex[i];
-            if (item < 0) continue;
-            const cur = byItem.get(item);
-            if (!cur) byItem.set(item, { min: orig, max: orig });
-            else {
-              if (orig < cur.min) cur.min = orig;
-              if (orig > cur.max) cur.max = orig;
-            }
-          }
-          if (byItem.size === 0) return null;
-          const out: MatchSpan[] = [];
-          byItem.forEach((range, itemIndex) => {
-            out.push({ itemIndex, charStart: range.min, charEnd: range.max + 1 });
-          });
-          return out;
-        };
-
-        // Expand each candidate into match variants. For numeric values,
-        // add comma-formatted (44,833) and digit-only (44833) variants. For
-        // ISO dates, add textual representations ("March 1, 2023" etc.) so
-        // a stored value of "2023-03-01" matches what the PDF actually says.
-        // CRITICAL: digit-only variants ONLY for candidates that are
-        // themselves purely numeric — otherwise an address like
-        // "3 Latitude Way, Corona, CA 92881" synthesizes "392881" and
-        // Phase 1 would match those random digits in sequence anywhere
-        // they appear, highlighting just the street number and zip.
-        const expandCandidate = (c: string): string[] => {
-          const out = new Set<string>([c]);
-          for (const dv of expandDateVariants(c)) out.add(dv);
-          for (const seg of expandEllipsisSegments(c)) out.add(seg);
-          if (/^-?\d+(\.\d+)?$/.test(c.trim())) {
-            const n = Number(c);
-            if (Number.isFinite(n)) {
-              out.add(n.toLocaleString('en-US'));
-              out.add(String(Math.round(n)));
-              out.add(Math.round(n).toLocaleString('en-US'));
-            }
-          }
-          if (isPurelyNumeric(c)) {
-            const digitsOnly = c.replace(/[^\d]/g, '');
-            if (digitsOnly.length >= 3) out.add(digitsOnly);
-          }
-          return Array.from(out).filter((s) => s.trim().length > 0);
-        };
-
-        // Build a digits-only haystack alongside the normalized one so that
-        // numeric targets locate cleanly even when the PDF inserts commas
-        // or currency symbols between the digits.
-        let combinedDigits = '';
-        const digitOriginItem: number[] = [];
-        const digitOriginIndex: number[] = [];
-        for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
-          const original = items[itemIdx].str ?? '';
-          for (let ci = 0; ci < original.length; ci++) {
-            if (/\d/.test(original[ci])) {
-              combinedDigits += original[ci];
-              digitOriginItem.push(itemIdx);
-              digitOriginIndex.push(ci);
-            }
-          }
-        }
-
-        const buildSpansFromDigits = (pos: number, len: number): MatchSpan[] | null => {
-          if (pos < 0 || len <= 0 || pos + len > combinedDigits.length) return null;
-          const byItem = new Map<number, { min: number; max: number }>();
-          for (let i = pos; i < pos + len; i++) {
-            const item = digitOriginItem[i];
-            const orig = digitOriginIndex[i];
-            if (item < 0) continue;
-            const cur = byItem.get(item);
-            if (!cur) byItem.set(item, { min: orig, max: orig });
-            else {
-              if (orig < cur.min) cur.min = orig;
-              if (orig > cur.max) cur.max = orig;
-            }
-          }
-          if (byItem.size === 0) return null;
-          const out: MatchSpan[] = [];
-          byItem.forEach((range, itemIndex) => {
-            // For a numeric match within an item like "44,833", the digit
-            // chars are at indices 0,1,3,4,5; min/max gives 0..5 which
-            // correctly covers the comma in between.
-            out.push({ itemIndex, charStart: range.min, charEnd: range.max + 1 });
-          });
-          return out;
-        };
-
-        // Phase 0 — short-circuit: if the only candidate is a meta-summary
-        // ("Multiple ... across Paragraphs ..."), don't try to highlight
-        // (it won't appear verbatim in the PDF) and surface a clear pill.
-        const lastCandidate = cleaned[cleaned.length - 1];
-        const allCandidatesMeta = cleaned.every((c) => isMetaSummary(c));
-        if (allCandidatesMeta || (cleaned.length === 1 && isMetaSummary(lastCandidate))) {
+        if (result.kind === 'spans-sections') {
           setMatchSpans(null);
           setMatchStatus('spans-sections');
           return;
         }
-
-        // Phase 1 — try EXACT normalized-text matches across every candidate
-        // and its format variants. Skip overly-generic single-word values
-        // (like "monthly") that would match indiscriminately — let source_text
-        // win for those.
-        for (const candidate of cleaned) {
-          if (isTooGenericValue(candidate)) continue;
-          for (const variant of expandCandidate(candidate)) {
-            const normalized = normalizeForMatch(variant);
-            if (normalized.length < 3) continue;
-            const pos = combined.indexOf(normalized);
-            if (pos !== -1) {
-              const spans = buildSpans(pos, pos + normalized.length);
-              if (spans) {
-                setMatchSpans(spans);
-                setMatchStatus('found');
-                return;
-              }
-            }
-          }
+        if (result.kind === 'no-candidates' || result.kind === 'not-found' || result.spans.length === 0) {
+          setMatchSpans(null);
+          setMatchStatus('not-found');
+          return;
         }
-
-        // Phase 2 — digits-only haystack match. Only run when the candidate
-        // itself is purely numeric (e.g. square_footage = "44833", rent =
-        // "$69,491.15"). For text candidates that merely contain digits
-        // (street addresses, descriptions), this path produces garbage —
-        // matching only the digits in isolation — so we skip it there.
-        for (const candidate of cleaned) {
-          if (!isPurelyNumeric(candidate)) continue;
-          const variantDigits = candidate.replace(/[^\d]/g, '');
-          if (variantDigits.length < 3) continue;
-          const dpos = combinedDigits.indexOf(variantDigits);
-          if (dpos !== -1) {
-            const spans = buildSpansFromDigits(dpos, variantDigits.length);
-            if (spans) {
-              setMatchSpans(spans);
-              setMatchStatus('found');
-              return;
-            }
-          }
-        }
-
-        // Strict fallback: longest-substring match on source_text (last
-        // candidate), but only if the matched substring is long enough that
-        // false positives are unlikely.
-        const fallbackSrc = cleaned[cleaned.length - 1];
-        const fallbackTarget = normalizeForMatch(fallbackSrc);
-        const minFallbackLen = Math.max(20, Math.floor(fallbackTarget.length * 0.5));
-        const longest = findLongestPhrase(combined, fallbackTarget, minFallbackLen);
-        if (longest) {
-          const spans = buildSpans(longest.start, longest.end);
-          if (spans) {
-            setMatchSpans(spans);
-            setMatchStatus('found');
-            return;
-          }
-        }
-
-        setMatchSpans(null);
-        setMatchStatus('not-found');
+        setMatchSpans(result.spans);
+        setMatchStatus('found');
       } catch (err) {
         console.error('[PdfViewer] Failed to compute highlight range:', err);
         setMatchSpans(null);

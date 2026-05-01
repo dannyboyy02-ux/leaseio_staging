@@ -93,6 +93,102 @@ export function isMetaSummary(s: string): boolean {
   );
 }
 
+/**
+ * Bounded Levenshtein — returns true if edit distance(a, b) ≤ max.
+ * Early-exits as soon as the row minimum exceeds max, so common-case
+ * mismatches are O(min(|a|,|b|)).
+ */
+export function levBounded(a: string, b: string, max: number): boolean {
+  if (Math.abs(a.length - b.length) > max) return false;
+  if (a === b) return true;
+  if (max === 0) return false;
+  if (b.length === 0) return a.length <= max;
+  if (a.length === 0) return b.length <= max;
+  const n = a.length, m = b.length;
+  const dp = new Array(m + 1);
+  for (let j = 0; j <= m; j++) dp[j] = j;
+  for (let i = 1; i <= n; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    let rowMin = i;
+    for (let j = 1; j <= m; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j - 1], dp[j]);
+      prev = tmp;
+      if (dp[j] < rowMin) rowMin = dp[j];
+    }
+    if (rowMin > max) return false;
+  }
+  return dp[m] <= max;
+}
+
+interface Token {
+  str: string;
+  start: number;
+  end: number;
+}
+
+function tokenizeWithPositions(s: string): Token[] {
+  const out: Token[] = [];
+  const re = /[\p{L}\p{N}]+/gu;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    out.push({ str: m[0].toLowerCase(), start: m.index, end: m.index + m[0].length });
+  }
+  return out;
+}
+
+/**
+ * Find the longest consecutive run of fuzzy-aligned tokens between
+ * haystack and target. Each token may differ from its target by up to
+ * ⌊len/4⌋ edits (handles font-glyph errors like "LaƟtude" vs "Latitude").
+ * Requires at least half the target tokens to match for a result.
+ *
+ * Returns char-range in haystack covering the matched run, or null.
+ */
+export function findFuzzyTokenRun(haystack: string, target: string): { start: number; end: number; matchedTokens: number } | null {
+  const hTokens = tokenizeWithPositions(haystack);
+  const tTokens = tokenizeWithPositions(target);
+  if (tTokens.length < 2 || hTokens.length === 0) return null;
+
+  let best: { start: number; end: number; count: number } | null = null;
+
+  // For each pair of starting positions, count consecutive aligned matches.
+  for (let hStart = 0; hStart < hTokens.length; hStart++) {
+    for (let tStart = 0; tStart < tTokens.length; tStart++) {
+      let h = hStart, t = tStart;
+      let runStart = -1, runEnd = -1, count = 0;
+      while (h < hTokens.length && t < tTokens.length) {
+        const ht = hTokens[h];
+        const tt = tTokens[t];
+        const maxDist = Math.max(1, Math.floor(tt.str.length / 4));
+        if (levBounded(ht.str, tt.str, maxDist)) {
+          if (runStart === -1) runStart = ht.start;
+          runEnd = ht.end;
+          count++;
+          h++;
+          t++;
+        } else {
+          break;
+        }
+      }
+      if (count > 0 && (!best || count > best.count)) {
+        best = { start: runStart, end: runEnd, count };
+      }
+    }
+  }
+
+  // Require a meaningful proportion of the target to be covered. 70% is
+  // strict enough to reject coincidental partial matches (e.g. matching
+  // "Corona, CA, 92881" of an address that has nothing to do with "Latitude
+  // Way"), but loose enough to tolerate a font-glyph error or two.
+  const minRequired = Math.max(3, Math.floor(tTokens.length * 0.7));
+  if (best && best.count >= minRequired) {
+    return { start: best.start, end: best.end, matchedTokens: best.count };
+  }
+  return null;
+}
+
 export function isPurelyNumeric(s: string): boolean {
   const trimmed = s.trim();
   if (!trimmed) return false;
@@ -147,6 +243,19 @@ export interface MatchResult {
   candidate?: string;
   variant?: string;
   matched?: string;
+}
+
+export interface MatchSpan {
+  itemIndex: number;
+  charStart: number;
+  charEnd: number;
+}
+
+export interface ItemMatchResult {
+  kind: MatchKind;
+  candidate?: string;
+  variant?: string;
+  spans: MatchSpan[];
 }
 
 /**
@@ -225,4 +334,250 @@ export function findHighlightSpans(haystack: string, candidates: Array<string | 
   }
 
   return { kind: 'not-found', candidate: cleaned[0] };
+}
+
+// ============================================================
+// Item-level matcher — used by PdfViewer (with pdfjs items) and the
+// E2E harness (with the same items from Node-side pdfjs). One source
+// of truth for both production and validation.
+// ============================================================
+
+interface NormalizedHaystack {
+  combined: string;
+  charOriginItem: number[];
+  charOriginIndex: number[];
+  combinedDigits: string;
+  digitOriginItem: number[];
+  digitOriginIndex: number[];
+}
+
+function buildItemHaystacks(items: ReadonlyArray<{ str?: string; hasEOL?: boolean }>): NormalizedHaystack {
+  let combined = '';
+  const charOriginItem: number[] = [];
+  const charOriginIndex: number[] = [];
+
+  for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+    const original = items[itemIdx].str ?? '';
+
+    // Inter-item boundary handling. Insert a single space UNLESS both ends
+    // of the boundary are alphanumeric AND neither raw item has whitespace
+    // at the boundary AND the previous item didn't mark end-of-line — that
+    // combination signals pdfjs split the SAME word across items (e.g.
+    // ["La", "titude"] from a font/style change), so no boundary space.
+    // Otherwise (line break, punctuation, leading/trailing space) keep
+    // the space so adjacent line-ending and line-starting words don't fuse
+    // into a single false token (e.g. "then" + "fair" → "thenfair").
+    if (combined.length > 0 && !combined.endsWith(' ')) {
+      const prevChar = combined[combined.length - 1];
+      const nextRawChar = original[0] ?? '';
+      const prevAlnum = /[\p{L}\p{N}]/u.test(prevChar);
+      const nextAlnum = /[\p{L}\p{N}]/u.test(nextRawChar);
+      const prevRawEndsWithSpace = (items[itemIdx - 1]?.str ?? '').endsWith(' ');
+      const currentRawStartsWithSpace = original.startsWith(' ');
+      const prevHadEOL = items[itemIdx - 1]?.hasEOL === true;
+      const fuseIntraWord =
+        prevAlnum && nextAlnum &&
+        !prevRawEndsWithSpace && !currentRawStartsWithSpace &&
+        !prevHadEOL;
+      if (!fuseIntraWord) {
+        combined += ' ';
+        charOriginItem.push(-1);
+        charOriginIndex.push(-1);
+      }
+    }
+
+    let lastWasSpace = combined.endsWith(' ') || combined.length === 0;
+    for (let ci = 0; ci < original.length; ci++) {
+      const norm = normalizeChar(original[ci]);
+      if (norm === ' ' && lastWasSpace) continue;
+      combined += norm;
+      charOriginItem.push(itemIdx);
+      charOriginIndex.push(ci);
+      lastWasSpace = norm === ' ';
+    }
+  }
+
+  let combinedDigits = '';
+  const digitOriginItem: number[] = [];
+  const digitOriginIndex: number[] = [];
+  for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+    const original = items[itemIdx].str ?? '';
+    for (let ci = 0; ci < original.length; ci++) {
+      if (/\d/.test(original[ci])) {
+        combinedDigits += original[ci];
+        digitOriginItem.push(itemIdx);
+        digitOriginIndex.push(ci);
+      }
+    }
+  }
+
+  return { combined, charOriginItem, charOriginIndex, combinedDigits, digitOriginItem, digitOriginIndex };
+}
+
+function spansFromNormalizedRange(h: NormalizedHaystack, pos: number, end: number): MatchSpan[] {
+  const byItem = new Map<number, { min: number; max: number }>();
+  for (let i = pos; i < end; i++) {
+    const item = h.charOriginItem[i];
+    const orig = h.charOriginIndex[i];
+    if (item < 0) continue;
+    const cur = byItem.get(item);
+    if (!cur) byItem.set(item, { min: orig, max: orig });
+    else {
+      if (orig < cur.min) cur.min = orig;
+      if (orig > cur.max) cur.max = orig;
+    }
+  }
+  const out: MatchSpan[] = [];
+  byItem.forEach((range, itemIndex) => {
+    out.push({ itemIndex, charStart: range.min, charEnd: range.max + 1 });
+  });
+  return out;
+}
+
+function spansFromDigitRange(h: NormalizedHaystack, pos: number, end: number): MatchSpan[] {
+  const byItem = new Map<number, { min: number; max: number }>();
+  for (let i = pos; i < end; i++) {
+    const item = h.digitOriginItem[i];
+    const orig = h.digitOriginIndex[i];
+    if (item < 0) continue;
+    const cur = byItem.get(item);
+    if (!cur) byItem.set(item, { min: orig, max: orig });
+    else {
+      if (orig < cur.min) cur.min = orig;
+      if (orig > cur.max) cur.max = orig;
+    }
+  }
+  const out: MatchSpan[] = [];
+  byItem.forEach((range, itemIndex) => {
+    // For "44,833" the digits span chars 0,1,3,4,5; min/max gives 0..5
+    // which correctly covers the comma in between.
+    out.push({ itemIndex, charStart: range.min, charEnd: range.max + 1 });
+  });
+  return out;
+}
+
+/**
+ * Item-level highlight matcher. Mirrors the candidate-side strategy of
+ * findHighlightSpans but resolves matches into per-pdfjs-item character
+ * spans suitable for slicing each item's str at exact boundaries.
+ *
+ * Used by PdfViewer's customTextRenderer and by the E2E harness so both
+ * stay in lockstep — no test-vs-prod drift.
+ */
+export function findHighlightSpansForItems(
+  items: ReadonlyArray<{ str?: string }>,
+  candidates: Array<string | undefined>
+): ItemMatchResult {
+  const cleaned = candidates.filter((c): c is string => typeof c === 'string' && c.trim().length > 0);
+  if (cleaned.length === 0) return { kind: 'no-candidates', spans: [] };
+
+  // By convention, the LAST candidate is source_text (the AI's verbatim
+  // citation) and earlier candidates are field values. If source_text is
+  // a meta-summary ("Multiple ... across Paragraphs ...", "See Paragraph
+  // 52..."), it won't appear verbatim in the PDF and its value (often a
+  // paraphrase) won't either. We try Phase 1 anyway in case the value
+  // happens to match exactly, then short-circuit to spans-sections.
+  const fallbackSrc = cleaned[cleaned.length - 1];
+  const sourceIsMeta = isMetaSummary(fallbackSrc);
+
+  // Phase 0a — if EVERY candidate is meta-summary, short-circuit early.
+  if (cleaned.every((c) => isMetaSummary(c))) {
+    return { kind: 'spans-sections', spans: [] };
+  }
+
+  if (items.length === 0) return { kind: 'not-found', candidate: cleaned[0], spans: [] };
+  const h = buildItemHaystacks(items);
+
+  // Phase 1 — exact text match across all candidates and variants.
+  for (const candidate of cleaned) {
+    if (isTooGenericValue(candidate)) continue;
+    for (const variant of expandCandidate(candidate)) {
+      const normalized = normalizeForMatch(variant);
+      if (normalized.length < 3) continue;
+      const pos = h.combined.indexOf(normalized);
+      if (pos !== -1) {
+        const spans = spansFromNormalizedRange(h, pos, pos + normalized.length);
+        if (spans.length > 0) {
+          return { kind: 'exact-text', candidate, variant, spans };
+        }
+      }
+    }
+  }
+
+  // Phase 2 — digits-only haystack (purely-numeric candidates only).
+  for (const candidate of cleaned) {
+    if (!isPurelyNumeric(candidate)) continue;
+    const variantDigits = candidate.replace(/[^\d]/g, '');
+    if (variantDigits.length < 3) continue;
+    const dpos = h.combinedDigits.indexOf(variantDigits);
+    if (dpos !== -1) {
+      const spans = spansFromDigitRange(h, dpos, dpos + variantDigits.length);
+      if (spans.length > 0) {
+        return { kind: 'digits-only', candidate, variant: variantDigits, spans };
+      }
+    }
+  }
+
+  // Phase 1.5 — token-fuzzy match. Handles pdfjs font-glyph errors
+  // ("LaƟtude" vs "Latitude"), OCR variations, intra-word splits, and
+  // minor punctuation drift. Tries candidates in their original order
+  // (value first, source_text second), preferring the value's tighter
+  // match over source_text's broader context.
+  for (const candidate of cleaned) {
+    if (isTooGenericValue(candidate)) continue;
+    if (isMetaSummary(candidate)) continue;
+    const fuzzy = findFuzzyTokenRun(h.combined, candidate);
+    if (fuzzy) {
+      const spans = spansFromNormalizedRange(h, fuzzy.start, fuzzy.end);
+      if (spans.length > 0) {
+        return { kind: 'exact-text', candidate, variant: candidate, spans };
+      }
+    }
+  }
+
+  // Phase 0b — if all earlier phases found nothing AND source_text is a
+  // meta-summary, surface spans-sections (rather than falling through to
+  // a longest-substring fallback that would highlight noise).
+  if (sourceIsMeta) {
+    return { kind: 'spans-sections', spans: [] };
+  }
+
+  // Phase 3 — longest-substring fallback on source_text.
+  const fallbackTarget = normalizeForMatch(fallbackSrc);
+  const minFallbackLen = Math.max(20, Math.floor(fallbackTarget.length * 0.5));
+  const longest = findLongestPhrase(h.combined, fallbackTarget, minFallbackLen);
+  if (longest) {
+    const spans = spansFromNormalizedRange(h, longest.start, longest.end);
+    if (spans.length > 0) {
+      return { kind: 'longest-substring', candidate: fallbackSrc, spans };
+    }
+  }
+
+  return { kind: 'not-found', candidate: cleaned[0], spans: [] };
+}
+
+/**
+ * Reconstruct a debug-readable string of the highlighted text by slicing
+ * each item at the per-item char boundaries. NOT used by the production
+ * renderer — `customTextRenderer` in PdfViewer wraps each item's char
+ * range in <mark> independently, so each highlight sits at its own visual
+ * position regardless of how this function joins them.
+ *
+ * Always inserts a single space between items for human readability.
+ * Compare against expected text using a normalization that ignores
+ * whitespace differences (e.g. strip non-alphanumeric, lowercase).
+ */
+export function reconstructHighlight(
+  items: ReadonlyArray<{ str?: string; hasEOL?: boolean }>,
+  spans: MatchSpan[]
+): string {
+  const sorted = [...spans].sort((a, b) => a.itemIndex - b.itemIndex);
+  return sorted
+    .map((s) => {
+      const str = items[s.itemIndex]?.str ?? '';
+      const start = Math.max(0, Math.min(s.charStart, str.length));
+      const end = Math.max(start, Math.min(s.charEnd, str.length));
+      return str.slice(start, end);
+    })
+    .join(' ');
 }
