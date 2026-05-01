@@ -99,9 +99,27 @@ export function isPurelyNumeric(s: string): boolean {
   return /^[$£€]?[\d,]+(?:\.\d+)?%?$/.test(trimmed);
 }
 
+/**
+ * If the AI's quote contains "..." or "…" it's signaling two non-contiguous
+ * fragments. Split the candidate at those markers and return each segment
+ * (descending by length) so the matcher can try each fragment as its own
+ * exact-text target. The longest matched fragment becomes the highlight.
+ */
+export function expandEllipsisSegments(c: string): string[] {
+  if (!/[…]|\.{3,}/.test(c)) return [];
+  const parts = c
+    .split(/\s*\.{3,}\s*|\s*…\s*/g)
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 12);
+  // Sort descending so the longer (more uniquely-matching) segment is tried first.
+  parts.sort((a, b) => b.length - a.length);
+  return parts;
+}
+
 export function expandCandidate(c: string): string[] {
   const out = new Set<string>([c]);
   for (const dv of expandDateVariants(c)) out.add(dv);
+  for (const seg of expandEllipsisSegments(c)) out.add(seg);
   if (/^-?\d+(\.\d+)?$/.test(c.trim())) {
     const n = Number(c);
     if (Number.isFinite(n)) {

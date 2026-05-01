@@ -134,6 +134,21 @@ function isPurelyNumeric(s: string): boolean {
   return /^[$£€]?[\d,]+(?:\.\d+)?%?$/.test(trimmed);
 }
 
+/**
+ * Split AI quotes containing "..." or "…" into the longest non-trivial
+ * sub-fragments — those ARE present verbatim in the PDF; the ellipsis
+ * just marks where the AI omitted intervening text.
+ */
+function expandEllipsisSegments(c: string): string[] {
+  if (!/[…]|\.{3,}/.test(c)) return [];
+  const parts = c
+    .split(/\s*\.{3,}\s*|\s*…\s*/g)
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 12);
+  parts.sort((a, b) => b.length - a.length);
+  return parts;
+}
+
 function isMetaSummary(s: string): boolean {
   if (!s) return false;
   const t = s.toLowerCase();
@@ -289,6 +304,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
         const expandCandidate = (c: string): string[] => {
           const out = new Set<string>([c]);
           for (const dv of expandDateVariants(c)) out.add(dv);
+          for (const seg of expandEllipsisSegments(c)) out.add(seg);
           if (/^-?\d+(\.\d+)?$/.test(c.trim())) {
             const n = Number(c);
             if (Number.isFinite(n)) {
@@ -433,13 +449,12 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
     [computeMatchRange, targetValue, targetHighlight]
   );
 
-  // Re-run the matcher when either highlight target changes for the SAME page —
-  // the Page doesn't remount, so onPageLoadSuccess won't fire again on its own.
-  useEffect(() => {
-    if (pageRef.current) {
-      computeMatchRange(pageRef.current, [targetValue, targetHighlight]);
-    }
-  }, [targetValue, targetHighlight, computeMatchRange]);
+  // No useEffect on [targetValue, targetHighlight] — the <Page> `key` already
+  // includes both, so any change to either remounts the Page and re-fires
+  // onPageLoadSuccess against the fresh page object. A second computeMatchRange
+  // path here would race with onPageLoadSuccess and clobber a valid match
+  // (the previous bug: highlight briefly appears, then vanishes when the
+  // useEffect runs against a stale pageRef and sets matchSpans to null).
 
   const customTextRenderer = useCallback(
     ({ str, itemIndex }: { str: string; itemIndex: number }) => {

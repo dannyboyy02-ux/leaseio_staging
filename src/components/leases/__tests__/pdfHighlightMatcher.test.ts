@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
   findHighlightSpans,
   expandDateVariants,
+  expandEllipsisSegments,
   isMetaSummary,
   isTooGenericValue,
   isPurelyNumeric,
@@ -263,5 +264,91 @@ describe('findHighlightSpans — every abstracted field category', () => {
       'another phrase that is not present anywhere',
     ]);
     expect(r.kind).toBe('not-found');
+  });
+});
+
+// ============================================================
+// Risks (citation_snippet) — separate render path in RisksSection.
+// Common shape: AI quotes a discontinuous fragment using "..." to
+// signal omitted middle text. Matcher must split at ellipsis and try
+// each fragment as a verbatim target.
+// ============================================================
+
+describe('expandEllipsisSegments', () => {
+  it('splits at "..." and returns fragments by length desc', () => {
+    const segs = expandEllipsisSegments(
+      'Lessee shall not voluntarily or by operation of law assign, transfer... or sublet all or any part of Lessee\'s interest in this Lease'
+    );
+    expect(segs).toHaveLength(2);
+    // Sorted descending — longer fragment first.
+    expect(segs[0].length).toBeGreaterThanOrEqual(segs[1].length);
+    expect(segs.find((s) => s.includes('Lessee shall not voluntarily'))).toBeDefined();
+    expect(segs.find((s) => s.includes('sublet all or any part'))).toBeDefined();
+  });
+  it('handles unicode ellipsis "…"', () => {
+    const segs = expandEllipsisSegments('First fragment of text…second fragment of text');
+    expect(segs).toHaveLength(2);
+  });
+  it('returns [] when no ellipsis present', () => {
+    expect(expandEllipsisSegments('A normal sentence with no ellipsis.')).toEqual([]);
+  });
+  it('drops fragments shorter than 12 chars', () => {
+    const segs = expandEllipsisSegments('long enough fragment here ... short ... another long enough one here');
+    expect(segs.every((s) => s.length >= 12)).toBe(true);
+    expect(segs).not.toContain('short');
+  });
+});
+
+describe('findHighlightSpans — Risks (citation_snippet) cases', () => {
+  // Page 7 of the test lease: full assignment-restriction paragraph
+  const PDF_PAGE_7_ASSIGN = `
+    25.1 Lessor's Consent Required. Lessee shall not voluntarily or by operation
+    of law assign, transfer, mortgage or encumber (collectively, "assign or
+    assignment") or sublet all or any part of Lessee's interest in this Lease
+    or in the Premises without Lessor's prior written consent.
+  `;
+
+  it('citation_snippet with "..." → matches the longest verbatim fragment', () => {
+    const snippet =
+      'Lessee shall not voluntarily or by operation of law assign, transfer, mortgage or encumber... or sublet all or any part of Lessee\'s interest in this Lease or in the Premises without Lessor\'s prior written consent.';
+    const r = findHighlightSpans(PDF_PAGE_7_ASSIGN, [undefined as any, snippet]);
+    expect(r.kind).toBe('exact-text');
+    // The longer fragment (the second one in this case) should be what wins.
+    expect(r.matched).toContain('sublet all or any part');
+  });
+
+  it('citation_snippet that is verbatim → exact text', () => {
+    const PDF_PAGE_10 =
+      'In the event that Lessee holds over, then the Base Rent shall be increased to 150% of the Base Rent applicable immediately preceding the expiration or termination.';
+    const snippet =
+      'In the event that Lessee holds over, then the Base Rent shall be increased to 150% of the Base Rent applicable immediately preceding the expiration or termination.';
+    const r = findHighlightSpans(PDF_PAGE_10, [undefined as any, snippet]);
+    expect(r.kind).toBe('exact-text');
+  });
+
+  it('citation_snippet that contains lease term language → exact text', () => {
+    const PDF_PAGE_1 =
+      'Original Term: Nine (9) years and Three (3) months ("Original Term") commencing March 1, 2023 ("Commencement Date") and ending May 31, 2032 ("Expiration Date").';
+    const snippet =
+      'Nine (9) years and Three (3) months ("Original Term") commencing March 1, 2023 ("Commencement Date") and ending May 31, 2032 ("Expiration Date")';
+    const r = findHighlightSpans(PDF_PAGE_1, [undefined as any, snippet]);
+    expect(r.kind).toBe('exact-text');
+  });
+
+  it('citation_snippet "N/A - no force majeure clause found in document" → spans-sections', () => {
+    const r = findHighlightSpans('Some unrelated content', [
+      undefined as any,
+      'N/A - no force majeure clause found in document',
+    ]);
+    expect(r.kind).toBe('spans-sections');
+  });
+
+  it('citation_snippet "Net lease" verbatim quote → exact text', () => {
+    const PDF_PAGE_14 =
+      'This Lease is a "Net" lease and, except as expressly provided to the contrary in this Lease, Lessee is responsible for paying all amounts due in connection with use of the Premises.';
+    const snippet =
+      'This Lease is a "Net" lease and, except as expressly provided to the contrary in this Lease, Lessee is responsible for paying all amounts due in connection with use of the Premises.';
+    const r = findHighlightSpans(PDF_PAGE_14, [undefined as any, snippet]);
+    expect(r.kind).toBe('exact-text');
   });
 });
