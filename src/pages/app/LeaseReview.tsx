@@ -719,13 +719,15 @@ export default function LeaseReview() {
             .select('id, status, submitted_by, change_summary, submitted_at, created_at')
             .eq('lease_id', leaseId)
             .in('status', ['draft', 'pending_approval'])
-            .maybeSingle(),
+            .order('created_at', { ascending: false })
+            .limit(1),
         ]);
 
         setRentSchedule(rsResult.data || []);
         setRisks(riskResult.data || []);
         setPendingUnlockRequest(unlockResult.data ?? null);
-        setActiveChangeSet(changeSetResult.data ?? null);
+        const csRowsInit = (changeSetResult as any).data;
+        setActiveChangeSet(Array.isArray(csRowsInit) && csRowsInit.length > 0 ? csRowsInit[0] : null);
         if (wsResult?.data?.asset_type_config && Array.isArray(wsResult.data.asset_type_config)) {
           setAssetTypes(wsResult.data.asset_type_config as string[]);
         }
@@ -1017,11 +1019,15 @@ export default function LeaseReview() {
         .select('id, status, submitted_by, change_summary, submitted_at, created_at')
         .eq('lease_id', leaseId)
         .in('status', ['draft', 'pending_approval'])
-        .maybeSingle(),
+        .order('created_at', { ascending: false })
+        .limit(1),
     ]);
     if (data) setLease(data);
     setPendingUnlockRequest(unlockResult.data ?? null);
-    setActiveChangeSet(changeSetResult.data ?? null);
+    // Use array form + take first; duplicate drafts (rare) would make
+    // maybeSingle() return null and break the unlock-edit flow.
+    const csRows = (changeSetResult as any).data;
+    setActiveChangeSet(Array.isArray(csRows) && csRows.length > 0 ? csRows[0] : null);
   }, [leaseId]);
 
   const handleCancelChangeSet = useCallback(async () => {

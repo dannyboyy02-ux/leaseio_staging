@@ -121,6 +121,22 @@ serve(async (req) => {
     unlockRequestId: string | null;
     submittedBy: string;
   }): Promise<string> {
+    // Reuse the existing open change set (draft or pending_approval) for this
+    // lease if one exists. Without this, repeated unlocks would create
+    // duplicate drafts — the frontend's maybeSingle() returns null on multiple
+    // matches, which silently disables editing for the user.
+    const { data: existing } = await supabaseAdmin
+      .from("lease_change_sets")
+      .select("id")
+      .eq("lease_id", leaseId)
+      .in("status", ["draft", "pending_approval"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing && (existing as any).id) {
+      return (existing as any).id;
+    }
+
     const { data, error } = await supabaseAdmin
       .from("lease_change_sets")
       .insert({

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -20,24 +20,35 @@ interface PdfViewerProps {
   targetHighlight?: string;
 }
 
-/**
- * Build a Set of normalized "tokens" from a longer source-text snippet so the
- * customTextRenderer can quickly decide whether a given text item should be
- * highlighted. Strips whitespace + punctuation, lowercases, and only keeps
- * tokens >= 3 chars to avoid highlighting tiny words (the/and/of) which would
- * paint half the page yellow.
- */
-function buildHighlightTokens(source: string): Set<string> {
-  const out = new Set<string>();
-  const normalized = source.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ');
-  for (const tok of normalized.split(/\s+/)) {
-    if (tok.length >= 3) out.add(tok);
-  }
-  return out;
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/**
+ * Normalize a string for substring matching: collapse whitespace, lowercase,
+ * strip punctuation. Used to find the source phrase inside the page's
+ * concatenated text without being thrown off by curly quotes / hyphenation.
+ */
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Find the longest contiguous substring of `target` that appears anywhere in
+ * `haystack`. Returns the [start, end) indices inside the normalized haystack,
+ * or null if no substring of >= MIN_CHARS chars matches. We start with the
+ * full target and shrink; first hit wins.
+ */
+function findLongestPhrase(haystack: string, target: string, minChars = 12): { start: number; end: number } | null {
+  if (target.length < minChars) return null;
+  for (let len = target.length; len >= minChars; len -= Math.max(1, Math.floor(len / 16))) {
+    for (let i = 0; i + len <= target.length; i++) {
+      const sub = target.substring(i, i + len);
+      const pos = haystack.indexOf(sub);
+      if (pos !== -1) return { start: pos, end: pos + len };
+    }
+  }
+  return null;
 }
 
 export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) {
@@ -74,25 +85,83 @@ export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) 
   const prevPage = () => setCurrentPage(p => Math.max(1, p - 1));
   const nextPage = () => setCurrentPage(p => Math.min(numPages, p + 1));
 
-  const highlightTokens = useMemo(
-    () => (targetHighlight ? buildHighlightTokens(targetHighlight) : null),
+  // Item-index range that overlaps the matched source phrase. Computed in
+  // onPageLoadSuccess once the page's text layout is known. Only items in
+  // [start, end] are highlighted — much tighter than per-token matching
+  // which would light up every common word (square, feet, etc.) on the page.
+  const [matchRange, setMatchRange] = useState<{ start: number; end: number } | null>(null);
+
+  const onPageLoadSuccess = useCallback(
+    async (page: any) => {
+      if (!targetHighlight) {
+        setMatchRange(null);
+        return;
+      }
+      try {
+        const textContent = await page.getTextContent();
+        const items: Array<{ str: string }> = textContent?.items ?? [];
+        if (items.length === 0) {
+          setMatchRange(null);
+          return;
+        }
+
+        // Build a normalized concatenated string with per-item char ranges.
+        let combined = '';
+        const itemRanges: Array<{ start: number; end: number }> = [];
+        for (const item of items) {
+          const piece = normalizeForMatch(item.str ?? '');
+          const start = combined.length;
+          // Pad with a single space between items so adjacent words don't fuse.
+          const fragment = piece.length > 0 ? piece + ' ' : ' ';
+          combined += fragment;
+          itemRanges.push({ start, end: start + piece.length });
+        }
+
+        const normalizedTarget = normalizeForMatch(targetHighlight);
+        if (normalizedTarget.length < 4) {
+          setMatchRange(null);
+          return;
+        }
+
+        // Try a full-phrase match first; fall back to the longest substring.
+        let pos = combined.indexOf(normalizedTarget);
+        let matchLen = normalizedTarget.length;
+        if (pos === -1) {
+          const longest = findLongestPhrase(combined, normalizedTarget, 12);
+          if (!longest) {
+            setMatchRange(null);
+            return;
+          }
+          pos = longest.start;
+          matchLen = longest.end - longest.start;
+        }
+
+        // Map char range back to item indices.
+        const matchEnd = pos + matchLen;
+        let startIdx = -1;
+        let endIdx = -1;
+        for (let i = 0; i < itemRanges.length; i++) {
+          const r = itemRanges[i];
+          if (r.end <= pos || r.start >= matchEnd) continue;
+          if (startIdx === -1) startIdx = i;
+          endIdx = i;
+        }
+        setMatchRange(startIdx === -1 ? null : { start: startIdx, end: endIdx });
+      } catch (err) {
+        console.error('[PdfViewer] Failed to compute highlight range:', err);
+        setMatchRange(null);
+      }
+    },
     [targetHighlight]
   );
 
-  // react-pdf calls customTextRenderer once per text item. The signature
-  // accepts a function returning a string of HTML which gets injected into
-  // the text layer span. We wrap matched tokens in <mark>; otherwise return
-  // the raw string unchanged.
   const customTextRenderer = useCallback(
-    ({ str }: { str: string }) => {
-      if (!highlightTokens || !str) return str;
-      const norm = str.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-      if (norm.length >= 3 && highlightTokens.has(norm)) {
-        return `<mark class="ai-source-highlight">${escapeHtml(str)}</mark>`;
-      }
-      return escapeHtml(str);
+    ({ str, itemIndex }: { str: string; itemIndex: number }) => {
+      if (!matchRange || str === '') return escapeHtml(str);
+      if (itemIndex < matchRange.start || itemIndex > matchRange.end) return escapeHtml(str);
+      return `<mark class="ai-source-highlight">${escapeHtml(str)}</mark>`;
     },
-    [highlightTokens]
+    [matchRange]
   );
   const zoomIn  = () => setScale(s => Math.min(2.5, parseFloat((s + 0.2).toFixed(1))));
   const zoomOut = () => setScale(s => Math.max(0.5, parseFloat((s - 0.2).toFixed(1))));
@@ -160,6 +229,7 @@ export function PdfViewer({ url, targetPage, targetHighlight }: PdfViewerProps) 
               renderTextLayer={true}
               renderAnnotationLayer={true}
               customTextRenderer={customTextRenderer}
+              onLoadSuccess={onPageLoadSuccess}
               loading={
                 <div className="flex items-center justify-center h-32">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

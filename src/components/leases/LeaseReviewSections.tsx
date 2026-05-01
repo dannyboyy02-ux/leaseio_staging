@@ -335,9 +335,9 @@ export function SectionCard({
                       type="button"
                       onClick={locateInPdf}
                       title="AI extracted — click to highlight in source"
-                      className="inline-flex items-center justify-center h-4 w-4 rounded-full text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors"
+                      className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary transition-colors"
                     >
-                      <Sparkles size={10} />
+                      <Sparkles size={12} className="fill-primary/30" />
                     </button>
                   )}
                   {!isModelLocked && <ConfidenceBadge confidence={fieldConfidence} />}
