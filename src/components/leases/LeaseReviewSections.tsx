@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Building2,
   Calendar,
@@ -211,6 +211,12 @@ export function SectionCard({
 }: SectionCardProps) {
   const { language } = useLanguage();
   const [isEditing, setIsEditing] = useState(!isLocked);
+  // When the lease unlocks (isLocked transitions true → false), reflect that
+  // in the section's editing state so the user doesn't have to also click the
+  // per-section "Edit" button. Conversely, re-locking forces edit mode off.
+  useEffect(() => {
+    setIsEditing(!isLocked);
+  }, [isLocked]);
   const [termUnit, setTermUnit] = useState<'months' | 'years'>('months');
   const section = SECTION_CONFIG[sectionKey];
   const Icon = section.icon;
