@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck:strict": "tsc --noEmit -p tsconfig.app.json --noImplicitAny",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "prebuild": "npm run typecheck:names",
+    "typecheck:names": "node scripts/check-undefined-names.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
