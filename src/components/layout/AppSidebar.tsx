@@ -18,6 +18,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Languages,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
@@ -65,7 +66,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { user, workspace, canAccessFeature, userRole, userFunctionalRoles, availableWorkspaces, switchWorkspace } = useApp();
   const { signOut, user: authUser } = useAuth();
-  const { t } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
 
   // Phase 2 — approval badge count (pending items needing current user's action)
   const [approvalBadge, setApprovalBadge] = useState(0);
@@ -350,6 +351,21 @@ export function AppSidebar() {
                 </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+
+            {/* Languages submenu — Claude pattern */}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="flex items-center gap-2 font-medium">
+                <Languages className="h-4 w-4" />
+                {t('nav.language')}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup value={language} onValueChange={(v) => setLanguage(v as 'en' | 'es')}>
+                  <DropdownMenuRadioItem value="en">English</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="es">Español</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+
             <DropdownMenuItem asChild>
               <Link to="/app/support" className="flex items-center gap-2 cursor-pointer font-medium">
                 <HelpCircle className="h-4 w-4" />

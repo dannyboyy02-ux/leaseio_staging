@@ -60,7 +60,6 @@ import { SummaryShareControls } from '@/components/summary/SummaryShareControls'
 import { UploadExecutedDocumentDialog } from "@/components/leases/UploadExecutedDocumentDialog";
 import { ExecutedTermsReview } from "@/components/leases/ExecutedTermsReview";
 import { VarianceReport } from "@/components/leases/VarianceReport";
-import { ModelLockConfirmation } from "@/components/leases/ModelLockConfirmation";
 import { LeaseDocumentsTab } from "@/components/leases/LeaseDocumentsTab";
 import { LockedLeaseDetail } from "@/components/leases/locked/LockedLeaseDetail";
 import { ArchiveButton } from "@/components/leases/ArchiveButton";
@@ -834,6 +833,52 @@ export default function LeaseReview() {
     };
     fetchParentLease();
   }, [lease?.parent_lease_id]);
+
+  /**
+   * Unified lock action — replaces the legacy ModelLockConfirmation.
+   * - When there's a draft change set with staged items: submits the changes
+   *   for financial approval (status=pending_approval) and re-locks the lease.
+   * - Otherwise: initial activation. Sets lifecycle_status=active, model_locked=true,
+   *   model_locked_at, model_locked_by.
+   */
+  const handleLockAction = async () => {
+    if (!lease) return;
+    if (activeChangeSet?.status === 'draft' && stagedItemCount > 0) {
+      await handleSubmitChanges();
+      return;
+    }
+    setSubmittingChanges(true);
+    try {
+      const { data: { user: authedUser } } = await supabase.auth.getUser();
+      if (!authedUser) throw new Error('Not authenticated');
+      const now = new Date().toISOString();
+      const fromStatus = (lease as any).lifecycle_status ?? 'executed';
+      const { error } = await supabase
+        .from('leases')
+        .update({
+          model_locked: true,
+          model_locked_at: now,
+          model_locked_by: authedUser.id,
+          lifecycle_status: 'active',
+        } as any)
+        .eq('id', lease.id);
+      if (error) throw new Error(`Lock failed: ${error.message}`);
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: authedUser.id,
+        activity_type: 'status_change',
+        from_status: fromStatus,
+        to_status: 'active',
+        details: { action: 'model_locked', locked_at: now },
+      });
+      toast.success('Lease locked and activated');
+      refetchLease();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to lock lease');
+    } finally {
+      setSubmittingChanges(false);
+    }
+  };
 
   const jumpToPage = (page?: number, sourceText?: string) => {
     if (!page) return;
@@ -2084,6 +2129,44 @@ export default function LeaseReview() {
           }
           actions={
             <div className="flex items-center gap-2">
+              {/* Save Draft / Cancel — only when there's an open draft change set */}
+              {!lease.model_locked && activeChangeSet?.status === 'draft' && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => toast.success('Draft saved — changes are staged automatically as you type')}
+                  >
+                    Save Draft
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                    onClick={() => setCancelChangeSetDialogOpen(true)}
+                    disabled={cancelingChangeSet}
+                  >
+                    {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                    Cancel
+                  </Button>
+                </>
+              )}
+              {/* Lock — initial activation OR re-lock with changes */}
+              {!lease.model_locked && (lifecycleStatus === 'executed' || lifecycleStatus === 'active') && (
+                <Button
+                  size="sm"
+                  className="bg-success hover:bg-success/90 text-white"
+                  onClick={() => setLockConfirmDialogOpen(true)}
+                  disabled={
+                    submittingChanges ||
+                    // Require staged items only when re-locking an active lease with a draft
+                    (activeChangeSet?.status === 'draft' && stagedItemCount === 0)
+                  }
+                >
+                  {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
+                  Lock
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
                 Approval Queue
                 <ChevronRight className="h-4 w-4 ml-1" />
@@ -2380,11 +2463,11 @@ export default function LeaseReview() {
                               varianceTenantNameMatch={lease.variance_tenant_name_match != null ? Boolean(lease.variance_tenant_name_match) : null}
                               varianceLandlordNameMatch={lease.variance_landlord_name_match != null ? Boolean(lease.variance_landlord_name_match) : null}
                             />
-                            <ModelLockConfirmation
-                              leaseId={lease.id}
-                              disabled={!!lease.model_locked}
-                              onSuccess={refetchLease}
-                            />
+                            {/* Lock action lives in the AppHeader actions slot
+                                (see Save Draft / Cancel / Lock buttons there).
+                                The legacy <ModelLockConfirmation> was removed —
+                                handleLockAction now handles both initial activation
+                                and re-lock-with-changes from one Lock button. */}
                             {lease.model_locked && isAdminUser && pendingUnlockRequest && (
                               <Card className="shadow-none border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
@@ -2472,49 +2555,18 @@ export default function LeaseReview() {
                             )}
                             {!lease.model_locked && activeChangeSet && (
                               <Card className="shadow-none border border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
-                                <CardContent className="py-3 px-4 flex items-center justify-between gap-4 flex-wrap">
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
-                                      {activeChangeSet.status === 'draft'
-                                        ? 'Unlocked for editing — changes are staged'
-                                        : 'Changes pending approval'}
-                                    </p>
-                                    <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                                      {activeChangeSet.status === 'draft'
-                                        ? `Edit the executed terms above. ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} staged.`
-                                        : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
-                                    </p>
-                                  </div>
-                                  {activeChangeSet.status === 'draft' && (
-                                    <div className="flex gap-2 shrink-0">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => toast.success('Draft saved — changes are staged automatically as you type')}
-                                      >
-                                        Save Draft
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                                        onClick={() => setCancelChangeSetDialogOpen(true)}
-                                        disabled={cancelingChangeSet}
-                                      >
-                                        {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        className="shrink-0 bg-success hover:bg-success/90 text-white"
-                                        onClick={() => setLockConfirmDialogOpen(true)}
-                                        disabled={submittingChanges || stagedItemCount === 0}
-                                      >
-                                        {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
-                                        Lock
-                                      </Button>
-                                    </div>
-                                  )}
+                                <CardContent className="py-3 px-4">
+                                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                                    {activeChangeSet.status === 'draft'
+                                      ? 'Unlocked for editing — changes are staged'
+                                      : 'Changes pending approval'}
+                                  </p>
+                                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                                    {activeChangeSet.status === 'draft'
+                                      ? `Edit the executed terms above. ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} staged.`
+                                      : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
+                                  </p>
+                                  {/* Save Draft / Cancel / Lock now live in the AppHeader actions slot. */}
                                 </CardContent>
                               </Card>
                             )}
@@ -2729,37 +2781,60 @@ export default function LeaseReview() {
         </DialogContent>
       </Dialog>
 
-      {/* Lock Confirmation Dialog — submits the change set for approval and re-locks. */}
+      {/* Unified Lock Confirmation Dialog — adapts copy by context.
+          (a) Re-lock with staged edits: submits change set for approval + re-locks.
+          (b) Initial activation: lifecycle → active, model_locked → true. */}
       <Dialog open={lockConfirmDialogOpen} onOpenChange={setLockConfirmDialogOpen}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5 text-success" />
-              Lock and submit {stagedItemCount} change{stagedItemCount !== 1 ? 's' : ''}
-            </DialogTitle>
-            <DialogDescription>
-              Your staged changes will be submitted for financial approval. The lease re-locks immediately. Approved changes apply to the live record; rejected ones are reverted.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
-            This action is irreversible from this screen. To make further edits later, request another unlock.
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setLockConfirmDialogOpen(false)} disabled={submittingChanges}>
-              Keep Editing
-            </Button>
-            <Button
-              className="bg-success hover:bg-success/90 text-white"
-              onClick={async () => {
-                await handleSubmitChanges();
-                setLockConfirmDialogOpen(false);
-              }}
-              disabled={submittingChanges || stagedItemCount === 0}
-            >
-              {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-              Lock &amp; Submit
-            </Button>
-          </DialogFooter>
+          {(() => {
+            const isReLock = activeChangeSet?.status === 'draft' && stagedItemCount > 0;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Lock className="h-5 w-5 text-success" />
+                    {isReLock
+                      ? `Lock and submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}`
+                      : 'Lock & activate this lease'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {isReLock
+                      ? 'Your staged changes will be submitted for financial approval. The lease re-locks immediately. Approved changes apply to the live record; rejected ones are reverted.'
+                      : 'This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.'}
+                  </DialogDescription>
+                </DialogHeader>
+                {!isReLock && (
+                  <ul className="text-xs text-muted-foreground space-y-1 ml-5 list-disc">
+                    <li>All executed terms and variance fields are frozen</li>
+                    <li>Lease status moves to <strong>Active</strong></li>
+                    <li>Record appears in the Active Portfolio dashboard</li>
+                    <li>A lock event is written to the activity log</li>
+                  </ul>
+                )}
+                <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
+                  {isReLock
+                    ? 'This action is irreversible from this screen. To make further edits later, request another unlock.'
+                    : 'You can request to unlock the record after activation, but each unlock requires a new approval cycle.'}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setLockConfirmDialogOpen(false)} disabled={submittingChanges}>
+                    Cancel
+                  </Button>
+                  <Button
+                    className="bg-success hover:bg-success/90 text-white"
+                    onClick={async () => {
+                      await handleLockAction();
+                      setLockConfirmDialogOpen(false);
+                    }}
+                    disabled={submittingChanges}
+                  >
+                    {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
+                    {isReLock ? 'Lock & Submit' : 'Lock & Activate'}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </AppLayout>
