@@ -2863,7 +2863,7 @@ export default function LeaseReview() {
           (a) Re-lock with staged edits: submits change set for approval + re-locks.
           (b) Initial activation: lifecycle → active, model_locked → true. */}
       <Dialog open={lockConfirmDialogOpen} onOpenChange={setLockConfirmDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           {(() => {
             const isReLock = activeChangeSet?.status === 'draft' && stagedItemCount > 0;
             const isEmptyDraftRelock = activeChangeSet?.status === 'draft' && stagedItemCount === 0;
@@ -2899,8 +2899,8 @@ export default function LeaseReview() {
                 )}
                 {adminCanSelfApprove && (
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
-                    <p><strong className="text-foreground">Apply now</strong> — changes take effect immediately. The audit trail records this as <em>self-approved by admin role</em>.</p>
-                    <p><strong className="text-foreground">Send to approver</strong> — another admin reviews. Lease re-locks while pending; underlying values stay unchanged until approved.</p>
+                    <p><strong className="text-foreground">Apply</strong> — changes take effect immediately. Recorded as self-approved by admin role.</p>
+                    <p><strong className="text-foreground">Send to approver</strong> — another admin reviews. Lease re-locks while pending.</p>
                   </div>
                 )}
                 <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
@@ -2908,8 +2908,8 @@ export default function LeaseReview() {
                     ? 'This action is irreversible from this screen. To make further edits later, request another unlock.'
                     : 'You can request to unlock the record after activation, but each unlock requires a new approval cycle.'}
                 </div>
-                <DialogFooter className="gap-2 sm:gap-2">
-                  <Button variant="outline" onClick={() => setLockConfirmDialogOpen(false)} disabled={submittingChanges}>
+                <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-2 sm:flex-wrap sm:justify-end">
+                  <Button variant="outline" onClick={() => setLockConfirmDialogOpen(false)} disabled={submittingChanges} className="sm:w-auto w-full">
                     Cancel
                   </Button>
                   {adminCanSelfApprove ? (
@@ -2922,11 +2922,12 @@ export default function LeaseReview() {
                         }}
                         disabled={submittingChanges}
                         title="Route the changes through another admin for approval"
+                        className="sm:w-auto w-full whitespace-nowrap"
                       >
                         Send to approver
                       </Button>
                       <Button
-                        className="bg-success hover:bg-success/90 text-white"
+                        className="bg-success hover:bg-success/90 text-white sm:w-auto w-full whitespace-nowrap"
                         onClick={async () => {
                           await handleLockAction('self_approve');
                           setLockConfirmDialogOpen(false);
@@ -2935,7 +2936,7 @@ export default function LeaseReview() {
                         title="Apply changes immediately and record self-approval in the audit trail"
                       >
                         {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-                        Apply now (self-approve)
+                        Apply
                       </Button>
                     </>
                   ) : (
