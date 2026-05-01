@@ -1397,17 +1397,39 @@ export default function LeaseReview() {
     if (stagedItemCount === 0) { toast.error('No staged changes to submit'); return; }
     setSubmittingChanges(true);
     try {
+      const submittedAt = new Date().toISOString();
       const { error } = await (supabase as any)
         .from('lease_change_sets')
-        .update({ status: 'pending_approval', submitted_at: new Date().toISOString() })
+        .update({ status: 'pending_approval', submitted_at: submittedAt })
         .eq('id', activeChangeSet.id);
       if (error) throw error;
+
+      // Re-lock the lease NOW. The change_set going to pending_approval
+      // means the proposed edits are awaiting financial approval, but the
+      // underlying lease fields are still the OLD values and must be
+      // protected from further edits during the approval wait. Without this
+      // step the lease stayed model_locked=false, the "Locked" detail view
+      // never engaged, and the user was stranded in a half-locked workbench
+      // with no Save/Cancel/Lock controls visible.
+      const { data: relockedRows, error: relockErr } = await (supabase as any)
+        .from('leases')
+        .update({
+          model_locked: true,
+          model_locked_at: submittedAt,
+          model_locked_by: user.id,
+        })
+        .eq('id', lease.id)
+        .select('id');
+      if (relockErr) throw new Error(`Re-lock failed: ${relockErr.message}`);
+      if (!relockedRows || relockedRows.length === 0) {
+        throw new Error('Re-lock affected 0 rows — likely a permissions issue.');
+      }
 
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
         user_id: user.id,
         activity_type: 'change_submitted',
-        details: { change_set_id: activeChangeSet.id, item_count: stagedItemCount },
+        details: { change_set_id: activeChangeSet.id, item_count: stagedItemCount, relocked: true },
       });
 
       // Governance audit — one change_set_submitted row + one field_change_staged per item
@@ -1442,7 +1464,7 @@ export default function LeaseReview() {
       const { error: auditErr3 } = await (supabase as any).from('lease_governance_audit').insert(auditRows);
       if (auditErr3) console.error('[LeaseReview] governance audit error:', auditErr3);
 
-      toast.success('Changes submitted for approval');
+      toast.success('Changes submitted for approval — lease re-locked');
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       refetchLease();
     } catch (err) {
