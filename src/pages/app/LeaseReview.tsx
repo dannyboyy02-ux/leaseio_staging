@@ -950,6 +950,30 @@ export default function LeaseReview() {
     }
   }, [form, user?.id]);
 
+  /**
+   * Direct-stage helper for inputs (e.g. Radix Select on asset_type) that
+   * commit-on-change rather than commit-on-blur. Bypasses the form-state
+   * read in trackFieldCorrection so there's no closure-staleness race
+   * against the just-dispatched setState.
+   *
+   * Without this, a Select value change would call onFieldChange (which
+   * schedules a setState) and then the deferred trackFieldCorrection would
+   * read form[fieldId] from a stale closure — staging the OLD value (or
+   * skipping the no-op dedupe) and the change would never reach
+   * lease_change_set_items. Result: stagedItemCount stayed 0, the Lock
+   * dialog showed the empty-draft branch with no admin choice, and on
+   * Re-lock the empty draft was discarded.
+   */
+  const stageFieldImmediate = useCallback(async (fieldId: string, newValue: string) => {
+    if (!lease?.id || !isUnlockedForEditing || !activeChangeSet?.id) return;
+    const originalValue = originalValues.current[fieldId];
+    if (originalValue === newValue) return;
+    const fieldLabel = Object.values(SECTION_CONFIG)
+      .flatMap(s => s.fields)
+      .find(f => f.id === fieldId)?.label ?? fieldId;
+    await stageFieldChange(activeChangeSet.id, fieldId, fieldLabel, originalValue ?? null, newValue);
+  }, [lease?.id, isUnlockedForEditing, activeChangeSet?.id, stageFieldChange]);
+
   // Track field corrections on blur
   const trackFieldCorrection = useCallback(async (fieldId: string) => {
     const originalValue = originalValues.current[fieldId];
@@ -2399,6 +2423,7 @@ export default function LeaseReview() {
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
+                            onFieldStaged={stageFieldImmediate}
                             onVerifyField={handleVerifyField}
                             onJumpToPage={jumpToPage}
                             confirmedSections={confirmedSections}
@@ -2615,6 +2640,7 @@ export default function LeaseReview() {
                           onFieldChange={handleFieldChange}
                           onFieldFocus={handleFieldFocus}
                           onFieldBlur={trackFieldCorrection}
+                          onFieldStaged={stageFieldImmediate}
                           onVerifyField={handleVerifyField}
                           onJumpToPage={jumpToPage}
                           confirmedSections={confirmedSections}
@@ -2638,6 +2664,7 @@ export default function LeaseReview() {
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
+                            onFieldStaged={stageFieldImmediate}
                             onVerifyField={handleVerifyField}
                             onJumpToPage={jumpToPage}
                             confirmedSections={confirmedSections}
@@ -2672,6 +2699,7 @@ export default function LeaseReview() {
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
+                            onFieldStaged={stageFieldImmediate}
                             onVerifyField={handleVerifyField}
                             onJumpToPage={jumpToPage}
                             confirmedSections={confirmedSections}

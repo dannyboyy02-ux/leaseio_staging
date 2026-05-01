@@ -198,6 +198,12 @@ interface SectionCardProps {
   onFieldChange: (fieldId: string, value: string) => void;
   onFieldFocus: (fieldId: string) => void;
   onFieldBlur: (fieldId: string) => void;
+  /**
+   * Direct-staging escape hatch for inputs (like Radix Select) that don't
+   * fire a separate blur after value commit. Receives the new value
+   * explicitly to avoid a closure-staleness race against form state.
+   */
+  onFieldStaged?: (fieldId: string, newValue: string) => void;
   onVerifyField: (fieldId: string) => void;
   onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
   confirmedSections: string[];
@@ -220,6 +226,7 @@ export function SectionCard({
   onFieldChange,
   onFieldFocus,
   onFieldBlur,
+  onFieldStaged,
   onVerifyField,
   onJumpToPage,
   confirmedSections,
@@ -387,10 +394,23 @@ export function SectionCard({
                 </div>
               )}
 
-              {/* Asset type Select dropdown */}
+              {/* Asset type Select dropdown.
+                  Radix Select doesn't fire onBlur after a value commit, so
+                  selection IS the commit point. Call onFieldChange (updates
+                  form state) AND onFieldStaged (direct-stage with the new
+                  value, bypassing form-state read to avoid a closure
+                  staleness race). Without this, asset_type edits never
+                  reached lease_change_set_items, so the Lock dialog kept
+                  showing the empty-draft branch with no admin choice. */}
               {field.id === 'asset_type' && assetTypes && assetTypes.length > 0 && !isReadOnly && (
                 <div className="relative">
-                  <Select value={value} onValueChange={(v) => onFieldChange(field.id, v)}>
+                  <Select
+                    value={value}
+                    onValueChange={(v) => {
+                      onFieldChange(field.id, v);
+                      onFieldStaged?.(field.id, v);
+                    }}
+                  >
                     <SelectTrigger className={cn("text-sm", sparklesAffordance && "pr-10", getFieldBorderClass(field.id))}>
                       <SelectValue placeholder="Select asset type" />
                     </SelectTrigger>
