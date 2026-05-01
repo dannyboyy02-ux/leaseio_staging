@@ -202,17 +202,97 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue }: Pdf
           return out;
         };
 
-        // Try each candidate in order: exact match first.
+        // Expand each candidate into match variants. For numeric values,
+        // add comma-formatted (44,833) and digit-only (44833) variants
+        // so a stored value of 44833 matches "44,833" in the PDF.
+        const expandCandidate = (c: string): string[] => {
+          const out = new Set<string>([c]);
+          // If the candidate is purely numeric, add a comma-grouped variant.
+          if (/^-?\d+(\.\d+)?$/.test(c.trim())) {
+            const n = Number(c);
+            if (Number.isFinite(n)) {
+              out.add(n.toLocaleString('en-US'));
+              out.add(String(Math.round(n)));
+              out.add(Math.round(n).toLocaleString('en-US'));
+            }
+          }
+          // If the candidate contains digits with grouping/decimals, add a
+          // digits-only variant (so "$69,491.15" can match "6949115").
+          const digitsOnly = c.replace(/[^\d]/g, '');
+          if (digitsOnly.length >= 3) out.add(digitsOnly);
+          return Array.from(out).filter((s) => s.trim().length > 0);
+        };
+
+        // Build a digits-only haystack alongside the normalized one so that
+        // numeric targets locate cleanly even when the PDF inserts commas
+        // or currency symbols between the digits.
+        let combinedDigits = '';
+        const digitOriginItem: number[] = [];
+        const digitOriginIndex: number[] = [];
+        for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+          const original = items[itemIdx].str ?? '';
+          for (let ci = 0; ci < original.length; ci++) {
+            if (/\d/.test(original[ci])) {
+              combinedDigits += original[ci];
+              digitOriginItem.push(itemIdx);
+              digitOriginIndex.push(ci);
+            }
+          }
+        }
+
+        const buildSpansFromDigits = (pos: number, len: number): MatchSpan[] | null => {
+          if (pos < 0 || len <= 0 || pos + len > combinedDigits.length) return null;
+          const byItem = new Map<number, { min: number; max: number }>();
+          for (let i = pos; i < pos + len; i++) {
+            const item = digitOriginItem[i];
+            const orig = digitOriginIndex[i];
+            if (item < 0) continue;
+            const cur = byItem.get(item);
+            if (!cur) byItem.set(item, { min: orig, max: orig });
+            else {
+              if (orig < cur.min) cur.min = orig;
+              if (orig > cur.max) cur.max = orig;
+            }
+          }
+          if (byItem.size === 0) return null;
+          const out: MatchSpan[] = [];
+          byItem.forEach((range, itemIndex) => {
+            // For a numeric match within an item like "44,833", the digit
+            // chars are at indices 0,1,3,4,5; min/max gives 0..5 which
+            // correctly covers the comma in between.
+            out.push({ itemIndex, charStart: range.min, charEnd: range.max + 1 });
+          });
+          return out;
+        };
+
+        // Try each candidate (and its variants) in order — exact match wins.
         for (const candidate of cleaned) {
-          const normalized = normalizeForMatch(candidate);
-          if (normalized.length < 3) continue;
-          const pos = combined.indexOf(normalized);
-          if (pos !== -1) {
-            const spans = buildSpans(pos, pos + normalized.length);
-            if (spans) {
-              setMatchSpans(spans);
-              setMatchStatus('found');
-              return;
+          for (const variant of expandCandidate(candidate)) {
+            // (a) Try exact normalized match first.
+            const normalized = normalizeForMatch(variant);
+            if (normalized.length >= 3) {
+              const pos = combined.indexOf(normalized);
+              if (pos !== -1) {
+                const spans = buildSpans(pos, pos + normalized.length);
+                if (spans) {
+                  setMatchSpans(spans);
+                  setMatchStatus('found');
+                  return;
+                }
+              }
+            }
+            // (b) For digit-heavy variants, try the digits-only haystack.
+            const variantDigits = variant.replace(/[^\d]/g, '');
+            if (variantDigits.length >= 3) {
+              const dpos = combinedDigits.indexOf(variantDigits);
+              if (dpos !== -1) {
+                const spans = buildSpansFromDigits(dpos, variantDigits.length);
+                if (spans) {
+                  setMatchSpans(spans);
+                  setMatchStatus('found');
+                  return;
+                }
+              }
             }
           }
         }

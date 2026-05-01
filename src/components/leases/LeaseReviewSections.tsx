@@ -274,11 +274,15 @@ export function SectionCard({
           const isReadOnly = isLocked || !isEditing;
           // Always use the AI's ORIGINAL extracted value as the primary
           // match target — never the form value, which the user may have
-          // edited away from what's actually in the PDF.
+          // edited. Coerce numbers to strings so numeric fields (square
+          // footage, rent amounts, etc.) participate in matching.
           const fieldExtractedValueRaw = extractedJson?.[field.id]?.value;
-          const fieldExtractedValue = typeof fieldExtractedValueRaw === 'string' && fieldExtractedValueRaw.trim().length > 0
-            ? fieldExtractedValueRaw
-            : undefined;
+          let fieldExtractedValue: string | undefined;
+          if (typeof fieldExtractedValueRaw === 'string' && fieldExtractedValueRaw.trim().length > 0) {
+            fieldExtractedValue = fieldExtractedValueRaw;
+          } else if (typeof fieldExtractedValueRaw === 'number' && Number.isFinite(fieldExtractedValueRaw)) {
+            fieldExtractedValue = String(fieldExtractedValueRaw);
+          }
           const locateInPdf = () => onJumpToPage(fieldPage, fieldSourceText, fieldExtractedValue);
           // Clicking/focusing the field also locates the source text in the PDF.
           const handleFieldFocus = () => {
