@@ -32,7 +32,11 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { createLeaseNotification } from '@/lib/leaseNotifications';
+import {
+  createLeaseNotification,
+  notifyChainAssignees,
+  notifyRoleHolders,
+} from '@/lib/leaseNotifications';
 import { calculateLease } from '@/lib/leaseCalculations';
 import type { LeaseCalculations } from '@/lib/leaseCalculations';
 import { FinancialImpactPreview } from './FinancialImpactPreview';
@@ -210,23 +214,6 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     [approvalPreview],
   );
 
-  const notifyRoleHolders = async (leaseId: string, role: string, message: string) => {
-    if (!workspace) return;
-    const { data: roleRows } = await (supabase as any)
-      .from('workspace_roles')
-      .select('user_id')
-      .eq('workspace_id', workspace.id)
-      .eq('role', role);
-    const recipientIds = (roleRows || []).map((r: any) => r.user_id).filter(Boolean);
-    if (!recipientIds.length) return;
-    await supabase.from('lease_activity_log').insert({
-      lease_id: leaseId,
-      user_id: null,
-      activity_type: 'comment',
-      details: { notification_type: `notify_${role}`, recipient_ids: recipientIds, message },
-    } as any);
-  };
-
   const submit = async (values: LeaseRequestFormValues) => {
     if (!user || !workspace) {
       toast.error('Please log in to submit a request');
@@ -268,8 +255,15 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         covenantFlagged: values.covenantFlagged,
       });
 
-      const initialStatus = getInitialStatusAfterSubmission(approvalRequirements);
+      // Legacy initial status — only used on the legacyFallback path
+      // when no policies are configured.
+      const legacyInitialStatus = getInitialStatusAfterSubmission(approvalRequirements);
 
+      // Phase 2: insert as 'draft' first. Only flip to submitted/under_review/approved
+      // AFTER chain resolution succeeds (or determines we should fall back).
+      // This eliminates the half-state failure mode where a lease was inserted
+      // in 'submitted' but had no resolved approvers because resolution then
+      // failed — a real bug the spec called out.
       const { data: lease, error: createError } = await supabase
         .from('leases')
         .insert({
@@ -291,7 +285,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           calc_pv_liability: calcs?.pvLiability ?? null,
           calc_straight_line_exp: calcs?.straightLineExpense ?? null,
           calc_cash_pl_delta: calcs?.cashPLDelta ?? null,
-          lifecycle_status: initialStatus,
+          lifecycle_status: 'draft',
           intake_source: 'request_workflow',
           // Lease requests don't go through AI abstraction — set Ready so the
           // processing spinner never fires when landing on the detail page.
@@ -324,25 +318,125 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         lease_id: lease.id,
         user_id: user.id,
         activity_type: 'created',
-        to_status: initialStatus,
+        to_status: 'draft',
         details: {
           description: values.description,
           requesting_department: values.requestingDepartment,
           monthly_payment: values.monthlyPayment,
           term_months: values.termMonths,
           has_attachment: Boolean(file),
-          auto_approved: initialStatus === 'approved',
         },
       } as any);
 
-      // Notify appropriate approvers
-      if (initialStatus === 'submitted' && approvalRequirements.requiresManagerApproval) {
-        await notifyRoleHolders(lease.id, 'manager_approver',
-          `New commitment request awaiting your review: ${values.description}`);
-      } else if (initialStatus === 'under_review' && approvalRequirements.requiresFinancialApproval) {
-        await notifyRoleHolders(lease.id, 'financial_approver',
-          `New commitment request awaiting financial review: ${values.description}`);
+      // Phase 2: resolve approval chain. Two outcomes that proceed:
+      //   - legacyFallback=true → workspace has no policies; use the legacy
+      //     getApprovalRequirements/notifyRoleHolders path exactly as before.
+      //   - matched policy → chain rows already written by the edge function;
+      //     notify the first stage's assignees.
+      // Any other outcome (ambiguous match, no_match_no_fallback,
+      // separation_violation, network error) leaves the lease in 'draft'
+      // and surfaces a toast — the spec's stated "lease stays in draft"
+      // half-state-eliminating contract.
+      const { data: chainResult, error: chainError } = await supabase.functions.invoke(
+        'resolve-approval-chain',
+        { body: { leaseId: lease.id, initialResolution: true } },
+      );
+
+      const chain = chainResult as
+        | {
+            ok: true;
+            legacyFallback: false;
+            policyId: string;
+            policyVersion: number;
+            policyName: string;
+            stepsCreated: number;
+            firstStepAssignees: { userId: string | null; role: string | null }[];
+          }
+        | { ok: true; legacyFallback: true; message: string }
+        | { ok: false; error: string; reason: string }
+        | null;
+
+      if (chainError || !chain || chain.ok === false) {
+        const message =
+          (chain && chain.ok === false && chain.error) ||
+          chainError?.message ||
+          'Could not route this request for approval. Contact your admin.';
+        toast.error(message);
+        // Leave the lease in 'draft' so the user (or admin) can fix the
+        // underlying issue and resubmit. The resolve function is idempotent
+        // on initialResolution=true.
+        return;
       }
+
+      let finalStatus: 'submitted' | 'under_review' | 'approved';
+      let routingPath: 'legacy' | 'chain';
+
+      if (chain.legacyFallback === true) {
+        // Legacy path — no policies configured.
+        finalStatus = legacyInitialStatus;
+        routingPath = 'legacy';
+        await supabase
+          .from('leases')
+          .update({ lifecycle_status: finalStatus, status_changed_at: new Date().toISOString() } as any)
+          .eq('id', lease.id);
+        if (finalStatus === 'submitted' && approvalRequirements.requiresManagerApproval) {
+          await notifyRoleHolders(
+            supabase,
+            lease.id,
+            workspace.id,
+            'manager_approver',
+            `New commitment request awaiting your review: ${values.description}`,
+          );
+        } else if (
+          finalStatus === 'under_review' &&
+          approvalRequirements.requiresFinancialApproval
+        ) {
+          await notifyRoleHolders(
+            supabase,
+            lease.id,
+            workspace.id,
+            'financial_approver',
+            `New commitment request awaiting financial review: ${values.description}`,
+          );
+        }
+      } else {
+        // Policy-driven path — chain rows already inserted by the edge function.
+        finalStatus = 'submitted';
+        routingPath = 'chain';
+        await supabase
+          .from('leases')
+          .update({ lifecycle_status: finalStatus, status_changed_at: new Date().toISOString() } as any)
+          .eq('id', lease.id);
+        await notifyChainAssignees(
+          supabase,
+          lease.id,
+          workspace.id,
+          chain.firstStepAssignees,
+          `New commitment request requires your approval: ${values.description}`,
+        );
+      }
+
+      await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user.id,
+        activity_type: 'status_change',
+        from_status: 'draft',
+        to_status: finalStatus,
+        details: {
+          triggered_by: 'request_submission',
+          routing_path: routingPath,
+          ...(routingPath === 'chain' && chain.legacyFallback === false
+            ? {
+                policy_id: chain.policyId,
+                policy_version: chain.policyVersion,
+                policy_name: chain.policyName,
+                steps_created: chain.stepsCreated,
+              }
+            : {
+                auto_approved: finalStatus === 'approved',
+              }),
+        },
+      } as any);
 
       await createLeaseNotification({
         leaseId: lease.id,
