@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 
 export interface SummaryData {
   requestTitle: string;
@@ -240,7 +241,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
               ['Vendor', data.vendor || '\u2014'],
               ['Requesting Department', data.requestingDepartment || '\u2014'],
               ['Submitted', fmtDate(data.submittedAt)],
-              ['Status', data.lifecycleStatus ? titleCase(data.lifecycleStatus) : '\u2014'],
+              ['Status', data.lifecycleStatus ? displayLabel(data.lifecycleStatus as LifecycleStatus) : '\u2014'],
             ]}
           />
         </section>

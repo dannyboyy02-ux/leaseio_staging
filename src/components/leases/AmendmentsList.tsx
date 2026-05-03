@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 
 interface Amendment {
   id: string;
@@ -56,7 +57,10 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
       case 'Failed':
         return <Badge variant="destructive" className="text-xs">Failed</Badge>;
       default:
-        return <Badge variant="outline" className="text-xs">{displayStatus}</Badge>;
+        // Phase 3: route lifecycle_status values through displayLabel so
+        // chain-vocabulary states (e.g. 'concept_submitted') render with
+        // their canonical user-facing label instead of the raw enum.
+        return <Badge variant="outline" className="text-xs">{displayLabel(displayStatus as LifecycleStatus)}</Badge>;
     }
   };
 

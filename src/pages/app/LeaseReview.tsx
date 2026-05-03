@@ -80,6 +80,7 @@ import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
 import { createLeaseNotification } from '@/lib/leaseNotifications';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
+import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -1658,20 +1659,24 @@ export default function LeaseReview() {
     ['approved', 'executed', 'active'].includes(lease?.lifecycle_status || ''),
   );
 
+  // Phase 3: branch via isEquivalent so chain-vocabulary leases
+  // (concept_submitted / concept_under_review / in_negotiation) surface
+  // the same banners as their legacy equivalents.
+  const lifecycle = lifecycleStatus as LifecycleStatus;
   let nextStepBanner: { type: 'action' | 'info'; message: string } | null = null;
-  if (lifecycleStatus === 'submitted') {
+  if (isEquivalent(lifecycle, 'submitted')) {
     if (isManagerApprover || isAdminUser) {
       nextStepBanner = { type: 'action', message: 'Action required: this request is waiting for your manager review.' };
     } else if (isRequestor) {
       nextStepBanner = { type: 'info', message: "Your request is pending manager review. You'll be notified when the status changes." };
     }
-  } else if (lifecycleStatus === 'under_review') {
+  } else if (isEquivalent(lifecycle, 'under_review')) {
     if (isFinancialApprover || isAdminUser) {
       nextStepBanner = { type: 'action', message: 'Action required: this request is awaiting your financial review.' };
     } else {
       nextStepBanner = { type: 'info', message: "This request is under financial review. You'll be notified once a decision is made." };
     }
-  } else if (lifecycleStatus === 'approved') {
+  } else if (isEquivalent(lifecycle, 'approved')) {
     nextStepBanner = { type: 'info', message: 'This request is approved. Upload the executed document to advance to Executed status.' };
   }
 

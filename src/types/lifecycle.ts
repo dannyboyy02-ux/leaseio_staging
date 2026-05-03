@@ -1,6 +1,24 @@
 // Lease Lifecycle Types
+//
+// Phase 3 expanded the vocabulary: the legacy 8 states are joined by 8
+// chain-vocabulary states (draft, concept_submitted, concept_under_review,
+// in_negotiation, final_review, pending_counter_signature, fully_executed,
+// chain_violation). Both vocabularies coexist permanently — chain-driven
+// leases use the new states; legacy-fallback leases stay on the old ones.
+//
+// The canonical state list, group helpers, transitions, and display
+// labels live in src/lib/lifecycleStates.ts (Node) ↔
+// supabase/functions/_shared/lifecycle.ts (Deno). This file re-exports
+// the type and keeps the static UI-facing config the badge consumes.
+//
+// NOTE: 'draft' is part of both vocabularies (per lifecycleStates.ts) but
+// it is not in the legacy 8-state list above and was previously absent
+// here. Phase 3 adds it so the LIFECYCLE_STATUS_CONFIG below can render
+// it consistently.
 
 export type LifecycleStatus =
+  | 'draft'
+  // Legacy
   | 'submitted'
   | 'under_review'
   | 'approved'
@@ -8,7 +26,15 @@ export type LifecycleStatus =
   | 'active'
   | 'expired'
   | 'rejected'
-  | 'cancelled';
+  | 'cancelled'
+  // Chain
+  | 'concept_submitted'
+  | 'concept_under_review'
+  | 'in_negotiation'
+  | 'final_review'
+  | 'pending_counter_signature'
+  | 'fully_executed'
+  | 'chain_violation';
 
 export type LeaseCategory = 'property' | 'equipment' | 'vehicle' | 'other';
 
@@ -150,7 +176,13 @@ export interface LeaseNudge {
 }
 
 // State machine transitions
+//
+// Mirrors VALID_TRANSITIONS in src/lib/lifecycleStates.ts (which is the
+// canonical source for the chain helpers + vitest tests). Kept here for
+// existing consumers that import LIFECYCLE_TRANSITIONS from this file.
 export const LIFECYCLE_TRANSITIONS: Record<LifecycleStatus, LifecycleStatus[]> = {
+  // Legacy
+  draft: ['submitted', 'concept_submitted', 'cancelled'],
   submitted: ['under_review', 'rejected', 'approved', 'cancelled'],
   under_review: ['approved', 'rejected', 'submitted', 'cancelled'],
   approved: ['executed', 'rejected', 'cancelled'],
@@ -159,6 +191,14 @@ export const LIFECYCLE_TRANSITIONS: Record<LifecycleStatus, LifecycleStatus[]> =
   expired: [],
   rejected: ['submitted'],
   cancelled: [],
+  // Chain
+  concept_submitted: ['concept_under_review', 'in_negotiation', 'rejected', 'cancelled'],
+  concept_under_review: ['in_negotiation', 'rejected', 'concept_submitted', 'cancelled'],
+  in_negotiation: ['final_review', 'rejected', 'cancelled'],
+  final_review: ['pending_counter_signature', 'in_negotiation', 'rejected', 'cancelled'],
+  pending_counter_signature: ['fully_executed', 'cancelled'],
+  fully_executed: ['active', 'chain_violation', 'cancelled'],
+  chain_violation: ['active', 'cancelled'],
 };
 
 // Status display configuration
@@ -221,6 +261,68 @@ export const LIFECYCLE_STATUS_CONFIG: Record<LifecycleStatus, {
   cancelled: {
     label: 'Cancelled',
     shortLabel: 'Cancelled',
+    color: 'destructive',
+    bgClass: 'bg-destructive/10',
+    textClass: 'text-destructive',
+  },
+  // ── Phase 3 additions ────────────────────────────────────────────────
+  // 'draft' is the pre-submission state both vocabularies share.
+  draft: {
+    label: 'Draft',
+    shortLabel: 'Draft',
+    color: 'secondary',
+    bgClass: 'bg-muted',
+    textClass: 'text-muted-foreground',
+  },
+  // Chain vocabulary. Per the Phase 3 spec, user-facing labels for chain
+  // states in the same semantic group as a legacy state are intentionally
+  // identical (e.g. 'concept_submitted' renders as "Submitted" — the user
+  // should not see internal vocabulary differences).
+  concept_submitted: {
+    label: 'Submitted',
+    shortLabel: 'Submitted',
+    color: 'secondary',
+    bgClass: 'bg-muted',
+    textClass: 'text-muted-foreground',
+  },
+  concept_under_review: {
+    label: 'Under Review',
+    shortLabel: 'Review',
+    color: 'outline',
+    bgClass: 'bg-warning/10',
+    textClass: 'text-warning',
+  },
+  in_negotiation: {
+    label: 'In Negotiation',
+    shortLabel: 'Negotiation',
+    color: 'outline',
+    bgClass: 'bg-primary/10',
+    textClass: 'text-primary',
+  },
+  final_review: {
+    label: 'Final Review',
+    shortLabel: 'Final',
+    color: 'outline',
+    bgClass: 'bg-warning/10',
+    textClass: 'text-warning',
+  },
+  pending_counter_signature: {
+    label: 'Awaiting Counter-Signature',
+    shortLabel: 'Counter-Sign',
+    color: 'outline',
+    bgClass: 'bg-warning/10',
+    textClass: 'text-warning',
+  },
+  fully_executed: {
+    label: 'Fully Executed',
+    shortLabel: 'Executed',
+    color: 'outline',
+    bgClass: 'bg-primary/10',
+    textClass: 'text-primary',
+  },
+  chain_violation: {
+    label: 'Chain Violation',
+    shortLabel: 'Violation',
     color: 'destructive',
     bgClass: 'bg-destructive/10',
     textClass: 'text-destructive',

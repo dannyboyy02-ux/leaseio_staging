@@ -40,6 +40,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
+import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 
 interface LeaseDetail {
   id: string;
@@ -376,7 +377,7 @@ export default function FinancialReview() {
       <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto">
         {!canAct && (
           <div className="rounded-lg border border-muted bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-            This review is in <strong>{lease.lifecycle_status.replace('_', ' ')}</strong> status.
+            This review is in <strong>{displayLabel(lease.lifecycle_status as LifecycleStatus)}</strong> status.
             {!isFinancialApprover && ' You do not have the Financial Approver role.'}
           </div>
         )}

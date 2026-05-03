@@ -29,7 +29,12 @@ interface ExtractionRow {
   processed_at: string | null;
 }
 
+// Phase 3 (KNOWN_ISSUES.md item #7): this local label table duplicates
+// the canonical displayLabel() in src/lib/lifecycleStates.ts. Extended
+// in place here per the Phase 3 plan; consolidation to a single helper
+// is tracked as a dedicated future refactor.
 const LIFECYCLE_LABELS: Record<string, string> = {
+  // Legacy
   submitted: 'Submitted for approval',
   under_review: 'Under review',
   approved: 'Approved',
@@ -37,6 +42,15 @@ const LIFECYCLE_LABELS: Record<string, string> = {
   active: 'Active',
   expired: 'Expired',
   rejected: 'Rejected',
+  // Chain — labels intentionally identical to legacy where the user-facing
+  // meaning matches; chain-only states get their canonical labels.
+  concept_submitted: 'Submitted for approval',
+  concept_under_review: 'Under review',
+  in_negotiation: 'In negotiation',
+  final_review: 'Final review',
+  pending_counter_signature: 'Awaiting counter-signature',
+  fully_executed: 'Fully executed',
+  chain_violation: 'Chain violation',
 };
 
 function getActivityLabel(activityType: string, lifecycleStatus?: string | null): string {
@@ -54,11 +68,22 @@ function getActivityLabel(activityType: string, lifecycleStatus?: string | null)
 
 function getDotColor(lifecycleStatus: string | null): string {
   switch (lifecycleStatus) {
+    // Legacy
     case 'submitted': return 'bg-blue-400';
     case 'under_review': return 'bg-amber-400';
     case 'approved': return 'bg-purple-400';
     case 'executed': return 'bg-indigo-400';
     case 'active': return 'bg-green-500';
+    // Chain — colors mirror equivalent legacy states so the dot looks
+    // identical regardless of vocabulary; chain-only states get their
+    // own colors in the same family.
+    case 'concept_submitted': return 'bg-blue-400';
+    case 'concept_under_review': return 'bg-amber-400';
+    case 'in_negotiation': return 'bg-purple-400';
+    case 'final_review': return 'bg-amber-500';
+    case 'pending_counter_signature': return 'bg-amber-500';
+    case 'fully_executed': return 'bg-indigo-400';
+    case 'chain_violation': return 'bg-red-500';
     default: return 'bg-gray-400';
   }
 }

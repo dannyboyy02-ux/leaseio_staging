@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import {
+  displayLabel,
+  type LifecycleStatus,
+} from "../_shared/lifecycle.ts";
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   return baseCorsHeaders(requestOrigin, "POST, OPTIONS");
@@ -61,7 +65,7 @@ function buildLeaseContext(leases: any[], workspaceName: string): string {
 
     const leaseLine = [
       `LEASE: ${name}`,
-      `  Status: ${lease.lifecycle_status}`,
+      `  Status: ${displayLabel(lease.lifecycle_status as LifecycleStatus)}`,
       `  Asset type: ${lease.asset_type || 'unspecified'}`,
       `  Landlord: ${lease.landlord_name || extractValue(json?.landlord_name) || 'unknown'}`,
       `  Tenant: ${lease.tenant_name || extractValue(json?.tenant_name) || 'unknown'}`,

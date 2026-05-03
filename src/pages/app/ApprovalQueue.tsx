@@ -32,6 +32,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
+import {
+  displayLabel,
+  isEquivalent,
+  type LifecycleStatus,
+} from '@/lib/lifecycleStates';
 
 interface QueueLease {
   id: string;
@@ -73,18 +78,20 @@ function LeaseQueueCard({
   onReject: (lease: QueueLease) => void;
   onView: (lease: QueueLease) => void;
 }) {
+  // Phase 3: queue-specific labels preserved for both vocabularies via
+  // isEquivalent. The bespoke "Awaiting X Review" strings are queue UX —
+  // displayLabel('submitted') would lose that context.
+  const status = lease.lifecycle_status as LifecycleStatus;
   const statusLabel =
-    lease.lifecycle_status === 'submitted' ? 'Awaiting Manager Review'
-    : lease.lifecycle_status === 'under_review' ? 'Awaiting Financial Review'
-    : lease.lifecycle_status === 'approved' ? 'Approved'
-    : lease.lifecycle_status === 'rejected' ? 'Rejected'
-    : lease.lifecycle_status;
+    isEquivalent(status, 'submitted') ? 'Awaiting Manager Review'
+    : isEquivalent(status, 'under_review') ? 'Awaiting Financial Review'
+    : displayLabel(status);
 
   const canManagerAct =
     isManagerApprover &&
-    lease.lifecycle_status === 'submitted' &&
+    isEquivalent(status, 'submitted') &&
     !lease.financial_returned_to_submitter;
-  const canFinancialAct = isFinancialApprover && lease.lifecycle_status === 'under_review';
+  const canFinancialAct = isFinancialApprover && isEquivalent(status, 'under_review');
   const canAct = canManagerAct || canFinancialAct;
 
   return (
