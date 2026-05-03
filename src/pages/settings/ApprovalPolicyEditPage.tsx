@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -32,6 +32,7 @@ import {
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { validatePolicy } from './approvalPolicyValidation';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — keep aligned with leases.asset_type / leases.lease_type CHECK
@@ -325,67 +326,11 @@ export default function ApprovalPolicyEditPage() {
     };
   }, [isNew, routeId, workspace?.id, navigate]);
 
-  const sodEffective: boolean = useMemo(() => {
-    if (form.sod_mode === 'inherit') return wsExtras.data?.sodDefault ?? true;
-    return form.sod_mode === 'require';
-  }, [form.sod_mode, wsExtras.data?.sodDefault]);
-
-  const validate = (): string | null => {
-    if (!form.name.trim()) return 'Name is required.';
-    if (!Number.isInteger(form.priority) || form.priority <= 0) return 'Priority must be a positive integer.';
-    const min = form.match_min_annual_cost.trim() === '' ? null : parseFloat(form.match_min_annual_cost);
-    const max = form.match_max_annual_cost.trim() === '' ? null : parseFloat(form.match_max_annual_cost);
-    if (min != null && !Number.isFinite(min)) return 'Min annual cost is invalid.';
-    if (max != null && !Number.isFinite(max)) return 'Max annual cost is invalid.';
-    if (min != null && max != null && min > max) return 'Min annual cost must be ≤ max annual cost.';
-
-    if (conceptSteps.length === 0) return 'At least one concept-chain step is required.';
-    if (signatorSteps.length === 0) return 'At least one signator-chain step is required.';
-
-    const validateStep = (s: ChainStep, label: string): string | null => {
-      if (!Number.isInteger(s.step_order) || s.step_order <= 0)
-        return `${label}: step order must be a positive integer.`;
-      if (!Number.isInteger(s.parallel_group) || s.parallel_group <= 0)
-        return `${label}: parallel group must be a positive integer.`;
-      const userSet = !!s.approver_user_id;
-      const roleSet = !!s.approver_role;
-      if (userSet === roleSet) return `${label}: each step must have exactly one of user or role.`;
-      if (s.delegate_user_id && (s.delegate_after_days == null || s.delegate_after_days <= 0))
-        return `${label}: delegate requires "delegate after N days" > 0.`;
-      return null;
-    };
-
-    for (const stage of [
-      { steps: conceptSteps, label: 'Concept' },
-      { steps: signatorSteps, label: 'Signator' },
-    ]) {
-      const seenInGroup = new Map<string, true>();
-      for (const s of stage.steps) {
-        const err = validateStep(s, stage.label);
-        if (err) return err;
-        const key = `${s.parallel_group}:${s.step_order}`;
-        if (seenInGroup.has(key))
-          return `${stage.label}: duplicate step order ${s.step_order} in parallel group ${s.parallel_group}.`;
-        seenInGroup.set(key, true);
-      }
-    }
-
-    if (sodEffective) {
-      const seen = new Set<string>();
-      for (const s of [...conceptSteps, ...signatorSteps]) {
-        if (s.approver_user_id) {
-          if (seen.has(s.approver_user_id))
-            return 'Separation of duties is required, but the same user appears in multiple steps.';
-          seen.add(s.approver_user_id);
-        }
-      }
-    }
-    return null;
-  };
-
   const save = async () => {
     if (!workspace?.id) return;
-    const err = validate();
+    const err = validatePolicy(form, conceptSteps, signatorSteps, {
+      workspaceSodDefault: wsExtras.data?.sodDefault ?? true,
+    });
     if (err) {
       toast.error(err);
       return;
