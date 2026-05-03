@@ -487,3 +487,57 @@ Do NOT build any of these in Phase 2. Each is owned by a later phase.
 - Confirm before running: query the current `lease_activity_log_activity_type_check` constraint definition and preserve every existing value when extending it. The list in this spec is the union of values from prior migrations but the actual current state in the database is the source of truth.
 - Do not introduce new dependencies. Stick to what is already in `package.json`.
 - When the chain step status transitions to `approved` or `rejected`, the constraint allows `superseded` but the assignee RLS check policy explicitly excludes it. Only the service role (edge function) writes `superseded`. This is intentional and the function should use the admin client for those writes.
+
+---
+
+## As-built notes (post-implementation, 2026-05-03)
+
+**Phase 2 status: CLOSED.** Delivered end-to-end with both legacy fallback and policy-driven chain paths verified live. The following deviations from the pre-coding spec were applied during the build and are now the source-of-truth implementation. Future phases should inherit these.
+
+### Submission flow — insert as `draft` first, flip after resolve
+
+The original spec showed `LeaseRequestForm` inserting the lease in its final lifecycle status (`submitted`/`under_review`/`approved`) and THEN calling resolve-approval-chain. That created a half-state failure mode: if resolution failed (ambiguous match, separation violation, network error) the lease was already in `submitted` with no resolved approvers wired up.
+
+The shipped behavior:
+
+1. Insert the lease in `lifecycle_status: 'draft'`.
+2. Call `resolve-approval-chain`.
+3. On `legacyFallback: true` → flip to legacy `getInitialStatusAfterSubmission` value + run legacy `notifyRoleHolders`.
+4. On policy match → flip to `submitted` + call `notifyChainAssignees`.
+5. On any error → leave the lease in `draft` and surface the toast. The resolver is idempotent (`initialResolution=true` returns `alreadyResolved` if any chain rows exist) so retry is safe.
+
+Phase 6 rerouting and Phase 3+ lifecycle changes should preserve this draft-first pattern for any new submission triggers.
+
+### `notifyRoleHolders` was inline, now lifted
+
+The pre-coding spec referred to `notifyRoleHolders` as if it were a reusable helper. It actually existed only as a closure inside `LeaseRequestForm.tsx:213`. We extracted it to `src/lib/leaseNotifications.ts` (signature `notifyRoleHolders(client, leaseId, workspaceId, role, message)`) with body unchanged, and added a sibling `notifyChainAssignees(client, leaseId, workspaceId, assignees, message)`.
+
+`notifyChainAssignees` semantics:
+- **Direct-user assignees** (chain row has `approver_user_id` set): one `lease_activity_log` entry, `activity_type='comment'`, `details.notification_type='notify_chain_step_users'`, `details.recipient_ids=[<user ids>]`.
+- **Role-based assignees** (chain row has `approver_role` set): fan out via `notifyRoleHolders` per unique role. This produces an entry with `details.notification_type='notify_<role>'` — the same shape the legacy path uses. The unambiguous source-of-truth marker for "was this transition chain-driven?" is the `status_change` activity log row's `details.routing_path` (see Lifecycle Transition Convention below), not the notification's `notification_type`.
+
+### Approvals page is `ApprovalQueue.tsx`
+
+The pre-coding spec said "ApprovalsPage.tsx (or wherever it lives)". The actual file is `src/pages/app/ApprovalQueue.tsx`. Phase 2 extended it purely additively — no refactor of existing legacy approval rendering. New code: `PendingChainStep` type, `ChainStepCard` component, parallel chain-step query inside `fetchLeases`, and `renderUnifiedMyReview()` for the "Needs My Review" tab. Existing `renderList()` still drives "All Pending" and "Reviewed" unchanged.
+
+### Lifecycle Transition Convention
+
+Surfaced during Path B verification: chain-driven `status_change` activity log rows had `from_status`/`to_status` only inside `details`, with the columns null. The form path wrote them as columns. Two write shapes meant downstream consumers had to handle both.
+
+Convention now documented in `CLAUDE.md` → **Lifecycle Transition Convention**. Briefly: every code path that transitions `leases.lifecycle_status` MUST (1) bump `leases.status_changed_at` in the same UPDATE statement, (2) write `status_change` activity log rows with both the top-level `from_status`/`to_status` columns AND the equivalent inside `details`, and (3) include `details.routing_path` (`'legacy'` or `'chain'`).
+
+`act-on-chain-step` enforces this via two helpers: `updateLifecycle(leaseId, newStatus)` and `logStatusChange(leaseId, fromStatus, toStatus, extra)`. Phase 3+ transition triggers (lifecycle expansion, rerouting) must follow the convention.
+
+### Activity type values — live constraint is truth
+
+The pre-coding spec listed an example set of pre-existing `activity_type` values for the CHECK constraint extension. The live constraint contained a different set (24 values, missing `model_locked`/`unlock_rejected` from the spec listing, with `change_set_*` and `risk_*` not in the spec). The migration captured the live constraint as truth and appended only the 6 Phase 2 additions (`chain_resolved`, `chain_step_approved`, `chain_step_rejected`, `chain_step_sent_back`, `chain_stage_completed`, `chain_resolution_failed`).
+
+The on-disk migration mirror (`supabase/migrations/20260502170000_phase2_lease_approval_chain.sql`) is the source of truth for the final value list.
+
+### Deploy path
+
+Edge functions deployed via the MCP `mcp__claude_ai_Supabase__deploy_edge_function` tool, not the Supabase CLI (the CLI isn't installed in the dev environment). Source-of-truth files committed to `supabase/functions/<name>/index.ts` per the project-config rule. After every deploy, `mcp__claude_ai_Supabase__get_edge_function` is used to confirm deployed source matches local.
+
+Final deployed versions at Phase 2 close:
+- `resolve-approval-chain` v2 (v1 = initial deploy; v2 brought bundled `_shared/approval_chain.ts` in sync with the LIFECYCLE TRANSITION CONVENTION header comment).
+- `act-on-chain-step` v3 (v1 = initial; v2 = lifecycle convention fix; v3 = same shared bundle sync).

@@ -1,9 +1,17 @@
-# Known Issues — Pre-Phase-2 Backlog
+# Known Issues — Open Backlog
 
-Tracked here so they survive across sessions. None of these block Phase 2; all
-are pre-existing. Surfaced during the Phase 2 Path A smoke test on 2026-05-03.
+Tracked here so they survive across sessions. None of these block Phase 2 (now
+closed) or Phase 3 (next). Items 1-4 surfaced during the Phase 2 Path A smoke
+test on 2026-05-03; item 5 surfaced during the Phase 2 Path B smoke the same
+day.
 
-When fixing, remove from this list and add a reference in the commit message.
+When fixing, remove from this list and reference it in the commit message.
+
+**Status reconciliation (Phase 2 close, 2026-05-03):** No items resolved during
+Phase 2. Items 1-5 all still open and confirmed flagged. The lifecycle
+transition convention asymmetries surfaced during Path B verification were
+fixed inline (commit `dccf2aa`) and are NOT tracked here — they're now part of
+the shipped Phase 2 contract via the convention doc in CLAUDE.md.
 
 ---
 

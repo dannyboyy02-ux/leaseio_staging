@@ -264,11 +264,11 @@ When rerouting:
 
 ## What gets built when
 
-**Phase 1 — Policy editor UI** (see `PHASE_1_BUILD_SPEC.md`)
-Admin-facing UI for creating, editing, deleting, and previewing policies. No runtime integration yet. Purely the data model and the admin tool to populate it.
+**Phase 1 — Policy editor UI** (see `PHASE_1_BUILD_SPEC.md`) — **CLOSED.**
+Admin-facing UI for creating, editing, deleting, and previewing policies. No runtime integration. Purely the data model and the admin tool to populate it.
 
-**Phase 2 — Resolution engine and chain table**
-The `resolve-approval-chain` edge function. The `lease_approval_chain` table. Triggered on lease request submission. Wires up notification of resolved approvers.
+**Phase 2 — Resolution engine and chain table** (see `PHASE_2_BUILD_SPEC.md`) — **CLOSED 2026-05-03.**
+The `resolve-approval-chain` and `act-on-chain-step` edge functions. The `lease_approval_chain` table. Triggered on lease request submission. Notifies resolved approvers via the unified inbox in `ApprovalQueue.tsx`. Workspaces without policies fall back to the legacy parallel-notify flow. Lifecycle transitions enforce the Lifecycle Transition Convention (see `CLAUDE.md`). See the spec's As-Built Notes for implementation deltas (insert-as-draft-first, lifted `notifyRoleHolders`, etc.).
 
 **Phase 3 — Lifecycle expansion**
 New lifecycle states (`concept_submitted`, `concept_under_review`, `in_negotiation`, `final_review`, `pending_counter_signature`, `fully_executed`). Migration of existing data. Updated transition logic.
