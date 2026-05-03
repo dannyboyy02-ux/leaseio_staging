@@ -2,6 +2,14 @@
 
 **Status:** Hard prerequisite for Checkpoint 4 (frontend consumer sweep) per `docs/PHASE_3_BUILD_SPEC.md`. User must review and approve this document before any consumer code changes land.
 
+**Checkpoint 4 closeout (2026-05-03):** All 208 occurrences resolved across three commits:
+- Batch A (display layer, A-category) — `c91f3bd` — 8 files / ~22 occurrences
+- Batch B (grouping/filter, B-category) — `074cfb3` — 19 files / ~78 occurrences
+- Batch C (write-path) — `5b801c4` — `LeaseRequestForm.tsx` reads `targetLifecycleStatus` from the resolve-approval-chain response and uses it as the post-resolution flip value
+- All No-Op categories (W/R/T/Q/X/Notes) verified untouched as designed
+- Single intentional deviation: `ApprovalQueue.tsx` queue-card status cascade (audit prescribed `displayLabel`, but the bespoke "Awaiting Manager/Financial Review" labels are queue UX context that `displayLabel` would erase). Used `isEquivalent` to extend both vocabularies into the existing labels — preserves the hard-stop reminder that legacy display behavior must not change. Documented in commit `c91f3bd` body.
+- Vitest 168/168 + tsc clean at the end of every batch.
+
 **Surveyed:** 2026-05-03. 208 occurrences of `lifecycle_status` / `lifecycleStatus` across 46 files (37 frontend, 9 edge functions). Auto-generated `src/integrations/supabase/types.ts` excluded.
 
 **Reviewed:** 2026-05-03 by the user. Three follow-ups addressed before Checkpoint 2 green-light:
@@ -478,11 +486,11 @@ Multiple files have local arrays/sets that duplicate group semantics:
 
 ## Validation checklist before signing off Checkpoint 4
 
-- [ ] All A-category occurrences route through `displayLabel()` (or via `LifecycleStatusBadge`)
-- [ ] All B-category occurrences use `groupOf()` / `isEquivalent()` / a `STATE_GROUPS`-derived list — no remaining literal status comparisons in branching logic
-- [ ] No untouched local-constant arrays still hardcode legacy-only state lists
-- [ ] `LeaseRequestForm.tsx:408` flips chain leases to `concept_submitted` (not `submitted`)
-- [ ] `act-on-chain-step` chain mode uses chain vocabulary; legacy mode uses legacy vocabulary
-- [ ] `supabase/functions/ai-assistant/index.ts:64` uses `displayLabel()` from the Deno helper
-- [ ] `npx tsc --noEmit` clean
-- [ ] `npx vitest run` 142+ tests passing, 0 regressions
+- [x] All A-category occurrences route through `displayLabel()` (or via `LifecycleStatusBadge`)
+- [x] All B-category occurrences use `groupOf()` / `isEquivalent()` / a `STATE_GROUPS`-derived list — no remaining literal status comparisons in branching logic
+- [x] No untouched local-constant arrays still hardcode legacy-only state lists (6 extended in place per option A; KNOWN_ISSUES #7 marker comments added to all 6)
+- [x] `LeaseRequestForm.tsx` flips chain leases via `targetLifecycleStatus` from resolve-approval-chain (currently `concept_submitted`) — no hardcoded value
+- [x] `act-on-chain-step` chain mode uses chain vocabulary; legacy mode uses legacy vocabulary (Checkpoint 3, commit `dce52da`)
+- [x] `supabase/functions/ai-assistant/index.ts:64` uses `displayLabel()` from the Deno helper
+- [x] `npx tsc --noEmit` clean
+- [x] `npx vitest run` 168/168 passing, 0 regressions
