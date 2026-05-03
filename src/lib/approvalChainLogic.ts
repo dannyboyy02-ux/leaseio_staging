@@ -14,6 +14,17 @@
 // When you change one, change the other in the same commit. No imports
 // allowed in either file (no React, no Supabase, no Deno-only or
 // Node-only modules) — only language-level types and logic.
+//
+// LIFECYCLE TRANSITION CONVENTION
+// Anyone editing the chain helpers is likely also touching transition
+// logic. Read CLAUDE.md → "Lifecycle Transition Convention" before
+// changing how lease.lifecycle_status is updated. Brief: every lifecycle
+// UPDATE bumps status_changed_at in the same statement; every
+// status_change activity log row populates from_status + to_status as
+// top-level columns AND the equivalent inside details, plus a
+// routing_path tag. The chain-driven helpers in act-on-chain-step
+// (updateLifecycle, logStatusChange) implement this; the form-path
+// writer in LeaseRequestForm matches.
 // ─────────────────────────────────────────────────────────────────────────
 
 export type Stage = 'concept' | 'signator';

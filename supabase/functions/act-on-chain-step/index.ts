@@ -113,6 +113,61 @@ serve(async (req) => {
     }
   }
 
+  // ── Lifecycle Transition Convention (CLAUDE.md) ─────────────────────────
+  // Every leases.lifecycle_status update MUST also bump status_changed_at
+  // in the SAME UPDATE statement. Every status_change activity log row
+  // MUST populate from_status + to_status as top-level columns AND keep
+  // the equivalent fields inside details for backward compatibility,
+  // and include a routing_path value so downstream consumers can
+  // distinguish how the transition was produced.
+  async function updateLifecycle(
+    leaseId: string,
+    newStatus: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const { error } = await supabaseAdmin
+      .from("leases")
+      .update({
+        lifecycle_status: newStatus,
+        status_changed_at: new Date().toISOString(),
+      })
+      .eq("id", leaseId);
+    if (error) {
+      console.error("[act-on-chain-step] lease lifecycle update error:", error.message);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  }
+
+  async function logStatusChange(
+    leaseId: string,
+    fromStatus: string,
+    toStatus: string,
+    extra: Record<string, unknown>,
+  ) {
+    const details = {
+      // Keep the legacy nested shape so any consumer reading details.from /
+      // details.to keeps working while we migrate to columns.
+      from: fromStatus,
+      to: toStatus,
+      // Convention: every chain-driven transition is tagged 'chain'.
+      routing_path: "chain",
+      ...extra,
+    };
+    const { error } = await supabaseAdmin
+      .from("lease_activity_log")
+      .insert({
+        lease_id: leaseId,
+        user_id: user.id,
+        activity_type: "status_change",
+        from_status: fromStatus,
+        to_status: toStatus,
+        details,
+      });
+    if (error) {
+      console.error("[act-on-chain-step] status_change log error:", error.message);
+    }
+  }
+
   let body: RequestBody;
   try {
     body = await req.json();
@@ -262,17 +317,10 @@ serve(async (req) => {
   if (action === "reject") {
     // Lease → rejected. Mark all remaining pending steps in the chain
     // as superseded.
-    const { error: leaseErr } = await supabaseAdmin
-      .from("leases")
-      .update({ lifecycle_status: "rejected" })
-      .eq("id", step.lease_id);
-    if (leaseErr) {
-      console.error("[act-on-chain-step] lease lifecycle update error:", leaseErr.message);
-    } else {
+    const result = await updateLifecycle(step.lease_id, "rejected");
+    if (result.ok) {
       lifecycleChange = "rejected";
-      await logActivity(step.lease_id, "status_change", {
-        from: "pending",
-        to: "rejected",
+      await logStatusChange(step.lease_id, "pending", "rejected", {
         triggered_by: "chain_step_rejected",
         chain_step_id: step.id,
       });
@@ -284,17 +332,10 @@ serve(async (req) => {
       .eq("status", "pending");
   } else if (action === "send_back") {
     // Lease → submitted. Mark current-stage pending steps as superseded.
-    const { error: leaseErr } = await supabaseAdmin
-      .from("leases")
-      .update({ lifecycle_status: "submitted" })
-      .eq("id", step.lease_id);
-    if (leaseErr) {
-      console.error("[act-on-chain-step] lease lifecycle update error:", leaseErr.message);
-    } else {
+    const result = await updateLifecycle(step.lease_id, "submitted");
+    if (result.ok) {
       lifecycleChange = "submitted";
-      await logActivity(step.lease_id, "status_change", {
-        from: "under_review",
-        to: "submitted",
+      await logStatusChange(step.lease_id, "under_review", "submitted", {
         triggered_by: "chain_step_sent_back",
         chain_step_id: step.id,
       });
@@ -317,22 +358,15 @@ serve(async (req) => {
       // Advance lease to under_review (matches legacy behavior so the
       // rest of the app keeps working). Phase 3 will introduce
       // in_negotiation.
-      const { error: leaseErr } = await supabaseAdmin
-        .from("leases")
-        .update({ lifecycle_status: "under_review" })
-        .eq("id", step.lease_id);
-      if (leaseErr) {
-        console.error("[act-on-chain-step] lease lifecycle update error:", leaseErr.message);
-      } else {
+      const result = await updateLifecycle(step.lease_id, "under_review");
+      if (result.ok) {
         lifecycleChange = "under_review";
         stageCompleted = true;
         await logActivity(step.lease_id, "chain_stage_completed", {
           stage: "concept",
           chain_step_id: step.id,
         });
-        await logActivity(step.lease_id, "status_change", {
-          from: "submitted",
-          to: "under_review",
+        await logStatusChange(step.lease_id, "submitted", "under_review", {
           triggered_by: "chain_stage_completed",
           stage: "concept",
         });
