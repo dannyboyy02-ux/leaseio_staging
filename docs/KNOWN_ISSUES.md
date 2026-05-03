@@ -95,8 +95,55 @@ the Lovable / Vercel subdomain where the smoke is being run.
 
 ---
 
+## 5. WorkspaceSettings tabs hidden from workspace owners (Phase 1 gating bug)
+
+**Symptom:** A workspace owner navigates to `/app/settings/workspace` and does
+not see the "Approval Policies", "Lease Configuration", or "Onboarding" tabs —
+only Company Profile, Users, Notifications, Financial, Risk Watchlist. The
+direct URL `/app/settings/approval-policies` works fine; only the in-page
+navigation is missing.
+
+**Root cause:** `src/pages/settings/WorkspaceSettings.tsx:161`:
+
+```ts
+const isAdmin = userRole === 'admin';
+```
+
+This is a literal string check that excludes workspace owners (who have
+`userRole === 'owner'`). The route-level guard in `App.tsx` correctly uses
+`canEditWorkspaceSettings` from `src/lib/authorization.ts`, which calls
+`isAdmin(role)` and normalizes 'owner' → 'admin'. But this in-page gate doesn't
+go through that helper. Result: the owner can navigate to admin pages by
+typing the URL but the tabs that link to them are hidden.
+
+Three tabs hit by this gate (lines 168, 170, 171):
+- `lease_config` — Lease Configuration
+- `approval_policies` — Approval Policies (added in Phase 1)
+- `onboarding` — Onboarding
+
+Plus two `{isAdmin && (...)}` blocks that wrap their `TabsContent` (lines
+1015, 1155, 1184) — same gate, same hide-from-owners effect.
+
+**Fix:** replace line 161 with:
+
+```ts
+import { canEditWorkspaceSettings } from '@/lib/authorization';
+// ...
+const isAdmin = canEditWorkspaceSettings(userRole);
+```
+
+(`canEditWorkspaceSettings` already returns true for both 'admin' and 'owner'.)
+One-line change; no behavior change for true admins.
+
+**Severity:** Medium — admin features are reachable by URL but discoverability
+is broken for owners. Surfaced 2026-05-03 when the user noticed the new
+"Approval Policies" tab wasn't visible after the Phase 1 deploy.
+
+---
+
 ## Tracking
 
-Surfaced 2026-05-03 during Phase 2 Path A smoke. Filed by Claude per user
-direction. Each item should get its own commit when fixed; reference this
-file in the message and remove the entry once green.
+Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4) and Phase 2 Path A
+follow-up (item 5). Filed by Claude per user direction. Each item should get
+its own commit when fixed; reference this file in the message and remove the
+entry once green.
