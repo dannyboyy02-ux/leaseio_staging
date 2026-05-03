@@ -351,6 +351,12 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
             policyName: string;
             stepsCreated: number;
             firstStepAssignees: { userId: string | null; role: string | null }[];
+            // Phase 3: edge function returns the chain-vocabulary destination
+            // for the post-resolution flip (e.g. 'concept_submitted'). Treated
+            // as authoritative for chain leases — the form must not hardcode.
+            // Optional in the type so the form falls back gracefully if a
+            // pre-Phase-3 deploy of the edge function is somehow in use.
+            targetLifecycleStatus?: string;
           }
         | { ok: true; legacyFallback: true; message: string }
         | { ok: false; error: string; reason: string }
@@ -368,11 +374,16 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         return;
       }
 
-      let finalStatus: 'submitted' | 'under_review' | 'approved';
+      // Phase 3: finalStatus widened to string so chain leases can flip to
+      // the chain-vocabulary destination ('concept_submitted') returned by
+      // the edge function. Legacy path keeps the original values.
+      let finalStatus: string;
       let routingPath: 'legacy' | 'chain';
 
       if (chain.legacyFallback === true) {
-        // Legacy path — no policies configured.
+        // Legacy path — no policies configured. Keeps Phase 2 behavior
+        // byte-identical: the legacy initial status comes from
+        // approvalRouting.ts.
         finalStatus = legacyInitialStatus;
         routingPath = 'legacy';
         await supabase
@@ -400,8 +411,13 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           );
         }
       } else {
-        // Policy-driven path — chain rows already inserted by the edge function.
-        finalStatus = 'submitted';
+        // Policy-driven path — chain rows already inserted by the edge
+        // function. Phase 3: read targetLifecycleStatus from the response
+        // so the lease enters chain vocabulary (concept_submitted). The
+        // pre-Phase-3 fallback to 'submitted' is kept defensively in case
+        // an older edge function build is ever live; the current resolve
+        // function (v3+) always returns this field.
+        finalStatus = chain.targetLifecycleStatus ?? 'submitted';
         routingPath = 'chain';
         await supabase
           .from('leases')
