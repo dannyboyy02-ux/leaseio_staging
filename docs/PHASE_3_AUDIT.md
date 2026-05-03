@@ -4,6 +4,15 @@
 
 **Surveyed:** 2026-05-03. 208 occurrences of `lifecycle_status` / `lifecycleStatus` across 46 files (37 frontend, 9 edge functions). Auto-generated `src/integrations/supabase/types.ts` excluded.
 
+**Reviewed:** 2026-05-03 by the user. Three follow-ups addressed before Checkpoint 2 green-light:
+1. ai-assistant unrecognized values (lines 27, 217) confirmed as dead values reading the correct column; filed as `KNOWN_ISSUES.md` item #6 — not a Phase 3 change.
+2. Six local constants (option B candidates) deferred to a dedicated post-Phase-3 refactor — filed as `KNOWN_ISSUES.md` item #7. Phase 3 extends each constant in place (option A).
+3. Test-file coverage confirmed: only 2 occurrences in test files, both already classified X (in `src/lib/__tests__/lockedLeaseLayout.test.ts`). Comprehensive grep of `*.test.*` and `__tests__/` returned no additional hits.
+
+**Implementation note:** Checkpoints 2-4 followed this audit. Any deviation surfaced during implementation is captured in the Phase 3 closeout commit body alongside the file inventory. The Phase 3 closeout MUST cite this document by SHA so future audits can trace which audit gated which implementation pass.
+
+**Audit-doc template:** the structure of this file (per-file occurrence tables with line / snippet / category / notes, summary by category, critical gaps + flags, validation checklist) is the canonical template for future audits in Phases 4-8 and any other large-blast-radius work.
+
 ## Migration approach legend
 
 - **A — `displayLabel(status)`**: occurrence is purely UI text rendering of the status. Replace literal text or per-state if/switch with a single `displayLabel(status)` call. Chain and legacy values render identical user-facing labels.
@@ -314,7 +323,10 @@ No `lifecycle_status` references — file is permission/role helpers only. (Orig
 
 | Line | Snippet | Cat | Notes |
 |------|---------|-----|-------|
-| various | Test fixtures | X | Add chain-state cases in Checkpoint 5 |
+| 9 | `it('LeaseReview dispatches to LockedLeaseDetail when model_locked && lifecycle_status === "active"', ...)` | X | Test name string |
+| 13 | `expect(source).toContain("lease?.model_locked === true && lease?.lifecycle_status === 'active'");` | X | Source-string match for routing decision; pure `'active'` group — same in both vocabularies, no chain-state case needed for this test |
+
+**Test-file coverage exhaustively confirmed (2026-05-03):** Comprehensive grep of `*.test.{ts,tsx,js,jsx}` and `__tests__/**` directories returned exactly these 2 occurrences and no others. Both classified X. The test relies on the literal `'active'` string, which is identical in legacy and chain vocabularies — no test update is needed in Checkpoint 5 for this file. New chain-state test cases in Checkpoint 5 will be added to `src/lib/__tests__/lifecycleStates.test.ts` (new file) and to the existing pure-helper test files.
 
 ### Already-correct files (Phase 2)
 
@@ -419,26 +431,28 @@ Two writes must change to honor the Phase 3 vocabulary split:
 1. **`src/components/workflow/LeaseRequestForm.tsx:408`** — chain-path post-resolution flip from `'submitted'` → `'concept_submitted'`.
 2. **`supabase/functions/act-on-chain-step/index.ts:~130`** (and helpers) — chain leases transition `concept_submitted` → `concept_under_review` → `in_negotiation` (was: `submitted` → `under_review` → `approved`). Branch on `getLifecycleMode()` per spec; legacy-fallback leases keep using legacy values.
 
-### Unrecognized state values discovered in edge functions
+### Unrecognized state values discovered in edge functions — INVESTIGATED + FILED
 
 `supabase/functions/ai-assistant/index.ts` references two values that aren't in either vocabulary:
-- Line 27: `'needs_review'` (in an `.includes` filter) — likely dead/legacy. Flag for implementer; harmless to leave but worth confirming intent.
-- Line 217: `'failed'` (in a `.not in` filter) — same.
+- Line 27: `'needs_review'` (in an `.includes` filter)
+- Line 217: `'failed'` (in a `.not in` filter)
 
-These are NOT in the `lifecycle_status` CHECK constraint and never have been in the live data per the Phase 1+2 verifications. Likely defensive code from an older draft of the schema. Recommendation: keep the filters as-is (Phase 3 doesn't touch them) but flag for a follow-up cleanup.
+**Investigation (2026-05-03):** Both filters confirmed reading the correct column (`lifecycle_status`, from line 209's SELECT). Neither value has ever been in the live CHECK constraint per Phase 1+2+3 verifications. Functional impact is nil — `.includes('needs_review')` always returns false, and `.not in ('failed', ...)` excludes only the other value (`'cancelled'`). Likely artifacts from an earlier schema draft where `'needs_review'` and `'failed'` were considered for what is now the separate `status` column (AI-processing state, not lifecycle state).
 
-### Local constants that should consolidate to helpers
+**Decision:** Filed as `docs/KNOWN_ISSUES.md` item #6, NOT fixed in Phase 3. Phase 3 touches `ai-assistant/index.ts` only at line 64 (the `displayLabel()` migration). The dead values are cosmetic and a separate cleanup phase will handle them.
+
+### Local constants that should consolidate to helpers — DECIDED + FILED
 
 Multiple files have local arrays/sets that duplicate group semantics:
 
-- `IN_PROGRESS_STATUSES` in `PipelineByDepartment.tsx` and `Leases.tsx`
+- `IN_PROGRESS_STATUSES` in `PipelineByDepartment.tsx`
+- `IN_FLIGHT_STATUSES` in `Leases.tsx`
 - `SHAREABLE_STATUSES` in `SummaryShareControls.tsx`
 - `APPROVED_STATUSES` in `FinancialImpactSummary.tsx`
-- `IN_FLIGHT_STATUSES` in `Leases.tsx`
 - `LIFECYCLE_LABELS` in `RecentActivity.tsx`
 - `expiringStatuses` in `SummaryStrip.tsx`
 
-In Checkpoint 4, ideally each of these collapses to a `groupOf()` check or pulls its membership list from `STATE_GROUPS`. If the user prefers minimal disruption, extend each constant in place to include chain equivalents (less elegant but smaller diff). The plan's "additive default" guidance suggests extending in place is acceptable when refactoring would otherwise force a structural change.
+**Decision (2026-05-03):** Phase 3 extends each constant **in place** (option A) — simply add the chain-vocabulary equivalents to each list. Consolidation to `STATE_GROUPS`-derived helpers (option B) is filed as `docs/KNOWN_ISSUES.md` item #7 for a dedicated future refactor phase. Phase 3's risk profile does not allow mixing vocabulary expansion with structural refactor of consumer code.
 
 ---
 

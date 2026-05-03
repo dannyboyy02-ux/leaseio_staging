@@ -149,9 +149,89 @@ is broken for owners. Surfaced 2026-05-03 when the user noticed the new
 
 ---
 
+## 6. `ai-assistant/index.ts` filters reference impossible `lifecycle_status` values
+
+**Symptom (audit-time investigation, 2026-05-03):** During the Phase 3
+audit, two filters in `supabase/functions/ai-assistant/index.ts` were found
+to reference `lifecycle_status` values that have never been part of the live
+CHECK constraint:
+
+- **Line 27** (inside `buildLeaseContext`):
+  ```ts
+  const activeLeases = leases.filter(l =>
+    ['active', 'executed', 'needs_review', 'draft'].includes(l.lifecycle_status)
+  );
+  ```
+  `'needs_review'` is not a valid `lifecycle_status`. The `.includes()` for
+  it always returns false; harmless dead value.
+- **Line 217** (lease query):
+  ```ts
+  .not('lifecycle_status', 'in', '("failed","cancelled")')
+  ```
+  `'failed'` is not a valid `lifecycle_status`. The NOT IN clause excludes
+  only `'cancelled'` in practice; harmless dead value.
+
+**Root cause:** Likely artifacts from an earlier draft of the schema where
+`'needs_review'` and `'failed'` may have been considered for what is now
+the separate `status` column (which carries the AI-processing state, not
+the lifecycle state). Both columns coexist on `leases`; the dead values
+look plausible at first glance.
+
+**Severity:** Cosmetic — no functional bug today. The filters do exactly
+what the surrounding code intends; they just carry useless predicates.
+Worth cleaning up to prevent future confusion.
+
+**Where to look:** `supabase/functions/ai-assistant/index.ts` lines 27 and
+217. Recommended fix:
+- Line 27: `['active', 'executed', 'draft'].includes(l.lifecycle_status)` (drop `'needs_review'`).
+- Line 217: `.not('lifecycle_status', 'in', '("cancelled")')` (drop `'failed'`); or — better — add the new Phase 3 chain-vocabulary `'cancelled'`-equivalent if/when one exists, and consider whether the AI assistant should also exclude `'rejected'`.
+
+**Decision:** Filed as KNOWN_ISSUES rather than fixed in Phase 3 per user
+direction. Phase 3 touches `ai-assistant/index.ts` only at line 64
+(`displayLabel()` migration), not the filters.
+
+---
+
+## 7. State-helper consolidation refactor (post-Phase-3)
+
+**Symptom:** Six local constants across the codebase encode the same
+semantic groupings as the `STATE_GROUPS` map in `src/lib/lifecycleStates.ts`
+(introduced in Phase 3 Checkpoint 2):
+
+- `IN_PROGRESS_STATUSES` in `src/components/dashboard/PipelineByDepartment.tsx`
+- `IN_FLIGHT_STATUSES` in `src/pages/Leases.tsx`
+- `SHAREABLE_STATUSES` in `src/components/summary/SummaryShareControls.tsx`
+- `APPROVED_STATUSES` in `src/components/summary/FinancialImpactSummary.tsx`
+- `LIFECYCLE_LABELS` in `src/components/dashboard/RecentActivity.tsx`
+- `expiringStatuses` in `src/components/dashboard/SummaryStrip.tsx`
+
+Phase 3's "extend in place" approach (per user direction) keeps each of
+these local but extends their lists to include chain-vocabulary
+equivalents. This is correct for Phase 3's risk profile but leaves the
+lists duplicated across files.
+
+**Recommended fix (dedicated future phase):** consolidate each constant
+into a `STATE_GROUPS`-derived helper. For example:
+
+```ts
+// Replaces SHAREABLE_STATUSES.has(status):
+isInGroups(status, ['post_concept_pre_signator', 'executed_pre_active', 'active'])
+```
+
+Surface area: 6 files, six constants, all read-only consumers. Behavior
+must remain identical. Add vitest cases that pin each consolidated
+predicate's truth table against the previous local-constant behavior.
+
+**Decision:** Filed as KNOWN_ISSUES rather than mixed into Phase 3.
+Vocabulary expansion (Phase 3) and constant consolidation are separate
+concerns and conflating them would inflate Phase 3's blast radius and
+make rollback harder. Re-evaluate after Phase 3 closes.
+
+---
+
 ## Tracking
 
-Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4) and Phase 2 Path A
-follow-up (item 5). Filed by Claude per user direction. Each item should get
-its own commit when fixed; reference this file in the message and remove the
-entry once green.
+Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
+follow-up (item 5), and Phase 3 audit (items 6-7). Filed by Claude per user
+direction. Each item should get its own commit when fixed; reference this
+file in the message and remove the entry once green.
