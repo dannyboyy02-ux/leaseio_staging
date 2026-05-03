@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
 
 /**
  * Compact currency formatter — `$1.2M`, `$870K`, `$1.4B`. Keeps stage rows
@@ -70,7 +71,10 @@ export function LeasePipeline() {
       const cutoff = Date.now() - ACTIVE_LOOKBACK_DAYS * 86_400_000;
       return STAGES.map((stage) => {
         const matching = leases.filter((l) => {
-          if (l.lifecycle_status !== stage.key) return false;
+          // Phase 3: bucket chain-vocabulary leases into the same stage as
+          // their legacy equivalent (e.g. concept_submitted ↔ submitted)
+          // so the pipeline view shows a unified picture across vocabularies.
+          if (!isEquivalent(l.lifecycle_status as LifecycleStatus, stage.key as LifecycleStatus)) return false;
           if (stage.key === 'active') {
             // Only "recently activated" leases stay in the pipeline view.
             // If activated_at is null (legacy data), treat as not in scope —

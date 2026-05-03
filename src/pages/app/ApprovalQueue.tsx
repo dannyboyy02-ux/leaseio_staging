@@ -512,12 +512,14 @@ export default function ApprovalQueue() {
           .eq('workspace_id', workspace.id)
           .eq('archived', false);
 
-      // Needs My Review
+      // Needs My Review.
+      // Phase 3: include chain awaiting_concept_approval / in_concept_review
+      // equivalents so the same approver picks up chain-driven leases too.
       const myReviewConditions: any[] = [];
       if (isManagerApprover) {
         myReviewConditions.push(
           baseQuery()
-            .eq('lifecycle_status', 'submitted')
+            .in('lifecycle_status', ['submitted', 'concept_submitted'])
             .or('financial_returned_to_submitter.is.null,financial_returned_to_submitter.eq.false')
             .is('manager_approved_by', null),
         );
@@ -525,7 +527,7 @@ export default function ApprovalQueue() {
       if (isFinancialApprover) {
         myReviewConditions.push(
           baseQuery()
-            .eq('lifecycle_status', 'under_review')
+            .in('lifecycle_status', ['under_review', 'concept_under_review'])
             .is('financial_approved_by', null),
         );
       }
@@ -537,12 +539,15 @@ export default function ApprovalQueue() {
       );
 
       const { data: allPendingData } = await baseQuery()
-        .in('lifecycle_status', ['submitted', 'under_review'])
+        .in('lifecycle_status', [
+          'submitted', 'under_review',
+          'concept_submitted', 'concept_under_review',
+        ])
         .order('uploaded_at', { ascending: false });
 
       const { data: reviewedData } = await baseQuery()
         .or(`manager_approved_by.eq.${user.id},financial_approved_by.eq.${user.id}`)
-        .not('lifecycle_status', 'in', '(submitted,under_review)')
+        .not('lifecycle_status', 'in', '(submitted,under_review,concept_submitted,concept_under_review)')
         .order('uploaded_at', { ascending: false })
         .limit(50);
 
@@ -795,7 +800,8 @@ export default function ApprovalQueue() {
     setIsActing(true);
     const now = new Date().toISOString();
     const lease = approveTarget;
-    const isManager = lease.lifecycle_status === 'submitted';
+    // Phase 3: bucket chain awaiting_concept_approval the same as legacy submitted.
+    const isManager = isEquivalent(lease.lifecycle_status as LifecycleStatus, 'submitted');
 
     try {
       if (isManager) {
@@ -874,7 +880,8 @@ export default function ApprovalQueue() {
     setIsActing(true);
     const now = new Date().toISOString();
     const lease = rejectTarget;
-    const isManager = lease.lifecycle_status === 'submitted';
+    // Phase 3: bucket chain awaiting_concept_approval the same as legacy submitted.
+    const isManager = isEquivalent(lease.lifecycle_status as LifecycleStatus, 'submitted');
 
     try {
       if (isManager) {
@@ -1044,7 +1051,8 @@ export default function ApprovalQueue() {
             onApprove={setApproveTarget}
             onReject={setRejectTarget}
             onView={(l) => {
-              if (isFinancialApprover && l.lifecycle_status === 'under_review') {
+              // Phase 3: include chain in_concept_review equivalent.
+              if (isFinancialApprover && isEquivalent(l.lifecycle_status as LifecycleStatus, 'under_review')) {
                 navigate(`/app/leases/${l.id}/financial-review`);
               } else {
                 navigate(`/app/leases/${l.id}`);

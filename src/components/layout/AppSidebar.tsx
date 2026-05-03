@@ -82,7 +82,8 @@ export function AppSidebar() {
             .from('leases')
             .select('id', { count: 'exact', head: true })
             .eq('workspace_id', workspace.id)
-            .eq('lifecycle_status', 'submitted')
+            // Phase 3: include chain awaiting_concept_approval equivalent.
+            .in('lifecycle_status', ['submitted', 'concept_submitted'])
             .or('financial_returned_to_submitter.is.null,financial_returned_to_submitter.eq.false')
             .is('manager_approved_by', null) as any;
           count += mc || 0;
@@ -92,7 +93,8 @@ export function AppSidebar() {
             .from('leases')
             .select('id', { count: 'exact', head: true })
             .eq('workspace_id', workspace.id)
-            .eq('lifecycle_status', 'under_review')
+            // Phase 3: include chain in_concept_review equivalent.
+            .in('lifecycle_status', ['under_review', 'concept_under_review'])
             .is('financial_approved_by', null) as any;
           count += fc || 0;
         }

@@ -19,7 +19,18 @@ interface DeptSummary {
   annualValue: number;
 }
 
-const IN_PROGRESS_STATUSES = ['submitted', 'under_review', 'approved', 'executed'];
+// Phase 3 (KNOWN_ISSUES.md item #7): extended in place with chain
+// vocabulary equivalents of awaiting_concept_approval, in_concept_review,
+// post_concept_pre_signator, signator_review, awaiting_counter_signature,
+// and executed_pre_active groups. Consolidation to a STATE_GROUPS-derived
+// helper is filed for a future refactor.
+const IN_PROGRESS_STATUSES = [
+  // Legacy
+  'submitted', 'under_review', 'approved', 'executed',
+  // Chain
+  'concept_submitted', 'concept_under_review', 'in_negotiation',
+  'final_review', 'pending_counter_signature', 'fully_executed',
+];
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {

@@ -37,7 +37,16 @@ interface Props {
   generatedAt?: string;
 }
 
-const APPROVED_STATUSES = ['approved', 'executed', 'active'];
+// Phase 3 (KNOWN_ISSUES.md item #7): extended in place with chain
+// vocabulary equivalents of the post-concept / executed / active groups.
+// Consolidation to a STATE_GROUPS-derived helper is filed for a future
+// refactor.
+const APPROVED_STATUSES = [
+  // Legacy
+  'approved', 'executed', 'active',
+  // Chain
+  'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
+];
 
 function fmt(n: number) {
   return '$' + Math.round(n).toLocaleString();

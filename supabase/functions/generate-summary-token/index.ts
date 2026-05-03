@@ -65,7 +65,12 @@ serve(async (req) => {
       });
     }
 
-    const allowedLifecycleStates = new Set(['approved', 'executed', 'active']);
+    // Phase 3: include chain post_concept_pre_signator + signator stages +
+    // executed equivalent (active is identical in both vocabularies).
+    const allowedLifecycleStates = new Set([
+      'approved', 'executed', 'active',
+      'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
+    ]);
     if (!allowedLifecycleStates.has(lease.lifecycle_status)) {
       return new Response(JSON.stringify({ error: 'Financial summaries can only be shared after approval.' }), {
         status: 409,

@@ -67,7 +67,12 @@ serve(async (req) => {
       });
     }
 
-    if (!['approved', 'executed', 'active'].includes(lease.lifecycle_status || '')) {
+    // Phase 3: include chain post_concept_pre_signator + signator stages +
+    // executed equivalent (active is identical in both vocabularies).
+    if (![
+      'approved', 'executed', 'active',
+      'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
+    ].includes(lease.lifecycle_status || '')) {
       return new Response(JSON.stringify({ error: 'Not found' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },

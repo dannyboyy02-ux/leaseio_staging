@@ -285,10 +285,18 @@ export default function LeaseReview() {
   const isApproved = !!approvalState?.approved;
 
   const lifecycleStatus = lease?.lifecycle_status;
-  const isIntakeStage = lifecycleStatus === 'submitted' || lifecycleStatus === 'under_review' || lifecycleStatus === 'approved';
+  // Phase 3: bucket chain-vocabulary leases into the same intake / review /
+  // posted groups as their legacy equivalents via isEquivalent. 'active'
+  // is identical in both vocabularies.
+  const lifecycleStatusTyped = lifecycleStatus as LifecycleStatus | undefined;
+  const isIntakeStage = lifecycleStatusTyped != null && (
+    isEquivalent(lifecycleStatusTyped, 'submitted') ||
+    isEquivalent(lifecycleStatusTyped, 'under_review') ||
+    isEquivalent(lifecycleStatusTyped, 'approved')
+  );
 
   // Check status states
-  const isReviewRequired = lifecycleStatus === 'under_review';
+  const isReviewRequired = lifecycleStatusTyped != null && isEquivalent(lifecycleStatusTyped, 'under_review');
   const isPendingApproval = false;
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lifecycleStatus === 'active';
@@ -1653,10 +1661,15 @@ export default function LeaseReview() {
   const isManagerApprover = (userFunctionalRoles ?? []).includes('manager_approver');
   const isFinancialApprover = (userFunctionalRoles ?? []).includes('financial_approver');
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
+  // Phase 3: include chain post_concept_pre_signator + signator stages +
+  // executed equivalent (active is identical in both vocabularies).
   const canShareFinancialSummary = Boolean(
     lease?.calc_total_commitment &&
     isAdminUser &&
-    ['approved', 'executed', 'active'].includes(lease?.lifecycle_status || ''),
+    [
+      'approved', 'executed', 'active',
+      'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
+    ].includes(lease?.lifecycle_status || ''),
   );
 
   // Phase 3: branch via isEquivalent so chain-vocabulary leases

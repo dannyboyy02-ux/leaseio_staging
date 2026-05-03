@@ -44,7 +44,13 @@ export function EscalationReviewPanel() {
         )
         .eq('workspace_id', workspace!.id)
         .eq('needs_escalation_review', true)
-        .in('lifecycle_status', ['submitted', 'under_review', 'approved', 'executed', 'active']);
+        // Phase 3: extend with chain vocabulary equivalents (active is
+        // identical in both vocabularies).
+        .in('lifecycle_status', [
+          'submitted', 'under_review', 'approved', 'executed', 'active',
+          'concept_submitted', 'concept_under_review', 'in_negotiation',
+          'final_review', 'pending_counter_signature', 'fully_executed',
+        ]);
       if (error) throw error;
       return (data || []) as EscalationLease[];
     },

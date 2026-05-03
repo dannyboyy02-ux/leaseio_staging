@@ -29,7 +29,12 @@ export function PendingApprovalsSection() {
         .from('leases')
         .select('id, filename, lifecycle_status, uploaded_at')
         .eq('workspace_id', workspace!.id)
-        .in('lifecycle_status', ['submitted', 'under_review', 'approved', 'executed'])
+        // Phase 3: include chain vocabulary equivalents.
+        .in('lifecycle_status', [
+          'submitted', 'under_review', 'approved', 'executed',
+          'concept_submitted', 'concept_under_review', 'in_negotiation',
+          'final_review', 'pending_counter_signature', 'fully_executed',
+        ])
         .order('uploaded_at', { ascending: false })
         .limit(12);
 
@@ -45,7 +50,11 @@ export function PendingApprovalsSection() {
     for (const lease of leases) {
       const name = lease.filename || 'Unnamed lease';
 
-      if (lease.lifecycle_status === 'submitted') {
+      // Phase 3: bucket chain-vocabulary leases the same as their legacy
+      // equivalents. Each branch matches a STATE_GROUPS group.
+      const s = lease.lifecycle_status;
+
+      if (s === 'submitted' || s === 'concept_submitted') {
         output.push({
           id: `submitted-${lease.id}`,
           title: name,
@@ -56,7 +65,7 @@ export function PendingApprovalsSection() {
         });
       }
 
-      if (lease.lifecycle_status === 'under_review') {
+      if (s === 'under_review' || s === 'concept_under_review') {
         output.push({
           id: `review-${lease.id}`,
           title: name,
@@ -67,7 +76,7 @@ export function PendingApprovalsSection() {
         });
       }
 
-      if (lease.lifecycle_status === 'approved') {
+      if (s === 'approved' || s === 'in_negotiation') {
         output.push({
           id: `approved-${lease.id}`,
           title: name,
@@ -78,7 +87,7 @@ export function PendingApprovalsSection() {
         });
       }
 
-      if (lease.lifecycle_status === 'executed') {
+      if (s === 'executed' || s === 'fully_executed') {
         output.push({
           id: `executed-${lease.id}`,
           title: name,

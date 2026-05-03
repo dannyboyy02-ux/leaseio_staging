@@ -115,7 +115,8 @@ export function UpcomingEvents() {
         )
         .eq('workspace_id', workspace!.id)
         .eq('archived', false)
-        .in('lifecycle_status', ['executed', 'active']);
+        // Phase 3: include chain executed equivalent (active is identical).
+        .in('lifecycle_status', ['executed', 'active', 'fully_executed']);
 
       if (error) throw error;
 

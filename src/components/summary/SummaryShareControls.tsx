@@ -10,7 +10,16 @@ interface Props {
   lifecycleStatus: string;
 }
 
-const SHAREABLE_STATUSES = new Set(['approved', 'executed', 'active']);
+// Phase 3 (KNOWN_ISSUES.md item #7): extended in place to cover the chain
+// vocabulary equivalents of the post-approval / executed groups.
+// Consolidation to a STATE_GROUPS-derived helper is filed for a future
+// refactor.
+const SHAREABLE_STATUSES = new Set([
+  // Legacy
+  'approved', 'executed', 'active',
+  // Chain
+  'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
+]);
 
 export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
   const [loading, setLoading] = useState(false);

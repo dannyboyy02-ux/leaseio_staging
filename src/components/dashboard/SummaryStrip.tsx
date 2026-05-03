@@ -74,9 +74,13 @@ export function SummaryStrip() {
       const ninetyDaysMs    = 90  * 24 * 60 * 60 * 1000;
       const oneTwentyDaysMs = 120 * 24 * 60 * 60 * 1000;
 
-      // Stat 1: Monthly Rent (active + executed leases) + weighted avg $/sqft
+      // Stat 1: Monthly Rent (active + executed leases) + weighted avg $/sqft.
+      // Phase 3: include chain executed equivalent (fully_executed).
       const portfolioLeases = leases.filter(
-        (l) => l.lifecycle_status === 'active' || l.lifecycle_status === 'executed'
+        (l) =>
+          l.lifecycle_status === 'active' ||
+          l.lifecycle_status === 'executed' ||
+          l.lifecycle_status === 'fully_executed'
       );
       const monthlyRentSum = portfolioLeases.reduce(
         (sum, l) => sum + getCurrentMonthlyRent((l as any).rent_schedules, l.executed_monthly_payment, l.current_monthly_rent, l.monthly_payment),
@@ -96,21 +100,35 @@ export function SummaryStrip() {
           ? `Avg ${formatCurrencyDecimals(weightedAvgPerSqft)}/sqft`
           : `${portfolioLeases.length} portfolio lease${portfolioLeases.length !== 1 ? 's' : ''}`;
 
-      // Stat 2: Needs Action — leases requiring human attention
+      // Stat 2: Needs Action — leases requiring human attention.
+      // Phase 3: extend with chain awaiting_concept + in_concept_review +
+      // executed_pre_active equivalents.
       const needsActionLeases = leases.filter((l) => {
-        if (l.lifecycle_status === 'submitted' || l.lifecycle_status === 'under_review') return true;
-        if (l.lifecycle_status === 'executed' && !(l as any).executed_document_url) return true;
+        const s = l.lifecycle_status;
+        if (
+          s === 'submitted' || s === 'under_review' ||
+          s === 'concept_submitted' || s === 'concept_under_review'
+        ) return true;
+        if ((s === 'executed' || s === 'fully_executed') && !(l as any).executed_document_url) return true;
         return false;
       });
       const needsActionCount = needsActionLeases.length;
 
-      // Stat 3: Awaiting Approval
-      const awaitingLeases = leases.filter((l) => l.lifecycle_status === 'under_review');
+      // Stat 3: Awaiting Approval.
+      // Phase 3: include chain in_concept_review equivalent.
+      const awaitingLeases = leases.filter(
+        (l) =>
+          l.lifecycle_status === 'under_review' ||
+          l.lifecycle_status === 'concept_under_review'
+      );
       const awaitingCount = awaitingLeases.length;
 
 
-      // Stat 4: Expiring within 90 days
-      const expiringStatuses = ['active', 'executed'];
+      // Stat 4: Expiring within 90 days.
+      // Phase 3 (KNOWN_ISSUES.md item #7): extended in place with the
+      // chain executed_pre_active equivalent. Consolidation to a
+      // STATE_GROUPS-derived helper is filed for a future refactor.
+      const expiringStatuses = ['active', 'executed', 'fully_executed'];
       const expiringLeases = leases.filter((l) => {
         if (!expiringStatuses.includes(l.lifecycle_status ?? '')) return false;
         const expiryStr = l.executed_expiry_date ?? l.lease_end;

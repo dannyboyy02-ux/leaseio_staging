@@ -53,7 +53,8 @@ export function UpcomingRisks() {
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace.id)
-        .in('lifecycle_status', ['active', 'executed']);
+        // Phase 3: include chain executed equivalent (active is identical).
+        .in('lifecycle_status', ['active', 'executed', 'fully_executed']);
 
       if (!leases) {
         setLoading(false);

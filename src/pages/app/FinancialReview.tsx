@@ -185,7 +185,12 @@ export default function FinancialReview() {
           .select('calc_total_commitment')
           .eq('workspace_id', workspace.id)
           .eq('lease_classification', 'finance')
-          .in('lifecycle_status', ['approved', 'executed', 'active'])
+          // Phase 3: include chain post_concept_pre_signator + signator
+          // stages + executed equivalent (active is identical).
+          .in('lifecycle_status', [
+            'approved', 'executed', 'active',
+            'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
+          ])
           .neq('id', leaseId);
         const total = (exposureData || []).reduce(
           (sum: number, l: any) => sum + (l.calc_total_commitment || 0),
@@ -359,7 +364,9 @@ export default function FinancialReview() {
 
   if (!lease) return null;
 
-  const canAct = isFinancialApprover && lease.lifecycle_status === 'under_review';
+  // Phase 3: include chain in_concept_review equivalent.
+  const canAct = isFinancialApprover &&
+    (lease.lifecycle_status === 'under_review' || lease.lifecycle_status === 'concept_under_review');
 
   return (
     <AppLayout>

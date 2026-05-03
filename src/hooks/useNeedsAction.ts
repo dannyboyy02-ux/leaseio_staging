@@ -47,11 +47,17 @@ export function useNeedsAction() {
             'lifecycle_status, financial_returned_to_submitter, financial_rejection_reason'
           )
           .eq('workspace_id', workspace!.id)
-          .in('lifecycle_status', ['under_review', 'executed', 'submitted']),
+          // Phase 3: include chain-vocabulary equivalents for awaiting,
+          // in-review, and executed-pre-active groups.
+          .in('lifecycle_status', [
+            'under_review', 'executed', 'submitted',
+            'concept_under_review', 'fully_executed', 'concept_submitted',
+          ]),
         (supabase as any)
           .from('lease_change_sets')
           .select('id, lease_id, leases!inner(request_title, filename, lifecycle_status, workspace_id, model_locked)')
           .eq('status', 'draft')
+          // 'active' is identical in both vocabularies.
           .eq('leases.lifecycle_status', 'active')
           .eq('leases.workspace_id', workspace!.id)
           .limit(10),
@@ -61,8 +67,13 @@ export function useNeedsAction() {
       const now = Date.now();
       const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
 
+      // Phase 3: branch on awaiting_concept_approval / in_concept_review
+      // groups so chain-vocabulary leases bucket the same as legacy.
       const returnedLeases: ReturnedLease[] = leases
-        .filter((l) => l.lifecycle_status === 'submitted' && (l as any).financial_returned_to_submitter)
+        .filter((l) =>
+          (l.lifecycle_status === 'submitted' || l.lifecycle_status === 'concept_submitted') &&
+          (l as any).financial_returned_to_submitter
+        )
         .map((l) => ({
           leaseId: l.id,
           leaseName: l.request_title ?? l.filename ?? 'Unnamed lease',
@@ -70,7 +81,10 @@ export function useNeedsAction() {
         }));
 
       const pendingApprovals: PendingApproval[] = leases
-        .filter((l) => l.lifecycle_status === 'under_review')
+        .filter((l) =>
+          l.lifecycle_status === 'under_review' ||
+          l.lifecycle_status === 'concept_under_review'
+        )
         .map((l) => {
           const referenceDate = l.submitted_for_approval_at ?? l.status_changed_at;
           const daysWaiting = referenceDate
@@ -96,7 +110,8 @@ export function useNeedsAction() {
       const otherFlags: OtherFlag[] = [];
 
       const stalledCount = leases.filter((l) => {
-        if (l.lifecycle_status !== 'under_review') return false;
+        // Phase 3: include chain in_concept_review.
+        if (l.lifecycle_status !== 'under_review' && l.lifecycle_status !== 'concept_under_review') return false;
         if (!l.status_changed_at) return false;
         return now - new Date(l.status_changed_at).getTime() > fourteenDaysMs;
       }).length;
@@ -105,7 +120,12 @@ export function useNeedsAction() {
       }
 
       const noAbstractionCount = leases.filter((l) => {
-        const inLifecycle = l.lifecycle_status === 'submitted' || l.lifecycle_status === 'under_review';
+        // Phase 3: include chain awaiting_concept_approval + in_concept_review.
+        const inLifecycle =
+          l.lifecycle_status === 'submitted' ||
+          l.lifecycle_status === 'under_review' ||
+          l.lifecycle_status === 'concept_submitted' ||
+          l.lifecycle_status === 'concept_under_review';
         const inStatus = l.status === 'Uploaded' || l.status === 'Processing';
         return inLifecycle && inStatus;
       }).length;
@@ -113,8 +133,11 @@ export function useNeedsAction() {
         otherFlags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval', icon: FileSearch });
       }
 
+      // Phase 3: include chain executed equivalent (fully_executed).
       const noDocCount = leases.filter(
-        (l) => l.lifecycle_status === 'executed' && !l.executed_document_url
+        (l) =>
+          (l.lifecycle_status === 'executed' || l.lifecycle_status === 'fully_executed') &&
+          !l.executed_document_url
       ).length;
       if (noDocCount > 0) {
         otherFlags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active', icon: Upload });

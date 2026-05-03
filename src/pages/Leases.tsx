@@ -61,8 +61,19 @@ type SortField = 'property' | 'landlord' | 'monthly_rent' | 'lease_start' | 'lea
 type SortDirection = 'asc' | 'desc';
 type LeaseView = 'active' | 'approval';
 
-// Statuses that represent in-flight (awaiting action) leases
-const IN_FLIGHT_STATUSES = new Set(['submitted', 'under_review', 'approved']);
+// Statuses that represent in-flight (awaiting action) leases.
+// Phase 3 (KNOWN_ISSUES.md item #7): extended in place with chain
+// vocabulary equivalents of awaiting_concept_approval, in_concept_review,
+// and post_concept_pre_signator groups (plus the chain-only signator
+// stages). Consolidation to a STATE_GROUPS-derived helper is filed for a
+// future refactor.
+const IN_FLIGHT_STATUSES = new Set([
+  // Legacy
+  'submitted', 'under_review', 'approved',
+  // Chain
+  'concept_submitted', 'concept_under_review', 'in_negotiation',
+  'final_review', 'pending_counter_signature',
+]);
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -112,7 +123,13 @@ export default function Leases() {
           'executed_monthly_payment, current_monthly_rent, monthly_payment, extracted_json, archived, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
-        .in('lifecycle_status', ['submitted', 'under_review', 'approved', 'executed', 'active', 'expired'])
+        .in('lifecycle_status', [
+          // Legacy
+          'submitted', 'under_review', 'approved', 'executed', 'active', 'expired',
+          // Chain
+          'concept_submitted', 'concept_under_review', 'in_negotiation',
+          'final_review', 'pending_counter_signature', 'fully_executed',
+        ])
         .order('lease_end', { ascending: true });
 
       if (!showArchived) {
@@ -227,8 +244,14 @@ export default function Leases() {
     }
   };
 
+  // Phase 3: extend with chain executed equivalent (fully_executed). 'active'
+  // is identical in both vocabularies.
   const activeLeases = useMemo(
-    () => leases.filter((l) => l.lifecycle_status === 'active' || l.lifecycle_status === 'executed'),
+    () => leases.filter((l) =>
+      l.lifecycle_status === 'active' ||
+      l.lifecycle_status === 'executed' ||
+      l.lifecycle_status === 'fully_executed'
+    ),
     [leases],
   );
 

@@ -60,7 +60,12 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         .select('id, calc_total_commitment, covenant_flagged')
         .eq('workspace_id', workspace!.id)
         .eq('archived', false)
-        .in('lifecycle_status', ['submitted', 'under_review', 'approved']);
+        // Phase 3: include chain awaiting_concept_approval, in_concept_review,
+        // and post_concept_pre_signator equivalents.
+        .in('lifecycle_status', [
+          'submitted', 'under_review', 'approved',
+          'concept_submitted', 'concept_under_review', 'in_negotiation',
+        ]);
 
       if (error) throw error;
 
@@ -93,7 +98,8 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
           )
           .eq('workspace_id', workspace!.id)
           .eq('archived', false)
-          .in('lifecycle_status', ['executed', 'active']),
+          // Phase 3: include chain executed equivalent (active is identical).
+          .in('lifecycle_status', ['executed', 'active', 'fully_executed']),
         supabase
           .from('workspaces')
           .select('discount_rate')
