@@ -222,6 +222,200 @@ function LeaseQueueCard({
   );
 }
 
+// ─── Phase 2 — chain-step inbox source ──────────────────────────────────
+// Additive parallel data source for the merged approver inbox. Renders
+// alongside (NOT replacing) the legacy QueueLease cards in the
+// "Needs My Review" tab.
+interface PendingChainStep {
+  id: string;
+  lease_id: string;
+  workspace_id: string;
+  stage: 'concept' | 'signator';
+  step_order: number;
+  parallel_group: number;
+  approver_user_id: string | null;
+  approver_role: string | null;
+  is_required: boolean;
+  created_at: string;
+  policy_id: string | null;
+  // Hydrated from leases table:
+  request_title: string | null;
+  requesting_department: string | null;
+  asset_type: string | null;
+  monthly_payment: number | null;
+  calc_total_commitment: number | null;
+}
+
+function ChainStepCard({
+  step,
+  onView,
+  onActed,
+}: {
+  step: PendingChainStep;
+  onView: (leaseId: string) => void;
+  onActed: () => void;
+}) {
+  const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'send_back' | null>(null);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Visual tag distinguishing source — per the Phase 2 guard rail, makes
+  // it obvious where each row came from when merged with legacy ones.
+  const stageLabel = step.stage === 'concept' ? 'Concept' : 'Signator';
+  const tagLabel = step.approver_role
+    ? `${stageLabel} approver: role ${step.approver_role}`
+    : `${stageLabel} approver: step ${step.step_order}`;
+
+  const submit = async (action: 'approve' | 'reject' | 'send_back') => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('act-on-chain-step', {
+        body: {
+          chainStepId: step.id,
+          action,
+          comment: comment.trim() || undefined,
+        },
+      });
+      if (error || !(data as any)?.ok) {
+        toast.error((data as any)?.error || error?.message || 'Action failed');
+        return;
+      }
+      toast.success(
+        action === 'approve'
+          ? 'Step approved'
+          : action === 'reject'
+          ? 'Step rejected'
+          : 'Step sent back',
+      );
+      setActionDialog(null);
+      setComment('');
+      onActed();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card className="overflow-hidden border-l-4 border-l-blue-400">
+      <CardContent className="p-0">
+        <div className="p-4 sm:p-5 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <button
+                onClick={() => onView(step.lease_id)}
+                className="text-sm font-semibold text-left hover:underline truncate block max-w-full"
+              >
+                {step.request_title || 'Untitled Request'}
+              </button>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {step.asset_type && <span className="capitalize">{step.asset_type}</span>}
+                {step.requesting_department && ` · ${step.requesting_department}`}
+              </p>
+            </div>
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1.5 border-blue-300 text-blue-700 bg-blue-50 dark:bg-blue-950/20 dark:text-blue-300"
+            >
+              {tagLabel}
+            </Badge>
+          </div>
+
+          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+            {step.monthly_payment != null && (
+              <span>
+                <strong className="text-foreground">{fmt(step.monthly_payment)}</strong> /mo
+              </span>
+            )}
+            {step.calc_total_commitment != null && (
+              <span>
+                Total <strong className="text-foreground">{fmt(step.calc_total_commitment)}</strong>
+              </span>
+            )}
+            <span>Submitted {format(new Date(step.created_at), 'MMM d, yyyy')}</span>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2 border-t">
+            <Button
+              size="sm"
+              onClick={() => submit('approve')}
+              disabled={busy}
+              className="flex-1 sm:flex-none"
+            >
+              {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-1" />}
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setActionDialog('send_back')}
+              disabled={busy}
+              className="flex-1 sm:flex-none"
+            >
+              Send Back
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setActionDialog('reject')}
+              disabled={busy}
+              className="flex-1 sm:flex-none"
+            >
+              <XCircle className="h-4 w-4 mr-1" />
+              Reject
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onView(step.lease_id)}
+              disabled={busy}
+              className="flex-1 sm:flex-none"
+            >
+              View <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+
+      <Dialog open={actionDialog !== null} onOpenChange={(o) => !o && setActionDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {actionDialog === 'reject' ? 'Reject step' : 'Send back to submitter'}
+            </DialogTitle>
+            <DialogDescription>
+              {actionDialog === 'reject'
+                ? 'Rejecting will mark the lease as rejected and supersede all other pending steps.'
+                : 'Sending back will move the lease back to submitted and supersede current-stage pending steps. The submitter must resubmit.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label className="text-xs">Comment (required)</Label>
+            <Textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Explain the reason…"
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setActionDialog(null)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              variant={actionDialog === 'reject' ? 'destructive' : 'default'}
+              onClick={() => actionDialog && submit(actionDialog)}
+              disabled={busy || !comment.trim()}
+            >
+              {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 interface UnlockRequest {
   id: string;
   lease_id: string;
@@ -255,6 +449,9 @@ export default function ApprovalQueue() {
   const [allPending, setAllPending] = useState<QueueLease[]>([]);
   const [reviewed, setReviewed] = useState<QueueLease[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Phase 2 — chain-step inbox source. Parallel to the legacy state above.
+  const [pendingChainSteps, setPendingChainSteps] = useState<PendingChainStep[]>([]);
 
   const [approveTarget, setApproveTarget] = useState<QueueLease | null>(null);
   const [rejectTarget, setRejectTarget] = useState<QueueLease | null>(null);
@@ -373,6 +570,65 @@ export default function ApprovalQueue() {
       setPendingMyReview(myReviewWithProfiles);
       setAllPending(allPendingWithProfiles);
       setReviewed(reviewedWithProfiles);
+
+      // Phase 2 — chain-step inbox. Additive, parallel to the legacy
+      // queries above. Two phases:
+      //   1. Get the functional roles I hold in this workspace.
+      //   2. Find pending chain steps assigned to me directly OR to a
+      //      role I hold. Then hydrate with lease metadata for display.
+      const { data: myRoleRows } = await (supabase as any)
+        .from('workspace_roles')
+        .select('role')
+        .eq('workspace_id', workspace.id)
+        .eq('user_id', user.id);
+      const myRoleNames = ((myRoleRows ?? []) as Array<{ role: string | null }>)
+        .map((r) => r.role)
+        .filter((r): r is string => Boolean(r));
+
+      let chainQuery = (supabase as any)
+        .from('lease_approval_chain')
+        .select(
+          'id, lease_id, workspace_id, stage, step_order, parallel_group, approver_user_id, approver_role, is_required, created_at, policy_id',
+        )
+        .eq('workspace_id', workspace.id)
+        .eq('status', 'pending');
+
+      if (myRoleNames.length > 0) {
+        chainQuery = chainQuery.or(
+          `approver_user_id.eq.${user.id},approver_role.in.(${myRoleNames.join(',')})`,
+        );
+      } else {
+        chainQuery = chainQuery.eq('approver_user_id', user.id);
+      }
+
+      const { data: chainStepRows } = await chainQuery;
+      const chainSteps = (chainStepRows ?? []) as Array<Omit<PendingChainStep, 'request_title' | 'requesting_department' | 'asset_type' | 'monthly_payment' | 'calc_total_commitment'>>;
+
+      let hydratedChainSteps: PendingChainStep[] = [];
+      if (chainSteps.length > 0) {
+        const chainLeaseIds = Array.from(new Set(chainSteps.map((s) => s.lease_id)));
+        const { data: chainLeases } = await supabase
+          .from('leases')
+          .select(
+            'id, request_title, requesting_department, asset_type, monthly_payment, calc_total_commitment',
+          )
+          .in('id', chainLeaseIds);
+        const leaseMap = new Map(
+          (chainLeases ?? []).map((l: any) => [l.id, l]),
+        );
+        hydratedChainSteps = chainSteps.map((s) => {
+          const l: any = leaseMap.get(s.lease_id) ?? {};
+          return {
+            ...s,
+            request_title: l.request_title ?? null,
+            requesting_department: l.requesting_department ?? null,
+            asset_type: l.asset_type ?? null,
+            monthly_payment: l.monthly_payment ?? null,
+            calc_total_commitment: l.calc_total_commitment ?? null,
+          };
+        });
+      }
+      setPendingChainSteps(hydratedChainSteps);
     } catch (err) {
       console.error('Error fetching approval queue:', err);
     } finally {
@@ -677,6 +933,79 @@ export default function ApprovalQueue() {
     }
   };
 
+  // Phase 2 — unified merge of legacy lease cards + chain-step cards for
+  // the "Needs My Review" tab. Sorted by created_at desc per spec. The
+  // existing renderList() below is unchanged and still drives "All
+  // Pending" + "Reviewed".
+  const renderUnifiedMyReview = () => {
+    if (loading) {
+      return (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-40 w-full rounded-lg" />
+          ))}
+        </div>
+      );
+    }
+    type Item =
+      | { kind: 'legacy'; lease: QueueLease; sortKey: string }
+      | { kind: 'chain'; step: PendingChainStep; sortKey: string };
+    const items: Item[] = [
+      ...pendingMyReview.map<Item>((l) => ({
+        kind: 'legacy',
+        lease: l,
+        sortKey: l.uploaded_at,
+      })),
+      ...pendingChainSteps.map<Item>((s) => ({
+        kind: 'chain',
+        step: s,
+        sortKey: s.created_at,
+      })),
+    ].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+
+    if (items.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <FileText className="h-12 w-12 mb-3 opacity-40" />
+          <p className="font-medium">Nothing here</p>
+          <p className="text-sm">No items to show in this tab</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {items.map((item) =>
+          item.kind === 'legacy' ? (
+            <LeaseQueueCard
+              key={`legacy-${item.lease.id}`}
+              lease={item.lease}
+              isManagerApprover={isManagerApprover}
+              isFinancialApprover={isFinancialApprover}
+              viewerMode={false}
+              onApprove={setApproveTarget}
+              onReject={setRejectTarget}
+              onView={(l) => {
+                if (isFinancialApprover && l.lifecycle_status === 'under_review') {
+                  navigate(`/app/leases/${l.id}/financial-review`);
+                } else {
+                  navigate(`/app/leases/${l.id}`);
+                }
+              }}
+            />
+          ) : (
+            <ChainStepCard
+              key={`chain-${item.step.id}`}
+              step={item.step}
+              onView={(leaseId) => navigate(`/app/leases/${leaseId}`)}
+              onActed={() => fetchLeases()}
+            />
+          ),
+        )}
+      </div>
+    );
+  };
+
   const renderList = (leases: QueueLease[], viewerMode = false) => {
     if (loading) {
       return (
@@ -720,7 +1049,9 @@ export default function ApprovalQueue() {
     );
   };
 
-  const pendingCount = pendingMyReview.length;
+  // Phase 2: pending count merges legacy lease rows with chain steps so
+  // the badge reflects the unified inbox.
+  const pendingCount = pendingMyReview.length + pendingChainSteps.length;
   const governanceCount = unlockRequests.length + changeSets.length;
   const showGovernanceTab = isAdminUser || isFinancialApprover;
 
@@ -756,7 +1087,7 @@ export default function ApprovalQueue() {
             )}
           </TabsList>
 
-          <TabsContent value="mine">{renderList(pendingMyReview)}</TabsContent>
+          <TabsContent value="mine">{renderUnifiedMyReview()}</TabsContent>
           <TabsContent value="all">{renderList(allPending, true)}</TabsContent>
           <TabsContent value="reviewed">{renderList(reviewed, true)}</TabsContent>
 
