@@ -44,12 +44,15 @@ import NotificationDetail from "./pages/app/NotificationDetail";
 import Reports from "./pages/Reports";
 import WorkspaceSettings from "./pages/settings/WorkspaceSettings";
 import AccountSettings from "./pages/settings/AccountSettings";
+import ApprovalPoliciesListPage from "./pages/settings/ApprovalPoliciesListPage";
+import ApprovalPolicyEditPage from "./pages/settings/ApprovalPolicyEditPage";
 import NotFound from "./pages/NotFound";
 import { RequireRole } from "@/components/auth/RequireRole";
 import {
   canAccessReportsAuditLog,
   canAccessReportsDataQuality,
   canAccessWorkspaceSettings,
+  canEditWorkspaceSettings,
 } from "@/lib/authorization";
 
 const queryClient = new QueryClient();
@@ -201,6 +204,26 @@ const App = () => (
                     <ProtectedRoute>
                       <RequireRole allow={canAccessWorkspaceSettings}>
                         <WorkspaceSettings />
+                      </RequireRole>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/settings/approval-policies"
+                  element={
+                    <ProtectedRoute>
+                      <RequireRole allow={canEditWorkspaceSettings}>
+                        <ApprovalPoliciesListPage />
+                      </RequireRole>
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/settings/approval-policies/:id"
+                  element={
+                    <ProtectedRoute>
+                      <RequireRole allow={canEditWorkspaceSettings}>
+                        <ApprovalPolicyEditPage />
                       </RequireRole>
                     </ProtectedRoute>
                   }

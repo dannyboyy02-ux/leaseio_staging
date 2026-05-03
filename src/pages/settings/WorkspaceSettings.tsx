@@ -1,5 +1,5 @@
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
-import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -161,13 +161,14 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
   const isAdmin = userRole === 'admin';
 
   const tabs = [
-    { id: 'profile',       label: 'Company Profile', icon: Building2,  visible: canAccessProfile },
-    { id: 'users',         label: 'Users',            icon: Users,      visible: canManageMembers },
-    { id: 'notifications', label: 'Notifications',    icon: Bell,       visible: canAccessDefaults },
-    { id: 'financial',     label: 'Financial',        icon: TrendingUp, visible: canAccessDefaults },
-    { id: 'lease_config',  label: 'Lease Configuration', icon: Settings2, visible: isAdmin },
-    { id: 'risk_watchlist',label: 'Risk Watchlist',   icon: AlertTriangle, visible: canEdit },
-    { id: 'onboarding',    label: 'Onboarding',       icon: Package,    visible: isAdmin },
+    { id: 'profile',           label: 'Company Profile',     icon: Building2,     visible: canAccessProfile },
+    { id: 'users',             label: 'Users',                icon: Users,         visible: canManageMembers },
+    { id: 'notifications',     label: 'Notifications',        icon: Bell,          visible: canAccessDefaults },
+    { id: 'financial',         label: 'Financial',            icon: TrendingUp,    visible: canAccessDefaults },
+    { id: 'lease_config',      label: 'Lease Configuration',  icon: Settings2,     visible: isAdmin },
+    { id: 'risk_watchlist',    label: 'Risk Watchlist',       icon: AlertTriangle, visible: canEdit },
+    { id: 'approval_policies', label: 'Approval Policies',    icon: GitBranch,     visible: isAdmin },
+    { id: 'onboarding',        label: 'Onboarding',           icon: Package,       visible: isAdmin },
   ].filter((tab) => tab.visible);
 
   const defaultTab = tabs[0]?.id ?? 'profile';
@@ -1145,6 +1146,37 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
           {canEdit && workspace?.id && (
             <TabsContent value="risk_watchlist" className="space-y-6">
               <RiskWatchlistManager workspaceId={workspace.id} />
+            </TabsContent>
+          )}
+
+          {/* Approval Policies — admin only. Settings sub-routes aren't
+              exposed by the main sidebar; this tab is the admin's entry
+              point to /app/settings/approval-policies. */}
+          {isAdmin && (
+            <TabsContent value="approval_policies" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <GitBranch className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <CardTitle>Approval Policies</CardTitle>
+                      <CardDescription>
+                        Configurable per-workspace rules that decide who approves a lease request based on its asset
+                        type, department, dollar threshold, region, and more. Phase 1 stores policies; Phase 2 wires
+                        them into actual lease submissions.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Button asChild>
+                    <Link to="/app/settings/approval-policies">
+                      <ExternalLink className="h-4 w-4 mr-1.5" />
+                      Open Approval Policies
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
 
