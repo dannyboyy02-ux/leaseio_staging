@@ -468,12 +468,20 @@ serve(async (req) => {
   }
 
   // Activity log: chain_resolved (best-effort; the chain is the truth).
+  // Also emit Phase 3 concept_stage_entered — this is the moment the
+  // chain lease enters the concept stage. Both are best-effort, written
+  // in sequence; failures of one do not block the other.
   await logActivity(leaseId, "chain_resolved", {
     policy_id: chosen.id,
     policy_name: chosen.name,
     policy_version: chosen.version,
     steps_created: rowsToInsert.length,
     used_default_fallback: matched.length === 0,
+    target_lifecycle_status: "concept_submitted",
+  });
+  await logActivity(leaseId, "concept_stage_entered", {
+    policy_id: chosen.id,
+    policy_version: chosen.version,
   });
 
   // Compute the first-stage first-step assignees for the caller's
@@ -503,6 +511,11 @@ serve(async (req) => {
       policyName: chosen.name,
       stepsCreated: rowsToInsert.length,
       firstStepAssignees,
+      // Phase 3: forward-compat hint for the caller. LeaseRequestForm in
+      // Checkpoint 4 will read this and flip the lease to
+      // 'concept_submitted' (chain vocabulary). Until then this field
+      // is ignored.
+      targetLifecycleStatus: "concept_submitted",
     },
     200,
     origin,

@@ -21,6 +21,7 @@ import {
   findFirstPendingAssignees,
   isStageComplete,
 } from "../_shared/approval_chain.ts";
+import { getLifecycleMode, type LifecycleMode } from "../_shared/lifecycle_mode.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -309,21 +310,56 @@ serve(async (req) => {
     comment: comment || null,
   });
 
+  // ── Phase 3: determine lifecycle mode ONCE, before any transition ─────
+  // Per CLAUDE.md and the Phase 3 spec, mode is determined once at the
+  // top of the request to avoid races where chain rows get inserted or
+  // removed mid-handler. In practice act-on-chain-step always operates
+  // on a chain step, so mode is virtually always 'chain' — but the
+  // branching is implemented defensively to keep all transition sites
+  // mode-aware.
+  const mode: LifecycleMode = await getLifecycleMode(step.lease_id, supabaseAdmin);
+
+  // Capture lease's current lifecycle for accurate from_status in chain
+  // mode. Legacy mode keeps Phase 2's literal from_status values
+  // verbatim to honor the byte-identical-observable-behavior contract.
+  let currentLifecycle: string | null = null;
+  if (mode === "chain") {
+    const { data: leaseRow } = await supabaseAdmin
+      .from("leases")
+      .select("lifecycle_status")
+      .eq("id", step.lease_id)
+      .maybeSingle();
+    currentLifecycle = (leaseRow as any)?.lifecycle_status ?? null;
+  }
+
   // Stage advancement / lifecycle transitions.
   let lifecycleChange: string | null = null;
   let nextAssignees: { userId: string | null; role: string | null }[] = [];
   let stageCompleted: boolean = false;
 
   if (action === "reject") {
-    // Lease → rejected. Mark all remaining pending steps in the chain
-    // as superseded.
+    // Lease → rejected (terminal — same in both vocabularies). Mark all
+    // remaining pending steps in the chain as superseded.
     const result = await updateLifecycle(step.lease_id, "rejected");
     if (result.ok) {
       lifecycleChange = "rejected";
-      await logStatusChange(step.lease_id, "pending", "rejected", {
-        triggered_by: "chain_step_rejected",
-        chain_step_id: step.id,
-      });
+      if (mode === "chain") {
+        await logStatusChange(
+          step.lease_id,
+          currentLifecycle ?? "pending",
+          "rejected",
+          {
+            triggered_by: "chain_step_rejected",
+            chain_step_id: step.id,
+          },
+        );
+      } else {
+        // Legacy — byte-identical to Phase 2.
+        await logStatusChange(step.lease_id, "pending", "rejected", {
+          triggered_by: "chain_step_rejected",
+          chain_step_id: step.id,
+        });
+      }
     }
     await supabaseAdmin
       .from("lease_approval_chain")
@@ -331,14 +367,30 @@ serve(async (req) => {
       .eq("lease_id", step.lease_id)
       .eq("status", "pending");
   } else if (action === "send_back") {
-    // Lease → submitted. Mark current-stage pending steps as superseded.
-    const result = await updateLifecycle(step.lease_id, "submitted");
+    // Chain mode → 'concept_submitted' (the chain-vocabulary equivalent
+    // of Phase 2's 'submitted' destination). Legacy mode → 'submitted'
+    // verbatim. Mark current-stage pending steps as superseded.
+    const targetLifecycle = mode === "chain" ? "concept_submitted" : "submitted";
+    const result = await updateLifecycle(step.lease_id, targetLifecycle);
     if (result.ok) {
-      lifecycleChange = "submitted";
-      await logStatusChange(step.lease_id, "under_review", "submitted", {
-        triggered_by: "chain_step_sent_back",
-        chain_step_id: step.id,
-      });
+      lifecycleChange = targetLifecycle;
+      if (mode === "chain") {
+        await logStatusChange(
+          step.lease_id,
+          currentLifecycle ?? "concept_under_review",
+          "concept_submitted",
+          {
+            triggered_by: "chain_step_sent_back",
+            chain_step_id: step.id,
+          },
+        );
+      } else {
+        // Legacy — byte-identical to Phase 2.
+        await logStatusChange(step.lease_id, "under_review", "submitted", {
+          triggered_by: "chain_step_sent_back",
+          chain_step_id: step.id,
+        });
+      }
     }
     await supabaseAdmin
       .from("lease_approval_chain")
@@ -355,35 +407,80 @@ serve(async (req) => {
     const allRows = (chainRows ?? []) as ChainStepLike[];
 
     if (step.stage === "concept" && isStageComplete(allRows, "concept")) {
-      // Advance lease to under_review (matches legacy behavior so the
-      // rest of the app keeps working). Phase 3 will introduce
-      // in_negotiation.
-      const result = await updateLifecycle(step.lease_id, "under_review");
+      // Stage just completed. Chain mode → in_negotiation; legacy mode
+      // → under_review (Phase 2 verbatim).
+      const targetLifecycle = mode === "chain" ? "in_negotiation" : "under_review";
+      const result = await updateLifecycle(step.lease_id, targetLifecycle);
       if (result.ok) {
-        lifecycleChange = "under_review";
+        lifecycleChange = targetLifecycle;
         stageCompleted = true;
+        // Phase 2's chain_stage_completed entry retained in BOTH modes
+        // for backward compatibility with downstream activity-log
+        // consumers that filter on it.
         await logActivity(step.lease_id, "chain_stage_completed", {
           stage: "concept",
           chain_step_id: step.id,
         });
-        await logStatusChange(step.lease_id, "submitted", "under_review", {
-          triggered_by: "chain_stage_completed",
-          stage: "concept",
-        });
+        if (mode === "chain") {
+          // Phase 3: more specific transition activity types.
+          await logActivity(step.lease_id, "concept_stage_completed", {
+            chain_step_id: step.id,
+          });
+          await logActivity(step.lease_id, "negotiation_stage_entered", {
+            chain_step_id: step.id,
+          });
+          await logStatusChange(
+            step.lease_id,
+            currentLifecycle ?? "concept_submitted",
+            "in_negotiation",
+            {
+              triggered_by: "chain_stage_completed",
+              stage: "concept",
+            },
+          );
+        } else {
+          // Legacy — byte-identical to Phase 2.
+          await logStatusChange(step.lease_id, "submitted", "under_review", {
+            triggered_by: "chain_stage_completed",
+            stage: "concept",
+          });
+        }
       }
-      // Next assignees would be from the signator stage. Phase 2 does
+      // Next assignees would be from the signator stage. Phase 2/3 does
       // not notify signator yet, but compute and return them so the
       // caller has the data if it wants to surface it.
       nextAssignees = findFirstPendingAssignees(allRows, "signator");
-    } else if (
-      step.stage === "concept" &&
-      advancedPastStepOrder(allRows, "concept", step.step_order)
-    ) {
-      // Crossed a sequential level inside the concept stage. Compute
-      // who's now active.
-      nextAssignees = findFirstPendingAssignees(allRows, "concept");
+    } else if (step.stage === "concept") {
+      // Approve in concept stage that did NOT complete the stage.
+      // Chain-mode addition (Phase 3): if currently in 'concept_submitted',
+      // bump to 'concept_under_review' on the FIRST concept-stage approval
+      // (regardless of whether we crossed a sequential parallel-group level).
+      // This is a new transition that did not exist in Phase 2; legacy
+      // mode skips this branch and behaves identically to Phase 2.
+      if (mode === "chain" && currentLifecycle === "concept_submitted") {
+        const result = await updateLifecycle(
+          step.lease_id,
+          "concept_under_review",
+        );
+        if (result.ok) {
+          lifecycleChange = "concept_under_review";
+          await logStatusChange(
+            step.lease_id,
+            "concept_submitted",
+            "concept_under_review",
+            {
+              triggered_by: "chain_step_approved",
+              chain_step_id: step.id,
+            },
+          );
+        }
+      }
+      if (advancedPastStepOrder(allRows, "concept", step.step_order)) {
+        // Crossed a sequential level — compute who's now active.
+        nextAssignees = findFirstPendingAssignees(allRows, "concept");
+      }
     } else if (step.stage === "signator") {
-      // Phase 2 no-op for signator stage — Phase 5 will own it.
+      // Phase 2/3 no-op for signator stage — Phase 5 will own it.
     }
   }
 
