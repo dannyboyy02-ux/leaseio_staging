@@ -443,3 +443,91 @@ Do NOT build any of these in Phase 3.
 - Reuse the existing patterns from Phase 1 and Phase 2: schema-change rule, deployed-source-matches-committed-source, ECONNRESET-recovery survey before resuming.
 - Do not introduce new dependencies. Stick to what is already in `package.json`.
 - The `displayLabel` for chain states uses identical user-facing text as legacy states ("Submitted" for both `submitted` and `concept_submitted`). This is intentional — the UI should not surface internal vocabulary differences to the user. If you find yourself wanting to expose them, stop and propose first.
+
+---
+
+## As-built notes (post-implementation deltas, 2026-05-03)
+
+This appendix captures everything that diverged from the original spec during implementation. Future phases (4 onward) inherit these patterns and decisions.
+
+### 1. `targetLifecycleStatus` field added to `resolve-approval-chain` response
+
+**Spec said:** the response shape included `policyId`, `policyVersion`, `policyName`, `stepsCreated`, `firstStepAssignees` for the chain-success branch. The post-resolution flip was implicit ("frontend flips to `concept_submitted`").
+
+**As-built:** `resolve-approval-chain` (v3) now returns an additional `targetLifecycleStatus: string` field on the chain-success branch. The frontend reads it as the authoritative destination instead of hardcoding `'concept_submitted'`. Rationale: keeping the destination on the server side means future changes to the chain vocabulary (e.g. a workspace-level override that bumps a lease straight to `final_review`) require only an edge-function deploy, not a frontend change.
+
+The form code currently reads `chain.targetLifecycleStatus ?? 'submitted'` — the `??` fallback exists defensively in case a pre-Phase-3 build of the resolver is somehow live. Phase 4+ deploys can drop the fallback once we are confident no old builds remain.
+
+### 2. `target_lifecycle_status` field added to `chain_resolved` activity log
+
+**Spec said:** `chain_resolved` activity log included `policy_id`, `policy_version`, `policy_name`, `steps_created`, `used_default_fallback`.
+
+**As-built:** plus `target_lifecycle_status: 'concept_submitted'`. Same reasoning as #1 — putting the destination in the activity log makes the audit trail self-explanatory and future-proofs the migration if the destination ever changes.
+
+The resolver also writes a separate `concept_stage_entered` activity log row immediately after `chain_resolved`. That row mirrors the Phase 3 vocabulary (the lease has just entered the concept stage). Phase 5 will write the analogous `final_review_stage_entered` / `pending_counter_signature_started` / `fully_executed_recorded` rows when the signator stage activates.
+
+### 3. `ApprovalQueue.tsx` queue-card label deviation — pattern for Phase 4+
+
+**Spec said (via the audit):** the queue card status cascade at lines 77-81 should be replaced with `displayLabel(status)` (A-category).
+
+**As-built:** the cascade preserves bespoke "Awaiting Manager Review" / "Awaiting Financial Review" labels and uses `isEquivalent(status, 'submitted')` / `isEquivalent(status, 'under_review')` to bucket both vocabularies into the same UX strings. `displayLabel()` would have replaced the queue-specific context with bare "Submitted" / "Under Review" — a UX regression.
+
+**Pattern for Phase 4+:** when a literal status comparison drives **role-aware or context-aware UX text** (not the bare status label), use `isEquivalent` to widen the comparison to both vocabularies; do **not** auto-apply `displayLabel`. The hard-stop reminder is "legacy display behavior must not change." The audit's A/B/C category is a default — context-aware text overrides it.
+
+### 4. `displayLabel` divergence between `executed` / `fully_executed` and `approved` / `in_negotiation`
+
+**Spec said:** chain states use identical user-facing labels to their legacy equivalents ("Submitted" for both `submitted` and `concept_submitted`).
+
+**As-built:** that holds for the `awaiting_concept_approval` and `in_concept_review` groups. It does **NOT** hold for two pairs:
+
+- `executed` → "Executed" but `fully_executed` → "Fully Executed". Legacy "executed" means "executed document uploaded" (one-sided); chain "fully_executed" means "both parties signed" (two-sided). The chain version carries a stricter semantic that the UI should expose.
+- `approved` → "Approved" but `in_negotiation` → "In Negotiation". Legacy "approved" means "all approvers signed off" (terminal-ish for the concept stage); chain "in_negotiation" means "concept approved, now actively negotiating the document". Different user-facing meaning, different label.
+
+These divergences are asserted by `src/lib/__tests__/lifecycleStates.test.ts` (the "renders intentionally distinct labels" test) — they are intentional, not bugs.
+
+**Pattern for Phase 4+:** when adding new chain states, default to identical labels with the legacy equivalent **unless** the chain state carries a meaningfully different user-facing semantic. Document the divergence inline in `displayLabel` and lock it with a vitest assertion.
+
+### 5. Audit occurrence count
+
+The audit cited 208 occurrences. Resolution work touched all of them; no off-by-one was found in implementation. Final tally:
+- Batch A (display layer): ~22 A-category in 8 files
+- Batch B (grouping/filter): ~78 B-category in 19 files
+- Batch C (write-path): 1 C-category in `LeaseRequestForm.tsx`
+- No-Op (~108): W/R/T/Q/X/Notes left untouched as designed
+
+The "approximate" counts in the audit summary table reflect that some A-category and B-category sites overlap on the same line (e.g. an `.in()` filter is one occurrence but resolves through the local-constant extension). The categorical bucketing is what mattered, not the exact count.
+
+### 6. Pure helpers extracted during implementation
+
+Two new pure helpers were added to enable unit testing of code paths the React-heavy form/UI couldn't expose otherwise:
+
+- **`src/lib/lifecycleStates.ts`** (Checkpoint 2) — vocabulary helpers. Tested by `src/lib/__tests__/lifecycleStates.test.ts` (26 tests). Mirrored to `supabase/functions/_shared/lifecycle.ts` for Deno consumers.
+- **`src/lib/leaseSubmissionDecision.ts`** (Checkpoint 5) — pure decision for the post-resolution flip in `LeaseRequestForm`. Tested by `src/lib/__tests__/leaseSubmissionDecision.test.ts` (16 tests covering the 4 customer-visible scenarios).
+
+The form `LeaseRequestForm.tsx` is now a thin wrapper that calls `decideSubmissionOutcome` and applies the result (UPDATE leases + notify + activity log). This is the pattern for any future submission-flow change — extract the decision into a pure helper, test the decision, keep the wrapper thin.
+
+### 7. Lifecycle mode helper lives in its own file
+
+**Spec said (Checkpoint 3 reminder):** `getLifecycleMode` goes into `_shared/approval_chain.ts` (or wherever the existing chain helpers live).
+
+**As-built:** new file `supabase/functions/_shared/lifecycle_mode.ts`. Reason: `_shared/approval_chain.ts` carries a SYNC CONSTRAINT header that explicitly forbids Supabase or Deno-specific imports — both files (Node + Deno) must be byte-equivalent in pure logic. `getLifecycleMode` requires the supabase-js client and does IO, so it would have violated that constraint. The new file is Deno-only with a header explaining the asymmetry; no Node mirror exists because the frontend never needs to compute lifecycle mode (chain rows themselves are visible to the UI).
+
+### 8. Six local consumer constants extended in place — KNOWN_ISSUES #7
+
+**Spec said:** "If a literal status comparison can be replaced with a helper function (`groupOf`, `displayLabel`, `normalizeToChainStates`), do that."
+
+**As-built (audit option-A decision):** six local constant arrays (`IN_PROGRESS_STATUSES`, `IN_FLIGHT_STATUSES`, `SHAREABLE_STATUSES`, `APPROVED_STATUSES`, `LIFECYCLE_LABELS`, `expiringStatuses`) were extended in place with chain-vocabulary equivalents rather than consolidated to `STATE_GROUPS`-derived helpers. Each got a `KNOWN_ISSUES.md` item #7 marker comment so the next person who touches them knows the consolidation is tracked. This was a deliberate scope-control decision — Phase 3's risk profile did not allow mixing vocabulary expansion with structural refactor of consumer code.
+
+**Pattern for Phase 4+:** when an obvious refactor opportunity surfaces during a vocabulary-expansion pass, extend in place + file a KNOWN_ISSUES marker. Do not consolidate.
+
+### 9. `auto_approved` activity log detail — no change needed
+
+The `auto_approved` field in the `status_change` activity log details (legacy branch) is computed as `finalStatus === 'approved'`. Chain leases never auto-approve to `'approved'` (they go to `'concept_submitted'`), so the legacy branch's literal comparison stays correct. No widening to `=== 'in_negotiation'` was added — that would be wrong (chain auto-approval doesn't exist).
+
+---
+
+## Closeout
+
+Phase 3 closed 2026-05-03. See the closeout commit body for the full file inventory and per-checkpoint commits. The closeout cites `docs/PHASE_3_AUDIT.md` by SHA per the audit-doc inheritance rule.
+
+Phase 4 (lease_documents table + negotiation document iterations) is the next active workstream.

@@ -39,6 +39,10 @@ import {
 } from '@/lib/leaseNotifications';
 import { calculateLease } from '@/lib/leaseCalculations';
 import type { LeaseCalculations } from '@/lib/leaseCalculations';
+import {
+  decideSubmissionOutcome,
+  type ChainResult,
+} from '@/lib/leaseSubmissionDecision';
 import { FinancialImpactPreview } from './FinancialImpactPreview';
 
 const leaseRequestSchema = z.object({
@@ -342,54 +346,28 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         { body: { leaseId: lease.id, initialResolution: true } },
       );
 
-      const chain = chainResult as
-        | {
-            ok: true;
-            legacyFallback: false;
-            policyId: string;
-            policyVersion: number;
-            policyName: string;
-            stepsCreated: number;
-            firstStepAssignees: { userId: string | null; role: string | null }[];
-            // Phase 3: edge function returns the chain-vocabulary destination
-            // for the post-resolution flip (e.g. 'concept_submitted'). Treated
-            // as authoritative for chain leases — the form must not hardcode.
-            // Optional in the type so the form falls back gracefully if a
-            // pre-Phase-3 deploy of the edge function is somehow in use.
-            targetLifecycleStatus?: string;
-          }
-        | { ok: true; legacyFallback: true; message: string }
-        | { ok: false; error: string; reason: string }
-        | null;
+      const chain = chainResult as ChainResult;
 
-      if (chainError || !chain || chain.ok === false) {
-        const message =
-          (chain && chain.ok === false && chain.error) ||
-          chainError?.message ||
-          'Could not route this request for approval. Contact your admin.';
-        toast.error(message);
-        // Leave the lease in 'draft' so the user (or admin) can fix the
-        // underlying issue and resubmit. The resolve function is idempotent
-        // on initialResolution=true.
+      // Phase 3: pure decision in src/lib/leaseSubmissionDecision.ts so the
+      // four submission outcomes are unit-testable.
+      const outcome = decideSubmissionOutcome(chain, legacyInitialStatus, chainError);
+      if (outcome.kind === 'leave_draft') {
+        toast.error(outcome.errorMessage);
+        // Lease stays in 'draft'; resolve-approval-chain is idempotent on
+        // initialResolution=true so the user can retry.
         return;
       }
 
-      // Phase 3: finalStatus widened to string so chain leases can flip to
-      // the chain-vocabulary destination ('concept_submitted') returned by
-      // the edge function. Legacy path keeps the original values.
-      let finalStatus: string;
-      let routingPath: 'legacy' | 'chain';
+      const finalStatus = outcome.finalStatus;
+      const routingPath = outcome.routingPath;
 
-      if (chain.legacyFallback === true) {
-        // Legacy path — no policies configured. Keeps Phase 2 behavior
-        // byte-identical: the legacy initial status comes from
-        // approvalRouting.ts.
-        finalStatus = legacyInitialStatus;
-        routingPath = 'legacy';
-        await supabase
-          .from('leases')
-          .update({ lifecycle_status: finalStatus, status_changed_at: new Date().toISOString() } as any)
-          .eq('id', lease.id);
+      // Apply the flip + notify the right approvers for the chosen path.
+      await supabase
+        .from('leases')
+        .update({ lifecycle_status: finalStatus, status_changed_at: new Date().toISOString() } as any)
+        .eq('id', lease.id);
+
+      if (routingPath === 'legacy') {
         if (finalStatus === 'submitted' && approvalRequirements.requiresManagerApproval) {
           await notifyRoleHolders(
             supabase,
@@ -411,23 +389,12 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           );
         }
       } else {
-        // Policy-driven path — chain rows already inserted by the edge
-        // function. Phase 3: read targetLifecycleStatus from the response
-        // so the lease enters chain vocabulary (concept_submitted). The
-        // pre-Phase-3 fallback to 'submitted' is kept defensively in case
-        // an older edge function build is ever live; the current resolve
-        // function (v3+) always returns this field.
-        finalStatus = chain.targetLifecycleStatus ?? 'submitted';
-        routingPath = 'chain';
-        await supabase
-          .from('leases')
-          .update({ lifecycle_status: finalStatus, status_changed_at: new Date().toISOString() } as any)
-          .eq('id', lease.id);
+        // Chain path — chain rows already inserted by the edge function.
         await notifyChainAssignees(
           supabase,
           lease.id,
           workspace.id,
-          chain.firstStepAssignees,
+          outcome.chainSuccess!.firstStepAssignees,
           `New commitment request requires your approval: ${values.description}`,
         );
       }
@@ -441,12 +408,12 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         details: {
           triggered_by: 'request_submission',
           routing_path: routingPath,
-          ...(routingPath === 'chain' && chain.legacyFallback === false
+          ...(routingPath === 'chain' && outcome.chainSuccess
             ? {
-                policy_id: chain.policyId,
-                policy_version: chain.policyVersion,
-                policy_name: chain.policyName,
-                steps_created: chain.stepsCreated,
+                policy_id: outcome.chainSuccess.policyId,
+                policy_version: outcome.chainSuccess.policyVersion,
+                policy_name: outcome.chainSuccess.policyName,
+                steps_created: outcome.chainSuccess.stepsCreated,
               }
             : {
                 auto_approved: finalStatus === 'approved',

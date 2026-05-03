@@ -21,6 +21,7 @@ Recommended path:
    ```bash
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase1_approval_policies.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase2_lease_approval_chain.test.sql
+   psql "$TEST_DATABASE_URL" -f supabase/tests/phase3_lifecycle_expansion.test.sql
    ```
    …or paste into the Studio SQL editor for that environment.
 4. Search the output for `FAIL` — empty result means everything passed.
@@ -89,12 +90,26 @@ the data-layer behavior is verified end-to-end without spinning up the Deno
 runtime. Function-level tests (CORS, auth gates, rate limit) are exercised
 via curl smoke tests in the deployed app.
 
+### `phase3_lifecycle_expansion.test.sql`
+
+6 tests covering the Phase 3 lifecycle vocabulary expansion + new lease columns:
+
+| # | Test | Checks |
+|---|---|---|
+| 1 | `lifecycle_status` accepts all 16 values | 9 legacy + 7 chain values all pass the CHECK constraint |
+| 2 | `lifecycle_status` rejects unknown values | `needs_review`, `failed`, casing variants, empty string all rejected |
+| 3 | 5 new lease columns (`concept_approved_at`, `signator_approved_at`, `counter_signed_at`, `fully_executed_at`, `execution_owner_id`) accept null and valid values; `execution_owner_id` enforces the `auth.users` FK |
+| 4 | 6 Phase 3 `activity_type` values accepted (`concept_stage_entered`, `concept_stage_completed`, `negotiation_stage_entered`, `final_review_stage_entered`, `pending_counter_signature_started`, `fully_executed_recorded`) |
+| 5 | All 30 pre-existing `activity_type` values still accepted (24 pre-Phase-2 + 6 Phase 2) — guards against regression of downstream writers |
+| 6 | All 9 legacy `lifecycle_status` values still accepted — guards against regression of legacy paths |
+
 ## Frontend tests
 
 Pure unit tests, run via `npm test` (vitest):
 
 - **Phase 1 validation rules** — `src/pages/settings/__tests__/approvalPolicyValidation.test.ts` (18 tests over the policy-editor save validation).
 - **Phase 2 chain logic** — `src/lib/__tests__/approvalChainLogic.test.ts` (21 tests over the pure helpers shared between the Deno edge functions and Node mirror).
+- **Phase 3 lifecycle states** — `src/lib/__tests__/lifecycleStates.test.ts` (26 tests over `displayLabel`/`groupOf`/`isEquivalent`/`canTransition`/transition-graph lock).
+- **Phase 3 submission decision** — `src/lib/__tests__/leaseSubmissionDecision.test.ts` (16 tests over the pure helper that decides post-resolution flip; covers the 4 LeaseRequestForm scenarios: chain success, legacy fallback, ambiguous match, network error).
 
-Combined frontend suite: 142+ tests, last green count documented in commit
-history.
+Combined frontend suite: 184 tests as of Phase 3 closeout.
