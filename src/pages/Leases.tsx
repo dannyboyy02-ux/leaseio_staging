@@ -29,6 +29,7 @@ import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useApp } from '@/contexts/AppContext';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -87,6 +88,7 @@ function formatCurrency(amount: number): string {
 export default function Leases() {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { workspace } = useApp();
   const [searchParams] = useSearchParams();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addLeaseDialogOpen, setAddLeaseDialogOpen] = useState(false);
@@ -114,7 +116,11 @@ export default function Leases() {
   ];
 
   const fetchLeases = async () => {
+    if (!workspace?.id) return;
     try {
+      // Workspace scoping is mandatory: a user who is a member of multiple
+      // workspaces would otherwise see every workspace's leases mixed
+      // together (RLS allows them all; UI must scope to the active one).
       let query = (supabase as any)
         .from('leases')
         .select(
@@ -123,6 +129,7 @@ export default function Leases() {
           'executed_monthly_payment, current_monthly_rent, monthly_payment, extracted_json, archived, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
+        .eq('workspace_id', workspace.id)
         .in('lifecycle_status', [
           // Legacy
           'submitted', 'under_review', 'approved', 'executed', 'active', 'expired',
@@ -150,9 +157,11 @@ export default function Leases() {
 
   useEffect(() => {
     fetchLeases();
-    // re-fetch when the archived toggle flips
+    // re-fetch when the archived toggle flips OR the active workspace
+    // switches — without the workspace dep, switching workspaces would
+    // leave the previous workspace's leases on screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showArchived]);
+  }, [showArchived, workspace?.id]);
 
   const handleDeleteClick = (lease: LeaseRow) => {
     setSelectedLease(lease);

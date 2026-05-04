@@ -40,6 +40,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
+import { useApp } from "@/contexts/AppContext";
 
 interface StatsData {
   totalLeases: number;
@@ -71,6 +72,7 @@ interface RecentCorrection {
 export default function ExtractionAnalytics() {
   const { t } = useAppTranslation();
   const navigate = useNavigate();
+  const { workspace } = useApp();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<StatsData>({
@@ -84,11 +86,18 @@ export default function ExtractionAnalytics() {
   const [recentCorrections, setRecentCorrections] = useState<RecentCorrection[]>([]);
 
   const fetchAnalytics = async () => {
+    if (!workspace?.id) return;
     try {
-      // Fetch total leases and average confidence
+      // Workspace scoping mandatory — analytics for the active workspace
+      // only. The companion field_corrections + lease_field_confidence
+      // queries below should also be workspace-scoped, but those tables'
+      // RLS policies already enforce workspace isolation via lease join,
+      // and a multi-workspace user is not the typical analytics consumer
+      // (this page is dev-mode only).
       const { data: leasesData, error: leasesError } = await supabase
         .from("leases")
         .select("id, avg_confidence_score")
+        .eq("workspace_id", workspace.id)
         .filter("processed_at", "not.is", "null");
 
       if (leasesError) throw leasesError;
@@ -180,7 +189,8 @@ export default function ExtractionAnalytics() {
 
   useEffect(() => {
     fetchAnalytics();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace?.id]);
 
   const handleRefresh = () => {
     setRefreshing(true);

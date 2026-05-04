@@ -19,6 +19,7 @@ import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useApp } from '@/contexts/AppContext';
 import {
   Table,
   TableBody,
@@ -50,6 +51,7 @@ export default function ImportHistory() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { t, language } = useLanguage();
+  const { workspace } = useApp();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<ImportRow | null>(null);
@@ -59,10 +61,13 @@ export default function ImportHistory() {
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const fetchImports = async () => {
+    if (!workspace?.id) return;
     try {
+      // Workspace scoping mandatory — see Leases.tsx for the same rationale.
       const { data, error } = await supabase
         .from('leases')
         .select('id, filename, status, uploaded_at, processed_at, error_message, storage_path')
+        .eq('workspace_id', workspace.id)
         .order('uploaded_at', { ascending: false });
 
       if (error) throw error;
@@ -88,7 +93,8 @@ export default function ImportHistory() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [imports]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imports, workspace?.id]);
 
   useEffect(() => {
     if (searchParams.get('action') === 'upload') {

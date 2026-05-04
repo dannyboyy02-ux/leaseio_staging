@@ -27,7 +27,7 @@ interface LeaseData {
 export function RentRollExport() {
   const [isExporting, setIsExporting] = useState(false);
   const { t } = useLanguage();
-  const { userRole } = useApp();
+  const { userRole, workspace } = useApp();
   const canExport = canExportReports(userRole);
 
   const formatCurrency = (amount: number | string | null): string => {
@@ -67,11 +67,18 @@ export function RentRollExport() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+      if (!workspace?.id) {
+        toast.error('No workspace selected');
+        return;
+      }
 
+      // Workspace scoping mandatory — exports for the active workspace only.
+      // Replaces the previous user_id filter, which would have mixed data
+      // for users with leases in multiple workspaces.
       const { data: leases, error } = await supabase
         .from('leases')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('workspace_id', workspace.id)
         .in('status', ['Ready', 'final', 'review'])
         .order('lease_end', { ascending: true });
 

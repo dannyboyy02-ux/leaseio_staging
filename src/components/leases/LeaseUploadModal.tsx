@@ -28,6 +28,7 @@ import { LeaseType } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useProcessing } from '@/contexts/ProcessingContext';
+import { useApp } from '@/contexts/AppContext';
 
 interface LeaseUploadModalProps {
   open: boolean;
@@ -48,6 +49,7 @@ type Step = 'upload' | 'classify' | 'error';
 
 export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadModalProps) {
   const { startProcessing } = useProcessing();
+  const { workspace } = useApp();
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [leaseType, setLeaseType] = useState<LeaseType>('master');
@@ -71,14 +73,17 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
       
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
+        if (!user || !workspace?.id) {
           setLoadingParentLeases(false);
           return;
         }
 
+        // Workspace scoping mandatory — amendments can only point at parents
+        // in the same workspace.
         const { data, error } = await supabase
           .from('leases')
           .select('id, tenant_name, landlord_name, lease_start, lease_end')
+          .eq('workspace_id', workspace.id)
           .eq('lifecycle_status', 'active')
           .order('uploaded_at', { ascending: false });
         
@@ -97,7 +102,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
     }
     
     fetchPostedLeases();
-  }, [leaseType]);
+  }, [leaseType, workspace?.id]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
