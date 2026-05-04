@@ -531,3 +531,7 @@ The `auto_approved` field in the `status_change` activity log details (legacy br
 Phase 3 closed 2026-05-03. See the closeout commit body for the full file inventory and per-checkpoint commits. The closeout cites `docs/PHASE_3_AUDIT.md` by SHA per the audit-doc inheritance rule.
 
 Phase 4 (lease_documents table + negotiation document iterations) is the next active workstream.
+
+### Reference: PRODUCT_STRATEGY.md (ratified 2026-05-04, post-Phase-3-close)
+
+`docs/PRODUCT_STRATEGY.md` was ratified the day after Phase 3 closed. No retroactive divergence — Phase 3's chain-vocabulary expansion was workspace-scoped throughout, which aligns with the strategy doc's "Implementation guidance for Phases 4-8" rules (workspace-scoped data, no prophylactic `firm_id` scaffolding). The strategy doc's binding interpretation applies to Phase 4+ going forward; Phase 3 is grandfathered.
