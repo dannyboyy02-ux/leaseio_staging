@@ -513,13 +513,19 @@ export default function ApprovalQueue() {
           .eq('archived', false);
 
       // Needs My Review.
-      // Phase 3: include chain awaiting_concept_approval / in_concept_review
-      // equivalents so the same approver picks up chain-driven leases too.
+      //
+      // Phase 3 follow-up (2026-05-05 smoke): the LEGACY queue stays
+      // legacy-only. Chain leases are surfaced exclusively via the
+      // chain step section (chainQuery below). My earlier Batch B edit
+      // included concept_submitted / concept_under_review here, which
+      // double-listed chain leases AND let users approve them via the
+      // legacy handler — which writes legacy lifecycle values and ignores
+      // the chain rows, corrupting the chain state.
       const myReviewConditions: any[] = [];
       if (isManagerApprover) {
         myReviewConditions.push(
           baseQuery()
-            .in('lifecycle_status', ['submitted', 'concept_submitted'])
+            .eq('lifecycle_status', 'submitted')
             .or('financial_returned_to_submitter.is.null,financial_returned_to_submitter.eq.false')
             .is('manager_approved_by', null),
         );
@@ -527,7 +533,7 @@ export default function ApprovalQueue() {
       if (isFinancialApprover) {
         myReviewConditions.push(
           baseQuery()
-            .in('lifecycle_status', ['under_review', 'concept_under_review'])
+            .eq('lifecycle_status', 'under_review')
             .is('financial_approved_by', null),
         );
       }
@@ -539,15 +545,12 @@ export default function ApprovalQueue() {
       );
 
       const { data: allPendingData } = await baseQuery()
-        .in('lifecycle_status', [
-          'submitted', 'under_review',
-          'concept_submitted', 'concept_under_review',
-        ])
+        .in('lifecycle_status', ['submitted', 'under_review'])
         .order('uploaded_at', { ascending: false });
 
       const { data: reviewedData } = await baseQuery()
         .or(`manager_approved_by.eq.${user.id},financial_approved_by.eq.${user.id}`)
-        .not('lifecycle_status', 'in', '(submitted,under_review,concept_submitted,concept_under_review)')
+        .not('lifecycle_status', 'in', '(submitted,under_review)')
         .order('uploaded_at', { ascending: false })
         .limit(50);
 
