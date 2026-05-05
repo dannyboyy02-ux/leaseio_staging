@@ -1,5 +1,5 @@
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
-import { Building2, Users, Bell, Save, Loader2, UserPlus, Trash2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -24,9 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
-import { MemberRoleSelect } from '@/components/workspace/MemberRoleSelect';
-import { PendingInvitesList } from '@/components/workspace/PendingInvitesList';
+import { MembersPanel, useWorkspaceMembers } from '@/components/workspace/MembersPanel';
 import { WorkspaceRole } from '@/types';
 import type { FunctionalRole } from '@/types/lifecycle';
 import { Link } from 'react-router-dom';
@@ -122,7 +120,6 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
   const [isSavingRoles, setIsSavingRoles] = useState(false);
   const [backdoorEnabled, setBackdoorEnabled] = useState(false);
   const [isSavingBackdoor, setIsSavingBackdoor] = useState(false);
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   // Phase 2 — functional roles state: map of user_id → Set<FunctionalRole>
   const [memberRoles, setMemberRoles] = useState<Record<string, Set<FunctionalRole>>>({});
@@ -299,54 +296,13 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
     }
   };
 
-  const { data: members, isLoading: membersLoading, refetch: refetchMembers } = useQuery({
-    queryKey: ['workspace-members', workspace?.id],
-    queryFn: async () => {
-      if (!workspace?.id) return [];
-
-      const { data, error } = await supabase
-        .from('workspace_members')
-        .select(`id, role, user_id, created_at`)
-        .eq('workspace_id', workspace.id);
-
-      if (error) throw error;
-
-      const memberIds = data?.map(m => m.user_id) || [];
-      if (memberIds.length === 0) return [];
-
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, email, first_name, last_name')
-        .in('id', memberIds);
-
-      if (profilesError) throw profilesError;
-
-      return data?.map(member => {
-        const profile = profiles?.find(p => p.id === member.user_id);
-        return {
-          ...member,
-          email: profile?.email || 'Unknown',
-          name: profile?.first_name && profile?.last_name
-            ? `${profile.first_name} ${profile.last_name}`
-            : profile?.email || 'Unknown User',
-        };
-      }) || [];
-    },
-    enabled: !!workspace?.id,
-  });
-
-  const { data: pendingInvites = [], refetch: refetchPending } = useQuery({
-    queryKey: ['pending-invites', workspace?.id],
-    queryFn: async () => {
-      if (!workspace?.id) return [];
-      const { data, error } = await supabase.functions.invoke('list-pending-invites', {
-        body: { workspaceId: workspace.id },
-      });
-      if (error || !data?.ok) return [];
-      return data.data?.invites || [];
-    },
-    enabled: !!workspace?.id && canManageMembers,
-  });
+  // OWM Checkpoint 2: members query lives in MembersPanel; the
+  // re-exported hook here keeps the roster available for the Approval
+  // Roles section below. TanStack dedupes by query key.
+  const {
+    data: members,
+    isLoading: membersLoading,
+  } = useWorkspaceMembers(workspace?.id);
 
   const handleSaveGeneral = async () => {
     if (!canEdit) { toast.error(t('workspace.read_only')); return; }
@@ -500,18 +456,6 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
     },
   });
 
-  const handleRemoveMember = async (memberId: string) => {
-    try {
-      const { error } = await supabase.from('workspace_members').delete().eq('id', memberId);
-      if (error) throw error;
-      toast.success('Member removed');
-      refetchMembers();
-    } catch (error) {
-      console.error('Error removing member:', error);
-      toast.error('Failed to remove member');
-    }
-  };
-
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'admin': return t('workspace.admin');
@@ -576,128 +520,17 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
           </TabsContent>
 
           {/* Users — member list + approval roles (hidden for single-user workspaces) */}
-          {canManageMembers && (
+          {canManageMembers && workspace?.id && (
             <TabsContent value="users" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>{t('workspace.team_members')}</CardTitle>
-                      <CardDescription>{t('workspace.manage_access')}</CardDescription>
-                    </div>
-                    <Button variant="accent" onClick={() => setInviteDialogOpen(true)}>
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      {t('workspace.invite_member')}
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {membersLoading ? (
-                    <div className="space-y-4">
-                      {[...Array(3)].map((_, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <Skeleton className="h-10 w-10 rounded-full" />
-                          <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-32" />
-                            <Skeleton className="h-3 w-48" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : !members || members.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>{t('workspace.no_members')}</p>
-                      <p className="text-sm">{t('workspace.only_one')}</p>
-                    </div>
-                  ) : members.length === 1 ? (
-                    // Single-user simplification: show Admin role only, hide role configuration
-                    <div>
-                      <div className="flex items-center justify-between py-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>
-                              {members[0].name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{members[0].name}</p>
-                            <p className="text-sm text-muted-foreground">{members[0].email}</p>
-                          </div>
-                        </div>
-                        <Badge variant="default" className="flex items-center gap-1">
-                          <Crown className="h-3 w-3" />
-                          Admin
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Add team members to configure roles and approval workflows.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-border">
-                      {members.map((member, index) => (
-                        <div
-                          key={member.id}
-                          className={cn(
-                            'flex items-center justify-between py-4 animate-fade-up',
-                            index === 0 && 'pt-0'
-                          )}
-                          style={{ animationDelay: `${index * 50}ms` }}
-                        >
-                          <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarFallback>
-                                {member.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="font-medium">{member.name}</p>
-                              <p className="text-sm text-muted-foreground">{member.email}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {member.user_id === workspace?.ownerId ? (
-                              <Badge variant="default" className="flex items-center gap-1">
-                                <Crown className="h-3 w-3" />
-                                {t('workspace.owner')}
-                              </Badge>
-                            ) : (
-                              <>
-                                <MemberRoleSelect
-                                  memberId={member.id}
-                                  currentRole={member.role as WorkspaceRole}
-                                  onRoleChanged={() => refetchMembers()}
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleRemoveMember(member.id)}
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              {/* Member management extracted to MembersPanel during OWM
+                  Checkpoint 2 — same component is reused on
+                  /app/account/workspaces for non-active workspaces. */}
+              <MembersPanel
+                workspaceId={workspace.id}
+                ownerId={workspace.ownerId}
+                canManage={canManageMembers}
+              />
 
-              {pendingInvites.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Pending Invitations</CardTitle>
-                    <CardDescription>Invitations that have not yet been accepted.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <PendingInvitesList invites={pendingInvites} onRefresh={refetchPending} />
-                  </CardContent>
-                </Card>
-              )}
 
               {/* Approval Roles — only shown when multiple members exist */}
               {members && members.length > 1 && (
@@ -1229,14 +1062,8 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
           {body}
         </AppLayout>
       )}
-      {workspace && canManageMembers && (
-        <InviteMemberDialog
-          open={inviteDialogOpen}
-          onOpenChange={setInviteDialogOpen}
-          workspaceId={workspace.id}
-          onInviteSent={() => { refetchMembers(); refetchPending(); }}
-        />
-      )}
+      {/* InviteMemberDialog mount moved into MembersPanel during OWM
+          Checkpoint 2. The panel owns its own dialog state. */}
     </>
   );
 }
