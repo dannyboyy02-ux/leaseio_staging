@@ -322,6 +322,15 @@ export function AppSidebar() {
               </Link>
             </DropdownMenuItem>
 
+            {/* Workspaces — account-level management of every workspace
+                the user owns or belongs to (Owner Workspace Management) */}
+            <DropdownMenuItem asChild>
+              <Link to="/app/account/workspaces" className="flex items-center gap-2 cursor-pointer font-medium">
+                <Building2 className="h-4 w-4" />
+                Workspaces
+              </Link>
+            </DropdownMenuItem>
+
             <DropdownMenuSeparator />
 
             {/* Theme + help */}

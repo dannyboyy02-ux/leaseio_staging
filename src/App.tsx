@@ -44,6 +44,7 @@ import NotificationDetail from "./pages/app/NotificationDetail";
 import Reports from "./pages/Reports";
 import WorkspaceSettings from "./pages/settings/WorkspaceSettings";
 import AccountSettings from "./pages/settings/AccountSettings";
+import WorkspaceManagement from "./pages/account/WorkspaceManagement";
 import ApprovalPoliciesListPage from "./pages/settings/ApprovalPoliciesListPage";
 import ApprovalPolicyEditPage from "./pages/settings/ApprovalPolicyEditPage";
 import NotFound from "./pages/NotFound";
@@ -233,6 +234,14 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <AccountSettings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/account/workspaces"
+                  element={
+                    <ProtectedRoute>
+                      <WorkspaceManagement />
                     </ProtectedRoute>
                   }
                 />
