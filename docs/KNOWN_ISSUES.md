@@ -1,17 +1,16 @@
 # Known Issues — Open Backlog
 
-Tracked here so they survive across sessions. None of these block Phase 2 (now
-closed) or Phase 3 (next). Items 1-4 surfaced during the Phase 2 Path A smoke
-test on 2026-05-03; item 5 surfaced during the Phase 2 Path B smoke the same
-day.
+Tracked here so they survive across sessions. When fixing, remove from this
+list and reference it in the commit message.
 
-When fixing, remove from this list and reference it in the commit message.
-
-**Status reconciliation (Phase 2 close, 2026-05-03):** No items resolved during
-Phase 2. Items 1-5 all still open and confirmed flagged. The lifecycle
-transition convention asymmetries surfaced during Path B verification were
-fixed inline (commit `dccf2aa`) and are NOT tracked here — they're now part of
-the shipped Phase 2 contract via the convention doc in CLAUDE.md.
+**Status reconciliation (Phase 3 close, 2026-05-05):**
+- Items 1-7 (pre-Phase-3 backlog) all still open. Phase 3 did not touch them.
+- Three new items added (8, 9, 10) from the Phase 3 smoke run.
+- One item resolved DURING Phase 3 closeout and NOT filed here: the P0
+  cross-workspace data leak (UI was missing workspace_id filtering on the
+  leases list — RLS allowed multi-membership reads to surface mixed data).
+  Fixed in commit `9b46dca`. Permanent regression test belongs in the future
+  Owner Workspace Management spec rather than as a sticky issue here.
 
 ---
 
@@ -229,9 +228,99 @@ make rollback harder. Re-evaluate after Phase 3 closes.
 
 ---
 
+## 8. Duplicate workspace creation on signup / onboarding
+
+**Symptom (database forensics, 2026-05-05):** During the Phase 3 closeout
+investigation of "where did Labs Analytix's workspaces come from?", the
+`workspaces` table revealed two rows named `"My Workspace"` owned by the
+same user, created **13 seconds apart** (2026-01-14 03:35:04 and 03:35:17).
+One of the two has zero members and zero leases (orphaned).
+
+```
+| id            | name         | created_at                  | members | leases |
+|---------------|--------------|----------------------------:|--------:|-------:|
+| 440d279f...   | My Workspace | 2026-01-14 03:35:04         |       0 |      0 |
+| b0f3c7a0...   | My Workspace | 2026-01-14 03:35:17 (+13s)  |       2 |      2 |
+```
+
+**Hypothesis:** A double-fire in the signup → onboarding workspace-creation
+flow. Possibly a React StrictMode double-effect, a race between Signup.tsx
+and Onboarding.tsx both calling create-workspace, or a retry on a slow
+first response that succeeded after the user clicked again.
+
+**Where to look:** `src/pages/Signup.tsx`, `src/pages/app/Onboarding.tsx`,
+and any edge function that auto-creates a workspace on first sign-in. Add
+an idempotency guard (e.g., "if user already owns a workspace, no-op")
+before any new workspace insert.
+
+**Severity:** Medium-Low — orphaned workspaces are invisible due to
+empty member/lease state, but they pollute the workspace switcher and
+inflate any "active workspaces" count. The orphan `440d279f-a781-450a-863a-73b51780becd`
+is safe to delete (zero members, zero leases) and will be cleaned up via
+the Owner Workspace Management feature when it ships.
+
+---
+
+## 9. Creator-membership row missing `invited_at` / `accepted_at`
+
+**Symptom (database forensics, 2026-05-05):** Workspace owners' own
+`workspace_members` rows have NULL `invited_at` and NULL `accepted_at`.
+Members added via the legitimate invite flow have both populated. The
+asymmetry breaks audit-trail clarity:
+
+```sql
+-- Owner's own admin row (created by the workspace-creation handler):
+{ workspace_id: c9dad4c7..., user_id: c2dbf842..., role: 'admin',
+  invited_at: NULL, accepted_at: NULL, created_at: 2026-01-07 ... }
+
+-- Invitee row (created by accept-invite edge function):
+{ workspace_id: c9dad4c7..., user_id: 3d5d40ec..., role: 'admin',
+  invited_at: 2026-04-22 21:22:22.801+00,
+  accepted_at: 2026-04-22 21:22:22.801+00, created_at: 2026-04-22 ... }
+```
+
+**Where to look:** the workspace-creation handler that auto-inserts the
+creator into `workspace_members`. Set `invited_at = accepted_at = now()`
+for the creator's own row so every membership has a populated timestamp
+trail.
+
+**Severity:** Low — purely a forensics-clarity issue. No user-visible
+behavior. Worth tightening before Phase 9 (firm layer) when audit trails
+become more important for cross-workspace member visibility.
+
+---
+
+## 10. Phase 3 audit miss: `LeaseStatusBadge.tsx`
+
+**Symptom (Phase 3 smoke, 2026-05-05):** The Phase 3 audit
+(`docs/PHASE_3_AUDIT.md`, committed as `49e1ab7`) traced
+`LifecycleStatusBadge.tsx` (the canonical chain-aware badge in
+`src/components/lifecycle/`) but **missed `LeaseStatusBadge.tsx`** — a
+separate badge in `src/components/leases/` used by `Leases.tsx` and
+`ImportHistory.tsx`. The two filenames differ by only the substring
+"cycle" and the audit grep didn't catch the second.
+
+The smoke surfaced this when a chain lease at `concept_submitted` rendered
+its raw enum text in the leases queue view while the lease detail page
+(which uses the canonical badge) correctly showed "Submitted".
+
+**Status:** Fixed in commit `aaa5ab3` (`LeaseStatusBadge.tsx` now routes
+every label through `displayLabel()`). Filed here NOT as an open issue
+but as a pattern note for future audits:
+
+**Pattern for Phase 4+ audits:** when grepping for badge / display
+components, do not rely on substring matching. Walk the imports of every
+status-rendering site and trace each transitive component, even if the
+filename is a near-twin of an already-audited component. The Phase 3
+audit doc template at the top of `docs/PHASE_3_AUDIT.md` should be
+updated to call this out — done as part of the Phase 3 closeout.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
-follow-up (item 5), and Phase 3 audit (items 6-7). Filed by Claude per user
-direction. Each item should get its own commit when fixed; reference this
-file in the message and remove the entry once green.
+follow-up (item 5), Phase 3 audit (items 6-7), and Phase 3 close-out
+forensics + smoke (items 8-10). Filed by Claude per user direction. Each
+item should get its own commit when fixed; reference this file in the
+message and remove the entry once green.
