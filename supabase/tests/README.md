@@ -22,6 +22,7 @@ Recommended path:
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase1_approval_policies.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase2_lease_approval_chain.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase3_lifecycle_expansion.test.sql
+   psql "$TEST_DATABASE_URL" -f supabase/tests/owner_workspace_mgmt.test.sql
    ```
    …or paste into the Studio SQL editor for that environment.
 4. Search the output for `FAIL` — empty result means everything passed.
@@ -89,6 +90,18 @@ issue (resolve-approval-chain's transactional chain INSERT, act-on-chain-step's
 the data-layer behavior is verified end-to-end without spinning up the Deno
 runtime. Function-level tests (CORS, auth gates, rate limit) are exercised
 via curl smoke tests in the deployed app.
+
+### `owner_workspace_mgmt.test.sql`
+
+5 tests covering the Owner Workspace Management feature:
+
+| # | Test | Checks |
+|---|---|---|
+| 1 | `deleted_workspaces` accepts service-role insert with full audit shape (10-column row landed) |
+| 2 | RLS scoping — owner sees own audit row; outsider sees zero (simulated via `set_config('request.jwt.claims', ...)`) |
+| 3 | `DELETE FROM leases` cascades to lease-child tables (verified on `lease_activity_log`) |
+| 4 | End-to-end edge-function-equivalent sequence: delete leases → delete workspace → insert audit. Zero orphans across `workspaces`, `leases`, `workspace_members`, `workspace_roles`, `invite_tokens`, `approval_policies`, `lease_activity_log`, `lease_approval_chain` (both via lease_id and via workspace_id) |
+| 5 | Confirms the FK trap the edge function defeats: deleting the workspace WITHOUT deleting leases first leaves a `workspace_id = NULL` orphan (the lease survives, hidden by RLS but still in the DB consuming storage) — proves why the explicit-leases-first ordering matters |
 
 ### `phase3_lifecycle_expansion.test.sql`
 

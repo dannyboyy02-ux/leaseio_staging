@@ -12,6 +12,15 @@ list and reference it in the commit message.
   Fixed in commit `9b46dca`. Permanent regression test belongs in the future
   Owner Workspace Management spec rather than as a sticky issue here.
 
+**Status reconciliation (Owner Workspace Management close, 2026-05-05):**
+- Item #8 (duplicate workspace creation): orphan `440d279f-a781-450a-863a-73b51780becd`
+  was successfully deleted via the new feature during Checkpoint 3 smoke,
+  which validated the delete-workspace edge function's cascade end-to-end.
+  The underlying duplicate-creation bug at signup/onboarding remains open
+  — a separate ticket fixes that surface; OWM only provided the cleanup tool.
+- Item #9 (creator-membership timestamps) NOT addressed by OWM. Still open.
+- No new items surfaced during OWM smoke.
+
 ---
 
 ## 1. `profiles` 400 on user-preferences read
@@ -255,9 +264,15 @@ before any new workspace insert.
 
 **Severity:** Medium-Low — orphaned workspaces are invisible due to
 empty member/lease state, but they pollute the workspace switcher and
-inflate any "active workspaces" count. The orphan `440d279f-a781-450a-863a-73b51780becd`
-is safe to delete (zero members, zero leases) and will be cleaned up via
-the Owner Workspace Management feature when it ships.
+inflate any "active workspaces" count.
+
+**Update 2026-05-05:** The orphan `440d279f-a781-450a-863a-73b51780becd`
+was deleted via the new Owner Workspace Management feature during its
+Checkpoint 3 smoke (post-delete DB verification: zero orphan rows across
+every dependent table; audit row populated correctly). The
+duplicate-creation bug itself is still open — preventing future
+duplicates is a separate Signup/Onboarding ticket and is NOT addressed
+by Owner Workspace Management.
 
 ---
 
