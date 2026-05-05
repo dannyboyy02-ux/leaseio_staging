@@ -803,8 +803,13 @@ export default function ApprovalQueue() {
     setIsActing(true);
     const now = new Date().toISOString();
     const lease = approveTarget;
-    // Phase 3: bucket chain awaiting_concept_approval the same as legacy submitted.
-    const isManager = isEquivalent(lease.lifecycle_status as LifecycleStatus, 'submitted');
+    // Phase 3 follow-up: literal legacy comparison only. Chain leases are
+    // approved via the chain edge function (act-on-chain-step), not this
+    // handler. If a chain value somehow reaches here, isManager === false
+    // and we'd fall through to the financial-approver branch — both wrong
+    // for chain. Legacy queue is legacy-only post-revert, so this defends
+    // in depth.
+    const isManager = lease.lifecycle_status === 'submitted';
 
     try {
       if (isManager) {
@@ -883,8 +888,9 @@ export default function ApprovalQueue() {
     setIsActing(true);
     const now = new Date().toISOString();
     const lease = rejectTarget;
-    // Phase 3: bucket chain awaiting_concept_approval the same as legacy submitted.
-    const isManager = isEquivalent(lease.lifecycle_status as LifecycleStatus, 'submitted');
+    // Phase 3 follow-up: literal legacy comparison only. Chain rejects fire
+    // via act-on-chain-step.
+    const isManager = lease.lifecycle_status === 'submitted';
 
     try {
       if (isManager) {
@@ -1054,8 +1060,10 @@ export default function ApprovalQueue() {
             onApprove={setApproveTarget}
             onReject={setRejectTarget}
             onView={(l) => {
-              // Phase 3: include chain in_concept_review equivalent.
-              if (isFinancialApprover && isEquivalent(l.lifecycle_status as LifecycleStatus, 'under_review')) {
+              // Phase 3 follow-up: literal legacy comparison. Chain leases
+              // never reach this card (legacy queue is legacy-only); the
+              // financial-review page is legacy-only too.
+              if (isFinancialApprover && l.lifecycle_status === 'under_review') {
                 navigate(`/app/leases/${l.id}/financial-review`);
               } else {
                 navigate(`/app/leases/${l.id}`);
