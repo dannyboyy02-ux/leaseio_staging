@@ -25,6 +25,7 @@ Recommended path:
    psql "$TEST_DATABASE_URL" -f supabase/tests/owner_workspace_mgmt.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase4_lease_documents.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase5_signator_activation.test.sql
+   psql "$TEST_DATABASE_URL" -f supabase/tests/phase6_chain_rerouting.test.sql
    ```
    …or paste into the Studio SQL editor for that environment.
 4. Search the output for `FAIL` — empty result means everything passed.
@@ -120,6 +121,19 @@ via curl smoke tests in the deployed app.
 | 7 | activity_type CHECK accepts the 5 Phase 4 values + preserves all 36 prior values | regression check covering pre-Phase-2 + Phase 2 + Phase 3 |
 | 8 | Storage RLS uses path-prefix workspace check | introspection of storage.foldername in upload/read/delete policies (post-fix migration) |
 | 9 | lease_documents RLS scoping | owner sees own; outsider workspace member sees zero (simulated via set_config request.jwt.claims) |
+
+### `phase6_chain_rerouting.test.sql`
+
+6 tests covering the Phase 6 chain rerouting schema, trigger, and activity-type vocabulary:
+
+| # | Test | Checks |
+|---|---|---|
+| 1 | Schema shape | `leases.reroute_evaluation_pending` column (boolean NOT NULL DEFAULT false); `lease_attribute_snapshots` and `lease_reroute_events` tables exist; 3 new indexes present (snapshots chronological, reroute events chronological, reroute events partial-index for `resulted_in_chain_violation`); `detect_lease_attribute_change` function + `leases_detect_attribute_change` trigger present |
+| 2 | Trigger semantics | Chain-driven non-terminal lease + policy-attribute change → flag=true + `attribute_change_detected` audit row written; legacy lease (no chain rows) → flag stays false, no audit row; terminal-state lease (rejected) → flag stays false, no audit row |
+| 3 | Trigger ignores non-policy attribute changes | Updating `notes` (not in the 5 policy-triggering attributes) on a chain-driven lease leaves flag=false, no audit row |
+| 4 | `detection_mode` CHECK | Accepts the 3 valid values (auto, manual_admin, manual_audit); rejects bogus values |
+| 5 | Phase 6 activity types + cross-phase regression | All 9 Phase 6 activity types accepted (attribute_change_detected, chain_rerouted, chain_reroute_skipped_no_match, chain_violation_entered, chain_violation_resolved, reroute_audit_run, manual_reroute_requested, manual_reroute_approved, manual_reroute_rejected); 16 representative prior values from legacy + Phases 2-5 still accepted |
+| 6 | Migration idempotency sentinel | `ADD COLUMN IF NOT EXISTS` + `CREATE TABLE IF NOT EXISTS` re-runs are no-ops |
 
 ### `phase5_signator_activation.test.sql`
 

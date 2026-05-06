@@ -541,6 +541,176 @@ Do NOT build any of these in Phase 6.
 
 ---
 
-## As-built notes (placeholder, populated at close)
+## As-built notes (closed 2026-05-06, citing spec SHA `e160340`)
 
-Spec ↔ implementation deltas to be captured here at Checkpoint 5 close, citing this spec doc by SHA per the audit-doc inheritance rule.
+Spec and implementation agree on the load-bearing pieces. Deltas
+captured below — implementation details future phases inherit.
+
+### A1. Pure helpers placed in `approvalChainLogic.ts`, not `lifecycleStates.ts`
+
+Spec §"Pure helpers" said "extend `src/lib/lifecycleStates.ts` and Deno
+mirror." Implementation puts `reconcileChainSteps` and
+`rollbackTargetForNewChain` in `src/lib/approvalChainLogic.ts` ↔
+`supabase/functions/_shared/approval_chain.ts` instead. Reason: both
+helpers consume `ChainStepLike` (defined in `approvalChainLogic.ts`).
+Putting them in `lifecycleStates.ts` would invert the dependency
+direction (lifecycle → chain). Same architectural call as Phase 5's
+Deno-only `lifecycle_mode.ts` carve-out. Mirror parity is preserved
+under the existing SYNC CONSTRAINT pattern.
+
+### A2. activity_type CHECK extension snapshotted from live state
+
+C1 standing pattern: `pg_get_constraintdef` snapshot of
+`lease_activity_log_activity_type_check` taken before extending. Live
+state at Phase 6 C1 had 47 values (Phase 5 closed at 47). Phase 6
+appends 9 → constraint now carries 56 values. The Phase 6 SQL test
+file (TEST 5.B) keeps a representative cross-phase regression sample
+to catch future drift.
+
+### A3. C1 `chain_violation` consumer audit closed one trivial gap
+
+Phase 3 added `chain_violation` to the lifecycle_status CHECK + type
+union + display config + state groups. Phase 6 actually starts WRITING
+the state. Audit at C1 found:
+  - `LeaseStatusBadge`, `RecentActivity`, `lifecycleStates.ts`,
+    `types/lifecycle.ts` already render it (no fix needed)
+  - `Portfolio` / `FinancialSummary` / `UpcomingEvents` /
+    `UpcomingRisks` correctly EXCLUDE it from "active" counts (no fix)
+  - **Gap closed:** `Leases.tsx:133` listing filter didn't include
+    `chain_violation` — would have orphaned violating leases. Fixed
+    inline at C1.
+  - **Deferred to C4:** `useNeedsAction` surfacing `chain_violation`
+    needed the banner UX. Wired in C4.1 with an `AlertOctagon`-iconed
+    `otherFlags` entry that gets `unshift`ed to the front (highest
+    priority).
+
+### A4. Trigger uses `BEFORE UPDATE` + flag-and-poll, not inline resolver call
+
+Spec §"Trigger to detect attribute changes" already specified this:
+the trigger writes an audit row + sets `reroute_evaluation_pending =
+true`, and does NOT invoke the resolver inline. Implementation
+matches. Reason captured in CLAUDE.md/the spec/the trigger comment:
+inline edge-function calls from triggers are an anti-pattern
+(transactional risk, no retry semantics). The flag is the queue;
+`process-pending-reroute-evaluations` is the worker; real-time UI
+calls clear the flag opportunistically.
+
+### A5. Cron functions invoke the resolver via HTTP fetch
+
+Both `process-pending-reroute-evaluations` and `reroute-audit-sweep`
+call `resolve-approval-chain` over HTTP, propagating the caller's
+Bearer token. Production cron supplies the service-role JWT; manual
+smoke runs work with any authenticated user JWT. The alternative
+(direct supabase-js client call from inside an edge function)
+doesn't work in the Deno runtime — there's no in-process function
+invocation primitive. Documented in each function's header comment.
+
+### A6. Reroute reconciliation is two atomic statements, not one
+
+Spec §"Critical guarantees" notes the initial chain INSERT is atomic.
+Phase 6 reroute mode issues UPDATE (supersede) + INSERT (add) as
+SEPARATE statements. Each is atomic individually but the pair is not.
+Failure recovery is the trigger flag staying set so a subsequent cron
+run retries. Documented in `resolve-approval-chain`'s header comment.
+The lease_reroute_events row is the durable receipt; the snapshot
+write happens after both reconciliation statements succeed, so a
+partial failure leaves the snapshot stale and the next reroute will
+attempt to reconcile from the prior policy state.
+
+### A7. Lifecycle Transition Convention applied at every reroute transition
+
+Per CLAUDE.md, every chain-driven lifecycle UPDATE bumps
+`status_changed_at` in the same statement and writes a
+`status_change` row with both top-level columns AND nested in
+details, plus `routing_path: 'chain'`. Phase 6 introduces three
+transition shapes:
+  - reroute that rolls lifecycle back (e.g.,
+    `final_review → concept_under_review`) — handled by
+    `resolve-approval-chain`'s `updateLifecycle` + `logStatusChange`
+    helpers, mirroring Phase 5's `act-on-chain-step` helpers exactly
+  - reroute that pushes lifecycle to `chain_violation` (when current
+    is `fully_executed`/`active`) — same helpers; activity log
+    additionally writes a `chain_violation_entered` row
+  - admin override that REVERTS chain_violation back to its prior
+    lifecycle (recovered from `lease_reroute_events.prior_lifecycle_status`)
+    — handled inline in `ChainViolationBanner`. Frontend writes
+    BOTH a `status_change` row AND a `chain_violation_resolved` row.
+
+### A8. Banner reverts to prior lifecycle by querying reroute_events
+
+`ChainViolationBanner`'s "Acknowledge and Override" needs to know
+where the lease was BEFORE chain_violation entry. Implementation
+queries the most recent `lease_reroute_events` row with
+`resulted_in_chain_violation = true` and reads its
+`prior_lifecycle_status`. Falls back to `'active'` if the row is
+somehow missing. The defensive fallback is unlikely to trip in
+practice (every chain_violation entry writes a reroute_events row)
+but matters for hand-edited or pre-Phase-6 chain_violation states.
+
+### A9. Multi-signator concurrence still applies (Phase 5 behavior)
+
+Phase 5's "first signator approve commits the lease" semantics
+flow through Phase 6 unchanged: if a reroute adds new signator
+chain rows on a lease that's already past the signator stage, the
+new rows show as pending but `act-on-chain-step` doesn't gate on
+isStageComplete for signator. Future phases that introduce
+multi-signator concurrence requirements will need to revisit this
+branch in `act-on-chain-step` AND ensure reroute reconciliation
+preserves the right step combinations. Captured here so it's not
+forgotten.
+
+### A10. "Mark as Acceptable" deferred from admin audit dashboard
+
+Spec §"Frontend — admin reroute audit dashboard" lists a "Mark as
+Acceptable" button alongside "Trigger Manual Reroute." Not shipped
+in C4. Reason: the activity_type vocabulary doesn't include a clean
+"audit_dismissed" or similar. Adding one would be a Phase 6.1 micro-
+migration. The current behavior — admin sees the finding, decides not
+to act, the next sweep re-detects — is a workable interim. If
+recurring audit findings become noise, add the dismiss vocabulary.
+
+### A11. Submitter notification uses localStorage, not a DB column
+
+Spec §"Frontend — submitter reroute notification" said "an in-app
+notification is created" and "a modal appears the next time they
+view the lease." Implementation uses localStorage at key
+`leaseio.reroute_seen.<eventId>` to track per-event acknowledgment,
+NOT a `lease_reroute_events.submitter_notified_at` column. Reason:
+the notification is per-browser convenience UX, not a hard audit
+requirement. Audit-quality "submitter was notified" already lives
+in the `chain_rerouted` activity log row's notification details.
+Adding a DB column would require a migration + UPDATE per
+notification dismiss, with no real audit benefit. localStorage
+unavailability falls back to "show every page load" — minor UX
+cost, no correctness impact.
+
+### A12. RerouteHistorySection scroll anchor
+
+The `RerouteHistorySection` is wrapped in a
+`<div data-reroute-history>` so the `RerouteNotificationModal`'s
+"View Chain Reroute History" button can find it via
+`document.querySelector('[data-reroute-history]')` and smooth-scroll.
+Tab-state-aware scrolling would require lifting the active-tab
+state up; deferred. The Documents tab is the default lease detail
+tab for chain-driven leases, so the behavior degrades gracefully on
+other tabs (the modal still dismisses, the user just navigates to
+Documents to see history).
+
+### A13. Closeout commit cites the spec by SHA
+
+Per the audit-doc inheritance rule, this closeout cites
+`docs/PHASE_6_BUILD_SPEC.md` at SHA `e160340` (the docs commit
+ratifying Phase 6).
+
+---
+
+## Phase 6 commit chain
+
+| Checkpoint | Commit | What landed |
+|---|---|---|
+| Spec ratified | `e160340` | This document, ratified 2026-05-05 |
+| C1 — schema | `8346f45` | Migration 20260506000000: `lease_attribute_snapshots` + `lease_reroute_events` tables, `leases.reroute_evaluation_pending` flag, `detect_lease_attribute_change` BEFORE UPDATE trigger, 9 new activity types, `Leases.tsx` listing filter fix |
+| C2 — pure helpers | `34b81f0` | `reconcileChainSteps` + `rollbackTargetForNewChain` (Node + Deno mirror); 16 new vitest cases; mirror parity verified |
+| C3 — edge functions | `9f2791b` | `resolve-approval-chain` v3→v4 (real reroute mode + audit_mode + snapshot writes); 3 new functions: `process-pending-reroute-evaluations`, `reroute-audit-sweep`, `admin-trigger-manual-reroute` |
+| C4 — frontend | `bdcba39` | `ChainViolationBanner`, `RerouteHistorySection`, `RerouteNotificationModal`, `RerouteAuditDashboard` page at `/app/admin/reroute-audit`; `useNeedsAction` chain_violation surfacing |
+| C5 — tests + close | (this commit) | `phase6_chain_rerouting.test.sql` (6-section matrix); README index updated; this As-built appendix; CLAUDE.md marked CLOSED |
