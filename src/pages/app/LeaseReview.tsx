@@ -70,6 +70,7 @@ import { UploadExecutedDocumentDialog } from "@/components/leases/UploadExecuted
 import { ExecutedTermsReview } from "@/components/leases/ExecutedTermsReview";
 import { VarianceReport } from "@/components/leases/VarianceReport";
 import { LeaseDocumentsTab } from "@/components/leases/LeaseDocumentsTab";
+import { DocumentsPanel } from "@/components/leases/documents/DocumentsPanel";
 import { LockedLeaseDetail } from "@/components/leases/locked/LockedLeaseDetail";
 import { ArchiveButton } from "@/components/leases/ArchiveButton";
 
@@ -2848,6 +2849,21 @@ export default function LeaseReview() {
 
                       {/* Documents */}
                       <TabsContent value="documents" className="mt-0 space-y-4">
+                        {/* Phase 4 — negotiation document iteration timeline.
+                            Renders above the legacy storage_path/executed_storage_path
+                            panel so the new iteration model is the primary surface;
+                            the legacy panel stays for backward compat with leases
+                            that pre-date Phase 4. */}
+                        <DocumentsPanel
+                          leaseId={lease.id}
+                          workspaceId={lease.workspace_id}
+                          lifecycleStatus={lease.lifecycle_status ?? ''}
+                          requestorId={lease.requestor_id ?? null}
+                          userId={lease.user_id ?? null}
+                          onLifecycleChanged={() => {
+                            queryClient.invalidateQueries({ queryKey: ['lease', leaseId] });
+                          }}
+                        />
                         <LeaseDocumentsTab
                           leaseId={lease.id}
                           filename={lease.filename}
