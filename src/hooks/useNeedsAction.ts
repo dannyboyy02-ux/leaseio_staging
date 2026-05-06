@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Clock, FileSearch, Upload } from 'lucide-react';
+import { AlertOctagon, Clock, FileSearch, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 
@@ -52,6 +52,10 @@ export function useNeedsAction() {
           .in('lifecycle_status', [
             'under_review', 'executed', 'submitted',
             'concept_under_review', 'fully_executed', 'concept_submitted',
+            // Phase 6: chain_violation is a critical action item that admins
+            // must address. Surfaced via otherFlags so the dashboard's
+            // NeedsAction strip pulls in the count.
+            'chain_violation',
           ]),
         (supabase as any)
           .from('lease_change_sets')
@@ -141,6 +145,24 @@ export function useNeedsAction() {
       ).length;
       if (noDocCount > 0) {
         otherFlags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active', icon: Upload });
+      }
+
+      // Phase 6: chain_violation leases are leases whose policy-required
+      // approver chain was not fully consulted before execution. These
+      // are the highest-priority action item \u2014 until resolved, the lease
+      // is in a governance gap. Surfaced regardless of whether retroactive
+      // approvers have been added; the banner on the lease detail page
+      // is the resolution surface.
+      const chainViolationCount = leases.filter(
+        (l) => l.lifecycle_status === 'chain_violation',
+      ).length;
+      if (chainViolationCount > 0) {
+        otherFlags.unshift({
+          label: 'Chain violation \u2014 retroactive approval required',
+          count: chainViolationCount,
+          href: '/app/leases?view=violations',
+          icon: AlertOctagon,
+        });
       }
 
       return { pendingApprovals, unlockedLeases, returnedLeases, otherFlags };

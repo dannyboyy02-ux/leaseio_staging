@@ -27,6 +27,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 import Onboarding from "./pages/app/Onboarding";
 import LeaseReview from "./pages/app/LeaseReview";
 import SignatorReview from "./pages/app/SignatorReview";
+import RerouteAuditDashboard from "./pages/app/RerouteAuditDashboard";
 import Portfolio from "./pages/app/Portfolio";
 import ApprovalQueue from "./pages/app/ApprovalQueue";
 import FinancialReview from "./pages/app/FinancialReview";
@@ -158,6 +159,20 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <SignatorReview />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Phase 6 — admin reroute audit dashboard. Gated to
+                    admin/owner: surfaces governance findings (would-be
+                    reroutes the auto-trigger missed) that require
+                    administrative judgment to act on. */}
+                <Route
+                  path="/app/admin/reroute-audit"
+                  element={
+                    <ProtectedRoute>
+                      <RequireRole allow={canEditWorkspaceSettings}>
+                        <RerouteAuditDashboard />
+                      </RequireRole>
                     </ProtectedRoute>
                   }
                 />

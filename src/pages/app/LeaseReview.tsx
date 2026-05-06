@@ -72,6 +72,9 @@ import { VarianceReport } from "@/components/leases/VarianceReport";
 import { LeaseDocumentsTab } from "@/components/leases/LeaseDocumentsTab";
 import { DocumentsPanel } from "@/components/leases/documents/DocumentsPanel";
 import { CounterSignaturePanel } from "@/components/leases/CounterSignaturePanel";
+import { ChainViolationBanner } from "@/components/leases/ChainViolationBanner";
+import { RerouteHistorySection } from "@/components/leases/RerouteHistorySection";
+import { RerouteNotificationModal } from "@/components/leases/RerouteNotificationModal";
 import { LockedLeaseDetail } from "@/components/leases/locked/LockedLeaseDetail";
 import { ArchiveButton } from "@/components/leases/ArchiveButton";
 
@@ -2252,6 +2255,15 @@ export default function LeaseReview() {
 
   return (
     <AppLayout>
+      {/* Phase 6 — submitter notification. Mounts at the top level so the
+          modal appears regardless of which tab is active when the page
+          loads. Self-gates on (current user === submitter && unseen
+          reroute event); renders nothing otherwise. */}
+      <RerouteNotificationModal
+        leaseId={lease.id}
+        requestorId={lease.requestor_id ?? null}
+        userId={lease.user_id ?? null}
+      />
       <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-muted/30">
         <AppHeader
           title={
@@ -2880,6 +2892,19 @@ export default function LeaseReview() {
                             }}
                           />
                         )}
+                        {lease.lifecycle_status === 'chain_violation' && (
+                          <ChainViolationBanner
+                            leaseId={lease.id}
+                            workspaceId={lease.workspace_id}
+                            lifecycleStatus={lease.lifecycle_status}
+                            onResolved={() => {
+                              queryClient.invalidateQueries({ queryKey: ['lease', leaseId] });
+                            }}
+                          />
+                        )}
+                        <div data-reroute-history>
+                          <RerouteHistorySection leaseId={lease.id} />
+                        </div>
                         <LeaseDocumentsTab
                           leaseId={lease.id}
                           filename={lease.filename}
