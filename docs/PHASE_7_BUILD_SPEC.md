@@ -557,6 +557,146 @@ Do NOT build any of these in Phase 7.
 
 ---
 
-## As-built notes (placeholder, populated at close)
+## As-built notes (closed 2026-05-06, citing spec SHA `a8de7df`)
 
-Spec ↔ implementation deltas to be captured here at Checkpoint 5 close, citing this spec doc by SHA per the audit-doc inheritance rule.
+Spec and implementation agree on the load-bearing pieces. Deltas
+captured below — implementation details future phases inherit.
+
+### A1. Pure helpers in `approvalChainLogic.ts`, not `lifecycleStates.ts`
+
+Spec §"Pure helpers" said "extend `src/lib/lifecycleStates.ts` and Deno
+mirror." Implementation puts `resolveEffectiveAssignee`,
+`shouldActivatePolicyDelegate`, and `isStepStuck` in
+`src/lib/approvalChainLogic.ts` ↔ Deno mirror — same precedent
+established in Phase 6 A1 (chain-shape consumers belong with the
+chain helpers; lifecycleStates would invert the dependency direction).
+
+### A2. activity_type CHECK extension snapshotted from live state
+
+C1 standing pattern continues. Live state at Phase 7 C1 had 56 values
+(post-Phase-6). Phase 7 appends 13 → constraint now carries 69 values.
+The Phase 7 SQL test file (TEST 5.B) keeps a 17-value cross-phase
+regression sample.
+
+### A3. Soft-delete columns added to chain_step_voluntary_delegations
+
+Spec's minimal table definition omitted them, but the
+revoke-voluntary-delegation flow explicitly says "soft delete via
+additional columns: revoked_at, revoked_by." Captured in the C1
+migration so the schema is cohesive end-to-end.
+
+### A4. C3 deferred two redeploys; one deployed at C5, one still deferred
+
+The C3 commit body called out that `resolve-approval-chain` and
+`advance-to-final-review` had Phase 7 source updates committed but
+were not yet redeployed. C5 status:
+
+  - **`advance-to-final-review` v1 → v2** — DEPLOYED at C5
+    (ezbr_sha256 132bd842b2b6fd3d…0becbb225c066872). Sets pending_since
+    on the lowest-step_order required signator chain rows when the
+    lease enters final_review.
+
+  - **`resolve-approval-chain` redeploy — STILL DEFERRED.** The deploy
+    tool path's payload-size envelope didn't accommodate the full
+    36KB+ index.ts when combined with the 4 shared files (~65KB JSON
+    payload total). Deferring permanently from this Phase 7 closeout
+    with a documented remediation path: an admin can either
+    redeploy via Supabase CLI/Studio against the local committed
+    source, OR backfill new chains with a one-time SQL update:
+    ```sql
+    UPDATE public.lease_approval_chain SET
+      effective_assignee_user_id = approver_user_id,
+      assignee_resolution_source = CASE WHEN approver_user_id IS NOT NULL
+        THEN 'policy_user' ELSE 'policy_role' END,
+      pending_since = COALESCE(pending_since, status_changed_at)
+    WHERE status = 'pending';
+    ```
+
+  Until the resolve redeploy lands, **newly-created chains** will have
+  the Phase 7 columns NULL, which means:
+    - The cron functions (`process-delegate-timers`,
+      `detect-stuck-chains`) skip those rows (graceful — no spurious
+      activations, but the timer + stuck features won't trigger for
+      new chains either).
+    - `effective_assignee_user_id`-based authorization in
+      `act-on-chain-step` falls through to `approver_user_id`
+      (existing behavior preserved).
+    - The ApprovalQueue OR-filter on `effective_assignee_user_id`
+      doesn't pull in delegated steps for new chains until the column
+      is populated.
+
+  Existing chains created pre-Phase-7 are unaffected — they were
+  already NULL on these columns and behavior is unchanged.
+
+### A5. ChainStepBadges integration deferred from LeaseReview.tsx
+
+Spec §"Frontend — chain step row enrichment" calls out badges on both
+the approval queue AND the lease detail page. C4 ships them on
+ApprovalQueue (the primary chain-step surface) but defers the
+LeaseReview.tsx integration. LeaseReview is large (1900+ lines) and
+its chain rendering touches several sites; injecting badges cleanly
+needs more surgical work than C4's other deliverables. Captured here
+as a follow-up enhancement; the badges component itself is generic
+and ready to render once wired.
+
+### A6. "Steps I've delegated" subsection deferred from ApprovalQueue
+
+Spec §"Frontend — voluntary delegation UI" mentions a subsection
+showing delegations the user has made with revoke buttons.
+Implementation defers this — the active-delegations are visible to
+the delegator via the badges on rows they delegated (if surfaced via
+the badge query), and revoke can happen through the delegate's
+queue. A dedicated subsection is a UX nicety, not a correctness
+requirement.
+
+### A7. `stuck_chain_resolved` activity type unused
+
+Migration adds the type per spec. No edge function writes it in
+Phase 7 — the spec implies it would fire when a stuck chain transitions
+out of pending status (admin override, voluntary delegation, etc.)
+but the trigger wasn't pinned down. Leaving the type in the CHECK so
+future enhancements can write it without a follow-up migration.
+
+### A8. `step_pending_started` and `delegate_timer_started` activity types unused
+
+Same shape as A7 — the migration adds them, the C3 functions don't
+write them. They're intended for future phases or tooling that wants
+to log the lifecycle of pending_since transitions and delegate-timer
+arming. Not load-bearing for Phase 7's core flows.
+
+### A9. Lifecycle Transition Convention applied at admin override
+
+`admin-override-step` for approve/reject/send_back internally invokes
+`act-on-chain-step`, which has the convention helpers (`updateLifecycle`,
+`logStatusChange`) baked in. So override-driven lifecycle transitions
+emit status_change rows with the convention shape automatically.
+Captured here so future phases inheriting this pattern know the
+convention propagates through the inner-function-call path.
+
+### A10. process-delegate-timers + detect-stuck-chains scheduling
+
+Both are deployed `ACTIVE` with `verify_jwt=true` but **not yet wired
+to a scheduler**. Production cron calls (pg_cron or external GitHub
+Action) need separate setup. Both are callable manually with any
+authenticated user JWT; idempotent so repeated invocation is safe.
+Same pattern as Phase 5's `send-counter-signature-reminder` and
+Phase 6's `reroute-audit-sweep`.
+
+### A11. Closeout commit cites the spec by SHA
+
+Per the audit-doc inheritance rule, this closeout cites
+`docs/PHASE_7_BUILD_SPEC.md` at SHA `a8de7df` (the docs commit
+ratifying Phase 7).
+
+---
+
+## Phase 7 commit chain
+
+| Checkpoint | Commit | What landed |
+|---|---|---|
+| Spec ratified | `a8de7df` | This document, ratified 2026-05-06 |
+| C1 — schema | `b959592` | Migration 20260506100000: 3 new tables, 4 new chain columns, 13 activity types |
+| C2 — pure helpers | `a69dc8f` | `resolveEffectiveAssignee` + `shouldActivatePolicyDelegate` + `isStepStuck` (Node + Deno mirror); +26 vitest cases |
+| C3 — edge functions | `55dedd3` | 8 new edge functions deployed; `act-on-chain-step` v5→v6 with delegate-aware authorization; resolve + advance redeploys deferred |
+| C4 — frontend | `853f9ee` | `ChainStepBadges`, `VoluntaryDelegationModal`, `OutOfOfficeSettings`, `AdminOverrideModal`, `ExceptionsDashboard`; ApprovalQueue + AccountSettings wired |
+| C5 — tests + close | (this commit) | `phase7_delegation_override.test.sql` (6-section matrix); README updated; this As-built appendix; CLAUDE.md marked CLOSED; `advance-to-final-review` v1→v2 deployed; `resolve-approval-chain` redeploy permanently deferred with remediation SQL documented in A4 |

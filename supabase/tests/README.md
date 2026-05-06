@@ -26,6 +26,7 @@ Recommended path:
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase4_lease_documents.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase5_signator_activation.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase6_chain_rerouting.test.sql
+   psql "$TEST_DATABASE_URL" -f supabase/tests/phase7_delegation_override.test.sql
    ```
    …or paste into the Studio SQL editor for that environment.
 4. Search the output for `FAIL` — empty result means everything passed.
@@ -121,6 +122,19 @@ via curl smoke tests in the deployed app.
 | 7 | activity_type CHECK accepts the 5 Phase 4 values + preserves all 36 prior values | regression check covering pre-Phase-2 + Phase 2 + Phase 3 |
 | 8 | Storage RLS uses path-prefix workspace check | introspection of storage.foldername in upload/read/delete policies (post-fix migration) |
 | 9 | lease_documents RLS scoping | owner sees own; outsider workspace member sees zero (simulated via set_config request.jwt.claims) |
+
+### `phase7_delegation_override.test.sql`
+
+6 tests covering the Phase 7 delegation, override, and exception schema deltas:
+
+| # | Test | Checks |
+|---|---|---|
+| 1 | Schema shape | 3 new tables (`user_out_of_office`, `chain_step_overrides`, `chain_step_voluntary_delegations`); 4 new chain columns (`pending_since`, `delegate_activated_at`, `effective_assignee_user_id`, `assignee_resolution_source`); 4 new CHECK constraints; OOO updated_at trigger present |
+| 2 | OOO CHECK constraints | `ooo_valid_window` rejects starts >= ends; `ooo_no_self_delegation` rejects user_id == delegate_user_id; valid distinct-window OOO accepted |
+| 3 | chain_step_overrides CHECKs | `length(trim(reason)) >= 20` enforced (rejects 9 chars, accepts 20 boundary, rejects whitespace-padded short); 5 valid override_action enum values accepted; bogus action rejected |
+| 4 | Voluntary delegation + assignee source | `vd_no_self_delegation` rejects same delegated_by/delegated_to; valid distinct vd accepted; 6 valid assignee_resolution_source values accepted; NULL accepted (pre-Phase-7 rows); bogus source rejected |
+| 5 | Phase 7 activity types + cross-phase regression | All 13 Phase 7 values accepted; 17 representative prior values from legacy / Phases 2-6 still accepted |
+| 6 | Migration idempotency sentinel | `ADD COLUMN IF NOT EXISTS` + `CREATE TABLE IF NOT EXISTS` re-runs are no-ops |
 
 ### `phase6_chain_rerouting.test.sql`
 
