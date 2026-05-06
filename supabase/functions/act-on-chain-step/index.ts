@@ -37,6 +37,11 @@ function jsonResponse(payload: unknown, status: number, origin: string | null) {
 interface RequestBody {
   chainStepId: string;
   action: "approve" | "reject" | "send_back";
+  // For concept-stage actions, this is the reviewer's note. For
+  // signator approve, this is the intent-to-bind attestation captured
+  // from the signator review page (≥30 chars enforced UI-side; server
+  // enforces non-empty as defense-in-depth). Same field for both —
+  // the UI populates it appropriately for the stage.
   comment?: string;
 }
 
@@ -223,6 +228,22 @@ serve(async (req) => {
     );
   }
 
+  // Phase 5: signator approve requires a non-empty attestation.
+  // Defense-in-depth alongside the row-level CHECK on
+  // leases.signator_attestation_required (which rejects the lease
+  // UPDATE) and the UI's ≥30-char gate.
+  if (step.stage === "signator" && action === "approve" && !comment) {
+    return jsonResponse(
+      {
+        ok: false,
+        error:
+          "Signator approval requires a non-empty attestation. Type your intent-to-bind statement before approving.",
+      },
+      400,
+      origin,
+    );
+  }
+
   const rateLimitResponse = await enforceWorkspaceRateLimit(
     supabaseAdmin,
     step.workspace_id,
@@ -322,14 +343,22 @@ serve(async (req) => {
   // Capture lease's current lifecycle for accurate from_status in chain
   // mode. Legacy mode keeps Phase 2's literal from_status values
   // verbatim to honor the byte-identical-observable-behavior contract.
+  //
+  // Phase 5: also capture requestor_id / user_id for the execution-owner
+  // default when signator approve transitions the lease to
+  // pending_counter_signature. Cheap (same row, more columns).
   let currentLifecycle: string | null = null;
+  let leaseRequestorId: string | null = null;
+  let leaseUserId: string | null = null;
   if (mode === "chain") {
     const { data: leaseRow } = await supabaseAdmin
       .from("leases")
-      .select("lifecycle_status")
+      .select("lifecycle_status, requestor_id, user_id")
       .eq("id", step.lease_id)
       .maybeSingle();
     currentLifecycle = (leaseRow as any)?.lifecycle_status ?? null;
+    leaseRequestorId = (leaseRow as any)?.requestor_id ?? null;
+    leaseUserId = (leaseRow as any)?.user_id ?? null;
   }
 
   // Stage advancement / lifecycle transitions.
@@ -367,14 +396,51 @@ serve(async (req) => {
       .eq("lease_id", step.lease_id)
       .eq("status", "pending");
   } else if (action === "send_back") {
-    // Chain mode → 'concept_submitted' (the chain-vocabulary equivalent
-    // of Phase 2's 'submitted' destination). Legacy mode → 'submitted'
-    // verbatim. Mark current-stage pending steps as superseded.
-    const targetLifecycle = mode === "chain" ? "concept_submitted" : "submitted";
+    // Phase 5: send_back semantics differ by stage in chain mode.
+    //   - concept stage send_back  → concept_submitted (Phase 2/3 behavior)
+    //   - signator stage send_back → in_negotiation (Phase 5)
+    // The signator's send-back loops the lease back to negotiation,
+    // not back to the concept stage — concept approvers already
+    // signed off; what changed is in the negotiated terms.
+    //
+    // Legacy mode keeps the Phase 2 byte-identical behavior
+    // (always → 'submitted').
+    let targetLifecycle: string;
+    let activityType: string;
+    if (mode === "chain" && step.stage === "signator") {
+      targetLifecycle = "in_negotiation";
+      activityType = "final_review_returned_to_negotiation";
+    } else if (mode === "chain") {
+      targetLifecycle = "concept_submitted";
+      activityType = "chain_step_sent_back";
+    } else {
+      targetLifecycle = "submitted";
+      activityType = "chain_step_sent_back";
+    }
+
     const result = await updateLifecycle(step.lease_id, targetLifecycle);
     if (result.ok) {
       lifecycleChange = targetLifecycle;
-      if (mode === "chain") {
+      if (mode === "chain" && step.stage === "signator") {
+        await logStatusChange(
+          step.lease_id,
+          currentLifecycle ?? "final_review",
+          "in_negotiation",
+          {
+            triggered_by: "chain_step_sent_back",
+            chain_step_id: step.id,
+            stage: "signator",
+            reason: comment,
+          },
+        );
+        // Phase 5 audit row capturing the signator-specific transition
+        // semantics. Distinct from chain_step_sent_back so downstream
+        // dashboards can differentiate concept-vs-signator returns.
+        await logActivity(step.lease_id, "final_review_returned_to_negotiation", {
+          chain_step_id: step.id,
+          reason: comment,
+        });
+      } else if (mode === "chain") {
         await logStatusChange(
           step.lease_id,
           currentLifecycle ?? "concept_under_review",
@@ -392,6 +458,13 @@ serve(async (req) => {
         });
       }
     }
+    // For BOTH stages: mark only the current stage's pending rows as
+    // superseded. Concept rows from a prior stage stay 'approved'
+    // (preserving the audit trail); the spec's intent for signator
+    // send-back is that the signator step row goes to 'sent_back'
+    // (already done by the global UPDATE earlier in this handler) and
+    // the lease is re-advanced via Phase 4's advance-to-final-review
+    // when ready, which will insert a fresh pending signator row.
     await supabaseAdmin
       .from("lease_approval_chain")
       .update({ status: "superseded" })
@@ -480,7 +553,148 @@ serve(async (req) => {
         nextAssignees = findFirstPendingAssignees(allRows, "concept");
       }
     } else if (step.stage === "signator") {
-      // Phase 2/3 no-op for signator stage — Phase 5 will own it.
+      // Phase 5: signator approve transitions the lease to
+      // pending_counter_signature. The lease moves out of approval
+      // workflow and into counter-signature chase mode.
+      //
+      // Required preconditions (already validated upstream):
+      //   - mode === 'chain' (signator chain rows only exist in chain)
+      //   - comment (= attestation) is non-empty (validated at body
+      //     parsing time alongside reject/send_back validation)
+      //   - The chain step has been authorized + UPDATED to status=approved
+      //     by the standard handler block above; this block does the
+      //     post-approve lease state transition.
+      //
+      // Note: Phase 5 spec assumes a single required signator step
+      // resolves the stage on first approve. Multi-signator concurrence
+      // is out of scope (chain rows can be added but only one is
+      // consumed; if isStageComplete returns false, the lease stays in
+      // final_review and the additional signator rows wait their turn).
+      // We don't gate on isStageComplete here — even if there are more
+      // signator rows, this single approve is the policy moment that
+      // commits the company. This matches the spec's "Approve" branch.
+
+      // Look up the workspace's counter-signature window
+      const { data: wsRow } = await supabaseAdmin
+        .from("workspaces")
+        .select("counter_signature_default_due_days")
+        .eq("id", step.workspace_id)
+        .maybeSingle();
+      const dueDays = (wsRow as any)?.counter_signature_default_due_days ?? 21;
+
+      // Compute due date (UTC midnight today + dueDays). YYYY-MM-DD
+      // string is what the date column expects.
+      const today = new Date();
+      const dueDate = new Date(Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        today.getUTCDate() + dueDays,
+      ));
+      const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+      // Default execution owner: the lease submitter. Falls back to
+      // user_id (the legacy uploader column) if requestor_id is null.
+      const executionOwnerId = leaseRequestorId ?? leaseUserId;
+
+      // Lease UPDATE: lifecycle + signator approval + counter-signature
+      // setup + execution-owner assignment all in one statement so the
+      // attestation CHECK constraint sees a consistent row.
+      const nowIso = new Date().toISOString();
+      const { error: leaseUpdateError } = await supabaseAdmin
+        .from("leases")
+        .update({
+          lifecycle_status: "pending_counter_signature",
+          signator_approved_at: nowIso,
+          signator_attestation: comment,
+          counter_signature_due_date: dueDateStr,
+          execution_owner_id: executionOwnerId,
+          status_changed_at: nowIso,
+        })
+        .eq("id", step.lease_id);
+      if (leaseUpdateError) {
+        console.error(
+          "[act-on-chain-step] signator lease update error:",
+          leaseUpdateError.message,
+        );
+        // The chain step has already been marked approved by the
+        // earlier UPDATE. We can't easily roll that back; log and
+        // surface the error so the signator UI can retry the lease
+        // update path (which is idempotent given the chain step is
+        // already approved).
+        return jsonResponse(
+          {
+            ok: false,
+            error: `Signator approve recorded on chain step but lease update failed: ${leaseUpdateError.message}`,
+            reason: "lease_update_failed",
+          },
+          500,
+          origin,
+        );
+      }
+
+      lifecycleChange = "pending_counter_signature";
+      stageCompleted = isStageComplete(allRows, "signator");
+
+      // Phase 5 activity log entries:
+      //   - signator_attestation_recorded — captures the attestation
+      //     text for forensic audit (separate from chain_step_approved
+      //     so consumers can filter on attestation events specifically)
+      //   - chain_stage_completed — Phase 2 contract; retained
+      //   - pending_counter_signature_started — Phase 3 contract;
+      //     captures the new lifecycle state's entry
+      //   - execution_owner_assigned — captures the auto-assignment
+      //   - status_change — Lifecycle Transition Convention
+      await logActivity(step.lease_id, "signator_attestation_recorded", {
+        chain_step_id: step.id,
+        attestation: comment,
+        attestation_length: comment.length,
+      });
+      await logActivity(step.lease_id, "chain_stage_completed", {
+        stage: "signator",
+        chain_step_id: step.id,
+      });
+      await logActivity(step.lease_id, "pending_counter_signature_started", {
+        chain_step_id: step.id,
+        counter_signature_due_date: dueDateStr,
+      });
+      if (executionOwnerId) {
+        await logActivity(step.lease_id, "execution_owner_assigned", {
+          execution_owner_id: executionOwnerId,
+          assigned_by: "system",
+          reason: "default_at_signator_approval",
+        });
+      }
+      await logStatusChange(
+        step.lease_id,
+        currentLifecycle ?? "final_review",
+        "pending_counter_signature",
+        {
+          triggered_by: "signator_approved",
+          chain_step_id: step.id,
+          counter_signature_due_date: dueDateStr,
+          execution_owner_id: executionOwnerId,
+        },
+      );
+
+      // Notify the execution owner that they're now responsible for
+      // chasing the counter-signature.
+      if (executionOwnerId) {
+        await supabaseAdmin.from("lease_activity_log").insert({
+          lease_id: step.lease_id,
+          user_id: null,
+          activity_type: "comment",
+          details: {
+            notification_type: "execution_owner_assigned",
+            recipient_ids: [executionOwnerId],
+            message:
+              `You are responsible for chasing the counter-signed document. Due ${dueDateStr}.`,
+          },
+        });
+      }
+
+      // No nextAssignees for Phase 5 — counter-signature is not a
+      // chain step, it's a manual upload + record-counter-signature
+      // edge function call.
     }
   }
 
