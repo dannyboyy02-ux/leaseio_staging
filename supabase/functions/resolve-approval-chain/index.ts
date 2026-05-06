@@ -1,20 +1,35 @@
-// resolve-approval-chain — Phase 2
+// resolve-approval-chain — Phase 2 (initial resolution) + Phase 6 (reroute)
 //
-// Called by LeaseRequestForm submission (and by Phase 6 rerouting later).
-// Loads policy attributes from the lease, finds the matching approval
-// policy, snapshots it into lease_approval_chain, and returns the first
-// stage's assignees so the caller can notify them.
+// Two modes selected by request body:
+//   initialResolution: true  → matches policy, inserts chain rows, writes
+//                              the first lease_attribute_snapshots row.
+//                              Idempotent: existing chain → success no-op.
+//   initialResolution: false → reroute mode. Loads the most recent snapshot,
+//                              diffs against current lease attributes, and
+//                              if a different policy now matches, reconciles
+//                              the existing chain (preserve / supersede /
+//                              add), rolls lifecycle back to the earliest
+//                              unsatisfied stage (or `chain_violation` if
+//                              the lease has executed), writes a fresh
+//                              snapshot + reroute_event row, and clears
+//                              `reroute_evaluation_pending`.
+//   auditMode (Phase 6)      → reroute-mode dry-run. Detects a would-be
+//                              reroute, writes a single `reroute_audit_run`
+//                              activity row, and returns the diff. Does NOT
+//                              modify chain rows, lifecycle, snapshots, or
+//                              the flag. Used by reroute-audit-sweep.
 //
 // Critical guarantees:
-//   - The chain INSERT is atomic. If anything fails before or during the
-//     insert (separation violation, ambiguous match, DB error, anything)
-//     no chain rows land. The lease state is the caller's concern; this
-//     function only reports the failure (with chain_resolution_failed).
-//   - Idempotent on initialResolution=true: if the lease already has any
-//     chain rows, return success without inserting (handles flaky-network
-//     retries from the form).
+//   - The initial chain INSERT is atomic. If anything fails before or
+//     during it, no chain rows land.
+//   - Idempotent on initialResolution=true: existing chain → return ok.
+//   - Reroute reconciliation issues UPDATE (supersede) + INSERT (add)
+//     separately. Each is atomic individually but the pair is not.
+//     Failure modes are recovered by the trigger flag staying set so a
+//     subsequent cron run retries.
 //
-// See docs/PHASE_2_BUILD_SPEC.md for the full contract.
+// See docs/PHASE_2_BUILD_SPEC.md (initial) and docs/PHASE_6_BUILD_SPEC.md
+// (reroute) for the full contract.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -24,6 +39,8 @@ import {
   type ChainStepLike,
   checkSeparationOfDuties,
   getEffectiveSeparationOfDuties,
+  reconcileChainSteps,
+  rollbackTargetForNewChain,
 } from "../_shared/approval_chain.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
@@ -40,6 +57,10 @@ function jsonResponse(payload: unknown, status: number, origin: string | null) {
 interface RequestBody {
   leaseId: string;
   initialResolution: boolean;
+  // Phase 6 — reroute-only fields. Ignored on initialResolution=true.
+  auditMode?: boolean;
+  detectionMode?: "auto" | "manual_admin" | "manual_audit";
+  triggerReason?: string;
 }
 
 interface PolicyRow {
@@ -70,6 +91,31 @@ interface PolicyStepRow {
   delegate_after_days: number | null;
   is_required: boolean;
 }
+
+interface LeaseAttrs {
+  asset_type: string | null;
+  lease_type: string | null;
+  requesting_department: string | null;
+  region: string | null;
+  monthly_payment: number | null;
+}
+
+interface SnapshotRow {
+  id: string;
+  policy_id: string | null;
+  policy_version: number | null;
+  asset_type: string | null;
+  lease_type: string | null;
+  requesting_department: string | null;
+  region: string | null;
+  monthly_payment: number | null;
+}
+
+type MatchOutcome =
+  | { kind: "no_policies" }
+  | { kind: "ambiguous"; tied: { id: string; name: string }[] }
+  | { kind: "no_match_no_fallback" }
+  | { kind: "matched"; policy: PolicyRow; usedFallback: boolean };
 
 serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -111,7 +157,6 @@ serve(async (req) => {
 
   const user = userData.user;
 
-  // Best-effort logger that won't throw on bad activity_type.
   async function logActivity(
     leaseId: string,
     activityType: string,
@@ -130,6 +175,44 @@ serve(async (req) => {
     }
   }
 
+  // Lifecycle Transition Convention helpers — used on every chain-driven
+  // lifecycle update introduced by reroute mode.
+  async function updateLifecycle(leaseId: string, newStatus: string) {
+    const { error } = await supabaseAdmin
+      .from("leases")
+      .update({
+        lifecycle_status: newStatus,
+        status_changed_at: new Date().toISOString(),
+      })
+      .eq("id", leaseId);
+    if (error) {
+      console.error("[resolve-approval-chain] lifecycle update error:", error.message);
+    }
+    return !error;
+  }
+
+  async function logStatusChange(
+    leaseId: string,
+    fromStatus: string,
+    toStatus: string,
+    extra: Record<string, unknown>,
+  ) {
+    const details = { from: fromStatus, to: toStatus, routing_path: "chain", ...extra };
+    const { error } = await supabaseAdmin
+      .from("lease_activity_log")
+      .insert({
+        lease_id: leaseId,
+        user_id: user.id,
+        activity_type: "status_change",
+        from_status: fromStatus,
+        to_status: toStatus,
+        details,
+      });
+    if (error) {
+      console.error("[resolve-approval-chain] status_change log error:", error.message);
+    }
+  }
+
   let body: RequestBody;
   try {
     body = await req.json();
@@ -143,9 +226,20 @@ serve(async (req) => {
 
   const leaseId = body?.leaseId;
   const initialResolution = body?.initialResolution ?? true;
+  const auditMode = body?.auditMode === true;
+  const detectionMode = body?.detectionMode ?? "auto";
+  const triggerReason = body?.triggerReason ?? "attribute_change_detected";
+
   if (!leaseId || typeof leaseId !== "string") {
     return jsonResponse(
       { ok: false, error: "leaseId is required", reason: "invalid_lease" },
+      400,
+      origin,
+    );
+  }
+  if (!["auto", "manual_admin", "manual_audit"].includes(detectionMode)) {
+    return jsonResponse(
+      { ok: false, error: "Invalid detectionMode", reason: "invalid_lease" },
       400,
       origin,
     );
@@ -155,7 +249,7 @@ serve(async (req) => {
   const { data: lease, error: leaseError } = await supabaseAdmin
     .from("leases")
     .select(
-      "id, workspace_id, asset_type, lease_type, requesting_department, region, monthly_payment",
+      "id, workspace_id, asset_type, lease_type, requesting_department, region, monthly_payment, lifecycle_status",
     )
     .eq("id", leaseId)
     .maybeSingle();
@@ -168,10 +262,11 @@ serve(async (req) => {
   }
 
   const workspaceId = (lease as any).workspace_id as string;
+  const currentLifecycle = (lease as any).lifecycle_status as string;
 
   const { data: ownership } = await supabaseAdmin
     .from("workspaces")
-    .select("owner_id")
+    .select("owner_id, separation_of_duties_default")
     .eq("id", workspaceId)
     .maybeSingle();
   const isOwner = (ownership as any)?.owner_id === user.id;
@@ -202,59 +297,528 @@ serve(async (req) => {
   );
   if (rateLimitResponse) return rateLimitResponse;
 
-  // Idempotency: initial resolution + chain already exists → return ok.
-  if (initialResolution) {
-    const { count: existingCount } = await supabaseAdmin
-      .from("lease_approval_chain")
-      .select("id", { count: "exact", head: true })
-      .eq("lease_id", leaseId);
-    if ((existingCount ?? 0) > 0) {
+  const wsSod = Boolean((ownership as any)?.separation_of_duties_default ?? true);
+
+  // Extract policy-triggering attributes from the live lease row.
+  const liveAttrs: LeaseAttrs = {
+    asset_type: (lease as any).asset_type ?? null,
+    lease_type: (lease as any).lease_type ?? null,
+    requesting_department: (lease as any).requesting_department ?? null,
+    region: (lease as any).region ?? null,
+    monthly_payment: (lease as any).monthly_payment ?? null,
+  };
+  const annualCost = typeof liveAttrs.monthly_payment === "number" && liveAttrs.monthly_payment > 0
+    ? liveAttrs.monthly_payment * 12
+    : 0;
+
+  // ── Shared policy-matching helper ────────────────────────────────────
+  async function matchPolicy(): Promise<MatchOutcome> {
+    const { data: policies, error: policiesError } = await supabaseAdmin
+      .from("approval_policies")
+      .select(
+        "id, workspace_id, name, priority, match_asset_types, match_departments, match_min_annual_cost, match_max_annual_cost, match_regions, match_lease_types, separation_of_duties_override, is_default_fallback, version, is_active, created_at",
+      )
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", true);
+    if (policiesError) throw new Error(policiesError.message);
+
+    const allPolicies = (policies ?? []) as PolicyRow[];
+    if (allPolicies.length === 0) return { kind: "no_policies" };
+
+    const matched = allPolicies
+      .filter((p) => {
+        if (p.match_asset_types.length > 0 && !p.match_asset_types.includes(liveAttrs.asset_type ?? "")) return false;
+        if (p.match_departments.length > 0 && !p.match_departments.includes(liveAttrs.requesting_department ?? "")) return false;
+        if (p.match_min_annual_cost != null && annualCost < p.match_min_annual_cost) return false;
+        if (p.match_max_annual_cost != null && annualCost > p.match_max_annual_cost) return false;
+        if (p.match_regions.length > 0 && !p.match_regions.includes(liveAttrs.region ?? "")) return false;
+        if (p.match_lease_types.length > 0 && !p.match_lease_types.includes(liveAttrs.lease_type ?? "")) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        return a.created_at.localeCompare(b.created_at);
+      });
+
+    if (matched.length >= 2 && matched[0].priority === matched[1].priority) {
+      const tied = matched
+        .filter((p) => p.priority === matched[0].priority)
+        .map((p) => ({ id: p.id, name: p.name }));
+      return { kind: "ambiguous", tied };
+    }
+
+    const chosen = matched[0] ?? allPolicies.find((p) => p.is_default_fallback === true);
+    if (!chosen) return { kind: "no_match_no_fallback" };
+    return { kind: "matched", policy: chosen, usedFallback: matched.length === 0 };
+  }
+
+  // ── Snapshot writer (used by both initial and reroute success paths) ─
+  async function writeSnapshot(policy: PolicyRow | null): Promise<void> {
+    const { error } = await supabaseAdmin
+      .from("lease_attribute_snapshots")
+      .insert({
+        lease_id: leaseId,
+        workspace_id: workspaceId,
+        policy_id: policy?.id ?? null,
+        policy_version: policy?.version ?? null,
+        asset_type: liveAttrs.asset_type,
+        lease_type: liveAttrs.lease_type,
+        requesting_department: liveAttrs.requesting_department,
+        region: liveAttrs.region,
+        monthly_payment: liveAttrs.monthly_payment,
+        annual_cost_at_snapshot: annualCost,
+        raw_attributes: {
+          asset_type: liveAttrs.asset_type,
+          lease_type: liveAttrs.lease_type,
+          requesting_department: liveAttrs.requesting_department,
+          region: liveAttrs.region,
+          monthly_payment: liveAttrs.monthly_payment,
+          annual_cost: annualCost,
+        },
+      });
+    if (error) {
+      console.error("[resolve-approval-chain] snapshot write error:", error.message);
+    }
+  }
+
+  // ─── Branch: Phase 6 reroute mode ────────────────────────────────────
+  if (!initialResolution) {
+    // Load most recent snapshot
+    const { data: snapData } = await supabaseAdmin
+      .from("lease_attribute_snapshots")
+      .select("id, policy_id, policy_version, asset_type, lease_type, requesting_department, region, monthly_payment")
+      .eq("lease_id", leaseId)
+      .order("chain_resolution_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const snapshot = snapData as SnapshotRow | null;
+
+    // Diff attributes
+    const changedAttributes: Record<string, { from: unknown; to: unknown }> = {};
+    if (snapshot) {
+      const fields: (keyof LeaseAttrs)[] = [
+        "asset_type",
+        "lease_type",
+        "requesting_department",
+        "region",
+        "monthly_payment",
+      ];
+      for (const f of fields) {
+        if (snapshot[f] !== liveAttrs[f]) {
+          changedAttributes[f] = { from: snapshot[f], to: liveAttrs[f] };
+        }
+      }
+    }
+
+    if (Object.keys(changedAttributes).length === 0) {
+      // No attribute change since last snapshot → nothing to do.
+      // Clear the flag in case the trigger set it on a non-policy
+      // attribute change (defensive; the trigger only fires on
+      // policy-triggering attributes today, but the column might
+      // get other writers later).
+      if (!auditMode) {
+        await supabaseAdmin
+          .from("leases")
+          .update({ reroute_evaluation_pending: false })
+          .eq("id", leaseId);
+      }
+      return jsonResponse(
+        { ok: true, no_reroute_needed: true, reason: "no_attribute_change" },
+        200,
+        origin,
+      );
+    }
+
+    // Match new policy
+    let matchResult: MatchOutcome;
+    try {
+      matchResult = await matchPolicy();
+    } catch (e: any) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "policy_load_failed",
+        error: e?.message ?? String(e),
+        reroute_path: true,
+      });
+      return jsonResponse(
+        { ok: false, error: e?.message ?? "Policy load failed", reason: "invalid_lease" },
+        500,
+        origin,
+      );
+    }
+
+    if (matchResult.kind === "no_policies" || matchResult.kind === "no_match_no_fallback") {
+      // Workspace lost its matching policy. Cannot reroute. Leave the
+      // chain alone but clear the flag so we don't loop forever.
+      if (!auditMode) {
+        await supabaseAdmin
+          .from("leases")
+          .update({ reroute_evaluation_pending: false })
+          .eq("id", leaseId);
+      }
+      await logActivity(leaseId, "chain_reroute_skipped_no_match", {
+        reason: matchResult.kind,
+        changed_attributes: changedAttributes,
+        audit_mode: auditMode,
+      });
       return jsonResponse(
         {
           ok: true,
-          alreadyResolved: true,
-          message: "Chain already exists for this lease",
+          no_reroute_needed: true,
+          reason: matchResult.kind,
+          changed_attributes: changedAttributes,
         },
         200,
         origin,
       );
     }
+
+    if (matchResult.kind === "ambiguous") {
+      // Don't reroute — surface the same error initial resolution would.
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "ambiguous_match",
+        tied_policy_ids: matchResult.tied.map((t) => t.id),
+        reroute_path: true,
+      });
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Multiple policies tied at top priority during reroute. Ask an admin to disambiguate.",
+          reason: "ambiguous_match",
+          details: { tiedPolicies: matchResult.tied },
+        },
+        409,
+        origin,
+      );
+    }
+
+    const newPolicy = matchResult.policy;
+
+    // If same policy + version as snapshot, the change was immaterial.
+    if (
+      snapshot &&
+      snapshot.policy_id === newPolicy.id &&
+      snapshot.policy_version === newPolicy.version
+    ) {
+      if (!auditMode) {
+        await supabaseAdmin
+          .from("leases")
+          .update({ reroute_evaluation_pending: false })
+          .eq("id", leaseId);
+        // Refresh the snapshot so the next evaluation diffs from current.
+        await writeSnapshot(newPolicy);
+      }
+      await logActivity(leaseId, "chain_reroute_skipped_no_match", {
+        reason: "attribute_change_immaterial",
+        changed_attributes: changedAttributes,
+        policy_id: newPolicy.id,
+        policy_version: newPolicy.version,
+        audit_mode: auditMode,
+      });
+      return jsonResponse(
+        {
+          ok: true,
+          no_reroute_needed: true,
+          attribute_change_immaterial: true,
+          changed_attributes: changedAttributes,
+        },
+        200,
+        origin,
+      );
+    }
+
+    // Load existing chain and the new policy's steps
+    const { data: existingRows } = await supabaseAdmin
+      .from("lease_approval_chain")
+      .select("id, stage, step_order, parallel_group, approver_user_id, approver_role, is_required, status, policy_id, policy_version")
+      .eq("lease_id", leaseId);
+    const existingChain = (existingRows ?? []) as Array<
+      ChainStepLike & { id: string; policy_id: string | null; policy_version: number | null }
+    >;
+
+    const { data: stepsData, error: stepsError } = await supabaseAdmin
+      .from("approval_chain_steps")
+      .select("stage, step_order, parallel_group, approver_user_id, approver_role, delegate_user_id, delegate_after_days, is_required")
+      .eq("policy_id", newPolicy.id)
+      .order("stage")
+      .order("step_order")
+      .order("parallel_group");
+    if (stepsError) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "steps_load_failed",
+        policy_id: newPolicy.id,
+        error: stepsError.message,
+        reroute_path: true,
+      });
+      return jsonResponse(
+        { ok: false, error: stepsError.message, reason: "invalid_lease" },
+        500,
+        origin,
+      );
+    }
+    const newPolicySteps = (stepsData ?? []) as PolicyStepRow[];
+
+    // SoD enforcement on the new chain
+    const sodEffective = getEffectiveSeparationOfDuties(
+      wsSod,
+      newPolicy.separation_of_duties_override,
+    );
+    const newAsLike: ChainStepLike[] = newPolicySteps.map((s) => ({
+      stage: s.stage,
+      step_order: s.step_order,
+      parallel_group: s.parallel_group,
+      approver_user_id: s.approver_user_id,
+      approver_role: s.approver_role,
+      is_required: s.is_required,
+      status: "pending",
+    }));
+    const sodViolator = checkSeparationOfDuties(newAsLike, sodEffective);
+    if (sodViolator) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "separation_violation",
+        policy_id: newPolicy.id,
+        conflicting_user_id: sodViolator,
+        reroute_path: true,
+      });
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Separation of duties violated by the new chain. Reroute aborted.",
+          reason: "separation_violation",
+          details: { conflictingUserId: sodViolator, policyId: newPolicy.id },
+        },
+        409,
+        origin,
+      );
+    }
+
+    // Reconcile
+    const reconciled = reconcileChainSteps(existingChain, newAsLike);
+    const target = rollbackTargetForNewChain(newAsLike, reconciled);
+
+    // Determine new lifecycle
+    let newLifecycle = currentLifecycle;
+    let resultedInChainViolation = false;
+    if (target !== "no_rollback_needed") {
+      if (currentLifecycle === "fully_executed" || currentLifecycle === "active") {
+        newLifecycle = "chain_violation";
+        resultedInChainViolation = true;
+      } else if (target === "concept_under_review" && currentLifecycle === "concept_submitted") {
+        // Already earlier than the target; keep as-is
+        newLifecycle = currentLifecycle;
+      } else {
+        newLifecycle = target;
+      }
+    }
+
+    // ── Audit mode short-circuit ──────────────────────────────────────
+    if (auditMode) {
+      await logActivity(leaseId, "reroute_audit_run", {
+        would_reroute: true,
+        prior_policy_id: snapshot?.policy_id ?? null,
+        new_policy_id: newPolicy.id,
+        prior_policy_version: snapshot?.policy_version ?? null,
+        new_policy_version: newPolicy.version,
+        changed_attributes: changedAttributes,
+        steps_added_count: reconciled.added.length,
+        steps_superseded_count: reconciled.superseded.length,
+        steps_preserved_count: reconciled.preserved.length,
+        prior_lifecycle_status: currentLifecycle,
+        proposed_lifecycle_status: newLifecycle,
+        proposed_chain_violation: resultedInChainViolation,
+      });
+      return jsonResponse(
+        {
+          ok: true,
+          rerouted: false,
+          audit_mode: true,
+          would_reroute: true,
+          prior_policy_id: snapshot?.policy_id ?? null,
+          new_policy_id: newPolicy.id,
+          changed_attributes: changedAttributes,
+          steps_added: reconciled.added.length,
+          steps_superseded: reconciled.superseded.length,
+          steps_preserved: reconciled.preserved.length,
+          prior_lifecycle_status: currentLifecycle,
+          proposed_lifecycle_status: newLifecycle,
+          would_chain_violation: resultedInChainViolation,
+        },
+        200,
+        origin,
+      );
+    }
+
+    // ── Apply reconciliation ──────────────────────────────────────────
+    // 1. Mark superseded rows
+    if (reconciled.superseded.length > 0) {
+      const supersededIds = (reconciled.superseded as Array<{ id: string }>).map((s) => s.id);
+      const { error: supErr } = await supabaseAdmin
+        .from("lease_approval_chain")
+        .update({ status: "superseded" })
+        .in("id", supersededIds);
+      if (supErr) {
+        console.error("[resolve-approval-chain] supersede error:", supErr.message);
+      }
+    }
+
+    // 2. Insert added rows
+    if (reconciled.added.length > 0) {
+      // Build full INSERT shape from newPolicySteps, filtered to added identities
+      const addedIdentities = new Set(
+        reconciled.added.map((a) => `${a.stage}::${a.approver_user_id ?? ""}::${a.approver_role ?? ""}`),
+      );
+      const rowsToInsert = newPolicySteps
+        .filter((s) =>
+          addedIdentities.has(`${s.stage}::${s.approver_user_id ?? ""}::${s.approver_role ?? ""}`),
+        )
+        .map((s) => ({
+          lease_id: leaseId,
+          workspace_id: workspaceId,
+          policy_id: newPolicy.id,
+          policy_version: newPolicy.version,
+          stage: s.stage,
+          step_order: s.step_order,
+          parallel_group: s.parallel_group,
+          approver_user_id: s.approver_user_id,
+          approver_role: s.approver_role,
+          delegate_user_id: s.delegate_user_id,
+          delegate_after_days: s.delegate_after_days,
+          is_required: s.is_required,
+          status: "pending",
+        }));
+      if (rowsToInsert.length > 0) {
+        const { error: insErr } = await supabaseAdmin
+          .from("lease_approval_chain")
+          .insert(rowsToInsert);
+        if (insErr) {
+          console.error("[resolve-approval-chain] add error:", insErr.message);
+        }
+      }
+    }
+
+    // 3. Update lifecycle if it changed (Lifecycle Transition Convention)
+    if (newLifecycle !== currentLifecycle) {
+      await updateLifecycle(leaseId, newLifecycle);
+      await logStatusChange(leaseId, currentLifecycle, newLifecycle, {
+        triggered_by: "chain_rerouted",
+        reroute_detection_mode: detectionMode,
+        prior_policy_id: snapshot?.policy_id ?? null,
+        new_policy_id: newPolicy.id,
+      });
+    }
+
+    // 4. Insert reroute event
+    const { data: rerouteEvent } = await supabaseAdmin
+      .from("lease_reroute_events")
+      .insert({
+        lease_id: leaseId,
+        workspace_id: workspaceId,
+        triggered_by: user.id,
+        trigger_reason: triggerReason,
+        prior_policy_id: snapshot?.policy_id ?? null,
+        prior_policy_version: snapshot?.policy_version ?? null,
+        new_policy_id: newPolicy.id,
+        new_policy_version: newPolicy.version,
+        changed_attributes: changedAttributes,
+        prior_lifecycle_status: currentLifecycle,
+        new_lifecycle_status: newLifecycle,
+        steps_added_count: reconciled.added.length,
+        steps_superseded_count: reconciled.superseded.length,
+        steps_preserved_count: reconciled.preserved.length,
+        detection_mode: detectionMode,
+        resulted_in_chain_violation: resultedInChainViolation,
+      })
+      .select("id")
+      .single();
+    const rerouteEventId = (rerouteEvent as any)?.id ?? null;
+
+    // 5. Insert fresh snapshot
+    await writeSnapshot(newPolicy);
+
+    // 6. Activity log
+    await logActivity(leaseId, "chain_rerouted", {
+      reroute_event_id: rerouteEventId,
+      prior_policy_id: snapshot?.policy_id ?? null,
+      new_policy_id: newPolicy.id,
+      prior_policy_version: snapshot?.policy_version ?? null,
+      new_policy_version: newPolicy.version,
+      changed_attributes: changedAttributes,
+      steps_added: reconciled.added.length,
+      steps_superseded: reconciled.superseded.length,
+      steps_preserved: reconciled.preserved.length,
+      prior_lifecycle_status: currentLifecycle,
+      new_lifecycle_status: newLifecycle,
+      detection_mode: detectionMode,
+      resulted_in_chain_violation: resultedInChainViolation,
+    });
+    if (resultedInChainViolation) {
+      await logActivity(leaseId, "chain_violation_entered", {
+        reroute_event_id: rerouteEventId,
+        prior_lifecycle_status: currentLifecycle,
+      });
+    }
+
+    // 7. Clear the trigger flag (the cron poller and this real-time
+    //    path both arrive here; whichever wins, the flag ends up false)
+    await supabaseAdmin
+      .from("leases")
+      .update({ reroute_evaluation_pending: false })
+      .eq("id", leaseId);
+
+    return jsonResponse(
+      {
+        ok: true,
+        rerouted: true,
+        reroute_event_id: rerouteEventId,
+        prior_policy_id: snapshot?.policy_id ?? null,
+        new_policy_id: newPolicy.id,
+        changed_attributes: changedAttributes,
+        steps_added: reconciled.added.length,
+        steps_superseded: reconciled.superseded.length,
+        steps_preserved: reconciled.preserved.length,
+        prior_lifecycle_status: currentLifecycle,
+        new_lifecycle_status: newLifecycle,
+        resulted_in_chain_violation: resultedInChainViolation,
+      },
+      200,
+      origin,
+    );
   }
 
-  // Extract policy-triggering attributes.
-  const assetType = (lease as any).asset_type ?? "";
-  const department = (lease as any).requesting_department ?? "";
-  const region = (lease as any).region ?? "";
-  const leaseType = (lease as any).lease_type ?? "";
-  const monthly = (lease as any).monthly_payment;
-  const annualCost = typeof monthly === "number" && monthly > 0 ? monthly * 12 : 0;
+  // ─── Branch: initial resolution (Phase 2 path) ───────────────────────
 
-  // Load all active policies for the workspace; do matching in TS so we
-  // can detect ambiguity and decide between fallback / no_match / legacy
-  // in a single pass.
-  const { data: policies, error: policiesError } = await supabaseAdmin
-    .from("approval_policies")
-    .select(
-      "id, workspace_id, name, priority, match_asset_types, match_departments, match_min_annual_cost, match_max_annual_cost, match_regions, match_lease_types, separation_of_duties_override, is_default_fallback, version, is_active, created_at",
-    )
-    .eq("workspace_id", workspaceId)
-    .eq("is_active", true);
-  if (policiesError) {
+  // Idempotency: initial resolution + chain already exists → return ok.
+  const { count: existingCount } = await supabaseAdmin
+    .from("lease_approval_chain")
+    .select("id", { count: "exact", head: true })
+    .eq("lease_id", leaseId);
+  if ((existingCount ?? 0) > 0) {
+    return jsonResponse(
+      {
+        ok: true,
+        alreadyResolved: true,
+        message: "Chain already exists for this lease",
+      },
+      200,
+      origin,
+    );
+  }
+
+  let initialMatch: MatchOutcome;
+  try {
+    initialMatch = await matchPolicy();
+  } catch (e: any) {
     await logActivity(leaseId, "chain_resolution_failed", {
       reason: "policy_load_failed",
-      error: policiesError.message,
+      error: e?.message ?? String(e),
     });
     return jsonResponse(
-      { ok: false, error: policiesError.message, reason: "invalid_lease" },
+      { ok: false, error: e?.message ?? "Policy load failed", reason: "invalid_lease" },
       500,
       origin,
     );
   }
 
-  const allPolicies = (policies ?? []) as PolicyRow[];
-
-  // Workspace has no policies at all → caller falls back to legacy flow.
-  if (allPolicies.length === 0) {
+  if (initialMatch.kind === "no_policies") {
     return jsonResponse(
       {
         ok: true,
@@ -266,86 +830,40 @@ serve(async (req) => {
       origin,
     );
   }
-
-  function policyMatches(p: PolicyRow): boolean {
-    if (p.match_asset_types.length > 0 && !p.match_asset_types.includes(assetType)) {
-      return false;
-    }
-    if (
-      p.match_departments.length > 0 &&
-      !p.match_departments.includes(department)
-    ) {
-      return false;
-    }
-    if (p.match_min_annual_cost != null && annualCost < p.match_min_annual_cost) {
-      return false;
-    }
-    if (p.match_max_annual_cost != null && annualCost > p.match_max_annual_cost) {
-      return false;
-    }
-    if (p.match_regions.length > 0 && !p.match_regions.includes(region)) {
-      return false;
-    }
-    if (
-      p.match_lease_types.length > 0 &&
-      !p.match_lease_types.includes(leaseType)
-    ) {
-      return false;
-    }
-    return true;
-  }
-
-  // Sort matched policies by priority desc, created_at asc.
-  const matched = allPolicies
-    .filter(policyMatches)
-    .sort((a, b) => {
-      if (b.priority !== a.priority) return b.priority - a.priority;
-      return a.created_at.localeCompare(b.created_at);
-    });
-
-  // Detect tie at top priority.
-  if (matched.length >= 2 && matched[0].priority === matched[1].priority) {
-    const tied = matched
-      .filter((p) => p.priority === matched[0].priority)
-      .map((p) => ({ id: p.id, name: p.name }));
+  if (initialMatch.kind === "ambiguous") {
     await logActivity(leaseId, "chain_resolution_failed", {
       reason: "ambiguous_match",
-      tied_policy_ids: tied.map((t) => t.id),
+      tied_policy_ids: initialMatch.tied.map((t) => t.id),
     });
     return jsonResponse(
       {
         ok: false,
         error: "Multiple policies tied at top priority. Ask an admin to disambiguate.",
         reason: "ambiguous_match",
-        details: { tiedPolicies: tied },
+        details: { tiedPolicies: initialMatch.tied },
+      },
+      409,
+      origin,
+    );
+  }
+  if (initialMatch.kind === "no_match_no_fallback") {
+    await logActivity(leaseId, "chain_resolution_failed", {
+      reason: "no_match_no_fallback",
+    });
+    return jsonResponse(
+      {
+        ok: false,
+        error:
+          "No matching policy and no default fallback configured. Ask an admin to add a fallback or a matching policy.",
+        reason: "no_match_no_fallback",
       },
       409,
       origin,
     );
   }
 
-  // Pick winner; if no specific match, look for default fallback.
-  let chosen: PolicyRow | undefined = matched[0];
-  if (!chosen) {
-    chosen = allPolicies.find((p) => p.is_default_fallback === true);
-    if (!chosen) {
-      await logActivity(leaseId, "chain_resolution_failed", {
-        reason: "no_match_no_fallback",
-      });
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            "No matching policy and no default fallback configured. Ask an admin to add a fallback or a matching policy.",
-          reason: "no_match_no_fallback",
-        },
-        409,
-        origin,
-      );
-    }
-  }
+  const chosen = initialMatch.policy;
 
-  // Load chosen policy's chain steps.
   const { data: stepsData, error: stepsError } = await supabaseAdmin
     .from("approval_chain_steps")
     .select(
@@ -386,20 +904,10 @@ serve(async (req) => {
     );
   }
 
-  // Separation-of-duties enforcement (workspace default + policy override).
-  const { data: ws } = await supabaseAdmin
-    .from("workspaces")
-    .select("separation_of_duties_default")
-    .eq("id", workspaceId)
-    .maybeSingle();
-  const wsSod = Boolean(
-    (ws as any)?.separation_of_duties_default ?? true,
-  );
   const sodEffective = getEffectiveSeparationOfDuties(
     wsSod,
     chosen.separation_of_duties_override,
   );
-  // Build lightweight ChainStepLike rows for the SoD check.
   const sodCheckSteps: ChainStepLike[] = policySteps.map((s) => ({
     stage: s.stage,
     step_order: s.step_order,
@@ -429,13 +937,11 @@ serve(async (req) => {
     );
   }
 
-  // Build the rows to insert. Single multi-row insert via PostgREST is
-  // a single transaction — atomic per spec.
   const rowsToInsert = policySteps.map((s) => ({
     lease_id: leaseId,
     workspace_id: workspaceId,
-    policy_id: chosen!.id,
-    policy_version: chosen!.version,
+    policy_id: chosen.id,
+    policy_version: chosen.version,
     stage: s.stage,
     step_order: s.step_order,
     parallel_group: s.parallel_group,
@@ -467,16 +973,17 @@ serve(async (req) => {
     );
   }
 
-  // Activity log: chain_resolved (best-effort; the chain is the truth).
-  // Also emit Phase 3 concept_stage_entered — this is the moment the
-  // chain lease enters the concept stage. Both are best-effort, written
-  // in sequence; failures of one do not block the other.
+  // Phase 6: write the first attribute snapshot. Best-effort (the chain
+  // is the truth; a missing snapshot only affects future reroute diffs,
+  // and the next re-resolution would establish one).
+  await writeSnapshot(chosen);
+
   await logActivity(leaseId, "chain_resolved", {
     policy_id: chosen.id,
     policy_name: chosen.name,
     policy_version: chosen.version,
     steps_created: rowsToInsert.length,
-    used_default_fallback: matched.length === 0,
+    used_default_fallback: initialMatch.usedFallback,
     target_lifecycle_status: "concept_submitted",
   });
   await logActivity(leaseId, "concept_stage_entered", {
@@ -484,9 +991,6 @@ serve(async (req) => {
     policy_version: chosen.version,
   });
 
-  // Compute the first-stage first-step assignees for the caller's
-  // notification step. "First active level" = lowest step_order in
-  // 'concept' that has any pending required step.
   const conceptSteps = policySteps.filter(
     (s) => s.stage === "concept" && s.is_required,
   );
@@ -511,10 +1015,6 @@ serve(async (req) => {
       policyName: chosen.name,
       stepsCreated: rowsToInsert.length,
       firstStepAssignees,
-      // Phase 3: forward-compat hint for the caller. LeaseRequestForm in
-      // Checkpoint 4 will read this and flip the lease to
-      // 'concept_submitted' (chain vocabulary). Until then this field
-      // is ignored.
       targetLifecycleStatus: "concept_submitted",
     },
     200,
