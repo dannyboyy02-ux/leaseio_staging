@@ -773,6 +773,95 @@ export type Database = {
           },
         ]
       }
+      lease_documents: {
+        Row: {
+          created_at: string
+          document_type: string
+          file_size_bytes: number | null
+          filename: string
+          id: string
+          is_current_latest: boolean
+          iteration_number: number
+          lease_id: string
+          mime_type: string | null
+          notes: string | null
+          storage_path: string
+          superseded_at: string | null
+          superseded_by: string | null
+          uploaded_at: string
+          uploaded_by: string
+          version_number: number
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_type: string
+          file_size_bytes?: number | null
+          filename: string
+          id?: string
+          is_current_latest?: boolean
+          iteration_number: number
+          lease_id: string
+          mime_type?: string | null
+          notes?: string | null
+          storage_path: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          uploaded_at?: string
+          uploaded_by: string
+          version_number: number
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          document_type?: string
+          file_size_bytes?: number | null
+          filename?: string
+          id?: string
+          is_current_latest?: boolean
+          iteration_number?: number
+          lease_id?: string
+          mime_type?: string | null
+          notes?: string | null
+          storage_path?: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          uploaded_at?: string
+          uploaded_by?: string
+          version_number?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_documents_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_documents_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_documents_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "lease_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_documents_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lease_field_confidence: {
         Row: {
           confidence_score: number
