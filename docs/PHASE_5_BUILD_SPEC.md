@@ -382,9 +382,204 @@ Do NOT build any of these in Phase 5.
 
 ---
 
-## As-built notes (placeholder, populated at close)
+## As-built notes (closed 2026-05-05, citing spec SHA `7702b8f`)
 
-Spec ↔ implementation deltas to be captured here at Checkpoint 5 close, citing this spec doc by SHA per the audit-doc inheritance rule.
+The spec and the live code agree on the load-bearing pieces. Deltas
+captured below — each one is an implementation detail future phases
+inherit, not a renegotiation of the spec.
+
+### A1. activity_type CHECK extension snapshotted from live state
+
+The spec's listing in `## Activity log additions` was a best-effort
+union of prior phases' values. As with Phase 2 / 3 / 4, the actual
+PostgreSQL constraint was the authoritative starting point. The
+migration in `supabase/migrations/20260505200000_phase5_signator_activation.sql`
+snapshots the live constraint via `pg_get_constraintdef`, appends the
+7 Phase 5 values, and re-creates the CHECK. This is the standing
+pattern; do the same in every future phase. The test file's TEST 4.B
+(regression) picks a representative cross-phase subset to keep this
+honest going forward.
+
+### A2. Lifecycle Transition Convention applied at three new sites
+
+Per CLAUDE.md, every lease lifecycle UPDATE bumps `status_changed_at`
+in the same statement and writes a `status_change` row with both
+top-level `from_status`/`to_status` columns AND the equivalent fields
+inside `details` plus a `routing_path` tag. Phase 5 introduces three
+new transition triggers; each follows the convention:
+
+- `act-on-chain-step` signator approve →
+  `final_review → pending_counter_signature` via the existing
+  `updateLifecycle` + `logStatusChange` helpers in that file.
+  `routing_path: 'chain'`.
+- `act-on-chain-step` signator send_back →
+  `final_review → in_negotiation` (NOT `concept_submitted` — the
+  signator's send-back loops back to negotiation, which the spec
+  calls out and the code implements as a stage-aware branch).
+- `record-counter-signature` →
+  `pending_counter_signature → fully_executed` via an inline
+  `logStatusChange` helper in that edge function (mirrors the
+  pattern from `act-on-chain-step` rather than importing it; the
+  helper is small enough that duplication is cheaper than a shared
+  module). `routing_path: 'chain'`.
+
+`assign-execution-owner` does NOT transition `lifecycle_status` — the
+lease stays in `pending_counter_signature` while the owner changes.
+The `execution_owner_reassigned` row is therefore an audit-only
+activity log entry, not a status change.
+
+### A3. Phase 4↔5 boundary fix: `isDocumentTypeAllowed` for pending_counter_signature
+
+Phase 4's pure helper restricted `pending_counter_signature` uploads
+to `our_signed | other`. But `record-counter-signature`'s precondition
+requires a `fully_executed_counterparty_returned` document on the
+lease, and the user must be able to upload that document while the
+lease is still in `pending_counter_signature` (the upload is
+upstream of the state transition). Both Node + Deno mirrors of
+`isDocumentTypeAllowed` were updated in Checkpoint 4 to also accept
+`fully_executed_counterparty_returned` at this stage. The vitest case
+that previously asserted "rejects fully_executed_counterparty_returned"
+was rewritten to assert acceptance and renamed accordingly.
+
+This is a Phase-4-defined helper that needed Phase-5-aware
+behaviour — caught at C4 implementation time, not at spec write time.
+Future phases should re-check this helper when they introduce new
+state→type transitions.
+
+### A4. Signator review page authorization is row-level, not role-level
+
+The spec sketched the page as gated to "signator role". The
+implementation in `src/pages/app/SignatorReview.tsx` instead does a
+row-level check inside the page itself: load the lease's pending
+signator chain step, and require the current user to be either the
+explicit `approver_user_id` on that step OR hold the step's
+`approver_role`. Anyone else gets a typed error and a back-link.
+
+Reason: a workspace can have multiple signators (e.g., regional
+heads), and policies route specific leases to specific signators
+or roles. A coarse `RequireRole` guard would let any signator open
+any other signator's lease. The row-level check matches the
+edge-function authorization shape exactly (defense in depth).
+
+The route in `src/App.tsx` is a plain `ProtectedRoute` — the page
+does its own gate.
+
+### A5. Approve button gating is a 4-input AND
+
+UI-side, the Approve button enables only when:
+1. `Documents Reviewed` checkbox is checked,
+2. `Terms Reviewed` checkbox is checked,
+3. `Authority Confirmed` checkbox is checked, AND
+4. The attestation textarea has ≥30 trimmed characters.
+
+The spec asked for a single "Documents Reviewed" checklist; the
+implementation expanded to 3 explicit confirmations because the
+intent-to-bind language calls out three separate truths
+(documents, terms, authority). Each is its own click-to-acknowledge.
+This is friction the spec explicitly endorses ("Do not optimize it
+away.").
+
+Server-side, only the attestation-non-empty contract is enforced
+(by `act-on-chain-step` AND the row-level CHECK constraint). The
+checklist is UI-only. If a determined attacker bypassed the UI
+they could approve without ticking the boxes, but the attestation
+text is still captured and the audit row records who approved
+when. The checklist is a UX gate, not a security gate.
+
+### A6. "Change Due Date" affordance deferred
+
+The spec mentions a "Change Due Date" button on the
+CounterSignaturePanel (admin-only). Phase 5 ships read-only display
+of `counter_signature_due_date` instead. Reason: changing the due
+date mid-flow needs careful interaction with the reminder tier
+state (do we reset `counter_signature_reminder_count`? leave it?
+re-evaluate against the new due date?), and the spec didn't pin
+that interaction down. Deferred to a Phase 5.1 follow-up or Phase 6
+spec — the admin can still effect the change via direct SQL or
+via assign-execution-owner + a fresh due date if pressed.
+
+### A7. send-counter-signature-reminder is the codebase's first scheduled function
+
+Spec called this out as "the first scheduled function in the
+codebase". It's deployed `ACTIVE` with `verify_jwt=true` but is
+NOT yet wired to a scheduler — a production cron call (pg_cron
+or external GitHub Action) needs separate setup and was kept out
+of the C3 scope. The function is callable manually with any
+authenticated user's JWT for staging tests; hitting it twice on
+the same day is a no-op for any lease whose
+`counter_signature_reminder_count` already equals the current
+tier. Wiring the schedule is a deployment-checklist item, not a
+code item.
+
+### A8. Tier 3+ overdue audit row written ONCE
+
+Spec read: "7 days overdue: send a notification to ... +
+counter_signature_overdue activity log entry. 14 days overdue, 28
+days overdue: repeated notifications with escalating tone." The
+implementation reads "repeated notifications" as
+`counter_signature_reminder_sent` rows (one per tier crossing) but
+writes the `counter_signature_overdue` audit row exactly ONCE per
+lease — when the tier first crosses 3. Otherwise the audit log
+would carry three "overdue" rows for the same lease (tiers 3, 4,
+5), which makes downstream filtering noisy and conveys the same
+fact thrice. The reminder-sent rows tell the story of "we kept
+chasing"; the single overdue row tells the story of "this one
+went late". Different audit semantics.
+
+### A9. Multi-signator concurrence is intentionally lenient
+
+`act-on-chain-step` does NOT gate the signator-stage approve on
+`isStageComplete` — even if a chain has multiple required signator
+rows, the FIRST approve commits the lease to
+`pending_counter_signature`. Reason: the signator approval is the
+policy-authoring intent ("this person signs"); requiring N
+signators concurrent before the lease moves is a policy-authoring
+decision, not a runtime-stage decision. Phase 5 ships the simpler
+single-required-signator flow that resolve-approval-chain produces
+in practice. If a workspace wires up two required signators, the
+second signator's row stays pending after the first signs;
+`act-on-chain-step`'s `stageCompleted` field reflects whether the
+stage as a whole completed, but the lease has already moved.
+
+This is a Phase 5 simplification; if multi-signator concurrence
+becomes a real requirement, revisit this branch.
+
+### A10. Frontend test coverage stays at 221
+
+Phase 5's frontend additions (signator review page, counter-signature
+panel, dashboard card) are integration-shaped components — they
+fetch from supabase, render conditionally on lease state, dispatch
+edge function calls. The pure-logic surface that fits cleanly in
+vitest is already covered by the Phase 5 C2 commit (13 new tests
+on counterSignatureUrgency / Label, the Node↔Deno mirror SYNC
+CONSTRAINT). The components themselves are covered by manual smoke
+tests during C5. Component-level vitest tests can be added as a
+follow-up but are not on Phase 5's critical path; the Phase 4
+precedent did the same.
+
+The leaseDocuments vitest case rewrite (Phase 4↔5 boundary fix in
+A3) flips a negative assertion to a positive one in the same case,
+so the suite count is unchanged at 221.
+
+### A11. Closeout commit cites this spec by SHA
+
+Per the audit-doc inheritance rule, the Phase 5 closeout commit
+cites this spec at SHA `7702b8f` (the docs commit ratifying Phase
+5). Future phases citing Phase 5 can reference the closeout commit
+and follow the chain back to here.
+
+---
+
+## Phase 5 commit chain
+
+| Checkpoint | Commit | What landed |
+|---|---|---|
+| Spec ratified | `7702b8f` | This document, ratified 2026-05-05 |
+| C1 — schema | `b581a03` | Migration 20260505200000: 3 lease columns + 1 workspace column + row-level attestation CHECK + 7 activity types |
+| C2 — pure helpers | `f297f51` | `counterSignatureUrgency` + `counterSignatureUrgencyLabel` (Node + Deno mirror); +13 vitest cases |
+| C3 — edge functions | `7bdae51` | `act-on-chain-step` v4→v5 (signator handling); 3 new functions: `assign-execution-owner`, `record-counter-signature`, `send-counter-signature-reminder` (codebase's first scheduled function) |
+| C4 — frontend | `ed215c1` | `SignatorReview` page + `CounterSignaturePanel` + `PendingCounterSignatureCard` + ApprovalQueue execution-owner section + WorkspaceSettings counter-signature window + Phase 4↔5 boundary fix (`isDocumentTypeAllowed` for `pending_counter_signature`) |
+| C5 — tests + close | (this commit) | `phase5_signator_activation.test.sql` (6-section matrix); README index updated; this As-built appendix; CLAUDE.md marked CLOSED |
 
 ---
 

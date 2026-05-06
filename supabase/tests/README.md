@@ -24,6 +24,7 @@ Recommended path:
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase3_lifecycle_expansion.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/owner_workspace_mgmt.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase4_lease_documents.test.sql
+   psql "$TEST_DATABASE_URL" -f supabase/tests/phase5_signator_activation.test.sql
    ```
    …or paste into the Studio SQL editor for that environment.
 4. Search the output for `FAIL` — empty result means everything passed.
@@ -119,6 +120,19 @@ via curl smoke tests in the deployed app.
 | 7 | activity_type CHECK accepts the 5 Phase 4 values + preserves all 36 prior values | regression check covering pre-Phase-2 + Phase 2 + Phase 3 |
 | 8 | Storage RLS uses path-prefix workspace check | introspection of storage.foldername in upload/read/delete policies (post-fix migration) |
 | 9 | lease_documents RLS scoping | owner sees own; outsider workspace member sees zero (simulated via set_config request.jwt.claims) |
+
+### `phase5_signator_activation.test.sql`
+
+6 tests covering the Phase 5 signator activation + counter-signature schema deltas:
+
+| # | Test | Checks |
+|---|---|---|
+| 1 | New lease columns shape | `signator_attestation` (text), `counter_signature_due_date` (date), `counter_signature_reminder_count` (integer NOT NULL DEFAULT 0) |
+| 2 | `counter_signature_default_due_days` default + bounds | Default = 21; CHECK accepts 1, 21, 365; rejects 0, 366, -1 |
+| 3 | `leases_signator_attestation_required` row-level CHECK | Both NULL accepted; both populated accepted; approved_at + NULL/empty/whitespace attestation rejected; NULL approved_at + populated attestation accepted (constraint is one-directional) |
+| 4 | Phase 5 activity types accepted + prior values regression | 7 Phase 5 values + representative prior values (legacy, Phase 2, Phase 3, Phase 4) all pass |
+| 5 | `counter_signature_reminder_count` defaults + NOT NULL | Default = 0; updates stick; NULL rejected |
+| 6 | Migration idempotency sentinel | `ADD COLUMN IF NOT EXISTS` re-runs are no-ops on lease + workspace columns |
 
 ### `phase3_lifecycle_expansion.test.sql`
 
