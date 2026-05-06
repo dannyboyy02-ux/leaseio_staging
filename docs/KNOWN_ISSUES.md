@@ -370,11 +370,55 @@ Tracked here for the next time `delete-workspace` is touched.
 
 ---
 
+## Phase 8 C1 additions (2026-05-06)
+
+### Item #12: lease_reports artifact cleanup job not yet implemented
+
+`lease_reports.expires_at` is populated at generation time (default 90
+days post-generation, configurable per workspace via
+`workspaces.report_artifact_retention_days`). The Phase 8 spec calls
+out a future cleanup job that would mark expired reports
+`status = 'expired'` and purge the storage artifacts. Phase 8 ships
+the column + retention config; the cleanup job itself is deferred.
+
+**Severity:** Low. Storage costs accumulate over time; nothing is
+broken. When implemented, this is a daily cron similar in shape to
+`process-delegate-timers` / `detect-stuck-chains`.
+
+**Where to look:** Cron-style edge function at
+`supabase/functions/cleanup-expired-reports/` (does not exist yet).
+Pattern: select `lease_reports` where `expires_at <= now()` AND
+`status != 'expired'`, delete artifacts from `lease-reports` bucket
+at `pdf_storage_path` and `json_storage_path`, update row to
+`status='expired'`, write `report_expired` activity log entry.
+
+### Item #13: Synchronous PDF generation may time out on very large portfolio reports
+
+Phase 8 ships with synchronous generation in
+`generate-portfolio-report` — the function builds the PDF and returns
+when ready. Edge functions have a wall-clock cap (Supabase default
+~150s). A workspace with hundreds of active leases in a single
+period may hit it.
+
+**Severity:** Medium-deferred. Real-world usage will tell us whether
+this matters. The architecture is forward-compatible: `lease_reports`
+already has `status: 'pending' | 'generating' | 'ready' | 'failed' |
+'expired'` and the frontend polls — switching to a background-queue
+generator (separate worker, queue table, or pg_cron-driven) requires
+no schema change.
+
+**Where to look:** `supabase/functions/generate-portfolio-report/`
+when it ships in C3. Document a soft cap on lease count per request
+(e.g., 500) and surface a clear error if exceeded.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
 follow-up (item 5), Phase 3 audit (items 6-7), Phase 3 close-out
-forensics + smoke (items 8-10), and Phase 4 close-out audit (item 11).
+forensics + smoke (items 8-10), Phase 4 close-out audit (item 11),
+and Phase 8 C1 (items 12-13).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
