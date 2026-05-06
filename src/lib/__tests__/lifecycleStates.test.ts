@@ -5,6 +5,9 @@ import {
   VALID_TRANSITIONS,
   type LifecycleStatus,
   canTransition,
+  counterSignatureUrgency,
+  counterSignatureUrgencyLabel,
+  type CounterSignatureUrgency,
   displayLabel,
   groupOf,
   isEquivalent,
@@ -285,5 +288,124 @@ describe('STATE_GROUPS coverage', () => {
         expect(ALL_STATES).toContain(s as LifecycleStatus);
       }
     }
+  });
+});
+
+// ─── counterSignatureUrgency (Phase 5) ──────────────────────────────────
+//
+// Truth table per the spec:
+//   daysUntil >  7  → on_track
+//   1 ≤ daysUntil ≤ 7 → approaching
+//   daysUntil === 0 → due_today
+//   -13 ≤ daysUntil ≤ -1 → overdue
+//   daysUntil ≤ -14 → critically_overdue
+//   null / undefined / invalid → no_due_date
+
+describe('counterSignatureUrgency', () => {
+  // Anchor "today" to a fixed UTC midnight so the calendar-day
+  // truncation is deterministic across timezones.
+  const today = new Date(Date.UTC(2026, 4, 20)); // 2026-05-20 UTC
+
+  function dueIn(days: number): Date {
+    return new Date(Date.UTC(2026, 4, 20 + days));
+  }
+
+  it('returns no_due_date for null', () => {
+    expect(counterSignatureUrgency(null, today)).toBe('no_due_date');
+  });
+
+  it('returns no_due_date for undefined', () => {
+    expect(counterSignatureUrgency(undefined as any, today)).toBe('no_due_date');
+  });
+
+  it('returns no_due_date for an invalid date string', () => {
+    expect(counterSignatureUrgency('not-a-date', today)).toBe('no_due_date');
+  });
+
+  it('returns on_track for due dates more than 7 days away', () => {
+    expect(counterSignatureUrgency(dueIn(30), today)).toBe('on_track');
+    expect(counterSignatureUrgency(dueIn(8), today)).toBe('on_track');
+    expect(counterSignatureUrgency(dueIn(365), today)).toBe('on_track');
+  });
+
+  it('returns approaching for 1 through 7 days away', () => {
+    expect(counterSignatureUrgency(dueIn(7), today)).toBe('approaching');
+    expect(counterSignatureUrgency(dueIn(5), today)).toBe('approaching');
+    expect(counterSignatureUrgency(dueIn(1), today)).toBe('approaching');
+  });
+
+  it('returns due_today for the same calendar day', () => {
+    expect(counterSignatureUrgency(dueIn(0), today)).toBe('due_today');
+  });
+
+  it('treats different times within the same calendar day as due_today (calendar-day truncation)', () => {
+    // Due at 2026-05-20T00:00 UTC, today at 2026-05-20T18:30 UTC.
+    // Without the truncation this would compute negative ms and bucket
+    // into 'overdue'; with the truncation both fall in day 20 → due_today.
+    const todayLater = new Date(Date.UTC(2026, 4, 20, 18, 30, 0));
+    const dueEarlier = new Date(Date.UTC(2026, 4, 20, 0, 0, 0));
+    expect(counterSignatureUrgency(dueEarlier, todayLater)).toBe('due_today');
+  });
+
+  it('returns overdue for 1 through 13 days past due', () => {
+    expect(counterSignatureUrgency(dueIn(-1), today)).toBe('overdue');
+    expect(counterSignatureUrgency(dueIn(-7), today)).toBe('overdue');
+    expect(counterSignatureUrgency(dueIn(-13), today)).toBe('overdue');
+  });
+
+  it('returns critically_overdue at 14+ days past due', () => {
+    expect(counterSignatureUrgency(dueIn(-14), today)).toBe('critically_overdue');
+    expect(counterSignatureUrgency(dueIn(-30), today)).toBe('critically_overdue');
+    expect(counterSignatureUrgency(dueIn(-365), today)).toBe('critically_overdue');
+  });
+
+  it('accepts ISO date strings (the shape the DB returns for date columns)', () => {
+    expect(counterSignatureUrgency('2026-05-21', today)).toBe('approaching');
+    expect(counterSignatureUrgency('2026-05-20', today)).toBe('due_today');
+    expect(counterSignatureUrgency('2026-05-19', today)).toBe('overdue');
+    expect(counterSignatureUrgency('2026-05-06', today)).toBe('critically_overdue');
+    expect(counterSignatureUrgency('2026-06-30', today)).toBe('on_track');
+  });
+
+  it('uses new Date() as default for today (smoke — verifies it doesn\'t throw)', () => {
+    // Can't pin "now", so just verify it returns a valid bucket.
+    const result = counterSignatureUrgency(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    expect([
+      'on_track',
+      'approaching',
+      'due_today',
+      'overdue',
+      'critically_overdue',
+      'no_due_date',
+    ]).toContain(result);
+  });
+});
+
+// ─── counterSignatureUrgencyLabel ───────────────────────────────────────
+
+describe('counterSignatureUrgencyLabel', () => {
+  it('returns a non-empty label for every urgency value', () => {
+    const allUrgencies: CounterSignatureUrgency[] = [
+      'on_track',
+      'approaching',
+      'due_today',
+      'overdue',
+      'critically_overdue',
+      'no_due_date',
+    ];
+    for (const u of allUrgencies) {
+      const label = counterSignatureUrgencyLabel(u);
+      expect(label).toBeTypeOf('string');
+      expect(label.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('returns the spec-defined labels exactly', () => {
+    expect(counterSignatureUrgencyLabel('on_track')).toBe('On Track');
+    expect(counterSignatureUrgencyLabel('approaching')).toBe('Approaching Due Date');
+    expect(counterSignatureUrgencyLabel('due_today')).toBe('Due Today');
+    expect(counterSignatureUrgencyLabel('overdue')).toBe('Overdue');
+    expect(counterSignatureUrgencyLabel('critically_overdue')).toBe('Critically Overdue');
+    expect(counterSignatureUrgencyLabel('no_due_date')).toBe('No Due Date Set');
   });
 });

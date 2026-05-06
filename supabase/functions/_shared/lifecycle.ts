@@ -169,3 +169,72 @@ export function canTransition(from: LifecycleStatus, to: LifecycleStatus): boole
 
 // All known states — useful for tests and exhaustive iteration.
 export const ALL_STATES: LifecycleStatus[] = Object.keys(VALID_TRANSITIONS) as LifecycleStatus[];
+
+// ─────────────────────────────────────────────────────────────────────────
+// Counter-signature urgency (Phase 5)
+//
+// Drives the dashboard banner + reminder cadence for leases in the
+// pending_counter_signature state. Pure date math — same input today
+// = same output, no side effects.
+//
+// SYNC CONSTRAINT applies: the Node mirror must match this logic
+// byte-equivalent.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type CounterSignatureUrgency =
+  | "on_track"           // Due date is more than 7 days away
+  | "approaching"        // Within 7 days of due date
+  | "due_today"          // Due today
+  | "overdue"            // Past due date
+  | "critically_overdue" // 14+ days past due
+  | "no_due_date";       // Defensive fallback
+
+/**
+ * Bucket a counter-signature due date into one of six urgency
+ * categories relative to `today`. Day boundaries are calendar-day
+ * coarse: anything within the same calendar day is "due_today",
+ * regardless of HH:MM. Negative day counts wrap to overdue /
+ * critically_overdue. Null due date returns no_due_date.
+ *
+ * The thresholds (>7 on_track, 1..7 approaching, 0 due_today,
+ * -1..-13 overdue, <=-14 critically_overdue) are the spec's
+ * reminder-cadence thresholds. Keep them in lockstep with the
+ * send-counter-signature-reminder edge function.
+ */
+export function counterSignatureUrgency(
+  dueDate: Date | string | null,
+  today: Date = new Date(),
+): CounterSignatureUrgency {
+  if (dueDate === null || dueDate === undefined) return "no_due_date";
+  const due = typeof dueDate === "string" ? new Date(dueDate) : dueDate;
+  if (Number.isNaN(due.getTime())) return "no_due_date";
+
+  // Compare at calendar-day granularity. Both sides truncated to
+  // midnight UTC so HH:MM:SS noise within the same day doesn't flip
+  // the bucket. Without this, a due_at="2026-05-20" and
+  // today="2026-05-20T18:00" would compute to negative days.
+  const dueDay = Date.UTC(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate());
+  const todayDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const daysUntil = Math.floor((dueDay - todayDay) / (1000 * 60 * 60 * 24));
+
+  if (daysUntil > 7) return "on_track";
+  if (daysUntil > 0) return "approaching";
+  if (daysUntil === 0) return "due_today";
+  if (daysUntil > -14) return "overdue";
+  return "critically_overdue";
+}
+
+/**
+ * User-facing label for a counter-signature urgency bucket.
+ */
+export function counterSignatureUrgencyLabel(urgency: CounterSignatureUrgency): string {
+  const labels: Record<CounterSignatureUrgency, string> = {
+    on_track: "On Track",
+    approaching: "Approaching Due Date",
+    due_today: "Due Today",
+    overdue: "Overdue",
+    critically_overdue: "Critically Overdue",
+    no_due_date: "No Due Date Set",
+  };
+  return labels[urgency];
+}
