@@ -37,6 +37,8 @@ import {
   isEquivalent,
   type LifecycleStatus,
 } from '@/lib/lifecycleStates';
+import { ChainStepBadges } from '@/components/leases/ChainStepBadges';
+import { VoluntaryDelegationModal } from '@/components/workflow/VoluntaryDelegationModal';
 
 interface QueueLease {
   id: string;
@@ -245,6 +247,19 @@ interface PendingChainStep {
   is_required: boolean;
   created_at: string;
   policy_id: string | null;
+  // Phase 7 — delegate-aware fields. May be NULL on chain rows that
+  // pre-date Phase 7 deployment.
+  effective_assignee_user_id?: string | null;
+  assignee_resolution_source?:
+    | 'policy_user'
+    | 'policy_role'
+    | 'policy_delegate'
+    | 'ooo_delegate'
+    | 'voluntary_delegate'
+    | 'admin_reassign'
+    | null;
+  pending_since?: string | null;
+  delegate_after_days?: number | null;
   // Hydrated from leases table:
   request_title: string | null;
   requesting_department: string | null;
@@ -265,6 +280,8 @@ function ChainStepCard({
   const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'send_back' | null>(null);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
+  // Phase 7: voluntary delegation modal
+  const [delegateOpen, setDelegateOpen] = useState(false);
 
   // Visual tag distinguishing source — per the Phase 2 guard rail, makes
   // it obvious where each row came from when merged with legacy ones.
@@ -327,6 +344,15 @@ function ChainStepCard({
             </Badge>
           </div>
 
+          {/* Phase 7: delegation context badges (voluntary / OOO / policy
+              delegate / pending N days). Auto-hides when no badges apply. */}
+          <ChainStepBadges
+            source={step.assignee_resolution_source ?? null}
+            pendingSince={step.pending_since ?? null}
+            originalAssigneeName={null}
+            delegateAfterDays={step.delegate_after_days ?? null}
+          />
+
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
             {step.monthly_payment != null && (
               <span>
@@ -372,6 +398,16 @@ function ChainStepCard({
             </Button>
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setDelegateOpen(true)}
+              disabled={busy}
+              className="flex-1 sm:flex-none"
+              title="Hand this step to a workspace member"
+            >
+              Delegate…
+            </Button>
+            <Button
+              size="sm"
               variant="ghost"
               onClick={() => onView(step.lease_id)}
               disabled={busy}
@@ -382,6 +418,14 @@ function ChainStepCard({
           </div>
         </div>
       </CardContent>
+
+      <VoluntaryDelegationModal
+        open={delegateOpen}
+        onOpenChange={setDelegateOpen}
+        chainStepId={step.id}
+        workspaceId={step.workspace_id}
+        onDelegated={onActed}
+      />
 
       <Dialog open={actionDialog !== null} onOpenChange={(o) => !o && setActionDialog(null)}>
         <DialogContent>
@@ -615,17 +659,24 @@ export default function ApprovalQueue() {
       let chainQuery = (supabase as any)
         .from('lease_approval_chain')
         .select(
-          'id, lease_id, workspace_id, stage, step_order, parallel_group, approver_user_id, approver_role, is_required, created_at, policy_id',
+          // Phase 7: also pull delegate-aware fields so badges + delegation
+          // affordance can render based on resolution source / pending_since.
+          'id, lease_id, workspace_id, stage, step_order, parallel_group, approver_user_id, approver_role, is_required, created_at, policy_id, effective_assignee_user_id, assignee_resolution_source, pending_since, delegate_after_days',
         )
         .eq('workspace_id', workspace.id)
         .eq('status', 'pending');
 
+      // Phase 7: surface steps where user is the original assignee, holds
+      // the role, OR is the effective assignee (covers admin reassign /
+      // voluntary delegation / OOO routing / activated policy delegate).
       if (myRoleNames.length > 0) {
         chainQuery = chainQuery.or(
-          `approver_user_id.eq.${user.id},approver_role.in.(${myRoleNames.join(',')})`,
+          `approver_user_id.eq.${user.id},approver_role.in.(${myRoleNames.join(',')}),effective_assignee_user_id.eq.${user.id}`,
         );
       } else {
-        chainQuery = chainQuery.eq('approver_user_id', user.id);
+        chainQuery = chainQuery.or(
+          `approver_user_id.eq.${user.id},effective_assignee_user_id.eq.${user.id}`,
+        );
       }
 
       const { data: chainStepRows } = await chainQuery;

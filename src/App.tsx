@@ -28,6 +28,7 @@ import Onboarding from "./pages/app/Onboarding";
 import LeaseReview from "./pages/app/LeaseReview";
 import SignatorReview from "./pages/app/SignatorReview";
 import RerouteAuditDashboard from "./pages/app/RerouteAuditDashboard";
+import ExceptionsDashboard from "./pages/app/ExceptionsDashboard";
 import Portfolio from "./pages/app/Portfolio";
 import ApprovalQueue from "./pages/app/ApprovalQueue";
 import FinancialReview from "./pages/app/FinancialReview";
@@ -172,6 +173,18 @@ const App = () => (
                     <ProtectedRoute>
                       <RequireRole allow={canEditWorkspaceSettings}>
                         <RerouteAuditDashboard />
+                      </RequireRole>
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Phase 7 — admin exceptions dashboard. Stuck chains,
+                    deactivated approvers, recent overrides, active OOO. */}
+                <Route
+                  path="/app/admin/exceptions"
+                  element={
+                    <ProtectedRoute>
+                      <RequireRole allow={canEditWorkspaceSettings}>
+                        <ExceptionsDashboard />
                       </RequireRole>
                     </ProtectedRoute>
                   }

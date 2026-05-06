@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut, Palette, Shield, Info, Settings2, Sun, Moon, Monitor, Mail, BarChart3 } from 'lucide-react';
+import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut, Palette, Shield, Info, Settings2, Sun, Moon, Monitor, Mail, BarChart3, CalendarOff } from 'lucide-react';
+import { OutOfOfficeSettings } from '@/components/workflow/OutOfOfficeSettings';
 import { useTheme } from 'next-themes';
 import { UsageContent } from '@/pages/app/UsageContent';
 import WorkspaceSettings from '@/pages/settings/WorkspaceSettings';
@@ -457,6 +458,11 @@ export default function AccountSettings() {
             <TabsTrigger value="usage" className={railTriggerClass}>
               <BarChart3 className="h-4 w-4" />
               {t('account.usage')}
+            </TabsTrigger>
+            {/* Phase 7 — out-of-office routing for chain approvals */}
+            <TabsTrigger value="out-of-office" className={railTriggerClass}>
+              <CalendarOff className="h-4 w-4" />
+              Out of Office
             </TabsTrigger>
 
             {isAdminUser && (
@@ -984,6 +990,11 @@ export default function AccountSettings() {
           )}
 
           {/* Appearance — theme toggle */}
+          {/* Phase 7 — Out of Office */}
+          <TabsContent value="out-of-office" className="space-y-6 mt-0">
+            <OutOfOfficeSettings />
+          </TabsContent>
+
           <TabsContent value="appearance" className="space-y-6 mt-0">
             <Card>
               <CardHeader>
