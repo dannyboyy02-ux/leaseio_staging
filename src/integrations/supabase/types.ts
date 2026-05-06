@@ -1242,6 +1242,8 @@ export type Database = {
           concept_approved_at: string | null
           confidence_scores: Json | null
           confirmed_sections: string[]
+          counter_signature_due_date: string | null
+          counter_signature_reminder_count: number
           counter_signed_at: string | null
           covenant_flagged: boolean | null
           current_monthly_rent: number | null
@@ -1316,6 +1318,7 @@ export type Database = {
           requestor_id: string | null
           security_deposit: string | null
           signator_approved_at: string | null
+          signator_attestation: string | null
           square_footage: number | null
           status: string
           status_changed_at: string | null
@@ -1372,6 +1375,8 @@ export type Database = {
           concept_approved_at?: string | null
           confidence_scores?: Json | null
           confirmed_sections?: string[]
+          counter_signature_due_date?: string | null
+          counter_signature_reminder_count?: number
           counter_signed_at?: string | null
           covenant_flagged?: boolean | null
           current_monthly_rent?: number | null
@@ -1446,6 +1451,7 @@ export type Database = {
           requestor_id?: string | null
           security_deposit?: string | null
           signator_approved_at?: string | null
+          signator_attestation?: string | null
           square_footage?: number | null
           status?: string
           status_changed_at?: string | null
@@ -1502,6 +1508,8 @@ export type Database = {
           concept_approved_at?: string | null
           confidence_scores?: Json | null
           confirmed_sections?: string[]
+          counter_signature_due_date?: string | null
+          counter_signature_reminder_count?: number
           counter_signed_at?: string | null
           covenant_flagged?: boolean | null
           current_monthly_rent?: number | null
@@ -1576,6 +1584,7 @@ export type Database = {
           requestor_id?: string | null
           security_deposit?: string | null
           signator_approved_at?: string | null
+          signator_attestation?: string | null
           square_footage?: number | null
           status?: string
           status_changed_at?: string | null
@@ -2161,6 +2170,7 @@ export type Database = {
           backdoor_enabled: boolean
           billing_interval: string
           building_options: Json
+          counter_signature_default_due_days: number
           covenant_threshold: number | null
           created_at: string
           default_notification_days: number
@@ -2185,6 +2195,7 @@ export type Database = {
           backdoor_enabled?: boolean
           billing_interval?: string
           building_options?: Json
+          counter_signature_default_due_days?: number
           covenant_threshold?: number | null
           created_at?: string
           default_notification_days?: number
@@ -2209,6 +2220,7 @@ export type Database = {
           backdoor_enabled?: boolean
           billing_interval?: string
           building_options?: Json
+          counter_signature_default_due_days?: number
           covenant_threshold?: number | null
           created_at?: string
           default_notification_days?: number
