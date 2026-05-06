@@ -459,6 +459,18 @@ export default function ApprovalQueue() {
 
   // Phase 2 — chain-step inbox source. Parallel to the legacy state above.
   const [pendingChainSteps, setPendingChainSteps] = useState<PendingChainStep[]>([]);
+  // Phase 5: leases in pending_counter_signature where the current user
+  // is the execution_owner_id. Surfaced inside "Needs My Review" so the
+  // execution owner has a single inbox view.
+  const [executionOwnerLeases, setExecutionOwnerLeases] = useState<
+    Array<{
+      id: string;
+      request_title: string | null;
+      tenant_name: string | null;
+      counter_signature_due_date: string | null;
+      counter_signature_reminder_count: number | null;
+    }>
+  >([]);
 
   const [approveTarget, setApproveTarget] = useState<QueueLease | null>(null);
   const [rejectTarget, setRejectTarget] = useState<QueueLease | null>(null);
@@ -644,6 +656,19 @@ export default function ApprovalQueue() {
         });
       }
       setPendingChainSteps(hydratedChainSteps);
+
+      // Phase 5 — execution-owner inbox section. Lists leases where the
+      // user is the execution_owner_id and lifecycle is
+      // pending_counter_signature. Workspace-scoped via the query.
+      const { data: ownerLeaseRows } = await (supabase as any)
+        .from('leases')
+        .select(
+          'id, request_title, tenant_name, counter_signature_due_date, counter_signature_reminder_count',
+        )
+        .eq('workspace_id', workspace.id)
+        .eq('lifecycle_status', 'pending_counter_signature')
+        .eq('execution_owner_id', user.id);
+      setExecutionOwnerLeases((ownerLeaseRows ?? []) as any);
     } catch (err) {
       console.error('Error fetching approval queue:', err);
     } finally {
@@ -986,7 +1011,9 @@ export default function ApprovalQueue() {
       })),
     ].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 
-    if (items.length === 0) {
+    const hasExecutionOwnerItems = executionOwnerLeases.length > 0;
+
+    if (items.length === 0 && !hasExecutionOwnerItems) {
       return (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <FileText className="h-12 w-12 mb-3 opacity-40" />
@@ -997,7 +1024,47 @@ export default function ApprovalQueue() {
     }
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-6">
+        {hasExecutionOwnerItems && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              Counter-signature follow-up ({executionOwnerLeases.length})
+            </p>
+            <div className="space-y-2">
+              {executionOwnerLeases.map((l) => {
+                const dueFmt = l.counter_signature_due_date
+                  ? format(new Date(l.counter_signature_due_date), 'MMM d, yyyy')
+                  : 'No due date';
+                return (
+                  <Card
+                    key={`exec-${l.id}`}
+                    className="overflow-hidden cursor-pointer hover:bg-muted/30"
+                    onClick={() => navigate(`/app/leases/${l.id}`)}
+                  >
+                    <CardContent className="p-4 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">
+                          {l.request_title || l.tenant_name || 'Untitled lease'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          You are the execution owner · Due {dueFmt}
+                          {l.counter_signature_reminder_count != null &&
+                          l.counter_signature_reminder_count > 0
+                            ? ` · ${l.counter_signature_reminder_count} reminder${
+                                l.counter_signature_reminder_count === 1 ? '' : 's'
+                              } sent`
+                            : ''}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {items.map((item) =>
           item.kind === 'legacy' ? (
             <LeaseQueueCard
@@ -1028,6 +1095,9 @@ export default function ApprovalQueue() {
       </div>
     );
   };
+
+  // Layout note: the renderUnifiedMyReview return wraps both the
+  // Phase 5 execution-owner section + the legacy/chain unified items.
 
   const renderList = (leases: QueueLease[], viewerMode = false) => {
     if (loading) {
@@ -1076,8 +1146,10 @@ export default function ApprovalQueue() {
   };
 
   // Phase 2: pending count merges legacy lease rows with chain steps so
-  // the badge reflects the unified inbox.
-  const pendingCount = pendingMyReview.length + pendingChainSteps.length;
+  // the badge reflects the unified inbox. Phase 5 adds counter-signature
+  // execution-owner items to the same badge.
+  const pendingCount =
+    pendingMyReview.length + pendingChainSteps.length + executionOwnerLeases.length;
   const governanceCount = unlockRequests.length + changeSets.length;
   const showGovernanceTab = isAdminUser || isFinancialApprover;
 

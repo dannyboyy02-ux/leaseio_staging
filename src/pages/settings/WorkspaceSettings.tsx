@@ -120,6 +120,11 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
   const [isSavingRoles, setIsSavingRoles] = useState(false);
   const [backdoorEnabled, setBackdoorEnabled] = useState(false);
   const [isSavingBackdoor, setIsSavingBackdoor] = useState(false);
+  // Phase 5 — counter-signature window default. Workspace-level setting
+  // that drives the due date computed when a lease enters
+  // pending_counter_signature.
+  const [counterSignatureDueDays, setCounterSignatureDueDays] = useState('21');
+  const [isSavingCounterSignature, setIsSavingCounterSignature] = useState(false);
 
   // Phase 2 — functional roles state: map of user_id → Set<FunctionalRole>
   const [memberRoles, setMemberRoles] = useState<Record<string, Set<FunctionalRole>>>({});
@@ -177,6 +182,26 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
       setNotificationDays(String(workspace.defaultNotificationDays || 90));
     }
   }, [workspace]);
+
+  // Phase 5 — load counter_signature_default_due_days for this workspace.
+  // Not on the WorkspaceBasic context shape (yet), so fetched directly.
+  useEffect(() => {
+    if (!workspace?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('workspaces')
+        .select('counter_signature_default_due_days')
+        .eq('id', workspace.id)
+        .maybeSingle();
+      if (cancelled) return;
+      const v = (data as any)?.counter_signature_default_due_days;
+      if (typeof v === 'number') setCounterSignatureDueDays(String(v));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace?.id]);
 
   // Load financial settings from workspaces table
   useEffect(() => {
@@ -342,6 +367,40 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
       toast.error('Failed to save notification settings');
     } finally {
       setIsSavingNotifications(false);
+    }
+  };
+
+  // Phase 5 — save counter-signature window. Persists
+  // workspaces.counter_signature_default_due_days; act-on-chain-step
+  // reads this when computing counter_signature_due_date at signator
+  // approve. CHECK constraint enforces 1..365 server-side.
+  const handleSaveCounterSignature = async () => {
+    if (!canEdit) {
+      toast.error(t('workspace.read_only'));
+      return;
+    }
+    if (!workspace?.id) {
+      toast.error('No workspace found');
+      return;
+    }
+    const days = parseInt(counterSignatureDueDays, 10);
+    if (!Number.isFinite(days) || days < 1 || days > 365) {
+      toast.error('Counter-signature window must be between 1 and 365 days.');
+      return;
+    }
+    setIsSavingCounterSignature(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('workspaces')
+        .update({ counter_signature_default_due_days: days })
+        .eq('id', workspace.id);
+      if (error) throw error;
+      toast.success('Counter-signature window saved.');
+    } catch (error) {
+      console.error('Error saving counter-signature window:', error);
+      toast.error('Failed to save counter-signature window');
+    } finally {
+      setIsSavingCounterSignature(false);
     }
   };
 
@@ -744,6 +803,52 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
                     {isSavingNotifications ? t('workspace.saving') : t('workspace.save_changes')}
                   </Button>
                   {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                </CardContent>
+              </Card>
+
+              {/* Phase 5 — counter-signature window default. */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Counter-Signature Window</CardTitle>
+                  <CardDescription>
+                    Default number of days from signator approval until the
+                    counter-signed document is expected. Reminders fire 7 days
+                    before, on the due date, and at 7 / 14 / 28 days overdue.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="counter-signature-days">
+                      Default counter-signature window (days)
+                    </Label>
+                    <Input
+                      id="counter-signature-days"
+                      type="number"
+                      value={counterSignatureDueDays}
+                      onChange={(e) => setCounterSignatureDueDays(e.target.value)}
+                      min={1}
+                      max={365}
+                      disabled={!canEdit}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Must be between 1 and 365 days. Default: 21.
+                    </p>
+                  </div>
+                  <Button
+                    variant="accent"
+                    onClick={handleSaveCounterSignature}
+                    disabled={!canEdit || isSavingCounterSignature}
+                  >
+                    {isSavingCounterSignature ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {isSavingCounterSignature ? t('workspace.saving') : t('workspace.save_changes')}
+                  </Button>
+                  {!canEdit && (
+                    <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

@@ -26,6 +26,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 // App pages (protected)
 import Onboarding from "./pages/app/Onboarding";
 import LeaseReview from "./pages/app/LeaseReview";
+import SignatorReview from "./pages/app/SignatorReview";
 import Portfolio from "./pages/app/Portfolio";
 import ApprovalQueue from "./pages/app/ApprovalQueue";
 import FinancialReview from "./pages/app/FinancialReview";
@@ -148,6 +149,15 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <FinancialReview />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Phase 5 — signator review (intentional friction page) */}
+                <Route
+                  path="/app/leases/:leaseId/signator-review"
+                  element={
+                    <ProtectedRoute>
+                      <SignatorReview />
                     </ProtectedRoute>
                   }
                 />

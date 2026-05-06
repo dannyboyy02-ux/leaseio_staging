@@ -165,11 +165,16 @@ describe('isDocumentTypeAllowed', () => {
     expect(isDocumentTypeAllowed('amendment', 'final_review')).toBe(false);
   });
 
-  it('pending_counter_signature allows our_signed and other only', () => {
+  it('pending_counter_signature allows our_signed, fully_executed_counterparty_returned, and other', () => {
     expect(isDocumentTypeAllowed('our_signed', 'pending_counter_signature')).toBe(true);
     expect(isDocumentTypeAllowed('other', 'pending_counter_signature')).toBe(true);
+    // Phase 5: counter-signed doc must be uploadable while still pending
+    // so record-counter-signature has the row to satisfy its precondition.
+    expect(
+      isDocumentTypeAllowed('fully_executed_counterparty_returned', 'pending_counter_signature'),
+    ).toBe(true);
     expect(isDocumentTypeAllowed('final_negotiated', 'pending_counter_signature')).toBe(false);
-    expect(isDocumentTypeAllowed('fully_executed_counterparty_returned', 'pending_counter_signature')).toBe(false);
+    expect(isDocumentTypeAllowed('draft', 'pending_counter_signature')).toBe(false);
   });
 
   it('fully_executed and legacy executed allow fully_executed_counterparty_returned, amendment, side_letter, other', () => {

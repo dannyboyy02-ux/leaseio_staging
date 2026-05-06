@@ -71,6 +71,7 @@ import { ExecutedTermsReview } from "@/components/leases/ExecutedTermsReview";
 import { VarianceReport } from "@/components/leases/VarianceReport";
 import { LeaseDocumentsTab } from "@/components/leases/LeaseDocumentsTab";
 import { DocumentsPanel } from "@/components/leases/documents/DocumentsPanel";
+import { CounterSignaturePanel } from "@/components/leases/CounterSignaturePanel";
 import { LockedLeaseDetail } from "@/components/leases/locked/LockedLeaseDetail";
 import { ArchiveButton } from "@/components/leases/ArchiveButton";
 
@@ -2864,6 +2865,21 @@ export default function LeaseReview() {
                             queryClient.invalidateQueries({ queryKey: ['lease', leaseId] });
                           }}
                         />
+                        {lease.lifecycle_status === 'pending_counter_signature' && (
+                          <CounterSignaturePanel
+                            leaseId={lease.id}
+                            workspaceId={lease.workspace_id}
+                            lifecycleStatus={lease.lifecycle_status}
+                            requestorId={lease.requestor_id ?? null}
+                            userId={lease.user_id ?? null}
+                            executionOwnerId={lease.execution_owner_id ?? null}
+                            dueDate={lease.counter_signature_due_date ?? null}
+                            reminderCount={lease.counter_signature_reminder_count ?? 0}
+                            onChanged={() => {
+                              queryClient.invalidateQueries({ queryKey: ['lease', leaseId] });
+                            }}
+                          />
+                        )}
                         <LeaseDocumentsTab
                           leaseId={lease.id}
                           filename={lease.filename}

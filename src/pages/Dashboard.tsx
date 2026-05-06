@@ -14,6 +14,7 @@ import { PipelineByDepartment } from '@/components/dashboard/PipelineByDepartmen
 import { IntakeTrend } from '@/components/dashboard/IntakeTrend';
 import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
 import { EscalationReviewPanel } from '@/components/dashboard/EscalationReviewPanel';
+import { PendingCounterSignatureCard } from '@/components/dashboard/PendingCounterSignatureCard';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -57,6 +58,9 @@ export default function Dashboard() {
 
         {/* Escalation alerts — only renders when needs_escalation_review leases exist */}
         <EscalationReviewPanel />
+
+        {/* Phase 5 — auto-hides when nothing is in pending_counter_signature */}
+        <PendingCounterSignatureCard />
 
         {/* Row 1: Action queue (wide) + Pipeline funnel (narrow) */}
         <div className="grid grid-cols-3 gap-6">

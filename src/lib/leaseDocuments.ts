@@ -134,7 +134,15 @@ export function isDocumentTypeAllowed(
     case 'final_review':
       return type === 'final_negotiated' || type === 'other';
     case 'pending_counter_signature':
-      return type === 'our_signed' || type === 'other';
+      // Phase 5: 'fully_executed_counterparty_returned' is the document
+      // type record-counter-signature looks for to land the lease in
+      // 'fully_executed'. Must be uploadable while the lease is still
+      // in pending_counter_signature.
+      return (
+        type === 'our_signed' ||
+        type === 'fully_executed_counterparty_returned' ||
+        type === 'other'
+      );
     case 'fully_executed':
     case 'executed':
       return (
