@@ -310,6 +310,31 @@ serve(async (req) => {
     triggering_document_id: triggeringDoc.id,
   });
 
+  // Phase 7: pending_since marks "what we're waiting on now." When the
+  // lease enters final_review, the signator chain rows (inserted at
+  // initial resolution but pending_since=null since they weren't
+  // active blockers yet) become the active blocker. Set pending_since
+  // on the lowest-step_order required signator rows.
+  const { data: signatorRows } = await supabaseAdmin
+    .from("lease_approval_chain")
+    .select("id, step_order")
+    .eq("lease_id", lease.id)
+    .eq("stage", "signator")
+    .eq("status", "pending")
+    .eq("is_required", true)
+    .is("pending_since", null);
+  const sigRows = (signatorRows ?? []) as Array<{ id: string; step_order: number }>;
+  if (sigRows.length > 0) {
+    const minOrder = Math.min(...sigRows.map((r) => r.step_order));
+    const ids = sigRows.filter((r) => r.step_order === minOrder).map((r) => r.id);
+    if (ids.length > 0) {
+      await supabaseAdmin
+        .from("lease_approval_chain")
+        .update({ pending_since: new Date().toISOString() })
+        .in("id", ids);
+    }
+  }
+
   // ── final_review_stage_entered audit row ───────────────────────────
   await supabaseAdmin
     .from("lease_activity_log")

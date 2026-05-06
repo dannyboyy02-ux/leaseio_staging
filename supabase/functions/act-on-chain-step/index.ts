@@ -56,6 +56,9 @@ interface ChainStepRow {
   approver_role: string | null;
   is_required: boolean;
   status: string;
+  // Phase 7
+  effective_assignee_user_id: string | null;
+  assignee_resolution_source: string | null;
 }
 
 const ACTION_TO_STATUS: Record<string, "approved" | "rejected" | "sent_back"> = {
@@ -204,11 +207,13 @@ serve(async (req) => {
     );
   }
 
-  // Load the chain step.
+  // Load the chain step. Phase 7 adds effective_assignee_user_id and
+  // assignee_resolution_source to the SELECT so we can recognize
+  // delegate authority and tag activity log entries with the source.
   const { data: stepData, error: stepError } = await supabaseAdmin
     .from("lease_approval_chain")
     .select(
-      "id, lease_id, workspace_id, stage, step_order, parallel_group, approver_user_id, approver_role, is_required, status",
+      "id, lease_id, workspace_id, stage, step_order, parallel_group, approver_user_id, approver_role, is_required, status, effective_assignee_user_id, assignee_resolution_source",
     )
     .eq("id", chainStepId)
     .maybeSingle();
@@ -253,12 +258,50 @@ serve(async (req) => {
   );
   if (rateLimitResponse) return rateLimitResponse;
 
-  // Authorization: assignee user OR has the step's role OR workspace
-  // owner/admin (override path).
+  // Authorization: original assignee user OR effective assignee
+  // (Phase 7 — covers admin reassign / voluntary delegation / OOO
+  // routing / activated policy delegate) OR active voluntary delegation
+  // for this step OR has the step's role OR workspace owner/admin
+  // (override path). The first hit short-circuits.
   let authorized = false;
+  let actedAsDelegate = false;
+  let delegateResolution: string | null = null;
 
   if (step.approver_user_id && step.approver_user_id === user.id) {
     authorized = true;
+  }
+
+  // Phase 7: effective_assignee_user_id covers all delegation sources
+  // (admin reassign / voluntary / OOO / activated policy delegate).
+  // If the actor is the effective assignee but NOT the original, tag
+  // the action as a delegated action for the audit trail.
+  if (!authorized && step.effective_assignee_user_id && step.effective_assignee_user_id === user.id) {
+    authorized = true;
+    if (step.approver_user_id !== user.id) {
+      actedAsDelegate = true;
+      delegateResolution = step.assignee_resolution_source ?? "unknown";
+    }
+  }
+
+  // Phase 7: also accept active (un-revoked) voluntary delegations as
+  // a defensive secondary path. Normally effective_assignee_user_id
+  // already reflects the voluntary delegate, but if the denormalized
+  // column is somehow stale this catches the canonical row.
+  if (!authorized) {
+    const { data: vd } = await supabaseAdmin
+      .from("chain_step_voluntary_delegations")
+      .select("id, delegated_by")
+      .eq("chain_step_id", step.id)
+      .eq("delegated_to", user.id)
+      .is("revoked_at", null)
+      .order("delegated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (vd) {
+      authorized = true;
+      actedAsDelegate = true;
+      delegateResolution = "voluntary_delegate";
+    }
   }
 
   if (!authorized && step.approver_role) {
@@ -329,6 +372,12 @@ serve(async (req) => {
     step_order: step.step_order,
     parallel_group: step.parallel_group,
     comment: comment || null,
+    // Phase 7: when the actor is acting via delegation rather than
+    // as the original assignee, tag the audit row so reviewers can
+    // distinguish original vs delegated actions.
+    acted_as_delegate: actedAsDelegate,
+    delegate_resolution: actedAsDelegate ? delegateResolution : null,
+    original_approver_user_id: actedAsDelegate ? step.approver_user_id : null,
   });
 
   // ── Phase 3: determine lifecycle mode ONCE, before any transition ─────
@@ -551,6 +600,31 @@ serve(async (req) => {
       if (advancedPastStepOrder(allRows, "concept", step.step_order)) {
         // Crossed a sequential level — compute who's now active.
         nextAssignees = findFirstPendingAssignees(allRows, "concept");
+
+        // Phase 7: set pending_since on the new active concept rows
+        // (the lowest step_order among required pending rows that
+        // don't yet have pending_since populated). The cron functions
+        // use pending_since to compute delegate-timer + stuck-chain
+        // thresholds, so accuracy here matters.
+        const { data: nextRows } = await supabaseAdmin
+          .from("lease_approval_chain")
+          .select("id, step_order")
+          .eq("lease_id", step.lease_id)
+          .eq("stage", "concept")
+          .eq("status", "pending")
+          .eq("is_required", true)
+          .is("pending_since", null);
+        const rows = (nextRows ?? []) as Array<{ id: string; step_order: number }>;
+        if (rows.length > 0) {
+          const minOrder = Math.min(...rows.map((r) => r.step_order));
+          const ids = rows.filter((r) => r.step_order === minOrder).map((r) => r.id);
+          if (ids.length > 0) {
+            await supabaseAdmin
+              .from("lease_approval_chain")
+              .update({ pending_since: new Date().toISOString() })
+              .in("id", ids);
+          }
+        }
       }
     } else if (step.stage === "signator") {
       // Phase 5: signator approve transitions the lease to

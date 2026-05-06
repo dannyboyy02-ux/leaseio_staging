@@ -666,6 +666,10 @@ serve(async (req) => {
       const addedIdentities = new Set(
         reconciled.added.map((a) => `${a.stage}::${a.approver_user_id ?? ""}::${a.approver_role ?? ""}`),
       );
+      // Phase 7: rows added via reroute become immediately pending —
+      // the lease lifecycle has rolled back so they're what's blocking.
+      // Set pending_since on required ones.
+      const rerouteNowIso = new Date().toISOString();
       const rowsToInsert = newPolicySteps
         .filter((s) =>
           addedIdentities.has(`${s.stage}::${s.approver_user_id ?? ""}::${s.approver_role ?? ""}`),
@@ -684,6 +688,10 @@ serve(async (req) => {
           delegate_after_days: s.delegate_after_days,
           is_required: s.is_required,
           status: "pending",
+          // Phase 7 columns
+          effective_assignee_user_id: s.approver_user_id,
+          assignee_resolution_source: s.approver_user_id ? "policy_user" : "policy_role",
+          pending_since: s.is_required ? rerouteNowIso : null,
         }));
       if (rowsToInsert.length > 0) {
         const { error: insErr } = await supabaseAdmin
@@ -937,6 +945,16 @@ serve(async (req) => {
     );
   }
 
+  // Phase 7: precompute the lowest required concept step_order so we
+  // can populate pending_since on the first-active row(s). Steps in
+  // higher step_orders (or the signator stage) start with pending_since
+  // = null and get it set when the prior steps complete.
+  const firstConceptOrderForPending = (() => {
+    const concept = policySteps.filter((s) => s.stage === "concept" && s.is_required);
+    return concept.length > 0 ? Math.min(...concept.map((s) => s.step_order)) : null;
+  })();
+  const phase7NowIso = new Date().toISOString();
+
   const rowsToInsert = policySteps.map((s) => ({
     lease_id: leaseId,
     workspace_id: workspaceId,
@@ -951,6 +969,19 @@ serve(async (req) => {
     delegate_after_days: s.delegate_after_days,
     is_required: s.is_required,
     status: "pending",
+    // Phase 7 columns:
+    // effective_assignee_user_id mirrors approver_user_id at insert
+    // (null for role-based rows). assignee_resolution_source documents
+    // how it was determined.
+    effective_assignee_user_id: s.approver_user_id,
+    assignee_resolution_source: s.approver_user_id ? "policy_user" : "policy_role",
+    // pending_since set only on the first-active concept row(s).
+    pending_since: s.stage === "concept" &&
+        s.is_required &&
+        firstConceptOrderForPending !== null &&
+        s.step_order === firstConceptOrderForPending
+      ? phase7NowIso
+      : null,
   }));
 
   const { error: insertError } = await supabaseAdmin
