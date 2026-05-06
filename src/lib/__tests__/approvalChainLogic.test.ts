@@ -1,13 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
+  type AssigneeContext,
   type ChainStepLike,
   advancedPastStepOrder,
   checkSeparationOfDuties,
   findFirstPendingAssignees,
   getEffectiveSeparationOfDuties,
   isStageComplete,
+  isStepStuck,
   reconcileChainSteps,
+  resolveEffectiveAssignee,
   rollbackTargetForNewChain,
+  shouldActivatePolicyDelegate,
 } from '../approvalChainLogic';
 
 const userStep = (
@@ -396,5 +400,249 @@ describe('rollbackTargetForNewChain', () => {
     expect(rollbackTargetForNewChain(added, { preserved: [], added })).toBe(
       'final_review',
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 7 — shouldActivatePolicyDelegate + isStepStuck + resolveEffectiveAssignee
+// ─────────────────────────────────────────────────────────────────────────
+
+const FIXED_NOW = new Date('2026-05-06T12:00:00Z');
+const daysAgo = (n: number): Date => new Date(FIXED_NOW.getTime() - n * 24 * 60 * 60 * 1000);
+
+const baseCtx = (
+  overrides: Partial<AssigneeContext> = {},
+): AssigneeContext => ({
+  policy_user_id: null,
+  policy_role: null,
+  policy_delegate_user_id: null,
+  policy_delegate_after_days: null,
+  voluntary_delegate_user_id: null,
+  ooo_delegate_user_id: null,
+  admin_reassigned_user_id: null,
+  pending_since: null,
+  ...overrides,
+});
+
+describe('shouldActivatePolicyDelegate', () => {
+  it('returns false when pending_since is null', () => {
+    expect(shouldActivatePolicyDelegate(null, 2, 'u-delegate', FIXED_NOW)).toBe(false);
+  });
+
+  it('returns false when delegate_after_days is null', () => {
+    expect(shouldActivatePolicyDelegate(daysAgo(10), null, 'u-delegate', FIXED_NOW)).toBe(false);
+  });
+
+  it('returns false when delegate_user_id is null', () => {
+    expect(shouldActivatePolicyDelegate(daysAgo(10), 2, null, FIXED_NOW)).toBe(false);
+  });
+
+  it('returns false when threshold not yet elapsed', () => {
+    // pending 1 day, threshold 2 days → not yet
+    expect(shouldActivatePolicyDelegate(daysAgo(1), 2, 'u-delegate', FIXED_NOW)).toBe(false);
+  });
+
+  it('returns true at exactly the threshold (>= comparison)', () => {
+    expect(shouldActivatePolicyDelegate(daysAgo(2), 2, 'u-delegate', FIXED_NOW)).toBe(true);
+  });
+
+  it('returns true past the threshold', () => {
+    expect(shouldActivatePolicyDelegate(daysAgo(5), 2, 'u-delegate', FIXED_NOW)).toBe(true);
+  });
+
+  it('handles ISO string input', () => {
+    const iso = daysAgo(3).toISOString();
+    expect(shouldActivatePolicyDelegate(iso, 2, 'u-delegate', FIXED_NOW)).toBe(true);
+  });
+
+  it('returns false for negative delegate_after_days (defensive)', () => {
+    expect(shouldActivatePolicyDelegate(daysAgo(10), -1, 'u-delegate', FIXED_NOW)).toBe(false);
+  });
+
+  it('returns false for invalid date string', () => {
+    expect(shouldActivatePolicyDelegate('not a date', 2, 'u-delegate', FIXED_NOW)).toBe(false);
+  });
+});
+
+describe('isStepStuck', () => {
+  it('returns false when pending_since is null', () => {
+    expect(isStepStuck(null, 7, FIXED_NOW)).toBe(false);
+  });
+
+  it('returns false below threshold', () => {
+    expect(isStepStuck(daysAgo(3), 7, FIXED_NOW)).toBe(false);
+  });
+
+  it('returns true at exactly the threshold', () => {
+    expect(isStepStuck(daysAgo(7), 7, FIXED_NOW)).toBe(true);
+  });
+
+  it('returns true past the threshold', () => {
+    expect(isStepStuck(daysAgo(14), 7, FIXED_NOW)).toBe(true);
+  });
+
+  it('uses default threshold of 7 days when not specified', () => {
+    expect(isStepStuck(daysAgo(8), undefined, FIXED_NOW)).toBe(true);
+    expect(isStepStuck(daysAgo(6), undefined, FIXED_NOW)).toBe(false);
+  });
+
+  it('returns false for invalid date string', () => {
+    expect(isStepStuck('garbage', 7, FIXED_NOW)).toBe(false);
+  });
+});
+
+describe('resolveEffectiveAssignee', () => {
+  it('returns policy_user when only that source is set', () => {
+    const r = resolveEffectiveAssignee(baseCtx({ policy_user_id: 'u-policy' }), FIXED_NOW);
+    expect(r).toEqual({ user_id: 'u-policy', role: null, source: 'policy_user' });
+  });
+
+  it('returns policy_role when only role is set', () => {
+    const r = resolveEffectiveAssignee(baseCtx({ policy_role: 'manager_approver' }), FIXED_NOW);
+    expect(r).toEqual({ user_id: null, role: 'manager_approver', source: 'policy_role' });
+  });
+
+  it('prefers policy_user over policy_role when both are set', () => {
+    const r = resolveEffectiveAssignee(
+      baseCtx({ policy_user_id: 'u-policy', policy_role: 'manager_approver' }),
+      FIXED_NOW,
+    );
+    expect(r.source).toBe('policy_user');
+    expect(r.user_id).toBe('u-policy');
+  });
+
+  it('does NOT activate policy_delegate before threshold elapses', () => {
+    const r = resolveEffectiveAssignee(
+      baseCtx({
+        policy_user_id: 'u-policy',
+        policy_delegate_user_id: 'u-delegate',
+        policy_delegate_after_days: 2,
+        pending_since: daysAgo(1),
+      }),
+      FIXED_NOW,
+    );
+    expect(r.source).toBe('policy_user');
+    expect(r.user_id).toBe('u-policy');
+  });
+
+  it('activates policy_delegate after threshold elapses', () => {
+    const r = resolveEffectiveAssignee(
+      baseCtx({
+        policy_user_id: 'u-policy',
+        policy_delegate_user_id: 'u-delegate',
+        policy_delegate_after_days: 2,
+        pending_since: daysAgo(3),
+      }),
+      FIXED_NOW,
+    );
+    expect(r.source).toBe('policy_delegate');
+    expect(r.user_id).toBe('u-delegate');
+  });
+
+  it('ooo_delegate beats activated policy_delegate', () => {
+    const r = resolveEffectiveAssignee(
+      baseCtx({
+        policy_user_id: 'u-policy',
+        policy_delegate_user_id: 'u-delegate',
+        policy_delegate_after_days: 2,
+        pending_since: daysAgo(10),
+        ooo_delegate_user_id: 'u-ooo',
+      }),
+      FIXED_NOW,
+    );
+    expect(r.source).toBe('ooo_delegate');
+    expect(r.user_id).toBe('u-ooo');
+  });
+
+  it('voluntary_delegate beats ooo_delegate', () => {
+    const r = resolveEffectiveAssignee(
+      baseCtx({
+        policy_user_id: 'u-policy',
+        ooo_delegate_user_id: 'u-ooo',
+        voluntary_delegate_user_id: 'u-voluntary',
+      }),
+      FIXED_NOW,
+    );
+    expect(r.source).toBe('voluntary_delegate');
+    expect(r.user_id).toBe('u-voluntary');
+  });
+
+  it('admin_reassign beats every other source', () => {
+    const r = resolveEffectiveAssignee(
+      baseCtx({
+        policy_user_id: 'u-policy',
+        policy_delegate_user_id: 'u-delegate',
+        policy_delegate_after_days: 2,
+        pending_since: daysAgo(10),
+        ooo_delegate_user_id: 'u-ooo',
+        voluntary_delegate_user_id: 'u-voluntary',
+        admin_reassigned_user_id: 'u-admin-target',
+      }),
+      FIXED_NOW,
+    );
+    expect(r.source).toBe('admin_reassign');
+    expect(r.user_id).toBe('u-admin-target');
+  });
+
+  it('admin_reassign with no other source still wins', () => {
+    const r = resolveEffectiveAssignee(
+      baseCtx({ admin_reassigned_user_id: 'u-admin-target' }),
+      FIXED_NOW,
+    );
+    expect(r.source).toBe('admin_reassign');
+    expect(r.user_id).toBe('u-admin-target');
+  });
+
+  it('falls back to policy_role default with null fields when no source is set', () => {
+    // Defensive: chain_assignee_present DB CHECK should prevent this in
+    // practice, but the function stays total.
+    const r = resolveEffectiveAssignee(baseCtx(), FIXED_NOW);
+    expect(r).toEqual({ user_id: null, role: null, source: 'policy_role' });
+  });
+
+  it('priority order is fully transitive (admin > voluntary > ooo > policy_delegate > policy_user)', () => {
+    // Sweep through the layers, peeling one source off at a time.
+    const allOn = baseCtx({
+      policy_user_id: 'u-policy',
+      policy_delegate_user_id: 'u-delegate',
+      policy_delegate_after_days: 2,
+      pending_since: daysAgo(10),
+      ooo_delegate_user_id: 'u-ooo',
+      voluntary_delegate_user_id: 'u-voluntary',
+      admin_reassigned_user_id: 'u-admin',
+    });
+    expect(resolveEffectiveAssignee(allOn, FIXED_NOW).source).toBe('admin_reassign');
+    expect(
+      resolveEffectiveAssignee({ ...allOn, admin_reassigned_user_id: null }, FIXED_NOW).source,
+    ).toBe('voluntary_delegate');
+    expect(
+      resolveEffectiveAssignee(
+        { ...allOn, admin_reassigned_user_id: null, voluntary_delegate_user_id: null },
+        FIXED_NOW,
+      ).source,
+    ).toBe('ooo_delegate');
+    expect(
+      resolveEffectiveAssignee(
+        {
+          ...allOn,
+          admin_reassigned_user_id: null,
+          voluntary_delegate_user_id: null,
+          ooo_delegate_user_id: null,
+        },
+        FIXED_NOW,
+      ).source,
+    ).toBe('policy_delegate');
+    expect(
+      resolveEffectiveAssignee(
+        {
+          ...allOn,
+          admin_reassigned_user_id: null,
+          voluntary_delegate_user_id: null,
+          ooo_delegate_user_id: null,
+          policy_delegate_user_id: null, // disable delegate
+        },
+        FIXED_NOW,
+      ).source,
+    ).toBe('policy_user');
   });
 });

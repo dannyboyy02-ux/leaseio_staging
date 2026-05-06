@@ -281,3 +281,151 @@ export function rollbackTargetForNewChain(
   }
   return 'no_rollback_needed';
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 7 — Effective assignee resolution + delegate timer + stuck check
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Phase 7 adds three sources of "who can act on this step" beyond the
+// original policy_user / policy_role: voluntary delegation (per-step,
+// user-initiated), out-of-office routing (workspace-level, declared in
+// advance), policy delegate timeout (the latent delegate_user_id /
+// delegate_after_days config from Phase 1, finally activated), and
+// admin reassignment (override path).
+//
+// resolveEffectiveAssignee is the single source of truth for "who can
+// act now." Edge functions and the `effective_assignee_user_id` denormalized
+// column on lease_approval_chain must always agree with what this
+// helper returns — the column is convenience for queries; the helper
+// is correctness.
+//
+// Same SYNC CONSTRAINT applies — Node and Deno mirrors must stay
+// byte-equivalent in behavior.
+
+export type AssigneeResolutionSource =
+  | 'policy_user'
+  | 'policy_role'
+  | 'policy_delegate'
+  | 'ooo_delegate'
+  | 'voluntary_delegate'
+  | 'admin_reassign';
+
+/**
+ * Inputs for resolveEffectiveAssignee. All "active" semantics are
+ * pushed up to the caller — these fields represent the CURRENT state
+ * for each source (e.g., voluntary_delegate_user_id is non-null only
+ * when an active, un-revoked voluntary delegation exists; ooo_delegate
+ * is non-null only when an OOO record covers `now`).
+ *
+ * This keeps the helper pure: it doesn't reach into a database or run
+ * windowing logic; it just applies priority rules over a pre-resolved
+ * snapshot.
+ */
+export interface AssigneeContext {
+  policy_user_id: string | null;
+  policy_role: string | null;
+  policy_delegate_user_id: string | null;
+  policy_delegate_after_days: number | null;
+  voluntary_delegate_user_id: string | null;
+  ooo_delegate_user_id: string | null;
+  admin_reassigned_user_id: string | null;
+  pending_since: Date | string | null;
+}
+
+/**
+ * Returns true if the policy delegate would activate based on time
+ * elapsed since the step became pending. Pure function — no I/O.
+ *
+ * All three of (delegate_user_id, delegate_after_days, pending_since)
+ * must be non-null. delegate_after_days is in days; the threshold is
+ * `pending_since + delegate_after_days * 24h`. Comparison is `>=` so
+ * "exactly N days elapsed" activates.
+ */
+export function shouldActivatePolicyDelegate(
+  pending_since: Date | string | null,
+  delegate_after_days: number | null,
+  delegate_user_id: string | null,
+  now: Date = new Date(),
+): boolean {
+  if (!pending_since || delegate_after_days == null || !delegate_user_id) {
+    return false;
+  }
+  const since = pending_since instanceof Date ? pending_since : new Date(pending_since);
+  if (Number.isNaN(since.getTime())) return false;
+  if (delegate_after_days < 0) return false;
+  const thresholdMs = delegate_after_days * 24 * 60 * 60 * 1000;
+  return now.getTime() - since.getTime() >= thresholdMs;
+}
+
+/**
+ * Returns true if a step has been pending without action longer than
+ * the threshold. Default threshold is 7 days, matching the
+ * detect-stuck-chains scheduled function. Pure function.
+ *
+ * pending_since null → false (the step isn't yet the active blocker).
+ */
+export function isStepStuck(
+  pending_since: Date | string | null,
+  threshold_days: number = 7,
+  now: Date = new Date(),
+): boolean {
+  if (!pending_since) return false;
+  if (threshold_days < 0) return false;
+  const since = pending_since instanceof Date ? pending_since : new Date(pending_since);
+  if (Number.isNaN(since.getTime())) return false;
+  const thresholdMs = threshold_days * 24 * 60 * 60 * 1000;
+  return now.getTime() - since.getTime() >= thresholdMs;
+}
+
+/**
+ * Computes the effective assignee at a given moment based on a snapshot
+ * of all assignment sources for a chain step.
+ *
+ * Priority order (highest to lowest):
+ *   1. admin_reassign — admin override always wins
+ *   2. voluntary_delegate — current user-declared intent
+ *   3. ooo_delegate — current user-declared OOO routing
+ *   4. policy_delegate — only if shouldActivatePolicyDelegate is true
+ *   5. policy_user — original explicit assignment
+ *   6. policy_role — original role-based assignment
+ *
+ * Returns the resolved (user_id, role, source). When the source is
+ * 'policy_role' the user_id is null and role carries the value;
+ * otherwise role is null and user_id carries the resolved user.
+ *
+ * If NO source produces a non-null assignee (which the
+ * chain_assignee_present DB CHECK should prevent), defaults to
+ * 'policy_role' with both fields null. This keeps the function total
+ * — every call returns a structurally valid result.
+ */
+export function resolveEffectiveAssignee(
+  ctx: AssigneeContext,
+  now: Date = new Date(),
+): { user_id: string | null; role: string | null; source: AssigneeResolutionSource } {
+  if (ctx.admin_reassigned_user_id) {
+    return { user_id: ctx.admin_reassigned_user_id, role: null, source: 'admin_reassign' };
+  }
+  if (ctx.voluntary_delegate_user_id) {
+    return { user_id: ctx.voluntary_delegate_user_id, role: null, source: 'voluntary_delegate' };
+  }
+  if (ctx.ooo_delegate_user_id) {
+    return { user_id: ctx.ooo_delegate_user_id, role: null, source: 'ooo_delegate' };
+  }
+  if (
+    shouldActivatePolicyDelegate(
+      ctx.pending_since,
+      ctx.policy_delegate_after_days,
+      ctx.policy_delegate_user_id,
+      now,
+    )
+  ) {
+    return { user_id: ctx.policy_delegate_user_id, role: null, source: 'policy_delegate' };
+  }
+  if (ctx.policy_user_id) {
+    return { user_id: ctx.policy_user_id, role: null, source: 'policy_user' };
+  }
+  if (ctx.policy_role) {
+    return { user_id: null, role: ctx.policy_role, source: 'policy_role' };
+  }
+  return { user_id: null, role: null, source: 'policy_role' };
+}
