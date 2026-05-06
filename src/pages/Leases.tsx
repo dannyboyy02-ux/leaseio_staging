@@ -136,6 +136,10 @@ export default function Leases() {
           // Chain
           'concept_submitted', 'concept_under_review', 'in_negotiation',
           'final_review', 'pending_counter_signature', 'fully_executed',
+          // Phase 6: leases in chain_violation must remain visible in the
+          // listing — the violation banner on the detail page is the
+          // resolution surface, but the user has to reach the lease first.
+          'chain_violation',
         ])
         .order('lease_end', { ascending: true });
 
