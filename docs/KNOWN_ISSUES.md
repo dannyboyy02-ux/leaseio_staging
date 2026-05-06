@@ -21,6 +21,11 @@ list and reference it in the commit message.
 - Item #9 (creator-membership timestamps) NOT addressed by OWM. Still open.
 - No new items surfaced during OWM smoke.
 
+**Status reconciliation (Phase 4 close, 2026-05-05):**
+- Items 1-9 (pre-Phase-4 backlog) all still open. Phase 4 did not touch them.
+- One new item added (#11) for the lease-documents storage cleanup
+  in delete-workspace — small follow-up; no security implication.
+
 ---
 
 ## 1. `profiles` 400 on user-preferences read
@@ -332,10 +337,44 @@ updated to call this out — done as part of the Phase 3 closeout.
 
 ---
 
+## 11. `delete-workspace` edge function does not purge `lease-documents` bucket
+
+**Symptom (Phase 4 close-out audit, 2026-05-05):** The
+`delete-workspace` edge function from Owner Workspace Management
+explicitly purges storage objects from the `leases` and
+`executed-leases` buckets when a workspace is deleted (per its
+`storageTargets` set + bucket loop). Phase 4 added a third bucket,
+`lease-documents`, but the edge function was not updated to include
+it. When a workspace is deleted:
+
+- The `lease_documents` rows cascade away via `lease_id` and
+  `workspace_id` ON DELETE CASCADE FKs (correct).
+- The storage objects under `lease-documents/{workspace_id}/...`
+  remain in storage (orphaned).
+
+**Severity:** Low. The orphan storage is invisible to all users —
+the path-prefix RLS rejects reads since the `workspace_id` no longer
+exists in `workspace_members` or `workspaces`. Pure billing /
+storage hygiene; no security implication.
+
+**Where to look:** `supabase/functions/delete-workspace/index.ts`,
+specifically the `for (const bucket of ["leases", "executed-leases"])`
+loop. Add `"lease-documents"` to the array. The path-prefix
+convention `{workspace_id}/{lease_id}/{uuid}_{filename}` means the
+existing list-then-remove pattern works without modification.
+
+**Decision:** Filed as KNOWN_ISSUES rather than fixed inline during
+Phase 4 because (a) it's a one-line edit in a different feature's
+edge function and (b) the orphan storage is invisible to all users.
+Tracked here for the next time `delete-workspace` is touched.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
-follow-up (item 5), Phase 3 audit (items 6-7), and Phase 3 close-out
-forensics + smoke (items 8-10). Filed by Claude per user direction. Each
-item should get its own commit when fixed; reference this file in the
-message and remove the entry once green.
+follow-up (item 5), Phase 3 audit (items 6-7), Phase 3 close-out
+forensics + smoke (items 8-10), and Phase 4 close-out audit (item 11).
+Filed by Claude per user direction. Each item should get its own commit
+when fixed; reference this file in the message and remove the entry once
+green.

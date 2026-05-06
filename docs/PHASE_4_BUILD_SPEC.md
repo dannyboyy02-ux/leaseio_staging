@@ -573,12 +573,75 @@ Do NOT build any of these in Phase 4. Each is owned by a later phase.
 
 ---
 
-## As-built notes (placeholder, populated at close)
+## As-built notes (post-implementation deltas, 2026-05-05)
 
-Spec ↔ implementation deltas to be captured here at Checkpoint 5 close, citing this spec doc by SHA per the audit-doc inheritance rule.
+This appendix captures everything that diverged from the original spec during implementation. Future phases (5+) inherit these patterns and decisions.
+
+### 1. Storage RLS strategy reversed mid-build
+
+**Spec said:** "Direct upload to the `lease-documents` bucket via supabase-js storage client. The storage path follows the convention `{workspace_id}/{lease_id}/{uuid}_{filename}`. After successful upload, calls the `upload-lease-document` edge function with metadata."
+
+That order — upload-bytes-first, insert-metadata-second — was contradicted by the storage RLS policies the spec also specified (which required a `lease_documents` row to ALREADY exist with matching `storage_path` when the storage upload runs).
+
+**As-built:** Caught the contradiction during Checkpoint 4 implementation. Wrote a follow-on migration (`20260505180000_phase4_lease_documents_storage_rls_fix.sql`) that swaps storage RLS to a path-prefix workspace check using `((storage.foldername(name))[1])::uuid`. The original C1 migration is unchanged per the schema-change rule. The frontend flow now matches the spec's described order without RLS rejection.
+
+**Pattern for Phase 5+:** when a feature involves both storage RLS and a metadata table, choose ONE of:
+- (a) **Path-prefix workspace check** (Phase 4 final shape) — independent of metadata existence; bytes can land first or simultaneously, metadata lookup happens at the table layer.
+- (b) **Metadata-first ordering** with storage RLS that requires the metadata row — but the frontend must insert metadata BEFORE upload, with rollback on upload failure.
+Pick the order at spec time and write both layers consistently.
+
+### 2. Activity log spec listing diverged from live state
+
+**Spec said:** the listing under "Activity log additions" included `model_locked` and `unlock_rejected` as already-present values.
+
+**As-built:** Live constraint snapshot (queried 2026-05-05 via `pg_get_constraintdef`) had 36 values: 24 pre-Phase-2 + 6 Phase 2 + 6 Phase 3. Neither `model_locked` nor `unlock_rejected` was in the live constraint. Used the live snapshot as authoritative per the spec's own "Query the current constraint definition first ... Standard practice" instruction. Same pattern as Phase 3 (which encountered the same drift).
+
+**Pattern for Phase 5+:** every CHECK-constraint-extending migration MUST query the live constraint definition first via `pg_get_constraintdef` and snapshot all existing values. Never trust the spec's enumeration of "current" values — always verify against the live database.
+
+### 3. Mime-type bucket policy: open vs. PDF-only
+
+**Spec said:** "Match the file size limit set in storage bucket configuration (likely 50MB based on existing patterns)" — silent on mime-type restriction.
+
+**As-built:** lease-documents bucket allows ANY mime type (matches spec's silence; loosens vs. `executed-leases` which is `ARRAY['application/pdf']` only). Realistic for negotiation: redlines arrive as `.docx` as often as `.pdf`, occasionally Word/RTF or images of marked-up paper. Documented the rationale inline in the migration.
+
+### 4. CASCADE alignment with Owner Workspace Management
+
+**Spec said:** `lease_documents.lease_id → leases(id) ON DELETE CASCADE; lease_documents.workspace_id → workspaces(id) ON DELETE CASCADE`.
+
+**As-built:** Both FKs are CASCADE as specified. Side-effect benefit: the existing `delete-workspace` edge function from Owner Workspace Management cleans up `lease_documents` rows automatically when a workspace is deleted. The OWM cascade list in its edge function does NOT need to be updated; the implicit FK chain handles it. Verified this isn't a bug by inspection: `lease_documents.lease_id` cascades when leases are deleted (which OWM does explicitly first to defeat the workspace_id SET NULL gap); `lease_documents.workspace_id` cascades when the workspace itself is deleted (redundant after the lease cascade, but safe).
+
+### 5. Storage cleanup not added to delete-workspace edge function
+
+**Implication of #4:** the `delete-workspace` edge function purges objects from the `leases` and `executed-leases` buckets but NOT from `lease-documents`. This is a gap — when a workspace is deleted, `lease_documents` rows cascade away, but the storage objects in `lease-documents/{workspace_id}/...` remain.
+
+**As-built (filed for follow-up):** captured as a note in the closeout commit. Fix is small: add `lease-documents` to the bucket loop in `delete-workspace/index.ts`. Not done in Phase 4 because (a) it's a one-line edit in a different feature's edge function and (b) the orphan storage is invisible to all users (path-prefix RLS rejects since the workspace no longer exists in `workspace_members`/`workspaces`). Pure billing/storage hygiene; no security implication. Tracked in `KNOWN_ISSUES.md`.
+
+### 6. Notification mechanism reused from Phase 2
+
+**Spec said:** "Notifies the concept approvers that re-review is needed" / "Notifies the signator that ..." — silent on mechanism.
+
+**As-built:** Both edge functions (`escalate-to-concept-approver` + `advance-to-final-review`) use the same notification shape `resolve-approval-chain` established: insert a `lease_activity_log` row with `activity_type='comment'`, `user_id=null`, and `details: { notification_type, recipient_ids, message }`. Recipients come from `workspace_roles` filtered by role (`manager_approver` for escalation; `signator` for advance). This reuses Phase 2's pattern verbatim — no new notification surface.
+
+### 7. Frontend: legacy `LeaseDocumentsTab` preserved
+
+**Spec said:** "The existing `leases.storage_path` and `leases.executed_storage_path` are preserved for backward compatibility ... New code uses `lease_documents` exclusively."
+
+**As-built:** `DocumentsPanel` (the Phase 4 surface) renders ABOVE the legacy `LeaseDocumentsTab` in the Documents tab on the lease detail page. Both render in parallel — the new iteration timeline is the primary view, the legacy column-based panel remains for backward compat with leases that pre-date Phase 4. No code path migrates legacy storage_path values into `lease_documents` rows; legacy leases simply have an empty Phase 4 timeline plus the populated legacy panel. A future phase (or backfill ticket) can synthesize Phase 4 rows from the legacy columns if a unified surface is wanted.
+
+### 8. Two-phase upload with best-effort orphan cleanup
+
+**Spec said:** "On step 2 failure, we attempt to clean up the orphan storage object — best-effort."
+
+**As-built:** Implemented exactly as specified. The upload dialog catches both invocation errors and `data.ok === false` from the edge function, then calls `supabase.storage.from('lease-documents').remove([storagePath])` to delete the orphan. Wrapped in try/catch so a cleanup failure logs to console but doesn't surface a second toast. The path-prefix storage RLS lets the uploader (workspace member) delete their own newly-uploaded object.
+
+### 9. `is_current_latest` partial unique index covers concurrent insert race
+
+**Spec said (in the trigger comments):** "Why AFTER INSERT (not BEFORE INSERT or a partial unique constraint alone): a BEFORE trigger would race the unique partial index check if two concurrent inserts both tried to set is_current_latest=true atomically. With AFTER INSERT and the demotion-then-promotion sequence, the unique index serializes correctly."
+
+**As-built:** Implemented as described. SQL test 3 (`is_current_latest unique partial index prevents two latest`) verifies the safety net by simulating a manual UPDATE attempt to flip an old row back to latest while a newer row is also latest — the unique violation fires. Concurrent inserts are not directly testable in a serial DO block but the index guarantees correctness regardless of ordering.
 
 ---
 
 ## Tracking
 
-Spec ratified 2026-05-05. Owner Workspace Management closed before this spec opened. Phase 5 (signator stage activation + counter-signature reminders) opens after this phase closes.
+Spec ratified 2026-05-05. Owner Workspace Management closed before this spec opened. Phase 5 (signator stage activation + counter-signature reminders) opens after this phase closes. Phase 4 closed 2026-05-05 — see closeout commit for the full inventory.

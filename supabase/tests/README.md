@@ -23,6 +23,7 @@ Recommended path:
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase2_lease_approval_chain.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase3_lifecycle_expansion.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/owner_workspace_mgmt.test.sql
+   psql "$TEST_DATABASE_URL" -f supabase/tests/phase4_lease_documents.test.sql
    ```
    …or paste into the Studio SQL editor for that environment.
 4. Search the output for `FAIL` — empty result means everything passed.
@@ -102,6 +103,22 @@ via curl smoke tests in the deployed app.
 | 3 | `DELETE FROM leases` cascades to lease-child tables (verified on `lease_activity_log`) |
 | 4 | End-to-end edge-function-equivalent sequence: delete leases → delete workspace → insert audit. Zero orphans across `workspaces`, `leases`, `workspace_members`, `workspace_roles`, `invite_tokens`, `approval_policies`, `lease_activity_log`, `lease_approval_chain` (both via lease_id and via workspace_id) |
 | 5 | Confirms the FK trap the edge function defeats: deleting the workspace WITHOUT deleting leases first leaves a `workspace_id = NULL` orphan (the lease survives, hidden by RLS but still in the DB consuming storage) — proves why the explicit-leases-first ordering matters |
+
+### `phase4_lease_documents.test.sql`
+
+9 tests covering the Phase 4 negotiation document tracking schema + trigger + storage RLS:
+
+| # | Test | Checks |
+|---|---|---|
+| 1 | document_type CHECK accepts all 11 spec values | concept_attachment, loi, draft, redline, counter_redline, final_negotiated, our_signed, fully_executed_counterparty_returned, amendment, side_letter, other |
+| 2 | document_type CHECK rejects unknowns | uppercase, invented values, empty string |
+| 3 | is_current_latest unique partial index prevents two latest | UPDATE attempt to set old row latest while newer is latest fails with unique_violation |
+| 4 | lease-documents storage bucket exists | private + 50MB limit confirmed |
+| 5 | AFTER INSERT trigger promotes new row + demotes prior latest | inserts 3 rows; row1 demoted by row2, row2 demoted by row3, row3 latest with null superseded_by/at |
+| 6 | Exactly one is_current_latest row per lease at all times | 5 sequential inserts → exactly 1 latest count |
+| 7 | activity_type CHECK accepts the 5 Phase 4 values + preserves all 36 prior values | regression check covering pre-Phase-2 + Phase 2 + Phase 3 |
+| 8 | Storage RLS uses path-prefix workspace check | introspection of storage.foldername in upload/read/delete policies (post-fix migration) |
+| 9 | lease_documents RLS scoping | owner sees own; outsider workspace member sees zero (simulated via set_config request.jwt.claims) |
 
 ### `phase3_lifecycle_expansion.test.sql`
 
