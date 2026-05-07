@@ -656,6 +656,70 @@ Do NOT build any of these in Phase 8.
 
 ---
 
-## As-built notes (placeholder, populated at close)
+## As-built notes (closed 2026-05-06)
 
-Spec ↔ implementation deltas to be captured here at Checkpoint 5 close, citing this spec doc by SHA per the audit-doc inheritance rule.
+Spec ratified at SHA `807a564`. Phase 8 closed at C5 with the following spec ↔ implementation deltas captured per the audit-doc inheritance rule.
+
+### A1. PDF rendering split client-side
+**Spec said:** edge function renders PDF synchronously (`@react-pdf/renderer` server-side) and uploads to storage in step 8 of `generate-lease-report`.
+**As built:** Edge function returns the structured `sections` + `json` to the client; the **client** renders PDF via `pdf(<DisclosureDocument />).toBlob()` (the codebase precedent at `LeaseAnalysisExport.tsx`) and uploads. A new `finalize-report-pdf` edge function records `pdf_storage_path` after the upload completes.
+**Why:** `@react-pdf/renderer` is a browser library — it depends on Node-only stream APIs and `yoga-layout` (wasm); it does not run reliably in the Deno edge runtime. Switching to a Deno-native PDF library (e.g., pdf-lib) would have required reimplementing flow / pagination / fonts from scratch, far exceeding the C3 budget. The polling + `status` field architecture remains in place exactly as the spec described, leaving an open path to background-queue rendering (per `KNOWN_ISSUES.md` #13) without a schema change.
+
+### A2. Single-lease report preparer-notes flag set extended beyond spec
+**Spec listed:** 6 rules (pending classification, OOR discount rate, no schedule, escalations without straight-line, not-locked, always-on TI/IDC).
+**As built:** Added two more, captured in `docs/JSON_REPORT_SCHEMA.md` and the C2 commit body:
+- Rule #6: commencement-date-after-expiration-date guardrail (high) — data-integrity check.
+- Rule #7: short-term lease (≤12 months, classified) — surfaces the ASC 842 short-term election (medium).
+**Why:** Both fired naturally when stress-testing the rule set against ill-formed inputs; both are real-world considerations a CPA would expect to see flagged. Documented up front to avoid silent drift.
+
+### A3. View-column aliasing in `v_lease_verification_audit`
+**Spec said:** `field_corrections.field_id`, `field_corrections.ai_confidence_at_correction`.
+**Live schema reality:** the actual columns are `field_corrections.field_name` and `field_corrections.ai_confidence`.
+**As built:** the view aliases `field_corrections.field_name` → `field_id` and `ai_confidence` → `ai_confidence_at_correction` in the JSON aggregate so downstream consumers see the spec's contract names. Captured in the migration's inline comment.
+
+### A4. `leases.discount_rate` lives at workspace scope today
+**Spec implied:** per-lease discount rate (`l.discount_rate` in the view definition).
+**Live schema reality:** `discount_rate` exists only on `workspaces`, not `leases` (one rate per workspace).
+**As built:** the view LEFT JOINs `workspaces` and surfaces `w.discount_rate` as the lease's effective rate. Forward-compatible: when per-lease override ships, the view body becomes `COALESCE(l.discount_rate, w.discount_rate)` without a schema break.
+
+### A5. Inlined rate-limit helper to fit the deploy bundle envelope
+**Spec said:** edge functions import `enforceWorkspaceRateLimit` from `_shared/audit.ts`.
+**As built:** `generate-lease-report` and `generate-portfolio-report` inline the helper instead of importing it. The committed `audit.ts` is unchanged.
+**Why:** The Phase 7 As-built A4 documented that the deploy-tool path tops out at ~65KB JSON-encoded payload. Including the full `audit.ts` (with Azure DI helpers) plus the 30KB `asc842_report.ts` Deno mirror plus `cors.ts` plus the function index would push past that ceiling. Inlining the ~50-line rate limiter saves 6KB and lands the bundle at ~55KB. The pure-logic mirror remains shared because it's mandatory contract.
+
+### A6. Portfolio reports skip per-lease activity log rows
+**Spec said:** `report_generation_*` activity logs on each report flow.
+**As built:** Single-lease reports write `report_generation_requested` / `report_generation_completed` / `report_generation_failed` to `lease_activity_log` per the spec. Portfolio reports skip these rows because `lease_activity_log.lease_id` is NOT NULL and a portfolio report has no lease anchor. The `lease_reports` row + the storage artifact carry the audit trail at workspace scope.
+**Future option:** if needed, write portfolio activity to a future `workspace_activity_log` (does not exist today) without touching the per-lease log.
+
+### A7. Report library route at `/app/reports/disclosure`, not `/app/reports`
+**Spec said:** report library at `/app/reports`.
+**As built:** Library at `/app/reports/disclosure`; the existing `/app/reports` is the workspace's reports hub (portfolio overview, renewals, audit log, data quality, etc., already shipped) and Phase 8 added a "Disclosure Reports" card pointing to the dedicated library. Replacing the hub would have broken the existing reports surface.
+
+### A8. Portfolio admin route gate stricter than function gate
+**Spec said:** admin OR editor can request portfolio reports.
+**As built:** The route `/app/admin/reports` is gated to admin/owner via `canEditWorkspaceSettings` (matches the other `/app/admin/*` pages). The edge function still accepts editors; an editor-friendly entry point can be added later if needed without changing the backend gate.
+
+### A9. Detail / admin / library / settings pages use English-only inline strings
+**Spec said:** Phase 8 frontend.
+**As built:** Only the Reports.tsx hub entry (`reports.disclosure` + `reports.disclosure_desc`) was added to `en/common.json` + `es/common.json`. All other Phase 8 pages use inline English. Translation hooks can be added in a follow-up if/when es coverage expands beyond the navigation surface; not load-bearing for Phase 8 acceptance.
+
+### A10. Two KNOWN_ISSUES tracked at C1, not implemented in Phase 8
+- **#12 — `cleanup-expired-reports` cron:** `expires_at` is populated by both edge functions per workspace `report_artifact_retention_days` setting, but no cron job purges expired artifacts yet. Severity: low. Future work: a small cron edge function that flips `status = 'expired'` and deletes the storage objects.
+- **#13 — synchronous PDF generation may time out on very large portfolios:** Phase 8 ships sync; the architecture is forward-compatible (status='generating' → poll → ready) so a future swap to a background queue does not require a schema change. Severity: medium-deferred. Soft cap recommended (~500 leases per portfolio report).
+
+### A11. Closeout commit cites the spec at SHA `807a564`
+Per the audit-doc inheritance rule. Commit chain:
+
+| SHA | Checkpoint |
+|---|---|
+| `807a564` | Spec ratified |
+| `b99403c` | C1 — schema migration + view + bucket + workspace cols + activity types |
+| `dda84a6` | C2 — pure helpers (Node) ↔ Deno mirror + 42 vitest cases |
+| `a0d4d2a` | C3 — 3 edge functions deployed + 2 PDF renderers |
+| `6e4c834` | C4 — frontend wiring (button, hooks, 3 pages, settings tab, hub entry) |
+| (this) | C5 — SQL test matrix + JSON_REPORT_SCHEMA + As-built notes + closeout |
+
+### A12. Phase 9 (firm-layer foundation) opens next
+Per `docs/PRODUCT_STRATEGY.md`. Phase 9 introduces the `firm` ↔ `workspace` relationship for the Business tier; Phase 10 adds the firm-tier UX. Phase 11 is firm-level cross-workspace report roll-ups (deferred from Phase 8 by design — scoped as out-of-scope above).
+

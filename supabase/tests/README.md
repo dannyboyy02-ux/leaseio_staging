@@ -27,6 +27,7 @@ Recommended path:
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase5_signator_activation.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase6_chain_rerouting.test.sql
    psql "$TEST_DATABASE_URL" -f supabase/tests/phase7_delegation_override.test.sql
+   psql "$TEST_DATABASE_URL" -f supabase/tests/phase8_disclosure_reports.test.sql
    ```
    …or paste into the Studio SQL editor for that environment.
 4. Search the output for `FAIL` — empty result means everything passed.
@@ -122,6 +123,19 @@ via curl smoke tests in the deployed app.
 | 7 | activity_type CHECK accepts the 5 Phase 4 values + preserves all 36 prior values | regression check covering pre-Phase-2 + Phase 2 + Phase 3 |
 | 8 | Storage RLS uses path-prefix workspace check | introspection of storage.foldername in upload/read/delete policies (post-fix migration) |
 | 9 | lease_documents RLS scoping | owner sees own; outsider workspace member sees zero (simulated via set_config request.jwt.claims) |
+
+### `phase8_disclosure_reports.test.sql`
+
+6 tests covering the Phase 8 disclosure-report schema deltas:
+
+| # | Test | Checks |
+|---|---|---|
+| 1 | Schema shape | `lease_reports` table exists with 21 contracted columns; 3 indexes (workspace chronological, lease-scoped partial, period partial) present; `v_lease_verification_audit` view exists; `lease-reports` storage bucket exists with `public=false`; 5 new workspace report-settings columns present |
+| 2 | `report_scope_lease_id_correlation` CHECK | `single_lease` without `lease_id` rejected; `single_lease` with `period_*` rejected; `monthly` without period rejected; `period_start > period_end` rejected; `period_*` scope with `lease_id` rejected; happy single_lease accepted; happy monthly portfolio accepted; period_start = period_end (single-day) accepted |
+| 3 | Workspace bound CHECKs | `report_fiscal_year_start_month` 0 / 13 rejected; `report_rounding_precision` 7 rejected; `report_artifact_retention_days` 0 / 731 rejected; bogus `report_default_discount_method` rejected; boundary happy paths (1, 12 / 0, 6 / 1, 730 / each enum value) accepted |
+| 4 | `activity_type` CHECK | All 6 Phase 8 values accepted (`report_generation_requested`, `report_generation_completed`, `report_generation_failed`, `report_downloaded`, `report_expired`, `report_deleted`); 13 representative prior values from legacy + Phases 2-7 still accepted; bogus type rejected |
+| 5 | RLS shape | Row-level security enabled on `lease_reports`; ≥3 policies present (read/insert/delete); ≥1 storage policy referencing `lease-reports` bucket |
+| 6 | Migration idempotency sentinel | `CREATE TABLE IF NOT EXISTS` + `ADD COLUMN IF NOT EXISTS` re-runs are no-ops |
 
 ### `phase7_delegation_override.test.sql`
 
