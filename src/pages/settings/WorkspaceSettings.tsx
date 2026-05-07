@@ -161,7 +161,11 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
   const canManageMembers = canManageWorkspaceMembers(userRole);
   const canAccessDefaults = canAccessWorkspaceDefaults(userRole);
   const canAccessProfile = canAccessWorkspaceProfile(userRole);
-  const isAdmin = userRole === 'admin';
+  // KNOWN_ISSUES #5 fix: workspace owners (userRole === 'owner') were
+  // excluded from the three admin-gated tabs because of a literal
+  // string check here. canEditWorkspaceSettings normalizes 'owner' to
+  // 'admin', so use it for the gate.
+  const isAdmin = canEditWorkspaceSettings(userRole);
 
   const tabs = [
     { id: 'profile',           label: 'Company Profile',     icon: Building2,     visible: canAccessProfile },

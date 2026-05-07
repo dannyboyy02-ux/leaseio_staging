@@ -26,49 +26,21 @@ list and reference it in the commit message.
 - One new item added (#11) for the lease-documents storage cleanup
   in delete-workspace — small follow-up; no security implication.
 
----
-
-## 1. `profiles` 400 on user-preferences read
-
-**Symptom (browser console):**
-```
-GET /rest/v1/profiles?select=email_notifications_enabled,sms_notifications_enabled,notify_abstraction_complete,ai_processing_consent_at&id=eq.<uuid>
-→ 400
-```
-
-**Hypothesis:** the request filters on `id=eq.<uuid>` but the columns being
-selected look like per-user preferences. Likely the filter should be on
-`user_id` (or wherever those preference columns actually live — could be on
-`profiles.user_id` or on a separate `user_preferences` table). RLS rejection on
-the wrong filter column would explain the 400 too.
-
-**Where to look:** grep for the column list (e.g.
-`email_notifications_enabled,sms_notifications_enabled`) to find the caller,
-then verify the actual table schema and filter shape.
-
-**Severity:** Low — silent failure, no user-visible blocker. Likely makes
-notification preferences appear unset.
-
----
-
-## 2. CSP rejecting `wss://*.supabase.co` (Realtime)
-
-**Symptom (browser console):**
-```
-Refused to connect to 'wss://wwkwoxxcprnjjufkbzac.supabase.co/realtime/v1/...'
-because it violates the following Content Security Policy directive: ...
-```
-
-**Hypothesis:** the deployed CSP `connect-src` directive lacks the `wss:` scheme
-for `*.supabase.co`. Realtime channels (e.g. the lease-pipeline subscription in
-`src/components/dashboard/LeasePipeline.tsx`) silently fail to connect, so
-realtime invalidation falls back to React Query's polling intervals.
-
-**Where to look:** check Vercel headers config / `vercel.json` / any CSP meta
-tag in `index.html`. Add `wss://*.supabase.co` to `connect-src`.
-
-**Severity:** Medium — degrades realtime UX (60s polling instead of instant
-updates) but doesn't break feature behavior since polling is the fallback.
+**Status reconciliation (proactive sweep, 2026-05-07):**
+- Item #1 (profiles 400) — RESOLVED. Root cause was missing
+  `notify_abstraction_complete` column on `public.profiles` referenced
+  by `AccountSettings.tsx`. Added in migration
+  `20260507100000_profiles_notify_abstraction_complete.sql`.
+- Item #2 (CSP missing wss + WASM blockers) — RESOLVED. Updated CSP
+  in `vercel.json` (commit `c2f6276`): added `wss://*.supabase.co` for
+  Realtime; added `'wasm-unsafe-eval'` for `@react-pdf/renderer`'s
+  yoga-layout WASM; added `data:` and `blob:` to connect-src; added
+  `worker-src 'self' blob:` and `frame-src 'self' blob:`.
+- Item #5 (WorkspaceSettings owner gating) — RESOLVED. Replaced
+  literal `userRole === 'admin'` with `canEditWorkspaceSettings(userRole)`
+  on line 164 (previously line 161 per the original report).
+- Items 3, 4, 6, 7, 8, 9, 10, 11, 12, 13 — still open / deferred /
+  pattern notes per their original entries below.
 
 ---
 
@@ -113,52 +85,6 @@ settings, and any environment-specific asset path config. Compare
 
 **Severity:** Medium-High on `theleaseio.com` (style breakage); zero impact on
 the Lovable / Vercel subdomain where the smoke is being run.
-
----
-
-## 5. WorkspaceSettings tabs hidden from workspace owners (Phase 1 gating bug)
-
-**Symptom:** A workspace owner navigates to `/app/settings/workspace` and does
-not see the "Approval Policies", "Lease Configuration", or "Onboarding" tabs —
-only Company Profile, Users, Notifications, Financial, Risk Watchlist. The
-direct URL `/app/settings/approval-policies` works fine; only the in-page
-navigation is missing.
-
-**Root cause:** `src/pages/settings/WorkspaceSettings.tsx:161`:
-
-```ts
-const isAdmin = userRole === 'admin';
-```
-
-This is a literal string check that excludes workspace owners (who have
-`userRole === 'owner'`). The route-level guard in `App.tsx` correctly uses
-`canEditWorkspaceSettings` from `src/lib/authorization.ts`, which calls
-`isAdmin(role)` and normalizes 'owner' → 'admin'. But this in-page gate doesn't
-go through that helper. Result: the owner can navigate to admin pages by
-typing the URL but the tabs that link to them are hidden.
-
-Three tabs hit by this gate (lines 168, 170, 171):
-- `lease_config` — Lease Configuration
-- `approval_policies` — Approval Policies (added in Phase 1)
-- `onboarding` — Onboarding
-
-Plus two `{isAdmin && (...)}` blocks that wrap their `TabsContent` (lines
-1015, 1155, 1184) — same gate, same hide-from-owners effect.
-
-**Fix:** replace line 161 with:
-
-```ts
-import { canEditWorkspaceSettings } from '@/lib/authorization';
-// ...
-const isAdmin = canEditWorkspaceSettings(userRole);
-```
-
-(`canEditWorkspaceSettings` already returns true for both 'admin' and 'owner'.)
-One-line change; no behavior change for true admins.
-
-**Severity:** Medium — admin features are reachable by URL but discoverability
-is broken for owners. Surfaced 2026-05-03 when the user noticed the new
-"Approval Policies" tab wasn't visible after the Phase 1 deploy.
 
 ---
 
