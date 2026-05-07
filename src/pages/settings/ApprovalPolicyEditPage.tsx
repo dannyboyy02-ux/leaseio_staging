@@ -9,7 +9,6 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
-  X,
   ChevronDown,
   FlaskConical,
 } from 'lucide-react';
@@ -20,9 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
@@ -41,20 +38,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { validatePolicy } from './approvalPolicyValidation';
 import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
+import { MatchCriteriaSentence } from './MatchCriteriaSentence';
 
 // ───────────────────────────────────────────────────────────────────────────
-// Constants — keep aligned with leases.asset_type / leases.lease_type CHECK
-// constraints so matched values pass the resolver later.
+// Constants — FUNCTIONAL_ROLE_OPTIONS must stay aligned with workspace_roles.
+// ASSET_TYPE_OPTIONS and LEASE_TYPE_OPTIONS now live in MatchCriteriaSentence
+// (the only consumer in this file after P1.2).
 // ───────────────────────────────────────────────────────────────────────────
-
-const ASSET_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'property', label: 'Property (Real Estate)' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'vehicle', label: 'Vehicle' },
-  { value: 'other', label: 'Other' },
-];
-
-const LEASE_TYPE_OPTIONS: string[] = ['Real Estate', 'Equipment'];
 
 const FUNCTIONAL_ROLE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'submitter', label: 'Submitter' },
@@ -121,83 +111,6 @@ const blankStep = (existing: ChainStep[]): ChainStep => ({
   delegate_after_days: null,
   is_required: true,
 });
-
-// ───────────────────────────────────────────────────────────────────────────
-// Reusable: chip-style multi-select with curated suggestions + free-text add.
-// ───────────────────────────────────────────────────────────────────────────
-
-function ChipMultiSelect({
-  values,
-  onChange,
-  suggestions,
-  placeholder,
-}: {
-  values: string[];
-  onChange: (next: string[]) => void;
-  suggestions: string[];
-  placeholder: string;
-}) {
-  const [draft, setDraft] = useState('');
-  const add = (v: string) => {
-    const trimmed = v.trim();
-    if (!trimmed || values.includes(trimmed)) return;
-    onChange([...values, trimmed]);
-    setDraft('');
-  };
-  const remove = (v: string) => onChange(values.filter((x) => x !== v));
-  const remaining = suggestions.filter((s) => !values.includes(s));
-
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5 min-h-[28px]">
-        {values.length === 0 ? (
-          <span className="text-xs text-muted-foreground italic">No filter — matches any</span>
-        ) : (
-          values.map((v) => (
-            <Badge key={v} variant="secondary" className="text-xs gap-1">
-              {v}
-              <button onClick={() => remove(v)} className="hover:text-destructive">
-                <X size={10} />
-              </button>
-            </Badge>
-          ))
-        )}
-      </div>
-      <div className="flex gap-2">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add(draft);
-            }
-          }}
-          placeholder={placeholder}
-          className="h-8 text-sm"
-        />
-        <Button variant="outline" size="sm" onClick={() => add(draft)} disabled={!draft.trim()}>
-          <Plus size={12} className="mr-1" />
-          Add
-        </Button>
-      </div>
-      {remaining.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          <span className="text-[10px] text-muted-foreground self-center">Suggestions:</span>
-          {remaining.slice(0, 8).map((s) => (
-            <button
-              key={s}
-              onClick={() => add(s)}
-              className="text-[10px] px-1.5 py-0.5 rounded border text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              + {s}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ───────────────────────────────────────────────────────────────────────────
 // Page
@@ -484,108 +397,23 @@ export default function ApprovalPolicyEditPage() {
           <CardHeader>
             <CardTitle>When does this rule apply?</CardTitle>
             <CardDescription>
-              This rule applies when ALL filled-in conditions are satisfied. Leave a condition empty to match anything.
+              Build a one-sentence rule by adding filters. Click any filter to change its values; click the × to remove it.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div>
-              <Label className="text-xs">Asset types</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-                {ASSET_TYPE_OPTIONS.map((o) => {
-                  const checked = form.match_asset_types.includes(o.value);
-                  return (
-                    <label
-                      key={o.value}
-                      className="flex items-center gap-2 rounded border px-2 py-1.5 cursor-pointer hover:bg-muted/40"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(v) => {
-                          const next = new Set(form.match_asset_types);
-                          if (v) next.add(o.value);
-                          else next.delete(o.value);
-                          setForm({ ...form, match_asset_types: Array.from(next) });
-                        }}
-                      />
-                      <span className="text-xs">{o.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-xs">Lease types</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-                {LEASE_TYPE_OPTIONS.map((o) => {
-                  const checked = form.match_lease_types.includes(o);
-                  return (
-                    <label
-                      key={o}
-                      className="flex items-center gap-2 rounded border px-2 py-1.5 cursor-pointer hover:bg-muted/40"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(v) => {
-                          const next = new Set(form.match_lease_types);
-                          if (v) next.add(o);
-                          else next.delete(o);
-                          setForm({ ...form, match_lease_types: Array.from(next) });
-                        }}
-                      />
-                      <span className="text-xs">{o}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-xs">Departments</Label>
-              <div className="mt-2">
-                <ChipMultiSelect
-                  values={form.match_departments}
-                  onChange={(v) => setForm({ ...form, match_departments: v })}
-                  suggestions={wsExtras.data?.departments ?? []}
-                  placeholder="Add a department…"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-xs">Regions</Label>
-              <div className="mt-2">
-                <ChipMultiSelect
-                  values={form.match_regions}
-                  onChange={(v) => setForm({ ...form, match_regions: v })}
-                  suggestions={wsExtras.data?.regions ?? []}
-                  placeholder="Add a region…"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Min annual cost (USD)</Label>
-                <Input
-                  type="number"
-                  value={form.match_min_annual_cost}
-                  onChange={(e) => setForm({ ...form, match_min_annual_cost: e.target.value })}
-                  placeholder="Any"
-                  inputMode="decimal"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Max annual cost (USD)</Label>
-                <Input
-                  type="number"
-                  value={form.match_max_annual_cost}
-                  onChange={(e) => setForm({ ...form, match_max_annual_cost: e.target.value })}
-                  placeholder="Any"
-                  inputMode="decimal"
-                />
-              </div>
-            </div>
+          <CardContent>
+            <MatchCriteriaSentence
+              state={{
+                match_asset_types: form.match_asset_types,
+                match_lease_types: form.match_lease_types,
+                match_departments: form.match_departments,
+                match_regions: form.match_regions,
+                match_min_annual_cost: form.match_min_annual_cost,
+                match_max_annual_cost: form.match_max_annual_cost,
+              }}
+              onChange={(next) => setForm({ ...form, ...next })}
+              departmentSuggestions={wsExtras.data?.departments ?? []}
+              regionSuggestions={wsExtras.data?.regions ?? []}
+            />
           </CardContent>
         </Card>
 
