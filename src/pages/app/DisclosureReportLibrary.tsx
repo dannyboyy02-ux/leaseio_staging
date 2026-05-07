@@ -45,8 +45,8 @@ interface ReportRow {
 type Filter = 'all' | 'lease_disclosure' | 'portfolio_period';
 
 export default function DisclosureReportLibrary() {
-  const { currentWorkspace } = useApp();
-  const workspaceId = currentWorkspace?.id;
+  const { workspace } = useApp();
+  const workspaceId = workspace?.id;
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);

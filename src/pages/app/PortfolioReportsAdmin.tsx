@@ -78,8 +78,8 @@ function iso(d: Date): string {
 }
 
 export default function PortfolioReportsAdmin() {
-  const { currentWorkspace } = useApp();
-  const workspaceId = currentWorkspace?.id;
+  const { workspace } = useApp();
+  const workspaceId = workspace?.id;
 
   const [scope, setScope] = useState<ReportScope>('quarterly');
   const initial = useMemo(() => shortcutForScope('quarterly'), []);
