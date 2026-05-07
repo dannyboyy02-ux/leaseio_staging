@@ -27,8 +27,11 @@ function formatCurrency(val: number | null | undefined): string {
 }
 
 function buildLeaseContext(leases: any[], workspaceName: string): string {
+  // KNOWN_ISSUES #6: 'needs_review' is not a valid lifecycle_status value
+  // (it never existed in the CHECK constraint). The .includes() for it always
+  // returned false. Removed; behavior unchanged.
   const activeLeases = leases.filter(l =>
-    ['active', 'executed', 'needs_review', 'draft'].includes(l.lifecycle_status)
+    ['active', 'executed', 'draft'].includes(l.lifecycle_status)
   );
 
   const totalMonthly = activeLeases.reduce((sum, l) => {
@@ -218,7 +221,10 @@ serve(async (req) => {
           extracted_json
         `)
         .eq('workspace_id', workspaceId)
-        .not('lifecycle_status', 'in', '("failed","cancelled")')
+        // KNOWN_ISSUES #6: 'failed' is not a valid lifecycle_status value
+        // either; only 'cancelled' actually exists. Kept the cancelled
+        // exclusion (we don't want the AI to reason over cancelled leases).
+        .not('lifecycle_status', 'in', '("cancelled")')
         .limit(60);
 
       const leaseContext = buildLeaseContext(leases || [], workspace.name);

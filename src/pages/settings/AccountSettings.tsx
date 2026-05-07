@@ -575,50 +575,77 @@ export default function AccountSettings() {
                 <CardDescription>{t('account.update_password')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="current-password">{t('account.current_password')}</Label>
-                  <div className="relative">
-                    <Input
-                      id="current-password"
-                      type={showPassword ? 'text' : 'password'}
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="absolute right-2 top-1/2 -translate-y-1/2"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
+                {/* KNOWN_ISSUES #3: password fields must be wrapped in a
+                    <form> and carry the right autocomplete attrs so password
+                    managers and Chrome's heuristic stop warning. The form's
+                    onSubmit calls the same handler as the button click; we
+                    keep the visible submit Button so existing styles work. */}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!isChangingPassword) handleChangePassword();
+                  }}
+                  className="space-y-4"
+                >
+                  {/* Hidden username input helps password managers associate
+                      the new credential with the right account. */}
+                  <input
+                    type="text"
+                    name="username"
+                    autoComplete="username"
+                    value={email}
+                    readOnly
+                    style={{ display: 'none' }}
+                    aria-hidden="true"
+                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="current-password">{t('account.current_password')}</Label>
+                    <div className="relative">
+                      <Input
+                        id="current-password"
+                        type={showPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="absolute right-2 top-1/2 -translate-y-1/2"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">{t('account.new_password')}</Label>
-                  <Input
-                    id="new-password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">{t('account.confirm_password')}</Label>
-                  <Input
-                    id="confirm-password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
-                </div>
-                <Button variant="accent" onClick={handleChangePassword} disabled={isChangingPassword}>
-                  {isChangingPassword ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : null}
-                  {isChangingPassword ? t('account.updating') : t('account.update_password_btn')}
-                </Button>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">{t('account.new_password')}</Label>
+                    <Input
+                      id="new-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">{t('account.confirm_password')}</Label>
+                    <Input
+                      id="confirm-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                  </div>
+                  <Button type="submit" variant="accent" disabled={isChangingPassword}>
+                    {isChangingPassword ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : null}
+                    {isChangingPassword ? t('account.updating') : t('account.update_password_btn')}
+                  </Button>
+                </form>
               </CardContent>
             </Card>
 

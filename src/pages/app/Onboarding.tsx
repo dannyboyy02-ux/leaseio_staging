@@ -82,13 +82,21 @@ export default function Onboarding() {
 
       if (workspaceError) throw workspaceError;
 
-      // Add owner as admin (owner is tracked via workspaces.owner_id)
+      // Add owner as admin (owner is tracked via workspaces.owner_id).
+      // KNOWN_ISSUES #9: invited_at + accepted_at populated explicitly so
+      // every workspace_members row has a complete timestamp trail. Without
+      // these, the owner's own row carried NULL values while invitee rows
+      // (created via accept-invite) had populated timestamps — an asymmetry
+      // that broke audit-trail clarity.
+      const nowIso = new Date().toISOString();
       const { error: memberError } = await supabase
         .from('workspace_members')
         .insert({
           workspace_id: workspace.id,
           user_id: user.id,
           role: 'admin',
+          invited_at: nowIso,
+          accepted_at: nowIso,
         });
 
       if (memberError) throw memberError;

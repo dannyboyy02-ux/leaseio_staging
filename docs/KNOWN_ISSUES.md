@@ -39,8 +39,30 @@ list and reference it in the commit message.
 - Item #5 (WorkspaceSettings owner gating) — RESOLVED. Replaced
   literal `userRole === 'admin'` with `canEditWorkspaceSettings(userRole)`
   on line 164 (previously line 161 per the original report).
-- Items 3, 4, 6, 7, 8, 9, 10, 11, 12, 13 — still open / deferred /
-  pattern notes per their original entries below.
+
+**Status reconciliation (P2 batch, 2026-05-07):**
+- Item #3 (password DOM warnings) — RESOLVED. Wrapped the password
+  card in `<form>` with hidden `autocomplete="username"` shadow input
+  and added `autocomplete="current-password"` / `autocomplete="new-password"`
+  to the three password Inputs in `src/pages/settings/AccountSettings.tsx`.
+  Form's onSubmit calls `handleChangePassword`. Chrome heuristic now
+  satisfied; password managers can autofill.
+- Item #6 (`ai-assistant` dead filter values) — RESOLVED. Dropped the
+  stale `'needs_review'` from the `buildLeaseContext` includes() filter
+  and dropped `'failed'` from the `.not('lifecycle_status', 'in', ...)`
+  query in `supabase/functions/ai-assistant/index.ts`. Behavior
+  unchanged (both values were dead — the constraints never accepted
+  them). Redeployed as ai-assistant v3
+  (ezbr e74d4c34a441fa2eb0b74ba26ae5529463778d513a7e05648fc54ea2f858dcba).
+- Item #9 (creator-membership `invited_at`/`accepted_at` NULL) —
+  RESOLVED. `src/pages/app/Onboarding.tsx` now sets both timestamps
+  to `now()` when inserting the owner's own `workspace_members` row.
+  Behavior unchanged for invitees; just the owner's audit-trail trail
+  is now consistent with everyone else's. Existing rows with NULL
+  timestamps remain NULL — a one-shot backfill UPDATE could be filed
+  if forensics need them, but the live-data effect is cosmetic only.
+- Items 4, 7, 8, 10, 11, 12, 13 — still open / deferred / pattern
+  notes per their original entries below.
 
 ---
 
