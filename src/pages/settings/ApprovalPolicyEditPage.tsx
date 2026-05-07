@@ -5,10 +5,6 @@ import {
   Loader2,
   Save,
   ArrowLeft,
-  Plus,
-  Trash2,
-  ArrowUp,
-  ArrowDown,
   ChevronDown,
   FlaskConical,
 } from 'lucide-react';
@@ -22,13 +18,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -39,35 +28,15 @@ import { toast } from 'sonner';
 import { validatePolicy } from './approvalPolicyValidation';
 import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
 import { MatchCriteriaSentence } from './MatchCriteriaSentence';
+import { ChainDiagram, type ChainStep } from './ChainDiagram';
 
 // ───────────────────────────────────────────────────────────────────────────
-// Constants — FUNCTIONAL_ROLE_OPTIONS must stay aligned with workspace_roles.
-// ASSET_TYPE_OPTIONS and LEASE_TYPE_OPTIONS now live in MatchCriteriaSentence
-// (the only consumer in this file after P1.2).
+// Constants — FUNCTIONAL_ROLE_OPTIONS now lives in ChainDiagram (its only
+// consumer post-P1.3). ASSET_TYPE_OPTIONS and LEASE_TYPE_OPTIONS live in
+// MatchCriteriaSentence (its only consumer post-P1.2).
 // ───────────────────────────────────────────────────────────────────────────
-
-const FUNCTIONAL_ROLE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'submitter', label: 'Submitter' },
-  { value: 'manager_approver', label: 'Manager approver' },
-  { value: 'financial_approver', label: 'Financial approver' },
-  { value: 'signator', label: 'Signator' },
-  { value: 'admin', label: 'Admin' },
-];
 
 type SodMode = 'inherit' | 'allow' | 'require';
-
-interface ChainStep {
-  // Local UI id only — not persisted. Server assigns its own.
-  uiId: string;
-  step_order: number;
-  parallel_group: number;
-  // Exactly one of these is set:
-  approver_user_id: string | null;
-  approver_role: string | null;
-  delegate_user_id: string | null;
-  delegate_after_days: number | null;
-  is_required: boolean;
-}
 
 interface PolicyForm {
   name: string;
@@ -100,17 +69,6 @@ const emptyForm = (): PolicyForm => ({
 });
 
 const newUiId = () => `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-const blankStep = (existing: ChainStep[]): ChainStep => ({
-  uiId: newUiId(),
-  step_order: existing.length + 1,
-  parallel_group: 1,
-  approver_user_id: null,
-  approver_role: 'manager_approver',
-  delegate_user_id: null,
-  delegate_after_days: null,
-  is_required: true,
-});
 
 // ───────────────────────────────────────────────────────────────────────────
 // Page
@@ -418,7 +376,7 @@ export default function ApprovalPolicyEditPage() {
         </Card>
 
         {/* Step 1 — Concept chain */}
-        <ChainEditor
+        <ChainDiagram
           title="Step 1: Get the green light"
           description="Before any paperwork starts. Who approves the request itself?"
           steps={conceptSteps}
@@ -427,7 +385,7 @@ export default function ApprovalPolicyEditPage() {
         />
 
         {/* Step 2 — Signator chain */}
-        <ChainEditor
+        <ChainDiagram
           title="Step 2: Sign the deal"
           description="After negotiation is done. The person whose signature legally binds the company."
           steps={signatorSteps}
@@ -549,247 +507,6 @@ export default function ApprovalPolicyEditPage() {
         workspaceId={workspace?.id ?? null}
       />
     </AppLayout>
-  );
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-// Chain editor — used twice (concept + signator)
-// ───────────────────────────────────────────────────────────────────────────
-
-function ChainEditor({
-  title,
-  description,
-  steps,
-  setSteps,
-  memberOptions,
-}: {
-  title: string;
-  description: string;
-  steps: ChainStep[];
-  setSteps: (s: ChainStep[]) => void;
-  memberOptions: Array<{ id: string; label: string }>;
-}) {
-  const addStep = () => setSteps([...steps, blankStep(steps)]);
-  const remove = (uiId: string) => setSteps(steps.filter((s) => s.uiId !== uiId));
-  const update = (uiId: string, patch: Partial<ChainStep>) =>
-    setSteps(steps.map((s) => (s.uiId === uiId ? { ...s, ...patch } : s)));
-  const move = (uiId: string, dir: -1 | 1) => {
-    const i = steps.findIndex((s) => s.uiId === uiId);
-    if (i < 0) return;
-    const j = i + dir;
-    if (j < 0 || j >= steps.length) return;
-    const swapped = [...steps];
-    [swapped[i], swapped[j]] = [swapped[j], swapped[i]];
-    // Re-sequence step_order to match new positions; preserve parallel_group.
-    setSteps(swapped.map((s, idx) => ({ ...s, step_order: idx + 1 })));
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>{description}</CardDescription>
-          </div>
-          <Button size="sm" variant="outline" onClick={addStep}>
-            <Plus className="h-4 w-4 mr-1.5" />
-            Add approver
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {steps.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">No approvers yet — add at least one.</p>
-        ) : (
-          <p className="text-[10px] text-muted-foreground">
-            Approvers are checked in order. Two approvers in the same group act at the same time.
-          </p>
-        )}
-        {steps.map((s, i) => {
-          const useRole = !!s.approver_role;
-          return (
-            <div key={s.uiId} className="rounded-md border p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Approver {s.step_order}
-                </p>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => move(s.uiId, -1)}
-                    disabled={i === 0}
-                    title="Move up"
-                  >
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={() => move(s.uiId, 1)}
-                    disabled={i === steps.length - 1}
-                    title="Move down"
-                  >
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => remove(s.uiId)}
-                    title="Remove step"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              {/*
-                Position is set by the up/down arrows above (state auto-resequences
-                step_order on swap), so the explicit "Step order" input is gone in
-                P1.1. parallel_group stays visible until P1.3 replaces it with
-                side-by-side rendering.
-              */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase tracking-wide">Group</Label>
-                  <Input
-                    type="number"
-                    value={s.parallel_group}
-                    onChange={(e) => update(s.uiId, { parallel_group: parseInt(e.target.value || '1', 10) })}
-                    className="h-8 text-sm"
-                    min={1}
-                  />
-                  <p className="text-[10px] text-muted-foreground">
-                    Same group = act at the same time. Different group = act in sequence.
-                  </p>
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label className="text-[10px] uppercase tracking-wide">Who approves?</Label>
-                  <RadioGroup
-                    value={useRole ? 'role' : 'user'}
-                    onValueChange={(v) => {
-                      if (v === 'role') update(s.uiId, { approver_user_id: null, approver_role: s.approver_role ?? 'manager_approver' });
-                      else update(s.uiId, { approver_role: null, approver_user_id: s.approver_user_id ?? null });
-                    }}
-                    className="flex gap-3"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <RadioGroupItem value="user" id={`${s.uiId}-user`} />
-                      <Label htmlFor={`${s.uiId}-user`} className="text-xs font-normal cursor-pointer">
-                        A specific person
-                      </Label>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <RadioGroupItem value="role" id={`${s.uiId}-role`} />
-                      <Label htmlFor={`${s.uiId}-role`} className="text-xs font-normal cursor-pointer">
-                        Anyone with a role
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {useRole ? (
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase tracking-wide">Role</Label>
-                    <Select
-                      value={s.approver_role ?? ''}
-                      onValueChange={(v) => update(s.uiId, { approver_role: v })}
-                    >
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue placeholder="Select role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FUNCTIONAL_ROLE_OPTIONS.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>
-                            {r.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase tracking-wide">User</Label>
-                    <Select
-                      value={s.approver_user_id ?? ''}
-                      onValueChange={(v) => update(s.uiId, { approver_user_id: v })}
-                    >
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue placeholder="Select user" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {memberOptions.length === 0 ? (
-                          <div className="px-2 py-1 text-xs text-muted-foreground">
-                            No workspace members loaded
-                          </div>
-                        ) : (
-                          memberOptions.map((m) => (
-                            <SelectItem key={m.id} value={m.id}>
-                              {m.label}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 pt-5">
-                  <Switch
-                    checked={s.is_required}
-                    onCheckedChange={(v) => update(s.uiId, { is_required: v })}
-                  />
-                  <span className="text-xs text-muted-foreground">{s.is_required ? 'Required' : 'Optional'}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase tracking-wide">Backup approver (optional)</Label>
-                  <Select
-                    value={s.delegate_user_id ?? '__none__'}
-                    onValueChange={(v) => update(s.uiId, { delegate_user_id: v === '__none__' ? null : v })}
-                  >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="No backup" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">No backup</SelectItem>
-                      {memberOptions.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase tracking-wide">Backup approver if no answer in N days</Label>
-                  <Input
-                    type="number"
-                    value={s.delegate_after_days ?? ''}
-                    onChange={(e) =>
-                      update(s.uiId, {
-                        delegate_after_days: e.target.value === '' ? null : parseInt(e.target.value, 10),
-                      })
-                    }
-                    placeholder="—"
-                    className="h-8 text-sm"
-                    min={1}
-                    disabled={!s.delegate_user_id}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
   );
 }
 
