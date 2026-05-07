@@ -431,7 +431,7 @@ serve(async (req) => {
     const { data: candidates, error: candidatesError } = await supabaseAdmin
       .from("leases")
       .select(
-        "id, workspace_id, lifecycle_status, model_locked, model_locked_at, model_locked_by, lease_classification, lease_classification_set_at, lease_classification_set_by, signator_attestation, signator_approved_at, request_title, filename, asset_type, landlord_name, tenant_name, property_address, lease_start, lease_end, term_months, executed_monthly_payment, current_monthly_rent, monthly_payment, escalation_type, escalation_rate, renewal_options, termination_clauses, escalation_clauses, security_deposit, calc_total_commitment, calc_pv_liability, calc_straight_line_expense, calc_cash_pl_delta, extracted_json, confirmed_sections",
+        "id, workspace_id, lifecycle_status, model_locked, model_locked_at, model_locked_by, lease_classification, lease_classification_set_at, lease_classification_set_by, signator_attestation, signator_approved_at, request_title, filename, asset_type, landlord_name, tenant_name, property_address, lease_start, lease_end, term_months, executed_monthly_payment, current_monthly_rent, monthly_payment, escalation_type, escalation_rate, renewal_options, termination_clauses, escalation_clauses, security_deposit, calc_total_commitment, calc_pv_liability, calc_straight_line_expense, calc_cash_pl_delta, extracted_json, confirmed_sections, discount_rate, discount_rate_basis, discount_rate_set_at, discount_rate_set_by",
       )
       .eq("workspace_id", body.workspaceId);
 
@@ -507,6 +507,14 @@ serve(async (req) => {
         asNumber(l.executed_monthly_payment) ??
         asNumber(l.current_monthly_rent) ??
         asNumber(l.monthly_payment);
+      // ASC 842 per-lease IBR: prefer per-lease override, fall back
+      // to workspace default. Each lease in the portfolio gets its
+      // own effective rate.
+      const perLeaseRate = asNumber(l.discount_rate);
+      const effectiveRate =
+        perLeaseRate !== null && perLeaseRate > 0
+          ? perLeaseRate
+          : discountRate;
       return {
         lease_id: id,
         workspace_id: body.workspaceId,
@@ -522,7 +530,7 @@ serve(async (req) => {
         lease_classification: pickClassification(l.lease_classification),
         classification_set_at: asString(l.lease_classification_set_at),
         classification_set_by_user_label: asString(l.lease_classification_set_by),
-        discount_rate: discountRate,
+        discount_rate: effectiveRate,
         monthly_payment: monthlyPayment,
         rent_schedule: shapeRentSchedule(rentByLease.get(id) ?? []),
         security_deposit: asNumber(l.security_deposit),

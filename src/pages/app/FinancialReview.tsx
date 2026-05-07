@@ -41,6 +41,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { LeaseDiscountRateCard } from '@/components/leases/LeaseDiscountRateCard';
 
 interface LeaseDetail {
   id: string;
@@ -98,7 +99,12 @@ const fmtDec = (n: number | null | undefined) =>
 export default function FinancialReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
-  const { user, workspace, userFunctionalRoles } = useApp();
+  const { user, workspace, userFunctionalRoles, userRole } = useApp();
+  const canEditDiscountRate =
+    userFunctionalRoles.includes('financial_approver') ||
+    userRole === 'admin' ||
+    userRole === 'owner' ||
+    userRole === 'editor';
 
   const isFinancialApprover = userFunctionalRoles.includes('financial_approver');
 
@@ -461,6 +467,15 @@ export default function FinancialReview() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Per-lease IBR override (ASC 842 compliance) */}
+            {lease?.id && workspace?.id && (
+              <LeaseDiscountRateCard
+                leaseId={lease.id}
+                workspaceId={workspace.id}
+                canEdit={canEditDiscountRate}
+              />
+            )}
           </div>
 
           {/* Right — Financial Impact */}

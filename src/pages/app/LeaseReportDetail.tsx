@@ -60,25 +60,46 @@ export default function LeaseReportDetail() {
   const navigate = useNavigate();
   const [report, setReport] = useState<LeaseReportRow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { generate: regenerate, isWorking: regenerating } = useGenerateLeaseReport();
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!reportId) return;
-      const { data, error } = await supabase
-        .from('lease_reports')
-        .select('*')
-        .eq('id', reportId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
-        toast.error(error.message);
+      // Always settle the loading state, even when reportId is
+      // missing or the supabase call throws — otherwise the page
+      // hangs on "Loading…" with no visible error.
+      try {
+        if (!reportId) {
+          if (!cancelled) {
+            setLoadError('Missing report id in URL');
+            setLoading(false);
+          }
+          return;
+        }
+        const { data, error } = await supabase
+          .from('lease_reports')
+          .select('*')
+          .eq('id', reportId)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error('[LeaseReportDetail] load error', error);
+          setLoadError(error.message);
+          toast.error(error.message);
+          setLoading(false);
+          return;
+        }
+        setReport(data as LeaseReportRow | null);
         setLoading(false);
-        return;
+      } catch (e: any) {
+        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.error('[LeaseReportDetail] load threw', e);
+        setLoadError(e?.message ?? String(e));
+        setLoading(false);
       }
-      setReport(data as LeaseReportRow | null);
-      setLoading(false);
     }
     load();
     return () => {
@@ -154,6 +175,11 @@ export default function LeaseReportDetail() {
           <p className="text-sm text-muted-foreground">
             The requested report does not exist or you do not have access.
           </p>
+          {loadError && (
+            <p className="text-xs text-red-700 font-mono">
+              {loadError}
+            </p>
+          )}
           <Button asChild variant="outline">
             <Link to={`/app/leases/${leaseId ?? ''}`}>
               <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to lease

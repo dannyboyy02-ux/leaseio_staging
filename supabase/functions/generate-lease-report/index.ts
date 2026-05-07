@@ -304,7 +304,7 @@ serve(async (req) => {
   const { data: lease, error: leaseError } = await supabaseAdmin
     .from("leases")
     .select(
-      "id, workspace_id, lifecycle_status, model_locked, model_locked_at, model_locked_by, lease_classification, lease_classification_set_at, lease_classification_set_by, signator_attestation, signator_approved_at, request_title, filename, asset_type, landlord_name, tenant_name, property_address, lease_start, lease_end, term_months, executed_monthly_payment, current_monthly_rent, monthly_payment, escalation_type, escalation_rate, renewal_options, termination_clauses, escalation_clauses, security_deposit, calc_total_commitment, calc_pv_liability, calc_straight_line_expense, calc_cash_pl_delta, extracted_json",
+      "id, workspace_id, lifecycle_status, model_locked, model_locked_at, model_locked_by, lease_classification, lease_classification_set_at, lease_classification_set_by, signator_attestation, signator_approved_at, request_title, filename, asset_type, landlord_name, tenant_name, property_address, lease_start, lease_end, term_months, executed_monthly_payment, current_monthly_rent, monthly_payment, escalation_type, escalation_rate, renewal_options, termination_clauses, escalation_clauses, security_deposit, calc_total_commitment, calc_pv_liability, calc_straight_line_expense, calc_cash_pl_delta, extracted_json, discount_rate, discount_rate_basis, discount_rate_set_at, discount_rate_set_by",
     )
     .eq("id", body.leaseId)
     .maybeSingle();
@@ -399,7 +399,17 @@ serve(async (req) => {
   const retentionDays: number = w.report_artifact_retention_days ?? 90;
   const discountRateMethod: string =
     w.report_default_discount_method ?? "workspace_default";
-  const discountRate: number = asNumber(w.discount_rate) ?? 0;
+  // ASC 842 compliance: prefer the per-lease IBR override, fall back
+  // to the workspace default. The view v_lease_verification_audit
+  // surfaces this same COALESCE; we duplicate the logic here so the
+  // ReportInputs.discount_rate is always the effective rate.
+  const perLeaseRate = asNumber((lease as any).discount_rate);
+  const workspaceRate = asNumber(w.discount_rate) ?? 0;
+  const discountRate: number =
+    perLeaseRate !== null && perLeaseRate > 0 ? perLeaseRate : workspaceRate;
+  const discountRateSource: "per_lease" | "workspace_default" =
+    perLeaseRate !== null && perLeaseRate > 0 ? "per_lease" : "workspace_default";
+  const discountRateBasis = asString((lease as any).discount_rate_basis);
 
   const workspaceSettingsSnapshot = {
     organization_name: organizationName,
@@ -408,6 +418,10 @@ serve(async (req) => {
     retention_days: retentionDays,
     discount_rate_method: discountRateMethod,
     discount_rate: discountRate,
+    discount_rate_source: discountRateSource,
+    discount_rate_basis: discountRateBasis,
+    workspace_default_rate: workspaceRate,
+    per_lease_override_rate: perLeaseRate,
   };
 
   const expiresAt = new Date(
