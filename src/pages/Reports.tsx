@@ -112,8 +112,27 @@ export default function Reports() {
     return (
       <AppLayout>
         <AppHeader title={t('reports.title')} subtitle={t('reports.subtitle')} />
-        <div className="p-6">
-          <div className="mb-8"><RentRollExport /></div>
+        <div className="p-6 space-y-6">
+          <div><RentRollExport /></div>
+          {/* ASC 842 disclosure reports are available regardless of plan
+              tier — they're the primary deliverable customers buy LeaseIO
+              for and the data lives per-lease. */}
+          <Card variant="interactive">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <CardTitle className="text-base">{t('reports.disclosure')}</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CardDescription className="mb-4">{t('reports.disclosure_desc')}</CardDescription>
+              <Button variant="secondary" asChild>
+                <Link to="/app/reports/disclosure">{t('reports.view_report')}</Link>
+              </Button>
+            </CardContent>
+          </Card>
           <Card variant="ghost" className="border-2 border-dashed border-border">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-6">

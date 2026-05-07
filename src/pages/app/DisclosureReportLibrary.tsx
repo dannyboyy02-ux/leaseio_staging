@@ -49,29 +49,47 @@ export default function DisclosureReportLibrary() {
   const workspaceId = currentWorkspace?.id;
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
 
   useEffect(() => {
-    if (!workspaceId) return;
     let cancelled = false;
     async function load() {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('lease_reports')
-        .select(
-          'id, report_type, report_scope, lease_id, generated_at, status, pdf_storage_path, json_storage_path, organization_name_at_gen, period_start, period_end, lease_count, excluded_lease_count',
-        )
-        .eq('workspace_id', workspaceId!)
-        .order('generated_at', { ascending: false })
-        .limit(200);
-      if (cancelled) return;
-      if (error) {
-        toast.error(error.message);
+      try {
+        if (!workspaceId) {
+          if (!cancelled) {
+            setLoadError('No active workspace selected.');
+            setLoading(false);
+          }
+          return;
+        }
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('lease_reports')
+          .select(
+            'id, report_type, report_scope, lease_id, generated_at, status, pdf_storage_path, json_storage_path, organization_name_at_gen, period_start, period_end, lease_count, excluded_lease_count',
+          )
+          .eq('workspace_id', workspaceId!)
+          .order('generated_at', { ascending: false })
+          .limit(200);
+        if (cancelled) return;
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error('[DisclosureReportLibrary] load error', error);
+          setLoadError(error.message);
+          toast.error(error.message);
+          setLoading(false);
+          return;
+        }
+        setRows((data ?? []) as ReportRow[]);
         setLoading(false);
-        return;
+      } catch (e: any) {
+        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.error('[DisclosureReportLibrary] load threw', e);
+        setLoadError(e?.message ?? String(e));
+        setLoading(false);
       }
-      setRows((data ?? []) as ReportRow[]);
-      setLoading(false);
     }
     load();
     return () => {
@@ -129,6 +147,9 @@ export default function DisclosureReportLibrary() {
             <CardTitle className="text-base">
               {loading ? 'Loading…' : `${filtered.length} report(s)`}
             </CardTitle>
+            {loadError && (
+              <p className="text-xs text-red-700 font-mono mt-2">{loadError}</p>
+            )}
           </CardHeader>
           <CardContent className="space-y-2">
             {!loading && filtered.length === 0 ? (

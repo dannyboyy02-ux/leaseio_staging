@@ -37,6 +37,9 @@ import { ArchiveButton } from '@/components/leases/ArchiveButton';
 import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/RentScheduleTable';
 import { AmendmentsList } from '@/components/leases/AmendmentsList';
 import { SummaryShareControls } from '@/components/summary/SummaryShareControls';
+import { Asc842InputsTab } from '@/components/leases/Asc842InputsTab';
+import { GenerateDisclosureReportButton } from '@/components/reports/GenerateDisclosureReportButton';
+import { LeaseDiscountRateCard } from '@/components/leases/LeaseDiscountRateCard';
 
 interface PendingUnlockRequest {
   id: string;
@@ -277,7 +280,8 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
       setDismissing(false);
     }
   }, [dismissTarget, dismissReason, lease?.id, refetchRisks]);
-  const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'obligations' | 'risks' | 'documents'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'obligations' | 'risks' | 'asc842' | 'documents'>('general');
+  const canEditAsc842 = userRole === 'admin' || userRole === 'owner' || userRole === 'editor';
 
   // Fetch unlock-request status, rent schedule, and risks
   useEffect(() => {
@@ -482,6 +486,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
               <TabsTrigger value="options">{t('locked_lease.tabs.options')}</TabsTrigger>
               <TabsTrigger value="obligations">{t('locked_lease.tabs.obligations')}</TabsTrigger>
               <TabsTrigger value="risks">{t('locked_lease.tabs.risks')}</TabsTrigger>
+              <TabsTrigger value="asc842">ASC 842 Inputs</TabsTrigger>
               <TabsTrigger value="documents">{t('locked_lease.tabs.documents')}</TabsTrigger>
             </TabsList>
 
@@ -654,7 +659,28 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
               </SectionCard>
             </TabsContent>
 
+            <TabsContent value="asc842" className="mt-0">
+              <Asc842InputsTab
+                leaseId={lease.id}
+                workspaceId={lease.workspace_id}
+                canEdit={canEditAsc842}
+              />
+              <div className="mt-4">
+                <LeaseDiscountRateCard
+                  leaseId={lease.id}
+                  workspaceId={lease.workspace_id}
+                  canEdit={canEditAsc842}
+                />
+              </div>
+            </TabsContent>
+
             <TabsContent value="documents" className="space-y-4 mt-0">
+              <SectionCard title="ASC 842 Disclosure Report">
+                <GenerateDisclosureReportButton
+                  leaseId={lease.id}
+                  isModelLocked={!!lease.model_locked}
+                />
+              </SectionCard>
               <SectionCard title={t('locked_lease.documents.section_title')}>
                 <AmendmentsList parentLeaseId={lease.id} />
               </SectionCard>

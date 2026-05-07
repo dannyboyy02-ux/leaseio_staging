@@ -58,7 +58,7 @@ const topNavItems = [
 // Bottom nav items — rendered after Approvals
 const bottomNavItems = [
   { title: 'Portfolio', href: '/app/portfolio', icon: Layers },
-  { title: 'Reports',   href: '/app/reports',   icon: BarChart3, requiresBusiness: true },
+  { title: 'Reports',   href: '/app/reports',   icon: BarChart3 },
 ];
 
 export function AppSidebar() {
