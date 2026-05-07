@@ -1,5 +1,6 @@
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
-import { Building2, Users, Bell, Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
+import { Building2, Users, Bell, Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink, FileText } from 'lucide-react';
+import { ReportSettingsCard } from '@/components/workspace/ReportSettingsCard';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -170,6 +171,7 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
     { id: 'lease_config',      label: 'Lease Configuration',  icon: Settings2,     visible: isAdmin },
     { id: 'risk_watchlist',    label: 'Risk Watchlist',       icon: AlertTriangle, visible: canEdit },
     { id: 'approval_policies', label: 'Approval Policies',    icon: GitBranch,     visible: isAdmin },
+    { id: 'reports',           label: 'Reports',              icon: FileText,      visible: canAccessDefaults },
     { id: 'onboarding',        label: 'Onboarding',           icon: Package,       visible: isAdmin },
   ].filter((tab) => tab.visible);
 
@@ -1115,6 +1117,13 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
                   </Button>
                 </CardContent>
               </Card>
+            </TabsContent>
+          )}
+
+          {/* Phase 8 — Reports tab (admin/editor) */}
+          {canAccessDefaults && workspace?.id && (
+            <TabsContent value="reports" className="space-y-6">
+              <ReportSettingsCard workspaceId={workspace.id} canEdit={canEdit} />
             </TabsContent>
           )}
 

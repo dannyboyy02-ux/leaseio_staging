@@ -26,6 +26,9 @@ import AcceptInvite from "./pages/AcceptInvite";
 // App pages (protected)
 import Onboarding from "./pages/app/Onboarding";
 import LeaseReview from "./pages/app/LeaseReview";
+import LeaseReportDetail from "./pages/app/LeaseReportDetail";
+import PortfolioReportsAdmin from "./pages/app/PortfolioReportsAdmin";
+import DisclosureReportLibrary from "./pages/app/DisclosureReportLibrary";
 import SignatorReview from "./pages/app/SignatorReview";
 import RerouteAuditDashboard from "./pages/app/RerouteAuditDashboard";
 import ExceptionsDashboard from "./pages/app/ExceptionsDashboard";
@@ -154,6 +157,15 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                {/* Phase 8 — single-lease disclosure report detail */}
+                <Route
+                  path="/app/leases/:leaseId/reports/:reportId"
+                  element={
+                    <ProtectedRoute>
+                      <LeaseReportDetail />
+                    </ProtectedRoute>
+                  }
+                />
                 {/* Phase 5 — signator review (intentional friction page) */}
                 <Route
                   path="/app/leases/:leaseId/signator-review"
@@ -174,6 +186,27 @@ const App = () => (
                       <RequireRole allow={canEditWorkspaceSettings}>
                         <RerouteAuditDashboard />
                       </RequireRole>
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Phase 8 — admin portfolio reports page. Generates
+                    workspace-scoped portfolio-period disclosure reports. */}
+                <Route
+                  path="/app/admin/reports"
+                  element={
+                    <ProtectedRoute>
+                      <RequireRole allow={canEditWorkspaceSettings}>
+                        <PortfolioReportsAdmin />
+                      </RequireRole>
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Phase 8 — disclosure report library (single + portfolio) */}
+                <Route
+                  path="/app/reports/disclosure"
+                  element={
+                    <ProtectedRoute>
+                      <DisclosureReportLibrary />
                     </ProtectedRoute>
                   }
                 />

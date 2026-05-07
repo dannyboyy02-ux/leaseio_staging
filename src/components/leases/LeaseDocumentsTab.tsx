@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { LeaseAnalysisDocument } from '@/components/leases/LeaseAnalysisExport';
 import { type ReportLease, type ReportProse } from '@/lib/reportGeneration';
+import { GenerateDisclosureReportButton } from '@/components/reports/GenerateDisclosureReportButton';
 
 interface LeaseDocumentsTabProps {
   leaseId: string;
@@ -217,6 +218,14 @@ export function LeaseDocumentsTab({
             </Button>
           </div>
         ) : !isLocked && isBusinessPlan ? null : !isBusinessPlan ? (
+          <></>
+        ) : null}
+
+        {/* Phase 8 — ASC 842 Disclosure Report (gated on model_locked) */}
+        <GenerateDisclosureReportButton leaseId={leaseId} isModelLocked={isLocked} />
+
+        {/* Legacy plan-gating tooltip preserved below */}
+        {!isBusinessPlan ? (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>

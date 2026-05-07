@@ -660,6 +660,8 @@
     "download_rent_roll": "Descargar Rol de Rentas",
     "generating": "Generando...",
     "export_restricted": "La exportación está disponible solo para administradores y editores.",
+    "disclosure": "Reportes de Divulgación",
+    "disclosure_desc": "Reportes de divulgación ASC 842 para arrendamientos individuales o periodos de portafolio. PDF + JSON.",
     "portfolio_overview": "Resumen del Portafolio",
     "portfolio_overview_desc": "Resumen de alto nivel de todos los arrendamientos activos, renta comprometida total y métricas clave.",
     "renewal_pipeline": "Pipeline de Renovaciones",

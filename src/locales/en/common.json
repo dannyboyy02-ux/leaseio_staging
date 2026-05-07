@@ -660,6 +660,8 @@
     "download_rent_roll": "Download Rent Roll",
     "generating": "Generating...",
     "export_restricted": "Export is available for admins and editors only.",
+    "disclosure": "Disclosure Reports",
+    "disclosure_desc": "ASC 842 disclosure reports for individual leases or portfolio-period roll-ups. PDF + JSON.",
     "portfolio_overview": "Portfolio Overview",
     "portfolio_overview_desc": "High-level summary of all active leases, total committed rent, and key metrics.",
     "renewal_pipeline": "Renewal Pipeline",

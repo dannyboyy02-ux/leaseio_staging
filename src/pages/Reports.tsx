@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, PieChart, TrendingUp, Calendar, Download, Lock, ClipboardList } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Calendar, Download, Lock, ClipboardList, FileText } from 'lucide-react';
 import type { ComponentType } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -50,6 +50,7 @@ const reports: Array<{
   requiresAdmin?: boolean;
   requiresEditor?: boolean;
 }> = [
+  { id: 'disclosure',   titleKey: 'reports.disclosure',           descKey: 'reports.disclosure_desc',           icon: FileText,      href: '/app/reports/disclosure' },
   { id: 'portfolio',    titleKey: 'reports.portfolio_overview',   descKey: 'reports.portfolio_overview_desc',   icon: PieChart },
   { id: 'renewals',     titleKey: 'reports.renewal_pipeline',     descKey: 'reports.renewal_pipeline_desc',     icon: Calendar },
   { id: 'escalations',  titleKey: 'reports.escalation_calendar',  descKey: 'reports.escalation_calendar_desc',  icon: TrendingUp },
