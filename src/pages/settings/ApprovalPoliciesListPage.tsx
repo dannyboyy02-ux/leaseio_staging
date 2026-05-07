@@ -106,7 +106,7 @@ export default function ApprovalPoliciesListPage() {
       return;
     }
     queryClient.setQueryData(['workspace-sod-default', workspace.id], next);
-    toast.success(`Separation of duties default: ${next ? 'ON' : 'OFF'}`);
+    toast.success(`Workspace default for distinct approvers: ${next ? 'ON' : 'OFF'}`);
   };
 
   const toggleActive = async (policy: Policy, next: boolean) => {
@@ -119,7 +119,7 @@ export default function ApprovalPoliciesListPage() {
     if (error) {
       // The partial unique index will reject if turning a non-default on while
       // another default is also active — surface a helpful message.
-      toast.error(error.message || 'Failed to update policy');
+      toast.error(error.message || 'Failed to update rule');
       return;
     }
     queryClient.invalidateQueries({ queryKey: ['approval-policies', workspace?.id] });
@@ -169,7 +169,7 @@ export default function ApprovalPoliciesListPage() {
         if (rpcErr) throw rpcErr;
       }
 
-      toast.success('Policy duplicated. Edit and activate when ready.');
+      toast.success('Rule duplicated. Edit and activate when ready.');
       queryClient.invalidateQueries({ queryKey: ['approval-policies', workspace.id] });
       navigate(`/app/settings/approval-policies/${(newPolicy as any).id}`);
     } catch (err: any) {
@@ -180,26 +180,28 @@ export default function ApprovalPoliciesListPage() {
   };
 
   const archive = async (policy: Policy) => {
-    if (!confirm(`Archive policy "${policy.name}"? It will be deactivated and stop matching new requests.`)) return;
+    if (!confirm(`Archive rule "${policy.name}"? It will be deactivated and stop matching new requests.`)) return;
     await toggleActive(policy, false);
   };
 
   return (
     <AppLayout>
-      <AppHeader title="Approval Policies" />
+      <AppHeader title="Approval Rules" />
       <div className="container mx-auto p-6 space-y-6">
-        {/* Workspace separation-of-duties banner */}
+        {/* Workspace default for distinct approvers */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="min-w-0">
-                <p className="text-sm font-medium">Workspace separation of duties</p>
+                <p className="text-sm font-medium">Can the same person fill multiple roles?</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  When ON, every approval chain must use distinct users in each step. Individual policies can override.
+                  When ON, every approval chain must use distinct users at each step. Individual rules can override this.
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-muted-foreground">{sodQuery.data ? 'ON' : 'OFF'}</span>
+                <span className="text-xs text-muted-foreground">
+                  {sodQuery.data ? 'ON — distinct users required' : 'OFF — same user allowed'}
+                </span>
                 <Switch
                   checked={Boolean(sodQuery.data)}
                   onCheckedChange={toggleSodDefault}
@@ -210,27 +212,27 @@ export default function ApprovalPoliciesListPage() {
           </CardContent>
         </Card>
 
-        {/* Policies list */}
+        {/* Rules list */}
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4">
             <div>
-              <CardTitle>Policies</CardTitle>
+              <CardTitle>Rules</CardTitle>
               <CardDescription>
-                Sorted by priority (highest first). The first policy whose criteria all match a new request wins. If
-                nothing matches, the default fallback policy is used.
+                Rules are checked in priority order — the first rule whose conditions all match a new request wins. If
+                nothing matches, the fallback rule is used.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button variant="outline" size="sm" onClick={() => setTestOpen(true)}>
                 <FlaskConical className="h-4 w-4 mr-1.5" />
-                Test Resolution
+                Try it on a sample request
               </Button>
               <Button
                 size="sm"
                 onClick={() => navigate('/app/settings/approval-policies/new')}
               >
                 <Plus className="h-4 w-4 mr-1.5" />
-                New Policy
+                New rule
               </Button>
             </div>
           </CardHeader>
@@ -243,10 +245,9 @@ export default function ApprovalPoliciesListPage() {
               </div>
             ) : sortedPolicies.length === 0 ? (
               <div className="text-center py-12 text-sm text-muted-foreground">
-                <p>No approval policies yet.</p>
+                <p>No approval rules yet.</p>
                 <p className="mt-1">
-                  Click <strong>New Policy</strong> to define the first one. Phase 1 stores policies; Phase 2 wires them
-                  into lease submissions.
+                  Click <strong>New rule</strong> to define the first one.
                 </p>
               </div>
             ) : (

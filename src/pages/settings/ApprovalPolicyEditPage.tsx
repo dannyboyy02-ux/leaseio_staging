@@ -10,6 +10,8 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  ChevronDown,
+  FlaskConical,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -29,10 +31,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { validatePolicy } from './approvalPolicyValidation';
+import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — keep aligned with leases.asset_type / leases.lease_type CHECK
@@ -206,6 +214,8 @@ export default function ApprovalPolicyEditPage() {
   const [signatorSteps, setSignatorSteps] = useState<ChainStep[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [testOpen, setTestOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Workspace-curated suggestion lists for departments/regions, plus the
   // workspace's separation-of-duties default so we can label the Inherit option.
@@ -262,7 +272,7 @@ export default function ApprovalPolicyEditPage() {
           .maybeSingle();
         if (pErr) throw pErr;
         if (!p) {
-          toast.error('Policy not found.');
+          toast.error('Rule not found.');
           navigate('/app/settings/approval-policies', { replace: true });
           return;
         }
@@ -316,7 +326,7 @@ export default function ApprovalPolicyEditPage() {
         setConceptSteps(concept);
         setSignatorSteps(signator);
       } catch (err: any) {
-        toast.error(err?.message ?? 'Failed to load policy');
+        toast.error(err?.message ?? 'Failed to load rule');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -392,7 +402,7 @@ export default function ApprovalPolicyEditPage() {
       });
       if (rpcErr) throw rpcErr;
 
-      toast.success(isNew ? 'Policy created.' : 'Policy saved.');
+      toast.success(isNew ? 'Rule created.' : 'Rule saved.');
       navigate('/app/settings/approval-policies');
     } catch (err: any) {
       toast.error(err?.message ?? 'Save failed');
@@ -404,7 +414,7 @@ export default function ApprovalPolicyEditPage() {
   if (loading) {
     return (
       <AppLayout>
-        <AppHeader title="Approval Policy" />
+        <AppHeader title="Approval Rule" />
         <div className="container mx-auto p-6">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -416,7 +426,7 @@ export default function ApprovalPolicyEditPage() {
 
   return (
     <AppLayout>
-      <AppHeader title={isNew ? 'New approval policy' : 'Edit approval policy'} />
+      <AppHeader title={isNew ? 'New approval rule' : 'Edit approval rule'} />
       <div className="container mx-auto p-6 space-y-6 max-w-4xl">
         <div>
           <Button
@@ -426,15 +436,15 @@ export default function ApprovalPolicyEditPage() {
             className="text-muted-foreground"
           >
             <ArrowLeft className="h-4 w-4 mr-1.5" />
-            All policies
+            All rules
           </Button>
         </div>
 
-        {/* Identity */}
+        {/* Name your rule */}
         <Card>
           <CardHeader>
-            <CardTitle>Identity</CardTitle>
-            <CardDescription>How this policy is named and prioritized.</CardDescription>
+            <CardTitle>Name your rule</CardTitle>
+            <CardDescription>Give it a clear name so other admins know when it should apply.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
@@ -454,50 +464,27 @@ export default function ApprovalPolicyEditPage() {
                 placeholder="Notes for other admins."
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Priority</Label>
-                <Input
-                  type="number"
-                  value={form.priority}
-                  onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value || '0', 10) })}
-                  min={1}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Active</Label>
+              <div className="flex items-center gap-2 h-10">
+                <Switch
+                  checked={form.is_active}
+                  onCheckedChange={(v) => setForm({ ...form, is_active: v })}
                 />
-                <p className="text-[10px] text-muted-foreground">Higher number wins when multiple policies match.</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Active</Label>
-                <div className="flex items-center gap-2 h-10">
-                  <Switch
-                    checked={form.is_active}
-                    onCheckedChange={(v) => setForm({ ...form, is_active: v })}
-                  />
-                  <span className="text-xs text-muted-foreground">{form.is_active ? 'On' : 'Off'}</span>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Default fallback</Label>
-                <div className="flex items-center gap-2 h-10">
-                  <Switch
-                    checked={form.is_default_fallback}
-                    onCheckedChange={(v) => setForm({ ...form, is_default_fallback: v })}
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    {form.is_default_fallback ? 'Used when nothing matches' : 'Off'}
-                  </span>
-                </div>
-                <p className="text-[10px] text-muted-foreground">Only one active default per workspace.</p>
+                <span className="text-xs text-muted-foreground">
+                  {form.is_active ? 'On — this rule is in use' : 'Off — this rule is paused'}
+                </span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Matching criteria */}
+        {/* When does this rule apply? */}
         <Card>
           <CardHeader>
-            <CardTitle>Matching criteria</CardTitle>
+            <CardTitle>When does this rule apply?</CardTitle>
             <CardDescription>
-              A policy matches a request when ALL filled-in criteria are satisfied. Empty criteria match any value.
+              This rule applies when ALL filled-in conditions are satisfied. Leave a condition empty to match anything.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -602,60 +589,113 @@ export default function ApprovalPolicyEditPage() {
           </CardContent>
         </Card>
 
-        {/* Separation of duties */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Separation of duties</CardTitle>
-            <CardDescription>
-              Whether a single person can fill multiple roles in the chain. Workspace default is{' '}
-              <strong>{wsExtras.data?.sodDefault ? 'ON' : 'OFF'}</strong>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RadioGroup value={form.sod_mode} onValueChange={(v) => setForm({ ...form, sod_mode: v as SodMode })}>
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem value="inherit" id="sod-inherit" />
-                <Label htmlFor="sod-inherit" className="font-normal text-sm cursor-pointer">
-                  Inherit workspace default (currently:{' '}
-                  <strong>{wsExtras.data?.sodDefault ? 'require distinct users' : 'allow same user'}</strong>)
-                </Label>
-              </div>
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem value="allow" id="sod-allow" />
-                <Label htmlFor="sod-allow" className="font-normal text-sm cursor-pointer">
-                  Allow same user in multiple roles
-                </Label>
-              </div>
-              <div className="flex items-start space-x-2">
-                <RadioGroupItem value="require" id="sod-require" />
-                <Label htmlFor="sod-require" className="font-normal text-sm cursor-pointer">
-                  Require distinct users
-                </Label>
-              </div>
-            </RadioGroup>
-          </CardContent>
-        </Card>
-
-        {/* Concept chain */}
+        {/* Step 1 — Concept chain */}
         <ChainEditor
-          title="Concept approval chain"
-          description="Approver(s) who review the request before any document exists."
+          title="Step 1: Get the green light"
+          description="Before any paperwork starts. Who approves the request itself?"
           steps={conceptSteps}
           setSteps={setConceptSteps}
           memberOptions={members.data ?? []}
         />
 
-        {/* Signator chain */}
+        {/* Step 2 — Signator chain */}
         <ChainEditor
-          title="Signator approval chain"
-          description="Final binding approval — the person whose signature legally binds the company."
+          title="Step 2: Sign the deal"
+          description="After negotiation is done. The person whose signature legally binds the company."
           steps={signatorSteps}
           setSteps={setSignatorSteps}
           memberOptions={members.data ?? []}
         />
 
-        {/* Save / Cancel */}
-        <div className="flex justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 px-6 border-t">
+        {/* Advanced settings — most admins won't need to change these */}
+        <Card>
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 rounded-t-lg transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Advanced settings</CardTitle>
+                    <CardDescription>Most admins don't need to change these.</CardDescription>
+                  </div>
+                  <ChevronDown
+                    className={`h-4 w-4 text-muted-foreground transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
+                  />
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="space-y-6 pt-2">
+                {/* When two rules fit, which wins? */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">When two rules fit, which wins?</Label>
+                  <Input
+                    type="number"
+                    value={form.priority}
+                    onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value || '0', 10) })}
+                    min={1}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Higher number wins when multiple rules match the same request.</p>
+                </div>
+
+                {/* Use this rule when no other rule fits */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Use this rule when no other rule fits</Label>
+                  <div className="flex items-center gap-2 h-10">
+                    <Switch
+                      checked={form.is_default_fallback}
+                      onCheckedChange={(v) => setForm({ ...form, is_default_fallback: v })}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {form.is_default_fallback ? 'On — this is the workspace fallback' : 'Off'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Only one rule per workspace can be the fallback.</p>
+                </div>
+
+                {/* Can the same person fill multiple roles? */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Can the same person fill multiple roles?</Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Workspace default is <strong>{wsExtras.data?.sodDefault ? 'ON (require distinct users)' : 'OFF (allow same user)'}</strong>.
+                  </p>
+                  <RadioGroup value={form.sod_mode} onValueChange={(v) => setForm({ ...form, sod_mode: v as SodMode })}>
+                    <div className="flex items-start space-x-2">
+                      <RadioGroupItem value="inherit" id="sod-inherit" />
+                      <Label htmlFor="sod-inherit" className="font-normal text-sm cursor-pointer">
+                        Use the workspace default (currently:{' '}
+                        <strong>{wsExtras.data?.sodDefault ? 'require distinct users' : 'allow same user'}</strong>)
+                      </Label>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <RadioGroupItem value="allow" id="sod-allow" />
+                      <Label htmlFor="sod-allow" className="font-normal text-sm cursor-pointer">
+                        Allow the same person in multiple roles
+                      </Label>
+                    </div>
+                    <div className="flex items-start space-x-2">
+                      <RadioGroupItem value="require" id="sod-require" />
+                      <Label htmlFor="sod-require" className="font-normal text-sm cursor-pointer">
+                        Require distinct users
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </Card>
+
+        {/* Test / Save / Cancel */}
+        <div className="flex flex-wrap justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 px-6 border-t">
+          <Button
+            variant="outline"
+            onClick={() => setTestOpen(true)}
+            disabled={saving || !workspace?.id}
+          >
+            <FlaskConical className="h-4 w-4 mr-1.5" />
+            Try it on a sample request
+          </Button>
+          <div className="flex-1" />
           <Button variant="ghost" onClick={() => navigate('/app/settings/approval-policies')} disabled={saving}>
             Cancel
           </Button>
@@ -668,12 +708,18 @@ export default function ApprovalPolicyEditPage() {
             ) : (
               <>
                 <Save className="h-4 w-4 mr-1.5" />
-                {isNew ? 'Create policy' : 'Save policy'}
+                {isNew ? 'Create rule' : 'Save rule'}
               </>
             )}
           </Button>
         </div>
       </div>
+
+      <ApprovalPolicyTestDialog
+        open={testOpen}
+        onOpenChange={setTestOpen}
+        workspaceId={workspace?.id ?? null}
+      />
     </AppLayout>
   );
 }
@@ -720,16 +766,16 @@ function ChainEditor({
           </div>
           <Button size="sm" variant="outline" onClick={addStep}>
             <Plus className="h-4 w-4 mr-1.5" />
-            Add step
+            Add approver
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
         {steps.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">No steps yet — add at least one.</p>
+          <p className="text-sm text-muted-foreground italic">No approvers yet — add at least one.</p>
         ) : (
           <p className="text-[10px] text-muted-foreground">
-            Steps with the same parallel-group act in parallel. Different groups act sequentially.
+            Approvers are checked in order. Two approvers in the same group act at the same time.
           </p>
         )}
         {steps.map((s, i) => {
@@ -738,7 +784,7 @@ function ChainEditor({
             <div key={s.uiId} className="rounded-md border p-3 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Step {s.step_order}
+                  Approver {s.step_order}
                 </p>
                 <div className="flex items-center gap-1">
                   <Button
@@ -773,19 +819,15 @@ function ChainEditor({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/*
+                Position is set by the up/down arrows above (state auto-resequences
+                step_order on swap), so the explicit "Step order" input is gone in
+                P1.1. parallel_group stays visible until P1.3 replaces it with
+                side-by-side rendering.
+              */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-[10px] uppercase tracking-wide">Step order</Label>
-                  <Input
-                    type="number"
-                    value={s.step_order}
-                    onChange={(e) => update(s.uiId, { step_order: parseInt(e.target.value || '1', 10) })}
-                    className="h-8 text-sm"
-                    min={1}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] uppercase tracking-wide">Parallel group</Label>
+                  <Label className="text-[10px] uppercase tracking-wide">Group</Label>
                   <Input
                     type="number"
                     value={s.parallel_group}
@@ -793,9 +835,12 @@ function ChainEditor({
                     className="h-8 text-sm"
                     min={1}
                   />
+                  <p className="text-[10px] text-muted-foreground">
+                    Same group = act at the same time. Different group = act in sequence.
+                  </p>
                 </div>
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-[10px] uppercase tracking-wide">Approver type</Label>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-[10px] uppercase tracking-wide">Who approves?</Label>
                   <RadioGroup
                     value={useRole ? 'role' : 'user'}
                     onValueChange={(v) => {
@@ -807,13 +852,13 @@ function ChainEditor({
                     <div className="flex items-center gap-1.5">
                       <RadioGroupItem value="user" id={`${s.uiId}-user`} />
                       <Label htmlFor={`${s.uiId}-user`} className="text-xs font-normal cursor-pointer">
-                        Specific user
+                        A specific person
                       </Label>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <RadioGroupItem value="role" id={`${s.uiId}-role`} />
                       <Label htmlFor={`${s.uiId}-role`} className="text-xs font-normal cursor-pointer">
-                        Functional role
+                        Anyone with a role
                       </Label>
                     </div>
                   </RadioGroup>
@@ -877,16 +922,16 @@ function ChainEditor({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-[10px] uppercase tracking-wide">Delegate (optional)</Label>
+                  <Label className="text-[10px] uppercase tracking-wide">Backup approver (optional)</Label>
                   <Select
                     value={s.delegate_user_id ?? '__none__'}
                     onValueChange={(v) => update(s.uiId, { delegate_user_id: v === '__none__' ? null : v })}
                   >
                     <SelectTrigger className="h-8 text-sm">
-                      <SelectValue placeholder="No delegate" />
+                      <SelectValue placeholder="No backup" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">No delegate</SelectItem>
+                      <SelectItem value="__none__">No backup</SelectItem>
                       {memberOptions.map((m) => (
                         <SelectItem key={m.id} value={m.id}>
                           {m.label}
@@ -896,7 +941,7 @@ function ChainEditor({
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] uppercase tracking-wide">Delegate after N days</Label>
+                  <Label className="text-[10px] uppercase tracking-wide">Backup approver if no answer in N days</Label>
                   <Input
                     type="number"
                     value={s.delegate_after_days ?? ''}

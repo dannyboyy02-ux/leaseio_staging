@@ -174,7 +174,7 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
     { id: 'financial',         label: 'Financial',            icon: TrendingUp,    visible: canAccessDefaults },
     { id: 'lease_config',      label: 'Lease Configuration',  icon: Settings2,     visible: isAdmin },
     { id: 'risk_watchlist',    label: 'Risk Watchlist',       icon: AlertTriangle, visible: canEdit },
-    { id: 'approval_policies', label: 'Approval Policies',    icon: GitBranch,     visible: isAdmin },
+    { id: 'approval_policies', label: 'Approval Rules',       icon: GitBranch,     visible: isAdmin },
     { id: 'reports',           label: 'Reports',              icon: FileText,      visible: canAccessDefaults },
     { id: 'onboarding',        label: 'Onboarding',           icon: Package,       visible: isAdmin },
   ].filter((tab) => tab.visible);
@@ -1093,7 +1093,7 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
             </TabsContent>
           )}
 
-          {/* Approval Policies — admin only. Settings sub-routes aren't
+          {/* Approval Rules — admin only. Settings sub-routes aren't
               exposed by the main sidebar; this tab is the admin's entry
               point to /app/settings/approval-policies. */}
           {isAdmin && (
@@ -1103,11 +1103,11 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
                   <div className="flex items-center gap-2">
                     <GitBranch className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <CardTitle>Approval Policies</CardTitle>
+                      <CardTitle>Approval Rules</CardTitle>
                       <CardDescription>
-                        Configurable per-workspace rules that decide who approves a lease request based on its asset
-                        type, department, dollar threshold, region, and more. Phase 1 stores policies; Phase 2 wires
-                        them into actual lease submissions.
+                        Per-workspace rules that decide who approves a lease request based on its asset type,
+                        department, dollar threshold, region, and more. Each rule defines the conditions that match
+                        and the chain of approvers that runs.
                       </CardDescription>
                     </div>
                   </div>
@@ -1116,7 +1116,7 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
                   <Button asChild>
                     <Link to="/app/settings/approval-policies">
                       <ExternalLink className="h-4 w-4 mr-1.5" />
-                      Open Approval Policies
+                      Open Approval Rules
                     </Link>
                   </Button>
                 </CardContent>
