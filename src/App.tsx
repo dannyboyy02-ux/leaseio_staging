@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,51 +10,62 @@ import { AppProvider } from "@/contexts/AppContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
-// Public pages
+// ─── Eager-loaded routes (kept in the main bundle for fast first paint) ────
+// Marketing + auth + legal — visited on cold loads, optimised for fast first
+// paint. Everything else below is React.lazy()-split into per-chunk JS.
 import Landing from "./pages/Landing";
-import LeaseAudit from "./pages/LeaseAudit";
-import Privacy from "./pages/Privacy";
-import Terms from "./pages/Terms";
-import PublicSummaryPage from "./pages/PublicSummaryPage";
-
-// Auth pages
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import AcceptInvite from "./pages/AcceptInvite";
-
-// App pages (protected)
-import Onboarding from "./pages/app/Onboarding";
-import LeaseReview from "./pages/app/LeaseReview";
-import LeaseReportDetail from "./pages/app/LeaseReportDetail";
-import PortfolioReportsAdmin from "./pages/app/PortfolioReportsAdmin";
-import DisclosureReportLibrary from "./pages/app/DisclosureReportLibrary";
-import SignatorReview from "./pages/app/SignatorReview";
-import RerouteAuditDashboard from "./pages/app/RerouteAuditDashboard";
-import ExceptionsDashboard from "./pages/app/ExceptionsDashboard";
-import Portfolio from "./pages/app/Portfolio";
-import ApprovalQueue from "./pages/app/ApprovalQueue";
-import FinancialReview from "./pages/app/FinancialReview";
-import ImportHistory from "./pages/app/ImportHistory";
-import Upgrade from "./pages/app/Upgrade";
-import Usage from "./pages/app/Usage";
-import NewLease from "./pages/app/NewLease";
-import ExtractionAnalytics from "./pages/app/ExtractionAnalytics";
-import AuditLog from "./pages/app/AuditLog";
-import Support from "./pages/app/Support";
-import NeedsActionPage from "./pages/app/NeedsActionPage";
-import Dashboard from "./pages/Dashboard";
-import Leases from "./pages/Leases";
-import Notifications from "./pages/Notifications";
-import NotificationDetail from "./pages/app/NotificationDetail";
-import Reports from "./pages/Reports";
-import WorkspaceSettings from "./pages/settings/WorkspaceSettings";
-import AccountSettings from "./pages/settings/AccountSettings";
-import WorkspaceManagement from "./pages/account/WorkspaceManagement";
-import ApprovalPoliciesListPage from "./pages/settings/ApprovalPoliciesListPage";
-import ApprovalPolicyEditPage from "./pages/settings/ApprovalPolicyEditPage";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
+
+// ─── Lazy-loaded routes (split into per-chunk JS, fetched on demand) ──────
+// Audit 2026-05-07 found the prod bundle was 4.05 MB / 1.19 MB gzipped in a
+// single chunk — every customer paid for the full app surface (PDF lib +
+// charts + every page) on first paint. React.lazy splits each route into its
+// own chunk; React.Suspense renders the fallback while the chunk loads.
+
+// Public-but-rare
+const LeaseAudit = lazy(() => import("./pages/LeaseAudit"));
+const PublicSummaryPage = lazy(() => import("./pages/PublicSummaryPage"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const AcceptInvite = lazy(() => import("./pages/AcceptInvite"));
+
+// App workbench (post-login)
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Leases = lazy(() => import("./pages/Leases"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const Reports = lazy(() => import("./pages/Reports"));
+const Onboarding = lazy(() => import("./pages/app/Onboarding"));
+const LeaseReview = lazy(() => import("./pages/app/LeaseReview"));
+const LeaseReportDetail = lazy(() => import("./pages/app/LeaseReportDetail"));
+const PortfolioReportsAdmin = lazy(() => import("./pages/app/PortfolioReportsAdmin"));
+const DisclosureReportLibrary = lazy(() => import("./pages/app/DisclosureReportLibrary"));
+const SignatorReview = lazy(() => import("./pages/app/SignatorReview"));
+const RerouteAuditDashboard = lazy(() => import("./pages/app/RerouteAuditDashboard"));
+const ExceptionsDashboard = lazy(() => import("./pages/app/ExceptionsDashboard"));
+const Portfolio = lazy(() => import("./pages/app/Portfolio"));
+const ApprovalQueue = lazy(() => import("./pages/app/ApprovalQueue"));
+const FinancialReview = lazy(() => import("./pages/app/FinancialReview"));
+const ImportHistory = lazy(() => import("./pages/app/ImportHistory"));
+const Upgrade = lazy(() => import("./pages/app/Upgrade"));
+const Usage = lazy(() => import("./pages/app/Usage"));
+const NewLease = lazy(() => import("./pages/app/NewLease"));
+const ExtractionAnalytics = lazy(() => import("./pages/app/ExtractionAnalytics"));
+const AuditLog = lazy(() => import("./pages/app/AuditLog"));
+const Support = lazy(() => import("./pages/app/Support"));
+const NeedsActionPage = lazy(() => import("./pages/app/NeedsActionPage"));
+const NotificationDetail = lazy(() => import("./pages/app/NotificationDetail"));
+
+// Settings + account
+const WorkspaceSettings = lazy(() => import("./pages/settings/WorkspaceSettings"));
+const AccountSettings = lazy(() => import("./pages/settings/AccountSettings"));
+const WorkspaceManagement = lazy(() => import("./pages/account/WorkspaceManagement"));
+const ApprovalPoliciesListPage = lazy(() => import("./pages/settings/ApprovalPoliciesListPage"));
+const ApprovalPolicyEditPage = lazy(() => import("./pages/settings/ApprovalPolicyEditPage"));
+
 import { RequireRole } from "@/components/auth/RequireRole";
 import {
   canAccessReportsAuditLog,
@@ -74,6 +86,24 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+              <Suspense
+                fallback={
+                  <div
+                    style={{
+                      minHeight: "100vh",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#6b7280",
+                      fontFamily:
+                        '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                      fontSize: "0.875rem",
+                    }}
+                  >
+                    Loading…
+                  </div>
+                }
+              >
               <Routes>
                 {/* Public routes */}
                 <Route path="/" element={<Landing />} />
@@ -381,6 +411,7 @@ const App = () => (
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
+              </Suspense>
               </BrowserRouter>
             </TooltipProvider>
           </LanguageProvider>
