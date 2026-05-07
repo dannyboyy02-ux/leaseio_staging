@@ -94,6 +94,49 @@ function makeInputs(overrides: Partial<ReportInputs> = {}): ReportInputs {
         page: 5,
       },
     },
+    // Default fixture includes a full asc842_inputs row so the
+    // preparer-notes "ASC 842 inputs not captured" rule does not
+    // trigger by default. Tests that want to exercise the unconfirmed
+    // path pass `asc842_inputs: null` (or set individual fields to
+    // null) in overrides.
+    asc842_inputs: {
+      tenant_improvement_allowance: 0,
+      tenant_improvement_allowance_basis: 'No TI allowance per lease section 3.4',
+      initial_direct_costs: 0,
+      initial_direct_costs_basis: 'No IDC incurred',
+      prepaid_rent: 0,
+      prepaid_rent_basis: 'No prepaid rent',
+      lease_incentives_received: 0,
+      lease_incentives_received_basis: 'No incentives',
+      residual_value_guarantee: 0,
+      residual_value_guarantee_basis: 'No RVG',
+      purchase_option_present: false,
+      purchase_option_price: null,
+      purchase_option_reasonably_certain: null,
+      purchase_option_basis: null,
+      termination_penalty_amount: null,
+      termination_penalty_reasonably_certain: null,
+      termination_penalty_basis: null,
+      ownership_transfers_at_end: false,
+      bargain_purchase_option: false,
+      major_part_economic_life: false,
+      major_part_economic_life_pct: 60,
+      pv_substantially_all_fair_value: false,
+      pv_to_fair_value_pct: 80,
+      asset_fair_value: 300_000,
+      specialized_asset_no_alt_use: false,
+      classification_criteria_basis: 'All five tests assessed; none met',
+      renewal_options_rc_term_months: 0,
+      renewal_options_rc_basis: null,
+      short_term_lease_election: false,
+      short_term_lease_election_basis: null,
+      variable_payments_description: null,
+      variable_payments_estimated_annual: null,
+      sublease_income_annual: null,
+      sublease_basis: null,
+      last_updated_at: '2026-04-25T10:00:00Z',
+      last_updated_by_label: 'jane.cpa@acme.test',
+    },
     ...overrides,
   };
 }
@@ -285,15 +328,58 @@ describe('buildKeyTermsSection', () => {
 // ─── buildPreparerNotesSection ──────────────────────────────────────────
 
 describe('buildPreparerNotesSection', () => {
-  it('always flags TI allowance / initial direct cost manual review', () => {
-    const section = buildPreparerNotesSection(makeInputs());
+  // Schema 1.1.0 — the always-on TI/IDC flag became conditional.
+  // It now fires ONLY when the per-lease asc842_inputs.tenant_improvement_allowance
+  // or initial_direct_costs is NULL (unconfirmed). Once captured (even
+  // as zero), the flag clears.
+  it('flags TI allowance only when null (unconfirmed)', () => {
+    const inputs = makeInputs();
+    const sectionWith = buildPreparerNotesSection(inputs);
     expect(
-      section.flags.some((f) =>
-        f.title.startsWith(
-          'Tenant improvement allowances and initial direct costs',
-        ),
+      sectionWith.flags.some((f) =>
+        f.title === 'Tenant improvement allowance not confirmed',
+      ),
+    ).toBe(false);
+    const sectionWithout = buildPreparerNotesSection(
+      makeInputs({
+        asc842_inputs: {
+          ...inputs.asc842_inputs!,
+          tenant_improvement_allowance: null,
+          tenant_improvement_allowance_basis: null,
+        },
+      }),
+    );
+    expect(
+      sectionWithout.flags.some(
+        (f) => f.title === 'Tenant improvement allowance not confirmed',
       ),
     ).toBe(true);
+  });
+
+  it('flags initial direct costs only when null (unconfirmed)', () => {
+    const inputs = makeInputs();
+    const section = buildPreparerNotesSection(
+      makeInputs({
+        asc842_inputs: {
+          ...inputs.asc842_inputs!,
+          initial_direct_costs: null,
+          initial_direct_costs_basis: null,
+        },
+      }),
+    );
+    expect(
+      section.flags.some((f) => f.title === 'Initial direct costs not confirmed'),
+    ).toBe(true);
+  });
+
+  it('flags ASC 842 inputs not captured when no row exists', () => {
+    const section = buildPreparerNotesSection(
+      makeInputs({ asc842_inputs: null }),
+    );
+    const flag = section.flags.find(
+      (f) => f.title === 'ASC 842 inputs not captured',
+    );
+    expect(flag?.severity).toBe('high');
   });
 
   it('flags pending classification with high severity', () => {

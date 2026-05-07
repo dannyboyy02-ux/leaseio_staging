@@ -57,6 +57,7 @@ import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
 import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
 import { SectionCard, RisksSection, SECTION_CONFIG, getFieldConfidence, type SectionKey } from "@/components/leases/LeaseReviewSections";
 import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRiskDialog";
+import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
 import { LeaseExports } from "@/components/leases/LeaseExports";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
@@ -2524,6 +2525,7 @@ export default function LeaseReview() {
                     <TabsTrigger value="rent">Rent</TabsTrigger>
                     <TabsTrigger value="options">Options & Clauses</TabsTrigger>
                     <TabsTrigger value="risks">Risks</TabsTrigger>
+                    <TabsTrigger value="asc842">ASC 842 Inputs</TabsTrigger>
                     <TabsTrigger value="documents">Documents</TabsTrigger>
                   </TabsList>
 
@@ -2858,6 +2860,23 @@ export default function LeaseReview() {
                             setRisks((data ?? []) as Risk[]);
                           }}
                         />
+                      </TabsContent>
+
+                      {/* ASC 842 Inputs — full per-lease capture for measurement,
+                          classification, term assessment, and disclosure. The fields
+                          here are NOT extracted by the AI pipeline. */}
+                      <TabsContent value="asc842" className="mt-0">
+                        {lease?.id && lease?.workspace_id && (
+                          <Asc842InputsTab
+                            leaseId={lease.id}
+                            workspaceId={lease.workspace_id}
+                            canEdit={
+                              userRole === 'admin' ||
+                              userRole === 'owner' ||
+                              userRole === 'editor'
+                            }
+                          />
+                        )}
                       </TabsContent>
 
                       {/* Documents */}

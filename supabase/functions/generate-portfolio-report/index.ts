@@ -42,6 +42,7 @@ import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import {
   buildPortfolioPeriodReport,
   partitionPortfolioCandidates,
+  type Asc842Inputs,
   type EscalationClause,
   type ExcludedLease,
   type LeaseClassification,
@@ -53,6 +54,49 @@ import {
   type VerificationAuditEntry,
   type WorkspacePortfolioContext,
 } from "../_shared/asc842_report.ts";
+
+function shapeAsc842Inputs(row: Record<string, unknown> | null | undefined): Asc842Inputs | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+  return {
+    tenant_improvement_allowance: asNumber(r.tenant_improvement_allowance),
+    tenant_improvement_allowance_basis: asString(r.tenant_improvement_allowance_basis),
+    initial_direct_costs: asNumber(r.initial_direct_costs),
+    initial_direct_costs_basis: asString(r.initial_direct_costs_basis),
+    prepaid_rent: asNumber(r.prepaid_rent),
+    prepaid_rent_basis: asString(r.prepaid_rent_basis),
+    lease_incentives_received: asNumber(r.lease_incentives_received),
+    lease_incentives_received_basis: asString(r.lease_incentives_received_basis),
+    residual_value_guarantee: asNumber(r.residual_value_guarantee),
+    residual_value_guarantee_basis: asString(r.residual_value_guarantee_basis),
+    purchase_option_present: typeof r.purchase_option_present === "boolean" ? r.purchase_option_present : null,
+    purchase_option_price: asNumber(r.purchase_option_price),
+    purchase_option_reasonably_certain: typeof r.purchase_option_reasonably_certain === "boolean" ? r.purchase_option_reasonably_certain : null,
+    purchase_option_basis: asString(r.purchase_option_basis),
+    termination_penalty_amount: asNumber(r.termination_penalty_amount),
+    termination_penalty_reasonably_certain: typeof r.termination_penalty_reasonably_certain === "boolean" ? r.termination_penalty_reasonably_certain : null,
+    termination_penalty_basis: asString(r.termination_penalty_basis),
+    ownership_transfers_at_end: typeof r.ownership_transfers_at_end === "boolean" ? r.ownership_transfers_at_end : null,
+    bargain_purchase_option: typeof r.bargain_purchase_option === "boolean" ? r.bargain_purchase_option : null,
+    major_part_economic_life: typeof r.major_part_economic_life === "boolean" ? r.major_part_economic_life : null,
+    major_part_economic_life_pct: asNumber(r.major_part_economic_life_pct),
+    pv_substantially_all_fair_value: typeof r.pv_substantially_all_fair_value === "boolean" ? r.pv_substantially_all_fair_value : null,
+    pv_to_fair_value_pct: asNumber(r.pv_to_fair_value_pct),
+    asset_fair_value: asNumber(r.asset_fair_value),
+    specialized_asset_no_alt_use: typeof r.specialized_asset_no_alt_use === "boolean" ? r.specialized_asset_no_alt_use : null,
+    classification_criteria_basis: asString(r.classification_criteria_basis),
+    renewal_options_rc_term_months: asNumber(r.renewal_options_rc_term_months),
+    renewal_options_rc_basis: asString(r.renewal_options_rc_basis),
+    short_term_lease_election: typeof r.short_term_lease_election === "boolean" ? r.short_term_lease_election : null,
+    short_term_lease_election_basis: asString(r.short_term_lease_election_basis),
+    variable_payments_description: asString(r.variable_payments_description),
+    variable_payments_estimated_annual: asNumber(r.variable_payments_estimated_annual),
+    sublease_income_annual: asNumber(r.sublease_income_annual),
+    sublease_basis: asString(r.sublease_basis),
+    last_updated_at: asString(r.last_updated_at),
+    last_updated_by_label: asString(r.last_updated_by),
+  };
+}
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -468,9 +512,9 @@ serve(async (req) => {
       (c) => includedSet.has(asString(c.id) ?? ""),
     );
 
-    // For each included lease, load rent_schedules + audit view in parallel
+    // For each included lease, load rent_schedules + audit view + asc842 inputs in parallel
     const leaseIds = includedLeaseRows.map((c) => asString(c.id) ?? "");
-    const [{ data: allRentSchedules }, { data: allAuditViews }] =
+    const [{ data: allRentSchedules }, { data: allAuditViews }, { data: allAsc842 }] =
       await Promise.all([
         leaseIds.length > 0
           ? supabaseAdmin
@@ -487,6 +531,12 @@ serve(async (req) => {
               .select("lease_id, field_corrections")
               .in("lease_id", leaseIds)
           : Promise.resolve({ data: [] as any[], error: null }),
+        leaseIds.length > 0
+          ? supabaseAdmin
+              .from("lease_asc842_inputs")
+              .select("*")
+              .in("lease_id", leaseIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
       ]);
 
     const rentByLease = new Map<string, any[]>();
@@ -499,6 +549,10 @@ serve(async (req) => {
     const auditByLease = new Map<string, unknown>();
     for (const row of (allAuditViews ?? []) as any[]) {
       auditByLease.set(row.lease_id as string, row.field_corrections);
+    }
+    const asc842ByLease = new Map<string, Record<string, unknown>>();
+    for (const row of (allAsc842 ?? []) as any[]) {
+      asc842ByLease.set(row.lease_id as string, row as Record<string, unknown>);
     }
 
     const leaseInputs: ReportInputs[] = includedLeaseRows.map((l) => {
@@ -547,6 +601,7 @@ serve(async (req) => {
         model_locked_at: asString(l.model_locked_at),
         model_locked_by_user_label: asString(l.model_locked_by),
         field_citations: {},
+        asc842_inputs: shapeAsc842Inputs(asc842ByLease.get(id) ?? null),
       } satisfies ReportInputs;
     });
 

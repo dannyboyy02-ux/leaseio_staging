@@ -91,6 +91,55 @@ export type VerificationAuditEntry = {
   ai_confidence_at_correction: number | null;
 };
 
+// Per-lease ASC 842 inputs that materially affect measurement,
+// classification, term assessment, and required disclosures. NULL on
+// any field means "not captured" — distinct from 0/false ("captured as
+// zero/false"). Sourced from public.lease_asc842_inputs.
+export type Asc842Inputs = {
+  // Right-of-Use Asset Adjustments
+  tenant_improvement_allowance: number | null;
+  tenant_improvement_allowance_basis: string | null;
+  initial_direct_costs: number | null;
+  initial_direct_costs_basis: string | null;
+  prepaid_rent: number | null;
+  prepaid_rent_basis: string | null;
+  lease_incentives_received: number | null;
+  lease_incentives_received_basis: string | null;
+  // Lease Liability Inputs
+  residual_value_guarantee: number | null;
+  residual_value_guarantee_basis: string | null;
+  purchase_option_present: boolean | null;
+  purchase_option_price: number | null;
+  purchase_option_reasonably_certain: boolean | null;
+  purchase_option_basis: string | null;
+  termination_penalty_amount: number | null;
+  termination_penalty_reasonably_certain: boolean | null;
+  termination_penalty_basis: string | null;
+  // Classification Criteria (ASC 842-10-25-2 — the 5 finance-lease tests)
+  ownership_transfers_at_end: boolean | null;
+  bargain_purchase_option: boolean | null;
+  major_part_economic_life: boolean | null;
+  major_part_economic_life_pct: number | null;
+  pv_substantially_all_fair_value: boolean | null;
+  pv_to_fair_value_pct: number | null;
+  asset_fair_value: number | null;
+  specialized_asset_no_alt_use: boolean | null;
+  classification_criteria_basis: string | null;
+  // Term Assessment
+  renewal_options_rc_term_months: number | null;
+  renewal_options_rc_basis: string | null;
+  short_term_lease_election: boolean | null;
+  short_term_lease_election_basis: string | null;
+  // Disclosure / Variable Payments
+  variable_payments_description: string | null;
+  variable_payments_estimated_annual: number | null;
+  sublease_income_annual: number | null;
+  sublease_basis: string | null;
+  // Audit
+  last_updated_at: string | null;
+  last_updated_by_label: string | null;
+};
+
 export type ReportInputs = {
   // Identity
   lease_id: string;
@@ -132,6 +181,10 @@ export type ReportInputs = {
   model_locked_by_user_label: string | null;
   // Citations — keyed by field_id
   field_citations: Record<string, Citation>;
+  // Per-lease ASC 842 inputs (TI, IDC, RVG, classification criteria,
+  // term assessment, disclosure items). Null when no asc842_inputs row
+  // exists for the lease yet — preparer notes will flag this.
+  asc842_inputs: Asc842Inputs | null;
 };
 
 // ─── Section types ──────────────────────────────────────────────────────
@@ -167,6 +220,8 @@ export type Asc842InputsSection = {
   term_months: number | null;
   commencement_date: string | null;
   expiration_date: string | null;
+  // Per-lease ASC 842 inputs surfaced verbatim. Null when no row.
+  per_lease_inputs: Asc842Inputs | null;
 };
 
 export type KeyTermsSection = {
@@ -396,6 +451,7 @@ export function buildAsc842InputsSection(
     term_months: inputs.term_months,
     commencement_date: inputs.commencement_date,
     expiration_date: inputs.expiration_date,
+    per_lease_inputs: inputs.asc842_inputs,
   };
 }
 
@@ -513,17 +569,120 @@ export function buildPreparerNotesSection(
     });
   }
 
-  // Tenant improvement allowances and initial direct costs are not
-  // extracted by the AI pipeline. They affect ASC 842 measurement (TI
-  // allowances reduce the ROU asset; initial direct costs are added to
-  // it) and the customer must confirm them manually.
-  flags.push({
-    severity: 'medium',
-    title:
-      'Tenant improvement allowances and initial direct costs require manual confirmation',
-    explanation:
-      'LeaseIO does not extract tenant improvement allowances or initial direct costs from lease documents. Both affect the right-of-use asset measurement under ASC 842 (TI allowances reduce it; initial direct costs increase it). Confirm these amounts manually before finalizing journal entries.',
-  });
+  // ─── ASC 842 inputs rules ────────────────────────────────────────
+  // The "always-on TI/IDC" flag from schema 1.0.0 becomes CONDITIONAL:
+  // only fires if those fields are NULL (unconfirmed). Once captured
+  // (even as zero), the flag clears.
+  const a = inputs.asc842_inputs;
+  if (a === null) {
+    flags.push({
+      severity: 'high',
+      title: 'ASC 842 inputs not captured',
+      explanation:
+        'No per-lease ASC 842 inputs have been recorded for this lease (TI allowance, initial direct costs, residual guarantees, classification criteria, term assessment). These are NOT extracted by the AI pipeline and must be captured manually before the disclosure report is reliable. Open the lease detail page → ASC 842 Inputs tab.',
+    });
+  } else {
+    if (a.tenant_improvement_allowance === null) {
+      flags.push({
+        severity: 'medium',
+        title: 'Tenant improvement allowance not confirmed',
+        explanation:
+          'TI allowance reduces the right-of-use asset under ASC 842-20-25-1. Capture the amount (zero is a valid answer) so the report can either reflect it or document its absence.',
+      });
+    }
+    if (a.initial_direct_costs === null) {
+      flags.push({
+        severity: 'medium',
+        title: 'Initial direct costs not confirmed',
+        explanation:
+          'Initial direct costs increase the right-of-use asset under ASC 842-20-30-5. Capture the amount (zero is a valid answer) so the report can either reflect it or document its absence.',
+      });
+    }
+    if (a.lease_incentives_received === null) {
+      flags.push({
+        severity: 'low',
+        title: 'Lease incentives received not confirmed',
+        explanation:
+          'Confirm whether the lessor provided any incentives (free-rent periods, moving allowances). Reduces the ROU asset.',
+      });
+    }
+    if (a.prepaid_rent === null) {
+      flags.push({
+        severity: 'low',
+        title: 'Prepaid rent not confirmed',
+        explanation:
+          'Confirm whether any rent was prepaid at or before commencement. Added to the ROU asset.',
+      });
+    }
+    // Classification criteria: if none of the 5 finance-lease tests is
+    // affirmed AND the lease is not classified, flag for review.
+    if (
+      inputs.lease_classification === 'pending' &&
+      a.ownership_transfers_at_end !== true &&
+      a.bargain_purchase_option !== true &&
+      a.major_part_economic_life !== true &&
+      a.pv_substantially_all_fair_value !== true &&
+      a.specialized_asset_no_alt_use !== true
+    ) {
+      flags.push({
+        severity: 'high',
+        title: 'Classification criteria not assessed',
+        explanation:
+          'None of the 5 ASC 842-10-25-2 finance-lease tests have been affirmed AND the lease is not yet classified. Capture each test (true/false with basis) so the operating-vs-finance determination is auditable.',
+      });
+    }
+    // Purchase option recorded but RC flag not set
+    if (
+      a.purchase_option_present === true &&
+      a.purchase_option_reasonably_certain === null
+    ) {
+      flags.push({
+        severity: 'high',
+        title: 'Purchase option present but reasonably-certain flag missing',
+        explanation:
+          'A purchase option is recorded but the lessee has not assessed whether exercise is reasonably certain. This determination materially affects the lease liability (the option price is included if RC). Set the flag and document the basis.',
+      });
+    }
+    // Finance lease without residual value guarantee assessed
+    if (
+      inputs.lease_classification === 'finance' &&
+      a.residual_value_guarantee === null
+    ) {
+      flags.push({
+        severity: 'high',
+        title: 'Finance lease without residual value guarantee assessment',
+        explanation:
+          'Finance leases must consider any residual value guarantee in the lease liability. Capture the amount (zero is a valid answer if no guarantee exists).',
+      });
+    }
+    // Renewal options RC term but no basis
+    if (
+      a.renewal_options_rc_term_months !== null &&
+      a.renewal_options_rc_term_months > 0 &&
+      (a.renewal_options_rc_basis === null ||
+        a.renewal_options_rc_basis.trim().length < 10)
+    ) {
+      flags.push({
+        severity: 'medium',
+        title: 'Renewal-options term-extension lacks basis',
+        explanation:
+          'You have extended the lease term to include reasonably-certain renewal options. ASC 842 requires this judgment to be documented. Provide a basis description of at least 10 characters.',
+      });
+    }
+    // Variable payments described but no estimate
+    if (
+      a.variable_payments_description !== null &&
+      a.variable_payments_description.trim().length > 0 &&
+      a.variable_payments_estimated_annual === null
+    ) {
+      flags.push({
+        severity: 'low',
+        title: 'Variable payments described but no annual estimate',
+        explanation:
+          'Variable payments are excluded from the lease liability but disclosed under ASC 842-20-50. Provide an estimated annual amount for the disclosure.',
+      });
+    }
+  }
 
   return { flags, generated_at: new Date().toISOString() };
 }
@@ -608,6 +767,7 @@ export function buildLeaseDisclosureJson(
       citation: payment.citation,
     },
     asc842_inputs: asc842,
+    asc842_per_lease_inputs: inputs.asc842_inputs,
     key_terms: keyTerms,
     preparer_notes: preparer,
     verification_audit: {
