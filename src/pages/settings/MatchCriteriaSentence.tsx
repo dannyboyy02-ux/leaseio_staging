@@ -1,25 +1,18 @@
-import { useEffect, useState } from 'react';
-import { Plus, X, ChevronDown } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { ChevronDown, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — must stay aligned with leases.asset_type and leases.lease_type
-// CHECK constraints. (Duplicated from ApprovalPolicyEditPage / TestDialog by
-// design; the wire format reads these raw enum values, so they're the load-
-// bearing surface that has to match the DB. Per docs/APPROVAL_POLICY_EDITOR_
-// REDESIGN.md "What does NOT change".)
+// CHECK constraints. The "lease type" pill in the sentence is the visual
+// home for BOTH match_asset_types and match_lease_types per the visual
+// contract addendum (§3 — exactly four pills in the sentence template).
 // ───────────────────────────────────────────────────────────────────────────
 
 const ASSET_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -44,58 +37,25 @@ export interface MatchCriteriaState {
   match_max_annual_cost: string;
 }
 
-type FilterKind =
-  | 'asset_types'
-  | 'lease_types'
-  | 'departments'
-  | 'regions'
-  | 'cost_range';
+type PillColor = 'blue' | 'emerald' | 'teal' | 'violet';
 
-const ALL_KINDS: FilterKind[] = [
-  'asset_types',
-  'lease_types',
-  'departments',
-  'regions',
-  'cost_range',
-];
-
-const ADD_LABEL: Record<FilterKind, string> = {
-  asset_types: 'Asset type',
-  lease_types: 'Lease type',
-  departments: 'Department',
-  regions: 'Region',
-  cost_range: 'Annual cost',
+const PILL_FILLED: Record<PillColor, string> = {
+  blue:
+    'bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 hover:bg-blue-100 dark:hover:bg-blue-900/50',
+  emerald:
+    'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/50',
+  teal:
+    'bg-teal-50 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200 hover:bg-teal-100 dark:hover:bg-teal-900/50',
+  violet:
+    'bg-violet-50 dark:bg-violet-900/30 text-violet-800 dark:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-900/50',
 };
 
-const REMOVE_ARIA: Record<FilterKind, string> = {
-  asset_types: 'Remove asset type filter',
-  lease_types: 'Remove lease type filter',
-  departments: 'Remove department filter',
-  regions: 'Remove region filter',
-  cost_range: 'Remove annual cost filter',
-};
+const PILL_EMPTY =
+  'border border-dashed border-muted-foreground/40 text-muted-foreground hover:border-foreground hover:text-foreground';
 
 // ───────────────────────────────────────────────────────────────────────────
-// Pure helpers
+// Pure helpers — exported for vitest.
 // ───────────────────────────────────────────────────────────────────────────
-
-function isActive(state: MatchCriteriaState, kind: FilterKind): boolean {
-  switch (kind) {
-    case 'asset_types':
-      return state.match_asset_types.length > 0;
-    case 'lease_types':
-      return state.match_lease_types.length > 0;
-    case 'departments':
-      return state.match_departments.length > 0;
-    case 'regions':
-      return state.match_regions.length > 0;
-    case 'cost_range':
-      return (
-        state.match_min_annual_cost.trim() !== '' ||
-        state.match_max_annual_cost.trim() !== ''
-      );
-  }
-}
 
 const fmtMoney = (raw: string): string => {
   const n = parseFloat(raw);
@@ -107,49 +67,60 @@ const fmtMoney = (raw: string): string => {
   }).format(n);
 };
 
-// "A" → "A", "A, B" → "A or B", "A, B, C" → "A, B, or C"
-function joinWithOr(values: string[]): string {
-  if (values.length === 0) return '…';
+export function joinWithOr(values: string[]): string {
+  if (values.length === 0) return '';
   if (values.length === 1) return values[0];
   if (values.length === 2) return `${values[0]} or ${values[1]}`;
   return `${values.slice(0, -1).join(', ')}, or ${values[values.length - 1]}`;
 }
 
-function pillLabel(state: MatchCriteriaState, kind: FilterKind): string {
-  switch (kind) {
-    case 'asset_types': {
-      const labels = state.match_asset_types.map(
-        (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v,
-      );
-      return labels.length === 0
-        ? 'asset type is …'
-        : `asset type is ${joinWithOr(labels)}`;
-    }
-    case 'lease_types':
-      return state.match_lease_types.length === 0
-        ? 'lease type is …'
-        : `lease type is ${joinWithOr(state.match_lease_types)}`;
-    case 'departments':
-      return state.match_departments.length === 0
-        ? 'department is …'
-        : `department is ${joinWithOr(state.match_departments)}`;
-    case 'regions':
-      return state.match_regions.length === 0
-        ? 'region is …'
-        : `region is ${joinWithOr(state.match_regions)}`;
-    case 'cost_range': {
-      const min = state.match_min_annual_cost.trim();
-      const max = state.match_max_annual_cost.trim();
-      if (min && max) return `annual cost is between ${fmtMoney(min)} and ${fmtMoney(max)}`;
-      if (min) return `annual cost is at least ${fmtMoney(min)}`;
-      if (max) return `annual cost is at most ${fmtMoney(max)}`;
-      return 'annual cost is …';
-    }
-  }
+/** "any lease type" when both arrays empty; otherwise asset+lease combined. */
+export function leaseTypeLabel(state: MatchCriteriaState): string {
+  const assetLabels = state.match_asset_types.map(
+    (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v,
+  );
+  const all = [...assetLabels, ...state.match_lease_types];
+  if (all.length === 0) return 'any lease type';
+  return joinWithOr(all);
+}
+
+export function departmentLabel(state: MatchCriteriaState): string {
+  if (state.match_departments.length === 0) return 'any department';
+  return joinWithOr(state.match_departments);
+}
+
+export function regionLabel(state: MatchCriteriaState): string {
+  if (state.match_regions.length === 0) return 'any region';
+  return joinWithOr(state.match_regions);
+}
+
+export function costLabel(state: MatchCriteriaState): string {
+  const min = state.match_min_annual_cost.trim();
+  const max = state.match_max_annual_cost.trim();
+  if (!min && !max) return 'any annual cost';
+  if (min && max) return `${fmtMoney(min)} – ${fmtMoney(max)}`;
+  if (min) return `at least ${fmtMoney(min)}`;
+  return `at most ${fmtMoney(max)}`;
+}
+
+export function isLeaseTypeActive(state: MatchCriteriaState): boolean {
+  return state.match_asset_types.length > 0 || state.match_lease_types.length > 0;
+}
+export function isDepartmentActive(state: MatchCriteriaState): boolean {
+  return state.match_departments.length > 0;
+}
+export function isRegionActive(state: MatchCriteriaState): boolean {
+  return state.match_regions.length > 0;
+}
+export function isCostActive(state: MatchCriteriaState): boolean {
+  return (
+    state.match_min_annual_cost.trim() !== '' ||
+    state.match_max_annual_cost.trim() !== ''
+  );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Component
+// Component — always renders the four-pill sentence per addendum §3.
 // ───────────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -165,277 +136,196 @@ export function MatchCriteriaSentence({
   departmentSuggestions,
   regionSuggestions,
 }: Props) {
-  // pendingKind = the filter the user just chose from "Add filter". The pill
-  // for that kind renders even though state hasn't been populated yet, and
-  // its popover auto-opens. We clear pendingKind on the next tick so a
-  // remove-and-re-add of the same kind triggers a fresh state change.
-  const [pendingKind, setPendingKind] = useState<FilterKind | null>(null);
-
-  useEffect(() => {
-    if (pendingKind === null) return;
-    const id = setTimeout(() => setPendingKind(null), 30);
-    return () => clearTimeout(id);
-  }, [pendingKind]);
-
-  const activeKinds = ALL_KINDS.filter((k) => isActive(state, k));
-  const visibleKinds: FilterKind[] =
-    pendingKind && !activeKinds.includes(pendingKind)
-      ? [...activeKinds, pendingKind]
-      : activeKinds;
-  const inactiveKinds = ALL_KINDS.filter((k) => !visibleKinds.includes(k));
-
-  const removeFilter = (kind: FilterKind) => {
-    switch (kind) {
-      case 'asset_types':
-        onChange({ ...state, match_asset_types: [] });
-        break;
-      case 'lease_types':
-        onChange({ ...state, match_lease_types: [] });
-        break;
-      case 'departments':
-        onChange({ ...state, match_departments: [] });
-        break;
-      case 'regions':
-        onChange({ ...state, match_regions: [] });
-        break;
-      case 'cost_range':
-        onChange({
-          ...state,
-          match_min_annual_cost: '',
-          match_max_annual_cost: '',
-        });
-        break;
-    }
-    if (pendingKind === kind) setPendingKind(null);
-  };
-
   return (
-    <div className="space-y-4">
-      <p className="text-sm leading-8">
-        This rule applies{' '}
-        {visibleKinds.length === 0 ? (
-          <span className="font-medium text-foreground">to all requests</span>
-        ) : (
-          <>
-            <span>when </span>
-            {visibleKinds.map((k, i) => (
-              <span key={k}>
-                {i > 0 && <span className="text-muted-foreground"> and </span>}
-                <FilterPill
-                  kind={k}
-                  state={state}
-                  onChange={onChange}
-                  onRemove={() => removeFilter(k)}
-                  departmentSuggestions={departmentSuggestions}
-                  regionSuggestions={regionSuggestions}
-                  autoOpen={pendingKind === k}
-                />
-              </span>
-            ))}
-          </>
-        )}
-        .
-      </p>
-
-      {inactiveKinds.length > 0 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm">
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Add filter
-              <ChevronDown className="h-3.5 w-3.5 ml-1" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {inactiveKinds.map((k) => (
-              <DropdownMenuItem
-                key={k}
-                onSelect={() => setPendingKind(k)}
-              >
-                {ADD_LABEL[k]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </div>
+    <p className="text-sm leading-8 text-foreground">
+      When someone requests a{' '}
+      <CriterionPill
+        label={leaseTypeLabel(state)}
+        active={isLeaseTypeActive(state)}
+        color="blue"
+        onClear={() =>
+          onChange({ ...state, match_asset_types: [], match_lease_types: [] })
+        }
+      >
+        <LeaseTypeEditor state={state} onChange={onChange} />
+      </CriterionPill>
+      {' '}in{' '}
+      <CriterionPill
+        label={departmentLabel(state)}
+        active={isDepartmentActive(state)}
+        color="emerald"
+        onClear={() => onChange({ ...state, match_departments: [] })}
+      >
+        <ChipEditor
+          values={state.match_departments}
+          onChange={(v) => onChange({ ...state, match_departments: v })}
+          suggestions={departmentSuggestions}
+          placeholder="Add a department…"
+          heading="Match these departments"
+        />
+      </CriterionPill>
+      {' '}for{' '}
+      <CriterionPill
+        label={costLabel(state)}
+        active={isCostActive(state)}
+        color="violet"
+        onClear={() =>
+          onChange({
+            ...state,
+            match_min_annual_cost: '',
+            match_max_annual_cost: '',
+          })
+        }
+      >
+        <CostRangeEditor state={state} onChange={onChange} />
+      </CriterionPill>
+      , located in{' '}
+      <CriterionPill
+        label={regionLabel(state)}
+        active={isRegionActive(state)}
+        color="teal"
+        onClear={() => onChange({ ...state, match_regions: [] })}
+      >
+        <ChipEditor
+          values={state.match_regions}
+          onChange={(v) => onChange({ ...state, match_regions: v })}
+          suggestions={regionSuggestions}
+          placeholder="Add a region…"
+          heading="Match these regions"
+        />
+      </CriterionPill>
+      .
+    </p>
   );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// FilterPill — one pill in the sentence
+// CriterionPill — one editable pill in the sentence. The × button appears
+// on hover (only when the pill is filled) and clears the criterion.
 // ───────────────────────────────────────────────────────────────────────────
 
-interface FilterPillProps {
-  kind: FilterKind;
-  state: MatchCriteriaState;
-  onChange: (next: MatchCriteriaState) => void;
-  onRemove: () => void;
-  departmentSuggestions: string[];
-  regionSuggestions: string[];
-  autoOpen: boolean;
+interface CriterionPillProps {
+  label: string;
+  active: boolean;
+  color: PillColor;
+  onClear: () => void;
+  children: ReactNode;
 }
 
-function FilterPill({
-  kind,
-  state,
-  onChange,
-  onRemove,
-  departmentSuggestions,
-  regionSuggestions,
-  autoOpen,
-}: FilterPillProps) {
-  const active = isActive(state, kind);
-  const label = pillLabel(state, kind);
-
-  // If the user opened a fresh pill via "Add filter" and then closed it
-  // without picking any value, snap the empty pill out of the sentence.
-  const handleOpenChange = (open: boolean) => {
-    if (!open && !active) onRemove();
-  };
+function CriterionPill({
+  label,
+  active,
+  color,
+  onClear,
+  children,
+}: CriterionPillProps) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <Popover defaultOpen={autoOpen} onOpenChange={handleOpenChange}>
-      <span className="inline-flex items-center align-baseline">
+    <span className="inline-flex items-center align-baseline group relative">
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
             className={cn(
-              'inline-flex items-center rounded-md px-2 py-0.5 text-sm font-medium transition-colors',
-              'border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20',
-              !active && 'border-dashed text-primary/70 italic',
+              'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm font-medium transition-colors',
+              active ? PILL_FILLED[color] : PILL_EMPTY,
             )}
           >
-            {label}
+            <span>{label}</span>
+            <ChevronDown className="w-3 h-3 opacity-70" />
           </button>
         </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 p-3">
+          {children}
+        </PopoverContent>
+      </Popover>
+      {active && (
         <button
           type="button"
-          onClick={onRemove}
-          aria-label={REMOVE_ARIA[kind]}
-          className="ml-0.5 inline-flex items-center justify-center rounded p-0.5 text-primary/70 hover:bg-destructive/10 hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear();
+          }}
+          aria-label="Remove this filter"
+          className="ml-1 inline-flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="w-3 h-3" />
         </button>
-      </span>
-      <PopoverContent align="start" className="w-72">
-        <PillEditor
-          kind={kind}
-          state={state}
-          onChange={onChange}
-          departmentSuggestions={departmentSuggestions}
-          regionSuggestions={regionSuggestions}
-        />
-      </PopoverContent>
-    </Popover>
+      )}
+    </span>
   );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// PillEditor — popover content per filter kind
+// Editors — popover content per pill.
 // ───────────────────────────────────────────────────────────────────────────
 
-interface PillEditorProps {
-  kind: FilterKind;
-  state: MatchCriteriaState;
-  onChange: (next: MatchCriteriaState) => void;
-  departmentSuggestions: string[];
-  regionSuggestions: string[];
-}
-
-function PillEditor({
-  kind,
+function LeaseTypeEditor({
   state,
   onChange,
-  departmentSuggestions,
-  regionSuggestions,
-}: PillEditorProps) {
-  if (kind === 'asset_types') {
-    const values = state.match_asset_types;
-    const toggle = (v: string) => {
-      const next = values.includes(v)
-        ? values.filter((x) => x !== v)
-        : [...values, v];
-      onChange({ ...state, match_asset_types: next });
-    };
-    return (
-      <div className="space-y-2">
-        <p className="text-xs font-medium">Match these asset types</p>
+}: {
+  state: MatchCriteriaState;
+  onChange: (s: MatchCriteriaState) => void;
+}) {
+  const toggleAsset = (v: string) => {
+    const next = state.match_asset_types.includes(v)
+      ? state.match_asset_types.filter((x) => x !== v)
+      : [...state.match_asset_types, v];
+    onChange({ ...state, match_asset_types: next });
+  };
+  const toggleLease = (v: string) => {
+    const next = state.match_lease_types.includes(v)
+      ? state.match_lease_types.filter((x) => x !== v)
+      : [...state.match_lease_types, v];
+    onChange({ ...state, match_lease_types: next });
+  };
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium">Asset types</p>
         {ASSET_TYPE_OPTIONS.map((o) => (
           <label
             key={o.value}
-            className="flex items-center gap-2 py-1 cursor-pointer text-sm"
+            className="flex items-center gap-2 py-0.5 cursor-pointer text-sm"
           >
             <Checkbox
-              checked={values.includes(o.value)}
-              onCheckedChange={() => toggle(o.value)}
+              checked={state.match_asset_types.includes(o.value)}
+              onCheckedChange={() => toggleAsset(o.value)}
             />
             <span>{o.label}</span>
           </label>
         ))}
       </div>
-    );
-  }
-
-  if (kind === 'lease_types') {
-    const values = state.match_lease_types;
-    const toggle = (v: string) => {
-      const next = values.includes(v)
-        ? values.filter((x) => x !== v)
-        : [...values, v];
-      onChange({ ...state, match_lease_types: next });
-    };
-    return (
-      <div className="space-y-2">
-        <p className="text-xs font-medium">Match these lease types</p>
+      <div className="space-y-1.5">
+        <p className="text-xs font-medium">Lease types</p>
         {LEASE_TYPE_OPTIONS.map((o) => (
           <label
             key={o}
-            className="flex items-center gap-2 py-1 cursor-pointer text-sm"
+            className="flex items-center gap-2 py-0.5 cursor-pointer text-sm"
           >
             <Checkbox
-              checked={values.includes(o)}
-              onCheckedChange={() => toggle(o)}
+              checked={state.match_lease_types.includes(o)}
+              onCheckedChange={() => toggleLease(o)}
             />
             <span>{o}</span>
           </label>
         ))}
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  if (kind === 'departments') {
-    return (
-      <div className="space-y-2">
-        <p className="text-xs font-medium">Match these departments</p>
-        <ChipPicker
-          values={state.match_departments}
-          onChange={(v) => onChange({ ...state, match_departments: v })}
-          suggestions={departmentSuggestions}
-          placeholder="Add a department…"
-        />
-      </div>
-    );
-  }
-
-  if (kind === 'regions') {
-    return (
-      <div className="space-y-2">
-        <p className="text-xs font-medium">Match these regions</p>
-        <ChipPicker
-          values={state.match_regions}
-          onChange={(v) => onChange({ ...state, match_regions: v })}
-          suggestions={regionSuggestions}
-          placeholder="Add a region…"
-        />
-      </div>
-    );
-  }
-
-  // cost_range
+function CostRangeEditor({
+  state,
+  onChange,
+}: {
+  state: MatchCriteriaState;
+  onChange: (s: MatchCriteriaState) => void;
+}) {
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium">Match this dollar range</p>
+      <p className="text-xs font-medium">Set the dollar range</p>
       <p className="text-[10px] text-muted-foreground">
         Leave one side blank to mean "any".
       </p>
@@ -471,25 +361,21 @@ function PillEditor({
   );
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// ChipPicker — shared between department & region popovers. Inlined here
-// rather than re-exported from ApprovalPolicyEditPage because the old caller
-// of the equivalent helper there is going away with this phase.
-// ───────────────────────────────────────────────────────────────────────────
-
-interface ChipPickerProps {
+interface ChipEditorProps {
   values: string[];
   onChange: (next: string[]) => void;
   suggestions: string[];
   placeholder: string;
+  heading: string;
 }
 
-function ChipPicker({
+function ChipEditor({
   values,
   onChange,
   suggestions,
   placeholder,
-}: ChipPickerProps) {
+  heading,
+}: ChipEditorProps) {
   const [draft, setDraft] = useState('');
   const add = (v: string) => {
     const trimmed = v.trim();
@@ -502,6 +388,7 @@ function ChipPicker({
 
   return (
     <div className="space-y-2">
+      <p className="text-xs font-medium">{heading}</p>
       <div className="flex flex-wrap gap-1.5 min-h-[24px]">
         {values.map((v) => (
           <Badge key={v} variant="secondary" className="text-xs gap-1">

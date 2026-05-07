@@ -111,7 +111,7 @@ describe('validatePolicy — chain shape (the spec\'s headline cases)', () => {
       [roleStep({ approver_role: 'signator' })],
       { workspaceSodDefault: true }
     );
-    expect(err).toBe('At least one concept-chain step is required.');
+    expect(err).toBe('"First, get the green light" needs at least one approver.');
   });
 
   it('blocks save with no signator step', () => {
@@ -121,7 +121,7 @@ describe('validatePolicy — chain shape (the spec\'s headline cases)', () => {
       [],
       { workspaceSodDefault: true }
     );
-    expect(err).toBe('At least one signator-chain step is required.');
+    expect(err).toBe('"Then, sign the deal" needs at least one approver.');
   });
 
   it('rejects step with both user and role set', () => {
@@ -131,7 +131,7 @@ describe('validatePolicy — chain shape (the spec\'s headline cases)', () => {
       [roleStep({ approver_role: 'signator' })],
       { workspaceSodDefault: true }
     );
-    expect(err).toBe('Concept: each step must have exactly one of user or role.');
+    expect(err).toBe('"First, get the green light": pick an approver for every empty slot.');
   });
 
   it('rejects step with neither user nor role', () => {
@@ -141,7 +141,7 @@ describe('validatePolicy — chain shape (the spec\'s headline cases)', () => {
       [roleStep({ approver_role: 'signator' })],
       { workspaceSodDefault: true }
     );
-    expect(err).toBe('Concept: each step must have exactly one of user or role.');
+    expect(err).toBe('"First, get the green light": pick an approver for every empty slot.');
   });
 
   it('rejects duplicate step_order within the same parallel_group', () => {
@@ -154,7 +154,7 @@ describe('validatePolicy — chain shape (the spec\'s headline cases)', () => {
       [roleStep({ approver_role: 'signator' })],
       { workspaceSodDefault: true }
     );
-    expect(err).toBe('Concept: duplicate step order 1 in parallel group 1.');
+    expect(err).toBe('"First, get the green light": duplicate step 1 in parallel group 1.');
   });
 
   it('allows duplicate step_order across different parallel_groups', () => {
@@ -177,7 +177,7 @@ describe('validatePolicy — chain shape (the spec\'s headline cases)', () => {
       [roleStep({ approver_role: 'signator' })],
       { workspaceSodDefault: true }
     );
-    expect(err).toBe('Concept: delegate requires "delegate after N days" > 0.');
+    expect(err).toBe('"First, get the green light": a backup approver needs "forward after N days" > 0.');
   });
 });
 

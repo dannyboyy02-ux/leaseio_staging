@@ -28,7 +28,7 @@ import { toast } from 'sonner';
 import { validatePolicy } from './approvalPolicyValidation';
 import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
 import { MatchCriteriaSentence } from './MatchCriteriaSentence';
-import { ChainDiagram, type ChainStep } from './ChainDiagram';
+import { ChainDiagram, seedSingleEmptyStep, type ChainStep } from './ChainDiagram';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — FUNCTIONAL_ROLE_OPTIONS now lives in ChainDiagram (its only
@@ -81,8 +81,15 @@ export default function ApprovalPolicyEditPage() {
   const isNew = !routeId || routeId === 'new';
 
   const [form, setForm] = useState<PolicyForm>(emptyForm());
-  const [conceptSteps, setConceptSteps] = useState<ChainStep[]>([]);
-  const [signatorSteps, setSignatorSteps] = useState<ChainStep[]>([]);
+  // For a brand-new rule, seed one empty approver slot per stage so the
+  // diagram has visible scaffolding (the dashed "Choose an approver…" CTA)
+  // instead of a blank "Add the first approver" row. Per visual contract §4.
+  const [conceptSteps, setConceptSteps] = useState<ChainStep[]>(() =>
+    isNew ? seedSingleEmptyStep() : [],
+  );
+  const [signatorSteps, setSignatorSteps] = useState<ChainStep[]>(() =>
+    isNew ? seedSingleEmptyStep() : [],
+  );
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
@@ -319,20 +326,32 @@ export default function ApprovalPolicyEditPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Name</Label>
+              <Label className="text-xs" htmlFor="approval-rule-name">Name</Label>
+              {/*
+                autoComplete="off" + a non-standard name attribute defeats
+                Chrome's heuristic that pre-fills bare text inputs with the
+                user's saved profile first name (the "Daniel" autofill bug
+                noted in the visual contract addendum §4).
+              */}
               <Input
+                id="approval-rule-name"
+                name="approval-rule-name-do-not-autofill"
+                autoComplete="off"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Real estate over $500K"
+                placeholder="e.g., Mid-size real estate leases"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Description (optional)</Label>
+              <Label className="text-xs" htmlFor="approval-rule-description">Description (optional)</Label>
               <Textarea
+                id="approval-rule-description"
+                name="approval-rule-description-do-not-autofill"
+                autoComplete="off"
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 rows={2}
-                placeholder="Notes for other admins."
+                placeholder="Notes for other admins (optional)"
               />
             </div>
             <div className="space-y-1.5">
@@ -354,9 +373,6 @@ export default function ApprovalPolicyEditPage() {
         <Card>
           <CardHeader>
             <CardTitle>When does this rule apply?</CardTitle>
-            <CardDescription>
-              Build a one-sentence rule by adding filters. Click any filter to change its values; click the × to remove it.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <MatchCriteriaSentence
@@ -375,23 +391,41 @@ export default function ApprovalPolicyEditPage() {
           </CardContent>
         </Card>
 
-        {/* Step 1 — Concept chain */}
-        <ChainDiagram
-          title="Step 1: Get the green light"
-          description="Before any paperwork starts. Who approves the request itself?"
-          steps={conceptSteps}
-          setSteps={setConceptSteps}
-          memberOptions={members.data ?? []}
-        />
+        {/* Who needs to approve? — both stages in one card with an
+            inter-stage vertical connector per visual contract addendum §5. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Who needs to approve?</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <ChainDiagram
+              caption={{
+                badge: '1',
+                primary: 'First, get the green light',
+                secondary: 'before any paperwork starts',
+              }}
+              steps={conceptSteps}
+              setSteps={setConceptSteps}
+              memberOptions={members.data ?? []}
+            />
 
-        {/* Step 2 — Signator chain */}
-        <ChainDiagram
-          title="Step 2: Sign the deal"
-          description="After negotiation is done. The person whose signature legally binds the company."
-          steps={signatorSteps}
-          setSteps={setSignatorSteps}
-          memberOptions={members.data ?? []}
-        />
+            {/* Inter-stage connector — 24px vertical line, addendum §5 */}
+            <div className="flex justify-center py-2">
+              <div className="w-px h-6 bg-border" aria-hidden />
+            </div>
+
+            <ChainDiagram
+              caption={{
+                badge: '2',
+                primary: 'Then, sign the deal',
+                secondary: 'after negotiation is done',
+              }}
+              steps={signatorSteps}
+              setSteps={setSignatorSteps}
+              memberOptions={members.data ?? []}
+            />
+          </CardContent>
+        </Card>
 
         {/* Advanced settings — most admins won't need to change these */}
         <Card>

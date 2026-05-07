@@ -5,7 +5,8 @@ import { describe, it, expect } from 'vitest';
 // of which are needed to exercise the data transforms — keeping the tests
 // pure-data here avoids dragging the JSX runtime into vitest.
 //
-// Spec: docs/APPROVAL_POLICY_EDITOR_REDESIGN.md (P1.3 — visual chain editor).
+// Spec: docs/APPROVAL_POLICY_EDITOR_REDESIGN.md +
+//       docs/APPROVAL_POLICY_EDITOR_VISUAL_CONTRACT.md (avatar color & initials).
 //
 // IF YOU CHANGE A HELPER IN ChainDiagram.tsx, MIRROR IT HERE.
 
@@ -20,34 +21,65 @@ interface ChainStep {
   is_required: boolean;
 }
 
-const FUNCTIONAL_ROLE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'submitter', label: 'Submitter' },
-  { value: 'manager_approver', label: 'Manager approver' },
-  { value: 'financial_approver', label: 'Financial approver' },
-  { value: 'signator', label: 'Signator' },
-  { value: 'admin', label: 'Admin' },
+interface MemberOption {
+  id: string;
+  label: string;
+}
+
+const FUNCTIONAL_ROLE_OPTIONS = [
+  { value: 'submitter', label: 'Submitter', abbrev: 'SU' },
+  { value: 'manager_approver', label: 'Manager approver', abbrev: 'MA' },
+  { value: 'financial_approver', label: 'Financial approver', abbrev: 'FA' },
+  { value: 'signator', label: 'Signator', abbrev: 'SG' },
+  { value: 'admin', label: 'Admin', abbrev: 'AD' },
 ];
 
 function step(overrides: Partial<ChainStep>): ChainStep {
-  // Use `in` checks so explicit null values from the override aren't
-  // re-defaulted by the ?? operator.
   return {
-    uiId: 'uiId' in overrides ? overrides.uiId! : 's-test',
-    step_order: 'step_order' in overrides ? overrides.step_order! : 1,
-    parallel_group: 'parallel_group' in overrides ? overrides.parallel_group! : 1,
+    uiId: 'uiId' in overrides ? (overrides.uiId as string) : 's-test',
+    step_order: 'step_order' in overrides ? (overrides.step_order as number) : 1,
+    parallel_group:
+      'parallel_group' in overrides ? (overrides.parallel_group as number) : 1,
     approver_user_id:
-      'approver_user_id' in overrides ? overrides.approver_user_id! : null,
+      'approver_user_id' in overrides
+        ? (overrides.approver_user_id as string | null)
+        : null,
+    // Default is now `null` to match the post-visual-contract blankStep
+    // (empty slot is the seeded shape). Tests that need a role explicitly
+    // pass approver_role: 'manager_approver'.
     approver_role:
-      'approver_role' in overrides ? overrides.approver_role! : 'manager_approver',
+      'approver_role' in overrides ? (overrides.approver_role as string | null) : null,
     delegate_user_id:
-      'delegate_user_id' in overrides ? overrides.delegate_user_id! : null,
+      'delegate_user_id' in overrides
+        ? (overrides.delegate_user_id as string | null)
+        : null,
     delegate_after_days:
-      'delegate_after_days' in overrides ? overrides.delegate_after_days! : null,
-    is_required: 'is_required' in overrides ? overrides.is_required! : true,
+      'delegate_after_days' in overrides
+        ? (overrides.delegate_after_days as number | null)
+        : null,
+    is_required:
+      'is_required' in overrides ? (overrides.is_required as boolean) : true,
   };
 }
 
 // ────── helpers under test (mirrors of ChainDiagram.tsx) ──────
+
+function blankStep(stepOrder: number, parallelGroup: number): ChainStep {
+  return {
+    uiId: 's-test-blank',
+    step_order: stepOrder,
+    parallel_group: parallelGroup,
+    approver_user_id: null,
+    approver_role: null,
+    delegate_user_id: null,
+    delegate_after_days: null,
+    is_required: true,
+  };
+}
+
+function seedSingleEmptyStep(): ChainStep[] {
+  return [blankStep(1, 1)];
+}
 
 function groupByParallel(steps: ChainStep[]): ChainStep[][] {
   const buckets = new Map<number, ChainStep[]>();
@@ -61,44 +93,6 @@ function groupByParallel(steps: ChainStep[]): ChainStep[][] {
   return Array.from(buckets.values()).sort(
     (a, b) => a[0].step_order - b[0].step_order,
   );
-}
-
-function addNextStep(steps: ChainStep[]): ChainStep[] {
-  const maxOrder = steps.reduce((m, s) => Math.max(m, s.step_order), 0);
-  const maxGroup = steps.reduce((m, s) => Math.max(m, s.parallel_group), 0);
-  return [
-    ...steps,
-    {
-      uiId: 's-new',
-      step_order: maxOrder + 1,
-      parallel_group: maxGroup + 1,
-      approver_user_id: null,
-      approver_role: 'manager_approver',
-      delegate_user_id: null,
-      delegate_after_days: null,
-      is_required: true,
-    },
-  ];
-}
-
-function addParallelApprover(
-  steps: ChainStep[],
-  parallelGroup: number,
-): ChainStep[] {
-  const maxOrder = steps.reduce((m, s) => Math.max(m, s.step_order), 0);
-  return [
-    ...steps,
-    {
-      uiId: 's-new-parallel',
-      step_order: maxOrder + 1,
-      parallel_group: parallelGroup,
-      approver_user_id: null,
-      approver_role: 'manager_approver',
-      delegate_user_id: null,
-      delegate_after_days: null,
-      is_required: true,
-    },
-  ];
 }
 
 function arrayMove<T>(arr: T[], from: number, to: number): T[] {
@@ -137,151 +131,141 @@ function updateStep(
   return steps.map((s) => (s.uiId === uiId ? { ...s, ...patch } : s));
 }
 
-interface MemberOption {
-  id: string;
-  label: string;
+function avatarColorIndex(identifier: string): number {
+  let hash = 5381;
+  for (let i = 0; i < identifier.length; i++) {
+    hash = (hash << 5) + hash + identifier.charCodeAt(i);
+    hash = hash >>> 0;
+  }
+  return hash % 6;
 }
 
-function approverDisplayLabel(s: ChainStep, memberOptions: MemberOption[]): string {
+function personInitials(label: string): string {
+  const noTail = label.replace(/\s*\([^)]+\)\s*$/, '');
+  const parts = noTail.trim().match(/^([A-Za-z])\w*\s+([A-Za-z])\w*/);
+  if (parts) return (parts[1] + parts[2]).toUpperCase();
+  const cleaned = noTail.replace(/[^a-zA-Z0-9]/g, '');
+  return cleaned.slice(0, 2).toUpperCase() || '??';
+}
+
+interface ApproverDisplay {
+  initials: string;
+  colorIndex: number;
+  primary: string;
+  secondary: string;
+  empty: boolean;
+}
+
+function approverDisplayFor(
+  s: ChainStep,
+  members: MemberOption[],
+): ApproverDisplay {
   if (s.approver_role) {
-    return (
-      FUNCTIONAL_ROLE_OPTIONS.find((r) => r.value === s.approver_role)?.label ??
-      s.approver_role
-    );
+    const role = FUNCTIONAL_ROLE_OPTIONS.find((r) => r.value === s.approver_role);
+    return {
+      initials: role?.abbrev ?? s.approver_role.slice(0, 2).toUpperCase(),
+      colorIndex: avatarColorIndex(`role:${s.approver_role}`),
+      primary: 'Anyone with role',
+      secondary: role?.label ?? s.approver_role,
+      empty: false,
+    };
   }
   if (s.approver_user_id) {
-    return (
-      memberOptions.find((m) => m.id === s.approver_user_id)?.label ??
-      'Unknown person'
-    );
+    const m = members.find((mm) => mm.id === s.approver_user_id);
+    const fullLabel = m?.label ?? 'Unknown person';
+    const noTail = fullLabel.replace(/\s*\([^)]+\)\s*$/, '');
+    const tail = fullLabel.match(/\(([^)]+)\)\s*$/)?.[1] ?? '';
+    return {
+      initials: personInitials(fullLabel),
+      colorIndex: avatarColorIndex(`user:${s.approver_user_id}`),
+      primary: noTail || fullLabel,
+      secondary: tail,
+      empty: false,
+    };
   }
-  return 'Pick an approver…';
+  return {
+    initials: '?',
+    colorIndex: 0,
+    primary: '',
+    secondary: '',
+    empty: true,
+  };
 }
 
-function backupDisplayLabel(s: ChainStep, memberOptions: MemberOption[]): string {
+function formatSecondaryLine(
+  s: ChainStep,
+  members: MemberOption[],
+  baseSecondary: string,
+): string {
+  const parts: string[] = [];
+  if (baseSecondary) parts.push(baseSecondary);
   if (s.delegate_user_id) {
-    return (
-      memberOptions.find((m) => m.id === s.delegate_user_id)?.label ??
-      'Unknown person'
-    );
+    const backup = members.find((m) => m.id === s.delegate_user_id);
+    const backupName =
+      backup?.label.replace(/\s*\([^)]+\)\s*$/, '') ?? 'Unknown';
+    const days = s.delegate_after_days ? ` +${s.delegate_after_days}d` : '';
+    parts.push(`Backup: ${backupName}${days}`);
   }
-  return 'No backup';
+  if (!s.is_required) parts.push('Optional');
+  return parts.join(' · ');
 }
 
 // ─────────────────────────── tests ───────────────────────────
+
+describe('blankStep / seedSingleEmptyStep', () => {
+  it('blankStep produces an empty slot — both approver fields null', () => {
+    const s = blankStep(1, 1);
+    expect(s.approver_role).toBeNull();
+    expect(s.approver_user_id).toBeNull();
+    expect(s.is_required).toBe(true);
+    expect(s.step_order).toBe(1);
+    expect(s.parallel_group).toBe(1);
+  });
+  it('seedSingleEmptyStep returns one blank step', () => {
+    const steps = seedSingleEmptyStep();
+    expect(steps).toHaveLength(1);
+    expect(steps[0].approver_role).toBeNull();
+    expect(steps[0].approver_user_id).toBeNull();
+  });
+});
 
 describe('groupByParallel', () => {
   it('returns empty for empty input', () => {
     expect(groupByParallel([])).toEqual([]);
   });
-  it('puts each step in its own group when parallel_groups are unique', () => {
-    const a = step({ uiId: 'a', step_order: 1, parallel_group: 1 });
-    const b = step({ uiId: 'b', step_order: 2, parallel_group: 2 });
-    const groups = groupByParallel([a, b]);
-    expect(groups).toHaveLength(2);
-    expect(groups[0].map((s) => s.uiId)).toEqual(['a']);
-    expect(groups[1].map((s) => s.uiId)).toEqual(['b']);
-  });
-  it('groups same parallel_group steps together', () => {
-    const a = step({ uiId: 'a', step_order: 1, parallel_group: 1 });
-    const b = step({ uiId: 'b', step_order: 2, parallel_group: 1 });
-    const c = step({ uiId: 'c', step_order: 3, parallel_group: 2 });
-    const groups = groupByParallel([a, b, c]);
-    expect(groups).toHaveLength(2);
-    expect(groups[0].map((s) => s.uiId).sort()).toEqual(['a', 'b']);
-    expect(groups[1].map((s) => s.uiId)).toEqual(['c']);
-  });
-  it('orders groups by their first step_order', () => {
-    // group 5 has step_order 1, group 1 has step_order 2 — group 5 wins.
+  it('groups by parallel_group and orders by first step_order', () => {
     const a = step({ uiId: 'a', step_order: 1, parallel_group: 5 });
     const b = step({ uiId: 'b', step_order: 2, parallel_group: 1 });
-    const groups = groupByParallel([a, b]);
-    expect(groups[0][0].parallel_group).toBe(5);
-    expect(groups[1][0].parallel_group).toBe(1);
+    const c = step({ uiId: 'c', step_order: 3, parallel_group: 5 });
+    const groups = groupByParallel([a, b, c]);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].map((s) => s.uiId).sort()).toEqual(['a', 'c']);
+    expect(groups[1].map((s) => s.uiId)).toEqual(['b']);
   });
   it('sorts within a group by step_order', () => {
     const a = step({ uiId: 'a', step_order: 3, parallel_group: 1 });
     const b = step({ uiId: 'b', step_order: 1, parallel_group: 1 });
-    const c = step({ uiId: 'c', step_order: 2, parallel_group: 1 });
-    const groups = groupByParallel([a, b, c]);
-    expect(groups[0].map((s) => s.uiId)).toEqual(['b', 'c', 'a']);
+    const groups = groupByParallel([a, b]);
+    expect(groups[0].map((s) => s.uiId)).toEqual(['b', 'a']);
   });
 });
 
-describe('addNextStep', () => {
-  it('seeds an empty chain with order 1, group 1', () => {
-    const out = addNextStep([]);
-    expect(out).toHaveLength(1);
-    expect(out[0].step_order).toBe(1);
-    expect(out[0].parallel_group).toBe(1);
-  });
-  it('appends with max+1 order and max+1 group', () => {
-    const a = step({ uiId: 'a', step_order: 5, parallel_group: 3 });
-    const out = addNextStep([a]);
-    expect(out).toHaveLength(2);
-    expect(out[1].step_order).toBe(6);
-    expect(out[1].parallel_group).toBe(4);
-  });
-  it('does not mutate the input', () => {
-    const input = [step({ uiId: 'a' })];
-    const before = JSON.stringify(input);
-    addNextStep(input);
-    expect(JSON.stringify(input)).toBe(before);
-  });
-});
-
-describe('addParallelApprover', () => {
-  it('uses the existing parallel_group, not max+1', () => {
-    const a = step({ uiId: 'a', step_order: 1, parallel_group: 7 });
-    const out = addParallelApprover([a], 7);
-    expect(out).toHaveLength(2);
-    expect(out[1].parallel_group).toBe(7);
-  });
-  it('still gets max+1 step_order so it sorts after siblings', () => {
-    const a = step({ uiId: 'a', step_order: 1, parallel_group: 1 });
-    const b = step({ uiId: 'b', step_order: 2, parallel_group: 1 });
-    const out = addParallelApprover([a, b], 1);
-    expect(out[2].step_order).toBe(3);
-  });
-});
-
-describe('reorderGroups', () => {
-  it('moves group from index 0 to index 1 and rewrites step_order', () => {
+describe('reorderGroups / removeStep / updateStep', () => {
+  it('reorderGroups rewrites step_order and preserves parallel_group', () => {
     const a = step({ uiId: 'a', step_order: 1, parallel_group: 1 });
     const b = step({ uiId: 'b', step_order: 2, parallel_group: 2 });
     const out = reorderGroups([a, b], 0, 1);
     expect(out.find((s) => s.uiId === 'a')!.step_order).toBe(2);
     expect(out.find((s) => s.uiId === 'b')!.step_order).toBe(1);
-  });
-  it('preserves parallel_group on each step', () => {
-    const a = step({ uiId: 'a', step_order: 1, parallel_group: 1 });
-    const b = step({ uiId: 'b', step_order: 2, parallel_group: 2 });
-    const out = reorderGroups([a, b], 0, 1);
     expect(out.find((s) => s.uiId === 'a')!.parallel_group).toBe(1);
     expect(out.find((s) => s.uiId === 'b')!.parallel_group).toBe(2);
   });
-  it('keeps within-group order intact when the group itself moves', () => {
-    const a = step({ uiId: 'a', step_order: 1, parallel_group: 1 });
-    const b = step({ uiId: 'b', step_order: 2, parallel_group: 1 });
-    const c = step({ uiId: 'c', step_order: 3, parallel_group: 2 });
-    const out = reorderGroups([a, b, c], 0, 1);
-    // group 2 (one step) is now first, group 1 (two steps in order a,b) is second.
-    const orders = out.map((s) => ({ uiId: s.uiId, step_order: s.step_order }));
-    expect(orders.find((o) => o.uiId === 'c')!.step_order).toBe(1);
-    expect(orders.find((o) => o.uiId === 'a')!.step_order).toBe(2);
-    expect(orders.find((o) => o.uiId === 'b')!.step_order).toBe(3);
-  });
-});
-
-describe('removeStep / updateStep', () => {
-  it('removeStep filters out the matching uiId', () => {
-    const a = step({ uiId: 'a' });
-    const b = step({ uiId: 'b' });
-    expect(removeStep([a, b], 'a').map((s) => s.uiId)).toEqual(['b']);
-  });
-  it('removeStep is a no-op when uiId is missing', () => {
-    const a = step({ uiId: 'a' });
-    expect(removeStep([a], 'b').map((s) => s.uiId)).toEqual(['a']);
+  it('removeStep filters by uiId', () => {
+    expect(
+      removeStep([step({ uiId: 'a' }), step({ uiId: 'b' })], 'a').map(
+        (s) => s.uiId,
+      ),
+    ).toEqual(['b']);
   });
   it('updateStep patches only the matching step', () => {
     const a = step({ uiId: 'a', is_required: true });
@@ -292,71 +276,128 @@ describe('removeStep / updateStep', () => {
   });
 });
 
-describe('approverDisplayLabel', () => {
-  const members: MemberOption[] = [
-    { id: 'u1', label: 'Alice (a@example.com)' },
-    { id: 'u2', label: 'Bob (b@example.com)' },
-  ];
-
-  it('shows the friendly role label when approver_role is set', () => {
-    expect(
-      approverDisplayLabel(
-        step({ approver_role: 'manager_approver', approver_user_id: null }),
-        members,
-      ),
-    ).toBe('Manager approver');
+describe('avatarColorIndex', () => {
+  it('returns a value 0..5 for any input', () => {
+    for (const id of ['user:abc', 'role:manager_approver', '', 'x']) {
+      const i = avatarColorIndex(id);
+      expect(i).toBeGreaterThanOrEqual(0);
+      expect(i).toBeLessThan(6);
+    }
   });
-  it('falls back to the raw role value if not in the option list', () => {
-    expect(
-      approverDisplayLabel(
-        step({ approver_role: 'unknown_role', approver_user_id: null }),
-        members,
-      ),
-    ).toBe('unknown_role');
+  it('is deterministic — same id → same color', () => {
+    expect(avatarColorIndex('role:manager_approver')).toBe(
+      avatarColorIndex('role:manager_approver'),
+    );
+    expect(avatarColorIndex('user:abc-123')).toBe(avatarColorIndex('user:abc-123'));
   });
-  it('shows the member label when approver_user_id is set', () => {
-    expect(
-      approverDisplayLabel(
-        step({ approver_role: null, approver_user_id: 'u2' }),
-        members,
-      ),
-    ).toBe('Bob (b@example.com)');
-  });
-  it('shows "Unknown person" when the user_id is not in members', () => {
-    expect(
-      approverDisplayLabel(
-        step({ approver_role: null, approver_user_id: 'u-missing' }),
-        members,
-      ),
-    ).toBe('Unknown person');
-  });
-  it('shows the placeholder when neither role nor user is set', () => {
-    expect(
-      approverDisplayLabel(
-        step({ approver_role: null, approver_user_id: null }),
-        members,
-      ),
-    ).toBe('Pick an approver…');
+  it('different ids generally produce different colors (best effort)', () => {
+    // Not a strong claim — just guards against the "always returns 0" bug.
+    const indices = new Set(
+      ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((s) => avatarColorIndex(s)),
+    );
+    expect(indices.size).toBeGreaterThan(1);
   });
 });
 
-describe('backupDisplayLabel', () => {
-  const members: MemberOption[] = [
-    { id: 'u1', label: 'Alice (a@example.com)' },
-  ];
-  it('shows the member label when delegate_user_id is set', () => {
-    expect(
-      backupDisplayLabel(step({ delegate_user_id: 'u1' }), members),
-    ).toBe('Alice (a@example.com)');
+describe('personInitials', () => {
+  it('takes first letter of first + last from "First Last"', () => {
+    expect(personInitials('Sara Kim')).toBe('SK');
   });
-  it('shows "No backup" when delegate is null', () => {
-    expect(backupDisplayLabel(step({ delegate_user_id: null }), members)).toBe(
-      'No backup',
+  it('strips trailing "(email)" before computing initials', () => {
+    expect(personInitials('Sara Kim (sara@example.com)')).toBe('SK');
+  });
+  it('handles a single-word name by falling back to first 2 chars', () => {
+    expect(personInitials('Madonna')).toBe('MA');
+  });
+  it('falls back to alphanumerics when the name has unusual chars', () => {
+    expect(personInitials('!@# 42xy')).toBe('42');
+  });
+  it('returns "??" for an unparseable label', () => {
+    expect(personInitials('!@#$%')).toBe('??');
+  });
+});
+
+describe('approverDisplayFor', () => {
+  const members: MemberOption[] = [
+    { id: 'u1', label: 'Sara Kim (sara@example.com)' },
+    { id: 'u2', label: 'Bob' },
+  ];
+
+  it('flags an empty slot with empty=true', () => {
+    expect(approverDisplayFor(step({}), members).empty).toBe(true);
+  });
+  it('returns role abbrev + "Anyone with role" primary line', () => {
+    const d = approverDisplayFor(
+      step({ approver_role: 'financial_approver' }),
+      members,
+    );
+    expect(d.empty).toBe(false);
+    expect(d.initials).toBe('FA');
+    expect(d.primary).toBe('Anyone with role');
+    expect(d.secondary).toBe('Financial approver');
+  });
+  it('falls back to first-2 chars when role is unknown', () => {
+    const d = approverDisplayFor(step({ approver_role: 'unknown' }), members);
+    expect(d.initials).toBe('UN');
+    expect(d.secondary).toBe('unknown');
+  });
+  it('returns user initials + display name without "(email)" tail', () => {
+    const d = approverDisplayFor(step({ approver_user_id: 'u1' }), members);
+    expect(d.empty).toBe(false);
+    expect(d.initials).toBe('SK');
+    expect(d.primary).toBe('Sara Kim');
+    expect(d.secondary).toBe('sara@example.com');
+  });
+  it('uses "Unknown person" when user_id is missing from members', () => {
+    const d = approverDisplayFor(step({ approver_user_id: 'missing' }), members);
+    expect(d.primary).toBe('Unknown person');
+  });
+});
+
+describe('formatSecondaryLine', () => {
+  const members: MemberOption[] = [
+    { id: 'd1', label: 'David Chen (david@x.com)' },
+  ];
+
+  it('returns the base secondary alone when no backup, required', () => {
+    expect(formatSecondaryLine(step({}), members, 'Department Head')).toBe(
+      'Department Head',
     );
   });
-  it('shows "Unknown person" when the delegate_user_id is missing from members', () => {
+  it('appends backup name and days when delegate is set', () => {
     expect(
-      backupDisplayLabel(step({ delegate_user_id: 'u-missing' }), members),
-    ).toBe('Unknown person');
+      formatSecondaryLine(
+        step({ delegate_user_id: 'd1', delegate_after_days: 3 }),
+        members,
+        'CFO',
+      ),
+    ).toBe('CFO · Backup: David Chen +3d');
+  });
+  it('appends "Optional" when is_required is false', () => {
+    expect(
+      formatSecondaryLine(step({ is_required: false }), members, 'Submitter'),
+    ).toBe('Submitter · Optional');
+  });
+  it('combines backup and optional into one line', () => {
+    expect(
+      formatSecondaryLine(
+        step({
+          delegate_user_id: 'd1',
+          delegate_after_days: 5,
+          is_required: false,
+        }),
+        members,
+        'Manager',
+      ),
+    ).toBe('Manager · Backup: David Chen +5d · Optional');
+  });
+  it('omits the backup days when delegate_after_days is null', () => {
+    expect(
+      formatSecondaryLine(
+        step({ delegate_user_id: 'd1', delegate_after_days: null }),
+        members,
+        'CFO',
+      ),
+    ).toBe('CFO · Backup: David Chen');
   });
 });

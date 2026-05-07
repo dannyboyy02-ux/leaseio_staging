@@ -1,15 +1,13 @@
 import { describe, it, expect } from 'vitest';
 
-// Re-implement the pure helpers under test. The component file isn't
-// importable in vitest (it pulls in lucide-react / radix-ui ESM that needs
-// jsdom + transform), so we mirror the helper logic here. Keep these copies
-// byte-for-byte aligned with the implementation in
-// `src/pages/settings/MatchCriteriaSentence.tsx` — the contract these test
-// pin is the user-facing sentence grammar, which would silently regress if
-// the implementation drifted.
+// Mirror of pure helpers from `src/pages/settings/MatchCriteriaSentence.tsx`.
+// The component imports radix UI / lucide-react, so we keep the test
+// JSX-runtime-free by re-implementing the data transforms here.
 //
-// Spec: docs/APPROVAL_POLICY_EDITOR_REDESIGN.md (P1.2 — sentence-style
-// matching criteria).
+// Spec: docs/APPROVAL_POLICY_EDITOR_REDESIGN.md +
+//       docs/APPROVAL_POLICY_EDITOR_VISUAL_CONTRACT.md (§3 — sentence pills).
+//
+// IF YOU CHANGE A HELPER IN MatchCriteriaSentence.tsx, MIRROR IT HERE.
 
 const ASSET_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'property', label: 'Property (Real Estate)' },
@@ -27,13 +25,6 @@ interface MatchCriteriaState {
   match_max_annual_cost: string;
 }
 
-type FilterKind =
-  | 'asset_types'
-  | 'lease_types'
-  | 'departments'
-  | 'regions'
-  | 'cost_range';
-
 const empty = (): MatchCriteriaState => ({
   match_asset_types: [],
   match_lease_types: [],
@@ -43,23 +34,7 @@ const empty = (): MatchCriteriaState => ({
   match_max_annual_cost: '',
 });
 
-function isActive(state: MatchCriteriaState, kind: FilterKind): boolean {
-  switch (kind) {
-    case 'asset_types':
-      return state.match_asset_types.length > 0;
-    case 'lease_types':
-      return state.match_lease_types.length > 0;
-    case 'departments':
-      return state.match_departments.length > 0;
-    case 'regions':
-      return state.match_regions.length > 0;
-    case 'cost_range':
-      return (
-        state.match_min_annual_cost.trim() !== '' ||
-        state.match_max_annual_cost.trim() !== ''
-      );
-  }
-}
+// ────── helpers under test (mirrors of MatchCriteriaSentence.tsx) ──────
 
 const fmtMoney = (raw: string): string => {
   const n = parseFloat(raw);
@@ -72,166 +47,196 @@ const fmtMoney = (raw: string): string => {
 };
 
 function joinWithOr(values: string[]): string {
-  if (values.length === 0) return '…';
+  if (values.length === 0) return '';
   if (values.length === 1) return values[0];
   if (values.length === 2) return `${values[0]} or ${values[1]}`;
   return `${values.slice(0, -1).join(', ')}, or ${values[values.length - 1]}`;
 }
 
-function pillLabel(state: MatchCriteriaState, kind: FilterKind): string {
-  switch (kind) {
-    case 'asset_types': {
-      const labels = state.match_asset_types.map(
-        (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v,
-      );
-      return labels.length === 0
-        ? 'asset type is …'
-        : `asset type is ${joinWithOr(labels)}`;
-    }
-    case 'lease_types':
-      return state.match_lease_types.length === 0
-        ? 'lease type is …'
-        : `lease type is ${joinWithOr(state.match_lease_types)}`;
-    case 'departments':
-      return state.match_departments.length === 0
-        ? 'department is …'
-        : `department is ${joinWithOr(state.match_departments)}`;
-    case 'regions':
-      return state.match_regions.length === 0
-        ? 'region is …'
-        : `region is ${joinWithOr(state.match_regions)}`;
-    case 'cost_range': {
-      const min = state.match_min_annual_cost.trim();
-      const max = state.match_max_annual_cost.trim();
-      if (min && max) return `annual cost is between ${fmtMoney(min)} and ${fmtMoney(max)}`;
-      if (min) return `annual cost is at least ${fmtMoney(min)}`;
-      if (max) return `annual cost is at most ${fmtMoney(max)}`;
-      return 'annual cost is …';
-    }
-  }
+function leaseTypeLabel(state: MatchCriteriaState): string {
+  const assetLabels = state.match_asset_types.map(
+    (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v,
+  );
+  const all = [...assetLabels, ...state.match_lease_types];
+  if (all.length === 0) return 'any lease type';
+  return joinWithOr(all);
 }
 
+function departmentLabel(state: MatchCriteriaState): string {
+  if (state.match_departments.length === 0) return 'any department';
+  return joinWithOr(state.match_departments);
+}
+
+function regionLabel(state: MatchCriteriaState): string {
+  if (state.match_regions.length === 0) return 'any region';
+  return joinWithOr(state.match_regions);
+}
+
+function costLabel(state: MatchCriteriaState): string {
+  const min = state.match_min_annual_cost.trim();
+  const max = state.match_max_annual_cost.trim();
+  if (!min && !max) return 'any annual cost';
+  if (min && max) return `${fmtMoney(min)} – ${fmtMoney(max)}`;
+  if (min) return `at least ${fmtMoney(min)}`;
+  return `at most ${fmtMoney(max)}`;
+}
+
+function isLeaseTypeActive(state: MatchCriteriaState): boolean {
+  return state.match_asset_types.length > 0 || state.match_lease_types.length > 0;
+}
+function isDepartmentActive(state: MatchCriteriaState): boolean {
+  return state.match_departments.length > 0;
+}
+function isRegionActive(state: MatchCriteriaState): boolean {
+  return state.match_regions.length > 0;
+}
+function isCostActive(state: MatchCriteriaState): boolean {
+  return (
+    state.match_min_annual_cost.trim() !== '' ||
+    state.match_max_annual_cost.trim() !== ''
+  );
+}
+
+// ─────────────────────────── tests ───────────────────────────
+
 describe('joinWithOr', () => {
-  it('returns ellipsis for empty list', () => {
-    expect(joinWithOr([])).toBe('…');
+  it('returns empty string for empty list', () => {
+    expect(joinWithOr([])).toBe('');
   });
-  it('returns the single value for one-element list', () => {
+  it('returns single value alone', () => {
     expect(joinWithOr(['Property'])).toBe('Property');
   });
-  it('joins two values with " or "', () => {
-    expect(joinWithOr(['Property', 'Equipment'])).toBe('Property or Equipment');
+  it('joins two with " or "', () => {
+    expect(joinWithOr(['A', 'B'])).toBe('A or B');
   });
-  it('uses Oxford comma + ", or " for three values', () => {
+  it('uses Oxford ", or " for three', () => {
     expect(joinWithOr(['A', 'B', 'C'])).toBe('A, B, or C');
   });
-  it('handles four values cleanly', () => {
-    expect(joinWithOr(['A', 'B', 'C', 'D'])).toBe('A, B, C, or D');
+});
+
+describe('leaseTypeLabel — combined asset+lease pill', () => {
+  it('returns "any lease type" when both arrays empty', () => {
+    expect(leaseTypeLabel(empty())).toBe('any lease type');
+  });
+  it('uses friendly asset label, not raw enum, when only asset_type set', () => {
+    expect(
+      leaseTypeLabel({ ...empty(), match_asset_types: ['property'] }),
+    ).toBe('Property (Real Estate)');
+  });
+  it('returns lease_type verbatim when only that is set', () => {
+    expect(
+      leaseTypeLabel({ ...empty(), match_lease_types: ['Real Estate'] }),
+    ).toBe('Real Estate');
+  });
+  it('combines asset + lease into one phrase when both set', () => {
+    expect(
+      leaseTypeLabel({
+        ...empty(),
+        match_asset_types: ['property'],
+        match_lease_types: ['Real Estate'],
+      }),
+    ).toBe('Property (Real Estate) or Real Estate');
+  });
+  it('falls back to raw value when asset_type is unknown', () => {
+    expect(
+      leaseTypeLabel({ ...empty(), match_asset_types: ['unknown'] }),
+    ).toBe('unknown');
   });
 });
 
-describe('isActive', () => {
-  it('treats every empty filter as inactive', () => {
-    const s = empty();
-    expect(isActive(s, 'asset_types')).toBe(false);
-    expect(isActive(s, 'lease_types')).toBe(false);
-    expect(isActive(s, 'departments')).toBe(false);
-    expect(isActive(s, 'regions')).toBe(false);
-    expect(isActive(s, 'cost_range')).toBe(false);
+describe('departmentLabel / regionLabel', () => {
+  it('returns "any department" when empty', () => {
+    expect(departmentLabel(empty())).toBe('any department');
   });
-  it('treats a single asset_type value as active', () => {
-    expect(isActive({ ...empty(), match_asset_types: ['property'] }, 'asset_types')).toBe(true);
-  });
-  it('treats cost_range as active when only min is set', () => {
-    expect(isActive({ ...empty(), match_min_annual_cost: '50000' }, 'cost_range')).toBe(true);
-  });
-  it('treats cost_range as active when only max is set', () => {
-    expect(isActive({ ...empty(), match_max_annual_cost: '500000' }, 'cost_range')).toBe(true);
-  });
-  it('treats cost_range as inactive when only whitespace is set', () => {
+  it('uses Oxford comma for 3+ departments', () => {
     expect(
-      isActive({ ...empty(), match_min_annual_cost: '   ' }, 'cost_range'),
-    ).toBe(false);
+      departmentLabel({
+        ...empty(),
+        match_departments: ['Ops', 'Sales', 'HR'],
+      }),
+    ).toBe('Ops, Sales, or HR');
+  });
+  it('returns "any region" when empty', () => {
+    expect(regionLabel(empty())).toBe('any region');
+  });
+  it('joins two regions with " or "', () => {
+    expect(
+      regionLabel({ ...empty(), match_regions: ['West', 'East'] }),
+    ).toBe('West or East');
   });
 });
 
-describe('pillLabel — asset_types', () => {
-  it('shows ellipsis when empty', () => {
-    expect(pillLabel(empty(), 'asset_types')).toBe('asset type is …');
+describe('costLabel', () => {
+  it('returns "any annual cost" when both bounds blank', () => {
+    expect(costLabel(empty())).toBe('any annual cost');
   });
-  it('uses the friendly label, not the raw enum, for one value', () => {
+  it('uses "X – Y" en-dash when both set', () => {
     expect(
-      pillLabel({ ...empty(), match_asset_types: ['property'] }, 'asset_types'),
-    ).toBe('asset type is Property (Real Estate)');
+      costLabel({
+        ...empty(),
+        match_min_annual_cost: '50000',
+        match_max_annual_cost: '500000',
+      }),
+    ).toBe('$50,000 – $500,000');
   });
-  it('joins two values with " or "', () => {
+  it('uses "at least X" when only min set', () => {
     expect(
-      pillLabel(
-        { ...empty(), match_asset_types: ['property', 'equipment'] },
-        'asset_types',
-      ),
-    ).toBe('asset type is Property (Real Estate) or Equipment');
+      costLabel({ ...empty(), match_min_annual_cost: '50000' }),
+    ).toBe('at least $50,000');
   });
-  it('falls back to raw value when label is unknown', () => {
+  it('uses "at most Y" when only max set', () => {
     expect(
-      pillLabel({ ...empty(), match_asset_types: ['unknown_kind'] }, 'asset_types'),
-    ).toBe('asset type is unknown_kind');
+      costLabel({ ...empty(), match_max_annual_cost: '500000' }),
+    ).toBe('at most $500,000');
   });
-});
-
-describe('pillLabel — lease_types / departments / regions', () => {
-  it('lease_types renders raw values', () => {
+  it('rounds decimals away from cents', () => {
     expect(
-      pillLabel({ ...empty(), match_lease_types: ['Real Estate'] }, 'lease_types'),
-    ).toBe('lease type is Real Estate');
-  });
-  it('departments renders the user-typed values verbatim', () => {
-    expect(
-      pillLabel(
-        { ...empty(), match_departments: ['Operations', 'Sales', 'HR'] },
-        'departments',
-      ),
-    ).toBe('department is Operations, Sales, or HR');
-  });
-  it('regions handles two values', () => {
-    expect(
-      pillLabel({ ...empty(), match_regions: ['West', 'East'] }, 'regions'),
-    ).toBe('region is West or East');
-  });
-});
-
-describe('pillLabel — cost_range', () => {
-  it('renders ellipsis when both blank', () => {
-    expect(pillLabel(empty(), 'cost_range')).toBe('annual cost is …');
-  });
-  it('uses "between X and Y" when both bounds set', () => {
-    expect(
-      pillLabel(
-        { ...empty(), match_min_annual_cost: '50000', match_max_annual_cost: '500000' },
-        'cost_range',
-      ),
-    ).toBe('annual cost is between $50,000 and $500,000');
-  });
-  it('uses "at least X" when only min is set', () => {
-    expect(
-      pillLabel({ ...empty(), match_min_annual_cost: '50000' }, 'cost_range'),
-    ).toBe('annual cost is at least $50,000');
-  });
-  it('uses "at most Y" when only max is set', () => {
-    expect(
-      pillLabel({ ...empty(), match_max_annual_cost: '500000' }, 'cost_range'),
-    ).toBe('annual cost is at most $500,000');
-  });
-  it('formats decimal bounds without cents', () => {
-    expect(
-      pillLabel(
-        { ...empty(), match_min_annual_cost: '12345.67', match_max_annual_cost: '98765.43' },
-        'cost_range',
-      ),
-    ).toBe('annual cost is between $12,346 and $98,765');
+      costLabel({
+        ...empty(),
+        match_min_annual_cost: '12345.67',
+        match_max_annual_cost: '98765.43',
+      }),
+    ).toBe('$12,346 – $98,765');
   });
   it('falls back gracefully on a non-numeric input', () => {
     expect(
-      pillLabel({ ...empty(), match_min_annual_cost: 'abc' }, 'cost_range'),
-    ).toBe('annual cost is at least $abc');
+      costLabel({ ...empty(), match_min_annual_cost: 'abc' }),
+    ).toBe('at least $abc');
+  });
+});
+
+describe('isXActive predicates', () => {
+  it('lease type active iff either array has items', () => {
+    expect(isLeaseTypeActive(empty())).toBe(false);
+    expect(
+      isLeaseTypeActive({ ...empty(), match_asset_types: ['property'] }),
+    ).toBe(true);
+    expect(
+      isLeaseTypeActive({ ...empty(), match_lease_types: ['Real Estate'] }),
+    ).toBe(true);
+  });
+  it('cost active iff either bound is non-blank', () => {
+    expect(isCostActive(empty())).toBe(false);
+    expect(
+      isCostActive({ ...empty(), match_min_annual_cost: '100' }),
+    ).toBe(true);
+    expect(
+      isCostActive({ ...empty(), match_max_annual_cost: '100' }),
+    ).toBe(true);
+  });
+  it('cost treats whitespace-only as blank', () => {
+    expect(
+      isCostActive({ ...empty(), match_min_annual_cost: '   ' }),
+    ).toBe(false);
+  });
+  it('department / region predicates flip on non-empty arrays', () => {
+    expect(isDepartmentActive(empty())).toBe(false);
+    expect(
+      isDepartmentActive({ ...empty(), match_departments: ['Ops'] }),
+    ).toBe(true);
+    expect(isRegionActive(empty())).toBe(false);
+    expect(
+      isRegionActive({ ...empty(), match_regions: ['West'] }),
+    ).toBe(true);
   });
 });

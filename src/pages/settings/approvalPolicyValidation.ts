@@ -57,13 +57,19 @@ export function validatePolicy(
     return 'Min annual cost must be ≤ max annual cost.';
 
   // Chain shape
-  if (conceptSteps.length === 0) return 'At least one concept-chain step is required.';
-  if (signatorSteps.length === 0) return 'At least one signator-chain step is required.';
+  if (conceptSteps.length === 0)
+    return '"First, get the green light" needs at least one approver.';
+  if (signatorSteps.length === 0)
+    return '"Then, sign the deal" needs at least one approver.';
 
-  // Per-step shape + duplicate (parallel_group, step_order) inside a stage
+  // Per-step shape + duplicate (parallel_group, step_order) inside a stage.
+  // Stage labels use the UI captions from APPROVAL_POLICY_EDITOR_VISUAL_
+  // CONTRACT.md §5 so the toast message matches what the admin sees on
+  // screen. Schema vocabulary ("step", "parallel group") only appears in
+  // the rare cases where it's the only precise term available.
   for (const stage of [
-    { steps: conceptSteps, label: 'Concept' },
-    { steps: signatorSteps, label: 'Signator' },
+    { steps: conceptSteps, label: '"First, get the green light"' },
+    { steps: signatorSteps, label: '"Then, sign the deal"' },
   ]) {
     const seen = new Set<string>();
     for (const s of stage.steps) {
@@ -74,12 +80,12 @@ export function validatePolicy(
       const userSet = !!s.approver_user_id;
       const roleSet = !!s.approver_role;
       if (userSet === roleSet)
-        return `${stage.label}: each step must have exactly one of user or role.`;
+        return `${stage.label}: pick an approver for every empty slot.`;
       if (s.delegate_user_id && (s.delegate_after_days == null || s.delegate_after_days <= 0))
-        return `${stage.label}: delegate requires "delegate after N days" > 0.`;
+        return `${stage.label}: a backup approver needs "forward after N days" > 0.`;
       const key = `${s.parallel_group}:${s.step_order}`;
       if (seen.has(key))
-        return `${stage.label}: duplicate step order ${s.step_order} in parallel group ${s.parallel_group}.`;
+        return `${stage.label}: duplicate step ${s.step_order} in parallel group ${s.parallel_group}.`;
       seen.add(key);
     }
   }
