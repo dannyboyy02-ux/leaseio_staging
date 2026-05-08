@@ -1523,6 +1523,12 @@ serve(async (req) => {
     const file = formData.get('file') as File;
     const leaseType = formData.get('leaseType') as string || 'master';
     const rawParentLeaseId = formData.get('parentLeaseId') as string | null;
+    // Phase 5: when set to 'true', skip the Tier 2 hard-gate. Used by
+    // the LeaseUploadModal "Override and proceed" path after a
+    // tier2_classification_failed rejection. Records an
+    // is_lease_override correction so future classifications for this
+    // workspace learn from the disagreement.
+    const forceTier2Override = formData.get('forceTier2Override') === 'true';
     const parentLeaseId = rawParentLeaseId?.trim() || null;
     const extractionMode = (formData.get('extractionMode') as string) || 'pipeline';
     const targetLeaseId = formData.get('leaseId') as string | null;
@@ -2008,7 +2014,8 @@ serve(async (req) => {
 
     if (
       tier2Classification.is_lease === false &&
-      tier2Classification.confidence > TIER2_REJECT_CONFIDENCE_THRESHOLD
+      tier2Classification.confidence > TIER2_REJECT_CONFIDENCE_THRESHOLD &&
+      !forceTier2Override
     ) {
       const reason = tier2Classification.non_lease_reason || 'Document does not appear to be a lease.';
       console.log(`[process_lease] Tier 2 rejected lease ${leaseId}: ${reason}`);
@@ -2128,6 +2135,50 @@ serve(async (req) => {
       } catch (err) {
         console.warn('[process_lease] Phase 3 parent-lease search failed:', err);
       }
+    }
+
+    // ── Phase 5: record is_lease_override correction ──────────────
+    // When the user overrode a Tier 2 hard-rejection ("I disagree,
+    // this IS a lease"), record the correction now that the
+    // extraction has succeeded. Feeds Phase 4's in-context-learning
+    // loop — future Haiku classifications for this workspace will
+    // see this as a few-shot example and adjust accordingly.
+    if (forceTier2Override && resolvedWorkspaceId) {
+      try {
+        const { error: corrErr } = await supabaseAdmin
+          .from('classification_corrections')
+          .insert({
+            workspace_id: resolvedWorkspaceId,
+            lease_id: leaseId,
+            original_classification: tier2Classification,
+            corrected_classification: { is_lease: true },
+            correction_type: 'is_lease_override',
+            user_note: null,
+            document_summary: sanitizedFilename,
+            corrected_by: user.id,
+          });
+        if (corrErr) {
+          console.warn('[process_lease] Phase 5 override correction insert failed:', corrErr.message);
+        } else {
+          console.log('[process_lease] Phase 5: is_lease_override correction recorded for future learning');
+        }
+        // Best-effort activity log
+        const { error: actErr } = await supabaseAdmin.from('lease_activity_log').insert({
+          lease_id: leaseId,
+          user_id: user.id,
+          activity_type: 'tier2_classification_overridden',
+          details: {
+            classification: tier2Classification,
+            forced: true,
+          },
+        });
+        if (actErr) {
+          console.warn('[process_lease] Phase 5 activity log insert failed:', actErr.message);
+        }
+      } catch (e) {
+        console.warn('[process_lease] Phase 5 override recording threw:', e);
+      }
+      (leaseData as any)._tier2_override = true;
     }
 
     const { warnings: validationWarnings, suggestions: validationSuggestions } = validateLeaseData(leaseData);

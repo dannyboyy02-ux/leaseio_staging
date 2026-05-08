@@ -45,7 +45,7 @@ interface ParentLease {
   lease_end: string | null;
 }
 
-type Step = 'upload' | 'classify' | 'error';
+type Step = 'upload' | 'classify' | 'error' | 'tier2_rejected';
 
 export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadModalProps) {
   const { startProcessing } = useProcessing();
@@ -56,6 +56,11 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
   const [parentLeaseId, setParentLeaseId] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  // Phase 5: Tier 2 rejection detail when AI says "this isn't a lease"
+  // with high confidence. User can override and force the upload through
+  // — the override is recorded as an is_lease_override correction that
+  // feeds Phase 4's per-workspace in-context learning.
+  const [tier2RejectDetail, setTier2RejectDetail] = useState<string>('');
 
   // Real parent leases from database
   const [availableParentLeases, setAvailableParentLeases] = useState<ParentLease[]>([]);
@@ -118,14 +123,17 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
     maxSize: 50 * 1024 * 1024, // 50MB
   });
 
-  const handleSubmit = async () => {
+  // Single upload routine, used by both initial submit and the
+  // post-rejection "Override and proceed" retry. When forceOverride
+  // is true, process_lease skips the Tier 2 hard-gate and records an
+  // is_lease_override correction for the Phase 4 learning loop.
+  const performUpload = async (forceOverride: boolean) => {
     if (!file) return;
     if (leaseType === 'amendment' && !parentLeaseId) return;
 
     setIsUploading(true);
 
     try {
-      // Get the current session for auth
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         toast.error('Session expired. Please log in again.');
@@ -133,15 +141,16 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         return;
       }
 
-      // Create form data
       const formData = new FormData();
       formData.append('file', file);
       formData.append('leaseType', leaseType);
       if (parentLeaseId) {
         formData.append('parentLeaseId', parentLeaseId);
       }
+      if (forceOverride) {
+        formData.append('forceTier2Override', 'true');
+      }
 
-      // Call the edge function
       const { data: result, error: invokeError } = await supabase.functions.invoke('process_lease', {
         body: formData,
       });
@@ -150,12 +159,21 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         throw new Error(`Failed to process lease: ${invokeError.message}`);
       }
 
+      // Tier 2 hard rejection — surface the override path instead of
+      // a generic error. Only fires on the FIRST submit (forceOverride=false);
+      // if the user already overrode and we still get this, it's a bug.
+      if (result?.reason === 'tier2_classification_failed' && !forceOverride) {
+        const detail = (result as any)?.detail || result.error || "This document doesn't appear to be a lease.";
+        setTier2RejectDetail(detail);
+        setStep('tier2_rejected');
+        return;
+      }
+
       if (result?.error) {
         throw new Error(result.error || 'Failed to process lease');
       }
 
       if (result?.leaseId) {
-        // Hand off to ProcessingContext — dismiss modal immediately
         startProcessing(result.leaseId, file.name);
         if (onSuccess) onSuccess(result.leaseId);
         handleClose();
@@ -171,12 +189,16 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
     }
   };
 
+  const handleSubmit = () => performUpload(false);
+  const handleTier2Override = () => performUpload(true);
+
   const handleClose = () => {
     setStep('upload');
     setFile(null);
     setLeaseType('master');
     setParentLeaseId('');
     setErrorMessage('');
+    setTier2RejectDetail('');
     onOpenChange(false);
   };
 
@@ -193,11 +215,13 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
             {step === 'upload' && 'Upload Lease Document'}
             {step === 'classify' && 'Classify Document'}
             {step === 'error' && 'Processing Failed'}
+            {step === 'tier2_rejected' && 'AI says this isn\'t a lease'}
           </DialogTitle>
           <DialogDescription>
             {step === 'upload' && 'Upload a PDF lease document to begin extraction'}
             {step === 'classify' && 'Help us understand what type of document this is'}
             {step === 'error' && 'There was a problem processing your document'}
+            {step === 'tier2_rejected' && 'Our classifier rejected this upload. Review and decide.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -376,6 +400,46 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
               </Button>
               <Button variant="accent" onClick={handleRetry} className="flex-1">
                 Try Again
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'tier2_rejected' && (
+          <div className="py-2">
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-900 mb-1">
+                    The AI classifier didn't recognize this as a lease
+                  </p>
+                  <p className="text-xs text-amber-800">{tier2RejectDetail}</p>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-muted p-4 mb-4 text-xs text-muted-foreground space-y-2">
+              <p>
+                <strong className="text-foreground">If this IS a lease:</strong> Click "Override and proceed". The
+                document will be extracted as normal, and your override will help train the classifier for similar
+                documents from your workspace going forward.
+              </p>
+              <p>
+                <strong className="text-foreground">If you uploaded the wrong file:</strong> Cancel and try again
+                with the correct PDF.
+              </p>
+            </div>
+            <div className="flex gap-3 w-full">
+              <Button variant="outline" onClick={handleClose} className="flex-1" disabled={isUploading}>
+                Cancel
+              </Button>
+              <Button
+                variant="accent"
+                onClick={handleTier2Override}
+                className="flex-1"
+                disabled={isUploading}
+              >
+                {isUploading ? 'Processing…' : 'Override and proceed'}
               </Button>
             </div>
           </div>
