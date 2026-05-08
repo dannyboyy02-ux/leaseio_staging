@@ -320,25 +320,20 @@ Tracked here for the next time `delete-workspace` is touched.
 
 ## Phase 8 C1 additions (2026-05-06)
 
-### Item #12: lease_reports artifact cleanup job not yet implemented
+### Item #12: lease_reports artifact cleanup job — RESOLVED 2026-05-07
 
-`lease_reports.expires_at` is populated at generation time (default 90
-days post-generation, configurable per workspace via
-`workspaces.report_artifact_retention_days`). The Phase 8 spec calls
-out a future cleanup job that would mark expired reports
-`status = 'expired'` and purge the storage artifacts. Phase 8 ships
-the column + retention config; the cleanup job itself is deferred.
-
-**Severity:** Low. Storage costs accumulate over time; nothing is
-broken. When implemented, this is a daily cron similar in shape to
-`process-delegate-timers` / `detect-stuck-chains`.
-
-**Where to look:** Cron-style edge function at
-`supabase/functions/cleanup-expired-reports/` (does not exist yet).
-Pattern: select `lease_reports` where `expires_at <= now()` AND
-`status != 'expired'`, delete artifacts from `lease-reports` bucket
-at `pdf_storage_path` and `json_storage_path`, update row to
-`status='expired'`, write `report_expired` activity log entry.
+Shipped `supabase/functions/cleanup-expired-reports/index.ts`. Daily
+cron-style edge function (`verify_jwt = true` default; production
+cron supplies service-role JWT). Selects `lease_reports` where
+`expires_at <= now() AND status != 'expired'`, batches storage
+removes against the `lease-reports` bucket in chunks of 100 across
+both `pdf_storage_path` and `json_storage_path`, marks each row
+`status = 'expired'` (row preserved as audit anchor), and writes a
+`report_expired` activity row for single-lease reports. Portfolio
+reports skip the activity log per Phase 8 As-built A6 (lease_id is
+NULL; lease_activity_log.lease_id is NOT NULL). Production cron
+wiring is a deployment-checklist item — same pattern as the Phase 7
+crons.
 
 ### Item #13: Synchronous PDF generation may time out on very large portfolio reports
 
