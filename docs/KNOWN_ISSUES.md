@@ -335,24 +335,23 @@ NULL; lease_activity_log.lease_id is NOT NULL). Production cron
 wiring is a deployment-checklist item — same pattern as the Phase 7
 crons.
 
-### Item #13: Synchronous PDF generation may time out on very large portfolio reports
+### Item #13: Synchronous PDF generation soft cap — RESOLVED 2026-05-07
 
-Phase 8 ships with synchronous generation in
-`generate-portfolio-report` — the function builds the PDF and returns
-when ready. Edge functions have a wall-clock cap (Supabase default
-~150s). A workspace with hundreds of active leases in a single
-period may hit it.
+`generate-portfolio-report` now enforces a `PORTFOLIO_LEASE_CAP = 500`
+guardrail. Workspaces whose eligible-lease count for the requested
+period exceeds the cap get a 422 with
+`reason: 'portfolio_too_large'`, the row is marked `status='failed'`
+with a descriptive `error_message`, and the frontend hook
+(`useGeneratePortfolioReport`) surfaces the message directly to the
+user. Cap is a single constant; raising it requires moving to
+background-queue generation (still deferred until real-world usage
+demands it).
 
-**Severity:** Medium-deferred. Real-world usage will tell us whether
-this matters. The architecture is forward-compatible: `lease_reports`
-already has `status: 'pending' | 'generating' | 'ready' | 'failed' |
-'expired'` and the frontend polls — switching to a background-queue
-generator (separate worker, queue table, or pg_cron-driven) requires
-no schema change.
-
-**Where to look:** `supabase/functions/generate-portfolio-report/`
-when it ships in C3. Document a soft cap on lease count per request
-(e.g., 500) and surface a clear error if exceeded.
+The architecture remains forward-compatible: `lease_reports.status`
+already supports `pending | generating | ready | failed | expired`
+and the frontend polls — switching to a background queue requires no
+schema change. The "punted heavy fix" stays punted; this is the
+minimal guardrail the original entry recommended.
 
 ---
 

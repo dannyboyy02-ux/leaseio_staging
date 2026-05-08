@@ -24,6 +24,10 @@
 //   - reportScope ∈ {monthly, quarterly, annual, custom_range}
 //   - periodStart ≤ periodEnd
 //   - Period bounds must be ISO date strings (YYYY-MM-DD)
+//   - Included lease count ≤ PORTFOLIO_LEASE_CAP (synchronous-generation
+//     guardrail — see KNOWN_ISSUES #13). Workspaces exceeding the cap
+//     get a 422 with reason 'portfolio_too_large' and the row is marked
+//     status='failed' so the report library reflects the rejection.
 //
 // ACTIVITY LOG
 // Portfolio reports are not tied to a single lease; the
@@ -54,6 +58,14 @@ import {
   type VerificationAuditEntry,
   type WorkspacePortfolioContext,
 } from "../_shared/asc842_report.ts";
+
+// Synchronous-generation guardrail. Edge functions have a wall-clock
+// cap (~150s on Supabase). For each included lease this function does
+// 3 parallel DB reads, an ASC 842 aggregation pass, JSON serialization
+// + upload, and (client-side) PDF rendering. 500 is conservative for
+// the synchronous architecture; raising it requires moving to
+// background-queue generation. Tracked as KNOWN_ISSUES #13.
+const PORTFOLIO_LEASE_CAP = 500;
 
 function shapeAsc842Inputs(row: Record<string, unknown> | null | undefined): Asc842Inputs | null {
   if (!row || typeof row !== "object") return null;
@@ -506,6 +518,32 @@ serve(async (req) => {
       partitionInput,
       { start: body.periodStart, end: body.periodEnd },
     );
+
+    if (included_lease_ids.length > PORTFOLIO_LEASE_CAP) {
+      const overage = included_lease_ids.length - PORTFOLIO_LEASE_CAP;
+      const message =
+        `Portfolio report exceeds the ${PORTFOLIO_LEASE_CAP}-lease soft cap ` +
+        `(${included_lease_ids.length} eligible leases, ${overage} over). ` +
+        `Synchronous generation cannot complete reliably at this size. ` +
+        `Narrow the period or split the report; background-queue generation ` +
+        `for very large portfolios is on the roadmap.`;
+      await supabaseAdmin
+        .from("lease_reports")
+        .update({ status: "failed", error_message: message })
+        .eq("id", reportId);
+      return jsonResponse(
+        {
+          ok: false,
+          error: message,
+          reason: "portfolio_too_large",
+          reportId,
+          eligibleLeaseCount: included_lease_ids.length,
+          cap: PORTFOLIO_LEASE_CAP,
+        },
+        422,
+        origin,
+      );
+    }
 
     const includedSet = new Set(included_lease_ids);
     const includedLeaseRows = candidateList.filter(
