@@ -58,6 +58,7 @@ import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
 import { SectionCard, RisksSection, SECTION_CONFIG, getFieldConfidence, type SectionKey } from "@/components/leases/LeaseReviewSections";
 import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRiskDialog";
 import { Tier2CorrectionDialog } from "@/components/leases/Tier2CorrectionDialog";
+import { LeaseInsightsCard } from "@/components/leases/LeaseInsightsCard";
 import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
 import { LeaseExports } from "@/components/leases/LeaseExports";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
@@ -2598,6 +2599,13 @@ export default function LeaseReview() {
                       <AlertTriangle size={10} className="mr-1" />
                       {lowConfidenceFields.length} fields need attention
                     </Badge>
+                  )}
+                  {lease?.id && (
+                    <LeaseInsightsCard
+                      leaseId={lease.id}
+                      workspaceId={workspace?.id ?? null}
+                      plan={workspace?.plan}
+                    />
                   )}
                 </div>
 

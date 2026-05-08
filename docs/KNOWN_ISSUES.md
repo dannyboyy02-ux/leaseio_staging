@@ -40,6 +40,18 @@ list and reference it in the commit message.
   literal `userRole === 'admin'` with `canEditWorkspaceSettings(userRole)`
   on line 164 (previously line 161 per the original report).
 
+**Status reconciliation (Tier 2 build close, 2026-05-08):**
+- Item #4 (CSS MIME type error on `theleaseio.com`) — RESOLVED.
+  Verified live with curl: `https://theleaseio.com/assets/index-*.css`
+  returns `Content-Type: text/css; charset=utf-8`; the JS bundle
+  returns `application/javascript; charset=utf-8`; root HTML returns
+  `text/html`. All asset MIME types are correct in the current
+  deployment. The original failure mode (catch-all serving `text/html`
+  for asset paths) is no longer present — likely fixed by a Vercel
+  domain config change since 2026-05-03 when the issue was filed.
+  Browser-side `strict MIME checking` error described in the issue
+  is not reproducible.
+
 **Status reconciliation (P2 batch, 2026-05-07):**
 - Item #3 (password DOM warnings) — RESOLVED. Wrapped the password
   card in `<form>` with hidden `autocomplete="username"` shadow input
