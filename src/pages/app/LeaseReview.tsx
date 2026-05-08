@@ -57,6 +57,7 @@ import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
 import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
 import { SectionCard, RisksSection, SECTION_CONFIG, getFieldConfidence, type SectionKey } from "@/components/leases/LeaseReviewSections";
 import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRiskDialog";
+import { Tier2CorrectionDialog } from "@/components/leases/Tier2CorrectionDialog";
 import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
 import { LeaseExports } from "@/components/leases/LeaseExports";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
@@ -170,7 +171,8 @@ function renderWarning(w: unknown): string {
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
-  const { user, userRole, userFunctionalRoles } = useApp();
+  const { user, userRole, userFunctionalRoles, workspace } = useApp();
+  const [tier2CorrectionOpen, setTier2CorrectionOpen] = useState(false);
   const queryClient = useQueryClient();
   
   const [lease, setLease] = useState<any | null>(null);
@@ -2560,6 +2562,15 @@ export default function LeaseReview() {
                               </li>
                             ))}
                           </ul>
+                          {workspace?.id && (
+                            <button
+                              type="button"
+                              onClick={() => setTier2CorrectionOpen(true)}
+                              className="mt-2 text-xs font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900"
+                            >
+                              AI got this wrong? Submit a correction
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3278,6 +3289,27 @@ export default function LeaseReview() {
               .is('dismissed_at', null);
             setRisks((data ?? []) as Risk[]);
           }}
+        />
+      )}
+      {workspace?.id && lease?.id && (
+        <Tier2CorrectionDialog
+          open={tier2CorrectionOpen}
+          onOpenChange={setTier2CorrectionOpen}
+          workspaceId={workspace.id}
+          leaseId={lease.id}
+          originalClassification={
+            ((lease?.extracted_json as ExtractedJson | null) as any)?._tier2_classification ?? null
+          }
+          documentSummary={
+            (() => {
+              const ej = lease?.extracted_json as ExtractedJson | null;
+              const fname = lease?.filename ?? lease?.request_title ?? null;
+              const tenant = (ej as any)?.tenant_name ?? null;
+              const tenantStr = typeof tenant === 'object' && tenant !== null ? (tenant as any)?.value : tenant;
+              if (fname && tenantStr) return `${fname} — tenant: ${String(tenantStr).slice(0, 80)}`;
+              return fname || null;
+            })()
+          }
         />
       )}
     </AppLayout>

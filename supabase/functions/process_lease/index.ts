@@ -631,12 +631,89 @@ GUIDANCE:
 - Confidence reflects your certainty. Use lower values when the document is borderline. False negatives (rejecting a real lease) are worse than false positives — when in doubt, set confidence below 0.85.
 - non_lease_reason: ONE short sentence (under 150 chars) that a finance user would understand. Required when is_lease=false; null otherwise.`;
 
-async function callHaikuForClassification(pdfBase64: string): Promise<Tier2Classification> {
+// Phase 4: fetch recent classification corrections for the workspace
+// to augment the system prompt as few-shot examples. Per-workspace
+// in-context learning at zero retraining cost. Capped at 10 most
+// recent corrections to keep prompt size bounded.
+const MAX_FEW_SHOT_CORRECTIONS = 10;
+
+interface ClassificationCorrectionRow {
+  original_classification: any;
+  corrected_classification: any;
+  correction_type: string;
+  user_note: string | null;
+  document_summary: string | null;
+}
+
+async function fetchRecentClassificationCorrections(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  workspaceId: string,
+): Promise<ClassificationCorrectionRow[]> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('classification_corrections')
+      .select('original_classification, corrected_classification, correction_type, user_note, document_summary')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(MAX_FEW_SHOT_CORRECTIONS);
+    if (error) {
+      console.warn('[Phase4] correction fetch failed:', error.message);
+      return [];
+    }
+    return (data ?? []) as ClassificationCorrectionRow[];
+  } catch (err) {
+    console.warn('[Phase4] correction fetch threw:', err);
+    return [];
+  }
+}
+
+function buildCorrectionsAddendum(corrections: ClassificationCorrectionRow[]): string {
+  if (corrections.length === 0) return '';
+
+  const examples = corrections
+    .map((c, i) => {
+      const orig = c.original_classification ?? {};
+      const corr = c.corrected_classification ?? {};
+      const docSummary = c.document_summary ? ` (document: "${c.document_summary}")` : '';
+      const note = c.user_note ? `\n     Reviewer reasoning: ${c.user_note}` : '';
+      return `  ${i + 1}.${docSummary}\n     AI said: ${JSON.stringify({
+        is_lease: orig.is_lease,
+        asset_type: orig.asset_type,
+        lease_type: orig.lease_type,
+      })}\n     Corrected to: ${JSON.stringify({
+        is_lease: corr.is_lease,
+        asset_type: corr.asset_type,
+        lease_type: corr.lease_type,
+      })}${note}`;
+    })
+    .join('\n');
+
+  return `\n\nWORKSPACE CORRECTION HISTORY — recent classifications from this team that reviewers corrected. These reflect this workspace's specific conventions and document patterns. Adjust your judgment for similar documents from this team:\n${examples}\n`;
+}
+
+async function callHaikuForClassification(
+  pdfBase64: string,
+  // Optional: when provided, recent corrections from this workspace
+  // are fetched and injected as few-shot examples. Per-workspace
+  // in-context learning. supabaseAdmin is required for the lookup;
+  // when omitted, classification proceeds without history.
+  supabaseAdmin: ReturnType<typeof createClient> | null = null,
+  workspaceId: string | null = null,
+): Promise<Tier2Classification> {
   console.log('[Haiku:classify] Running Tier 2 classification...');
+
+  let systemPrompt = TIER2_CLASSIFY_SYSTEM;
+  if (supabaseAdmin && workspaceId) {
+    const corrections = await fetchRecentClassificationCorrections(supabaseAdmin, workspaceId);
+    if (corrections.length > 0) {
+      systemPrompt = systemPrompt + buildCorrectionsAddendum(corrections);
+      console.log(`[Haiku:classify] Augmented prompt with ${corrections.length} workspace corrections`);
+    }
+  }
 
   const content = await callAnthropicAPIWithPDF(
     'claude-haiku-4-5-20251001',
-    TIER2_CLASSIFY_SYSTEM,
+    systemPrompt,
     pdfBase64,
     'Classify this document and return the JSON.',
     256,
@@ -1572,7 +1649,11 @@ serve(async (req) => {
       // upload was a mistake.
       let executedTier2: Tier2Classification;
       try {
-        executedTier2 = await callHaikuForClassification(executedPdfBase64);
+        executedTier2 = await callHaikuForClassification(
+          executedPdfBase64,
+          supabaseAdmin,
+          existingLease.workspace_id ?? null,
+        );
       } catch (err) {
         console.warn('[process_lease] Executed-path Tier 2 classification failed, failing open:', err);
         executedTier2 = {
@@ -1906,7 +1987,11 @@ serve(async (req) => {
     // soft warnings, parent-lease detection, override + corrections.
     let tier2Classification: Tier2Classification;
     try {
-      tier2Classification = await callHaikuForClassification(pdfBase64);
+      tier2Classification = await callHaikuForClassification(
+        pdfBase64,
+        supabaseAdmin,
+        resolvedWorkspaceId ?? null,
+      );
     } catch (err) {
       // Network or API failure on the classification call — fail
       // open. Tier 1 will run and catch genuine non-leases via
