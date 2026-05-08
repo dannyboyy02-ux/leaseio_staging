@@ -142,7 +142,7 @@
       "per_month": "/mes",
       "per_year": "/año",
       "get_started": "Comenzar",
-      "start_trial": "Prueba Gratis",
+      "start_trial": "Prueba Gratis de 7 Días",
       "lease": "arrendamiento",
       "leases": "arrendamientos",
       "custom": "¿Necesita más?",
@@ -582,10 +582,15 @@
     "popular": "Popular",
     "per_month": "/mes",
     "downgrade": "Degradar",
-    "free_tier": "Nivel Gratis",
+    "free_tier": "Plan Inicial",
     "leases": "arrendamientos",
     "lease": "arrendamiento",
-    "paid": "Pagado"
+    "paid": "Pagado",
+    "trial_banner_title": "Estás en una prueba gratuita de 7 días",
+    "trial_banner_desc": "Se cobrará tu tarjeta el {{date}}. Cancela en cualquier momento antes de esa fecha para evitar cargos.",
+    "past_due_banner_title": "Pago fallido",
+    "past_due_banner_desc": "No pudimos procesar tu pago más reciente. Actualiza tu método de pago para mantener activa tu suscripción.",
+    "update_payment_method": "Actualizar Método de Pago"
   },
   "workspace": {
     "title": "Configuración del Espacio de Trabajo",

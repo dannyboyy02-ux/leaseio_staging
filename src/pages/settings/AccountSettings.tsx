@@ -39,7 +39,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { PLANS, PLAN_ORDER, isUpgrade, normalizePlanId } from '@/config/pricing';
+import { ANNUAL_DISCOUNT_PERCENT, PLANS, PLAN_ORDER, isUpgrade, normalizePlanId } from '@/config/pricing';
 import type { SubscriptionPlan } from '@/types';
 
 const timezones = [
@@ -151,18 +151,31 @@ export default function AccountSettings() {
   const [isManagingPayment, setIsManagingPayment] = useState(false);
   const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('profile');
+  // Billing interval selection for the in-app upgrade flow. Defaults
+  // monthly; can be set to 'annual' via the toggle on the plan grid OR
+  // pre-armed via ?billing= when arriving from onboarding.
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
+  const [autoCheckoutFired, setAutoCheckoutFired] = useState(false);
 
   // Handle URL params for tab switching
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab) setActiveTab(tab);
-    
+
     const checkout = searchParams.get('checkout');
     if (checkout === 'success') {
       toast.success('Subscription activated successfully!');
       refreshProfile();
     } else if (checkout === 'canceled') {
       toast.info('Checkout was canceled');
+    }
+
+    // Pre-arm billing interval from onboarding handoff. Stays in state
+    // even after the param clears, so subsequent upgrades respect the
+    // user's original landing-page choice.
+    const billing = searchParams.get('billing');
+    if (billing === 'annual' || billing === 'monthly') {
+      setBillingInterval(billing);
     }
   }, [searchParams, refreshProfile]);
 
@@ -373,10 +386,10 @@ export default function AccountSettings() {
 
     setIsUpgrading(planId);
     setConfirmUpgradePlan(null);
-    
+
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { planId, workspaceId: workspace.id },
+        body: { planId, workspaceId: workspace.id, billingInterval },
       });
 
       if (error) throw error;
@@ -386,11 +399,32 @@ export default function AccountSettings() {
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
-      toast.error('Failed to start checkout. Please try again.');
+      const msg = error instanceof Error ? error.message : 'Failed to start checkout. Please try again.';
+      toast.error(msg);
     } finally {
       setIsUpgrading(null);
     }
   };
+
+  // Auto-trigger checkout when arriving from onboarding with
+  // ?autoCheckout=1. Fires once per mount; further visits to the
+  // subscription tab require manual upgrade. The param is cleared
+  // from the URL after firing so refresh doesn't retrigger before
+  // the webhook has updated subscription_status.
+  useEffect(() => {
+    if (autoCheckoutFired) return;
+    if (searchParams.get('autoCheckout') !== '1') return;
+    if (!workspace?.id) return;
+    if ((workspace.subscriptionStatus === 'active' || workspace.subscriptionStatus === 'trialing')) return;
+
+    setAutoCheckoutFired(true);
+    proceedWithCheckout('business');
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('autoCheckout');
+    navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace?.id, workspace?.subscriptionStatus, searchParams, autoCheckoutFired]);
 
   const handleManagePayment = async () => {
     setIsManagingPayment(true);
@@ -804,6 +838,49 @@ export default function AccountSettings() {
 
           {/* Subscription */}
           <TabsContent value="subscription" className="space-y-6 mt-0">
+            {/* Trial banner — visible while subscription is in Stripe's trial window. */}
+            {workspace?.subscriptionStatus === 'trialing' && workspace?.subscriptionPeriodEnd && (
+              <Card className="border-accent/50 bg-accent/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">{t('account.trial_banner_title')}</CardTitle>
+                  <CardDescription>
+                    {t('account.trial_banner_desc', {
+                      date: new Date(workspace.subscriptionPeriodEnd).toLocaleDateString(
+                        language === 'es' ? 'es-419' : 'en-US',
+                        { month: 'long', day: 'numeric', year: 'numeric' },
+                      ),
+                    })}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            )}
+
+            {/* Past-due / unpaid / incomplete states — payment failed; user must update method. */}
+            {workspace?.subscriptionStatus &&
+              ['past_due', 'unpaid', 'incomplete'].includes(workspace.subscriptionStatus) && (
+                <Card className="border-destructive/60 bg-destructive/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base text-destructive">
+                      {t('account.past_due_banner_title')}
+                    </CardTitle>
+                    <CardDescription>
+                      {t('account.past_due_banner_desc')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleManagePayment}
+                      disabled={isManagingPayment}
+                    >
+                      {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      {t('account.update_payment_method')}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
             {/* Current Plan & Usage */}
             <div className="grid gap-6 lg:grid-cols-2">
               <Card>
@@ -889,7 +966,24 @@ export default function AccountSettings() {
 
             {/* Plans */}
             <div>
-              <h2 className="text-lg font-semibold mb-4">{t('account.available_plans')}</h2>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h2 className="text-lg font-semibold">{t('account.available_plans')}</h2>
+                <div className="flex items-center gap-3 text-sm">
+                  <span className={cn('font-medium', billingInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground')}>
+                    {t('landing.pricing.monthly')}
+                  </span>
+                  <Switch
+                    checked={billingInterval === 'annual'}
+                    onCheckedChange={(v) => setBillingInterval(v ? 'annual' : 'monthly')}
+                  />
+                  <span className={cn('font-medium', billingInterval === 'annual' ? 'text-foreground' : 'text-muted-foreground')}>
+                    {t('landing.pricing.annual')}
+                  </span>
+                  <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                    {t('landing.pricing.save')} {ANNUAL_DISCOUNT_PERCENT}%
+                  </span>
+                </div>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {PLAN_ORDER.map((planId, index) => {
                   const plan = PLANS[planId];
@@ -919,14 +1013,10 @@ export default function AccountSettings() {
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base">{t(plan.nameKey)}</CardTitle>
                         <div className="flex items-baseline gap-1 mt-1">
-                          {plan.price.monthly === 0 ? (
-                            <span className="text-2xl font-bold">{t('account.free')}</span>
-                          ) : (
-                            <>
-                              <span className="text-2xl font-bold">${plan.price.monthly}</span>
-                              <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
-                            </>
-                          )}
+                          <span className="text-2xl font-bold">
+                            ${billingInterval === 'annual' ? Math.round(plan.price.annual / 12) : plan.price.monthly}
+                          </span>
+                          <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {plan.maxActiveLeases === -1 ? 'Unlimited' : plan.maxActiveLeases} {plan.maxActiveLeases === 1 ? t('account.lease') : t('account.leases')}

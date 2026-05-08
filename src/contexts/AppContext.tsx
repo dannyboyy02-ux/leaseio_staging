@@ -96,7 +96,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at";
+        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at, subscription_status, billing_interval, subscription_period_end";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -219,6 +219,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         updatedAt:
           resolvedWorkspace.updated_at || resolvedWorkspace.created_at || profile.created_at,
+        subscriptionStatus:
+          (resolvedWorkspace as any).subscription_status ?? null,
+        billingInterval:
+          (resolvedWorkspace as any).billing_interval ?? null,
+        subscriptionPeriodEnd:
+          (resolvedWorkspace as any).subscription_period_end ?? null,
       });
 
       try {

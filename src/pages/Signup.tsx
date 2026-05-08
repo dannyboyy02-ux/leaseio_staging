@@ -36,6 +36,7 @@ export default function Signup() {
   const { t } = useAppTranslation();
   const [searchParams] = useSearchParams();
   const preselectedPlan = searchParams.get('plan') || 'starter';
+  const preselectedBilling = searchParams.get('billing') === 'annual' ? 'annual' : 'monthly';
   const planDisplayName = PLAN_DISPLAY_NAMES[preselectedPlan] || 'Starter';
   
   const [formData, setFormData] = useState({
@@ -150,7 +151,7 @@ export default function Signup() {
     });
 
     setIsLoading(false);
-    navigate('/app/onboarding');
+    navigate(`/app/onboarding?plan=${preselectedPlan}&billing=${preselectedBilling}`);
   };
 
   return (

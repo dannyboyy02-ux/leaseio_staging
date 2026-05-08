@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
 import { Button } from '@/components/ui/button';
@@ -15,13 +15,19 @@ import { cn } from '@/lib/utils';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export default function Onboarding() {
+  const [searchParams] = useSearchParams();
+  // Plan + billing interval are propagated from the landing page
+  // (PricingSection) through Signup. Both default to safe values
+  // ('starter', 'monthly') when the query params are missing.
+  const initialPlan: SubscriptionPlan =
+    searchParams.get('plan') === 'business' ? 'business' : 'starter';
+  const initialBilling: 'monthly' | 'annual' =
+    searchParams.get('billing') === 'annual' ? 'annual' : 'monthly';
+
   const [step, setStep] = useState(1);
   const [workspaceName, setWorkspaceName] = useState('');
-  // Match Signup default: 'starter' is the canonical entry-tier in
-  // src/config/pricing.ts (SubscriptionPlan = 'starter' | 'business').
-  // 'free' was off-spec and would fail TS narrowing; normalizePlanId
-  // would coerce it back to 'starter' anyway.
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>('starter');
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(initialPlan);
+  const [selectedBilling] = useState<'monthly' | 'annual'>(initialBilling);
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
   const { refreshProfile, workspace, isLoading: appLoading } = useApp();
@@ -114,7 +120,14 @@ export default function Onboarding() {
       });
 
       await refreshProfile();
-      navigate(selectedPlan === 'business' ? '/app/settings/account?tab=subscription' : '/app/leases');
+      // For Business signups, route to the subscription tab pre-armed
+      // with billing-interval intent so the upgrade modal opens to the
+      // user's choice from the landing page.
+      navigate(
+        selectedPlan === 'business'
+          ? `/app/settings/account?tab=subscription&billing=${selectedBilling}&autoCheckout=1`
+          : '/app/leases',
+      );
     } catch (error: any) {
       toast({
         title: t('onboarding_flow.error_title'),

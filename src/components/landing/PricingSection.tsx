@@ -40,14 +40,8 @@ export function PricingSection() {
                 <CardHeader className="pb-2 pt-6 text-center">
                   <h3 className="font-display text-xl font-bold text-foreground">{t(plan.nameKey)}</h3>
                   <div className="mt-3">
-                    {display === 0 ? (
-                      <span className="text-3xl font-bold text-foreground">{t('landing.pricing.free')}</span>
-                    ) : (
-                      <>
-                        <span className="text-3xl font-bold text-foreground">${display}</span>
-                        <span className="text-muted-foreground">{t('landing.pricing.per_month')}</span>
-                      </>
-                    )}
+                    <span className="text-3xl font-bold text-foreground">${display}</span>
+                    <span className="text-muted-foreground">{t('landing.pricing.per_month')}</span>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">{t(plan.descriptionKey)}</p>
                 </CardHeader>
@@ -61,7 +55,7 @@ export function PricingSection() {
                     ))}
                   </ul>
                   <Button className="w-full" variant={plan.popular ? 'default' : 'outline'} asChild>
-                    <Link to={`/signup?plan=${plan.id}`}>{t('landing.pricing.start_trial')}</Link>
+                    <Link to={`/signup?plan=${plan.id}&billing=${billingInterval}`}>{t('landing.pricing.start_trial')}</Link>
                   </Button>
                 </CardContent>
               </Card>

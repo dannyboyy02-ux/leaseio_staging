@@ -13,6 +13,12 @@ const PRODUCT_TO_PLAN: Record<string, string> = {
   "prod_TlQhRntCDhkxfK": "business",
 };
 
+// A subscription is "subscribed" while it's actively granting access —
+// active OR trialing. Stripe statuses past_due, unpaid, canceled,
+// incomplete, etc. are NOT treated as subscribed; the UI handles them
+// as failure or grace states.
+const SUBSCRIBED_STATUSES = new Set(["active", "trialing"]);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -41,10 +47,13 @@ serve(async (req) => {
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
 
     if (customers.data.length === 0) {
-      return new Response(JSON.stringify({ 
-        subscribed: false, 
+      return new Response(JSON.stringify({
+        subscribed: false,
         plan: "starter",
-        subscription_end: null 
+        status: null,
+        billing_interval: null,
+        trial_end: null,
+        subscription_end: null,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -52,17 +61,23 @@ serve(async (req) => {
     }
 
     const customerId = customers.data[0].id;
+    // Drop the active-only filter — the previous code missed `trialing`
+    // subscriptions, which after the 7-day trial wiring are the
+    // most common state for new sign-ups during their first week.
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
-      status: "active",
+      status: "all",
       limit: 1,
     });
 
     if (subscriptions.data.length === 0) {
-      return new Response(JSON.stringify({ 
-        subscribed: false, 
+      return new Response(JSON.stringify({
+        subscribed: false,
         plan: "starter",
-        subscription_end: null 
+        status: null,
+        billing_interval: null,
+        trial_end: null,
+        subscription_end: null,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
@@ -72,11 +87,22 @@ serve(async (req) => {
     const subscription = subscriptions.data[0];
     const productId = subscription.items.data[0].price.product as string;
     const plan = PRODUCT_TO_PLAN[productId] ?? "starter";
-    const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
+    const recurringInterval = subscription.items.data[0].price.recurring?.interval;
+    const billingInterval = recurringInterval === "year" ? "annual" : "monthly";
+    const subscribed = SUBSCRIBED_STATUSES.has(subscription.status);
+    const subscriptionEnd = (subscription as any).current_period_end
+      ? new Date((subscription as any).current_period_end * 1000).toISOString()
+      : null;
+    const trialEnd = subscription.trial_end
+      ? new Date(subscription.trial_end * 1000).toISOString()
+      : null;
 
     return new Response(JSON.stringify({
-      subscribed: true,
-      plan,
+      subscribed,
+      plan: subscribed ? plan : "starter",
+      status: subscription.status,
+      billing_interval: billingInterval,
+      trial_end: trialEnd,
       subscription_end: subscriptionEnd,
       subscription_id: subscription.id,
       customer_id: customerId,

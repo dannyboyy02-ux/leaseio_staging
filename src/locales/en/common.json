@@ -142,7 +142,7 @@
       "per_month": "/mo",
       "per_year": "/year",
       "get_started": "Get Started",
-      "start_trial": "Start Free Trial",
+      "start_trial": "Start 7-day Free Trial",
       "lease": "lease",
       "leases": "leases",
       "custom": "Need more?",
@@ -582,10 +582,15 @@
     "popular": "Popular",
     "per_month": "/mo",
     "downgrade": "Downgrade",
-    "free_tier": "Free Tier",
+    "free_tier": "Entry Tier",
     "leases": "leases",
     "lease": "lease",
-    "paid": "Paid"
+    "paid": "Paid",
+    "trial_banner_title": "You're on a 7-day free trial",
+    "trial_banner_desc": "Your card will be charged on {{date}}. Cancel anytime before then to avoid charges.",
+    "past_due_banner_title": "Payment failed",
+    "past_due_banner_desc": "We couldn't process your most recent payment. Update your payment method to keep your subscription active.",
+    "update_payment_method": "Update Payment Method"
   },
   "workspace": {
     "title": "Workspace Settings",

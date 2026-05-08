@@ -42,6 +42,12 @@ export interface Workspace {
   createdAt: string;
   updatedAt: string;
   renewalDate: string;
+  // Subscription state mirrored from Stripe via stripe-webhook. Null
+  // for workspaces that haven't checked out yet (the workspace `plan`
+  // column may be set optimistically in onboarding before payment).
+  subscriptionStatus: string | null;
+  billingInterval: 'monthly' | 'annual' | null;
+  subscriptionPeriodEnd: string | null;
 }
 
 export interface WorkspaceMember {
