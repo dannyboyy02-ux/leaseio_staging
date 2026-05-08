@@ -965,7 +965,19 @@ function mergeOpusOverrides(sonnetMerged: any, opusMerged: any, targetFields: st
  * current users have it — but a revoke flow exists in Settings → Privacy
  * and that revoke must block subsequent extractions.
  */
-async function assertAiConsent(userId: string): Promise<void> {
+async function assertAiConsent(
+  // Passed explicitly because supabaseAdmin is request-scoped (declared
+  // inside serve()). Module-level functions cannot reach it through
+  // lexical scope — verified empirically by a Deno scope test
+  // (2026-05-08). Prior to this fix, the body referenced module-level
+  // supabaseAdmin which would ReferenceError at runtime; the failure
+  // mode happened to be masked because production traffic predating
+  // the two-pass migration used the legacy Azure-DI/OpenAI path that
+  // doesn't go through this helper. Same scope-bug pattern still
+  // exists in extractLeaseDataWithClaude (next).
+  supabaseAdmin: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<void> {
   const { data, error } = await supabaseAdmin
     .from('profiles')
     .select('ai_processing_consent_at')
@@ -982,7 +994,17 @@ async function assertAiConsent(userId: string): Promise<void> {
   }
 }
 
-async function extractLeaseDataWithClaude(pdfBase64: string, workspaceId: string | null = null): Promise<LeaseExtractionResult> {
+async function extractLeaseDataWithClaude(
+  // See assertAiConsent docstring — supabaseAdmin is request-scoped
+  // and must be passed explicitly. The internal risk_templates lookup
+  // below references it; without this parameter the reference would
+  // ReferenceError (silently caught by the try/catch around the
+  // lookup, with the side-effect of always running extraction
+  // without the workspace-specific risk watchlist).
+  supabaseAdmin: ReturnType<typeof createClient>,
+  pdfBase64: string,
+  workspaceId: string | null = null,
+): Promise<LeaseExtractionResult> {
   console.log('[Claude] Starting two-pass native-PDF extraction...');
   const extractionStart = Date.now();
 
@@ -1071,9 +1093,13 @@ async function extractLeaseDataWithClaude(pdfBase64: string, workspaceId: string
   };
 }
 
-// Legacy stub — unused, retained for reference only
+// Legacy stub — unused, retained for reference only. Signature kept
+// loose; if ever called, the module-level supabaseAdmin reference
+// inside extractLeaseDataWithClaude would have already thrown, which
+// is the existing dead-code-path behavior.
 async function _extractLeaseDataWithOpenAI_STUB(pdfBase64: string): Promise<LeaseExtractionResult> {
-  return extractLeaseDataWithClaude(pdfBase64);
+  // @ts-expect-error — legacy stub; supabaseAdmin would be undefined here
+  return extractLeaseDataWithClaude(undefined, pdfBase64);
 }
 
 // Original OpenAI implementation below — retained for reference, not called
@@ -1645,7 +1671,7 @@ serve(async (req) => {
       console.log('[process_lease] Executed: PDF encoded for native extraction');
 
       // Privacy gate before invoking AI extraction.
-      await assertAiConsent(user.id);
+      await assertAiConsent(supabaseAdmin, user.id);
 
       // Tier 2 gate on the executed-document path. Same threshold and
       // fail-open semantics as the new-upload path. Catches users who
@@ -1714,7 +1740,7 @@ serve(async (req) => {
 
       let leaseData: LeaseExtractionResult;
       try {
-        leaseData = await extractLeaseDataWithClaude(executedPdfBase64, existingLease.workspace_id ?? null);
+        leaseData = await extractLeaseDataWithClaude(supabaseAdmin, executedPdfBase64, existingLease.workspace_id ?? null);
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Executed AI extraction failed: ${msg}`);
@@ -1983,7 +2009,7 @@ serve(async (req) => {
     console.log('[process_lease] PDF encoded for native Claude extraction');
 
     // Privacy gate before invoking AI extraction.
-    await assertAiConsent(user.id);
+    await assertAiConsent(supabaseAdmin, user.id);
 
     // ── Tier 2 classification (hard gate) ─────────────────────────
     // Cheap Haiku call before Tier 1 to short-circuit non-lease
@@ -2083,7 +2109,7 @@ serve(async (req) => {
 
     let leaseData: LeaseExtractionResult;
     try {
-      leaseData = await extractLeaseDataWithClaude(pdfBase64, resolvedWorkspaceId ?? null);
+      leaseData = await extractLeaseDataWithClaude(supabaseAdmin, pdfBase64, resolvedWorkspaceId ?? null);
       console.log('[process_lease] Lease data extracted successfully');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
