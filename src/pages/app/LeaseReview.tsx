@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { format } from "date-fns";
 import {
   FileText,
@@ -119,6 +119,20 @@ interface ExtractedJson {
   // user's selection (lease_type, asset_type). Soft warnings only —
   // do not block submission.
   _tier2_warnings?: string[];
+  // Tier 2 Phase 3: candidate parent leases when this upload looks
+  // like an amendment. Populated only when the document was
+  // declared/detected as an amendment AND there are matches in the
+  // workspace by tenant + landlord + property.
+  _parent_lease_candidates?: Array<{
+    id: string;
+    request_title: string | null;
+    tenant_name: string | null;
+    landlord_name: string | null;
+    property_address: string | null;
+    lifecycle_status: string | null;
+    match_score: number;
+    match_reasons: string[];
+  }>;
   _approval?: ApprovalMetadata;
   _amendment_changes?: Array<{
     field: string;
@@ -2496,6 +2510,38 @@ export default function LeaseReview() {
                       leaseEnd={form.lease_end}
                       confidenceScores={confidenceScores}
                     />
+                  )}
+                  {Array.isArray(extractedJson?._parent_lease_candidates) && extractedJson._parent_lease_candidates.length > 0 && (
+                    <div className="rounded-lg border border-purple-300 bg-purple-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-purple-600 mt-0.5 shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-purple-800 text-sm mb-1">Possible Parent Leases</h4>
+                          <p className="text-xs text-purple-700/80 mb-2">
+                            This document looks like an amendment. Based on the extracted parties and property, it may belong to one of these existing leases in the workspace. Confirm the parent lease before finalizing.
+                          </p>
+                          <ul className="text-sm text-purple-700 space-y-2">
+                            {extractedJson._parent_lease_candidates.map((c) => (
+                              <li key={c.id} className="flex items-start gap-2">
+                                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-500" />
+                                <div className="flex-1">
+                                  <Link
+                                    to={`/app/leases/${c.id}/review`}
+                                    className="font-medium underline hover:text-purple-900"
+                                  >
+                                    {c.request_title || c.tenant_name || `Lease ${c.id.slice(0, 8)}`}
+                                  </Link>
+                                  <span className="text-xs text-purple-700/70">
+                                    {' — '}matches on {c.match_reasons.join(' + ')}
+                                    {c.lifecycle_status ? ` · ${c.lifecycle_status}` : ''}
+                                  </span>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
                   )}
                   {Array.isArray(extractedJson?._tier2_warnings) && extractedJson._tier2_warnings.length > 0 && (
                     <div className="rounded-lg border border-blue-300 bg-blue-50 p-4">

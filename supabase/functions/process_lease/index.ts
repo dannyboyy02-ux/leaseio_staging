@@ -451,6 +451,117 @@ const TIER2_REJECT_CONFIDENCE_THRESHOLD = 0.85;
 // noisy to be useful guidance.
 const TIER2_WARNING_CONFIDENCE_THRESHOLD = 0.6;
 
+// ─────────────────────────────────────────────────────────────────────
+// Tier 2 Phase 3: parent-lease auto-detection for amendments
+// ─────────────────────────────────────────────────────────────────────
+//
+// When an upload is classified as an amendment (declared by the user
+// OR detected by Haiku with sufficient confidence), search the same
+// workspace for active master leases whose parties + property
+// plausibly match the extracted ones. Surface top candidates in the
+// review UI so the user can confirm or reassign the parent.
+//
+// Matching strategy:
+//   - Pull all non-archived master leases in the workspace (lease_type
+//     is null OR = 'master'). RLS bypass via service-role; filter
+//     workspace_id explicitly to prevent cross-workspace leakage.
+//   - For each candidate, normalize tenant_name / landlord_name /
+//     property_address (lowercase, strip corp suffixes, collapse
+//     whitespace) and compare against the extracted values. Match
+//     when normalized strings are equal OR one is a substring of the
+//     other (length >= 5 to avoid noise).
+//   - Score = number of matching fields (1, 2, or 3). Filter out
+//     score 0. Return top 5 by score desc.
+
+const CORPORATE_SUFFIX_RE = /\b(llc|inc|incorporated|corp|corporation|co|company|ltd|limited|lp|llp|plc|gmbh|sa|nv|bv|trust)\b\.?/gi;
+
+function normalizeForMatch(s: string | null | undefined): string {
+  if (!s || typeof s !== 'string') return '';
+  return s
+    .toLowerCase()
+    .replace(/[,.&'\-]/g, ' ')
+    .replace(CORPORATE_SUFFIX_RE, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function fieldsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizeForMatch(a);
+  const nb = normalizeForMatch(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  // Substring containment for partial matches (e.g., "ABC Properties" vs
+  // "ABC Properties Holdings"). Min length 5 to avoid 3-char false positives.
+  if (na.length >= 5 && nb.includes(na)) return true;
+  if (nb.length >= 5 && na.includes(nb)) return true;
+  return false;
+}
+
+interface ParentLeaseCandidate {
+  id: string;
+  request_title: string | null;
+  tenant_name: string | null;
+  landlord_name: string | null;
+  property_address: string | null;
+  lifecycle_status: string | null;
+  match_score: number;
+  match_reasons: string[];
+}
+
+async function findParentLeaseCandidates(
+  // Passed explicitly because supabaseAdmin is request-scoped (declared
+  // inside serve()) — matches the pattern used by resolveAuthorizedWorkspaceId.
+  // Other helpers in this file reference module-level supabaseAdmin which
+  // has been a latent scope bug; new code uses the safe injection pattern.
+  supabaseAdmin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  extractedJson: Record<string, unknown>,
+  currentLeaseId: string,
+  maxResults: number = 5,
+): Promise<ParentLeaseCandidate[]> {
+  const tenantNew   = extractValue(extractedJson?.tenant_name      as any) as string | null;
+  const landlordNew = extractValue(extractedJson?.landlord_name    as any) as string | null;
+  const propertyNew = extractValue(extractedJson?.property_address as any) as string | null;
+
+  if (!tenantNew && !landlordNew && !propertyNew) return [];
+
+  const { data: candidates, error } = await supabaseAdmin
+    .from('leases')
+    .select('id, request_title, tenant_name, landlord_name, property_address, lifecycle_status')
+    .eq('workspace_id', workspaceId)
+    .or('lease_type.is.null,lease_type.eq.master')
+    .eq('archived', false)
+    .neq('id', currentLeaseId)
+    .limit(200);
+
+  if (error || !candidates) {
+    console.warn('[Phase3] candidate query failed:', error?.message);
+    return [];
+  }
+
+  const scored: ParentLeaseCandidate[] = [];
+  for (const c of candidates as any[]) {
+    const reasons: string[] = [];
+    if (fieldsMatch(tenantNew, c.tenant_name)) reasons.push('tenant');
+    if (fieldsMatch(landlordNew, c.landlord_name)) reasons.push('landlord');
+    if (fieldsMatch(propertyNew, c.property_address)) reasons.push('property');
+    if (reasons.length === 0) continue;
+    scored.push({
+      id: c.id,
+      request_title: c.request_title,
+      tenant_name: c.tenant_name,
+      landlord_name: c.landlord_name,
+      property_address: c.property_address,
+      lifecycle_status: c.lifecycle_status,
+      match_score: reasons.length,
+      match_reasons: reasons,
+    });
+  }
+
+  scored.sort((a, b) => b.match_score - a.match_score);
+  return scored.slice(0, maxResults);
+}
+
 // Build human-readable mismatch warnings between Haiku's detected
 // classification and what the workflow / user already declared.
 // Empty array if no mismatch or confidence too low. Surfaced in the
@@ -1904,6 +2015,34 @@ serve(async (req) => {
     if (tier2Warnings.length > 0) {
       (leaseData as any)._tier2_warnings = tier2Warnings;
       console.log('[process_lease] Tier 2 warnings:', tier2Warnings);
+    }
+
+    // ── Phase 3: parent-lease auto-detection ──────────────────────
+    // If this upload is an amendment (declared by user OR detected by
+    // Haiku with sufficient confidence), search the workspace for
+    // candidate parent leases by matching tenant + landlord + property.
+    // Surfaces in the review UI; the user remains the authority on
+    // which parent (if any) is correct.
+    const looksLikeAmendment =
+      leaseType === 'amendment' ||
+      (tier2Classification.lease_type === 'amendment' &&
+        tier2Classification.confidence > TIER2_WARNING_CONFIDENCE_THRESHOLD);
+
+    if (looksLikeAmendment && resolvedWorkspaceId) {
+      try {
+        const candidates = await findParentLeaseCandidates(
+          supabaseAdmin,
+          resolvedWorkspaceId,
+          leaseData as unknown as Record<string, unknown>,
+          leaseId,
+        );
+        if (candidates.length > 0) {
+          (leaseData as any)._parent_lease_candidates = candidates;
+          console.log(`[process_lease] Phase 3: ${candidates.length} parent-lease candidates found`);
+        }
+      } catch (err) {
+        console.warn('[process_lease] Phase 3 parent-lease search failed:', err);
+      }
     }
 
     const { warnings: validationWarnings, suggestions: validationSuggestions } = validateLeaseData(leaseData);
