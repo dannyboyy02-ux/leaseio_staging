@@ -445,6 +445,60 @@ interface Tier2Classification {
 }
 
 const TIER2_REJECT_CONFIDENCE_THRESHOLD = 0.85;
+// Soft-warning threshold (Phase 2). Lower bar than rejection: if
+// Haiku has at least moderate confidence about a mismatch, surface
+// the warning. Below this threshold the classifier's view is too
+// noisy to be useful guidance.
+const TIER2_WARNING_CONFIDENCE_THRESHOLD = 0.6;
+
+// Build human-readable mismatch warnings between Haiku's detected
+// classification and what the workflow / user already declared.
+// Empty array if no mismatch or confidence too low. Surfaced in the
+// review UI via extracted_json._tier2_warnings.
+function buildTier2Warnings(
+  classification: Tier2Classification,
+  userLeaseType: string | null,
+  existingLeaseAssetType: string | null,
+): string[] {
+  const warnings: string[] = [];
+  if (classification.confidence < TIER2_WARNING_CONFIDENCE_THRESHOLD) return warnings;
+
+  // lease_type mismatch ('master' vs 'amendment')
+  if (
+    classification.lease_type &&
+    userLeaseType &&
+    classification.lease_type !== userLeaseType
+  ) {
+    if (classification.lease_type === 'amendment' && userLeaseType === 'master') {
+      warnings.push(
+        'This document references an existing lease and looks like an amendment, but it was uploaded as a master lease. Confirm before finalizing.',
+      );
+    } else if (classification.lease_type === 'master' && userLeaseType === 'amendment') {
+      warnings.push(
+        'This document looks like a standalone master lease, but it was uploaded as an amendment. Confirm the parent-lease relationship before finalizing.',
+      );
+    }
+  }
+
+  // asset_type mismatch (only meaningful when we have an existing
+  // workflow-set asset_type to compare against)
+  if (
+    classification.asset_type &&
+    existingLeaseAssetType &&
+    classification.asset_type !== existingLeaseAssetType
+  ) {
+    const friendly = (raw: string) =>
+      raw === 'real_estate' ? 'real estate'
+      : raw === 'equipment' ? 'equipment'
+      : raw === 'vehicle' ? 'vehicle'
+      : raw;
+    warnings.push(
+      `Lease record is set to ${friendly(existingLeaseAssetType)} but this document looks like a ${friendly(classification.asset_type)} lease. Confirm the asset type before finalizing.`,
+    );
+  }
+
+  return warnings;
+}
 
 const TIER2_CLASSIFY_SYSTEM = `You are a document classifier specialized in commercial leases. Your job is to determine whether the document is a lease (rental agreement for real estate, equipment, or vehicles) or some other type of document.
 
@@ -1325,7 +1379,7 @@ serve(async (req) => {
 
       const { data: existingLease, error: fetchError } = await supabaseAdmin
         .from('leases')
-        .select('id, user_id, workspace_id, lifecycle_status, current_monthly_rent, monthly_payment, lease_start, lease_end, tenant_name, landlord_name, model_locked')
+        .select('id, user_id, workspace_id, lifecycle_status, current_monthly_rent, monthly_payment, lease_start, lease_end, tenant_name, landlord_name, model_locked, asset_type')
         .eq('id', targetLeaseId)
         .single();
 
@@ -1399,12 +1453,101 @@ serve(async (req) => {
       // Privacy gate before invoking AI extraction.
       await assertAiConsent(user.id);
 
+      // Tier 2 gate on the executed-document path. Same threshold and
+      // fail-open semantics as the new-upload path. Catches users who
+      // accidentally upload an MSA / invoice / wrong PDF as their
+      // "final executed lease" — saves the Opus extraction cost and
+      // gives a clear error before the workspace member realizes the
+      // upload was a mistake.
+      let executedTier2: Tier2Classification;
+      try {
+        executedTier2 = await callHaikuForClassification(executedPdfBase64);
+      } catch (err) {
+        console.warn('[process_lease] Executed-path Tier 2 classification failed, failing open:', err);
+        executedTier2 = {
+          is_lease: true,
+          confidence: 0,
+          asset_type: null,
+          lease_type: null,
+          non_lease_reason: null,
+        };
+      }
+
+      if (
+        executedTier2.is_lease === false &&
+        executedTier2.confidence > TIER2_REJECT_CONFIDENCE_THRESHOLD
+      ) {
+        const reason = executedTier2.non_lease_reason || 'Document does not appear to be a lease.';
+        console.log(`[process_lease] Executed-path Tier 2 rejected lease ${targetLeaseId}: ${reason}`);
+
+        try {
+          const { error: activityErr } = await supabaseAdmin.from('lease_activity_log').insert({
+            lease_id: targetLeaseId,
+            user_id: user.id,
+            activity_type: 'tier2_classification_rejected',
+            details: {
+              classification: executedTier2,
+              threshold: TIER2_REJECT_CONFIDENCE_THRESHOLD,
+              path: 'executed',
+            },
+          });
+          if (activityErr) {
+            console.warn('[process_lease] Executed-path Tier 2 activity-log insert failed:', activityErr.message);
+          }
+        } catch (e) {
+          console.warn('[process_lease] Executed-path Tier 2 activity-log insert threw:', e);
+        }
+
+        // Note: do NOT mark the existing lease 'Failed' — the in-flight
+        // lease should remain workable; only the executed-upload step
+        // is rejected. User can retry with the correct PDF.
+        return new Response(JSON.stringify({
+          ok: false,
+          error: `This document doesn't appear to be a lease. ${reason}`,
+          reason: 'tier2_classification_failed',
+          detail: reason,
+          classification: executedTier2,
+          leaseId: targetLeaseId,
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       let leaseData: LeaseExtractionResult;
       try {
         leaseData = await extractLeaseDataWithClaude(executedPdfBase64, existingLease.workspace_id ?? null);
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
         throw new Error(`Executed AI extraction failed: ${msg}`);
+      }
+
+      // Stamp Tier 2 classification + warnings onto the executed
+      // extraction result so the review UI surfaces mismatches.
+      (leaseData as any)._tier2_classification = executedTier2;
+      const executedWarnings = buildTier2Warnings(
+        executedTier2,
+        null, // executed path doesn't carry a user-declared leaseType (the lease was already created)
+        existingLease.asset_type ?? null,
+      );
+      if (executedWarnings.length > 0) {
+        (leaseData as any)._tier2_warnings = executedWarnings;
+        console.log('[process_lease] Executed-path Tier 2 warnings:', executedWarnings);
+      }
+
+      // Best-effort passed activity log
+      try {
+        const { error: activityErr } = await supabaseAdmin.from('lease_activity_log').insert({
+          lease_id: targetLeaseId,
+          user_id: user.id,
+          activity_type: 'tier2_classification_passed',
+          details: { classification: executedTier2, path: 'executed', warnings: executedWarnings },
+        });
+        if (activityErr) {
+          console.warn('[process_lease] Executed-path Tier 2 passed activity-log insert failed:', activityErr.message);
+        }
+      } catch (e) {
+        console.warn('[process_lease] Executed-path Tier 2 passed activity-log insert threw:', e);
       }
 
       const execMonthlyPayment   = extractValue(leaseData.current_monthly_rent) as number | null;
@@ -1745,9 +1888,23 @@ serve(async (req) => {
       throw error;
     }
 
-    // Stamp the Tier 2 classification onto the extracted JSON for
-    // forensics + Phase 4 correction-recording.
+    // Stamp the Tier 2 classification + soft warnings onto the
+    // extracted JSON for forensics + review UI surfacing + Phase 4
+    // correction-recording.
     (leaseData as any)._tier2_classification = tier2Classification;
+    const tier2Warnings = buildTier2Warnings(
+      tier2Classification,
+      leaseType, // user-declared via FormData ('master' | 'amendment')
+      // New-upload path doesn't have an existingLease asset_type to
+      // compare against (the lease row was just created); pass null
+      // so only lease_type mismatch warnings surface here. Asset-type
+      // mismatch detection runs on the executed path.
+      null,
+    );
+    if (tier2Warnings.length > 0) {
+      (leaseData as any)._tier2_warnings = tier2Warnings;
+      console.log('[process_lease] Tier 2 warnings:', tier2Warnings);
+    }
 
     const { warnings: validationWarnings, suggestions: validationSuggestions } = validateLeaseData(leaseData);
     if (validationWarnings.length > 0) {

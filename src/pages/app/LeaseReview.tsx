@@ -114,6 +114,11 @@ interface ExtractedJson {
   escalation_clauses?: any;
   _validation_warnings?: string[];
   _validation_suggestions?: string[];
+  // Tier 2 classification mismatch warnings. Populated by
+  // process_lease when Haiku's classification disagrees with the
+  // user's selection (lease_type, asset_type). Soft warnings only —
+  // do not block submission.
+  _tier2_warnings?: string[];
   _approval?: ApprovalMetadata;
   _amendment_changes?: Array<{
     field: string;
@@ -2491,6 +2496,27 @@ export default function LeaseReview() {
                       leaseEnd={form.lease_end}
                       confidenceScores={confidenceScores}
                     />
+                  )}
+                  {Array.isArray(extractedJson?._tier2_warnings) && extractedJson._tier2_warnings.length > 0 && (
+                    <div className="rounded-lg border border-blue-300 bg-blue-50 p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-blue-800 text-sm mb-1">Classification Check</h4>
+                          <p className="text-xs text-blue-700/80 mb-2">
+                            The AI classifier flagged possible mismatches between this document and how it was uploaded. Review and confirm before finalizing.
+                          </p>
+                          <ul className="text-sm text-blue-700 space-y-1">
+                            {extractedJson._tier2_warnings.map((warning, i) => (
+                              <li key={i} className="flex items-start gap-2">
+                                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                                <span>{warning}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
                   )}
                   {Array.isArray(extractedJson?._validation_warnings) && extractedJson._validation_warnings.length > 0 && (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
