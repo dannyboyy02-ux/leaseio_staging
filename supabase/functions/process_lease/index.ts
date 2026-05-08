@@ -423,6 +423,97 @@ async function callAnthropicAPIWithPDF(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Tier 2 classification (Phase 1: hard gate on is_lease=false)
+// ─────────────────────────────────────────────────────────────────────
+//
+// Runs BEFORE Tier 1 two-pass extraction. Cheap (~$0.01) Haiku call
+// to determine whether the uploaded document is actually a lease.
+// Hard-rejects only when confidence > TIER2_REJECT_CONFIDENCE_THRESHOLD,
+// to minimize false-negative risk (rejecting a real lease).
+//
+// Phase 2-5 will add: soft warnings on asset/lease-type mismatch,
+// auto-detection of parent leases for amendments, override path with
+// correction recording, in-context learning from prior corrections.
+
+interface Tier2Classification {
+  is_lease: boolean;
+  confidence: number;
+  asset_type: 'real_estate' | 'equipment' | 'vehicle' | 'other' | null;
+  lease_type: 'master' | 'amendment' | null;
+  non_lease_reason: string | null;
+}
+
+const TIER2_REJECT_CONFIDENCE_THRESHOLD = 0.85;
+
+const TIER2_CLASSIFY_SYSTEM = `You are a document classifier specialized in commercial leases. Your job is to determine whether the document is a lease (rental agreement for real estate, equipment, or vehicles) or some other type of document.
+
+Return ONLY valid JSON with this exact shape:
+{
+  "is_lease": boolean,
+  "confidence": number,
+  "asset_type": "real_estate" | "equipment" | "vehicle" | "other" | null,
+  "lease_type": "master" | "amendment" | null,
+  "non_lease_reason": string | null
+}
+
+GUIDANCE:
+- A "lease" is a contract granting one party (lessee/tenant) the right to use property owned by another party (lessor/landlord) in exchange for payment.
+- "master" = standalone primary lease. "amendment" = a document that references and modifies a prior lease.
+- Asset type: real_estate (offices, warehouses, retail, land), equipment (machinery, IT hardware, copiers), vehicles (cars, trucks, fleet).
+- Common NON-leases: invoices, master service agreements (MSAs), NDAs, lease applications (offers to lease, not the lease itself), letters of intent, lease termination/surrender notices, sublease consents, side letters with no lease text, broker agreements, lease audit reports.
+- If a document is partially relevant (e.g., an LOI for a future lease, or a surrender notice for an expiring lease), set is_lease=false with a clear reason.
+- Confidence reflects your certainty. Use lower values when the document is borderline. False negatives (rejecting a real lease) are worse than false positives — when in doubt, set confidence below 0.85.
+- non_lease_reason: ONE short sentence (under 150 chars) that a finance user would understand. Required when is_lease=false; null otherwise.`;
+
+async function callHaikuForClassification(pdfBase64: string): Promise<Tier2Classification> {
+  console.log('[Haiku:classify] Running Tier 2 classification...');
+
+  const content = await callAnthropicAPIWithPDF(
+    'claude-haiku-4-5-20251001',
+    TIER2_CLASSIFY_SYSTEM,
+    pdfBase64,
+    'Classify this document and return the JSON.',
+    256,
+    30_000,
+  );
+
+  try {
+    const parsed = await repairJsonObject(content) as any;
+    const result: Tier2Classification = {
+      is_lease: typeof parsed.is_lease === 'boolean' ? parsed.is_lease : true,
+      confidence: typeof parsed.confidence === 'number'
+        ? Math.max(0, Math.min(1, parsed.confidence))
+        : 0,
+      asset_type:
+        ['real_estate', 'equipment', 'vehicle', 'other'].includes(parsed.asset_type)
+          ? parsed.asset_type
+          : null,
+      lease_type:
+        ['master', 'amendment'].includes(parsed.lease_type)
+          ? parsed.lease_type
+          : null,
+      non_lease_reason: typeof parsed.non_lease_reason === 'string'
+        ? parsed.non_lease_reason.slice(0, 200)
+        : null,
+    };
+    console.log('[Haiku:classify]', JSON.stringify(result));
+    return result;
+  } catch (error) {
+    // On parse failure, fail open (treat as lease, log) rather than
+    // blocking a real upload. Subsequent extraction will catch any
+    // genuine non-lease via empty fields.
+    console.error('[Haiku:classify] Parse failed, failing open:', error);
+    return {
+      is_lease: true,
+      confidence: 0,
+      asset_type: null,
+      lease_type: null,
+      non_lease_reason: null,
+    };
+  }
+}
+
 async function callHaikuForPageMap(pdfBase64: string): Promise<PageMap> {
   console.log('[Haiku] Building page map from native PDF...');
   const system = `You are a lease document classifier. Your only job is to identify which pages contain specific types of information. Do not extract values — only identify page locations.
@@ -1553,6 +1644,90 @@ serve(async (req) => {
     // Privacy gate before invoking AI extraction.
     await assertAiConsent(user.id);
 
+    // ── Tier 2 classification (hard gate) ─────────────────────────
+    // Cheap Haiku call before Tier 1 to short-circuit non-lease
+    // uploads (invoices, MSAs, NDAs, etc.) at ~$0.01 instead of
+    // burning $0.50+ on Opus extraction. Threshold 0.85 — false
+    // negatives are worse than false positives. Phases 2-5 add
+    // soft warnings, parent-lease detection, override + corrections.
+    let tier2Classification: Tier2Classification;
+    try {
+      tier2Classification = await callHaikuForClassification(pdfBase64);
+    } catch (err) {
+      // Network or API failure on the classification call — fail
+      // open. Tier 1 will run and catch genuine non-leases via
+      // empty fields. Don't block the user on a Haiku outage.
+      console.warn('[process_lease] Tier 2 classification failed, failing open:', err);
+      tier2Classification = {
+        is_lease: true,
+        confidence: 0,
+        asset_type: null,
+        lease_type: null,
+        non_lease_reason: null,
+      };
+    }
+
+    if (
+      tier2Classification.is_lease === false &&
+      tier2Classification.confidence > TIER2_REJECT_CONFIDENCE_THRESHOLD
+    ) {
+      const reason = tier2Classification.non_lease_reason || 'Document does not appear to be a lease.';
+      console.log(`[process_lease] Tier 2 rejected lease ${leaseId}: ${reason}`);
+
+      await supabaseAdmin.from('leases').update({
+        status: 'Failed',
+        error_message: `[Tier 2] ${reason}`,
+      }).eq('id', leaseId);
+
+      // Activity-log insert is best-effort. The CHECK constraint
+      // requires migration 20260507240000 — until that's applied to
+      // live, the insert will fail (CHECK violation). Don't block
+      // the rejection response on it.
+      try {
+        const { error: activityErr } = await supabaseAdmin.from('lease_activity_log').insert({
+          lease_id: leaseId,
+          user_id: user.id,
+          activity_type: 'tier2_classification_rejected',
+          details: {
+            classification: tier2Classification,
+            threshold: TIER2_REJECT_CONFIDENCE_THRESHOLD,
+          },
+        });
+        if (activityErr) {
+          console.warn('[process_lease] Tier 2 rejection activity-log insert failed (migration likely not applied):', activityErr.message);
+        }
+      } catch (e) {
+        console.warn('[process_lease] Tier 2 rejection activity-log insert threw:', e);
+      }
+
+      return new Response(JSON.stringify({
+        error: "This document doesn't appear to be a lease",
+        reason: 'tier2_classification_failed',
+        detail: reason,
+        classification: tier2Classification,
+        leaseId,
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Passed the gate (or failed open due to Haiku outage). Log it
+    // best-effort — see migration-drift note above.
+    try {
+      const { error: activityErr } = await supabaseAdmin.from('lease_activity_log').insert({
+        lease_id: leaseId,
+        user_id: user.id,
+        activity_type: 'tier2_classification_passed',
+        details: { classification: tier2Classification },
+      });
+      if (activityErr) {
+        console.warn('[process_lease] Tier 2 passed activity-log insert failed (migration likely not applied):', activityErr.message);
+      }
+    } catch (e) {
+      console.warn('[process_lease] Tier 2 passed activity-log insert threw:', e);
+    }
+
     let leaseData: LeaseExtractionResult;
     try {
       leaseData = await extractLeaseDataWithClaude(pdfBase64, resolvedWorkspaceId ?? null);
@@ -1562,6 +1737,10 @@ serve(async (req) => {
       await supabaseAdmin.from('leases').update({ status: 'Failed', error_message: `AI extraction failed: ${errorMessage}` }).eq('id', leaseId);
       throw error;
     }
+
+    // Stamp the Tier 2 classification onto the extracted JSON for
+    // forensics + Phase 4 correction-recording.
+    (leaseData as any)._tier2_classification = tier2Classification;
 
     const { warnings: validationWarnings, suggestions: validationSuggestions } = validateLeaseData(leaseData);
     if (validationWarnings.length > 0) {
