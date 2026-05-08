@@ -95,8 +95,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         updatedAt: profile.created_at,
       });
 
+      // NOTE: subscription_status and subscription_period_end are
+      // intentionally NOT in this SELECT. Migration
+      // 20260426000003_audit_remediation.sql adds them to workspaces
+      // in the repo, but the column changes were never applied to the
+      // live database (migration drift — see
+      // docs/MIGRATION_DRIFT_REMEDIATION.md and
+      // 20260507230000_workspace_subscription_state.sql). Including
+      // either column makes PostgREST 400 the entire workspace load
+      // and breaks the app for every user.
+      // After the operator runs `supabase db push` to apply the
+      // pending migrations, expand this SELECT to include the missing
+      // columns and update the setWorkspace block below to read them.
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at, subscription_status, billing_interval, subscription_period_end";
+        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at, billing_interval";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -219,12 +231,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
         renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         updatedAt:
           resolvedWorkspace.updated_at || resolvedWorkspace.created_at || profile.created_at,
-        subscriptionStatus:
-          (resolvedWorkspace as any).subscription_status ?? null,
+        // subscriptionStatus + subscriptionPeriodEnd intentionally
+        // null until the pending migration adds those columns to the
+        // live workspaces table (see workspaceSelect comment above).
+        // Trial + past-due banners gracefully degrade — they don't
+        // render when subscriptionStatus is null.
+        subscriptionStatus: null,
         billingInterval:
           (resolvedWorkspace as any).billing_interval ?? null,
-        subscriptionPeriodEnd:
-          (resolvedWorkspace as any).subscription_period_end ?? null,
+        subscriptionPeriodEnd: null,
       });
 
       try {
