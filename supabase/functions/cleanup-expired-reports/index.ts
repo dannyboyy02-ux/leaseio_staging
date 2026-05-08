@@ -16,18 +16,29 @@
 // NULL and lease_activity_log.lease_id is NOT NULL — same Phase 8
 // As-built A6 decision used by generate-portfolio-report).
 //
-// Schedule (when wired in production): daily. Until then, manual
-// invocation works with any authenticated JWT.
+// Schedule: daily at 08:30 UTC, wired via pg_cron in
+// `20260507210000_cleanup_expired_reports_cron.sql`. Manual invocation
+// for testing requires the same x-cron-secret header — there is no
+// JWT fallback by design (the Phase 4 audit-remediation pattern moved
+// scheduled functions off Bearer auth to a deployment-managed secret).
 //
-// AUTH: verify_jwt = true (default). Production cron supplies
-// service-role JWT.
+// AUTH: verify_jwt = false (config.toml override). Caller must present
+// `x-cron-secret: $CLEANUP_EXPIRED_REPORTS_CRON_SECRET`. The secret is
+// set in two places at deploy time:
+//   1. Edge function env: `supabase secrets set CLEANUP_EXPIRED_REPORTS_CRON_SECRET=<value>`
+//   2. Database setting:  `ALTER DATABASE postgres SET app.cleanup_expired_reports_cron_secret = '<value>';`
+// pg_cron reads the database setting and forwards it as the header.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
-  return baseCorsHeaders(origin, "POST, GET, OPTIONS");
+  return {
+    ...baseCorsHeaders(origin, "POST, GET, OPTIONS"),
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  };
 }
 
 function jsonResponse(payload: unknown, status: number, origin: string | null) {
@@ -48,23 +59,19 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRoleKey) {
+  const expectedCronSecret = Deno.env.get("CLEANUP_EXPIRED_REPORTS_CRON_SECRET");
+  if (!supabaseUrl || !serviceRoleKey || !expectedCronSecret) {
     return jsonResponse({ error: "Server configuration error" }, 500, origin);
   }
 
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
+  const providedCronSecret = req.headers.get("x-cron-secret");
+  if (providedCronSecret !== expectedCronSecret) {
     return jsonResponse({ ok: false, error: "Unauthorized", reason: "no_auth" }, 401, origin);
   }
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   });
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-  if (userError || !userData?.user) {
-    return jsonResponse({ ok: false, error: "Invalid authentication", reason: "invalid_auth" }, 401, origin);
-  }
 
   const ranAt = new Date().toISOString();
 

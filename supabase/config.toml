@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.cleanup-expired-reports]
+verify_jwt = false

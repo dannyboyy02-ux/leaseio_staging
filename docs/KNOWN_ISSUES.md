@@ -322,18 +322,36 @@ Tracked here for the next time `delete-workspace` is touched.
 
 ### Item #12: lease_reports artifact cleanup job — RESOLVED 2026-05-07
 
-Shipped `supabase/functions/cleanup-expired-reports/index.ts`. Daily
-cron-style edge function (`verify_jwt = true` default; production
-cron supplies service-role JWT). Selects `lease_reports` where
-`expires_at <= now() AND status != 'expired'`, batches storage
-removes against the `lease-reports` bucket in chunks of 100 across
-both `pdf_storage_path` and `json_storage_path`, marks each row
-`status = 'expired'` (row preserved as audit anchor), and writes a
-`report_expired` activity row for single-lease reports. Portfolio
-reports skip the activity log per Phase 8 As-built A6 (lease_id is
-NULL; lease_activity_log.lease_id is NOT NULL). Production cron
-wiring is a deployment-checklist item — same pattern as the Phase 7
-crons.
+Shipped `supabase/functions/cleanup-expired-reports/index.ts` and
+production cron wiring at
+`supabase/migrations/20260507210000_cleanup_expired_reports_cron.sql`.
+
+Daily 08:30 UTC schedule via `pg_cron` + `pg_net`, mirroring the
+audit-remediated `send-lease-notifications-daily` pattern (migration
+`20260426000003`). Edge function uses `verify_jwt = false` and
+authenticates via an `x-cron-secret` header read from
+`CLEANUP_EXPIRED_REPORTS_CRON_SECRET`; pg_cron forwards the same value
+sourced from `current_setting('app.cleanup_expired_reports_cron_secret', true)`.
+The Bearer-JWT pattern was abandoned mid-implementation when the
+existing wired-cron precedent was found — kept the existing audit-
+remediated pattern for consistency.
+
+Behavior: selects `lease_reports` where `expires_at <= now() AND
+status != 'expired'`, batches storage removes against the
+`lease-reports` bucket in chunks of 100 across both `pdf_storage_path`
+and `json_storage_path`, marks each row `status = 'expired'` (row
+preserved as audit anchor), and writes a `report_expired` activity
+row for single-lease reports. Portfolio reports skip the activity log
+per Phase 8 As-built A6 (lease_id is NULL; lease_activity_log.lease_id
+is NOT NULL).
+
+**Operator deployment steps** (one-time, both must use the same value):
+  1. `supabase secrets set CLEANUP_EXPIRED_REPORTS_CRON_SECRET='<value>'`
+  2. `ALTER DATABASE postgres SET app.cleanup_expired_reports_cron_secret = '<value>';`
+
+If either step is missed the function fails closed (401); pg_cron
+still fires and the rejection shows up in `net._http_response`. No
+data loss either way.
 
 ### Item #13: Synchronous PDF generation soft cap — RESOLVED 2026-05-07
 
