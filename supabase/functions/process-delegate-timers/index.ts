@@ -6,10 +6,15 @@
 // OOO). Idempotent — running multiple times in a window doesn't
 // double-activate.
 //
-// Schedule (when wired in production): hourly. Until then, manual
-// invocation works with any authenticated JWT.
+// Schedule: hourly at :05 UTC, wired via pg_cron in
+// `20260507220000_phase567_crons.sql`. Manual invocation for testing
+// requires the same x-cron-secret header — no JWT fallback.
 //
-// AUTH: verify_jwt = true. Production cron supplies service-role JWT.
+// AUTH: verify_jwt = false (config.toml override). Caller must present
+// `x-cron-secret: $PROCESS_DELEGATE_TIMERS_CRON_SECRET`. The secret is
+// set in two places at deploy time:
+//   1. Edge function env: `supabase secrets set PROCESS_DELEGATE_TIMERS_CRON_SECRET=<value>`
+//   2. Database setting:  `ALTER DATABASE postgres SET app.process_delegate_timers_cron_secret = '<value>';`
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -17,7 +22,11 @@ import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { shouldActivatePolicyDelegate } from "../_shared/approval_chain.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
-  return baseCorsHeaders(origin, "POST, GET, OPTIONS");
+  return {
+    ...baseCorsHeaders(origin, "POST, GET, OPTIONS"),
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-cron-secret",
+  };
 }
 
 function jsonResponse(payload: unknown, status: number, origin: string | null) {
@@ -36,19 +45,17 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ error: "Server configuration error" }, 500, origin);
+  const expectedCronSecret = Deno.env.get("PROCESS_DELEGATE_TIMERS_CRON_SECRET");
+  if (!supabaseUrl || !serviceRoleKey || !expectedCronSecret) {
+    return jsonResponse({ error: "Server configuration error" }, 500, origin);
+  }
 
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
+  const providedCronSecret = req.headers.get("x-cron-secret");
+  if (providedCronSecret !== expectedCronSecret) {
     return jsonResponse({ ok: false, error: "Unauthorized", reason: "no_auth" }, 401, origin);
   }
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-  if (userError || !userData?.user) {
-    return jsonResponse({ ok: false, error: "Invalid authentication", reason: "invalid_auth" }, 401, origin);
-  }
 
   // Pull every pending step with a delegate configured but not yet
   // activated. Filter further in JS (the partial index covers the

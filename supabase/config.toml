@@ -50,3 +50,12 @@ verify_jwt = false
 
 [functions.cleanup-expired-reports]
 verify_jwt = false
+
+[functions.process-delegate-timers]
+verify_jwt = false
+
+[functions.detect-stuck-chains]
+verify_jwt = false
+
+[functions.send-counter-signature-reminder]
+verify_jwt = false

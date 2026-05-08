@@ -373,6 +373,51 @@ minimal guardrail the original entry recommended.
 
 ---
 
+## Cron-wiring follow-ups (2026-05-07)
+
+### Item #14: reroute-audit-sweep + process-pending-reroute-evaluations are not yet on cron
+
+When wiring the rest of the scheduled functions in
+`20260507220000_phase567_crons.sql`, three leaf crons shipped
+(`send-counter-signature-reminder`, `process-delegate-timers`,
+`detect-stuck-chains`). The two reroute-related crons were NOT wired
+in the same pass because both forward the inbound `Authorization`
+header to `resolve-approval-chain` (1054-line sibling function in
+`supabase/functions/resolve-approval-chain/index.ts`).
+
+`resolve-approval-chain` uses `user.id` in five places (lines 169,
+205, 272, 277-279, 723) — workspace-membership authorization gates
+plus `triggered_by` attribution on the audit log. Switching the two
+reroute crons to the `x-cron-secret` pattern leaves no JWT to
+forward, which means safely wiring them requires a service-context
+invocation path in `resolve-approval-chain`.
+
+**Severity:** Medium-deferred. The two crons run fine on manual
+invocation today; the auto-detection of attribute changes that should
+trigger rerouting is currently caught by the BEFORE UPDATE trigger
+on `leases` (see Phase 6 spec) — the `process-pending-reroute-evaluations`
+poller is a backstop. The daily `reroute-audit-sweep` is a
+defense-in-depth scan that detects but does not act, so leaving it
+manual reduces only the catch-rate of stale-policy drift.
+
+**Where to look:**
+  1. `supabase/functions/resolve-approval-chain/index.ts` — extend the
+     auth block to recognize an `x-internal-cron` header (or similar),
+     and skip user-membership checks + null out `triggered_by` when
+     called via that path.
+  2. `supabase/functions/reroute-audit-sweep/index.ts` and
+     `supabase/functions/process-pending-reroute-evaluations/index.ts`
+     — swap Bearer JWT for `x-cron-secret` (per
+     `cleanup-expired-reports`), forward the new internal header to
+     `resolve-approval-chain` instead of `Authorization`.
+  3. `supabase/migrations/<new>_reroute_crons.sql` — add the two
+     schedules.
+
+Both crons need to keep their existing manual-invocation paths usable
+during testing (real users may want to dry-run a reroute audit sweep).
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
