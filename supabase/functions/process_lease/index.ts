@@ -1700,14 +1700,21 @@ serve(async (req) => {
         console.warn('[process_lease] Tier 2 rejection activity-log insert threw:', e);
       }
 
+      // Status 200 (not 422) so supabase-js surfaces the body via
+      // `data` instead of swallowing the message into a generic
+      // FunctionsHttpError. The frontend (LeaseUploadModal etc.)
+      // already checks `result?.error` and throws with the message —
+      // matches the pattern used by create-checkout and other
+      // user-facing edge functions in this codebase.
       return new Response(JSON.stringify({
-        error: "This document doesn't appear to be a lease",
+        ok: false,
+        error: `This document doesn't appear to be a lease. ${reason}`,
         reason: 'tier2_classification_failed',
         detail: reason,
         classification: tier2Classification,
         leaseId,
       }), {
-        status: 422,
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
