@@ -59,3 +59,6 @@ verify_jwt = false
 
 [functions.send-counter-signature-reminder]
 verify_jwt = false
+
+[functions.vendor-health-check]
+verify_jwt = false

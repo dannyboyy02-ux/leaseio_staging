@@ -45,6 +45,7 @@ const PortfolioReportsAdmin = lazy(() => import("./pages/app/PortfolioReportsAdm
 const DisclosureReportLibrary = lazy(() => import("./pages/app/DisclosureReportLibrary"));
 const SignatorReview = lazy(() => import("./pages/app/SignatorReview"));
 const RerouteAuditDashboard = lazy(() => import("./pages/app/RerouteAuditDashboard"));
+const OperationsPage = lazy(() => import("./pages/app/OperationsPage"));
 const ExceptionsDashboard = lazy(() => import("./pages/app/ExceptionsDashboard"));
 const Portfolio = lazy(() => import("./pages/app/Portfolio"));
 const ApprovalQueue = lazy(() => import("./pages/app/ApprovalQueue"));
@@ -249,6 +250,18 @@ const App = () => (
                       <RequireRole allow={canEditWorkspaceSettings}>
                         <ExceptionsDashboard />
                       </RequireRole>
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Operational Monitoring Phase 2 — vendor health,
+                    upcoming renewals, recent alerts. RLS-gated to ops
+                    admins via is_ops_admin helper (LeaseIO HQ
+                    workspace owner/admin only at v1). */}
+                <Route
+                  path="/app/admin/operations"
+                  element={
+                    <ProtectedRoute>
+                      <OperationsPage />
                     </ProtectedRoute>
                   }
                 />
