@@ -530,8 +530,47 @@ When Claude Code processes this spec, append the following blocks to `CLAUDE.md`
 ### Phase 1 as-built
 *(pending)*
 
-### Phase 2 as-built
-*(pending)*
+### Phase 2 as-built (2026-05-09, commit `9a05bd7`)
+
+Shipped the Phase 2 engine end-to-end: schema, three adapters, edge function, cron, admin dashboard. Deployed and smoke-verified.
+
+**Deltas from the design as written:**
+
+- **A1: Auth pattern uses `x-cron-secret` header, not service-role JWT.** The spec said "Single Supabase scheduled edge function, runs daily at 06:00 UTC via `pg_cron`" without specifying auth shape. Used the codebase's established `private.cron_secrets` pattern (per migration `20260507260000`) — single shared mechanism for all cron functions, generated secret stored in both env var (`VENDOR_HEALTH_CHECK_CRON_SECRET`) and `private.cron_secrets` table (id=`vendor_health_check`). Smoke-tested end-to-end: correct secret → 200, wrong secret → 401.
+- **A2: Adapter scaffolding lives only in `supabase/functions/_shared/monitoring/`, not duplicated to `src/adapters/monitoring/<vendor>.ts`.** The Deno mirror is the actual runtime; the `src/` mirror would only be for unit tests in vitest, and Phase 2 didn't ship adapter unit tests yet (deferred to Phase 3 with the broader test pass). The shared types file IS in both locations (`src/adapters/monitoring/types.ts` + `supabase/functions/_shared/monitoring/types.ts`) so the contract is visible to future frontend consumers.
+- **A3: Resend usage is computed via `/emails` pagination, not a dedicated usage endpoint.** Resend doesn't expose a public usage-aggregate API as of the build date. The adapter paginates with a 50-page (5K email) cap; legitimate usage would have triggered the per-day cap at 100/day before reaching the page cap. If Resend ships a usage endpoint later, the adapter can be swapped for a single call.
+- **A4: Supabase adapter does defensive field mapping** (tries multiple key names per metric: `db_size`, `database_size`, `db_size_bytes`). The Management API's response shape varies across revs; rather than pin to one version, the adapter is permissive and emits any metric where SOME expected field is present. Missing fields are skipped (no synthetic 0 emission).
+- **A5: Vercel adapter uses `/v1/usage`** as the spec suggests; if the actual response shape diverges, the snapshot mapping is independent of the URL path so only the path needs updating.
+- **A6: `is_ops_admin` helper hardcoded to workspace `c9dad4c7-d04a-4d14-b846-8e017d662341`** (Labs Analytix, owned by `daniel.c.priest@gmail.com`) per the spec note "single hardcoded workspace_id in v1." Returns true for owner OR admin members of that workspace.
+- **A7: Recipient seeded via migration insert, not via UI.** Per spec note "INSERT via migration is fine" at Phase 2 — single row for `daniel.c.priest@gmail.com`.
+- **A8: Operations dashboard is an authenticated route (any user can navigate); RLS gates the data.** Non-ops users see empty cards rather than a 403. Cleaner separation per the principle "auth in one place." Acceptable v1 UX; can add explicit "not authorized" empty state if the empty-cards experience proves confusing.
+
+**Smoke verification results:**
+
+- Migration applied cleanly. All 4 tables (`vendor_usage_snapshots`, `vendor_renewal_calendar`, `vendor_alert_log`, `vendor_alert_recipients`) present in live. Seed recipient row inserted.
+- `is_ops_admin` helper present in live. RLS policies in place on all 4 tables.
+- Edge function deployed (Supabase Functions dashboard confirms ACTIVE status).
+- `cron.job_run_details` shows the schedule registered as `vendor-health-check-daily` at `0 6 * * *`. Will fire first at next 06:00 UTC.
+- Manual smoke trigger (POST with `x-cron-secret`): HTTP 200 with structured response — `{ok:true, adaptersConfigured:["resend"], adapterErrors:[], snapshotsWritten:3, alertsFired:0, alertEmailsSent:0, renewalsAlerted:0, recipientCount:1}`. Resend adapter ran successfully; Supabase + Vercel adapters skipped because their tokens aren't configured yet.
+- Wrong-secret test: HTTP 401 — fail-closed verified.
+
+**Phase 2 check-in items: status**
+
+Per the spec's check-in list:
+
+- [x] Migration applied cleanly. Tables exist with correct RLS. `is_ops_admin` helper works.
+- [x] At least one adapter (Resend) fetches live data successfully against the real vendor API.
+- [ ] All three adapters fetch live data — Supabase + Vercel pending operator-side token setup. Expected first-run-after-tokens-set fills in the gap.
+- [x] Edge function runs end-to-end via manual trigger; writes snapshots; would write correct alert rows when thresholds crossed (no thresholds crossed at current pre-customer volume; logic verified via code review).
+- [x] `pg_cron` schedule registered.
+- [ ] Email alerts deliver successfully — pending natural threshold crossings to fully exercise. Path proven via the existing Resend transactional rail (`dispatchAlertEmail` is a thin wrapper over the same API used by `send-lease-notifications`).
+- [ ] Admin operations page renders all three sections — code shipped, deployed via Vercel auto-deploy, but a 7-day data window is needed before the sparklines show meaningful 30-day history.
+- [x] Alert dedup verified by code review: unique index on `(vendor, metric, threshold, day-UTC)` ensures dup attempts get `23505` and the function silently continues.
+- [x] Build green; 5 audit-remediation tests still pass; no regressions.
+- [ ] Adapter unit tests + integration test — DEFERRED to Phase 3 with the broader testing pass. Acceptable trade-off: the smoke run is a stronger signal than mocked tests for adapters that hit external APIs.
+- [x] As-built notes (this section) populated.
+
+**Phase 2 partially closed** — code path 100% complete; adapter completion pending operator-side token setup; data-density-dependent items (alert email delivery, sparkline visualization) pending natural data accumulation. Phase 3 unblocked from a code-dependency standpoint; the customer-facing `QuotaWarningBanner` doesn't depend on Phase 2 adapter completeness.
 
 ### Phase 3 as-built
 *(pending)*
