@@ -24,6 +24,13 @@ import {
 import { ResendAdapter } from "../_shared/monitoring/resend.ts";
 import { SupabaseAdapter } from "../_shared/monitoring/supabase.ts";
 import { VercelAdapter } from "../_shared/monitoring/vercel.ts";
+import { SentryAdapter } from "../_shared/monitoring/sentry.ts";
+import { StripeAdapter } from "../_shared/monitoring/stripe.ts";
+import { AnthropicAdapter } from "../_shared/monitoring/anthropic.ts";
+import {
+  pollWorkspaceQuotas,
+  type WorkspaceQuotaSnapshot,
+} from "../_shared/monitoring/workspace_quotas.ts";
 import {
   dispatchAlertEmail,
   renderRenewalEmail,
@@ -105,6 +112,34 @@ serve(async (req) => {
     }));
   } else {
     console.warn("[vendor-health-check] VERCEL_ACCESS_TOKEN not set; skipping Vercel adapter");
+  }
+
+  // Phase 3 adapters
+  const sentryToken = Deno.env.get("SENTRY_AUTH_TOKEN");
+  const sentryOrgSlug = Deno.env.get("SENTRY_ORG_SLUG");
+  if (sentryToken && sentryOrgSlug) {
+    adapters.push(new SentryAdapter({ authToken: sentryToken, orgSlug: sentryOrgSlug, tier: "free" }));
+  } else {
+    console.warn("[vendor-health-check] SENTRY_AUTH_TOKEN or SENTRY_ORG_SLUG not set; skipping Sentry adapter");
+  }
+
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+  if (stripeKey) {
+    adapters.push(new StripeAdapter({ secretKey: stripeKey }));
+  } else {
+    console.warn("[vendor-health-check] STRIPE_SECRET_KEY not set; skipping Stripe webhook health adapter");
+  }
+
+  const anthropicAdminKey = Deno.env.get("ANTHROPIC_ADMIN_API_KEY");
+  if (anthropicAdminKey) {
+    const capRaw = Deno.env.get("ANTHROPIC_MONTHLY_CAP_USD");
+    const cap = capRaw ? Number(capRaw) : null;
+    adapters.push(new AnthropicAdapter({
+      adminApiKey: anthropicAdminKey,
+      monthlyCapUsd: Number.isFinite(cap as number) ? cap : null,
+    }));
+  } else {
+    console.warn("[vendor-health-check] ANTHROPIC_ADMIN_API_KEY not set; skipping Anthropic spend adapter");
   }
 
   // ── Fetch snapshots from each adapter ────────────────────────────
@@ -213,6 +248,93 @@ serve(async (req) => {
     }
   }
 
+  // ── Anthropic burn-rate alert (Phase 3) ──────────────────────────
+  // Compares 24h spend against the trailing 7-day rolling average
+  // for the same metric. Spec says: "alert if > 3× 7-day rolling avg."
+  // Only fires when sufficient history exists (≥7 prior 24h points).
+  let anthropicBurnAlerts = 0;
+  if (allSnapshots.some((s) => s.vendor === "anthropic" && s.metric === "spend_24h_usd")) {
+    const todaySpend = allSnapshots.find((s) => s.vendor === "anthropic" && s.metric === "spend_24h_usd")!;
+    const { data: prior } = await supabaseAdmin
+      .from("vendor_usage_snapshots")
+      .select("current_value, recorded_at")
+      .eq("vendor", "anthropic")
+      .eq("metric", "spend_24h_usd")
+      .lt("recorded_at", ranAt)
+      .order("recorded_at", { ascending: false })
+      .limit(7);
+    const priorRows = (prior ?? []) as Array<{ current_value: number }>;
+    if (priorRows.length >= 7) {
+      const avg = priorRows.reduce((s, r) => s + Number(r.current_value), 0) / priorRows.length;
+      if (avg > 0 && todaySpend.current_value > avg * 3) {
+        const { error: burnErr } = await supabaseAdmin.from("vendor_alert_log").insert({
+          vendor: "anthropic",
+          metric: "spend_24h_usd_burn_rate",
+          threshold_crossed: "critical",
+          current_value: todaySpend.current_value,
+          limit_value: avg * 3,
+          pct_of_limit: Math.round((todaySpend.current_value / (avg * 3)) * 10000) / 100,
+          upgrade_suggestion: `Anthropic 24h spend ($${todaySpend.current_value}) is more than 3× the 7-day rolling average ($${Math.round(avg * 100) / 100}). Audit recent process_lease invocations for runaway loops or compromised keys.`,
+          upgrade_url: "https://console.anthropic.com/settings/usage",
+        });
+        if (!burnErr) {
+          anthropicBurnAlerts++;
+          if (recipients.length > 0 && resendKey) {
+            const { subject, body_text } = renderThresholdEmail({
+              vendor: "anthropic",
+              metric: "spend_24h_usd_burn_rate",
+              threshold: "critical",
+              current_value: todaySpend.current_value,
+              limit_value: avg * 3,
+              pct_of_limit: (todaySpend.current_value / (avg * 3)) * 100,
+              tier: "pay-as-you-go",
+              upgrade_suggestion: `24h spend exceeds 3× the 7-day rolling average. Audit immediately.`,
+              upgrade_url: "https://console.anthropic.com/settings/usage",
+              ops_dashboard_url: OPS_DASHBOARD_URL,
+            });
+            await dispatchAlertEmail(
+              { recipients, subject, body_text },
+              { resendApiKey: resendKey },
+            );
+            alertEmailsSent++;
+          }
+        }
+      }
+    }
+  }
+
+  // ── Workspace quota pass (Phase 3) ───────────────────────────────
+  // Per-workspace usage snapshots feed the customer-facing
+  // QuotaWarningBanner. Independent of the vendor adapters; a
+  // workspace iteration writes to workspace_quota_snapshots, not
+  // vendor_usage_snapshots.
+  let workspaceSnapshotsWritten = 0;
+  try {
+    const wsSnapshots = await pollWorkspaceQuotas(supabaseAdmin);
+    if (wsSnapshots.length > 0) {
+      const wsRows = wsSnapshots.map((s) => ({
+        workspace_id: s.workspace_id,
+        metric: s.metric,
+        current_value: s.current_value,
+        limit_value: s.limit_value,
+        pct_of_limit: s.pct_of_limit,
+        tier: s.tier,
+        category: s.category,
+        metadata: s.metadata ?? {},
+      }));
+      const { error: wsErr, count: wsCount } = await supabaseAdmin
+        .from("workspace_quota_snapshots")
+        .insert(wsRows, { count: "exact" });
+      if (wsErr) {
+        console.error("[vendor-health-check] workspace_quota insert failed:", wsErr.message);
+      } else {
+        workspaceSnapshotsWritten = wsCount ?? wsRows.length;
+      }
+    }
+  } catch (err) {
+    console.error("[vendor-health-check] workspace_quota pass threw:", err);
+  }
+
   // ── Renewal calendar pass ────────────────────────────────────────
   const today = new Date(ranAt.slice(0, 10));
   const { data: renewals } = await supabaseAdmin
@@ -265,7 +387,9 @@ serve(async (req) => {
       adaptersConfigured: adapters.map((a) => a.vendor),
       adapterErrors,
       snapshotsWritten,
+      workspaceSnapshotsWritten,
       alertsFired,
+      anthropicBurnAlerts,
       alertEmailsSent,
       renewalsAlerted,
       recipientCount: recipients.length,
