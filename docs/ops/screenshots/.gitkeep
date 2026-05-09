@@ -1,0 +1,5 @@
+Screenshots for Phase 1 hardening go here:
+- anthropic-spend-cap-<date>.png
+- (other vendor configurations as Phase 2/3 add them)
+
+This .gitkeep ensures the directory exists in git history before the first screenshot is committed.
