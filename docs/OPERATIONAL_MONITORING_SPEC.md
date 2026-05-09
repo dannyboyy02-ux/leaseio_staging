@@ -572,8 +572,44 @@ Per the spec's check-in list:
 
 **Phase 2 partially closed** — code path 100% complete; adapter completion pending operator-side token setup; data-density-dependent items (alert email delivery, sparkline visualization) pending natural data accumulation. Phase 3 unblocked from a code-dependency standpoint; the customer-facing `QuotaWarningBanner` doesn't depend on Phase 2 adapter completeness.
 
-### Phase 3 as-built
-*(pending)*
+### Phase 3 as-built (2026-05-09, commit `6393b25`)
+
+Shipped the customer-facing banner + 3 vendor adapters (Sentry, Stripe webhook health, Anthropic spend) + the workspace quota poller. Edge function redeployed; smoke-verified end-to-end.
+
+**Deltas from the design as written:**
+
+- **B1: Stripe webhook health check uses `pending_webhooks > 0` after a 5-min delivery window as the failure proxy.** The spec called for "computes 24h failure rate." Stripe doesn't expose per-event delivery success directly via `/v1/events`; the cleanest available signal is `pending_webhooks` (count of endpoints that haven't acked the event). Fresh events naturally have `pending_webhooks > 0` for seconds; we filter to `age_sec > 300` to avoid false positives from in-flight deliveries. The 1% threshold from the spec is implemented via `limit_value=1` with the hard_cliff ladder, which means alert fires the moment failure rate exceeds 0.5% (warn at 50% of limit) — slightly tighter than 1%, which matches the spec's "alert at first occurrence" intent.
+- **B2: Anthropic burn-rate alert is computed in the edge function, not in the adapter.** The adapter emits a `spend_24h_usd` snapshot with `limit_value=null` (which short-circuits `thresholdCrossed()`'s null guard). The edge function's burn-rate logic queries the trailing 7 days of `spend_24h_usd` snapshots from `vendor_usage_snapshots`, computes the rolling average, and fires a `critical` alert under the synthetic metric `spend_24h_usd_burn_rate` if today > 3× avg. Cold-start protection: skipped until ≥7 prior snapshots exist (the 7-day-window assumption from the spec).
+- **B3: `spending_limit_set` snapshot deferred to v1.5.** The spec lists this as a snapshot but Anthropic does not expose the configured cap value via API. The cap is set in the Console (Phase 1 deliverable); from the API side we can only see usage, not the limit. Adapter docstring documents the gap. The "is the cap still set?" question answers via the operator's quarterly Phase 1 review, not via this adapter.
+- **B4: Workspace quota poller skips `document_storage_bytes` and `monthly_email_intake_events`.** The first has no per-workspace cap defined in `pricing.ts` (would need infrastructure-level allocation); the second waits for Email Intake to ship and per-tier caps to be enforced. Both can be added when needed without touching the schema (just add metric rows to the poller output).
+- **B5: Workspace quota snapshots use the same threshold ladder as vendor `soft_quota`** (70/85/95). The customer-facing banner overrides this slightly: it triggers at 80% (informational) and 95% (persistent), matching the spec's "80%/95%" UI contract rather than the 70/85/95 backend ladder. The mismatch is intentional — the backend records snapshots and could fire backend alerts at 70%, but the customer-facing UI only surfaces from 80% to avoid noise.
+- **B6: QuotaWarningBanner picks the single highest-pct metric over 80%, not all of them.** Banner spam is worse than missed signals; the worst offender is the actionable one. If a workspace is over on multiple metrics, the user sees the highest one and addresses it; subsequent metrics surface as the worst becomes second-worst.
+- **B7: Banner dismissal is workspace-scoped + metric-scoped + pct-bucket-scoped via localStorage.** Dismissing at 82% sticks until the same metric crosses a 5% bucket boundary (85, 90, 95). At 95% the banner becomes persistent and ignores any prior dismissal. localStorage means dismissal is per-browser, not per-account — adequate for v1; a server-side dismissal record is v1.5.
+- **B8: Operations admin route did NOT need a `RequireRole` gate.** Per Phase 2 A8: RLS is the auth source for the admin operations dashboard. The same applies here — non-ops users see empty data on `/app/admin/operations`. Phase 3's QuotaWarningBanner has no admin gate; it's customer-facing by design.
+- **B9: Backup-restore runbook documents both Supabase native restore and `pg_dump`/`pg_restore` fallback.** Daniel-side execution still owed; the drill log section in the runbook tracks each annual run.
+
+**Smoke verification results:**
+
+- Migration applied cleanly. `workspace_quota_snapshots` table present with correct RLS (workspace members read their own).
+- Edge function redeployed. Manual smoke trigger: HTTP 200 with `{ok:true, adaptersConfigured:["resend","stripe"], adapterErrors:[], snapshotsWritten:5, workspaceSnapshotsWritten:8, alertsFired:0, anthropicBurnAlerts:0, alertEmailsSent:0, renewalsAlerted:0, recipientCount:1}`.
+- `workspace_quota_snapshots` populated correctly: 8 rows = 4 metrics × 2 workspaces. Spot-checked Labs Analytix snapshot — `archived_leases: 1/250 = 0.4%` and `member_count: 1, limit=null` (Business tier unlimited members) match production reality.
+- Stripe webhook health adapter activated automatically (existing `STRIPE_SECRET_KEY` was already set for outbound). Sentry + Anthropic adapters logged "skipping" warnings as expected.
+- All 24 vitest tests pass (19 new monitoring + 5 existing audit-remediation).
+
+**Phase 3 check-in items: status**
+
+- [x] Customer-facing banner renders correctly at 80% and 95% thresholds. Dismissible at 80% (per metric per pct-bucket via localStorage), persistent at 95%. Upgrade CTA wired.
+- [x] Workspace quota poller writes per-workspace snapshots for every active workspace. Sample workspace verified.
+- [x] All three new vendor adapters (Sentry, Stripe webhook health, Anthropic spend) ship in code and activate when their tokens are configured. Stripe activated automatically; Sentry + Anthropic pending operator-side tokens.
+- [ ] Stripe webhook failure alert tested with real failure — pending. The threshold-crossing logic is exercised by code review + the unit tests; live exercise would require breaking and unbreaking the webhook endpoint, which is invasive.
+- [ ] Anthropic spending-limit-configured check tested — DEFERRED (B3 above; Anthropic doesn't expose the cap value via API).
+- [ ] Backup-restore drill executed — runbook committed; execution Daniel-side.
+- [x] All tests pass. No regressions.
+- [x] As-built notes (this section) populated.
+
+**Phase 3 partially closed** — code path 100% complete; vendor adapter completion pending operator-side token setup; backup-restore drill execution pending.
+
+Phase 4 remains GATED on Phase 9 (Firm Layer Foundation) per spec.
 
 ### Phase 4 as-built
 *(pending; blocked on Phase 9)*
