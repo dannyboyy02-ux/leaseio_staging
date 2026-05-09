@@ -190,20 +190,29 @@ Workspace admin can pre-approve a whole domain (e.g., `@yourbroker.com`). Useful
 
 ## 7. Schema design
 
-Three new tables:
+**Updated 2026-05-09** to reflect Decision 3 (domain allowlist + pending-sender queue at v1) and Decision 6 (per-tier daily caps). The original "two new tables + workspaces extension" is now "one new settings table + three event/queue tables." Original `intake_*` columns on `workspaces` migrate to the dedicated `workspace_intake_settings` table per the decisions memo.
 
 ```sql
--- workspaces extension (new column)
-ALTER TABLE public.workspaces
-  ADD COLUMN intake_slug text UNIQUE,
-  ADD COLUMN intake_token text,
-  ADD COLUMN intake_enabled boolean NOT NULL DEFAULT false,
-  ADD COLUMN intake_rate_limit_per_hour integer NOT NULL DEFAULT 20;
+-- Per-workspace intake configuration. One row per workspace, backfilled
+-- at migration time with intake_enabled=false (Decision 5).
+CREATE TABLE public.workspace_intake_settings (
+  workspace_id            uuid PRIMARY KEY REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  -- Random unguessable token (Decision 2). Format: 'intake-' || base32(gen_random_bytes(8))
+  intake_address          text NOT NULL UNIQUE,
+  intake_enabled          boolean NOT NULL DEFAULT false,
+  -- Domain allowlist (Decision 3). Examples: ['joneslang.com', 'cushwake.com'].
+  -- Wildcards permitted at LHS only (e.g., '*.law') — interpreted by edge function.
+  allowed_sender_domains  text[] NOT NULL DEFAULT '{}',
+  -- Per-tier caps (Decision 6). Seeded from tier defaults at row creation;
+  -- support overrides for negotiated customer arrangements.
+  daily_email_cap         integer NOT NULL,
+  monthly_email_cap       integer NOT NULL,  -- 0 = unmetered (Business default)
+  created_at              timestamptz NOT NULL DEFAULT now(),
+  updated_at              timestamptz NOT NULL DEFAULT now()
+);
 
--- the one inbound address per workspace (denormalized from intake_slug+token for indexing)
--- NOT a separate table — kept on workspaces row because every workspace has exactly one.
-
--- audit log of every received email
+-- audit log of every received email (allowlisted senders processed
+-- through this; pending-sender entries land in pending_intake_emails)
 CREATE TABLE public.email_intake_events (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id    uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
@@ -215,7 +224,7 @@ CREATE TABLE public.email_intake_events (
   attachment_count integer NOT NULL DEFAULT 0,
   status          text NOT NULL CHECK (status IN (
     'received', 'processing', 'extracted',
-    'rejected_unknown_sender', 'rejected_no_attachment',
+    'rejected_no_attachment',
     'rejected_non_lease', 'rejected_quota', 'rejected_spam',
     'failed'
   )),
@@ -250,14 +259,53 @@ CREATE INDEX idx_email_intake_attachments_lease
   ON public.email_intake_attachments(lease_id)
   WHERE lease_id IS NOT NULL;
 
--- v2: pending senders (deferred to v2)
--- CREATE TABLE public.email_intake_pending_senders (...);
+-- Pending-sender queue (Decision 3 — promoted to v1 from v2).
+-- Inbound emails from senders NOT in allowed_sender_domains land
+-- here for admin review. 30-day retention; auto-rejected after.
+-- The PDFs are stored in storage with a 'quarantine' prefix until
+-- approved (admin promotes to processing) or auto-rejected (purge).
+CREATE TABLE public.pending_intake_emails (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id        uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  message_id          text,
+  sender_email        text NOT NULL,
+  sender_name         text,
+  sender_domain       text NOT NULL,            -- denormalized for fast allowlist queries
+  subject             text,
+  received_at         timestamptz NOT NULL DEFAULT now(),
+  expires_at          timestamptz NOT NULL DEFAULT (now() + INTERVAL '30 days'),
+  attachment_summary  jsonb NOT NULL DEFAULT '[]'::jsonb,  -- [{filename, size_bytes, storage_path}]
+  status              text NOT NULL CHECK (status IN (
+    'pending_review', 'approved_once', 'approved_with_domain',
+    'rejected_admin', 'rejected_quota', 'rejected_expired'
+  )),
+  acted_at            timestamptz,
+  acted_by            uuid REFERENCES auth.users(id),
+  decision_note       text,
+  -- When approved, the resulting event is linked here so the audit
+  -- trail connects "broker emailed -> admin approved -> lease X exists"
+  resulting_event_id  uuid REFERENCES public.email_intake_events(id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_pending_intake_workspace_active
+  ON public.pending_intake_emails(workspace_id, received_at DESC)
+  WHERE status = 'pending_review';
+
+CREATE INDEX idx_pending_intake_expiry
+  ON public.pending_intake_emails(expires_at)
+  WHERE status = 'pending_review';
+
+CREATE UNIQUE INDEX idx_pending_intake_message_id
+  ON public.pending_intake_emails(workspace_id, message_id)
+  WHERE message_id IS NOT NULL;
 ```
 
 RLS:
-- Workspace members read both events and attachments
-- Service-role-only writes (edge function bypasses RLS)
-- Append-only from clients (no UPDATE/DELETE policies)
+- Workspace members read all four tables (settings, events, attachments, pending).
+- Service-role-only writes for events + attachments (edge function bypasses RLS).
+- Workspace admins / owners can UPDATE `workspace_intake_settings` (configure allowlist, toggle enabled, adjust caps within tier ceiling).
+- Workspace admins / owners can UPDATE `pending_intake_emails` to approve/reject (RLS check on `status` transitions).
+- Append-only otherwise (no DELETE policies on events / attachments).
 
 ---
 
@@ -464,16 +512,16 @@ Estimated effort: 2-3 multi-step sessions of focused work.
 
 ---
 
-## 14. Open questions (for your decision)
+## 14. Open questions — RESOLVED 2026-05-09
 
-These need your call before implementation starts:
+All six questions ratified per `docs/EMAIL_INTAKE_DECISIONS.md` (commit pending alongside this update). Decisions summary; see the decisions memo for full rationale, divergences, and architectural notes.
 
-1. **Email service vendor.** Recommendation: SendGrid Inbound Parse for v1. Alternative: Resend Inbound (vendor consolidation) or AWS SES (cost at scale). Pick one.
-2. **Domain choice.** Recommendation: `leases.theleaseio.com`. Alternative: `intake.theleaseio.com` or top-level `leases@theleaseio.com` with subaddressing (`leases+acme-finance-7k3r2j@…`). Subaddressing is cheaper (no separate MX) but breaks for senders who strip plus addresses.
-3. **Sender-match policy default.** v1 plan: members + owner only. Loosen at workspace-admin discretion via domain allowlist (v2). Tighter (e.g., explicit per-sender allowlist from the start) is also defensible if you expect mostly internal forwarding. **Default in plan: members + owner.**
-4. **Quota-exceeded behavior.** v1: silent fail with admin notification. v2: bounce email to sender. Acceptable to defer the bounce to v2?
-5. **Backfill.** Should existing workspaces auto-receive an intake address as part of the migration (default `intake_enabled = false` so it's opt-in)? Or opt-in via a workspace-settings click? **Plan defaults to: backfill addresses, opt-in to enable.**
-6. **Tier gating.** Is email intake available on all tiers (current plan) or Business-only? Mid-market finance teams forward leases regardless of tier; Business-only would be a moat-ish gate but reduces product appeal at lower tiers. **Plan: all tiers, with rate limits scaled by tier.**
+1. **Email service vendor — Resend Inbound.** Reverses the original SendGrid recommendation. Resend Inbound exited beta; vendor consolidation now wins. Adapter pattern (`src/adapters/inbound-email/resend.ts`) preserves swap protection: ~4-8h of work + DNS TTL cutover to switch vendors later.
+2. **Domain — `leases.theleaseio.com` (subdomain MX) with random-token local-part.** Subaddressing (`leases+token@…`) rejected because Outlook 365 / Exchange routinely strip `+token` segments — silent failure for the highest-value sender persona. Local-part is `intake-<random>` (≥12 chars base32 from `gen_random_bytes`); slug-based addresses rejected as enumerable.
+3. **Sender-match policy — domain allowlist + pending-sender queue at v1.** **Diverges from this plan's original "members + owner only" v1 scope.** Strategic Rule #5 (capture every lease) requires Path 2 to handle third-party senders (brokers, lawyers, vendors) — a v1 that locks to internal forwarding only delivers <30% of Path 2's strategic value. Marginal cost: ~0.75 sessions for the pending queue.
+4. **Quota-exceeded behavior — silent fail + immediate admin notification at v1; bounce-to-sender at v2.** Confirmed as proposed. Bounce-to-sender requires `leases.theleaseio.com` outbound DKIM/SPF/DMARC hardening — real v2 scope.
+5. **Backfill — pre-create intake addresses for all workspaces at migration time, `intake_enabled = false` default.** Confirmed as proposed. Random unguessable tokens have zero security cost when disabled; UX benefit is single-toggle activation.
+6. **Tier gating — email intake on all tiers, with per-tier daily caps.** Reframes the original binary. Plus 10/day, Pro 50/day, Business 200/day (configurable). Cost protection via Tier 2 classifier ($0.01/misfile) plus rate caps. Conversion lever: "you've hit your daily intake cap — upgrade to Pro to lift it."
 
 ---
 
@@ -492,13 +540,15 @@ To keep v1 tight:
 
 ## 16. Definition of done for v1
 
-- [ ] All 3 schema deltas (workspaces extension, email_intake_events, email_intake_attachments) applied to live with idempotent migrations.
-- [ ] `inbound-email-parse` edge function deployed; HMAC auth works; rejects unauth'd POSTs with 401.
-- [ ] DNS / MX setup complete for `leases.theleaseio.com`; webhook configured at the inbound service; test email from a workspace member's address arrives in their workspace's leases list within 60 seconds.
-- [ ] Workspace settings tab shows the intake address with copy-to-clipboard, regenerate, and enable/disable toggles working.
+- [ ] All 4 schema deltas (`workspace_intake_settings`, `email_intake_events`, `email_intake_attachments`, `pending_intake_emails`) applied to live with idempotent migrations. Backfill row in `workspace_intake_settings` for every existing workspace with `intake_enabled = false`.
+- [ ] `inbound-email` edge function (Resend Inbound webhook handler) deployed; Svix signature verification works; rejects unsigned POSTs with 401.
+- [ ] DNS / MX setup complete for `leases.theleaseio.com`; Resend Inbound domain registered; webhook URL configured; test email from an external Gmail to a backfilled intake address arrives in the workspace's leases list within 60 seconds.
+- [ ] Workspace settings tab shows the intake address with copy-to-clipboard, allowed-domains editor, daily-cap display, and enable/disable toggles working.
+- [ ] Pending-sender queue UI: when an email arrives from a non-allowlisted domain, admins receive immediate in-app + email notification with link to the queue. Approve / Approve-with-domain / Reject actions all wired.
+- [ ] Per-tier daily caps enforced. Plus 10/day, Pro 50/day, Business 200/day. Cap counted in workspace timezone, not UTC.
 - [ ] Leases list filter chip "Source: Email" filters correctly.
 - [ ] Tier 2 → Tier 1 → Tier 3 pipeline runs unchanged on email-intake leases (verified: a non-lease attachment is rejected by Tier 2 with the standard error, not a special case).
-- [ ] Failure paths exercised manually: unknown sender, oversize PDF, non-PDF attachment, quota-exceeded — each produces the right `email_intake_events.status`.
+- [ ] Failure paths exercised manually: pending sender (admin notification), oversize PDF, non-PDF attachment, quota-exceeded — each produces the right status row + admin notification.
 - [ ] In-app notification fires for workspace admins on each rejected email.
 - [ ] Existing tests still pass; new tests cover: webhook HMAC verification, address parsing, sender-match logic, attachment validation.
 - [ ] CLAUDE.md updated to mark email-intake foundation closed; KNOWN_ISSUES.md updated.
@@ -507,20 +557,27 @@ To keep v1 tight:
 
 ## Appendix A — Implementation effort estimate
 
+**Updated 2026-05-09** — revised from 2.75 to 3.5–4 sessions following Decision 3 (domain allowlist + pending-sender queue promoted from v2 to v1).
+
 | Component | Sessions |
 |---|---|
-| Schema migration + RLS + types regen | 0.5 |
-| `inbound-email-parse` edge function | 1.0 |
-| Workspace settings tab + intake-address UI | 0.5 |
+| Schema migration + RLS + types regen (4 tables incl. `pending_intake_emails`) | 0.75 |
+| Resend Inbound adapter (`src/adapters/inbound-email/resend.ts`) + Svix HMAC verification | 0.5 |
+| `inbound-email` edge function (workspace lookup, sender allowlist check, attachment fetch via Resend API, storage upload, lease enqueue) | 1.0 |
+| Pending-sender queue (new): admin notification + UI + approve/reject actions + 30-day expiry sweep | 0.75 |
+| Workspace settings tab + intake-address UI + allowed-domains editor + cap display | 0.5 |
 | Leases list filter + email-source surface | 0.25 |
-| End-to-end smoke test with real email | 0.25 |
+| End-to-end smoke test with real email (external Gmail → backfilled address) | 0.25 |
 | Documentation + CLAUDE.md updates | 0.25 |
-| **Total v1** | **~2.75 sessions** |
+| **Total v1** | **3.5–4 sessions** |
 
-Plus operator-side setup (your work):
-- Inbound service account
-- DNS / MX configuration
-- Webhook secret generation
+Plus operator-side setup (per `EMAIL_INTAKE_DECISIONS.md` — your work):
+- Resend Inbound domain registration
+- DNS MX record on `leases.theleaseio.com` subdomain only
+- Resend webhook registration with `email.received` event subscription
+- `RESEND_WEBHOOK_SECRET` + `RESEND_API_KEY` env vars
+- Inbound vs. outbound bucket clarification with Resend
+- 1-2 hours dashboard work + 24-48 hours DNS propagation
 
 ---
 
