@@ -20,7 +20,9 @@
 // in pricing config; would need infra-level allocation) and
 // monthly_email_intake_events (Email Intake not yet shipped).
 
-import type { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+// Loosely-typed Supabase client — see supabase.ts adapter for the
+// Deno generic-resolution rationale.
+type SupabaseLikeClient = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export interface WorkspaceQuotaSnapshot {
   workspace_id: string;
@@ -51,7 +53,7 @@ function pctOf(current: number, limit: number | null): number | null {
 }
 
 export async function pollWorkspaceQuotas(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: SupabaseLikeClient,
 ): Promise<WorkspaceQuotaSnapshot[]> {
   const { data: workspaces, error: wsErr } = await supabaseAdmin
     .from('workspaces')

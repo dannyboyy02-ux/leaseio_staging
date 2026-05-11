@@ -609,6 +609,30 @@ Shipped the customer-facing banner + 3 vendor adapters (Sentry, Stripe webhook h
 
 **Phase 3 partially closed** — code path 100% complete; vendor adapter completion pending operator-side token setup; backup-restore drill execution pending.
 
+#### Phase 3 adapter shape fixes (2026-05-11)
+
+After operator-side tokens were configured (`MANAGEMENT_API_TOKEN`, `VERCEL_ACCESS_TOKEN`, `ANTHROPIC_ADMIN_API_KEY`, etc.), the Supabase, Vercel, and Anthropic adapters all authenticated but returned **zero snapshots**. Built a temporary `monitoring-probe` edge function (deployed, ran, then deleted) to capture the real API response shapes. The probe revealed the design assumed Management/usage endpoints that don't actually exist on the public APIs. Three adapters rewritten against observed reality:
+
+- **C1: Supabase adapter rewritten.** `/v1/projects/{ref}/usage` and `/v1/organizations/{slug}/usage` returned 404 — they're not public. Adapter now emits `paused_status` from `/v1/projects/{ref}` (returns `ACTIVE_HEALTHY` cleanly) and queries `db_size_bytes` / `storage_bytes` directly via the service-role Postgres client. New SECURITY DEFINER RPC `pg_database_size_postgres()` shipped in migration `20260511000000_pg_database_size_rpc.sql` (the Management API doesn't expose DB size; pg_database_size() is the only path). Egress / edge invocations / MAU deferred — those live in Supabase's internal billing and aren't on the public Management API; operator picks them up from the Supabase Dashboard during quarterly review.
+- **C2: Vercel adapter rewritten.** Vercel intentionally locks usage data behind their billing dashboard; no public `/v1/usage` or `/v1/teams/{id}/billing/usage` endpoints exist. Adapter now emits a single `project_count` snapshot from `/v9/projects` (with `limit_value: null` so threshold logic short-circuits) as a "signal of life." The metadata note documents that bandwidth/function/build-minute overage protection relies on Vercel's own dashboard alerts — operator must ensure the Vercel billing email is one Daniel actively monitors.
+- **C3: Anthropic adapter rewritten with admin-key diagnostic path.** All admin endpoints (`/v1/organizations/me`, `/v1/organizations/cost_report`, `/v1/organizations/usage_report/messages`) returned 401 "invalid x-api-key". Signature of "valid key, wrong type" — admin endpoints require an admin-scoped key (`sk-ant-admin-...`), not a runtime key (`sk-ant-api...`). The adapter now probes `/v1/organizations/cost_report` first; on 401 it emits a single synthetic snapshot `admin_key_invalid` (current_value=1, limit_value=0.5, hard_cliff) with remediation text in metadata. The Stop 1 vendor-side spending cap is the real cost protection; this adapter is an early-warning layer that's silent until an admin key is provided. On successful auth (when an admin key is configured), the adapter attempts a best-effort spend extraction with multiple candidate response-shape paths since the real response shape is unknown until first success.
+- **C4: `monitoring-probe` deployed, used, then deleted.** Diagnostic edge function not committed; it served its one-time purpose. The findings it captured are documented above so a future operator hitting the same "0 snapshots after auth" symptom doesn't have to rediscover them.
+
+**Smoke after the rewrites (2026-05-11):**
+```
+adaptersConfigured: ["resend","supabase","vercel","stripe","anthropic"]
+adapterErrors: []
+snapshotsWritten: 9            ← jumped from 5 (resend+stripe only) to 9 (added supabase 3, vercel 1, anthropic 1 diagnostic)
+workspaceSnapshotsWritten: 8
+alertsFired: 1                 ← anthropic admin_key_invalid crossing hard_cliff
+alertEmailsSent: 1             ← email dispatched to daniel.c.priest@gmail.com
+renewalsAlerted: 0
+```
+
+**Operator follow-up owed:**
+- Replace `ANTHROPIC_ADMIN_API_KEY` with a true admin-scoped key from https://console.anthropic.com/settings/keys → "Admin Keys" section. Until then the diagnostic snapshot will alert on every cron run. (Alternative: silence the alert by deleting the recipient row for anthropic-only and accept that admin-key monitoring is silent — but this defeats the early-warning purpose.)
+- The cap-vs-monitor mismatch flagged earlier (operator set `ANTHROPIC_MONTHLY_CAP_USD=100` but Anthropic Console hard cap is $200) is still owed an intent confirmation. The monitor will alert at 50/75/90% of `$100`; the actual vendor-side cutoff is $200. If the intent is "warn me at $50/75/90 so I have headroom under the $200 cap," current config is correct.
+
 Phase 4 remains GATED on Phase 9 (Firm Layer Foundation) per spec.
 
 ### Phase 4 as-built

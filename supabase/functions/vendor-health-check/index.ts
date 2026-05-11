@@ -102,6 +102,7 @@ serve(async (req) => {
       managementToken: sbMgmtToken,
       projectRef: sbProjectRef,
       tier: "pro",
+      supabaseAdmin, // direct SQL for db_size / storage; Management API for project status
     }));
   } else {
     console.warn("[vendor-health-check] MANAGEMENT_API_TOKEN not set; skipping Supabase adapter");

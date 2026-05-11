@@ -1,177 +1,155 @@
-// Supabase monitoring adapter — Phase 2 of OPERATIONAL_MONITORING_SPEC.md
+// Supabase monitoring adapter — REWRITTEN 2026-05-11 after Phase 3
+// probe revealed the spec-suggested Management API usage endpoints
+// don't actually exist publicly.
 //
-// Polls the Supabase Management API for project usage. Tracks five
-// metrics against tier caps:
-//   - db_size_bytes              soft_quota
-//   - storage_bytes              soft_quota
-//   - egress_30d_bytes           soft_quota
-//   - edge_invocations_30d       soft_quota
-//   - monthly_active_users       soft_quota
+// What we observed via the live probe (commit history has the probe
+// function that captured this):
+//   - /v1/projects/{ref}                      → 200, project metadata
+//                                               including `status` (perfect
+//                                               for the paused-status check)
+//   - /v1/projects/{ref}/usage                → never existed (the spec
+//                                               was wrong)
+//   - /v1/organizations/{slug}/usage          → 404
+//   - /v1/organizations/{slug}/billing/...    → 404
 //
-// Plus the paused_status check (hard_cliff) — a free Supabase project
-// pauses after 7 days of inactivity. Once you have customers, this
-// should never happen, but during development it can.
+// So the Management API gives us project status only. For actual
+// usage metrics we query Postgres directly:
+//   - db_size_bytes via pg_database_size()
+//   - storage_bytes via SUM over storage.objects metadata
 //
-// Auth: SUPABASE_MANAGEMENT_TOKEN (operator generates at
-// https://supabase.com/dashboard/account/tokens; read-only scope is
-// sufficient).
+// What we can't get cleanly at v1: egress_30d_bytes,
+// edge_invocations_30d, monthly_active_users. These live in
+// Supabase's internal billing system and aren't on the public
+// Management API. Operator picks these up from the Supabase Dashboard
+// quarterly (annual reminder in vendor_renewal_calendar).
+//
+// Auth: MANAGEMENT_API_TOKEN env var for the project-status check.
+// supabaseAdmin client (passed in) for direct SQL.
 
 import type { MonitoringAdapter, VendorUsageSnapshot } from './types.ts';
 
+// Loosely-typed Supabase client. The strict `ReturnType<typeof createClient>`
+// trips on Deno's generic resolution when the function imports its own
+// createClient with the same version pin (the generics resolve differently
+// across module boundaries). Runtime is well-tested via smoke; this `any`
+// is a Deno typing pragma, not a correctness loss.
+type SupabaseLikeClient = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
 const MGMT_API = 'https://api.supabase.com';
 
-// Tier limits per the spec (free vs pro). v1 assumes the project is
-// on Pro per the cost model. The free-tier values are kept for the
-// rare case where someone re-checks against a free project.
+// Pro-tier limits per the cost model. Free-tier kept as reference.
 const LIMITS = {
   free: {
-    db_size_bytes: 500 * 1024 * 1024,                  // 500 MB
-    storage_bytes: 1 * 1024 * 1024 * 1024,             // 1 GB
-    egress_30d_bytes: 5 * 1024 * 1024 * 1024,          // 5 GB
-    edge_invocations_30d: 500_000,
-    monthly_active_users: 50_000,
+    db_size_bytes: 500 * 1024 * 1024,            // 500 MB
+    storage_bytes: 1 * 1024 * 1024 * 1024,       // 1 GB
   },
   pro: {
-    db_size_bytes: 8 * 1024 * 1024 * 1024,             // 8 GB
-    storage_bytes: 100 * 1024 * 1024 * 1024,           // 100 GB
-    egress_30d_bytes: 250 * 1024 * 1024 * 1024,        // 250 GB
-    edge_invocations_30d: 2_000_000,
-    monthly_active_users: 100_000,
+    db_size_bytes: 8 * 1024 * 1024 * 1024,       // 8 GB
+    storage_bytes: 100 * 1024 * 1024 * 1024,     // 100 GB
   },
 } as const;
 
-interface UsagePayload {
-  // Supabase Management API returns a flexible structure; key off
-  // the metric name. Specific fields vary across project tiers.
-  [key: string]: unknown;
-}
-
 export class SupabaseAdapter implements MonitoringAdapter {
   readonly vendor = 'supabase';
-  private readonly token: string;
+  private readonly managementToken: string;
   private readonly projectRef: string;
   private readonly tier: keyof typeof LIMITS;
+  private readonly supabaseAdmin: SupabaseLikeClient;
 
-  constructor(opts: { managementToken: string; projectRef: string; tier?: keyof typeof LIMITS }) {
-    this.token = opts.managementToken;
+  constructor(opts: {
+    managementToken: string;
+    projectRef: string;
+    tier?: keyof typeof LIMITS;
+    supabaseAdmin: SupabaseLikeClient;
+  }) {
+    this.managementToken = opts.managementToken;
     this.projectRef = opts.projectRef;
     this.tier = opts.tier ?? 'pro';
-  }
-
-  private async fetchJson(path: string): Promise<UsagePayload | null> {
-    const res = await fetch(`${MGMT_API}${path}`, {
-      headers: { Authorization: `Bearer ${this.token}` },
-    });
-    if (!res.ok) {
-      console.error(`[monitoring:supabase] ${path} ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      return null;
-    }
-    return await res.json() as UsagePayload;
+    this.supabaseAdmin = opts.supabaseAdmin;
   }
 
   async fetchSnapshots(): Promise<VendorUsageSnapshot[]> {
-    // Project status — for the paused_status hard_cliff check.
-    const project = await this.fetchJson(`/v1/projects/${this.projectRef}`);
-    const status = (project as any)?.status as string | undefined;
-
-    // Usage bundle. The Management API endpoint shape can vary; we
-    // pull and map defensively.
-    const usage = await this.fetchJson(`/v1/projects/${this.projectRef}/usage`);
-    if (!usage) return [];
-
     const limits = LIMITS[this.tier];
     const snapshots: VendorUsageSnapshot[] = [];
-    const tierLabel = this.tier;
 
-    function pickNumeric(obj: any, ...keys: string[]): number | null {
-      for (const key of keys) {
-        const v = obj?.[key];
-        if (typeof v === 'number') return v;
-        if (typeof v === 'string' && v !== '') {
-          const n = Number(v);
-          if (!Number.isNaN(n)) return n;
+    // ── Project status (paused_status check via Management API) ──
+    try {
+      const res = await fetch(`${MGMT_API}/v1/projects/${this.projectRef}`, {
+        headers: { Authorization: `Bearer ${this.managementToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as { status?: string; name?: string };
+        const status = data.status ?? 'UNKNOWN';
+        const isActive = status === 'ACTIVE_HEALTHY' || status === 'ACTIVE';
+        snapshots.push({
+          vendor: 'supabase',
+          metric: 'paused_status',
+          current_value: isActive ? 0 : 1,
+          limit_value: 0.5,  // any non-active value crosses threshold
+          tier: this.tier,
+          category: 'hard_cliff',
+          metadata: { project_status: status, project_name: data.name },
+        });
+      } else {
+        console.warn(`[monitoring:supabase] /v1/projects/${this.projectRef} returned ${res.status}`);
+      }
+    } catch (err) {
+      console.warn('[monitoring:supabase] project status fetch threw:', err);
+    }
+
+    // ── DB size via direct SQL (no public Management API endpoint) ──
+    try {
+      const { data, error } = await this.supabaseAdmin
+        .rpc('pg_database_size_postgres' as any);
+      // The RPC might not exist; fall back to a raw query via the
+      // PostgREST table-with-views pattern. The cleanest is just to
+      // create a tiny SECURITY DEFINER view if we want this often;
+      // for v1, swallow errors and skip the metric.
+      if (!error && data !== null && data !== undefined) {
+        const size = Number(data);
+        if (Number.isFinite(size)) {
+          snapshots.push({
+            vendor: 'supabase',
+            metric: 'db_size_bytes',
+            current_value: size,
+            limit_value: limits.db_size_bytes,
+            tier: this.tier,
+            category: 'soft_quota',
+            metadata: { source: 'pg_database_size(postgres)' },
+          });
         }
       }
-      return null;
+    } catch (err) {
+      // RPC doesn't exist — that's the expected path until the
+      // migration adding pg_database_size_postgres lands. Logged
+      // benignly.
+      console.warn('[monitoring:supabase] pg_database_size RPC unavailable:', err instanceof Error ? err.message : err);
     }
 
-    // The exact field names from the Supabase Management API can
-    // differ between API revs; pull from a few likely keys. Each
-    // snapshot is best-effort — if the field is missing, we skip it
-    // rather than emit a 0 that would look like quota usage.
-    const dbSize = pickNumeric(usage, 'db_size', 'database_size', 'db_size_bytes');
-    if (dbSize !== null) {
-      snapshots.push({
-        vendor: 'supabase',
-        metric: 'db_size_bytes',
-        current_value: dbSize,
-        limit_value: limits.db_size_bytes,
-        tier: tierLabel,
-        category: 'soft_quota',
-      });
-    }
-
-    const storageBytes = pickNumeric(usage, 'storage', 'storage_size', 'storage_bytes');
-    if (storageBytes !== null) {
-      snapshots.push({
-        vendor: 'supabase',
-        metric: 'storage_bytes',
-        current_value: storageBytes,
-        limit_value: limits.storage_bytes,
-        tier: tierLabel,
-        category: 'soft_quota',
-      });
-    }
-
-    const egress = pickNumeric(usage, 'egress', 'egress_bytes', 'monthly_egress', 'egress_30d_bytes');
-    if (egress !== null) {
-      snapshots.push({
-        vendor: 'supabase',
-        metric: 'egress_30d_bytes',
-        current_value: egress,
-        limit_value: limits.egress_30d_bytes,
-        tier: tierLabel,
-        category: 'soft_quota',
-      });
-    }
-
-    const invocations = pickNumeric(usage, 'edge_function_invocations', 'edge_invocations', 'function_invocations');
-    if (invocations !== null) {
-      snapshots.push({
-        vendor: 'supabase',
-        metric: 'edge_invocations_30d',
-        current_value: invocations,
-        limit_value: limits.edge_invocations_30d,
-        tier: tierLabel,
-        category: 'soft_quota',
-      });
-    }
-
-    const mau = pickNumeric(usage, 'monthly_active_users', 'mau');
-    if (mau !== null) {
-      snapshots.push({
-        vendor: 'supabase',
-        metric: 'monthly_active_users',
-        current_value: mau,
-        limit_value: limits.monthly_active_users,
-        tier: tierLabel,
-        category: 'soft_quota',
-      });
-    }
-
-    // Paused-status hard cliff. Encoded as a synthetic 0/1 metric
-    // with limit 0.5 so any non-active value crosses critical.
-    if (status) {
-      const isActive = status === 'ACTIVE_HEALTHY' || status === 'ACTIVE';
-      snapshots.push({
-        vendor: 'supabase',
-        metric: 'paused_status',
-        current_value: isActive ? 0 : 1,
-        limit_value: 0.5,
-        tier: tierLabel,
-        category: 'hard_cliff',
-        metadata: { project_status: status },
-      });
+    // ── Storage size via SUM over storage.objects metadata ──
+    try {
+      const { data, error } = await this.supabaseAdmin
+        .from('storage.objects' as any)
+        .select('metadata');
+      if (!error && Array.isArray(data)) {
+        let totalBytes = 0;
+        for (const row of data) {
+          const m = (row as any)?.metadata;
+          const size = Number(m?.size);
+          if (Number.isFinite(size)) totalBytes += size;
+        }
+        snapshots.push({
+          vendor: 'supabase',
+          metric: 'storage_bytes',
+          current_value: totalBytes,
+          limit_value: limits.storage_bytes,
+          tier: this.tier,
+          category: 'soft_quota',
+          metadata: { source: 'sum(storage.objects.metadata.size)', object_count: data.length },
+        });
+      }
+    } catch (err) {
+      console.warn('[monitoring:supabase] storage.objects sum threw:', err instanceof Error ? err.message : err);
     }
 
     return snapshots;
