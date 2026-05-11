@@ -1004,7 +1004,17 @@ async function extractLeaseDataWithClaude(
   supabaseAdmin: ReturnType<typeof createClient>,
   pdfBase64: string,
   workspaceId: string | null = null,
-): Promise<LeaseExtractionResult> {
+  // Return type is a permissive Record because Opus extracts 7+
+  // additional clause fields (permitted_use, insurance_requirements,
+  // maintenance_responsibilities, holdover_terms, assignment_consent,
+  // personal_guarantees, estoppel_snda, complex_clause_flags,
+  // uncertain_fields) plus 3 forensic underscore fields
+  // (_haiku_warnings, _extraction_model, _haiku_page_map) that the
+  // strict LeaseExtractionResult type doesn't model. The previous
+  // destructured return dropped all of them silently — paying Opus
+  // for data we then threw away. Downstream code uses extractValue()
+  // and field-shape-agnostic access, so the wider type is safe.
+): Promise<Record<string, any>> {
   console.log('[Claude] Starting two-pass native-PDF extraction...');
   const extractionStart = Date.now();
 
@@ -1071,26 +1081,14 @@ async function extractLeaseDataWithClaude(
   merged._extraction_model = 'claude-opus-4-6';
   merged._haiku_page_map = pageMap;
 
-  return {
-    landlord_name:         merged.landlord_name         || null,
-    tenant_name:           merged.tenant_name           || null,
-    property_address:      merged.property_address      || null,
-    lease_start:           merged.lease_start           || null,
-    lease_end:             merged.lease_end             || null,
-    square_footage:        merged.square_footage        || null,
-    current_monthly_rent:  merged.current_monthly_rent  || null,
-    rent_escalation_type:  merged.rent_escalation_type  || null,
-    rent_schedule:         merged.rent_schedule         || [],
-    rent_commencement_date:merged.rent_commencement_date|| null,
-    base_rent_amount:      merged.base_rent_amount      || null,
-    base_rent_frequency:   merged.base_rent_frequency   || null,
-    security_deposit:      merged.security_deposit      || null,
-    renewal_options:       merged.renewal_options       || null,
-    escalation_clauses:    merged.escalation_clauses    || null,
-    termination_clauses:   merged.termination_clauses   || null,
-    key_dates:             merged.key_dates             || [],
-    risks:                 merged.risks || [],
-  };
+  // Default array fields so downstream code that iterates without a
+  // null check (rent_schedule.filter, key_dates.map, risks.map)
+  // doesn't TypeError when Opus omitted an array entirely.
+  if (!Array.isArray(merged.rent_schedule)) merged.rent_schedule = [];
+  if (!Array.isArray(merged.key_dates))     merged.key_dates = [];
+  if (!Array.isArray(merged.risks))         merged.risks = [];
+
+  return merged;
 }
 
 // Legacy stub — unused, retained for reference only. Signature kept
