@@ -90,8 +90,14 @@ serve(async (req) => {
     console.warn("[vendor-health-check] RESEND_API_KEY not set; skipping Resend adapter");
   }
 
-  const sbMgmtToken = Deno.env.get("SUPABASE_MANAGEMENT_TOKEN");
-  const sbProjectRef = Deno.env.get("SUPABASE_PROJECT_REF") ?? "wwkwoxxcprnjjufkbzac";
+  // NOTE: env var name cannot start with SUPABASE_ — the platform
+  // reserves that prefix for auto-injected secrets and silently
+  // refuses user-set secrets with it. Renamed from
+  // SUPABASE_MANAGEMENT_TOKEN to SB_MGMT_TOKEN 2026-05-11 after
+  // a smoke run revealed the prefix collision. SB_PROJECT_REF for
+  // parity. Documented in feedback_supabase_reserved_prefix.md.
+  const sbMgmtToken = Deno.env.get("SB_MGMT_TOKEN");
+  const sbProjectRef = Deno.env.get("SB_PROJECT_REF") ?? "wwkwoxxcprnjjufkbzac";
   if (sbMgmtToken) {
     adapters.push(new SupabaseAdapter({
       managementToken: sbMgmtToken,
@@ -99,7 +105,7 @@ serve(async (req) => {
       tier: "pro",
     }));
   } else {
-    console.warn("[vendor-health-check] SUPABASE_MANAGEMENT_TOKEN not set; skipping Supabase adapter");
+    console.warn("[vendor-health-check] SB_MGMT_TOKEN not set; skipping Supabase adapter");
   }
 
   const vercelToken = Deno.env.get("VERCEL_ACCESS_TOKEN");
