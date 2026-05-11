@@ -27,7 +27,13 @@ What's still owed (Daniel-side, ~10 minutes):
 
 ---
 
-### ☐ 2. Domain registrar hardened
+### ✅ 2. Domain registrar hardened
+
+**Status: DONE 2026-05-11** by Daniel. State captured privately (registrar-state-2026-05-11.md file in `docs/ops/` is optional — can be filled from the template if you want an in-repo record of which settings were verified; not required if you're keeping the audit privately).
+
+---
+
+### Original verification template (kept for reference)
 
 **Status: VERIFICATION OWED on registrar-side state. Codebase-side checks pass.**
 
@@ -57,9 +63,24 @@ Log into the registrar where `theleaseio.com` is registered. Verify and document
 
 ---
 
-### ⚠️ 3. Stripe webhook health verified
+### ⚠️ 3. Stripe webhook health verified — SANDBOX ONLY (live destination still owed)
 
-**Status: PARTIAL. Codebase-side checks pass; dashboard-side delivery health verification still owed.**
+**Status: SANDBOX VERIFIED 2026-05-11** by Daniel. Sandbox destination `leaseio-sandbox-supabase` routes to the `stripe-webhook` edge function. 4 events subscribed: `checkout.session.completed`, `customer.subscription.{created,updated,deleted}`. Test event returned 200 in 355ms.
+
+**🔴 STILL OWED before first real customer:** Live-mode Stripe webhook destination has NOT been created yet. Stripe sandbox and live mode are separate environments with separate webhook endpoints and separate signing secrets. The sandbox verification proves the function works; it does NOT prove the live integration works. Before onboarding customer #1:
+
+1. Open `https://dashboard.stripe.com/webhooks` and switch the dashboard from "Test mode" toggle to LIVE.
+2. Click "Add endpoint." URL: `https://wwkwoxxcprnjjufkbzac.supabase.co/functions/v1/stripe-webhook`. Subscribe to the same 4 events as sandbox: `checkout.session.completed` + `customer.subscription.created/updated/deleted`.
+3. Copy the live signing secret (starts with `whsec_`, distinct from the sandbox one).
+4. Rotate the env var: `supabase secrets set STRIPE_WEBHOOK_SECRET='<live signing secret>'`. This REPLACES the sandbox secret — the deployed `stripe-webhook` function will switch from accepting sandbox events to accepting live events at this point.
+5. Trigger a live test event from the dashboard ("Send test webhook" button) → confirm 200 response.
+6. Edit this file to flip status from SANDBOX VERIFIED to LIVE VERIFIED.
+
+This is added to the renewal calendar backlog under "Pre-launch checklist" — it's not annual; it's a one-time gate before customer #1.
+
+---
+
+### Original verification template (kept for reference)
 
 What was verified:
 
@@ -139,9 +160,9 @@ Phase 1 (no-code operational hardening) — CLOSED 2026-MM-DD per docs/ops/PHASE
 | Item | Status | Owner | Effort |
 |---|---|---|---|
 | 1. Anthropic spending cap | ✅ DONE 2026-05-11 | Daniel | ~10 min |
-| 2. Domain registrar hardened | ☐ OWED | Daniel | ~15 min |
-| 3. Stripe webhook health | ⚠️ PARTIAL (code ✅, dashboard owed) | Daniel | ~5 min |
-| 4. Manual renewal calendar | ☐ OWED | Daniel | ~30 min |
+| 2. Domain registrar hardened | ✅ DONE 2026-05-11 | Daniel | ~15 min |
+| 3. Stripe webhook health | ⚠️ SANDBOX ✅ 2026-05-11; LIVE destination still owed before first customer | Daniel | ~5 min (live retry) |
+| 4. Manual renewal calendar | ⚠️ PARTIAL — see playbook Stop 4 for gaps | Daniel | ~15 min to add missing events |
 | 5. `docs/ops/` artifacts | ⚠️ PARTIAL (structure ✅, screenshots/state owed) | Daniel | uploaded as items 1+2+4 complete |
 | 6. CLAUDE.md Phase 1 closeout | ☐ OWED on completion | Claude (next session, after Daniel completes 1-4) | ~2 min |
 

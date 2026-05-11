@@ -42,7 +42,7 @@
 
 **Why this is second:** Domain expiry is the SaaS-killer. If `theleaseio.com` lapses, the entire site goes dark. Auto-renew silently fails when the card on file expires; that's the most common cause of unintended domain lapse. Multi-stage protection: auto-renew ON, card valid for 12+ months past renewal, 2FA on the registrar account itself.
 
-**Status: ☐ Not done**
+**Status: ☑ Done 2026-05-11** by Daniel.
 
 ### Steps
 
@@ -92,7 +92,7 @@
 
 **Why this is third:** Your `stripe-webhook` edge function is what writes subscription state to your database. If it breaks (network error, signing secret rotation), customers can be charged in Stripe without getting their subscription provisioned in LeaseIO, or vice versa. The codebase side is verified clean (we did that already); now verify the dashboard side.
 
-**Status: ☐ Not done**
+**Status: ⚠️ Sandbox done 2026-05-11; LIVE destination still owed before first customer.** See `docs/ops/PHASE_1_VERIFICATION_2026-05-09.md` item 3 for the 6-step live-mode setup. Schedule it as a pre-launch gate.
 
 ### Steps
 
