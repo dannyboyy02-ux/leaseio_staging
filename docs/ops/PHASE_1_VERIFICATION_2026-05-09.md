@@ -163,6 +163,7 @@ Phase 1 (no-code operational hardening) — CLOSED 2026-MM-DD per docs/ops/PHASE
 | 2. Domain registrar hardened | ✅ DONE 2026-05-11 | Daniel | ~15 min |
 | 3. Stripe webhook health | ⚠️ SANDBOX ✅ 2026-05-11; LIVE destination still owed before first customer | Daniel | ~5 min (live retry) |
 | 4. Manual renewal calendar | ⚠️ PARTIAL — see playbook Stop 4 for gaps | Daniel | ~15 min to add missing events |
+| 5. Monitoring tokens | ✅ DONE 2026-05-11 from operator side. All 5 adapters now configured + authenticated (MANAGEMENT_API_TOKEN, VERCEL_ACCESS_TOKEN, ANTHROPIC_ADMIN_API_KEY, ANTHROPIC_MONTHLY_CAP_USD=100). Supabase / Vercel / Anthropic adapters return 0 useful snapshots because their API response shapes diverge from what the code expects — separate Claude-side iteration to update the field mapping. | Daniel ✅ / Claude follow-up | done |
 | 5. `docs/ops/` artifacts | ⚠️ PARTIAL (structure ✅, screenshots/state owed) | Daniel | uploaded as items 1+2+4 complete |
 | 6. CLAUDE.md Phase 1 closeout | ☐ OWED on completion | Claude (next session, after Daniel completes 1-4) | ~2 min |
 

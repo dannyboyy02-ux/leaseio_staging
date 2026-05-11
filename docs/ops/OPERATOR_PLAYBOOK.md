@@ -209,7 +209,7 @@
 
 **Why this matters:** The Phase 2 + Phase 3 monitoring cron is already deployed and running daily at 06:00 UTC, but most adapters are "skipped" right now because their tokens aren't set. Setting them turns on the actual monitoring coverage. Until you do this, you only see Resend + Stripe webhook health.
 
-**Status: ☐ Not done**
+**Status: ☑ Done 2026-05-11** by Daniel. All 5 adapters configured + authenticated. Operator env-var names landed as `MANAGEMENT_API_TOKEN` (Supabase Management), `VERCEL_ACCESS_TOKEN`, `ANTHROPIC_ADMIN_API_KEY`, `ANTHROPIC_MONTHLY_CAP_USD=100`. Code rewritten to match (Supabase reserves the `SUPABASE_` prefix for auto-injected secrets, so the original `SUPABASE_MANAGEMENT_TOKEN` name didn't work). Supabase / Vercel / Anthropic adapters need response-shape fixes (separate Claude-side iteration) before they emit useful data; the auth chain is proven and follow-up is operator-independent.
 
 ### What you'll generate
 
