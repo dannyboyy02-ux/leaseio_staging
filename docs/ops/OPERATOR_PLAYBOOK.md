@@ -12,7 +12,7 @@
 
 **Why this is first:** This is the single highest-cost-risk vendor in the LeaseIO stack. A bug in `process_lease`, a misconfigured retry loop, or a compromised API key can produce four-figure bills overnight. The Anthropic Console has a hard spending cap feature — when set, Anthropic *enforces* it (stops accepting requests when the cap is hit). Until you do this, you have no ceiling.
 
-**Status: ☐ Not done**
+**Status: ☑ Done 2026-05-11.** Screenshot at `docs/ops/screenshots/anthropic-spend-cap-2026-05-11.png`.
 
 ### Steps
 

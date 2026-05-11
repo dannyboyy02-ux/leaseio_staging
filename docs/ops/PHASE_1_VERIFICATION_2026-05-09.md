@@ -8,9 +8,9 @@
 
 ## Phase 1 check-in — item-by-item
 
-### ☐ 1. Anthropic spending cap configured
+### ✅ 1. Anthropic spending cap configured
 
-**Status: VERIFICATION OWED.** Cannot self-verify from outside the Anthropic Console.
+**Status: DONE 2026-05-11.** Screenshot captured at `docs/ops/screenshots/anthropic-spend-cap-2026-05-11.png` (146 KB) by Daniel.
 
 What was checked:
 - The runtime `ANTHROPIC_API_KEY` is set (process_lease, ai-assistant, generate-lease-insights all running successfully — the rate-limit failures we've seen prove they're hitting Anthropic, not failing on missing key).
@@ -138,7 +138,7 @@ Phase 1 (no-code operational hardening) — CLOSED 2026-MM-DD per docs/ops/PHASE
 
 | Item | Status | Owner | Effort |
 |---|---|---|---|
-| 1. Anthropic spending cap | ☐ OWED | Daniel | ~10 min |
+| 1. Anthropic spending cap | ✅ DONE 2026-05-11 | Daniel | ~10 min |
 | 2. Domain registrar hardened | ☐ OWED | Daniel | ~15 min |
 | 3. Stripe webhook health | ⚠️ PARTIAL (code ✅, dashboard owed) | Daniel | ~5 min |
 | 4. Manual renewal calendar | ☐ OWED | Daniel | ~30 min |
