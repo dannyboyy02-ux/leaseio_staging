@@ -126,30 +126,32 @@ export class SupabaseAdapter implements MonitoringAdapter {
       console.warn('[monitoring:supabase] pg_database_size RPC unavailable:', err instanceof Error ? err.message : err);
     }
 
-    // ── Storage size via SUM over storage.objects metadata ──
+    // ── Storage size via SECURITY DEFINER RPC ──
+    // PostgREST doesn't expose the storage schema by default, so a
+    // direct .from('storage.objects') call returns nothing. The
+    // storage_total_bytes() function (migration 20260511010000)
+    // computes the SUM with elevated privileges.
     try {
       const { data, error } = await this.supabaseAdmin
-        .from('storage.objects' as any)
-        .select('metadata');
-      if (!error && Array.isArray(data)) {
-        let totalBytes = 0;
-        for (const row of data) {
-          const m = (row as any)?.metadata;
-          const size = Number(m?.size);
-          if (Number.isFinite(size)) totalBytes += size;
+        .rpc('storage_total_bytes' as any);
+      if (!error && data !== null && data !== undefined) {
+        const size = Number(data);
+        if (Number.isFinite(size)) {
+          snapshots.push({
+            vendor: 'supabase',
+            metric: 'storage_bytes',
+            current_value: size,
+            limit_value: limits.storage_bytes,
+            tier: this.tier,
+            category: 'soft_quota',
+            metadata: { source: 'storage_total_bytes() RPC' },
+          });
         }
-        snapshots.push({
-          vendor: 'supabase',
-          metric: 'storage_bytes',
-          current_value: totalBytes,
-          limit_value: limits.storage_bytes,
-          tier: this.tier,
-          category: 'soft_quota',
-          metadata: { source: 'sum(storage.objects.metadata.size)', object_count: data.length },
-        });
+      } else if (error) {
+        console.warn('[monitoring:supabase] storage_total_bytes RPC error:', error.message ?? error);
       }
     } catch (err) {
-      console.warn('[monitoring:supabase] storage.objects sum threw:', err instanceof Error ? err.message : err);
+      console.warn('[monitoring:supabase] storage_total_bytes RPC threw:', err instanceof Error ? err.message : err);
     }
 
     return snapshots;
