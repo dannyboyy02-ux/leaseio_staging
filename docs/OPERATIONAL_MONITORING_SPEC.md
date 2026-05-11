@@ -434,6 +434,27 @@ If any check fails, do not proceed to Phase 4. Phase 4 builds firm-layer aggrega
 
 ---
 
+## Backlog — review later
+
+### ICS subscription feed for renewal calendar (proposed 2026-05-11)
+
+Replace manual Google Calendar event creation for `vendor_renewal_calendar` rows with a subscribed ICS feed.
+
+**Shape:** New edge function `renewal-calendar-feed` returns `text/calendar` from `vendor_renewal_calendar`. Each row emits a VEVENT with VALARM blocks for T-60/T-30/T-14 (and T-7 for cards). Operator adds the URL once to Google Calendar via "Other calendars → From URL." Google auto-refreshes every ~12-24h, so new rows appear without manual sync.
+
+**Why it's attractive:** Zero per-event Google Calendar API cost (read-only ICS, not OAuth). Subscribe once, hands-off. Reuses existing renewal table. No new dependencies. Solves the current gap where every new renewal needs manual calendar entry.
+
+**Tradeoffs / open questions:**
+- URL is a bearer secret — anyone with it reads the renewal list. Path needs a token-gated route (HMAC or a `?token=` query param tied to a row in `private.cron_secrets` or similar).
+- Up to ~24h refresh lag on Google's side. Acceptable for renewal dates measured in months.
+- Alternative considered: attach `.ics` files to the T-60/T-30/T-14 reminder emails Resend already sends, letting Gmail's "Add to Calendar" do the work per event. Lower setup cost but click-per-event vs subscribe-once.
+
+**Effort estimate:** ~1 session (edge function + token-gating + one-time operator setup steps in OPERATOR_PLAYBOOK).
+
+**Not a launch blocker.** Manual entry of the handful of renewal dates is fine for the operator-of-one stage; revisit when the calendar has more than ~10 rows or when a second operator is added.
+
+---
+
 ## Out of scope (deferred indefinitely or to far future)
 
 - **External monitoring SaaS** (Better Stack, Datadog, Cronitor, PagerDuty). Revisit when LeaseIO has multiple operators and an on-call rotation. Estimate: Year 2+.
