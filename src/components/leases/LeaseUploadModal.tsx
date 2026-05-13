@@ -144,6 +144,15 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
       const formData = new FormData();
       formData.append('file', file);
       formData.append('leaseType', leaseType);
+      // Pin the lease to the user's currently-active workspace. Without
+      // this, process_lease falls into resolveAuthorizedWorkspaceId's
+      // LIMIT 1 fallback, which picks a random owned workspace —
+      // the lease can silently land in a different workspace than the
+      // one the UI is showing. Caught by the 2026-05-13 Tier 3 smoke
+      // (lease went to "My Workspace"/pro while the UI was on Labs/business).
+      if (workspace?.id) {
+        formData.append('workspaceId', workspace.id);
+      }
       if (parentLeaseId) {
         formData.append('parentLeaseId', parentLeaseId);
       }

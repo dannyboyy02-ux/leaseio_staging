@@ -286,25 +286,41 @@ async function resolveAuthorizedWorkspaceId(
     return membership.workspace_id;
   }
 
-  const { data: ownedWorkspace, error: ownedError } = await supabaseAdmin
+  // Fallback when the caller didn't specify a workspace. The original
+  // implementation did `.limit(1)` with no ORDER BY — nondeterministic
+  // when a user owns or is a member of multiple workspaces. Caught
+  // 2026-05-13 when a lease silently landed in the wrong workspace.
+  //
+  // Policy: pick the most-recently-created workspace as a stable
+  // default, AND log a warning so callers know they're depending on
+  // a fallback they shouldn't.
+  const { data: ownedWorkspaces, error: ownedError } = await supabaseAdmin
     .from('workspaces')
-    .select('id')
+    .select('id, created_at')
     .eq('owner_id', userId)
-    .limit(1)
-    .maybeSingle();
+    .order('created_at', { ascending: false })
+    .limit(2);
 
   if (ownedError) throw new Error(`Failed to resolve workspace ownership: ${ownedError.message}`);
-  if (ownedWorkspace) return ownedWorkspace.id;
+  if (ownedWorkspaces && ownedWorkspaces.length > 0) {
+    if (ownedWorkspaces.length > 1) {
+      console.warn(`[process_lease] User ${userId} owns multiple workspaces and no workspaceId was provided; defaulting to most-recently-created. Callers should always pass workspaceId.`);
+    }
+    return ownedWorkspaces[0].id;
+  }
 
-  const { data: membership, error: membershipError } = await supabaseAdmin
+  const { data: memberships, error: membershipError } = await supabaseAdmin
     .from('workspace_members')
-    .select('workspace_id')
+    .select('workspace_id, created_at')
     .eq('user_id', userId)
-    .limit(1)
-    .maybeSingle();
+    .order('created_at', { ascending: false })
+    .limit(2);
 
   if (membershipError) throw new Error(`Failed to resolve workspace membership: ${membershipError.message}`);
-  return membership?.workspace_id ?? null;
+  if (memberships && memberships.length > 1) {
+    console.warn(`[process_lease] User ${userId} is a member of multiple workspaces and no workspaceId was provided; defaulting to most-recently-joined.`);
+  }
+  return memberships?.[0]?.workspace_id ?? null;
 }
 
 // ================================================================

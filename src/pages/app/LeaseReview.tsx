@@ -2603,8 +2603,7 @@ export default function LeaseReview() {
                   {lease?.id && (
                     <LeaseInsightsCard
                       leaseId={lease.id}
-                      workspaceId={workspace?.id ?? null}
-                      plan={workspace?.plan}
+                      workspaceId={lease.workspace_id ?? null}
                     />
                   )}
                 </div>

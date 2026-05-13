@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { normalizePlanId } from '@/config/pricing';
 
 type InsightSeverity = 'info' | 'notice' | 'concern';
 type InsightType =
@@ -33,7 +34,13 @@ interface LeaseInsight {
 interface Props {
   leaseId: string;
   workspaceId: string | null;
-  plan: 'starter' | 'business' | string | null | undefined;
+  // `plan` is optional and treated as a hint only. The card always
+  // re-checks the workspaceId's plan from the DB. This is because
+  // the edge function gates on the LEASE's workspace plan — if the
+  // caller passes the user's *active* workspace plan instead of the
+  // *lease's* workspace plan, the gate diverges from the UI state
+  // and "Generate" produces a 403. Caught 2026-05-13.
+  plan?: 'starter' | 'business' | string | null | undefined;
 }
 
 const SEVERITY_STYLES: Record<InsightSeverity, { ring: string; bg: string; text: string; icon: typeof Info }> = {
@@ -50,12 +57,34 @@ const TYPE_LABELS: Record<InsightType, string> = {
   general_observation: 'Observation',
 };
 
-export function LeaseInsightsCard({ leaseId, workspaceId, plan }: Props) {
+export function LeaseInsightsCard({ leaseId, workspaceId, plan: planHint }: Props) {
   const [insights, setInsights] = useState<LeaseInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  // Self-correcting plan resolution: re-read from workspaceId so the
+  // card never disagrees with the edge function's gate (see Props
+  // docstring for the 2026-05-13 incident that drove this change).
+  const [resolvedPlan, setResolvedPlan] = useState<'starter' | 'business'>(
+    normalizePlanId(planHint as string | null | undefined),
+  );
 
-  const isBusiness = plan === 'business';
+  useEffect(() => {
+    let cancelled = false;
+    if (!workspaceId) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from('workspaces')
+        .select('plan')
+        .eq('id', workspaceId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) return;
+      setResolvedPlan(normalizePlanId((data as any).plan));
+    })();
+    return () => { cancelled = true; };
+  }, [workspaceId]);
+
+  const isBusiness = resolvedPlan === 'business';
 
   const fetchInsights = useCallback(async () => {
     if (!leaseId) return;
