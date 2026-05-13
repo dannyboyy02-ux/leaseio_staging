@@ -243,8 +243,15 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 function normalizeConfidenceScore(value: number): number {
-  const normalized = value <= 1 ? value * 100 : value;
-  return Math.min(Math.max(normalized, 0), 100);
+  // The lease_field_confidence.confidence_score column is NUMERIC(3,2)
+  // — it stores values on the 0.00–1.00 scale. Historical OpenAI-era
+  // rows confirm: confidence_score=1.00 (not 100). The Claude pipeline
+  // emits 0–1 directly (e.g., 0.99), so most calls are passthroughs.
+  // Inputs that come in 0–100 form (legacy paths) get rescaled.
+  // Prior version multiplied 0–1 inputs by 100 → 99 → numeric overflow
+  // → silent upsert failure → empty lease_field_confidence. Fixed 2026-05-13.
+  const onZeroOneScale = value > 1 ? value / 100 : value;
+  return Math.min(Math.max(onZeroOneScale, 0), 1);
 }
 
 async function resolveAuthorizedWorkspaceId(
