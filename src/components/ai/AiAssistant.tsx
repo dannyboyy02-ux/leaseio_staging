@@ -16,7 +16,7 @@ interface Message {
 const SUGGESTED_QUESTIONS = [
   'What are my total monthly lease obligations?',
   'Which leases expire in the next 12 months?',
-  'Do any leases have high-severity risks?',
+  'Do any leases have flagged risk items?',
   'What is the total annual rent commitment?',
 ];
 
@@ -56,24 +56,22 @@ export function AiAssistant() {
     setInput('');
     setStreaming(true);
 
-    // Get auth token
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      setMessages(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { role: 'assistant', content: 'Authentication error. Please refresh and try again.' };
-        return updated;
-      });
-      setStreaming(false);
-      return;
-    }
-
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-    const functionUrl = `${supabaseUrl}/functions/v1/ai-assistant`;
-
     abortRef.current = new AbortController();
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'assistant', content: 'Your session expired — sign in again to continue.' };
+          return updated;
+        });
+        return;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const functionUrl = `${supabaseUrl}/functions/v1/ai-assistant`;
+
       const res = await fetch(functionUrl, {
         method: 'POST',
         headers: {
@@ -107,7 +105,8 @@ export function AiAssistant() {
           try {
             const event = JSON.parse(line.slice(6));
             if (event.error) {
-              assembled = event.error;
+              console.error('[ai-assistant] Server error:', event.error);
+              assembled = "I couldn't complete that request. Please try again.";
               setMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = { role: 'assistant', content: assembled };
@@ -133,7 +132,7 @@ export function AiAssistant() {
       setMessages(prev => {
         const updated = [...prev];
         if (updated[updated.length - 1]?.loading) {
-          updated[updated.length - 1] = { role: 'assistant', content: assembled || 'No response received.' };
+          updated[updated.length - 1] = { role: 'assistant', content: assembled || "I didn't get a response. Please try your question again." };
         } else {
           updated[updated.length - 1] = { ...updated[updated.length - 1], loading: false };
         }
@@ -145,7 +144,7 @@ export function AiAssistant() {
         const updated = [...prev];
         updated[updated.length - 1] = {
           role: 'assistant',
-          content: 'Something went wrong. Please try again.',
+          content: "I couldn't finish that response. Try sending again — the connection may have dropped.",
         };
         return updated;
       });
