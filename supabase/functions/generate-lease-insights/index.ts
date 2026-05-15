@@ -26,6 +26,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import {
+  assertAiConsent,
+  assertBusinessPlan,
+  enforceWorkspaceRateLimit,
+} from "../_shared/audit.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -196,14 +201,24 @@ serve(async (req) => {
     return jsonResponse({ ok: false, error: "Not a member of this workspace" }, 403, origin);
   }
 
-  // Tier gate — Business plan only.
-  if (workspace.plan !== "business") {
-    return jsonResponse({
-      ok: false,
-      error: "Portfolio insights are available on the Business plan.",
-      reason: "tier_gate",
-    }, 403, origin);
-  }
+  // Tier gate — Business plan only (P1-04).
+  const planBlock = assertBusinessPlan(workspace.plan, "Portfolio insights", origin);
+  if (planBlock) return planBlock;
+
+  // AI consent gate (P1-04).
+  const consentBlock = await assertAiConsent(supabaseAdmin, user.id, origin);
+  if (consentBlock) return consentBlock;
+
+  // Workspace-scoped rate limit (P1-12). Sonnet calls run $0.04-0.08
+  // each; cap at 10 per workspace per hour to bound cost.
+  const rateBlock = await enforceWorkspaceRateLimit(
+    supabaseAdmin,
+    workspaceId,
+    "generate-lease-insights",
+    origin,
+    10,
+  );
+  if (rateBlock) return rateBlock;
 
   // Load portfolio context — aggregate stats across other leases in the
   // workspace. Bounded; no full extracted_json from siblings (cost control).

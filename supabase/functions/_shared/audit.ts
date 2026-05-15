@@ -156,6 +156,63 @@ function getHourWindowStart(now = new Date()): string {
   return windowStart.toISOString();
 }
 
+/**
+ * Verify the user has granted AI processing consent in their profile.
+ * The signup form makes this a contract; AccountSettings lets users
+ * revoke it. Any edge function that sends customer lease data to a
+ * third-party model MUST gate on this — P1-04.
+ *
+ * Returns a 403 jsonResponse when consent is missing/revoked; returns
+ * null when the call may proceed. Throws on infra error (DB unreachable).
+ */
+export async function assertAiConsent(
+  supabaseAdmin: any,
+  userId: string,
+  requestOrigin: string | null,
+): Promise<Response | null> {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("ai_processing_consent_at")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Could not verify AI processing consent: ${error.message}`);
+  }
+  if (!data?.ai_processing_consent_at) {
+    return jsonResponse(
+      {
+        error:
+          "AI processing consent has not been granted. Re-enable consent in Settings → Privacy before using AI features.",
+        reason: "ai_consent_missing",
+      },
+      403,
+      requestOrigin,
+    );
+  }
+  return null;
+}
+
+/**
+ * Tier gate for Business-only AI features (P1-04, P1-05). Pass the
+ * workspace.plan value already fetched by the caller; this helper only
+ * formats the 403 response and keeps callers consistent.
+ */
+export function assertBusinessPlan(
+  plan: string | null | undefined,
+  featureLabel: string,
+  requestOrigin: string | null,
+): Response | null {
+  if (plan === "business") return null;
+  return jsonResponse(
+    {
+      error: `${featureLabel} is available on the Business plan.`,
+      reason: "tier_gate",
+    },
+    403,
+    requestOrigin,
+  );
+}
+
 export async function enforceWorkspaceRateLimit(
   supabaseAdmin: any,
   workspaceId: string | null,

@@ -988,16 +988,21 @@ function mergeOpusOverrides(sonnetMerged: any, opusMerged: any, targetFields: st
  * current users have it — but a revoke flow exists in Settings → Privacy
  * and that revoke must block subsequent extractions.
  */
+/**
+ * MIRROR of _shared/audit.ts:assertAiConsent — kept here as a throw-based
+ * variant because process_lease's main flow wraps everything in a single
+ * try/catch and formats errors uniformly. The shared helper returns a
+ * Response which is the right shape for the other 4 AI functions
+ * (ai-assistant, generate-lease-insights, generate-lease-analysis,
+ * retry_lease) that are built around early-return-Response control flow.
+ *
+ * If you change consent semantics (column name, error message), update
+ * BOTH this function AND _shared/audit.ts:assertAiConsent.
+ *
+ * supabaseAdmin is passed explicitly because it's request-scoped (declared
+ * inside serve()). Verified empirically by a Deno scope test (2026-05-08).
+ */
 async function assertAiConsent(
-  // Passed explicitly because supabaseAdmin is request-scoped (declared
-  // inside serve()). Module-level functions cannot reach it through
-  // lexical scope — verified empirically by a Deno scope test
-  // (2026-05-08). Prior to this fix, the body referenced module-level
-  // supabaseAdmin which would ReferenceError at runtime; the failure
-  // mode happened to be masked because production traffic predating
-  // the two-pass migration used the legacy Azure-DI/OpenAI path that
-  // doesn't go through this helper. Same scope-bug pattern still
-  // exists in extractLeaseDataWithClaude (next).
   supabaseAdmin: ReturnType<typeof createClient>,
   userId: string,
 ): Promise<void> {

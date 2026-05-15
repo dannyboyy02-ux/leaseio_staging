@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
 import {
   analyzeWithAzureDI as runAzureDI,
+  assertAiConsent,
   enforceWorkspaceRateLimit,
   repairJsonObject,
 } from "../_shared/audit.ts";
@@ -540,6 +541,10 @@ serve(async (req) => {
     }
 
     console.log(`[retry_lease] Retrying lease: ${leaseId}`);
+
+    // P1-04: AI consent gate — retry hits Claude same as initial extraction.
+    const consentBlock = await assertAiConsent(supabaseAdmin, user.id, requestOrigin);
+    if (consentBlock) return consentBlock;
 
     const rateLimitResponse = await enforceWorkspaceRateLimit(
       supabaseAdmin,

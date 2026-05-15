@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import {
+  assertAiConsent,
+  assertBusinessPlan,
+  enforceWorkspaceRateLimit,
+} from "../_shared/audit.ts";
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   return baseCorsHeaders(requestOrigin, "POST, OPTIONS");
@@ -90,27 +95,57 @@ serve(async (req) => {
       });
     }
 
-    // Verify user has access to this workspace
-    const { data: membership } = await supabaseAdmin
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('workspace_id', lease.workspace_id)
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    const { data: ownedWorkspace } = await supabaseAdmin
+    // Verify user has access to this workspace and fetch its plan in the
+    // same round-trip so we can gate on Business tier.
+    const { data: workspaceRow } = await supabaseAdmin
       .from('workspaces')
-      .select('id')
+      .select('id, owner_id, plan')
       .eq('id', lease.workspace_id)
-      .eq('owner_id', user.id)
       .maybeSingle();
 
-    if (!membership && !ownedWorkspace) {
+    if (!workspaceRow) {
+      return new Response(JSON.stringify({ error: 'Workspace not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    let isAuthorized = workspaceRow.owner_id === user.id;
+    if (!isAuthorized) {
+      const { data: membership } = await supabaseAdmin
+        .from('workspace_members')
+        .select('user_id')
+        .eq('workspace_id', lease.workspace_id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      isAuthorized = Boolean(membership);
+    }
+    if (!isAuthorized) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    // P1-05: lease analysis is a Business-tier feature. The UI hides
+    // the button on lower tiers but the edge function must enforce
+    // the gate server-side so a hand-rolled call can't bypass it.
+    const planBlock = assertBusinessPlan(workspaceRow.plan, 'Lease analysis', requestOrigin);
+    if (planBlock) return planBlock;
+
+    // P1-04: AI consent gate.
+    const consentBlock = await assertAiConsent(supabaseAdmin, user.id, requestOrigin);
+    if (consentBlock) return consentBlock;
+
+    // P1-12: workspace-scoped rate limit — 10 Sonnet calls per workspace per hour.
+    const rateBlock = await enforceWorkspaceRateLimit(
+      supabaseAdmin,
+      lease.workspace_id,
+      'generate-lease-analysis',
+      requestOrigin,
+      10,
+    );
+    if (rateBlock) return rateBlock;
 
     // Fetch rent schedule
     const { data: rentSchedule } = await supabaseAdmin

@@ -168,6 +168,18 @@ serve(async (req) => {
         await writer.close();
         return;
       }
+      // P1-12: cap question length. A 2000-char question is generous for
+      // a finance staffer; beyond that the prompt cost climbs without
+      // matching legitimate use, and a long question is the cheapest way
+      // for a compromised session to drain workspace AI budget.
+      const QUESTION_MAX_CHARS = 2000;
+      if (question.trim().length > QUESTION_MAX_CHARS) {
+        await write({
+          error: `Question is too long. Please shorten it to under ${QUESTION_MAX_CHARS} characters.`,
+        });
+        await writer.close();
+        return;
+      }
       if (!workspaceId) {
         await write({ error: 'workspaceId is required' });
         await writer.close();
@@ -207,6 +219,75 @@ serve(async (req) => {
         await write({ error: 'The AI assistant requires a Business plan.' });
         await writer.close();
         return;
+      }
+
+      // P1-04: AI consent gate. The signup form contractually promises
+      // the user controls AI processing of their data; revoking consent
+      // in Settings → Privacy must actually stop AI calls here.
+      const { data: consentRow, error: consentErr } = await supabaseAdmin
+        .from('profiles')
+        .select('ai_processing_consent_at')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (consentErr) {
+        console.error('[ai-assistant] consent check failed:', consentErr.message);
+        await write({ error: 'Could not verify AI processing consent. Please try again.' });
+        await writer.close();
+        return;
+      }
+      if (!consentRow?.ai_processing_consent_at) {
+        await write({
+          error:
+            'AI processing consent has not been granted. Re-enable consent in Settings → Privacy to use the AI assistant.',
+        });
+        await writer.close();
+        return;
+      }
+
+      // P1-12: workspace-scoped rate limit. 30 questions per hour per
+      // workspace gives a real finance team plenty of headroom while
+      // bounding cost on a compromised or abusive session.
+      const windowStart = new Date();
+      windowStart.setUTCMinutes(0, 0, 0);
+      const windowStartIso = windowStart.toISOString();
+      const RATE_LIMIT = 30;
+      const { data: rateRow, error: rateErr } = await supabaseAdmin
+        .from('processing_rate_limits')
+        .select('id, request_count')
+        .eq('workspace_id', workspaceId)
+        .eq('function_name', 'ai-assistant')
+        .eq('window_start', windowStartIso)
+        .maybeSingle();
+      if (rateErr) {
+        console.error('[ai-assistant] rate check failed:', rateErr.message);
+        await write({ error: 'Rate-limit check failed. Please try again.' });
+        await writer.close();
+        return;
+      }
+      if (rateRow && rateRow.request_count >= RATE_LIMIT) {
+        await write({
+          error:
+            'AI assistant usage limit reached for this hour. Please wait and try again shortly.',
+        });
+        await writer.close();
+        return;
+      }
+      const { error: rateUpsertErr } = await supabaseAdmin
+        .from('processing_rate_limits')
+        .upsert(
+          {
+            workspace_id: workspaceId,
+            function_name: 'ai-assistant',
+            window_start: windowStartIso,
+            request_count: (rateRow?.request_count || 0) + 1,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'workspace_id,function_name,window_start' },
+        );
+      if (rateUpsertErr) {
+        console.error('[ai-assistant] rate upsert failed:', rateUpsertErr.message);
+        // Don't block the request on a tracking write failure — the
+        // gate still works on the next call when the row is read again.
       }
 
       // Fetch leases scoped to this workspace
