@@ -227,36 +227,22 @@ export default function FinancialReview() {
   const handleApprove = async () => {
     if (!lease || !user?.id || classification === 'pending') return;
     setIsActing(true);
-    const now = new Date().toISOString();
     try {
-      await supabase
-        .from('leases')
-        .update({
-          lifecycle_status: 'approved',
-          financial_approved_by: user.id,
-          financial_approved_at: now,
-          lease_classification: classification,
-          lease_classification_set_by: user.id,
-          lease_classification_set_at: now,
-          status_changed_at: now,
-        } as any)
-        .eq('id', lease.id);
-
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user.id,
-        activity_type: 'approval',
-        from_status: 'under_review',
-        to_status: 'approved',
-        details: {
-          role: 'financial_approver',
-          action: 'financial_approved',
+      // P1-11: lifecycle/approval columns are guarded by a DB trigger
+      // (migration 20260515010000). The actual transition lives in the
+      // legacy-lease-action edge function under service-role credentials;
+      // the browser only invokes it and the audit-log notification row.
+      const { data, error } = await supabase.functions.invoke('legacy-lease-action', {
+        body: {
+          action: 'financial_approve',
+          leaseId: lease.id,
           classification,
-          covenant_headroom: covenantHeadroom,
         },
-      } as any);
+      });
+      if (error) throw new Error(error.message ?? 'Approval failed');
+      if ((data as any)?.error) throw new Error((data as any).error);
 
-      // Notify submitter
+      // Notification row — not a workflow column, browser can still write it.
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
         user_id: null,
@@ -264,6 +250,7 @@ export default function FinancialReview() {
         details: {
           notification_type: 'notify_submitter_approved',
           message: `Your commitment request "${lease.request_title}" has been approved (${classification} lease).`,
+          covenant_headroom: covenantHeadroom,
         },
       } as any);
 
@@ -272,7 +259,8 @@ export default function FinancialReview() {
       navigate('/app/approvals');
     } catch (err) {
       console.error(err);
-      toast.error('Failed to approve');
+      const msg = err instanceof Error ? err.message : 'Failed to approve';
+      toast.error(msg);
     } finally {
       setIsActing(false);
     }
@@ -281,28 +269,22 @@ export default function FinancialReview() {
   const handleReject = async () => {
     if (!lease || !user?.id || !rejectReason.trim()) return;
     setIsActing(true);
-    const now = new Date().toISOString();
     try {
+      // P1-11: lifecycle/approval columns are guarded by a DB trigger.
+      // Edge function performs the transition + main activity-log row;
+      // browser still writes the notification-comment row.
+      const action = returnToSubmitter ? 'financial_send_back' : 'financial_reject';
+      const { data, error } = await supabase.functions.invoke('legacy-lease-action', {
+        body: {
+          action,
+          leaseId: lease.id,
+          reason: rejectReason.trim(),
+        },
+      });
+      if (error) throw new Error(error.message ?? 'Rejection failed');
+      if ((data as any)?.error) throw new Error((data as any).error);
+
       if (returnToSubmitter) {
-        await supabase
-          .from('leases')
-          .update({
-            lifecycle_status: 'submitted',
-            financial_rejection_reason: rejectReason.trim(),
-            financial_returned_to_submitter: true,
-            status_changed_at: now,
-          } as any)
-          .eq('id', lease.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: lease.id,
-          user_id: user.id,
-          activity_type: 'send_back',
-          from_status: 'under_review',
-          to_status: 'submitted',
-          details: { role: 'financial_approver', action: 'financial_returned', reason: rejectReason.trim() },
-        } as any);
-
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: null,
@@ -315,24 +297,6 @@ export default function FinancialReview() {
 
         toast.success('Returned to submitter for revision');
       } else {
-        await supabase
-          .from('leases')
-          .update({
-            lifecycle_status: 'rejected',
-            financial_rejection_reason: rejectReason.trim(),
-            status_changed_at: now,
-          } as any)
-          .eq('id', lease.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: lease.id,
-          user_id: user.id,
-          activity_type: 'rejection',
-          from_status: 'under_review',
-          to_status: 'rejected',
-          details: { role: 'financial_approver', action: 'financial_rejected', reason: rejectReason.trim() },
-        } as any);
-
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: null,
@@ -350,7 +314,8 @@ export default function FinancialReview() {
       navigate('/app/approvals');
     } catch (err) {
       console.error(err);
-      toast.error('Failed to submit rejection');
+      const msg = err instanceof Error ? err.message : 'Failed to submit rejection';
+      toast.error(msg);
     } finally {
       setIsActing(false);
     }

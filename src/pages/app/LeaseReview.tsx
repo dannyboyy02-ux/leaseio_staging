@@ -1009,28 +1009,15 @@ export default function LeaseReview() {
     }
     setSubmittingChanges(true);
     try {
-      const { data: { user: authedUser } } = await supabase.auth.getUser();
-      if (!authedUser) throw new Error('Not authenticated');
-      const now = new Date().toISOString();
-      const fromStatus = (lease as any).lifecycle_status ?? 'executed';
-      const { error } = await supabase
-        .from('leases')
-        .update({
-          model_locked: true,
-          model_locked_at: now,
-          model_locked_by: authedUser.id,
-          lifecycle_status: 'active',
-        } as any)
-        .eq('id', lease.id);
-      if (error) throw new Error(`Lock failed: ${error.message}`);
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: authedUser.id,
-        activity_type: 'status_change',
-        from_status: fromStatus,
-        to_status: 'active',
-        details: { action: 'model_locked', locked_at: now },
+      // P1-11: model_locked + lifecycle_status are guarded by a DB
+      // trigger (migration 20260515010000). The legacy-lease-action
+      // edge function performs the transition + audit-log row under
+      // service-role credentials.
+      const { data, error } = await supabase.functions.invoke('legacy-lease-action', {
+        body: { action: 'model_lock', leaseId: lease.id },
       });
+      if (error) throw new Error(error.message ?? 'Lock failed');
+      if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('Lease locked and activated');
       refetchLease();
     } catch (err: any) {

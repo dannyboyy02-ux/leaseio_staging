@@ -877,7 +877,6 @@ export default function ApprovalQueue() {
   const handleApprove = async () => {
     if (!approveTarget || !user?.id) return;
     setIsActing(true);
-    const now = new Date().toISOString();
     const lease = approveTarget;
     // Phase 3 follow-up: literal legacy comparison only. Chain leases are
     // approved via the chain edge function (act-on-chain-step), not this
@@ -888,26 +887,20 @@ export default function ApprovalQueue() {
     const isManager = lease.lifecycle_status === 'submitted';
 
     try {
+      // P1-11: lifecycle/approval columns are guarded by a DB trigger;
+      // the actual transition lives in legacy-lease-action under
+      // service-role. Financial-approver needs a classification value;
+      // the queue defaults to 'operating' for the legacy flow (the
+      // deeper FinancialReview page is where users pick explicitly).
+      const { data, error } = await supabase.functions.invoke('legacy-lease-action', {
+        body: isManager
+          ? { action: 'manager_approve', leaseId: lease.id }
+          : { action: 'financial_approve', leaseId: lease.id, classification: 'operating' },
+      });
+      if (error) throw new Error(error.message ?? 'Approval failed');
+      if ((data as any)?.error) throw new Error((data as any).error);
+
       if (isManager) {
-        await supabase
-          .from('leases')
-          .update({
-            lifecycle_status: 'under_review',
-            manager_approved_by: user.id,
-            manager_approved_at: now,
-            status_changed_at: now,
-          } as any)
-          .eq('id', lease.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: lease.id,
-          user_id: user.id,
-          activity_type: 'approval',
-          from_status: 'submitted',
-          to_status: 'under_review',
-          details: { role: 'manager_approver', action: 'manager_approved' },
-        } as any);
-
         const { data: finRoles } = await (supabase as any)
           .from('workspace_roles')
           .select('user_id')
@@ -925,26 +918,6 @@ export default function ApprovalQueue() {
             },
           } as any);
         }
-      } else {
-        // Financial approver: transition to approved
-        await supabase
-          .from('leases')
-          .update({
-            lifecycle_status: 'approved',
-            financial_approved_by: user.id,
-            financial_approved_at: now,
-            status_changed_at: now,
-          } as any)
-          .eq('id', lease.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: lease.id,
-          user_id: user.id,
-          activity_type: 'approval',
-          from_status: 'under_review',
-          to_status: 'approved',
-          details: { role: 'financial_approver', action: 'financial_approved' },
-        } as any);
       }
 
       toast.success(isManager ? 'Approved \u2014 forwarded to financial review' : 'Commitment approved');
@@ -953,7 +926,8 @@ export default function ApprovalQueue() {
       fetchLeases();
     } catch (err) {
       console.error(err);
-      toast.error('Failed to approve');
+      const msg = err instanceof Error ? err.message : 'Failed to approve';
+      toast.error(msg);
     } finally {
       setIsActing(false);
     }
@@ -962,50 +936,24 @@ export default function ApprovalQueue() {
   const handleReject = async () => {
     if (!rejectTarget || !user?.id || !rejectReason.trim()) return;
     setIsActing(true);
-    const now = new Date().toISOString();
     const lease = rejectTarget;
     // Phase 3 follow-up: literal legacy comparison only. Chain rejects fire
     // via act-on-chain-step.
     const isManager = lease.lifecycle_status === 'submitted';
 
     try {
-      if (isManager) {
-        await supabase
-          .from('leases')
-          .update({
-            lifecycle_status: 'rejected',
-            manager_rejection_reason: rejectReason.trim(),
-            status_changed_at: now,
-          } as any)
-          .eq('id', lease.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: lease.id,
-          user_id: user.id,
-          activity_type: 'rejection',
-          from_status: 'submitted',
-          to_status: 'rejected',
-          details: { role: 'manager_approver', action: 'manager_rejected', reason: rejectReason.trim() },
-        } as any);
-      } else {
-        await supabase
-          .from('leases')
-          .update({
-            lifecycle_status: 'rejected',
-            financial_rejection_reason: rejectReason.trim(),
-            status_changed_at: now,
-          } as any)
-          .eq('id', lease.id);
-
-        await supabase.from('lease_activity_log').insert({
-          lease_id: lease.id,
-          user_id: user.id,
-          activity_type: 'rejection',
-          from_status: 'under_review',
-          to_status: 'rejected',
-          details: { role: 'financial_approver', action: 'financial_rejected', reason: rejectReason.trim() },
-        } as any);
-      }
+      // P1-11: lifecycle/rejection columns guarded by DB trigger. Edge
+      // function performs the transition; browser writes the notification
+      // comment after.
+      const { data, error } = await supabase.functions.invoke('legacy-lease-action', {
+        body: {
+          action: isManager ? 'manager_reject' : 'financial_reject',
+          leaseId: lease.id,
+          reason: rejectReason.trim(),
+        },
+      });
+      if (error) throw new Error(error.message ?? 'Rejection failed');
+      if ((data as any)?.error) throw new Error((data as any).error);
 
       if (lease.requestorEmail) {
         await supabase.from('lease_activity_log').insert({
@@ -1026,7 +974,8 @@ export default function ApprovalQueue() {
       fetchLeases();
     } catch (err) {
       console.error(err);
-      toast.error('Failed to reject');
+      const msg = err instanceof Error ? err.message : 'Failed to reject';
+      toast.error(msg);
     } finally {
       setIsActing(false);
     }
