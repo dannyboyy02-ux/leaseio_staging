@@ -590,7 +590,10 @@
     "trial_banner_desc": "Se cobrará tu tarjeta el {{date}}. Cancela en cualquier momento antes de esa fecha para evitar cargos.",
     "past_due_banner_title": "Pago fallido",
     "past_due_banner_desc": "No pudimos procesar tu pago más reciente. Actualiza tu método de pago para mantener activa tu suscripción.",
-    "update_payment_method": "Actualizar Método de Pago"
+    "update_payment_method": "Actualizar Método de Pago",
+    "recovery_callout_title": "Elegiste Business durante el registro",
+    "recovery_callout_desc": "Su espacio de trabajo está en Starter hasta que se complete el pago. Continúe donde lo dejó.",
+    "recovery_callout_cta": "Completar pago de Business"
   },
   "workspace": {
     "title": "Configuración del Espacio de Trabajo",
@@ -1127,6 +1130,10 @@
     "trial_ends": "La prueba termina",
     "all_set_title": "¡Todo listo!",
     "all_set_desc": "Su espacio de trabajo \"{{name}}\" está listo con el plan {{plan}}.",
+    "all_set_desc_business": "Su espacio de trabajo \"{{name}}\" está listo. Complete el pago para activar Business.",
+    "activating_business_line1": "Activando Business — $499/mes",
+    "activating_business_line2": "Completará el pago a continuación y luego volverá aquí para cargar su primer arrendamiento.",
+    "continue_to_checkout": "Continuar al pago",
     "creating": "Creando...",
     "upload_first_lease": "Cargue su primer arrendamiento"
   },

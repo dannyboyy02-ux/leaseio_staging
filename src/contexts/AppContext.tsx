@@ -225,6 +225,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           (resolvedWorkspace as any).billing_interval ?? null,
         subscriptionPeriodEnd:
           (resolvedWorkspace as any).subscription_period_end ?? null,
+        intendedPlan:
+          (resolvedWorkspace as any).intended_plan ?? null,
       });
 
       try {

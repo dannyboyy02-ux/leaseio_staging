@@ -881,6 +881,36 @@ export default function AccountSettings() {
                 </Card>
               )}
 
+            {/* Abandoned-checkout recovery — user selected Business during signup
+                but never completed payment. Surfaces a way back into checkout. */}
+            {workspace?.intendedPlan === 'business' &&
+              workspace.plan !== 'business' &&
+              workspace.subscriptionStatus !== 'active' &&
+              workspace.subscriptionStatus !== 'trialing' && (
+                <Card className="border-primary/50 bg-primary/5">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">
+                      {t('account.recovery_callout_title')}
+                    </CardTitle>
+                    <CardDescription>
+                      {t('account.recovery_callout_desc')}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      size="sm"
+                      onClick={() => proceedWithCheckout('business')}
+                      disabled={isUpgrading === 'business'}
+                    >
+                      {isUpgrading === 'business' ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : null}
+                      {t('account.recovery_callout_cta')}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
             {/* Current Plan & Usage */}
             <div className="grid gap-6 lg:grid-cols-2">
               <Card>

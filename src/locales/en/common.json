@@ -590,7 +590,10 @@
     "trial_banner_desc": "Your card will be charged on {{date}}. Cancel anytime before then to avoid charges.",
     "past_due_banner_title": "Payment failed",
     "past_due_banner_desc": "We couldn't process your most recent payment. Update your payment method to keep your subscription active.",
-    "update_payment_method": "Update Payment Method"
+    "update_payment_method": "Update Payment Method",
+    "recovery_callout_title": "You picked Business during signup",
+    "recovery_callout_desc": "Your workspace is on Starter until checkout completes. Pick up where you left off below.",
+    "recovery_callout_cta": "Complete Business checkout"
   },
   "workspace": {
     "title": "Workspace Settings",
@@ -1127,6 +1130,10 @@
     "trial_ends": "Trial ends",
     "all_set_title": "You're all set!",
     "all_set_desc": "Your workspace \"{{name}}\" is ready with the {{plan}} plan.",
+    "all_set_desc_business": "Your workspace \"{{name}}\" is ready. Complete checkout to activate Business.",
+    "activating_business_line1": "Activating Business — $499/mo",
+    "activating_business_line2": "You'll complete payment next, then return here to upload your first lease.",
+    "continue_to_checkout": "Continue to checkout",
     "creating": "Creating...",
     "upload_first_lease": "Upload your first lease"
   },

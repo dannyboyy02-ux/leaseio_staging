@@ -48,6 +48,11 @@ export interface Workspace {
   subscriptionStatus: string | null;
   billingInterval: 'monthly' | 'annual' | null;
   subscriptionPeriodEnd: string | null;
+  // User-declared plan at workspace creation. Independent of `plan`
+  // (which Stripe webhook owns). Used to recover an abandoned Business
+  // checkout — AccountSettings surfaces a callout when intendedPlan
+  // diverges from plan.
+  intendedPlan: SubscriptionPlan | null;
 }
 
 export interface WorkspaceMember {

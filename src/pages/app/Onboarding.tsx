@@ -33,7 +33,7 @@ export default function Onboarding() {
   const { refreshProfile, workspace, isLoading: appLoading } = useApp();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { t, language } = useAppTranslation();
+  const { t } = useAppTranslation();
 
   useEffect(() => {
     if (!appLoading && workspace) {
@@ -71,18 +71,22 @@ export default function Onboarding() {
     setIsLoading(true);
 
     try {
-      const workspacePlan: SubscriptionPlan = selectedPlan;
-      const planConfig = PLANS[workspacePlan];
-      
-      // Create workspace
+      // Always create the workspace at Starter defaults. The
+      // entitlement-guard trigger in migration 20260426000003 rejects any
+      // authenticated insert that diverges from those defaults, so we
+      // omit plan / document_limit and let the DB defaults apply.
+      // Stripe checkout + the signed webhook (service role, which bypasses
+      // the trigger) own the promotion to Business.
+      //
+      // intended_plan persists the user's declared choice so AccountSettings
+      // can recover an abandoned Business checkout.
       const { data: workspace, error: workspaceError } = await supabase
         .from('workspaces')
         .insert({
           name: workspaceName.trim(),
           owner_id: user.id,
-          plan: workspacePlan,
-          document_limit: planConfig.maxActiveLeases,
-        })
+          intended_plan: selectedPlan,
+        } as any)
         .select()
         .single();
 
@@ -284,34 +288,43 @@ export default function Onboarding() {
                   {t('onboarding_flow.all_set_title')}
                 </h1>
                 <p className="text-muted-foreground">
-                  {t('onboarding_flow.all_set_desc', {
-                    name: workspaceName,
-                    plan: t(selectedPlanConfig.nameKey),
-                  })}
+                  {selectedPlan === 'business'
+                    ? t('onboarding_flow.all_set_desc_business', { name: workspaceName })
+                    : t('onboarding_flow.all_set_desc', {
+                        name: workspaceName,
+                        plan: t(selectedPlanConfig.nameKey),
+                      })}
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{t('onboarding_flow.plan_label')}</span>
-                    <span className="font-medium text-foreground">{t(selectedPlanConfig.nameKey)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{t('onboarding_flow.document_limit')}</span>
-                    <span className="font-medium text-foreground">
-                      {selectedPlanConfig.maxActiveLeases === -1 ? 'Unlimited' : selectedPlanConfig.maxActiveLeases}{' '}
-                      {selectedPlanConfig.maxActiveLeases === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
-                    </span>
-                  </div>
-                  {selectedPlanConfig.price.monthly > 0 && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{t('onboarding_flow.trial_ends')}</span>
-                      <span className="font-medium text-foreground">
-                        {new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString(
-                          language === 'es' ? 'es-419' : 'en-US'
-                        )}
-                      </span>
+                  {selectedPlan === 'business' ? (
+                    // For Business, we don't show plan/limit rows because the
+                    // workspace was created at Starter defaults; Stripe webhook
+                    // promotes to Business after checkout. Showing "Business / 50
+                    // leases" here would be a false confirmation.
+                    <div className="text-sm text-foreground space-y-1">
+                      <p className="font-medium">
+                        {t('onboarding_flow.activating_business_line1')}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {t('onboarding_flow.activating_business_line2')}
+                      </p>
                     </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{t('onboarding_flow.plan_label')}</span>
+                        <span className="font-medium text-foreground">{t(selectedPlanConfig.nameKey)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{t('onboarding_flow.document_limit')}</span>
+                        <span className="font-medium text-foreground">
+                          {selectedPlanConfig.maxActiveLeases === -1 ? 'Unlimited' : selectedPlanConfig.maxActiveLeases}{' '}
+                          {selectedPlanConfig.maxActiveLeases === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
+                        </span>
+                      </div>
+                    </>
                   )}
                 </div>
                 <div className="flex gap-3">
@@ -324,6 +337,8 @@ export default function Onboarding() {
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         {t('onboarding_flow.creating')}
                       </>
+                    ) : selectedPlan === 'business' ? (
+                      t('onboarding_flow.continue_to_checkout')
                     ) : (
                       t('onboarding_flow.upload_first_lease')
                     )}
