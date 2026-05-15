@@ -1,1 +1,3788 @@
-{"types":"export type Json =\n  | string\n  | number\n  | boolean\n  | null\n  | { [key: string]: Json | undefined }\n  | Json[]\n\nexport type Database = {\n  // Allows to automatically instantiate createClient with right options\n  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)\n  __InternalSupabase: {\n    PostgrestVersion: \"14.1\"\n  }\n  public: {\n    Tables: {\n      alert_rules: {\n        Row: {\n          alert_type: string\n          created_at: string\n          id: string\n          is_active: boolean\n          threshold_days: number | null\n          threshold_value: number | null\n          updated_at: string\n          workspace_id: string\n        }\n        Insert: {\n          alert_type: string\n          created_at?: string\n          id?: string\n          is_active?: boolean\n          threshold_days?: number | null\n          threshold_value?: number | null\n          updated_at?: string\n          workspace_id: string\n        }\n        Update: {\n          alert_type?: string\n          created_at?: string\n          id?: string\n          is_active?: boolean\n          threshold_days?: number | null\n          threshold_value?: number | null\n          updated_at?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"alert_rules_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      approval_chain_steps: {\n        Row: {\n          approver_role: string | null\n          approver_user_id: string | null\n          created_at: string\n          delegate_after_days: number | null\n          delegate_user_id: string | null\n          id: string\n          is_required: boolean\n          parallel_group: number\n          policy_id: string\n          stage: string\n          step_order: number\n        }\n        Insert: {\n          approver_role?: string | null\n          approver_user_id?: string | null\n          created_at?: string\n          delegate_after_days?: number | null\n          delegate_user_id?: string | null\n          id?: string\n          is_required?: boolean\n          parallel_group?: number\n          policy_id: string\n          stage: string\n          step_order: number\n        }\n        Update: {\n          approver_role?: string | null\n          approver_user_id?: string | null\n          created_at?: string\n          delegate_after_days?: number | null\n          delegate_user_id?: string | null\n          id?: string\n          is_required?: boolean\n          parallel_group?: number\n          policy_id?: string\n          stage?: string\n          step_order?: number\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"approval_chain_steps_policy_id_fkey\"\n            columns: [\"policy_id\"]\n            isOneToOne: false\n            referencedRelation: \"approval_policies\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      approval_policies: {\n        Row: {\n          created_at: string\n          created_by: string\n          description: string | null\n          id: string\n          is_active: boolean\n          is_default_fallback: boolean\n          match_asset_types: string[]\n          match_departments: string[]\n          match_lease_types: string[]\n          match_max_annual_cost: number | null\n          match_min_annual_cost: number | null\n          match_regions: string[]\n          name: string\n          priority: number\n          separation_of_duties_override: boolean | null\n          updated_at: string\n          updated_by: string\n          version: number\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string\n          created_by: string\n          description?: string | null\n          id?: string\n          is_active?: boolean\n          is_default_fallback?: boolean\n          match_asset_types?: string[]\n          match_departments?: string[]\n          match_lease_types?: string[]\n          match_max_annual_cost?: number | null\n          match_min_annual_cost?: number | null\n          match_regions?: string[]\n          name: string\n          priority?: number\n          separation_of_duties_override?: boolean | null\n          updated_at?: string\n          updated_by: string\n          version?: number\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string\n          description?: string | null\n          id?: string\n          is_active?: boolean\n          is_default_fallback?: boolean\n          match_asset_types?: string[]\n          match_departments?: string[]\n          match_lease_types?: string[]\n          match_max_annual_cost?: number | null\n          match_min_annual_cost?: number | null\n          match_regions?: string[]\n          name?: string\n          priority?: number\n          separation_of_duties_override?: boolean | null\n          updated_at?: string\n          updated_by?: string\n          version?: number\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"approval_policies_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      chain_step_overrides: {\n        Row: {\n          chain_step_id: string\n          created_at: string\n          id: string\n          lease_id: string\n          override_action: string\n          override_at: string\n          override_by: string\n          override_reason: string\n          prior_assignee_role: string | null\n          prior_assignee_user_id: string | null\n          reassigned_to_user_id: string | null\n          workspace_id: string\n        }\n        Insert: {\n          chain_step_id: string\n          created_at?: string\n          id?: string\n          lease_id: string\n          override_action: string\n          override_at?: string\n          override_by: string\n          override_reason: string\n          prior_assignee_role?: string | null\n          prior_assignee_user_id?: string | null\n          reassigned_to_user_id?: string | null\n          workspace_id: string\n        }\n        Update: {\n          chain_step_id?: string\n          created_at?: string\n          id?: string\n          lease_id?: string\n          override_action?: string\n          override_at?: string\n          override_by?: string\n          override_reason?: string\n          prior_assignee_role?: string | null\n          prior_assignee_user_id?: string | null\n          reassigned_to_user_id?: string | null\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"chain_step_overrides_chain_step_id_fkey\"\n            columns: [\"chain_step_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_approval_chain\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"chain_step_overrides_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"chain_step_overrides_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"chain_step_overrides_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"chain_step_overrides_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      chain_step_voluntary_delegations: {\n        Row: {\n          chain_step_id: string\n          delegated_at: string\n          delegated_by: string\n          delegated_to: string\n          id: string\n          lease_id: string\n          reason: string | null\n          revoked_at: string | null\n          revoked_by: string | null\n          workspace_id: string\n        }\n        Insert: {\n          chain_step_id: string\n          delegated_at?: string\n          delegated_by: string\n          delegated_to: string\n          id?: string\n          lease_id: string\n          reason?: string | null\n          revoked_at?: string | null\n          revoked_by?: string | null\n          workspace_id: string\n        }\n        Update: {\n          chain_step_id?: string\n          delegated_at?: string\n          delegated_by?: string\n          delegated_to?: string\n          id?: string\n          lease_id?: string\n          reason?: string | null\n          revoked_at?: string | null\n          revoked_by?: string | null\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"chain_step_voluntary_delegations_chain_step_id_fkey\"\n            columns: [\"chain_step_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_approval_chain\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"chain_step_voluntary_delegations_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"chain_step_voluntary_delegations_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"chain_step_voluntary_delegations_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"chain_step_voluntary_delegations_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      deleted_workspaces: {\n        Row: {\n          deleted_at: string\n          deleted_by: string | null\n          id: string\n          lease_count_at_deletion: number | null\n          member_count_at_deletion: number | null\n          original_workspace_id: string\n          owner_id: string\n          storage_objects_purged: number | null\n          workspace_name: string | null\n          workspace_plan: string | null\n        }\n        Insert: {\n          deleted_at?: string\n          deleted_by?: string | null\n          id?: string\n          lease_count_at_deletion?: number | null\n          member_count_at_deletion?: number | null\n          original_workspace_id: string\n          owner_id: string\n          storage_objects_purged?: number | null\n          workspace_name?: string | null\n          workspace_plan?: string | null\n        }\n        Update: {\n          deleted_at?: string\n          deleted_by?: string | null\n          id?: string\n          lease_count_at_deletion?: number | null\n          member_count_at_deletion?: number | null\n          original_workspace_id?: string\n          owner_id?: string\n          storage_objects_purged?: number | null\n          workspace_name?: string | null\n          workspace_plan?: string | null\n        }\n        Relationships: []\n      }\n      dismissed_events: {\n        Row: {\n          created_at: string\n          dismissed_at: string\n          event_key: string\n          expires_at: string | null\n          id: string\n          user_id: string\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string\n          dismissed_at?: string\n          event_key: string\n          expires_at?: string | null\n          id?: string\n          user_id: string\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string\n          dismissed_at?: string\n          event_key?: string\n          expires_at?: string | null\n          id?: string\n          user_id?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"dismissed_events_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      executed_term_edits: {\n        Row: {\n          edited_at: string\n          edited_by: string\n          edited_value: string | null\n          field_name: string\n          id: string\n          lease_id: string\n          original_value: string | null\n          reason: string | null\n        }\n        Insert: {\n          edited_at?: string\n          edited_by: string\n          edited_value?: string | null\n          field_name: string\n          id?: string\n          lease_id: string\n          original_value?: string | null\n          reason?: string | null\n        }\n        Update: {\n          edited_at?: string\n          edited_by?: string\n          edited_value?: string | null\n          field_name?: string\n          id?: string\n          lease_id?: string\n          original_value?: string | null\n          reason?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"executed_term_edits_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"executed_term_edits_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"executed_term_edits_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      field_corrections: {\n        Row: {\n          ai_confidence: number | null\n          corrected_at: string | null\n          corrected_by: string | null\n          corrected_value: string | null\n          correction_type: string | null\n          field_name: string\n          id: string\n          lease_id: string\n          original_value: string | null\n          user_notes: string | null\n        }\n        Insert: {\n          ai_confidence?: number | null\n          corrected_at?: string | null\n          corrected_by?: string | null\n          corrected_value?: string | null\n          correction_type?: string | null\n          field_name: string\n          id?: string\n          lease_id: string\n          original_value?: string | null\n          user_notes?: string | null\n        }\n        Update: {\n          ai_confidence?: number | null\n          corrected_at?: string | null\n          corrected_by?: string | null\n          corrected_value?: string | null\n          correction_type?: string | null\n          field_name?: string\n          id?: string\n          lease_id?: string\n          original_value?: string | null\n          user_notes?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"field_corrections_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"field_corrections_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"field_corrections_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      invite_tokens: {\n        Row: {\n          accepted_at: string | null\n          created_at: string\n          email: string\n          expires_at: string\n          first_name: string | null\n          id: string\n          last_name: string | null\n          role: Database[\"public\"][\"Enums\"][\"workspace_role\"]\n          token: string\n          workspace_id: string\n        }\n        Insert: {\n          accepted_at?: string | null\n          created_at?: string\n          email: string\n          expires_at?: string\n          first_name?: string | null\n          id?: string\n          last_name?: string | null\n          role?: Database[\"public\"][\"Enums\"][\"workspace_role\"]\n          token?: string\n          workspace_id: string\n        }\n        Update: {\n          accepted_at?: string | null\n          created_at?: string\n          email?: string\n          expires_at?: string\n          first_name?: string | null\n          id?: string\n          last_name?: string | null\n          role?: Database[\"public\"][\"Enums\"][\"workspace_role\"]\n          token?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"invite_tokens_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_activity_log: {\n        Row: {\n          activity_type: string\n          created_at: string\n          details: Json | null\n          from_status: string | null\n          id: string\n          lease_id: string\n          to_status: string | null\n          user_id: string | null\n        }\n        Insert: {\n          activity_type: string\n          created_at?: string\n          details?: Json | null\n          from_status?: string | null\n          id?: string\n          lease_id: string\n          to_status?: string | null\n          user_id?: string | null\n        }\n        Update: {\n          activity_type?: string\n          created_at?: string\n          details?: Json | null\n          from_status?: string | null\n          id?: string\n          lease_id?: string\n          to_status?: string | null\n          user_id?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_activity_log_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_activity_log_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_activity_log_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_activity_log_user_id_fkey\"\n            columns: [\"user_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_approval_actions: {\n        Row: {\n          action: string\n          approval_type: string\n          approver_id: string\n          comment: string | null\n          created_at: string\n          id: string\n          lease_id: string\n        }\n        Insert: {\n          action: string\n          approval_type: string\n          approver_id: string\n          comment?: string | null\n          created_at?: string\n          id?: string\n          lease_id: string\n        }\n        Update: {\n          action?: string\n          approval_type?: string\n          approver_id?: string\n          comment?: string | null\n          created_at?: string\n          id?: string\n          lease_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_approval_actions_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_approval_actions_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_approval_actions_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_approval_chain: {\n        Row: {\n          action_at: string | null\n          action_by: string | null\n          approver_role: string | null\n          approver_user_id: string | null\n          assignee_resolution_source: string | null\n          comment: string | null\n          created_at: string\n          delegate_activated_at: string | null\n          delegate_after_days: number | null\n          delegate_user_id: string | null\n          effective_assignee_user_id: string | null\n          id: string\n          is_required: boolean\n          lease_id: string\n          parallel_group: number\n          pending_since: string | null\n          policy_id: string | null\n          policy_version: number | null\n          rerouted_from_chain_id: string | null\n          stage: string\n          status: string\n          step_order: number\n          workspace_id: string\n        }\n        Insert: {\n          action_at?: string | null\n          action_by?: string | null\n          approver_role?: string | null\n          approver_user_id?: string | null\n          assignee_resolution_source?: string | null\n          comment?: string | null\n          created_at?: string\n          delegate_activated_at?: string | null\n          delegate_after_days?: number | null\n          delegate_user_id?: string | null\n          effective_assignee_user_id?: string | null\n          id?: string\n          is_required?: boolean\n          lease_id: string\n          parallel_group?: number\n          pending_since?: string | null\n          policy_id?: string | null\n          policy_version?: number | null\n          rerouted_from_chain_id?: string | null\n          stage: string\n          status?: string\n          step_order: number\n          workspace_id: string\n        }\n        Update: {\n          action_at?: string | null\n          action_by?: string | null\n          approver_role?: string | null\n          approver_user_id?: string | null\n          assignee_resolution_source?: string | null\n          comment?: string | null\n          created_at?: string\n          delegate_activated_at?: string | null\n          delegate_after_days?: number | null\n          delegate_user_id?: string | null\n          effective_assignee_user_id?: string | null\n          id?: string\n          is_required?: boolean\n          lease_id?: string\n          parallel_group?: number\n          pending_since?: string | null\n          policy_id?: string | null\n          policy_version?: number | null\n          rerouted_from_chain_id?: string | null\n          stage?: string\n          status?: string\n          step_order?: number\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_approval_chain_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_approval_chain_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_approval_chain_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_approval_chain_policy_id_fkey\"\n            columns: [\"policy_id\"]\n            isOneToOne: false\n            referencedRelation: \"approval_policies\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_approval_chain_rerouted_from_chain_id_fkey\"\n            columns: [\"rerouted_from_chain_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_approval_chain\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_approval_chain_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_approvers: {\n        Row: {\n          approval_type: string\n          approved_at: string | null\n          approver_id: string\n          created_at: string\n          id: string\n          lease_id: string\n        }\n        Insert: {\n          approval_type: string\n          approved_at?: string | null\n          approver_id: string\n          created_at?: string\n          id?: string\n          lease_id: string\n        }\n        Update: {\n          approval_type?: string\n          approved_at?: string | null\n          approver_id?: string\n          created_at?: string\n          id?: string\n          lease_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_approvers_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_approvers_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_approvers_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_asc842_inputs: {\n        Row: {\n          asset_fair_value: number | null\n          bargain_purchase_option: boolean | null\n          classification_criteria_basis: string | null\n          created_at: string\n          id: string\n          initial_direct_costs: number | null\n          initial_direct_costs_basis: string | null\n          last_updated_at: string\n          last_updated_by: string | null\n          lease_id: string\n          lease_incentives_received: number | null\n          lease_incentives_received_basis: string | null\n          major_part_economic_life: boolean | null\n          major_part_economic_life_pct: number | null\n          ownership_transfers_at_end: boolean | null\n          prepaid_rent: number | null\n          prepaid_rent_basis: string | null\n          purchase_option_basis: string | null\n          purchase_option_present: boolean | null\n          purchase_option_price: number | null\n          purchase_option_reasonably_certain: boolean | null\n          pv_substantially_all_fair_value: boolean | null\n          pv_to_fair_value_pct: number | null\n          renewal_options_rc_basis: string | null\n          renewal_options_rc_term_months: number | null\n          residual_value_guarantee: number | null\n          residual_value_guarantee_basis: string | null\n          short_term_lease_election: boolean | null\n          short_term_lease_election_basis: string | null\n          specialized_asset_no_alt_use: boolean | null\n          sublease_basis: string | null\n          sublease_income_annual: number | null\n          tenant_improvement_allowance: number | null\n          tenant_improvement_allowance_basis: string | null\n          termination_penalty_amount: number | null\n          termination_penalty_basis: string | null\n          termination_penalty_reasonably_certain: boolean | null\n          variable_payments_description: string | null\n          variable_payments_estimated_annual: number | null\n          workspace_id: string\n        }\n        Insert: {\n          asset_fair_value?: number | null\n          bargain_purchase_option?: boolean | null\n          classification_criteria_basis?: string | null\n          created_at?: string\n          id?: string\n          initial_direct_costs?: number | null\n          initial_direct_costs_basis?: string | null\n          last_updated_at?: string\n          last_updated_by?: string | null\n          lease_id: string\n          lease_incentives_received?: number | null\n          lease_incentives_received_basis?: string | null\n          major_part_economic_life?: boolean | null\n          major_part_economic_life_pct?: number | null\n          ownership_transfers_at_end?: boolean | null\n          prepaid_rent?: number | null\n          prepaid_rent_basis?: string | null\n          purchase_option_basis?: string | null\n          purchase_option_present?: boolean | null\n          purchase_option_price?: number | null\n          purchase_option_reasonably_certain?: boolean | null\n          pv_substantially_all_fair_value?: boolean | null\n          pv_to_fair_value_pct?: number | null\n          renewal_options_rc_basis?: string | null\n          renewal_options_rc_term_months?: number | null\n          residual_value_guarantee?: number | null\n          residual_value_guarantee_basis?: string | null\n          short_term_lease_election?: boolean | null\n          short_term_lease_election_basis?: string | null\n          specialized_asset_no_alt_use?: boolean | null\n          sublease_basis?: string | null\n          sublease_income_annual?: number | null\n          tenant_improvement_allowance?: number | null\n          tenant_improvement_allowance_basis?: string | null\n          termination_penalty_amount?: number | null\n          termination_penalty_basis?: string | null\n          termination_penalty_reasonably_certain?: boolean | null\n          variable_payments_description?: string | null\n          variable_payments_estimated_annual?: number | null\n          workspace_id: string\n        }\n        Update: {\n          asset_fair_value?: number | null\n          bargain_purchase_option?: boolean | null\n          classification_criteria_basis?: string | null\n          created_at?: string\n          id?: string\n          initial_direct_costs?: number | null\n          initial_direct_costs_basis?: string | null\n          last_updated_at?: string\n          last_updated_by?: string | null\n          lease_id?: string\n          lease_incentives_received?: number | null\n          lease_incentives_received_basis?: string | null\n          major_part_economic_life?: boolean | null\n          major_part_economic_life_pct?: number | null\n          ownership_transfers_at_end?: boolean | null\n          prepaid_rent?: number | null\n          prepaid_rent_basis?: string | null\n          purchase_option_basis?: string | null\n          purchase_option_present?: boolean | null\n          purchase_option_price?: number | null\n          purchase_option_reasonably_certain?: boolean | null\n          pv_substantially_all_fair_value?: boolean | null\n          pv_to_fair_value_pct?: number | null\n          renewal_options_rc_basis?: string | null\n          renewal_options_rc_term_months?: number | null\n          residual_value_guarantee?: number | null\n          residual_value_guarantee_basis?: string | null\n          short_term_lease_election?: boolean | null\n          short_term_lease_election_basis?: string | null\n          specialized_asset_no_alt_use?: boolean | null\n          sublease_basis?: string | null\n          sublease_income_annual?: number | null\n          tenant_improvement_allowance?: number | null\n          tenant_improvement_allowance_basis?: string | null\n          termination_penalty_amount?: number | null\n          termination_penalty_basis?: string | null\n          termination_penalty_reasonably_certain?: boolean | null\n          variable_payments_description?: string | null\n          variable_payments_estimated_annual?: number | null\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_asc842_inputs_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: true\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_asc842_inputs_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: true\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_asc842_inputs_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: true\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_asc842_inputs_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_attribute_snapshots: {\n        Row: {\n          annual_cost_at_snapshot: number | null\n          asset_type: string | null\n          chain_resolution_at: string\n          created_at: string\n          id: string\n          lease_id: string\n          lease_type: string | null\n          monthly_payment: number | null\n          policy_id: string | null\n          policy_version: number | null\n          raw_attributes: Json\n          region: string | null\n          requesting_department: string | null\n          workspace_id: string\n        }\n        Insert: {\n          annual_cost_at_snapshot?: number | null\n          asset_type?: string | null\n          chain_resolution_at?: string\n          created_at?: string\n          id?: string\n          lease_id: string\n          lease_type?: string | null\n          monthly_payment?: number | null\n          policy_id?: string | null\n          policy_version?: number | null\n          raw_attributes?: Json\n          region?: string | null\n          requesting_department?: string | null\n          workspace_id: string\n        }\n        Update: {\n          annual_cost_at_snapshot?: number | null\n          asset_type?: string | null\n          chain_resolution_at?: string\n          created_at?: string\n          id?: string\n          lease_id?: string\n          lease_type?: string | null\n          monthly_payment?: number | null\n          policy_id?: string | null\n          policy_version?: number | null\n          raw_attributes?: Json\n          region?: string | null\n          requesting_department?: string | null\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_attribute_snapshots_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_attribute_snapshots_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_attribute_snapshots_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_attribute_snapshots_policy_id_fkey\"\n            columns: [\"policy_id\"]\n            isOneToOne: false\n            referencedRelation: \"approval_policies\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_attribute_snapshots_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_change_set_items: {\n        Row: {\n          change_set_id: string\n          created_at: string\n          field_label: string\n          field_name: string\n          id: string\n          old_value: string | null\n          proposed_value: string | null\n          source_section: string | null\n        }\n        Insert: {\n          change_set_id: string\n          created_at?: string\n          field_label: string\n          field_name: string\n          id?: string\n          old_value?: string | null\n          proposed_value?: string | null\n          source_section?: string | null\n        }\n        Update: {\n          change_set_id?: string\n          created_at?: string\n          field_label?: string\n          field_name?: string\n          id?: string\n          old_value?: string | null\n          proposed_value?: string | null\n          source_section?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_change_set_items_change_set_id_fkey\"\n            columns: [\"change_set_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_change_sets\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_change_sets: {\n        Row: {\n          change_summary: string | null\n          created_at: string\n          id: string\n          lease_id: string\n          requested_approver_id: string | null\n          review_note: string | null\n          reviewed_at: string | null\n          reviewed_by: string | null\n          self_approved: boolean\n          status: string\n          submitted_at: string | null\n          submitted_by: string\n          unlock_request_id: string | null\n          updated_at: string\n          workspace_id: string\n        }\n        Insert: {\n          change_summary?: string | null\n          created_at?: string\n          id?: string\n          lease_id: string\n          requested_approver_id?: string | null\n          review_note?: string | null\n          reviewed_at?: string | null\n          reviewed_by?: string | null\n          self_approved?: boolean\n          status?: string\n          submitted_at?: string | null\n          submitted_by: string\n          unlock_request_id?: string | null\n          updated_at?: string\n          workspace_id: string\n        }\n        Update: {\n          change_summary?: string | null\n          created_at?: string\n          id?: string\n          lease_id?: string\n          requested_approver_id?: string | null\n          review_note?: string | null\n          reviewed_at?: string | null\n          reviewed_by?: string | null\n          self_approved?: boolean\n          status?: string\n          submitted_at?: string | null\n          submitted_by?: string\n          unlock_request_id?: string | null\n          updated_at?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_change_sets_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_change_sets_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_change_sets_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_change_sets_unlock_request_id_fkey\"\n            columns: [\"unlock_request_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_unlock_requests\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_change_sets_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_documents: {\n        Row: {\n          created_at: string\n          document_type: string\n          file_size_bytes: number | null\n          filename: string\n          id: string\n          is_current_latest: boolean\n          iteration_number: number\n          lease_id: string\n          mime_type: string | null\n          notes: string | null\n          storage_path: string\n          superseded_at: string | null\n          superseded_by: string | null\n          uploaded_at: string\n          uploaded_by: string\n          version_number: number\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string\n          document_type: string\n          file_size_bytes?: number | null\n          filename: string\n          id?: string\n          is_current_latest?: boolean\n          iteration_number: number\n          lease_id: string\n          mime_type?: string | null\n          notes?: string | null\n          storage_path: string\n          superseded_at?: string | null\n          superseded_by?: string | null\n          uploaded_at?: string\n          uploaded_by: string\n          version_number: number\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string\n          document_type?: string\n          file_size_bytes?: number | null\n          filename?: string\n          id?: string\n          is_current_latest?: boolean\n          iteration_number?: number\n          lease_id?: string\n          mime_type?: string | null\n          notes?: string | null\n          storage_path?: string\n          superseded_at?: string | null\n          superseded_by?: string | null\n          uploaded_at?: string\n          uploaded_by?: string\n          version_number?: number\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_documents_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_documents_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_documents_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_documents_superseded_by_fkey\"\n            columns: [\"superseded_by\"]\n            isOneToOne: false\n            referencedRelation: \"lease_documents\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_documents_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_field_confidence: {\n        Row: {\n          confidence_score: number\n          corrected_at: string | null\n          created_at: string | null\n          field_name: string\n          id: string\n          lease_id: string\n          was_corrected: boolean | null\n        }\n        Insert: {\n          confidence_score: number\n          corrected_at?: string | null\n          created_at?: string | null\n          field_name: string\n          id?: string\n          lease_id: string\n          was_corrected?: boolean | null\n        }\n        Update: {\n          confidence_score?: number\n          corrected_at?: string | null\n          created_at?: string | null\n          field_name?: string\n          id?: string\n          lease_id?: string\n          was_corrected?: boolean | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_field_confidence_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_field_confidence_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_field_confidence_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_governance_audit: {\n        Row: {\n          actor_email: string | null\n          actor_user_id: string | null\n          cancellation_reason: string | null\n          change_summary: string | null\n          created_at: string\n          event_type: string\n          field_label: string | null\n          field_name: string | null\n          final_value: string | null\n          id: string\n          lease_id: string\n          old_value: string | null\n          proposed_value: string | null\n          rejection_reason: string | null\n          related_change_set_id: string | null\n          related_unlock_request_id: string | null\n          workspace_id: string\n        }\n        Insert: {\n          actor_email?: string | null\n          actor_user_id?: string | null\n          cancellation_reason?: string | null\n          change_summary?: string | null\n          created_at?: string\n          event_type: string\n          field_label?: string | null\n          field_name?: string | null\n          final_value?: string | null\n          id?: string\n          lease_id: string\n          old_value?: string | null\n          proposed_value?: string | null\n          rejection_reason?: string | null\n          related_change_set_id?: string | null\n          related_unlock_request_id?: string | null\n          workspace_id: string\n        }\n        Update: {\n          actor_email?: string | null\n          actor_user_id?: string | null\n          cancellation_reason?: string | null\n          change_summary?: string | null\n          created_at?: string\n          event_type?: string\n          field_label?: string | null\n          field_name?: string | null\n          final_value?: string | null\n          id?: string\n          lease_id?: string\n          old_value?: string | null\n          proposed_value?: string | null\n          rejection_reason?: string | null\n          related_change_set_id?: string | null\n          related_unlock_request_id?: string | null\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_governance_audit_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_related_change_set_id_fkey\"\n            columns: [\"related_change_set_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_change_sets\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_related_unlock_request_id_fkey\"\n            columns: [\"related_unlock_request_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_unlock_requests\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_notifications: {\n        Row: {\n          created_at: string\n          event_date: string\n          event_description: string | null\n          event_type: string\n          id: string\n          is_confirmed: boolean\n          last_notified_at: string | null\n          lease_id: string\n          notify_days_before: number[]\n          notify_email: boolean\n          updated_at: string\n        }\n        Insert: {\n          created_at?: string\n          event_date: string\n          event_description?: string | null\n          event_type: string\n          id?: string\n          is_confirmed?: boolean\n          last_notified_at?: string | null\n          lease_id: string\n          notify_days_before?: number[]\n          notify_email?: boolean\n          updated_at?: string\n        }\n        Update: {\n          created_at?: string\n          event_date?: string\n          event_description?: string | null\n          event_type?: string\n          id?: string\n          is_confirmed?: boolean\n          last_notified_at?: string | null\n          lease_id?: string\n          notify_days_before?: number[]\n          notify_email?: boolean\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_notifications_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_notifications_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_notifications_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_nudges: {\n        Row: {\n          channel: string\n          id: string\n          lease_id: string\n          nudge_type: string\n          sent_at: string\n          sent_by: string | null\n        }\n        Insert: {\n          channel: string\n          id?: string\n          lease_id: string\n          nudge_type: string\n          sent_at?: string\n          sent_by?: string | null\n        }\n        Update: {\n          channel?: string\n          id?: string\n          lease_id?: string\n          nudge_type?: string\n          sent_at?: string\n          sent_by?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_nudges_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_nudges_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_nudges_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_reports: {\n        Row: {\n          created_at: string\n          discount_rate_method_at_gen: string | null\n          error_message: string | null\n          excluded_lease_count: number\n          exclusion_reasons: Json\n          expires_at: string | null\n          generated_at: string\n          generated_by: string\n          id: string\n          json_storage_path: string | null\n          lease_count: number\n          lease_id: string | null\n          organization_name_at_gen: string | null\n          pdf_storage_path: string | null\n          period_end: string | null\n          period_start: string | null\n          report_scope: string\n          report_type: string\n          status: string\n          workspace_id: string\n          workspace_settings_snapshot: Json\n        }\n        Insert: {\n          created_at?: string\n          discount_rate_method_at_gen?: string | null\n          error_message?: string | null\n          excluded_lease_count?: number\n          exclusion_reasons?: Json\n          expires_at?: string | null\n          generated_at?: string\n          generated_by: string\n          id?: string\n          json_storage_path?: string | null\n          lease_count?: number\n          lease_id?: string | null\n          organization_name_at_gen?: string | null\n          pdf_storage_path?: string | null\n          period_end?: string | null\n          period_start?: string | null\n          report_scope: string\n          report_type: string\n          status?: string\n          workspace_id: string\n          workspace_settings_snapshot?: Json\n        }\n        Update: {\n          created_at?: string\n          discount_rate_method_at_gen?: string | null\n          error_message?: string | null\n          excluded_lease_count?: number\n          exclusion_reasons?: Json\n          expires_at?: string | null\n          generated_at?: string\n          generated_by?: string\n          id?: string\n          json_storage_path?: string | null\n          lease_count?: number\n          lease_id?: string | null\n          organization_name_at_gen?: string | null\n          pdf_storage_path?: string | null\n          period_end?: string | null\n          period_start?: string | null\n          report_scope?: string\n          report_type?: string\n          status?: string\n          workspace_id?: string\n          workspace_settings_snapshot?: Json\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_reports_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_reports_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_reports_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_reports_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_reroute_events: {\n        Row: {\n          changed_attributes: Json\n          created_at: string\n          detection_mode: string\n          id: string\n          lease_id: string\n          new_lifecycle_status: string\n          new_policy_id: string | null\n          new_policy_version: number | null\n          notes: string | null\n          prior_lifecycle_status: string\n          prior_policy_id: string | null\n          prior_policy_version: number | null\n          resulted_in_chain_violation: boolean\n          steps_added_count: number\n          steps_preserved_count: number\n          steps_superseded_count: number\n          trigger_reason: string\n          triggered_at: string\n          triggered_by: string | null\n          workspace_id: string\n        }\n        Insert: {\n          changed_attributes: Json\n          created_at?: string\n          detection_mode: string\n          id?: string\n          lease_id: string\n          new_lifecycle_status: string\n          new_policy_id?: string | null\n          new_policy_version?: number | null\n          notes?: string | null\n          prior_lifecycle_status: string\n          prior_policy_id?: string | null\n          prior_policy_version?: number | null\n          resulted_in_chain_violation?: boolean\n          steps_added_count?: number\n          steps_preserved_count?: number\n          steps_superseded_count?: number\n          trigger_reason: string\n          triggered_at?: string\n          triggered_by?: string | null\n          workspace_id: string\n        }\n        Update: {\n          changed_attributes?: Json\n          created_at?: string\n          detection_mode?: string\n          id?: string\n          lease_id?: string\n          new_lifecycle_status?: string\n          new_policy_id?: string | null\n          new_policy_version?: number | null\n          notes?: string | null\n          prior_lifecycle_status?: string\n          prior_policy_id?: string | null\n          prior_policy_version?: number | null\n          resulted_in_chain_violation?: boolean\n          steps_added_count?: number\n          steps_preserved_count?: number\n          steps_superseded_count?: number\n          trigger_reason?: string\n          triggered_at?: string\n          triggered_by?: string | null\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_reroute_events_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_reroute_events_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_reroute_events_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_reroute_events_new_policy_id_fkey\"\n            columns: [\"new_policy_id\"]\n            isOneToOne: false\n            referencedRelation: \"approval_policies\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_reroute_events_prior_policy_id_fkey\"\n            columns: [\"prior_policy_id\"]\n            isOneToOne: false\n            referencedRelation: \"approval_policies\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_reroute_events_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_state_transitions: {\n        Row: {\n          created_at: string | null\n          from_lifecycle: string | null\n          from_status: string | null\n          id: string\n          lease_id: string\n          metadata: Json | null\n          to_lifecycle: string | null\n          to_status: string\n          transition_reason: string | null\n          transitioned_by: string | null\n        }\n        Insert: {\n          created_at?: string | null\n          from_lifecycle?: string | null\n          from_status?: string | null\n          id?: string\n          lease_id: string\n          metadata?: Json | null\n          to_lifecycle?: string | null\n          to_status: string\n          transition_reason?: string | null\n          transitioned_by?: string | null\n        }\n        Update: {\n          created_at?: string | null\n          from_lifecycle?: string | null\n          from_status?: string | null\n          id?: string\n          lease_id?: string\n          metadata?: Json | null\n          to_lifecycle?: string | null\n          to_status?: string\n          transition_reason?: string | null\n          transitioned_by?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_state_transitions_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_state_transitions_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_state_transitions_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      lease_unlock_requests: {\n        Row: {\n          created_at: string\n          id: string\n          lease_id: string\n          request_reason: string\n          requested_by: string\n          review_note: string | null\n          reviewed_at: string | null\n          reviewed_by: string | null\n          status: string\n          updated_at: string\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string\n          id?: string\n          lease_id: string\n          request_reason: string\n          requested_by: string\n          review_note?: string | null\n          reviewed_at?: string | null\n          reviewed_by?: string | null\n          status?: string\n          updated_at?: string\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string\n          id?: string\n          lease_id?: string\n          request_reason?: string\n          requested_by?: string\n          review_note?: string | null\n          reviewed_at?: string | null\n          reviewed_by?: string | null\n          status?: string\n          updated_at?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_unlock_requests_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_unlock_requests_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_unlock_requests_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_unlock_requests_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      leases: {\n        Row: {\n          activated_at: string | null\n          approver_email: string | null\n          archived: boolean\n          archived_at: string | null\n          archived_by: string | null\n          asset_type: string | null\n          audit_log: Json | null\n          avg_confidence_score: number | null\n          base_rent_amount: string | null\n          base_rent_frequency: string | null\n          building: string | null\n          business_unit: string | null\n          calc_cash_pl_delta: number | null\n          calc_pv_liability: number | null\n          calc_straight_line_exp: number | null\n          calc_total_commitment: number | null\n          category: string | null\n          concept_approved_at: string | null\n          confidence_scores: Json | null\n          confirmed_sections: string[]\n          counter_signature_due_date: string | null\n          counter_signature_reminder_count: number\n          counter_signed_at: string | null\n          covenant_flagged: boolean | null\n          current_monthly_rent: number | null\n          discount_rate: number | null\n          discount_rate_basis: string | null\n          discount_rate_set_at: string | null\n          discount_rate_set_by: string | null\n          error_message: string | null\n          escalation_clauses: string | null\n          escalation_rate: number | null\n          escalation_type: string | null\n          estimated_monthly_cost_max: number | null\n          estimated_monthly_cost_min: number | null\n          estimated_term_max: number | null\n          estimated_term_min: number | null\n          executed_break_clause: string | null\n          executed_commencement_date: string | null\n          executed_document_url: string | null\n          executed_expiry_date: string | null\n          executed_extracted_json: Json | null\n          executed_extraction_confidence: Json | null\n          executed_filename: string | null\n          executed_landlord_name: string | null\n          executed_monthly_payment: number | null\n          executed_rent_review_clause: string | null\n          executed_storage_path: string | null\n          executed_tenant_name: string | null\n          executed_uploaded_at: string | null\n          executed_uploaded_by: string | null\n          execution_approved_at: string | null\n          execution_owner_id: string | null\n          expected_start_date: string | null\n          extracted_json: Json | null\n          filename: string\n          financial_approved_at: string | null\n          financial_approved_by: string | null\n          financial_rejection_reason: string | null\n          financial_returned_to_submitter: boolean | null\n          fully_executed_at: string | null\n          id: string\n          initializer_id: string | null\n          intake_source: string | null\n          internal_approved_at: string | null\n          landlord_name: string | null\n          last_nudged_at: string | null\n          lease_classification: string | null\n          lease_classification_set_at: string | null\n          lease_classification_set_by: string | null\n          lease_end: string | null\n          lease_owner_id: string | null\n          lease_start: string | null\n          lease_type: string | null\n          lifecycle_status: string | null\n          location: string | null\n          manager_approved_at: string | null\n          manager_approved_by: string | null\n          manager_rejection_reason: string | null\n          model_locked: boolean\n          model_locked_at: string | null\n          model_locked_by: string | null\n          monthly_payment: number | null\n          needs_escalation_review: boolean | null\n          notes: string | null\n          parent_lease_id: string | null\n          processed_at: string | null\n          property_address: string | null\n          region: string | null\n          rejection_reason: string | null\n          renewal_options: string | null\n          rent_commencement_date: string | null\n          rent_escalation_type: string | null\n          request_description: string | null\n          request_title: string | null\n          request_urgency: string | null\n          requesting_department: string | null\n          requestor_id: string | null\n          reroute_evaluation_pending: boolean\n          security_deposit: string | null\n          signator_approved_at: string | null\n          signator_attestation: string | null\n          square_footage: number | null\n          status: string\n          status_changed_at: string | null\n          storage_path: string | null\n          submitted_for_approval_at: string | null\n          summary_last_viewed_at: string | null\n          summary_share_token: string | null\n          summary_share_token_expires_at: string | null\n          summary_shared_at: string | null\n          tenant_name: string | null\n          term_months: number | null\n          termination_clauses: string | null\n          unlock_action_token: string | null\n          unlock_requested: boolean\n          unlock_requested_at: string | null\n          unlock_requested_by: string | null\n          unlock_token_expires_at: string | null\n          uploaded_at: string\n          user_id: string\n          variance_commencement_days: number | null\n          variance_expiry_days: number | null\n          variance_landlord_name_match: boolean | null\n          variance_monthly_payment: number | null\n          variance_reviewed_at: string | null\n          variance_reviewed_by: string | null\n          variance_tenant_name_match: boolean | null\n          vendor_address_line1: string | null\n          vendor_address_line2: string | null\n          vendor_city: string | null\n          vendor_name: string | null\n          vendor_phone: string | null\n          vendor_state: string | null\n          vendor_zip: string | null\n          workspace_id: string | null\n        }\n        Insert: {\n          activated_at?: string | null\n          approver_email?: string | null\n          archived?: boolean\n          archived_at?: string | null\n          archived_by?: string | null\n          asset_type?: string | null\n          audit_log?: Json | null\n          avg_confidence_score?: number | null\n          base_rent_amount?: string | null\n          base_rent_frequency?: string | null\n          building?: string | null\n          business_unit?: string | null\n          calc_cash_pl_delta?: number | null\n          calc_pv_liability?: number | null\n          calc_straight_line_exp?: number | null\n          calc_total_commitment?: number | null\n          category?: string | null\n          concept_approved_at?: string | null\n          confidence_scores?: Json | null\n          confirmed_sections?: string[]\n          counter_signature_due_date?: string | null\n          counter_signature_reminder_count?: number\n          counter_signed_at?: string | null\n          covenant_flagged?: boolean | null\n          current_monthly_rent?: number | null\n          discount_rate?: number | null\n          discount_rate_basis?: string | null\n          discount_rate_set_at?: string | null\n          discount_rate_set_by?: string | null\n          error_message?: string | null\n          escalation_clauses?: string | null\n          escalation_rate?: number | null\n          escalation_type?: string | null\n          estimated_monthly_cost_max?: number | null\n          estimated_monthly_cost_min?: number | null\n          estimated_term_max?: number | null\n          estimated_term_min?: number | null\n          executed_break_clause?: string | null\n          executed_commencement_date?: string | null\n          executed_document_url?: string | null\n          executed_expiry_date?: string | null\n          executed_extracted_json?: Json | null\n          executed_extraction_confidence?: Json | null\n          executed_filename?: string | null\n          executed_landlord_name?: string | null\n          executed_monthly_payment?: number | null\n          executed_rent_review_clause?: string | null\n          executed_storage_path?: string | null\n          executed_tenant_name?: string | null\n          executed_uploaded_at?: string | null\n          executed_uploaded_by?: string | null\n          execution_approved_at?: string | null\n          execution_owner_id?: string | null\n          expected_start_date?: string | null\n          extracted_json?: Json | null\n          filename: string\n          financial_approved_at?: string | null\n          financial_approved_by?: string | null\n          financial_rejection_reason?: string | null\n          financial_returned_to_submitter?: boolean | null\n          fully_executed_at?: string | null\n          id?: string\n          initializer_id?: string | null\n          intake_source?: string | null\n          internal_approved_at?: string | null\n          landlord_name?: string | null\n          last_nudged_at?: string | null\n          lease_classification?: string | null\n          lease_classification_set_at?: string | null\n          lease_classification_set_by?: string | null\n          lease_end?: string | null\n          lease_owner_id?: string | null\n          lease_start?: string | null\n          lease_type?: string | null\n          lifecycle_status?: string | null\n          location?: string | null\n          manager_approved_at?: string | null\n          manager_approved_by?: string | null\n          manager_rejection_reason?: string | null\n          model_locked?: boolean\n          model_locked_at?: string | null\n          model_locked_by?: string | null\n          monthly_payment?: number | null\n          needs_escalation_review?: boolean | null\n          notes?: string | null\n          parent_lease_id?: string | null\n          processed_at?: string | null\n          property_address?: string | null\n          region?: string | null\n          rejection_reason?: string | null\n          renewal_options?: string | null\n          rent_commencement_date?: string | null\n          rent_escalation_type?: string | null\n          request_description?: string | null\n          request_title?: string | null\n          request_urgency?: string | null\n          requesting_department?: string | null\n          requestor_id?: string | null\n          reroute_evaluation_pending?: boolean\n          security_deposit?: string | null\n          signator_approved_at?: string | null\n          signator_attestation?: string | null\n          square_footage?: number | null\n          status?: string\n          status_changed_at?: string | null\n          storage_path?: string | null\n          submitted_for_approval_at?: string | null\n          summary_last_viewed_at?: string | null\n          summary_share_token?: string | null\n          summary_share_token_expires_at?: string | null\n          summary_shared_at?: string | null\n          tenant_name?: string | null\n          term_months?: number | null\n          termination_clauses?: string | null\n          unlock_action_token?: string | null\n          unlock_requested?: boolean\n          unlock_requested_at?: string | null\n          unlock_requested_by?: string | null\n          unlock_token_expires_at?: string | null\n          uploaded_at?: string\n          user_id: string\n          variance_commencement_days?: number | null\n          variance_expiry_days?: number | null\n          variance_landlord_name_match?: boolean | null\n          variance_monthly_payment?: number | null\n          variance_reviewed_at?: string | null\n          variance_reviewed_by?: string | null\n          variance_tenant_name_match?: boolean | null\n          vendor_address_line1?: string | null\n          vendor_address_line2?: string | null\n          vendor_city?: string | null\n          vendor_name?: string | null\n          vendor_phone?: string | null\n          vendor_state?: string | null\n          vendor_zip?: string | null\n          workspace_id?: string | null\n        }\n        Update: {\n          activated_at?: string | null\n          approver_email?: string | null\n          archived?: boolean\n          archived_at?: string | null\n          archived_by?: string | null\n          asset_type?: string | null\n          audit_log?: Json | null\n          avg_confidence_score?: number | null\n          base_rent_amount?: string | null\n          base_rent_frequency?: string | null\n          building?: string | null\n          business_unit?: string | null\n          calc_cash_pl_delta?: number | null\n          calc_pv_liability?: number | null\n          calc_straight_line_exp?: number | null\n          calc_total_commitment?: number | null\n          category?: string | null\n          concept_approved_at?: string | null\n          confidence_scores?: Json | null\n          confirmed_sections?: string[]\n          counter_signature_due_date?: string | null\n          counter_signature_reminder_count?: number\n          counter_signed_at?: string | null\n          covenant_flagged?: boolean | null\n          current_monthly_rent?: number | null\n          discount_rate?: number | null\n          discount_rate_basis?: string | null\n          discount_rate_set_at?: string | null\n          discount_rate_set_by?: string | null\n          error_message?: string | null\n          escalation_clauses?: string | null\n          escalation_rate?: number | null\n          escalation_type?: string | null\n          estimated_monthly_cost_max?: number | null\n          estimated_monthly_cost_min?: number | null\n          estimated_term_max?: number | null\n          estimated_term_min?: number | null\n          executed_break_clause?: string | null\n          executed_commencement_date?: string | null\n          executed_document_url?: string | null\n          executed_expiry_date?: string | null\n          executed_extracted_json?: Json | null\n          executed_extraction_confidence?: Json | null\n          executed_filename?: string | null\n          executed_landlord_name?: string | null\n          executed_monthly_payment?: number | null\n          executed_rent_review_clause?: string | null\n          executed_storage_path?: string | null\n          executed_tenant_name?: string | null\n          executed_uploaded_at?: string | null\n          executed_uploaded_by?: string | null\n          execution_approved_at?: string | null\n          execution_owner_id?: string | null\n          expected_start_date?: string | null\n          extracted_json?: Json | null\n          filename?: string\n          financial_approved_at?: string | null\n          financial_approved_by?: string | null\n          financial_rejection_reason?: string | null\n          financial_returned_to_submitter?: boolean | null\n          fully_executed_at?: string | null\n          id?: string\n          initializer_id?: string | null\n          intake_source?: string | null\n          internal_approved_at?: string | null\n          landlord_name?: string | null\n          last_nudged_at?: string | null\n          lease_classification?: string | null\n          lease_classification_set_at?: string | null\n          lease_classification_set_by?: string | null\n          lease_end?: string | null\n          lease_owner_id?: string | null\n          lease_start?: string | null\n          lease_type?: string | null\n          lifecycle_status?: string | null\n          location?: string | null\n          manager_approved_at?: string | null\n          manager_approved_by?: string | null\n          manager_rejection_reason?: string | null\n          model_locked?: boolean\n          model_locked_at?: string | null\n          model_locked_by?: string | null\n          monthly_payment?: number | null\n          needs_escalation_review?: boolean | null\n          notes?: string | null\n          parent_lease_id?: string | null\n          processed_at?: string | null\n          property_address?: string | null\n          region?: string | null\n          rejection_reason?: string | null\n          renewal_options?: string | null\n          rent_commencement_date?: string | null\n          rent_escalation_type?: string | null\n          request_description?: string | null\n          request_title?: string | null\n          request_urgency?: string | null\n          requesting_department?: string | null\n          requestor_id?: string | null\n          reroute_evaluation_pending?: boolean\n          security_deposit?: string | null\n          signator_approved_at?: string | null\n          signator_attestation?: string | null\n          square_footage?: number | null\n          status?: string\n          status_changed_at?: string | null\n          storage_path?: string | null\n          submitted_for_approval_at?: string | null\n          summary_last_viewed_at?: string | null\n          summary_share_token?: string | null\n          summary_share_token_expires_at?: string | null\n          summary_shared_at?: string | null\n          tenant_name?: string | null\n          term_months?: number | null\n          termination_clauses?: string | null\n          unlock_action_token?: string | null\n          unlock_requested?: boolean\n          unlock_requested_at?: string | null\n          unlock_requested_by?: string | null\n          unlock_token_expires_at?: string | null\n          uploaded_at?: string\n          user_id?: string\n          variance_commencement_days?: number | null\n          variance_expiry_days?: number | null\n          variance_landlord_name_match?: boolean | null\n          variance_monthly_payment?: number | null\n          variance_reviewed_at?: string | null\n          variance_reviewed_by?: string | null\n          variance_tenant_name_match?: boolean | null\n          vendor_address_line1?: string | null\n          vendor_address_line2?: string | null\n          vendor_city?: string | null\n          vendor_name?: string | null\n          vendor_phone?: string | null\n          vendor_state?: string | null\n          vendor_zip?: string | null\n          workspace_id?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"leases_parent_lease_id_fkey\"\n            columns: [\"parent_lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"leases_parent_lease_id_fkey\"\n            columns: [\"parent_lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"leases_parent_lease_id_fkey\"\n            columns: [\"parent_lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"leases_user_id_fkey\"\n            columns: [\"user_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"leases_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      notifications: {\n        Row: {\n          alert_type: string\n          body: string\n          created_at: string\n          id: string\n          lease_id: string | null\n          read_at: string | null\n          title: string\n          user_id: string | null\n          workspace_id: string\n        }\n        Insert: {\n          alert_type: string\n          body: string\n          created_at?: string\n          id?: string\n          lease_id?: string | null\n          read_at?: string | null\n          title: string\n          user_id?: string | null\n          workspace_id: string\n        }\n        Update: {\n          alert_type?: string\n          body?: string\n          created_at?: string\n          id?: string\n          lease_id?: string | null\n          read_at?: string | null\n          title?: string\n          user_id?: string | null\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"notifications_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"notifications_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"notifications_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"notifications_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      processing_rate_limits: {\n        Row: {\n          created_at: string\n          function_name: string\n          id: string\n          request_count: number\n          updated_at: string\n          window_start: string\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string\n          function_name: string\n          id?: string\n          request_count?: number\n          updated_at?: string\n          window_start: string\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string\n          function_name?: string\n          id?: string\n          request_count?: number\n          updated_at?: string\n          window_start?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"processing_rate_limits_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      profiles: {\n        Row: {\n          ai_processing_consent_at: string | null\n          billing_interval: string\n          company_name: string | null\n          created_at: string\n          current_workspace_id: string | null\n          email: string | null\n          email_notifications_enabled: boolean\n          first_name: string | null\n          id: string\n          last_name: string | null\n          plan: string\n          processed_count: number\n          sms_notifications_enabled: boolean\n          stripe_customer_id: string | null\n          stripe_subscription_id: string | null\n          subscription_period_end: string | null\n          subscription_status: string | null\n          timezone: string | null\n          trial_ends_at: string | null\n        }\n        Insert: {\n          ai_processing_consent_at?: string | null\n          billing_interval?: string\n          company_name?: string | null\n          created_at?: string\n          current_workspace_id?: string | null\n          email?: string | null\n          email_notifications_enabled?: boolean\n          first_name?: string | null\n          id: string\n          last_name?: string | null\n          plan?: string\n          processed_count?: number\n          sms_notifications_enabled?: boolean\n          stripe_customer_id?: string | null\n          stripe_subscription_id?: string | null\n          subscription_period_end?: string | null\n          subscription_status?: string | null\n          timezone?: string | null\n          trial_ends_at?: string | null\n        }\n        Update: {\n          ai_processing_consent_at?: string | null\n          billing_interval?: string\n          company_name?: string | null\n          created_at?: string\n          current_workspace_id?: string | null\n          email?: string | null\n          email_notifications_enabled?: boolean\n          first_name?: string | null\n          id?: string\n          last_name?: string | null\n          plan?: string\n          processed_count?: number\n          sms_notifications_enabled?: boolean\n          stripe_customer_id?: string | null\n          stripe_subscription_id?: string | null\n          subscription_period_end?: string | null\n          subscription_status?: string | null\n          timezone?: string | null\n          trial_ends_at?: string | null\n        }\n        Relationships: []\n      }\n      rent_schedules: {\n        Row: {\n          annual_amount: number | null\n          created_at: string\n          id: string\n          lease_id: string\n          monthly_amount: number | null\n          notes: string | null\n          period_end: string | null\n          period_start: string\n          updated_at: string\n        }\n        Insert: {\n          annual_amount?: number | null\n          created_at?: string\n          id?: string\n          lease_id: string\n          monthly_amount?: number | null\n          notes?: string | null\n          period_end?: string | null\n          period_start: string\n          updated_at?: string\n        }\n        Update: {\n          annual_amount?: number | null\n          created_at?: string\n          id?: string\n          lease_id?: string\n          monthly_amount?: number | null\n          notes?: string | null\n          period_end?: string | null\n          period_start?: string\n          updated_at?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"rent_schedules_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"rent_schedules_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"rent_schedules_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      risk_templates: {\n        Row: {\n          asset_type: string | null\n          created_at: string\n          created_by: string | null\n          default_explanation: string\n          id: string\n          is_system: boolean\n          severity: string\n          title: string\n          workspace_id: string | null\n        }\n        Insert: {\n          asset_type?: string | null\n          created_at?: string\n          created_by?: string | null\n          default_explanation: string\n          id?: string\n          is_system?: boolean\n          severity: string\n          title: string\n          workspace_id?: string | null\n        }\n        Update: {\n          asset_type?: string | null\n          created_at?: string\n          created_by?: string | null\n          default_explanation?: string\n          id?: string\n          is_system?: boolean\n          severity?: string\n          title?: string\n          workspace_id?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"risk_templates_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      risks: {\n        Row: {\n          citation_page: number | null\n          citation_snippet: string | null\n          created_by: string | null\n          dismissed_at: string | null\n          dismissed_by: string | null\n          dismissed_reason: string | null\n          explanation: string | null\n          id: string\n          is_user_added: boolean\n          lease_id: string\n          risk_template_id: string | null\n          severity: string\n          source_text_norm: string | null\n          title: string\n        }\n        Insert: {\n          citation_page?: number | null\n          citation_snippet?: string | null\n          created_by?: string | null\n          dismissed_at?: string | null\n          dismissed_by?: string | null\n          dismissed_reason?: string | null\n          explanation?: string | null\n          id?: string\n          is_user_added?: boolean\n          lease_id: string\n          risk_template_id?: string | null\n          severity: string\n          source_text_norm?: string | null\n          title: string\n        }\n        Update: {\n          citation_page?: number | null\n          citation_snippet?: string | null\n          created_by?: string | null\n          dismissed_at?: string | null\n          dismissed_by?: string | null\n          dismissed_reason?: string | null\n          explanation?: string | null\n          id?: string\n          is_user_added?: boolean\n          lease_id?: string\n          risk_template_id?: string | null\n          severity?: string\n          source_text_norm?: string | null\n          title?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"risks_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"risks_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"risks_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"risks_risk_template_id_fkey\"\n            columns: [\"risk_template_id\"]\n            isOneToOne: false\n            referencedRelation: \"risk_templates\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      summary_views: {\n        Row: {\n          id: string\n          lease_id: string\n          referrer: string | null\n          viewed_at: string | null\n          viewer_ip: string | null\n        }\n        Insert: {\n          id?: string\n          lease_id: string\n          referrer?: string | null\n          viewed_at?: string | null\n          viewer_ip?: string | null\n        }\n        Update: {\n          id?: string\n          lease_id?: string\n          referrer?: string | null\n          viewed_at?: string | null\n          viewer_ip?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"summary_views_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"summary_views_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"summary_views_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      user_out_of_office: {\n        Row: {\n          created_at: string\n          delegate_user_id: string\n          ends_at: string\n          id: string\n          is_active: boolean\n          reason: string | null\n          starts_at: string\n          updated_at: string\n          user_id: string\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string\n          delegate_user_id: string\n          ends_at: string\n          id?: string\n          is_active?: boolean\n          reason?: string | null\n          starts_at: string\n          updated_at?: string\n          user_id: string\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string\n          delegate_user_id?: string\n          ends_at?: string\n          id?: string\n          is_active?: boolean\n          reason?: string | null\n          starts_at?: string\n          updated_at?: string\n          user_id?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"user_out_of_office_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      user_preferences: {\n        Row: {\n          created_at: string\n          id: string\n          onboarding_dismissed_at: string | null\n          updated_at: string\n          user_id: string\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string\n          id?: string\n          onboarding_dismissed_at?: string | null\n          updated_at?: string\n          user_id: string\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string\n          id?: string\n          onboarding_dismissed_at?: string | null\n          updated_at?: string\n          user_id?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"user_preferences_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      workspace_approvers: {\n        Row: {\n          created_at: string\n          created_by: string | null\n          id: string\n          is_active: boolean\n          user_id: string\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string\n          created_by?: string | null\n          id?: string\n          is_active?: boolean\n          user_id: string\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string\n          created_by?: string | null\n          id?: string\n          is_active?: boolean\n          user_id?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"workspace_approvers_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      workspace_members: {\n        Row: {\n          accepted_at: string | null\n          created_at: string\n          id: string\n          invited_at: string | null\n          invited_email: string | null\n          role: Database[\"public\"][\"Enums\"][\"workspace_role\"]\n          user_id: string | null\n          workspace_id: string\n        }\n        Insert: {\n          accepted_at?: string | null\n          created_at?: string\n          id?: string\n          invited_at?: string | null\n          invited_email?: string | null\n          role?: Database[\"public\"][\"Enums\"][\"workspace_role\"]\n          user_id?: string | null\n          workspace_id: string\n        }\n        Update: {\n          accepted_at?: string | null\n          created_at?: string\n          id?: string\n          invited_at?: string | null\n          invited_email?: string | null\n          role?: Database[\"public\"][\"Enums\"][\"workspace_role\"]\n          user_id?: string | null\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"workspace_members_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      workspace_roles: {\n        Row: {\n          created_at: string | null\n          id: string\n          role: string\n          user_id: string\n          workspace_id: string\n        }\n        Insert: {\n          created_at?: string | null\n          id?: string\n          role: string\n          user_id: string\n          workspace_id: string\n        }\n        Update: {\n          created_at?: string | null\n          id?: string\n          role?: string\n          user_id?: string\n          workspace_id?: string\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"workspace_roles_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      workspaces: {\n        Row: {\n          approval_threshold: number | null\n          asset_type_config: Json | null\n          backdoor_enabled: boolean\n          billing_interval: string\n          building_options: Json\n          counter_signature_default_due_days: number\n          covenant_threshold: number | null\n          created_at: string\n          default_notification_days: number\n          department_options: Json\n          discount_rate: number | null\n          document_limit: number\n          documents_used: number\n          id: string\n          location_options: Json\n          max_archived_leases: number | null\n          name: string\n          owner_id: string\n          plan: string\n          region_options: Json\n          report_artifact_retention_days: number\n          report_default_discount_method: string | null\n          report_fiscal_year_start_month: number\n          report_organization_name: string | null\n          report_rounding_precision: number\n          separation_of_duties_default: boolean\n          timezone: string\n          updated_at: string\n        }\n        Insert: {\n          approval_threshold?: number | null\n          asset_type_config?: Json | null\n          backdoor_enabled?: boolean\n          billing_interval?: string\n          building_options?: Json\n          counter_signature_default_due_days?: number\n          covenant_threshold?: number | null\n          created_at?: string\n          default_notification_days?: number\n          department_options?: Json\n          discount_rate?: number | null\n          document_limit?: number\n          documents_used?: number\n          id?: string\n          location_options?: Json\n          max_archived_leases?: number | null\n          name: string\n          owner_id: string\n          plan?: string\n          region_options?: Json\n          report_artifact_retention_days?: number\n          report_default_discount_method?: string | null\n          report_fiscal_year_start_month?: number\n          report_organization_name?: string | null\n          report_rounding_precision?: number\n          separation_of_duties_default?: boolean\n          timezone?: string\n          updated_at?: string\n        }\n        Update: {\n          approval_threshold?: number | null\n          asset_type_config?: Json | null\n          backdoor_enabled?: boolean\n          billing_interval?: string\n          building_options?: Json\n          counter_signature_default_due_days?: number\n          covenant_threshold?: number | null\n          created_at?: string\n          default_notification_days?: number\n          department_options?: Json\n          discount_rate?: number | null\n          document_limit?: number\n          documents_used?: number\n          id?: string\n          location_options?: Json\n          max_archived_leases?: number | null\n          name?: string\n          owner_id?: string\n          plan?: string\n          region_options?: Json\n          report_artifact_retention_days?: number\n          report_default_discount_method?: string | null\n          report_fiscal_year_start_month?: number\n          report_organization_name?: string | null\n          report_rounding_precision?: number\n          separation_of_duties_default?: boolean\n          timezone?: string\n          updated_at?: string\n        }\n        Relationships: []\n      }\n    }\n    Views: {\n      v_correction_analytics: {\n        Row: {\n          avg_original_confidence: number | null\n          field_name: string | null\n          last_correction: string | null\n          leases_affected: number | null\n          total_corrections: number | null\n        }\n        Relationships: []\n      }\n      v_governance_audit_report: {\n        Row: {\n          actor_email: string | null\n          actor_user_id: string | null\n          cancellation_reason: string | null\n          change_summary: string | null\n          event_timestamp: string | null\n          event_type: string | null\n          field_label: string | null\n          field_name: string | null\n          final_value: string | null\n          id: string | null\n          lease_id: string | null\n          lease_name: string | null\n          old_value: string | null\n          proposed_value: string | null\n          rejection_reason: string | null\n          related_change_set_id: string | null\n          related_unlock_request_id: string | null\n          workspace_id: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"lease_governance_audit_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"leases\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_lease_verification_audit\"\n            referencedColumns: [\"lease_id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_lease_id_fkey\"\n            columns: [\"lease_id\"]\n            isOneToOne: false\n            referencedRelation: \"v_review_queue\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_related_change_set_id_fkey\"\n            columns: [\"related_change_set_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_change_sets\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_related_unlock_request_id_fkey\"\n            columns: [\"related_unlock_request_id\"]\n            isOneToOne: false\n            referencedRelation: \"lease_unlock_requests\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"lease_governance_audit_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      v_lease_verification_audit: {\n        Row: {\n          confirmed_sections: string[] | null\n          discount_rate: number | null\n          discount_rate_basis: string | null\n          discount_rate_per_lease_override: number | null\n          discount_rate_set_at: string | null\n          discount_rate_set_by: string | null\n          discount_rate_workspace_default: number | null\n          field_corrections: Json | null\n          lease_classification_set_at: string | null\n          lease_classification_set_by: string | null\n          lease_id: string | null\n          model_locked: boolean | null\n          model_locked_at: string | null\n          model_locked_by: string | null\n          signator_approved_at: string | null\n          signator_attestation: string | null\n          workspace_id: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"leases_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n      v_review_queue: {\n        Row: {\n          avg_confidence_score: number | null\n          fields_requiring_review: string[] | null\n          filename: string | null\n          id: string | null\n          landlord_name: string | null\n          review_field_count: number | null\n          status: string | null\n          tenant_name: string | null\n          uploaded_at: string | null\n          user_id: string | null\n          workspace_id: string | null\n        }\n        Insert: {\n          avg_confidence_score?: number | null\n          fields_requiring_review?: never\n          filename?: string | null\n          id?: string | null\n          landlord_name?: string | null\n          review_field_count?: never\n          status?: string | null\n          tenant_name?: string | null\n          uploaded_at?: string | null\n          user_id?: string | null\n          workspace_id?: string | null\n        }\n        Update: {\n          avg_confidence_score?: number | null\n          fields_requiring_review?: never\n          filename?: string | null\n          id?: string | null\n          landlord_name?: string | null\n          review_field_count?: never\n          status?: string | null\n          tenant_name?: string | null\n          uploaded_at?: string | null\n          user_id?: string | null\n          workspace_id?: string | null\n        }\n        Relationships: [\n          {\n            foreignKeyName: \"leases_user_id_fkey\"\n            columns: [\"user_id\"]\n            isOneToOne: false\n            referencedRelation: \"profiles\"\n            referencedColumns: [\"id\"]\n          },\n          {\n            foreignKeyName: \"leases_workspace_id_fkey\"\n            columns: [\"workspace_id\"]\n            isOneToOne: false\n            referencedRelation: \"workspaces\"\n            referencedColumns: [\"id\"]\n          },\n        ]\n      }\n    }\n    Functions: {\n      apply_policy_steps: {\n        Args: { p_policy_id: string; p_steps: Json }\n        Returns: undefined\n      }\n      approve_field: {\n        Args: { p_field_name: string; p_lease_id: string }\n        Returns: boolean\n      }\n      finalize_lease_approval: {\n        Args: { p_lease_id: string }\n        Returns: boolean\n      }\n      get_audit_user_id: { Args: { p_email: string }; Returns: string }\n      get_workspace_role: {\n        Args: { _user_id: string; _workspace_id: string }\n        Returns: Database[\"public\"][\"Enums\"][\"workspace_role\"]\n      }\n      has_workspace_permission: {\n        Args: {\n          _min_role: Database[\"public\"][\"Enums\"][\"workspace_role\"]\n          _user_id: string\n          _workspace_id: string\n        }\n        Returns: boolean\n      }\n      is_workspace_member: {\n        Args: { _user_id: string; _workspace_id: string }\n        Returns: boolean\n      }\n      is_workspace_owner: {\n        Args: { _user_id: string; _workspace_id: string }\n        Returns: boolean\n      }\n      preview_policy_resolution: {\n        Args: {\n          p_annual_cost: number\n          p_asset_type: string\n          p_department: string\n          p_lease_type: string\n          p_region: string\n          p_workspace_id: string\n        }\n        Returns: Json\n      }\n      record_field_correction: {\n        Args: {\n          p_corrected_value: string\n          p_correction_type?: string\n          p_field_name: string\n          p_lease_id: string\n          p_original_value: string\n          p_user_notes?: string\n        }\n        Returns: string\n      }\n    }\n    Enums: {\n      subscription_plan: \"free\" | \"starter\" | \"pro\" | \"business\"\n      workspace_role: \"admin\" | \"editor\" | \"viewer\"\n    }\n    CompositeTypes: {\n      [_ in never]: never\n    }\n  }\n}\n\ntype DatabaseWithoutInternals = Omit<Database, \"__InternalSupabase\">\n\ntype DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, \"public\">]\n\nexport type Tables<\n  DefaultSchemaTableNameOrOptions extends\n    | keyof (DefaultSchema[\"Tables\"] & DefaultSchema[\"Views\"])\n    | { schema: keyof DatabaseWithoutInternals },\n  TableName extends DefaultSchemaTableNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"] &\n        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Views\"])\n    : never = never,\n> = DefaultSchemaTableNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"] &\n      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Views\"])[TableName] extends {\n      Row: infer R\n    }\n    ? R\n    : never\n  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema[\"Tables\"] &\n        DefaultSchema[\"Views\"])\n    ? (DefaultSchema[\"Tables\"] &\n        DefaultSchema[\"Views\"])[DefaultSchemaTableNameOrOptions] extends {\n        Row: infer R\n      }\n      ? R\n      : never\n    : never\n\nexport type TablesInsert<\n  DefaultSchemaTableNameOrOptions extends\n    | keyof DefaultSchema[\"Tables\"]\n    | { schema: keyof DatabaseWithoutInternals },\n  TableName extends DefaultSchemaTableNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"]\n    : never = never,\n> = DefaultSchemaTableNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"][TableName] extends {\n      Insert: infer I\n    }\n    ? I\n    : never\n  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema[\"Tables\"]\n    ? DefaultSchema[\"Tables\"][DefaultSchemaTableNameOrOptions] extends {\n        Insert: infer I\n      }\n      ? I\n      : never\n    : never\n\nexport type TablesUpdate<\n  DefaultSchemaTableNameOrOptions extends\n    | keyof DefaultSchema[\"Tables\"]\n    | { schema: keyof DatabaseWithoutInternals },\n  TableName extends DefaultSchemaTableNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"]\n    : never = never,\n> = DefaultSchemaTableNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions[\"schema\"]][\"Tables\"][TableName] extends {\n      Update: infer U\n    }\n    ? U\n    : never\n  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema[\"Tables\"]\n    ? DefaultSchema[\"Tables\"][DefaultSchemaTableNameOrOptions] extends {\n        Update: infer U\n      }\n      ? U\n      : never\n    : never\n\nexport type Enums<\n  DefaultSchemaEnumNameOrOptions extends\n    | keyof DefaultSchema[\"Enums\"]\n    | { schema: keyof DatabaseWithoutInternals },\n  EnumName extends DefaultSchemaEnumNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions[\"schema\"]][\"Enums\"]\n    : never = never,\n> = DefaultSchemaEnumNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions[\"schema\"]][\"Enums\"][EnumName]\n  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema[\"Enums\"]\n    ? DefaultSchema[\"Enums\"][DefaultSchemaEnumNameOrOptions]\n    : never\n\nexport type CompositeTypes<\n  PublicCompositeTypeNameOrOptions extends\n    | keyof DefaultSchema[\"CompositeTypes\"]\n    | { schema: keyof DatabaseWithoutInternals },\n  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {\n    schema: keyof DatabaseWithoutInternals\n  }\n    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions[\"schema\"]][\"CompositeTypes\"]\n    : never = never,\n> = PublicCompositeTypeNameOrOptions extends {\n  schema: keyof DatabaseWithoutInternals\n}\n  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions[\"schema\"]][\"CompositeTypes\"][CompositeTypeName]\n  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema[\"CompositeTypes\"]\n    ? DefaultSchema[\"CompositeTypes\"][PublicCompositeTypeNameOrOptions]\n    : never\n\nexport const Constants = {\n  public: {\n    Enums: {\n      subscription_plan: [\"free\", \"starter\", \"pro\", \"business\"],\n      workspace_role: [\"admin\", \"editor\", \"viewer\"],\n    },\n  },\n} as const\n"}
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
+  public: {
+    Tables: {
+      alert_rules: {
+        Row: {
+          alert_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          threshold_days: number | null
+          threshold_value: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          threshold_days?: number | null
+          threshold_value?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          threshold_days?: number | null
+          threshold_value?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_rules_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      approval_chain_steps: {
+        Row: {
+          approver_role: string | null
+          approver_user_id: string | null
+          created_at: string
+          delegate_after_days: number | null
+          delegate_user_id: string | null
+          id: string
+          is_required: boolean
+          parallel_group: number
+          policy_id: string
+          stage: string
+          step_order: number
+        }
+        Insert: {
+          approver_role?: string | null
+          approver_user_id?: string | null
+          created_at?: string
+          delegate_after_days?: number | null
+          delegate_user_id?: string | null
+          id?: string
+          is_required?: boolean
+          parallel_group?: number
+          policy_id: string
+          stage: string
+          step_order: number
+        }
+        Update: {
+          approver_role?: string | null
+          approver_user_id?: string | null
+          created_at?: string
+          delegate_after_days?: number | null
+          delegate_user_id?: string | null
+          id?: string
+          is_required?: boolean
+          parallel_group?: number
+          policy_id?: string
+          stage?: string
+          step_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_chain_steps_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "approval_policies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      approval_policies: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_default_fallback: boolean
+          match_asset_types: string[]
+          match_departments: string[]
+          match_lease_types: string[]
+          match_max_annual_cost: number | null
+          match_min_annual_cost: number | null
+          match_regions: string[]
+          name: string
+          priority: number
+          separation_of_duties_override: boolean | null
+          updated_at: string
+          updated_by: string
+          version: number
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default_fallback?: boolean
+          match_asset_types?: string[]
+          match_departments?: string[]
+          match_lease_types?: string[]
+          match_max_annual_cost?: number | null
+          match_min_annual_cost?: number | null
+          match_regions?: string[]
+          name: string
+          priority?: number
+          separation_of_duties_override?: boolean | null
+          updated_at?: string
+          updated_by: string
+          version?: number
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default_fallback?: boolean
+          match_asset_types?: string[]
+          match_departments?: string[]
+          match_lease_types?: string[]
+          match_max_annual_cost?: number | null
+          match_min_annual_cost?: number | null
+          match_regions?: string[]
+          name?: string
+          priority?: number
+          separation_of_duties_override?: boolean | null
+          updated_at?: string
+          updated_by?: string
+          version?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_policies_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chain_step_overrides: {
+        Row: {
+          chain_step_id: string
+          created_at: string
+          id: string
+          lease_id: string
+          override_action: string
+          override_at: string
+          override_by: string
+          override_reason: string
+          prior_assignee_role: string | null
+          prior_assignee_user_id: string | null
+          reassigned_to_user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          chain_step_id: string
+          created_at?: string
+          id?: string
+          lease_id: string
+          override_action: string
+          override_at?: string
+          override_by: string
+          override_reason: string
+          prior_assignee_role?: string | null
+          prior_assignee_user_id?: string | null
+          reassigned_to_user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          chain_step_id?: string
+          created_at?: string
+          id?: string
+          lease_id?: string
+          override_action?: string
+          override_at?: string
+          override_by?: string
+          override_reason?: string
+          prior_assignee_role?: string | null
+          prior_assignee_user_id?: string | null
+          reassigned_to_user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chain_step_overrides_chain_step_id_fkey"
+            columns: ["chain_step_id"]
+            isOneToOne: false
+            referencedRelation: "lease_approval_chain"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chain_step_overrides_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chain_step_overrides_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "chain_step_overrides_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chain_step_overrides_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chain_step_voluntary_delegations: {
+        Row: {
+          chain_step_id: string
+          delegated_at: string
+          delegated_by: string
+          delegated_to: string
+          id: string
+          lease_id: string
+          reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          chain_step_id: string
+          delegated_at?: string
+          delegated_by: string
+          delegated_to: string
+          id?: string
+          lease_id: string
+          reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          chain_step_id?: string
+          delegated_at?: string
+          delegated_by?: string
+          delegated_to?: string
+          id?: string
+          lease_id?: string
+          reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chain_step_voluntary_delegations_chain_step_id_fkey"
+            columns: ["chain_step_id"]
+            isOneToOne: false
+            referencedRelation: "lease_approval_chain"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chain_step_voluntary_delegations_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chain_step_voluntary_delegations_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "chain_step_voluntary_delegations_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chain_step_voluntary_delegations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      classification_corrections: {
+        Row: {
+          corrected_by: string | null
+          corrected_classification: Json
+          correction_type: string
+          created_at: string
+          document_summary: string | null
+          id: string
+          lease_id: string | null
+          original_classification: Json
+          user_note: string | null
+          workspace_id: string
+        }
+        Insert: {
+          corrected_by?: string | null
+          corrected_classification: Json
+          correction_type: string
+          created_at?: string
+          document_summary?: string | null
+          id?: string
+          lease_id?: string | null
+          original_classification: Json
+          user_note?: string | null
+          workspace_id: string
+        }
+        Update: {
+          corrected_by?: string | null
+          corrected_classification?: Json
+          correction_type?: string
+          created_at?: string
+          document_summary?: string | null
+          id?: string
+          lease_id?: string | null
+          original_classification?: Json
+          user_note?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "classification_corrections_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classification_corrections_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "classification_corrections_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "classification_corrections_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deleted_workspaces: {
+        Row: {
+          deleted_at: string
+          deleted_by: string | null
+          id: string
+          lease_count_at_deletion: number | null
+          member_count_at_deletion: number | null
+          original_workspace_id: string
+          owner_id: string
+          storage_objects_purged: number | null
+          workspace_name: string | null
+          workspace_plan: string | null
+        }
+        Insert: {
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          lease_count_at_deletion?: number | null
+          member_count_at_deletion?: number | null
+          original_workspace_id: string
+          owner_id: string
+          storage_objects_purged?: number | null
+          workspace_name?: string | null
+          workspace_plan?: string | null
+        }
+        Update: {
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          lease_count_at_deletion?: number | null
+          member_count_at_deletion?: number | null
+          original_workspace_id?: string
+          owner_id?: string
+          storage_objects_purged?: number | null
+          workspace_name?: string | null
+          workspace_plan?: string | null
+        }
+        Relationships: []
+      }
+      dismissed_events: {
+        Row: {
+          created_at: string
+          dismissed_at: string
+          event_key: string
+          expires_at: string | null
+          id: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          dismissed_at?: string
+          event_key: string
+          expires_at?: string | null
+          id?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          dismissed_at?: string
+          event_key?: string
+          expires_at?: string | null
+          id?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dismissed_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      executed_term_edits: {
+        Row: {
+          edited_at: string
+          edited_by: string
+          edited_value: string | null
+          field_name: string
+          id: string
+          lease_id: string
+          original_value: string | null
+          reason: string | null
+        }
+        Insert: {
+          edited_at?: string
+          edited_by: string
+          edited_value?: string | null
+          field_name: string
+          id?: string
+          lease_id: string
+          original_value?: string | null
+          reason?: string | null
+        }
+        Update: {
+          edited_at?: string
+          edited_by?: string
+          edited_value?: string | null
+          field_name?: string
+          id?: string
+          lease_id?: string
+          original_value?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "executed_term_edits_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "executed_term_edits_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "executed_term_edits_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      field_corrections: {
+        Row: {
+          ai_confidence: number | null
+          corrected_at: string | null
+          corrected_by: string | null
+          corrected_value: string | null
+          correction_type: string | null
+          field_name: string
+          id: string
+          lease_id: string
+          original_value: string | null
+          user_notes: string | null
+        }
+        Insert: {
+          ai_confidence?: number | null
+          corrected_at?: string | null
+          corrected_by?: string | null
+          corrected_value?: string | null
+          correction_type?: string | null
+          field_name: string
+          id?: string
+          lease_id: string
+          original_value?: string | null
+          user_notes?: string | null
+        }
+        Update: {
+          ai_confidence?: number | null
+          corrected_at?: string | null
+          corrected_by?: string | null
+          corrected_value?: string | null
+          correction_type?: string | null
+          field_name?: string
+          id?: string
+          lease_id?: string
+          original_value?: string | null
+          user_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "field_corrections_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "field_corrections_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "field_corrections_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invite_tokens: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          first_name: string | null
+          id: string
+          last_name: string | null
+          role: Database["public"]["Enums"]["workspace_role"]
+          token: string
+          workspace_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          role?: Database["public"]["Enums"]["workspace_role"]
+          token?: string
+          workspace_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          role?: Database["public"]["Enums"]["workspace_role"]
+          token?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_tokens_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_activity_log: {
+        Row: {
+          activity_type: string
+          created_at: string
+          details: Json | null
+          from_status: string | null
+          id: string
+          lease_id: string
+          to_status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          activity_type: string
+          created_at?: string
+          details?: Json | null
+          from_status?: string | null
+          id?: string
+          lease_id: string
+          to_status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          activity_type?: string
+          created_at?: string
+          details?: Json | null
+          from_status?: string | null
+          id?: string
+          lease_id?: string
+          to_status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_activity_log_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_activity_log_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_activity_log_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_approval_actions: {
+        Row: {
+          action: string
+          approval_type: string
+          approver_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          lease_id: string
+        }
+        Insert: {
+          action: string
+          approval_type: string
+          approver_id: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          lease_id: string
+        }
+        Update: {
+          action?: string
+          approval_type?: string
+          approver_id?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          lease_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_approval_actions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_approval_actions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_approval_actions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_approval_chain: {
+        Row: {
+          action_at: string | null
+          action_by: string | null
+          approver_role: string | null
+          approver_user_id: string | null
+          assignee_resolution_source: string | null
+          comment: string | null
+          created_at: string
+          delegate_activated_at: string | null
+          delegate_after_days: number | null
+          delegate_user_id: string | null
+          effective_assignee_user_id: string | null
+          id: string
+          is_required: boolean
+          lease_id: string
+          parallel_group: number
+          pending_since: string | null
+          policy_id: string | null
+          policy_version: number | null
+          rerouted_from_chain_id: string | null
+          stage: string
+          status: string
+          step_order: number
+          workspace_id: string
+        }
+        Insert: {
+          action_at?: string | null
+          action_by?: string | null
+          approver_role?: string | null
+          approver_user_id?: string | null
+          assignee_resolution_source?: string | null
+          comment?: string | null
+          created_at?: string
+          delegate_activated_at?: string | null
+          delegate_after_days?: number | null
+          delegate_user_id?: string | null
+          effective_assignee_user_id?: string | null
+          id?: string
+          is_required?: boolean
+          lease_id: string
+          parallel_group?: number
+          pending_since?: string | null
+          policy_id?: string | null
+          policy_version?: number | null
+          rerouted_from_chain_id?: string | null
+          stage: string
+          status?: string
+          step_order: number
+          workspace_id: string
+        }
+        Update: {
+          action_at?: string | null
+          action_by?: string | null
+          approver_role?: string | null
+          approver_user_id?: string | null
+          assignee_resolution_source?: string | null
+          comment?: string | null
+          created_at?: string
+          delegate_activated_at?: string | null
+          delegate_after_days?: number | null
+          delegate_user_id?: string | null
+          effective_assignee_user_id?: string | null
+          id?: string
+          is_required?: boolean
+          lease_id?: string
+          parallel_group?: number
+          pending_since?: string | null
+          policy_id?: string | null
+          policy_version?: number | null
+          rerouted_from_chain_id?: string | null
+          stage?: string
+          status?: string
+          step_order?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_approval_chain_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_approval_chain_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_approval_chain_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_approval_chain_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "approval_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_approval_chain_rerouted_from_chain_id_fkey"
+            columns: ["rerouted_from_chain_id"]
+            isOneToOne: false
+            referencedRelation: "lease_approval_chain"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_approval_chain_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_approvers: {
+        Row: {
+          approval_type: string
+          approved_at: string | null
+          approver_id: string
+          created_at: string
+          id: string
+          lease_id: string
+        }
+        Insert: {
+          approval_type: string
+          approved_at?: string | null
+          approver_id: string
+          created_at?: string
+          id?: string
+          lease_id: string
+        }
+        Update: {
+          approval_type?: string
+          approved_at?: string | null
+          approver_id?: string
+          created_at?: string
+          id?: string
+          lease_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_approvers_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_approvers_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_approvers_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_asc842_inputs: {
+        Row: {
+          asset_fair_value: number | null
+          bargain_purchase_option: boolean | null
+          classification_criteria_basis: string | null
+          created_at: string
+          id: string
+          initial_direct_costs: number | null
+          initial_direct_costs_basis: string | null
+          last_updated_at: string
+          last_updated_by: string | null
+          lease_id: string
+          lease_incentives_received: number | null
+          lease_incentives_received_basis: string | null
+          major_part_economic_life: boolean | null
+          major_part_economic_life_pct: number | null
+          ownership_transfers_at_end: boolean | null
+          prepaid_rent: number | null
+          prepaid_rent_basis: string | null
+          purchase_option_basis: string | null
+          purchase_option_present: boolean | null
+          purchase_option_price: number | null
+          purchase_option_reasonably_certain: boolean | null
+          pv_substantially_all_fair_value: boolean | null
+          pv_to_fair_value_pct: number | null
+          renewal_options_rc_basis: string | null
+          renewal_options_rc_term_months: number | null
+          residual_value_guarantee: number | null
+          residual_value_guarantee_basis: string | null
+          short_term_lease_election: boolean | null
+          short_term_lease_election_basis: string | null
+          specialized_asset_no_alt_use: boolean | null
+          sublease_basis: string | null
+          sublease_income_annual: number | null
+          tenant_improvement_allowance: number | null
+          tenant_improvement_allowance_basis: string | null
+          termination_penalty_amount: number | null
+          termination_penalty_basis: string | null
+          termination_penalty_reasonably_certain: boolean | null
+          variable_payments_description: string | null
+          variable_payments_estimated_annual: number | null
+          workspace_id: string
+        }
+        Insert: {
+          asset_fair_value?: number | null
+          bargain_purchase_option?: boolean | null
+          classification_criteria_basis?: string | null
+          created_at?: string
+          id?: string
+          initial_direct_costs?: number | null
+          initial_direct_costs_basis?: string | null
+          last_updated_at?: string
+          last_updated_by?: string | null
+          lease_id: string
+          lease_incentives_received?: number | null
+          lease_incentives_received_basis?: string | null
+          major_part_economic_life?: boolean | null
+          major_part_economic_life_pct?: number | null
+          ownership_transfers_at_end?: boolean | null
+          prepaid_rent?: number | null
+          prepaid_rent_basis?: string | null
+          purchase_option_basis?: string | null
+          purchase_option_present?: boolean | null
+          purchase_option_price?: number | null
+          purchase_option_reasonably_certain?: boolean | null
+          pv_substantially_all_fair_value?: boolean | null
+          pv_to_fair_value_pct?: number | null
+          renewal_options_rc_basis?: string | null
+          renewal_options_rc_term_months?: number | null
+          residual_value_guarantee?: number | null
+          residual_value_guarantee_basis?: string | null
+          short_term_lease_election?: boolean | null
+          short_term_lease_election_basis?: string | null
+          specialized_asset_no_alt_use?: boolean | null
+          sublease_basis?: string | null
+          sublease_income_annual?: number | null
+          tenant_improvement_allowance?: number | null
+          tenant_improvement_allowance_basis?: string | null
+          termination_penalty_amount?: number | null
+          termination_penalty_basis?: string | null
+          termination_penalty_reasonably_certain?: boolean | null
+          variable_payments_description?: string | null
+          variable_payments_estimated_annual?: number | null
+          workspace_id: string
+        }
+        Update: {
+          asset_fair_value?: number | null
+          bargain_purchase_option?: boolean | null
+          classification_criteria_basis?: string | null
+          created_at?: string
+          id?: string
+          initial_direct_costs?: number | null
+          initial_direct_costs_basis?: string | null
+          last_updated_at?: string
+          last_updated_by?: string | null
+          lease_id?: string
+          lease_incentives_received?: number | null
+          lease_incentives_received_basis?: string | null
+          major_part_economic_life?: boolean | null
+          major_part_economic_life_pct?: number | null
+          ownership_transfers_at_end?: boolean | null
+          prepaid_rent?: number | null
+          prepaid_rent_basis?: string | null
+          purchase_option_basis?: string | null
+          purchase_option_present?: boolean | null
+          purchase_option_price?: number | null
+          purchase_option_reasonably_certain?: boolean | null
+          pv_substantially_all_fair_value?: boolean | null
+          pv_to_fair_value_pct?: number | null
+          renewal_options_rc_basis?: string | null
+          renewal_options_rc_term_months?: number | null
+          residual_value_guarantee?: number | null
+          residual_value_guarantee_basis?: string | null
+          short_term_lease_election?: boolean | null
+          short_term_lease_election_basis?: string | null
+          specialized_asset_no_alt_use?: boolean | null
+          sublease_basis?: string | null
+          sublease_income_annual?: number | null
+          tenant_improvement_allowance?: number | null
+          tenant_improvement_allowance_basis?: string | null
+          termination_penalty_amount?: number | null
+          termination_penalty_basis?: string | null
+          termination_penalty_reasonably_certain?: boolean | null
+          variable_payments_description?: string | null
+          variable_payments_estimated_annual?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_asc842_inputs_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: true
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_asc842_inputs_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: true
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_asc842_inputs_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: true
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_asc842_inputs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_attribute_snapshots: {
+        Row: {
+          annual_cost_at_snapshot: number | null
+          asset_type: string | null
+          chain_resolution_at: string
+          created_at: string
+          id: string
+          lease_id: string
+          lease_type: string | null
+          monthly_payment: number | null
+          policy_id: string | null
+          policy_version: number | null
+          raw_attributes: Json
+          region: string | null
+          requesting_department: string | null
+          workspace_id: string
+        }
+        Insert: {
+          annual_cost_at_snapshot?: number | null
+          asset_type?: string | null
+          chain_resolution_at?: string
+          created_at?: string
+          id?: string
+          lease_id: string
+          lease_type?: string | null
+          monthly_payment?: number | null
+          policy_id?: string | null
+          policy_version?: number | null
+          raw_attributes?: Json
+          region?: string | null
+          requesting_department?: string | null
+          workspace_id: string
+        }
+        Update: {
+          annual_cost_at_snapshot?: number | null
+          asset_type?: string | null
+          chain_resolution_at?: string
+          created_at?: string
+          id?: string
+          lease_id?: string
+          lease_type?: string | null
+          monthly_payment?: number | null
+          policy_id?: string | null
+          policy_version?: number | null
+          raw_attributes?: Json
+          region?: string | null
+          requesting_department?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_attribute_snapshots_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_attribute_snapshots_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_attribute_snapshots_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_attribute_snapshots_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "approval_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_attribute_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_change_set_items: {
+        Row: {
+          change_set_id: string
+          created_at: string
+          field_label: string
+          field_name: string
+          id: string
+          old_value: string | null
+          proposed_value: string | null
+          source_section: string | null
+        }
+        Insert: {
+          change_set_id: string
+          created_at?: string
+          field_label: string
+          field_name: string
+          id?: string
+          old_value?: string | null
+          proposed_value?: string | null
+          source_section?: string | null
+        }
+        Update: {
+          change_set_id?: string
+          created_at?: string
+          field_label?: string
+          field_name?: string
+          id?: string
+          old_value?: string | null
+          proposed_value?: string | null
+          source_section?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_change_set_items_change_set_id_fkey"
+            columns: ["change_set_id"]
+            isOneToOne: false
+            referencedRelation: "lease_change_sets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_change_sets: {
+        Row: {
+          change_summary: string | null
+          created_at: string
+          id: string
+          lease_id: string
+          requested_approver_id: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          self_approved: boolean
+          status: string
+          submitted_at: string | null
+          submitted_by: string
+          unlock_request_id: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          change_summary?: string | null
+          created_at?: string
+          id?: string
+          lease_id: string
+          requested_approver_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          self_approved?: boolean
+          status?: string
+          submitted_at?: string | null
+          submitted_by: string
+          unlock_request_id?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          change_summary?: string | null
+          created_at?: string
+          id?: string
+          lease_id?: string
+          requested_approver_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          self_approved?: boolean
+          status?: string
+          submitted_at?: string | null
+          submitted_by?: string
+          unlock_request_id?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_change_sets_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_change_sets_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_change_sets_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_change_sets_unlock_request_id_fkey"
+            columns: ["unlock_request_id"]
+            isOneToOne: false
+            referencedRelation: "lease_unlock_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_change_sets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_documents: {
+        Row: {
+          created_at: string
+          document_type: string
+          file_size_bytes: number | null
+          filename: string
+          id: string
+          is_current_latest: boolean
+          iteration_number: number
+          lease_id: string
+          mime_type: string | null
+          notes: string | null
+          storage_path: string
+          superseded_at: string | null
+          superseded_by: string | null
+          uploaded_at: string
+          uploaded_by: string
+          version_number: number
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_type: string
+          file_size_bytes?: number | null
+          filename: string
+          id?: string
+          is_current_latest?: boolean
+          iteration_number: number
+          lease_id: string
+          mime_type?: string | null
+          notes?: string | null
+          storage_path: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          uploaded_at?: string
+          uploaded_by: string
+          version_number: number
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          document_type?: string
+          file_size_bytes?: number | null
+          filename?: string
+          id?: string
+          is_current_latest?: boolean
+          iteration_number?: number
+          lease_id?: string
+          mime_type?: string | null
+          notes?: string | null
+          storage_path?: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          uploaded_at?: string
+          uploaded_by?: string
+          version_number?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_documents_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_documents_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_documents_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_documents_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "lease_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_documents_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_field_confidence: {
+        Row: {
+          confidence_score: number
+          corrected_at: string | null
+          created_at: string | null
+          field_name: string
+          id: string
+          lease_id: string
+          was_corrected: boolean | null
+        }
+        Insert: {
+          confidence_score: number
+          corrected_at?: string | null
+          created_at?: string | null
+          field_name: string
+          id?: string
+          lease_id: string
+          was_corrected?: boolean | null
+        }
+        Update: {
+          confidence_score?: number
+          corrected_at?: string | null
+          created_at?: string | null
+          field_name?: string
+          id?: string
+          lease_id?: string
+          was_corrected?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_field_confidence_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_field_confidence_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_field_confidence_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_governance_audit: {
+        Row: {
+          actor_email: string | null
+          actor_user_id: string | null
+          cancellation_reason: string | null
+          change_summary: string | null
+          created_at: string
+          event_type: string
+          field_label: string | null
+          field_name: string | null
+          final_value: string | null
+          id: string
+          lease_id: string
+          old_value: string | null
+          proposed_value: string | null
+          rejection_reason: string | null
+          related_change_set_id: string | null
+          related_unlock_request_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          actor_email?: string | null
+          actor_user_id?: string | null
+          cancellation_reason?: string | null
+          change_summary?: string | null
+          created_at?: string
+          event_type: string
+          field_label?: string | null
+          field_name?: string | null
+          final_value?: string | null
+          id?: string
+          lease_id: string
+          old_value?: string | null
+          proposed_value?: string | null
+          rejection_reason?: string | null
+          related_change_set_id?: string | null
+          related_unlock_request_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          actor_email?: string | null
+          actor_user_id?: string | null
+          cancellation_reason?: string | null
+          change_summary?: string | null
+          created_at?: string
+          event_type?: string
+          field_label?: string | null
+          field_name?: string | null
+          final_value?: string | null
+          id?: string
+          lease_id?: string
+          old_value?: string | null
+          proposed_value?: string | null
+          rejection_reason?: string | null
+          related_change_set_id?: string | null
+          related_unlock_request_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_related_change_set_id_fkey"
+            columns: ["related_change_set_id"]
+            isOneToOne: false
+            referencedRelation: "lease_change_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_related_unlock_request_id_fkey"
+            columns: ["related_unlock_request_id"]
+            isOneToOne: false
+            referencedRelation: "lease_unlock_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_insights: {
+        Row: {
+          body: string
+          generated_at: string
+          generated_model: string | null
+          id: string
+          insight_type: string
+          lease_id: string
+          severity: string
+          source_data: Json
+          title: string
+          triggered_by: string
+          workspace_id: string
+        }
+        Insert: {
+          body: string
+          generated_at?: string
+          generated_model?: string | null
+          id?: string
+          insight_type: string
+          lease_id: string
+          severity: string
+          source_data?: Json
+          title: string
+          triggered_by: string
+          workspace_id: string
+        }
+        Update: {
+          body?: string
+          generated_at?: string
+          generated_model?: string | null
+          id?: string
+          insight_type?: string
+          lease_id?: string
+          severity?: string
+          source_data?: Json
+          title?: string
+          triggered_by?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_insights_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_insights_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_insights_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_insights_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_notifications: {
+        Row: {
+          created_at: string
+          event_date: string
+          event_description: string | null
+          event_type: string
+          id: string
+          is_confirmed: boolean
+          last_notified_at: string | null
+          lease_id: string
+          notify_days_before: number[]
+          notify_email: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          event_date: string
+          event_description?: string | null
+          event_type: string
+          id?: string
+          is_confirmed?: boolean
+          last_notified_at?: string | null
+          lease_id: string
+          notify_days_before?: number[]
+          notify_email?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          event_date?: string
+          event_description?: string | null
+          event_type?: string
+          id?: string
+          is_confirmed?: boolean
+          last_notified_at?: string | null
+          lease_id?: string
+          notify_days_before?: number[]
+          notify_email?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_nudges: {
+        Row: {
+          channel: string
+          id: string
+          lease_id: string
+          nudge_type: string
+          sent_at: string
+          sent_by: string | null
+        }
+        Insert: {
+          channel: string
+          id?: string
+          lease_id: string
+          nudge_type: string
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Update: {
+          channel?: string
+          id?: string
+          lease_id?: string
+          nudge_type?: string
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_nudges_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_nudges_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_nudges_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_reports: {
+        Row: {
+          created_at: string
+          discount_rate_method_at_gen: string | null
+          error_message: string | null
+          excluded_lease_count: number
+          exclusion_reasons: Json
+          expires_at: string | null
+          generated_at: string
+          generated_by: string
+          id: string
+          json_storage_path: string | null
+          lease_count: number
+          lease_id: string | null
+          organization_name_at_gen: string | null
+          pdf_storage_path: string | null
+          period_end: string | null
+          period_start: string | null
+          report_scope: string
+          report_type: string
+          status: string
+          workspace_id: string
+          workspace_settings_snapshot: Json
+        }
+        Insert: {
+          created_at?: string
+          discount_rate_method_at_gen?: string | null
+          error_message?: string | null
+          excluded_lease_count?: number
+          exclusion_reasons?: Json
+          expires_at?: string | null
+          generated_at?: string
+          generated_by: string
+          id?: string
+          json_storage_path?: string | null
+          lease_count?: number
+          lease_id?: string | null
+          organization_name_at_gen?: string | null
+          pdf_storage_path?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          report_scope: string
+          report_type: string
+          status?: string
+          workspace_id: string
+          workspace_settings_snapshot?: Json
+        }
+        Update: {
+          created_at?: string
+          discount_rate_method_at_gen?: string | null
+          error_message?: string | null
+          excluded_lease_count?: number
+          exclusion_reasons?: Json
+          expires_at?: string | null
+          generated_at?: string
+          generated_by?: string
+          id?: string
+          json_storage_path?: string | null
+          lease_count?: number
+          lease_id?: string | null
+          organization_name_at_gen?: string | null
+          pdf_storage_path?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          report_scope?: string
+          report_type?: string
+          status?: string
+          workspace_id?: string
+          workspace_settings_snapshot?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_reports_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_reports_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_reports_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_reports_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_reroute_events: {
+        Row: {
+          changed_attributes: Json
+          created_at: string
+          detection_mode: string
+          id: string
+          lease_id: string
+          new_lifecycle_status: string
+          new_policy_id: string | null
+          new_policy_version: number | null
+          notes: string | null
+          prior_lifecycle_status: string
+          prior_policy_id: string | null
+          prior_policy_version: number | null
+          resulted_in_chain_violation: boolean
+          steps_added_count: number
+          steps_preserved_count: number
+          steps_superseded_count: number
+          trigger_reason: string
+          triggered_at: string
+          triggered_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          changed_attributes: Json
+          created_at?: string
+          detection_mode: string
+          id?: string
+          lease_id: string
+          new_lifecycle_status: string
+          new_policy_id?: string | null
+          new_policy_version?: number | null
+          notes?: string | null
+          prior_lifecycle_status: string
+          prior_policy_id?: string | null
+          prior_policy_version?: number | null
+          resulted_in_chain_violation?: boolean
+          steps_added_count?: number
+          steps_preserved_count?: number
+          steps_superseded_count?: number
+          trigger_reason: string
+          triggered_at?: string
+          triggered_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          changed_attributes?: Json
+          created_at?: string
+          detection_mode?: string
+          id?: string
+          lease_id?: string
+          new_lifecycle_status?: string
+          new_policy_id?: string | null
+          new_policy_version?: number | null
+          notes?: string | null
+          prior_lifecycle_status?: string
+          prior_policy_id?: string | null
+          prior_policy_version?: number | null
+          resulted_in_chain_violation?: boolean
+          steps_added_count?: number
+          steps_preserved_count?: number
+          steps_superseded_count?: number
+          trigger_reason?: string
+          triggered_at?: string
+          triggered_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_reroute_events_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_reroute_events_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_reroute_events_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_reroute_events_new_policy_id_fkey"
+            columns: ["new_policy_id"]
+            isOneToOne: false
+            referencedRelation: "approval_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_reroute_events_prior_policy_id_fkey"
+            columns: ["prior_policy_id"]
+            isOneToOne: false
+            referencedRelation: "approval_policies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_reroute_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_state_transitions: {
+        Row: {
+          created_at: string | null
+          from_lifecycle: string | null
+          from_status: string | null
+          id: string
+          lease_id: string
+          metadata: Json | null
+          to_lifecycle: string | null
+          to_status: string
+          transition_reason: string | null
+          transitioned_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          from_lifecycle?: string | null
+          from_status?: string | null
+          id?: string
+          lease_id: string
+          metadata?: Json | null
+          to_lifecycle?: string | null
+          to_status: string
+          transition_reason?: string | null
+          transitioned_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          from_lifecycle?: string | null
+          from_status?: string | null
+          id?: string
+          lease_id?: string
+          metadata?: Json | null
+          to_lifecycle?: string | null
+          to_status?: string
+          transition_reason?: string | null
+          transitioned_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_state_transitions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_state_transitions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_state_transitions_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_unlock_requests: {
+        Row: {
+          created_at: string
+          id: string
+          lease_id: string
+          request_reason: string
+          requested_by: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lease_id: string
+          request_reason: string
+          requested_by: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lease_id?: string
+          request_reason?: string
+          requested_by?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_unlock_requests_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_unlock_requests_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_unlock_requests_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_unlock_requests_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leases: {
+        Row: {
+          activated_at: string | null
+          approver_email: string | null
+          archived: boolean
+          archived_at: string | null
+          archived_by: string | null
+          asset_type: string | null
+          audit_log: Json | null
+          avg_confidence_score: number | null
+          base_rent_amount: string | null
+          base_rent_frequency: string | null
+          building: string | null
+          business_unit: string | null
+          calc_cash_pl_delta: number | null
+          calc_pv_liability: number | null
+          calc_straight_line_exp: number | null
+          calc_total_commitment: number | null
+          category: string | null
+          concept_approved_at: string | null
+          confidence_scores: Json | null
+          confirmed_sections: string[]
+          counter_signature_due_date: string | null
+          counter_signature_reminder_count: number
+          counter_signed_at: string | null
+          covenant_flagged: boolean | null
+          current_monthly_rent: number | null
+          discount_rate: number | null
+          discount_rate_basis: string | null
+          discount_rate_set_at: string | null
+          discount_rate_set_by: string | null
+          error_message: string | null
+          escalation_clauses: string | null
+          escalation_rate: number | null
+          escalation_type: string | null
+          estimated_monthly_cost_max: number | null
+          estimated_monthly_cost_min: number | null
+          estimated_term_max: number | null
+          estimated_term_min: number | null
+          executed_break_clause: string | null
+          executed_commencement_date: string | null
+          executed_document_url: string | null
+          executed_expiry_date: string | null
+          executed_extracted_json: Json | null
+          executed_extraction_confidence: Json | null
+          executed_filename: string | null
+          executed_landlord_name: string | null
+          executed_monthly_payment: number | null
+          executed_rent_review_clause: string | null
+          executed_storage_path: string | null
+          executed_tenant_name: string | null
+          executed_uploaded_at: string | null
+          executed_uploaded_by: string | null
+          execution_approved_at: string | null
+          execution_owner_id: string | null
+          expected_start_date: string | null
+          extracted_json: Json | null
+          filename: string
+          financial_approved_at: string | null
+          financial_approved_by: string | null
+          financial_rejection_reason: string | null
+          financial_returned_to_submitter: boolean | null
+          fully_executed_at: string | null
+          id: string
+          initializer_id: string | null
+          intake_source: string | null
+          internal_approved_at: string | null
+          landlord_name: string | null
+          last_nudged_at: string | null
+          lease_classification: string | null
+          lease_classification_set_at: string | null
+          lease_classification_set_by: string | null
+          lease_end: string | null
+          lease_owner_id: string | null
+          lease_start: string | null
+          lease_type: string | null
+          lifecycle_status: string | null
+          location: string | null
+          manager_approved_at: string | null
+          manager_approved_by: string | null
+          manager_rejection_reason: string | null
+          model_locked: boolean
+          model_locked_at: string | null
+          model_locked_by: string | null
+          monthly_payment: number | null
+          needs_escalation_review: boolean | null
+          notes: string | null
+          parent_lease_id: string | null
+          processed_at: string | null
+          property_address: string | null
+          region: string | null
+          rejection_reason: string | null
+          renewal_options: string | null
+          rent_commencement_date: string | null
+          rent_escalation_type: string | null
+          request_description: string | null
+          request_title: string | null
+          request_urgency: string | null
+          requesting_department: string | null
+          requestor_id: string | null
+          reroute_evaluation_pending: boolean
+          security_deposit: string | null
+          signator_approved_at: string | null
+          signator_attestation: string | null
+          square_footage: number | null
+          status: string
+          status_changed_at: string | null
+          storage_path: string | null
+          submitted_for_approval_at: string | null
+          summary_last_viewed_at: string | null
+          summary_share_token: string | null
+          summary_share_token_expires_at: string | null
+          summary_shared_at: string | null
+          tenant_name: string | null
+          term_months: number | null
+          termination_clauses: string | null
+          unlock_action_token: string | null
+          unlock_requested: boolean
+          unlock_requested_at: string | null
+          unlock_requested_by: string | null
+          unlock_token_expires_at: string | null
+          uploaded_at: string
+          user_id: string
+          variance_commencement_days: number | null
+          variance_expiry_days: number | null
+          variance_landlord_name_match: boolean | null
+          variance_monthly_payment: number | null
+          variance_reviewed_at: string | null
+          variance_reviewed_by: string | null
+          variance_tenant_name_match: boolean | null
+          vendor_address_line1: string | null
+          vendor_address_line2: string | null
+          vendor_city: string | null
+          vendor_name: string | null
+          vendor_phone: string | null
+          vendor_state: string | null
+          vendor_zip: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          approver_email?: string | null
+          archived?: boolean
+          archived_at?: string | null
+          archived_by?: string | null
+          asset_type?: string | null
+          audit_log?: Json | null
+          avg_confidence_score?: number | null
+          base_rent_amount?: string | null
+          base_rent_frequency?: string | null
+          building?: string | null
+          business_unit?: string | null
+          calc_cash_pl_delta?: number | null
+          calc_pv_liability?: number | null
+          calc_straight_line_exp?: number | null
+          calc_total_commitment?: number | null
+          category?: string | null
+          concept_approved_at?: string | null
+          confidence_scores?: Json | null
+          confirmed_sections?: string[]
+          counter_signature_due_date?: string | null
+          counter_signature_reminder_count?: number
+          counter_signed_at?: string | null
+          covenant_flagged?: boolean | null
+          current_monthly_rent?: number | null
+          discount_rate?: number | null
+          discount_rate_basis?: string | null
+          discount_rate_set_at?: string | null
+          discount_rate_set_by?: string | null
+          error_message?: string | null
+          escalation_clauses?: string | null
+          escalation_rate?: number | null
+          escalation_type?: string | null
+          estimated_monthly_cost_max?: number | null
+          estimated_monthly_cost_min?: number | null
+          estimated_term_max?: number | null
+          estimated_term_min?: number | null
+          executed_break_clause?: string | null
+          executed_commencement_date?: string | null
+          executed_document_url?: string | null
+          executed_expiry_date?: string | null
+          executed_extracted_json?: Json | null
+          executed_extraction_confidence?: Json | null
+          executed_filename?: string | null
+          executed_landlord_name?: string | null
+          executed_monthly_payment?: number | null
+          executed_rent_review_clause?: string | null
+          executed_storage_path?: string | null
+          executed_tenant_name?: string | null
+          executed_uploaded_at?: string | null
+          executed_uploaded_by?: string | null
+          execution_approved_at?: string | null
+          execution_owner_id?: string | null
+          expected_start_date?: string | null
+          extracted_json?: Json | null
+          filename: string
+          financial_approved_at?: string | null
+          financial_approved_by?: string | null
+          financial_rejection_reason?: string | null
+          financial_returned_to_submitter?: boolean | null
+          fully_executed_at?: string | null
+          id?: string
+          initializer_id?: string | null
+          intake_source?: string | null
+          internal_approved_at?: string | null
+          landlord_name?: string | null
+          last_nudged_at?: string | null
+          lease_classification?: string | null
+          lease_classification_set_at?: string | null
+          lease_classification_set_by?: string | null
+          lease_end?: string | null
+          lease_owner_id?: string | null
+          lease_start?: string | null
+          lease_type?: string | null
+          lifecycle_status?: string | null
+          location?: string | null
+          manager_approved_at?: string | null
+          manager_approved_by?: string | null
+          manager_rejection_reason?: string | null
+          model_locked?: boolean
+          model_locked_at?: string | null
+          model_locked_by?: string | null
+          monthly_payment?: number | null
+          needs_escalation_review?: boolean | null
+          notes?: string | null
+          parent_lease_id?: string | null
+          processed_at?: string | null
+          property_address?: string | null
+          region?: string | null
+          rejection_reason?: string | null
+          renewal_options?: string | null
+          rent_commencement_date?: string | null
+          rent_escalation_type?: string | null
+          request_description?: string | null
+          request_title?: string | null
+          request_urgency?: string | null
+          requesting_department?: string | null
+          requestor_id?: string | null
+          reroute_evaluation_pending?: boolean
+          security_deposit?: string | null
+          signator_approved_at?: string | null
+          signator_attestation?: string | null
+          square_footage?: number | null
+          status?: string
+          status_changed_at?: string | null
+          storage_path?: string | null
+          submitted_for_approval_at?: string | null
+          summary_last_viewed_at?: string | null
+          summary_share_token?: string | null
+          summary_share_token_expires_at?: string | null
+          summary_shared_at?: string | null
+          tenant_name?: string | null
+          term_months?: number | null
+          termination_clauses?: string | null
+          unlock_action_token?: string | null
+          unlock_requested?: boolean
+          unlock_requested_at?: string | null
+          unlock_requested_by?: string | null
+          unlock_token_expires_at?: string | null
+          uploaded_at?: string
+          user_id: string
+          variance_commencement_days?: number | null
+          variance_expiry_days?: number | null
+          variance_landlord_name_match?: boolean | null
+          variance_monthly_payment?: number | null
+          variance_reviewed_at?: string | null
+          variance_reviewed_by?: string | null
+          variance_tenant_name_match?: boolean | null
+          vendor_address_line1?: string | null
+          vendor_address_line2?: string | null
+          vendor_city?: string | null
+          vendor_name?: string | null
+          vendor_phone?: string | null
+          vendor_state?: string | null
+          vendor_zip?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          approver_email?: string | null
+          archived?: boolean
+          archived_at?: string | null
+          archived_by?: string | null
+          asset_type?: string | null
+          audit_log?: Json | null
+          avg_confidence_score?: number | null
+          base_rent_amount?: string | null
+          base_rent_frequency?: string | null
+          building?: string | null
+          business_unit?: string | null
+          calc_cash_pl_delta?: number | null
+          calc_pv_liability?: number | null
+          calc_straight_line_exp?: number | null
+          calc_total_commitment?: number | null
+          category?: string | null
+          concept_approved_at?: string | null
+          confidence_scores?: Json | null
+          confirmed_sections?: string[]
+          counter_signature_due_date?: string | null
+          counter_signature_reminder_count?: number
+          counter_signed_at?: string | null
+          covenant_flagged?: boolean | null
+          current_monthly_rent?: number | null
+          discount_rate?: number | null
+          discount_rate_basis?: string | null
+          discount_rate_set_at?: string | null
+          discount_rate_set_by?: string | null
+          error_message?: string | null
+          escalation_clauses?: string | null
+          escalation_rate?: number | null
+          escalation_type?: string | null
+          estimated_monthly_cost_max?: number | null
+          estimated_monthly_cost_min?: number | null
+          estimated_term_max?: number | null
+          estimated_term_min?: number | null
+          executed_break_clause?: string | null
+          executed_commencement_date?: string | null
+          executed_document_url?: string | null
+          executed_expiry_date?: string | null
+          executed_extracted_json?: Json | null
+          executed_extraction_confidence?: Json | null
+          executed_filename?: string | null
+          executed_landlord_name?: string | null
+          executed_monthly_payment?: number | null
+          executed_rent_review_clause?: string | null
+          executed_storage_path?: string | null
+          executed_tenant_name?: string | null
+          executed_uploaded_at?: string | null
+          executed_uploaded_by?: string | null
+          execution_approved_at?: string | null
+          execution_owner_id?: string | null
+          expected_start_date?: string | null
+          extracted_json?: Json | null
+          filename?: string
+          financial_approved_at?: string | null
+          financial_approved_by?: string | null
+          financial_rejection_reason?: string | null
+          financial_returned_to_submitter?: boolean | null
+          fully_executed_at?: string | null
+          id?: string
+          initializer_id?: string | null
+          intake_source?: string | null
+          internal_approved_at?: string | null
+          landlord_name?: string | null
+          last_nudged_at?: string | null
+          lease_classification?: string | null
+          lease_classification_set_at?: string | null
+          lease_classification_set_by?: string | null
+          lease_end?: string | null
+          lease_owner_id?: string | null
+          lease_start?: string | null
+          lease_type?: string | null
+          lifecycle_status?: string | null
+          location?: string | null
+          manager_approved_at?: string | null
+          manager_approved_by?: string | null
+          manager_rejection_reason?: string | null
+          model_locked?: boolean
+          model_locked_at?: string | null
+          model_locked_by?: string | null
+          monthly_payment?: number | null
+          needs_escalation_review?: boolean | null
+          notes?: string | null
+          parent_lease_id?: string | null
+          processed_at?: string | null
+          property_address?: string | null
+          region?: string | null
+          rejection_reason?: string | null
+          renewal_options?: string | null
+          rent_commencement_date?: string | null
+          rent_escalation_type?: string | null
+          request_description?: string | null
+          request_title?: string | null
+          request_urgency?: string | null
+          requesting_department?: string | null
+          requestor_id?: string | null
+          reroute_evaluation_pending?: boolean
+          security_deposit?: string | null
+          signator_approved_at?: string | null
+          signator_attestation?: string | null
+          square_footage?: number | null
+          status?: string
+          status_changed_at?: string | null
+          storage_path?: string | null
+          submitted_for_approval_at?: string | null
+          summary_last_viewed_at?: string | null
+          summary_share_token?: string | null
+          summary_share_token_expires_at?: string | null
+          summary_shared_at?: string | null
+          tenant_name?: string | null
+          term_months?: number | null
+          termination_clauses?: string | null
+          unlock_action_token?: string | null
+          unlock_requested?: boolean
+          unlock_requested_at?: string | null
+          unlock_requested_by?: string | null
+          unlock_token_expires_at?: string | null
+          uploaded_at?: string
+          user_id?: string
+          variance_commencement_days?: number | null
+          variance_expiry_days?: number | null
+          variance_landlord_name_match?: boolean | null
+          variance_monthly_payment?: number | null
+          variance_reviewed_at?: string | null
+          variance_reviewed_by?: string | null
+          variance_tenant_name_match?: boolean | null
+          vendor_address_line1?: string | null
+          vendor_address_line2?: string | null
+          vendor_city?: string | null
+          vendor_name?: string | null
+          vendor_phone?: string | null
+          vendor_state?: string | null
+          vendor_zip?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leases_parent_lease_id_fkey"
+            columns: ["parent_lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leases_parent_lease_id_fkey"
+            columns: ["parent_lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "leases_parent_lease_id_fkey"
+            columns: ["parent_lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leases_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          alert_type: string
+          body: string
+          created_at: string
+          id: string
+          lease_id: string | null
+          read_at: string | null
+          title: string
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          alert_type: string
+          body: string
+          created_at?: string
+          id?: string
+          lease_id?: string | null
+          read_at?: string | null
+          title: string
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          alert_type?: string
+          body?: string
+          created_at?: string
+          id?: string
+          lease_id?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "notifications_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processing_rate_limits: {
+        Row: {
+          created_at: string
+          function_name: string
+          id: string
+          request_count: number
+          updated_at: string
+          window_start: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          function_name: string
+          id?: string
+          request_count?: number
+          updated_at?: string
+          window_start: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          function_name?: string
+          id?: string
+          request_count?: number
+          updated_at?: string
+          window_start?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_rate_limits_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          ai_processing_consent_at: string | null
+          billing_interval: string
+          company_name: string | null
+          created_at: string
+          current_workspace_id: string | null
+          email: string | null
+          email_notifications_enabled: boolean
+          first_name: string | null
+          id: string
+          last_name: string | null
+          notify_abstraction_complete: boolean
+          plan: string
+          processed_count: number
+          sms_notifications_enabled: boolean
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_period_end: string | null
+          subscription_status: string | null
+          timezone: string | null
+          trial_ends_at: string | null
+        }
+        Insert: {
+          ai_processing_consent_at?: string | null
+          billing_interval?: string
+          company_name?: string | null
+          created_at?: string
+          current_workspace_id?: string | null
+          email?: string | null
+          email_notifications_enabled?: boolean
+          first_name?: string | null
+          id: string
+          last_name?: string | null
+          notify_abstraction_complete?: boolean
+          plan?: string
+          processed_count?: number
+          sms_notifications_enabled?: boolean
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_period_end?: string | null
+          subscription_status?: string | null
+          timezone?: string | null
+          trial_ends_at?: string | null
+        }
+        Update: {
+          ai_processing_consent_at?: string | null
+          billing_interval?: string
+          company_name?: string | null
+          created_at?: string
+          current_workspace_id?: string | null
+          email?: string | null
+          email_notifications_enabled?: boolean
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          notify_abstraction_complete?: boolean
+          plan?: string
+          processed_count?: number
+          sms_notifications_enabled?: boolean
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_period_end?: string | null
+          subscription_status?: string | null
+          timezone?: string | null
+          trial_ends_at?: string | null
+        }
+        Relationships: []
+      }
+      rent_schedules: {
+        Row: {
+          annual_amount: number | null
+          created_at: string
+          id: string
+          lease_id: string
+          monthly_amount: number | null
+          notes: string | null
+          period_end: string | null
+          period_start: string
+          updated_at: string
+        }
+        Insert: {
+          annual_amount?: number | null
+          created_at?: string
+          id?: string
+          lease_id: string
+          monthly_amount?: number | null
+          notes?: string | null
+          period_end?: string | null
+          period_start: string
+          updated_at?: string
+        }
+        Update: {
+          annual_amount?: number | null
+          created_at?: string
+          id?: string
+          lease_id?: string
+          monthly_amount?: number | null
+          notes?: string | null
+          period_end?: string | null
+          period_start?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rent_schedules_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rent_schedules_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "rent_schedules_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      risk_templates: {
+        Row: {
+          asset_type: string | null
+          created_at: string
+          created_by: string | null
+          default_explanation: string
+          id: string
+          is_system: boolean
+          severity: string
+          title: string
+          workspace_id: string | null
+        }
+        Insert: {
+          asset_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_explanation: string
+          id?: string
+          is_system?: boolean
+          severity: string
+          title: string
+          workspace_id?: string | null
+        }
+        Update: {
+          asset_type?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_explanation?: string
+          id?: string
+          is_system?: boolean
+          severity?: string
+          title?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "risk_templates_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      risks: {
+        Row: {
+          citation_page: number | null
+          citation_snippet: string | null
+          created_by: string | null
+          dismissed_at: string | null
+          dismissed_by: string | null
+          dismissed_reason: string | null
+          explanation: string | null
+          id: string
+          is_user_added: boolean
+          lease_id: string
+          risk_template_id: string | null
+          severity: string
+          source_text_norm: string | null
+          title: string
+        }
+        Insert: {
+          citation_page?: number | null
+          citation_snippet?: string | null
+          created_by?: string | null
+          dismissed_at?: string | null
+          dismissed_by?: string | null
+          dismissed_reason?: string | null
+          explanation?: string | null
+          id?: string
+          is_user_added?: boolean
+          lease_id: string
+          risk_template_id?: string | null
+          severity: string
+          source_text_norm?: string | null
+          title: string
+        }
+        Update: {
+          citation_page?: number | null
+          citation_snippet?: string | null
+          created_by?: string | null
+          dismissed_at?: string | null
+          dismissed_by?: string | null
+          dismissed_reason?: string | null
+          explanation?: string | null
+          id?: string
+          is_user_added?: boolean
+          lease_id?: string
+          risk_template_id?: string | null
+          severity?: string
+          source_text_norm?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "risks_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risks_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "risks_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "risks_risk_template_id_fkey"
+            columns: ["risk_template_id"]
+            isOneToOne: false
+            referencedRelation: "risk_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      summary_views: {
+        Row: {
+          id: string
+          lease_id: string
+          referrer: string | null
+          viewed_at: string | null
+          viewer_ip: string | null
+        }
+        Insert: {
+          id?: string
+          lease_id: string
+          referrer?: string | null
+          viewed_at?: string | null
+          viewer_ip?: string | null
+        }
+        Update: {
+          id?: string
+          lease_id?: string
+          referrer?: string | null
+          viewed_at?: string | null
+          viewer_ip?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "summary_views_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "summary_views_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "summary_views_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_out_of_office: {
+        Row: {
+          created_at: string
+          delegate_user_id: string
+          ends_at: string
+          id: string
+          is_active: boolean
+          reason: string | null
+          starts_at: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          delegate_user_id: string
+          ends_at: string
+          id?: string
+          is_active?: boolean
+          reason?: string | null
+          starts_at: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          delegate_user_id?: string
+          ends_at?: string
+          id?: string
+          is_active?: boolean
+          reason?: string | null
+          starts_at?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_out_of_office_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          onboarding_dismissed_at: string | null
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          onboarding_dismissed_at?: string | null
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          onboarding_dismissed_at?: string | null
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vendor_alert_log: {
+        Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          current_value: number | null
+          fired_at: string
+          id: string
+          limit_value: number | null
+          metric: string
+          pct_of_limit: number | null
+          threshold_crossed: string
+          upgrade_suggestion: string | null
+          upgrade_url: string | null
+          vendor: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          current_value?: number | null
+          fired_at?: string
+          id?: string
+          limit_value?: number | null
+          metric: string
+          pct_of_limit?: number | null
+          threshold_crossed: string
+          upgrade_suggestion?: string | null
+          upgrade_url?: string | null
+          vendor: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          current_value?: number | null
+          fired_at?: string
+          id?: string
+          limit_value?: number | null
+          metric?: string
+          pct_of_limit?: number | null
+          threshold_crossed?: string
+          upgrade_suggestion?: string | null
+          upgrade_url?: string | null
+          vendor?: string
+        }
+        Relationships: []
+      }
+      vendor_alert_recipients: {
+        Row: {
+          created_at: string
+          email: string
+          enabled: boolean
+          id: string
+          name: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          enabled?: boolean
+          id?: string
+          name?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          enabled?: boolean
+          id?: string
+          name?: string | null
+        }
+        Relationships: []
+      }
+      vendor_renewal_calendar: {
+        Row: {
+          account_url: string | null
+          amount_estimate: number | null
+          auto_renew: boolean
+          id: string
+          item: string
+          last_alerted_at: string | null
+          notes: string | null
+          reminder_days_before: number[]
+          renewal_date: string
+          vendor: string
+        }
+        Insert: {
+          account_url?: string | null
+          amount_estimate?: number | null
+          auto_renew?: boolean
+          id?: string
+          item: string
+          last_alerted_at?: string | null
+          notes?: string | null
+          reminder_days_before?: number[]
+          renewal_date: string
+          vendor: string
+        }
+        Update: {
+          account_url?: string | null
+          amount_estimate?: number | null
+          auto_renew?: boolean
+          id?: string
+          item?: string
+          last_alerted_at?: string | null
+          notes?: string | null
+          reminder_days_before?: number[]
+          renewal_date?: string
+          vendor?: string
+        }
+        Relationships: []
+      }
+      vendor_usage_snapshots: {
+        Row: {
+          category: string
+          current_value: number
+          id: string
+          limit_value: number | null
+          metadata: Json
+          metric: string
+          pct_of_limit: number | null
+          recorded_at: string
+          tier: string | null
+          vendor: string
+        }
+        Insert: {
+          category: string
+          current_value: number
+          id?: string
+          limit_value?: number | null
+          metadata?: Json
+          metric: string
+          pct_of_limit?: number | null
+          recorded_at?: string
+          tier?: string | null
+          vendor: string
+        }
+        Update: {
+          category?: string
+          current_value?: number
+          id?: string
+          limit_value?: number | null
+          metadata?: Json
+          metric?: string
+          pct_of_limit?: number | null
+          recorded_at?: string
+          tier?: string | null
+          vendor?: string
+        }
+        Relationships: []
+      }
+      workspace_approvers: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_approvers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_members: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          id: string
+          invited_at: string | null
+          invited_email: string | null
+          role: Database["public"]["Enums"]["workspace_role"]
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          id?: string
+          invited_at?: string | null
+          invited_email?: string | null
+          role?: Database["public"]["Enums"]["workspace_role"]
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          id?: string
+          invited_at?: string | null
+          invited_email?: string | null
+          role?: Database["public"]["Enums"]["workspace_role"]
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_quota_snapshots: {
+        Row: {
+          category: string
+          current_value: number
+          id: string
+          limit_value: number | null
+          metadata: Json
+          metric: string
+          pct_of_limit: number | null
+          recorded_at: string
+          tier: string | null
+          workspace_id: string
+        }
+        Insert: {
+          category: string
+          current_value: number
+          id?: string
+          limit_value?: number | null
+          metadata?: Json
+          metric: string
+          pct_of_limit?: number | null
+          recorded_at?: string
+          tier?: string | null
+          workspace_id: string
+        }
+        Update: {
+          category?: string
+          current_value?: number
+          id?: string
+          limit_value?: number | null
+          metadata?: Json
+          metric?: string
+          pct_of_limit?: number | null
+          recorded_at?: string
+          tier?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_quota_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_roles_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspaces: {
+        Row: {
+          approval_threshold: number | null
+          asset_type_config: Json | null
+          backdoor_enabled: boolean
+          billing_interval: string
+          building_options: Json
+          counter_signature_default_due_days: number
+          covenant_threshold: number | null
+          created_at: string
+          default_notification_days: number
+          department_options: Json
+          discount_rate: number | null
+          document_limit: number
+          documents_used: number
+          id: string
+          location_options: Json
+          max_archived_leases: number | null
+          name: string
+          owner_id: string
+          plan: string
+          region_options: Json
+          report_artifact_retention_days: number
+          report_default_discount_method: string | null
+          report_fiscal_year_start_month: number
+          report_organization_name: string | null
+          report_rounding_precision: number
+          separation_of_duties_default: boolean
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_period_end: string | null
+          subscription_status: string | null
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          approval_threshold?: number | null
+          asset_type_config?: Json | null
+          backdoor_enabled?: boolean
+          billing_interval?: string
+          building_options?: Json
+          counter_signature_default_due_days?: number
+          covenant_threshold?: number | null
+          created_at?: string
+          default_notification_days?: number
+          department_options?: Json
+          discount_rate?: number | null
+          document_limit?: number
+          documents_used?: number
+          id?: string
+          location_options?: Json
+          max_archived_leases?: number | null
+          name: string
+          owner_id: string
+          plan?: string
+          region_options?: Json
+          report_artifact_retention_days?: number
+          report_default_discount_method?: string | null
+          report_fiscal_year_start_month?: number
+          report_organization_name?: string | null
+          report_rounding_precision?: number
+          separation_of_duties_default?: boolean
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_period_end?: string | null
+          subscription_status?: string | null
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          approval_threshold?: number | null
+          asset_type_config?: Json | null
+          backdoor_enabled?: boolean
+          billing_interval?: string
+          building_options?: Json
+          counter_signature_default_due_days?: number
+          covenant_threshold?: number | null
+          created_at?: string
+          default_notification_days?: number
+          department_options?: Json
+          discount_rate?: number | null
+          document_limit?: number
+          documents_used?: number
+          id?: string
+          location_options?: Json
+          max_archived_leases?: number | null
+          name?: string
+          owner_id?: string
+          plan?: string
+          region_options?: Json
+          report_artifact_retention_days?: number
+          report_default_discount_method?: string | null
+          report_fiscal_year_start_month?: number
+          report_organization_name?: string | null
+          report_rounding_precision?: number
+          separation_of_duties_default?: boolean
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_period_end?: string | null
+          subscription_status?: string | null
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      v_correction_analytics: {
+        Row: {
+          avg_original_confidence: number | null
+          field_name: string | null
+          last_correction: string | null
+          leases_affected: number | null
+          total_corrections: number | null
+        }
+        Relationships: []
+      }
+      v_governance_audit_report: {
+        Row: {
+          actor_email: string | null
+          actor_user_id: string | null
+          cancellation_reason: string | null
+          change_summary: string | null
+          event_timestamp: string | null
+          event_type: string | null
+          field_label: string | null
+          field_name: string | null
+          final_value: string | null
+          id: string | null
+          lease_id: string | null
+          lease_name: string | null
+          old_value: string | null
+          proposed_value: string | null
+          rejection_reason: string | null
+          related_change_set_id: string | null
+          related_unlock_request_id: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_lease_verification_audit"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "v_review_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_related_change_set_id_fkey"
+            columns: ["related_change_set_id"]
+            isOneToOne: false
+            referencedRelation: "lease_change_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_related_unlock_request_id_fkey"
+            columns: ["related_unlock_request_id"]
+            isOneToOne: false
+            referencedRelation: "lease_unlock_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_lease_verification_audit: {
+        Row: {
+          confirmed_sections: string[] | null
+          discount_rate: number | null
+          discount_rate_basis: string | null
+          discount_rate_per_lease_override: number | null
+          discount_rate_set_at: string | null
+          discount_rate_set_by: string | null
+          discount_rate_workspace_default: number | null
+          field_corrections: Json | null
+          lease_classification_set_at: string | null
+          lease_classification_set_by: string | null
+          lease_id: string | null
+          model_locked: boolean | null
+          model_locked_at: string | null
+          model_locked_by: string | null
+          signator_approved_at: string | null
+          signator_attestation: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_review_queue: {
+        Row: {
+          avg_confidence_score: number | null
+          fields_requiring_review: string[] | null
+          filename: string | null
+          id: string | null
+          landlord_name: string | null
+          review_field_count: number | null
+          status: string | null
+          tenant_name: string | null
+          uploaded_at: string | null
+          user_id: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          avg_confidence_score?: number | null
+          fields_requiring_review?: never
+          filename?: string | null
+          id?: string | null
+          landlord_name?: string | null
+          review_field_count?: never
+          status?: string | null
+          tenant_name?: string | null
+          uploaded_at?: string | null
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          avg_confidence_score?: number | null
+          fields_requiring_review?: never
+          filename?: string | null
+          id?: string | null
+          landlord_name?: string | null
+          review_field_count?: never
+          status?: string | null
+          tenant_name?: string | null
+          uploaded_at?: string | null
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leases_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Functions: {
+      apply_policy_steps: {
+        Args: { p_policy_id: string; p_steps: Json }
+        Returns: undefined
+      }
+      approve_field: {
+        Args: { p_field_name: string; p_lease_id: string }
+        Returns: boolean
+      }
+      finalize_lease_approval: {
+        Args: { p_lease_id: string }
+        Returns: boolean
+      }
+      get_audit_user_id: { Args: { p_email: string }; Returns: string }
+      get_workspace_role: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: Database["public"]["Enums"]["workspace_role"]
+      }
+      has_workspace_permission: {
+        Args: {
+          _min_role: Database["public"]["Enums"]["workspace_role"]
+          _user_id: string
+          _workspace_id: string
+        }
+        Returns: boolean
+      }
+      is_ops_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_workspace_member: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
+      }
+      is_workspace_owner: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
+      }
+      pg_database_size_postgres: { Args: never; Returns: number }
+      preview_policy_resolution: {
+        Args: {
+          p_annual_cost: number
+          p_asset_type: string
+          p_department: string
+          p_lease_type: string
+          p_region: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
+      record_field_correction: {
+        Args: {
+          p_corrected_value: string
+          p_correction_type?: string
+          p_field_name: string
+          p_lease_id: string
+          p_original_value: string
+          p_user_notes?: string
+        }
+        Returns: string
+      }
+      storage_total_bytes: { Args: never; Returns: number }
+    }
+    Enums: {
+      subscription_plan: "free" | "starter" | "pro" | "business"
+      workspace_role: "admin" | "editor" | "viewer"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      subscription_plan: ["free", "starter", "pro", "business"],
+      workspace_role: ["admin", "editor", "viewer"],
+    },
+  },
+} as const
