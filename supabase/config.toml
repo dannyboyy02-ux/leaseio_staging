@@ -12,6 +12,15 @@ verify_jwt = false
 [functions.accept-invite]
 verify_jwt = false
 
+# get-invite-info is a public token-based endpoint. AcceptInvite.tsx
+# calls it before the user has a session (the recipient may not yet
+# have a LeaseIO account). The function does its own auth via a 64-char
+# hex token lookup against invite_tokens. P1-13 — without this stanza
+# the function inherited the platform default, blocking new-user
+# invite acceptance.
+[functions.get-invite-info]
+verify_jwt = false
+
 [functions.list-pending-invites]
 verify_jwt = false
 
