@@ -320,7 +320,7 @@ function EventList({
   getDaysLabel: (n: number) => string;
   today: Date;
   t: (k: string) => string;
-  language: string;
+  language: 'en' | 'es';
   navigate: (to: string) => void;
 }) {
   useEffect(() => { onFilterChange(tabVal); }, [tabVal]);

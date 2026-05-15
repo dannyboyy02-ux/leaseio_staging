@@ -159,8 +159,8 @@ describe('Scenario 4: both fields null/empty', () => {
 describe('Scenario 5: mixed portfolio aggregation', () => {
   it('totalPVLiability excludes index leases', () => {
     const leases: LeaseRow[] = [
-      { escalation_type: 'percent', current_monthly_rent: 5000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 3,   discount_rate: 5 },
-      { escalation_type: 'index',   current_monthly_rent: 3000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0,   discount_rate: 5 },
+      { escalation_type: 'percent', current_monthly_rent: 5000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 3, lease_end: null, monthly_payment: null, executed_monthly_payment: null },
+      { escalation_type: 'index',   current_monthly_rent: 3000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, lease_end: null, monthly_payment: null, executed_monthly_payment: null },
     ];
     const result = computePortfolioMetrics(leases, { discountRate: 5 });
     const percentOnly = calculateLease({ monthlyPayment: 5000, termMonths: 24, startDate: '2026-01-01', escalationRate: 3, discountRate: 5 });
@@ -171,9 +171,9 @@ describe('Scenario 5: mixed portfolio aggregation', () => {
 
   it('indexBasedLeasePV and totalPVLiability counts are correct for 3-lease mix', () => {
     const leases: LeaseRow[] = [
-      { escalation_type: 'percent', current_monthly_rent: 4000, term_months: 36, lease_start: '2026-01-01', escalation_rate: 2, discount_rate: 5 },
-      { escalation_type: 'none',    current_monthly_rent: 2000, term_months: 12, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
-      { escalation_type: 'index',   current_monthly_rent: 6000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
+      { escalation_type: 'percent', current_monthly_rent: 4000, term_months: 36, lease_start: '2026-01-01', escalation_rate: 2, lease_end: null, monthly_payment: null, executed_monthly_payment: null },
+      { escalation_type: 'none',    current_monthly_rent: 2000, term_months: 12, lease_start: '2026-01-01', escalation_rate: 0, lease_end: null, monthly_payment: null, executed_monthly_payment: null },
+      { escalation_type: 'index',   current_monthly_rent: 6000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, lease_end: null, monthly_payment: null, executed_monthly_payment: null },
     ];
     const result = computePortfolioMetrics(leases, { discountRate: 5 });
     expect(result.indexBasedLeaseCount).toBe(1);
@@ -256,9 +256,9 @@ describe('Scenario 8: term_months fallback to date derivation', () => {
 describe('Scenario 9: parsing boundary — downstream uses escalation_type only', () => {
   it('computePortfolioMetrics filters on escalation_type, not rent_escalation_type', () => {
     const leases: LeaseRow[] = [
-      { escalation_type: 'percent', current_monthly_rent: 5000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 3, discount_rate: 5 },
-      { escalation_type: 'index',   current_monthly_rent: 3000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
-      { escalation_type: 'none',    current_monthly_rent: 2000, term_months: 12, lease_start: '2026-01-01', escalation_rate: 0, discount_rate: 5 },
+      { escalation_type: 'percent', current_monthly_rent: 5000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 3, lease_end: null, monthly_payment: null, executed_monthly_payment: null },
+      { escalation_type: 'index',   current_monthly_rent: 3000, term_months: 24, lease_start: '2026-01-01', escalation_rate: 0, lease_end: null, monthly_payment: null, executed_monthly_payment: null },
+      { escalation_type: 'none',    current_monthly_rent: 2000, term_months: 12, lease_start: '2026-01-01', escalation_rate: 0, lease_end: null, monthly_payment: null, executed_monthly_payment: null },
     ];
     const result = computePortfolioMetrics(leases, { discountRate: 5 });
     // Only 2 non-index leases contribute to totalPVLiability
@@ -321,6 +321,8 @@ describe('Additional audit regressions', () => {
         {
           escalation_type: 'none',
           current_monthly_rent: 5000,
+          monthly_payment: null,
+          executed_monthly_payment: null,
           lease_start: null,
           lease_end: null,
           term_months: null,

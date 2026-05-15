@@ -3,6 +3,13 @@ export type { LeaseInputs, LeaseCalculations } from '@/lib/leaseCalculations';
 
 export type WorkflowLeaseType = 'Real Estate' | 'Equipment';
 
+/**
+ * Workflow-level lease category for the NewLease form's top-of-page
+ * selector — distinct from the asset-type LeaseCategory in
+ * `@/types/lifecycle` (`'property' | 'equipment' | 'vehicle' | 'other'`).
+ */
+export type LeaseCategory = 'New Lease' | 'Lease Amendment';
+
 /** Lifecycle status values — matches DB constraint */
 export type WorkflowStatus =
   | 'submitted'

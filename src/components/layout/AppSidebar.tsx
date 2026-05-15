@@ -136,8 +136,6 @@ export function AppSidebar() {
     switch (currentPlan) {
       case 'business':
         return 'business';
-      case 'pro':
-        return 'default';
       case 'starter':
         return 'secondary';
       default:

@@ -69,7 +69,6 @@ interface LeaseDetail {
   filename: string | null;
   requestor_id: string | null;
   uploaded_at: string | null;
-  created_at: string;
   requestorName?: string;
   requestorEmail?: string;
   managerName?: string;
@@ -136,7 +135,7 @@ export default function FinancialReview() {
           supabase
             .from('leases')
             .select(
-              'id, request_title, requesting_department, asset_type, vendor_name, monthly_payment, term_months, escalation_rate, lease_start, lease_end, calc_total_commitment, calc_pv_liability, calc_straight_line_exp, calc_cash_pl_delta, lease_classification, covenant_flagged, lifecycle_status, financial_returned_to_submitter, manager_approved_by, manager_approved_at, financial_approved_by, storage_path, filename, requestor_id, uploaded_at, created_at',
+              'id, request_title, requesting_department, asset_type, vendor_name, monthly_payment, term_months, escalation_rate, lease_start, lease_end, calc_total_commitment, calc_pv_liability, calc_straight_line_exp, calc_cash_pl_delta, lease_classification, covenant_flagged, lifecycle_status, financial_returned_to_submitter, manager_approved_by, manager_approved_at, financial_approved_by, storage_path, filename, requestor_id, uploaded_at',
             )
             .eq('id', leaseId)
             .single(),

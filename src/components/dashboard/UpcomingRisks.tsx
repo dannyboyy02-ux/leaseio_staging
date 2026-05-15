@@ -48,10 +48,8 @@ export function UpcomingRisks() {
 
       const { data: leases } = await supabase
         .from('leases')
-        .select(
-          'id, request_title, filename, lease_end, executed_expiry_date, renewal_options, escalation_type, rent_escalation_type, executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
-          'rent_schedules(period_start, period_end, monthly_amount)'
-        )
+        // PostgREST type narrowing requires a literal string — see note in useNeedsAction.
+        .select('id, request_title, filename, lease_end, executed_expiry_date, renewal_options, escalation_type, rent_escalation_type, executed_monthly_payment, current_monthly_rent, monthly_payment, rent_schedules(period_start, period_end, monthly_amount)')
         .eq('workspace_id', workspace.id)
         // Phase 3: include chain executed equivalent (active is identical).
         .in('lifecycle_status', ['active', 'executed', 'fully_executed']);

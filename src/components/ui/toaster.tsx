@@ -19,7 +19,7 @@ function safeRender(node: unknown): React.ReactNode {
   }
 
   if (typeof node === "object" && "$$typeof" in node) {
-    return node as React.ReactNode;
+    return node as unknown as React.ReactNode;
   }
 
   try {

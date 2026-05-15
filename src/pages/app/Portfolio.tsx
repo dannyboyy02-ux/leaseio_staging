@@ -31,12 +31,8 @@ export default function Portfolio() {
       const [{ data: leases, error }, { data: workspaceSettings, error: workspaceError }] = await Promise.all([
         supabase
           .from('leases')
-          .select(
-            'id, filename, request_title, asset_type, extracted_json, ' +
-            'executed_monthly_payment, current_monthly_rent, monthly_payment, ' +
-            'lease_start, lease_end, term_months, escalation_type, escalation_rate, ' +
-            'calc_pv_liability, calc_total_commitment, landlord_name, property_address'
-          )
+          // PostgREST type narrowing requires a literal string — see note in useNeedsAction.
+          .select('id, filename, request_title, asset_type, extracted_json, executed_monthly_payment, current_monthly_rent, monthly_payment, lease_start, lease_end, term_months, escalation_type, escalation_rate, calc_pv_liability, calc_total_commitment, landlord_name, property_address')
           .eq('workspace_id', workspace!.id)
           .eq('archived', false)
           // Phase 3: include chain executed equivalent (active is identical).

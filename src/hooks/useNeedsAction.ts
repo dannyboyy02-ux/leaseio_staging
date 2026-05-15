@@ -41,11 +41,10 @@ export function useNeedsAction() {
       const [leasesResult, draftChangeSetsResult] = await Promise.all([
         supabase
           .from('leases')
-          .select(
-            'id, request_title, filename, requesting_department, monthly_payment, ' +
-            'submitted_for_approval_at, status_changed_at, status, executed_document_url, ' +
-            'lifecycle_status, financial_returned_to_submitter, financial_rejection_reason'
-          )
+          // PostgREST type narrowing requires a literal string. Don't split
+          // this with '+' concatenation — that widens to `string` and the
+          // result type collapses to GenericStringError.
+          .select('id, request_title, filename, requesting_department, monthly_payment, submitted_for_approval_at, status_changed_at, status, executed_document_url, lifecycle_status, financial_returned_to_submitter, financial_rejection_reason')
           .eq('workspace_id', workspace!.id)
           // Phase 3: include chain-vocabulary equivalents for awaiting,
           // in-review, and executed-pre-active groups.

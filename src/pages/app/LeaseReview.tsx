@@ -1088,8 +1088,11 @@ export default function LeaseReview() {
     if (!lease?.id || !isUnlockedForEditing || !activeChangeSet?.id) return;
     const originalValue = originalValues.current[fieldId];
     if (originalValue === newValue) return;
-    const fieldLabel = Object.values(SECTION_CONFIG)
-      .flatMap(s => s.fields)
+    // `as const` on SECTION_CONFIG makes each section's fields a different
+    // readonly tuple type, so Object.values()+.flatMap can't reconcile them.
+    // Erase to a common shape for lookup.
+    const fieldLabel = (Object.values(SECTION_CONFIG)
+      .flatMap(s => s.fields as readonly { id: string; label: string }[]))
       .find(f => f.id === fieldId)?.label ?? fieldId;
     await stageFieldChange(activeChangeSet.id, fieldId, fieldLabel, originalValue ?? null, newValue);
   }, [lease?.id, isUnlockedForEditing, activeChangeSet?.id, stageFieldChange]);
@@ -1103,8 +1106,9 @@ export default function LeaseReview() {
 
     // Stage change when unlocked for governance editing
     if (isUnlockedForEditing && activeChangeSet?.id) {
-      const fieldLabel = Object.values(SECTION_CONFIG)
-        .flatMap(s => s.fields)
+      // See note above stageFieldImmediate — same SECTION_CONFIG type widening.
+      const fieldLabel = (Object.values(SECTION_CONFIG)
+        .flatMap(s => s.fields as readonly { id: string; label: string }[]))
         .find(f => f.id === fieldId)?.label ?? fieldId;
       await stageFieldChange(activeChangeSet.id, fieldId, fieldLabel, originalValue ?? null, currentValue);
     }
@@ -1228,7 +1232,10 @@ export default function LeaseReview() {
         current = next;
       }
     }
-    const { error } = await supabase.from('rent_schedules').insert(rows);
+    // RentScheduleEntry (in RentScheduleTable.tsx) omits lease_id since it's
+    // a read-side display type, but the insert requires it. We add lease_id
+    // to every row above; cast bypasses the row-shape mismatch.
+    const { error } = await supabase.from('rent_schedules').insert(rows as any);
     if (error) { toast.error('Failed to generate schedule'); return; }
     const { data } = await supabase.from('rent_schedules').select('*').eq('lease_id', leaseId).order('period_start');
     if (data) setRentSchedule(data);
@@ -2693,28 +2700,37 @@ export default function LeaseReview() {
                           <AmendmentChanges changes={extractedJson._amendment_changes} />
                         )}
                         {/* Executed terms review (executed stage + active staged-editing) */}
-                        {(lifecycleStatus === 'executed' || lifecycleStatus === 'active') && (
+                        {(lifecycleStatus === 'executed' || lifecycleStatus === 'active') && (() => {
+                          // Match handleSync's source-of-truth chain (around line 1323):
+                          // freshly-parsed form value, then lease DB values. Keeps the
+                          // pipeline column in sync with whatever the user is editing.
+                          const parsedFormRent = form.current_monthly_rent
+                            ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null
+                            : null;
+                          const pipelineMonthlyValue =
+                            parsedFormRent ?? lease.current_monthly_rent ?? lease.monthly_payment ?? null;
+                          return (
                           <>
                             <ExecutedTermsReview
                               leaseId={lease.id}
                               pipelineTerms={{
                                 tenant_name: form.tenant_name || null,
                                 landlord_name: form.landlord_name || null,
-                                commencement_date: form.lease_start || null,
-                                expiry_date: form.lease_end || null,
-                                monthly_payment: form.current_monthly_rent || null,
-                                rent_review_clause: null,
-                                break_clause: null,
+                                lease_start: form.lease_start || null,
+                                lease_end: form.lease_end || null,
+                                current_monthly_rent: parsedFormRent,
+                                monthly_payment: pipelineMonthlyValue,
                               }}
                               executedTerms={{
-                                tenant_name: lease.executed_tenant_name ?? null,
-                                landlord_name: lease.executed_landlord_name ?? null,
-                                commencement_date: lease.executed_commencement_date ?? null,
-                                expiry_date: lease.executed_expiry_date ?? null,
-                                monthly_payment: lease.executed_monthly_payment != null ? String(lease.executed_monthly_payment) : null,
-                                rent_review_clause: lease.executed_rent_review_clause ?? null,
-                                break_clause: lease.executed_break_clause ?? null,
-                                confidence: (lease.executed_confidence as Record<string, number>) || {},
+                                executed_tenant_name: lease.executed_tenant_name ?? null,
+                                executed_landlord_name: lease.executed_landlord_name ?? null,
+                                executed_commencement_date: lease.executed_commencement_date ?? null,
+                                executed_expiry_date: lease.executed_expiry_date ?? null,
+                                executed_monthly_payment: lease.executed_monthly_payment ?? null,
+                                executed_rent_review_clause: lease.executed_rent_review_clause ?? null,
+                                executed_break_clause: lease.executed_break_clause ?? null,
+                                executed_extraction_confidence:
+                                  (lease.executed_extraction_confidence as Record<string, number> | null) ?? null,
                               }}
                               canEdit={!lease.model_locked}
                               onTermUpdated={refetchLease}
@@ -2723,13 +2739,14 @@ export default function LeaseReview() {
                             />
                             <VarianceReport
                               leaseFilename={lease.filename || ''}
-                              pipelineMonthly={Number(lease.current_monthly_rent || lease.monthly_payment) || 0}
-                              executedMonthly={Number(lease.executed_monthly_payment) || 0}
-                              varianceMonthlyPayment={lease.variance_monthly_payment != null ? Number(lease.variance_monthly_payment) : null}
-                              varianceCommencementDays={lease.variance_commencement_days != null ? Number(lease.variance_commencement_days) : null}
-                              varianceExpiryDays={lease.variance_expiry_days != null ? Number(lease.variance_expiry_days) : null}
-                              varianceTenantNameMatch={lease.variance_tenant_name_match != null ? Boolean(lease.variance_tenant_name_match) : null}
-                              varianceLandlordNameMatch={lease.variance_landlord_name_match != null ? Boolean(lease.variance_landlord_name_match) : null}
+                              // Nullish-coalesce (??) so a legitimate $0 rent isn't substituted for the fallback.
+                              pipelineMonthly={pipelineMonthlyValue}
+                              executedMonthly={lease.executed_monthly_payment ?? null}
+                              variance_monthly_payment={lease.variance_monthly_payment != null ? Number(lease.variance_monthly_payment) : null}
+                              variance_commencement_days={lease.variance_commencement_days != null ? Number(lease.variance_commencement_days) : null}
+                              variance_expiry_days={lease.variance_expiry_days != null ? Number(lease.variance_expiry_days) : null}
+                              variance_tenant_name_match={lease.variance_tenant_name_match != null ? Boolean(lease.variance_tenant_name_match) : null}
+                              variance_landlord_name_match={lease.variance_landlord_name_match != null ? Boolean(lease.variance_landlord_name_match) : null}
                             />
                             {/* Lock action lives in the AppHeader actions slot
                                 (see Save Draft / Cancel / Lock buttons there).
@@ -2839,7 +2856,8 @@ export default function LeaseReview() {
                               </Card>
                             )}
                           </>
-                        )}
+                          );
+                        })()}
                       </TabsContent>
 
                       {/* Vendor / Counterparty */}

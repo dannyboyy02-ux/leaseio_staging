@@ -390,7 +390,7 @@ export default function Leases() {
                   className="pl-10"
                 />
               </div>
-              <Select value={expirationFilter} onValueChange={setExpirationFilter}>
+              <Select value={expirationFilter} onValueChange={(v) => setExpirationFilter(v as typeof expirationFilter)}>
                 <SelectTrigger className="w-full sm:w-[200px]">
                   <SelectValue />
                 </SelectTrigger>

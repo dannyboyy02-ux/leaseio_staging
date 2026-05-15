@@ -203,7 +203,7 @@ export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Pr
               <div className="border-t pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Result</p>
 
-                {!result.matched ? (
+                {result.matched === false ? (
                   <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
                     <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                     <div>
