@@ -182,8 +182,10 @@ serve(async (req) => {
     }
 
     // --- Build invite URL using existing token — no new token generated ---
-    const origin = req.headers.get('origin') || 'https://theleaseio.com';
-    const inviteUrl = `${origin}/accept-invite?token=${invite.token}`;
+    // P1-08: APP_URL is a deploy-time canonical, not request Origin.
+    // See send-invite/index.ts for the rationale.
+    const appUrl = (Deno.env.get('APP_URL') ?? 'https://theleaseio.com').replace(/\/$/, '');
+    const inviteUrl = `${appUrl}/accept-invite?token=${invite.token}`;
 
     // --- SEND EMAIL FIRST ---
     const sendResult = await sendInviteEmail({

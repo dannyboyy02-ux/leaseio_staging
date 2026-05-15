@@ -155,7 +155,14 @@ serve(async (req) => {
     }
 
     const wsName = workspaceName ?? workspace.name ?? 'Workspace';
-    const origin = req.headers.get('origin') || 'https://theleaseio.com';
+    // P1-08: build invite URLs from a deploy-time canonical APP_URL,
+    // never from the request Origin header. An authenticated workspace
+    // owner/admin calling this function outside the browser could
+    // otherwise spoof the Origin and send a real LeaseIO-branded
+    // invite email whose accept-link points at a hostile domain that
+    // captures the token. APP_URL defaults to the production landing
+    // domain — accept-invite is served at the root path.
+    const appUrl = (Deno.env.get('APP_URL') ?? 'https://theleaseio.com').replace(/\/$/, '');
     const results: Array<{ email: string; ok: boolean; code: string; message: string }> = [];
 
     try {
@@ -173,7 +180,7 @@ serve(async (req) => {
           .eq('workspace_id', workspaceId).eq('email', email).is('accepted_at', null).maybeSingle();
 
         if (existingInvite) {
-          const inviteUrl = `${origin}/accept-invite?token=${existingInvite.token}`;
+          const inviteUrl = `${appUrl}/accept-invite?token=${existingInvite.token}`;
           const sendResult = await sendInviteEmail({ resendApiKey, to: email, firstName, workspaceName: wsName, role, inviteUrl });
           if (!sendResult.sent) {
             results.push({ email, ok: false, code: 'API_ERROR', message: sendResult.error ?? 'Email send failed' });
@@ -207,7 +214,7 @@ serve(async (req) => {
           } else {
             // 4. New invite
             const inviteToken = generateInviteToken();
-            const inviteUrl   = `${origin}/accept-invite?token=${inviteToken}`;
+            const inviteUrl   = `${appUrl}/accept-invite?token=${inviteToken}`;
             const sendResult  = await sendInviteEmail({ resendApiKey, to: email, firstName, workspaceName: wsName, role, inviteUrl });
             if (!sendResult.sent) {
               results.push({ email, ok: false, code: 'API_ERROR', message: sendResult.error ?? 'Email send failed' });
