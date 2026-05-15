@@ -1022,6 +1022,115 @@ async function assertAiConsent(
   }
 }
 
+/**
+ * P1-03 backend quota gate. Enforces:
+ *   - active_leases cap (only when isNewLease=true; re-extracting an
+ *     existing lease doesn't add to the active count)
+ *   - monthly_extractions cap (always; an extraction always costs AI)
+ *
+ * Limits mirror src/config/pricing.ts. starter: 15 active / 15 mo.
+ * business: 50 active / 50 mo. Unknown/null plan defaults to starter.
+ *
+ * Returns a 402 Payment Required response when the workspace would
+ * exceed the cap, with a structured body the frontend renders as an
+ * upgrade prompt. Returns null when the call may proceed.
+ *
+ * "Monthly" = trailing 30 days, matching the soft-quota poller in
+ * _shared/monitoring/workspace_quotas.ts. Uses leases.uploaded_at —
+ * leases.created_at does not exist on this schema.
+ */
+interface PlanQuotaLimits {
+  active_leases: number;
+  monthly_extractions: number;
+}
+const PLAN_QUOTAS: Record<string, PlanQuotaLimits> = {
+  starter:  { active_leases: 15, monthly_extractions: 15 },
+  business: { active_leases: 50, monthly_extractions: 50 },
+};
+
+async function assertProcessingQuota(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  workspaceId: string | null,
+  corsHeaders: Record<string, string>,
+  opts: { isNewLease: boolean },
+): Promise<Response | null> {
+  if (!workspaceId) return null;
+
+  const { data: ws } = await supabaseAdmin
+    .from('workspaces')
+    .select('plan')
+    .eq('id', workspaceId)
+    .maybeSingle();
+  const plan = ((ws as { plan?: string } | null)?.plan === 'business') ? 'business' : 'starter';
+  const limits = PLAN_QUOTAS[plan];
+
+  // Monthly extractions — always checked.
+  const since30dIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { count: monthlyExtractionCount, error: extractionErr } = await supabaseAdmin
+    .from('leases')
+    .select('id', { count: 'exact', head: true })
+    .eq('workspace_id', workspaceId)
+    .gte('uploaded_at', since30dIso)
+    .not('extracted_json', 'is', null);
+  if (extractionErr) {
+    console.error('[process_lease] quota: extraction count failed:', extractionErr.message);
+    // Fail open on a count error — same posture as the rate-limit
+    // helper. We don't want a transient DB blip to block paying
+    // customers; the soft-quota dashboard catches drift over time.
+    return null;
+  }
+  const monthlyExtractions = monthlyExtractionCount ?? 0;
+  if (monthlyExtractions >= limits.monthly_extractions) {
+    // 200 + structured body, same pattern as tier2_classification_failed —
+    // the frontend's `supabase.functions.invoke` swallows non-2xx into a
+    // generic FunctionsHttpError, but parses the body cleanly on 200.
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: `This workspace has reached its monthly AI extraction limit (${limits.monthly_extractions}/mo on ${plan}). Upgrade to Business or wait for the rolling 30-day window to roll over.`,
+        reason: 'quota_exceeded',
+        metric: 'monthly_extractions',
+        plan,
+        current: monthlyExtractions,
+        limit: limits.monthly_extractions,
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  // Active leases — only for genuinely new uploads. Re-extracting an
+  // executed document on an existing lease doesn't add to the count.
+  if (opts.isNewLease) {
+    const { count: activeCount, error: activeErr } = await supabaseAdmin
+      .from('leases')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspaceId)
+      .eq('lifecycle_status', 'active')
+      .eq('archived', false);
+    if (activeErr) {
+      console.error('[process_lease] quota: active count failed:', activeErr.message);
+      return null;
+    }
+    const active = activeCount ?? 0;
+    if (active >= limits.active_leases) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: `This workspace has reached its active-lease limit (${limits.active_leases} on ${plan}). Archive an existing lease or upgrade to Business before uploading more.`,
+          reason: 'quota_exceeded',
+          metric: 'active_leases',
+          plan,
+          current: active,
+          limit: limits.active_leases,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+  }
+
+  return null;
+}
+
 async function extractLeaseDataWithClaude(
   // See assertAiConsent docstring — supabaseAdmin is request-scoped
   // and must be passed explicitly. The internal risk_templates lookup
@@ -1673,6 +1782,16 @@ serve(async (req) => {
       );
       if (rateLimitResponse) return rateLimitResponse;
 
+      // P1-03 quota gate on executed-upload path: only monthly extraction
+      // cap applies (the underlying lease already exists).
+      const quotaResp = await assertProcessingQuota(
+        supabaseAdmin,
+        existingLease.workspace_id,
+        corsHeaders,
+        { isNewLease: false },
+      );
+      if (quotaResp) return quotaResp;
+
       const timestamp = Date.now();
       const bucketPrefix = existingLease.workspace_id
         ? `${existingLease.workspace_id}/${targetLeaseId}/executed`
@@ -2010,6 +2129,18 @@ serve(async (req) => {
       requestOrigin,
     );
     if (rateLimitResponse) return rateLimitResponse;
+
+    // P1-03 quota gate on new-upload path: both active-lease cap and
+    // monthly extraction cap apply. Runs BEFORE storage upload + AI
+    // calls so the workspace sees an upgrade prompt instead of a
+    // partially-created record.
+    const quotaResp = await assertProcessingQuota(
+      supabaseAdmin,
+      resolvedWorkspaceId,
+      corsHeaders,
+      { isNewLease: true },
+    );
+    if (quotaResp) return quotaResp;
 
     const leaseId = crypto.randomUUID();
     const storagePath = `${user.id}/${leaseId}/${sanitizedFilename}`;

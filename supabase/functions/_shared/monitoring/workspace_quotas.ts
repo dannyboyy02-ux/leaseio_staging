@@ -89,18 +89,22 @@ export async function pollWorkspaceQuotas(
       .eq('archived', true);
     const archived = archivedCount ?? 0;
 
-    // Monthly extractions: count leases created in last 30 days
+    // Monthly extractions: count leases uploaded in last 30 days
     // with a non-null extracted_json (proxy for "an extraction ran").
     // Note: this is conservative — it counts unique leases not
     // unique extraction calls, so a re-extracted lease counts once.
     // Acceptable approximation; the exact billable-extraction count
     // is what Stripe + the tier-overage logic uses, which can
     // diverge from this snapshot by intent.
+    //
+    // leases.uploaded_at is the source-of-truth timestamp here;
+    // leases.created_at doesn't exist on this schema (the prior code
+    // referenced it and the gte filter silently failed against PostgREST).
     const { count: extractionCount } = await supabaseAdmin
       .from('leases')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', w.id)
-      .gte('created_at', since30d)
+      .gte('uploaded_at', since30d)
       .not('extracted_json', 'is', null);
     const extractions = extractionCount ?? 0;
 
