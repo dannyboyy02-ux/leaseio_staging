@@ -41,7 +41,9 @@ for (const target of configuredTargets) {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
+    // Truncate to avoid dumping verbose Supabase error bodies (schema text,
+    // function names, etc.) into CI logs at full length.
+    const errorText = (await response.text()).slice(0, 200);
     console.error(`Smoke test failed for ${target.name}: ${response.status} ${errorText}`);
     process.exit(1);
   }

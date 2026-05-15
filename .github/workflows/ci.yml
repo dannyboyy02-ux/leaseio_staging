@@ -27,11 +27,39 @@ jobs:
       - name: Verify Supabase types
         run: npm run check:supabase-types
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Run tests
         run: npm test
 
       - name: Build app
         run: npm run build
+
+      # Smoke-test secrets are required on main pushes — silently skipping
+      # would let auth/RLS regressions land unnoticed (audit P2-09). PR
+      # branches may legitimately lack secrets (fork PRs); the next step's
+      # conditional handles that case.
+      - name: Verify smoke-test secrets on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          SUPABASE_STAGING_URL: ${{ secrets.SUPABASE_STAGING_URL }}
+          SUPABASE_STAGING_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_STAGING_SERVICE_ROLE_KEY }}
+          SUPABASE_PRODUCTION_URL: ${{ secrets.SUPABASE_PRODUCTION_URL }}
+          SUPABASE_PRODUCTION_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_PRODUCTION_SERVICE_ROLE_KEY }}
+        run: |
+          # `if`-form not `&&`: under `set -e` the && short-circuit on a
+          # non-empty var (test exits 1) would kill the whole script before
+          # later checks ran, masking a partially-configured environment.
+          missing=()
+          if [ -z "$SUPABASE_STAGING_URL" ]; then missing+=(SUPABASE_STAGING_URL); fi
+          if [ -z "$SUPABASE_STAGING_SERVICE_ROLE_KEY" ]; then missing+=(SUPABASE_STAGING_SERVICE_ROLE_KEY); fi
+          if [ -z "$SUPABASE_PRODUCTION_URL" ]; then missing+=(SUPABASE_PRODUCTION_URL); fi
+          if [ -z "$SUPABASE_PRODUCTION_SERVICE_ROLE_KEY" ]; then missing+=(SUPABASE_PRODUCTION_SERVICE_ROLE_KEY); fi
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Smoke-test secrets missing on main push — cannot silently skip. Missing: ${missing[*]}"
+            exit 1
+          fi
 
       - name: Security hardening smoke test
         if: ${{ secrets.SUPABASE_STAGING_URL != '' && secrets.SUPABASE_STAGING_SERVICE_ROLE_KEY != '' && secrets.SUPABASE_PRODUCTION_URL != '' && secrets.SUPABASE_PRODUCTION_SERVICE_ROLE_KEY != '' }}
