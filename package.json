@@ -9,7 +9,7 @@
     "typecheck:strict": "tsc --noEmit -p tsconfig.app.json --noImplicitAny",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "prebuild": "npm run typecheck:names",
+    "prebuild": "npm run typecheck:names && npm run typecheck",
     "typecheck:names": "node scripts/check-undefined-names.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
