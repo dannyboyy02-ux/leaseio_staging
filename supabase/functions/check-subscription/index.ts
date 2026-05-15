@@ -4,9 +4,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 
-// Default CORS headers for backwards compatibility
-const corsHeaders = getCorsHeaders(null);
-
 // Map Stripe product IDs to plan names
 const PRODUCT_TO_PLAN: Record<string, string> = {
   "prod_TlQhMebFLbmsbR": "starter",
@@ -20,6 +17,8 @@ const PRODUCT_TO_PLAN: Record<string, string> = {
 const SUBSCRIBED_STATUSES = new Set(["active", "trialing"]);
 
 serve(async (req) => {
+  // P1-02: derive CORS from request origin per call — see create-checkout for context.
+  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

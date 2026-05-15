@@ -4,9 +4,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 
-// Default CORS headers for backwards compatibility
-const corsHeaders = getCorsHeaders(null);
-
 // Stripe price IDs per plan + interval. Monthly hardcoded (existing
 // production values); annual sourced from env vars at deploy time.
 //
@@ -41,6 +38,12 @@ const VALID_INTERVALS: ReadonlySet<string> = new Set(["monthly", "annual"]);
 const TRIAL_PERIOD_DAYS = 7;
 
 serve(async (req) => {
+  // P1-02: derive CORS from the request origin per call. Module-level
+  // getCorsHeaders(null) defaulted to the first allowlisted origin
+  // (theleaseio.com), so legitimate calls from app.theleaseio.com or
+  // localhost dev got a mismatched Access-Control-Allow-Origin and were
+  // rejected by the browser before they could even reach Stripe.
+  const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
