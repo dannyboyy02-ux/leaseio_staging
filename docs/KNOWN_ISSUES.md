@@ -430,12 +430,36 @@ during testing (real users may want to dry-run a reroute audit sweep).
 
 ---
 
+## P2-01 cron / secret hygiene (2026-05-15)
+
+### Item #15: `process-alerts-daily` cron is orphaned — no source in repo, no auth header
+
+Surfaced during P2-01 (audit P2-01 in `docs/LEASEIO_AI_BUILD_AUDIT_FINDINGS_2026-05-13.md`) on 2026-05-15 while sweeping cron-secret mechanism drift.
+
+**State as of 2026-05-15:**
+- `cron.job` has a row named `process-alerts-daily` (schedule `30 8 * * *`).
+- The cron's HTTP POST has only `Content-Type: application/json` — no `x-cron-secret`, no `Authorization: Bearer`. Other crons all pass `x-cron-secret` from `private.cron_secrets`.
+- The target function `process-alerts` IS deployed (verify_jwt=false, version 18, last update ~2026-04-22) but **has no source in `supabase/functions/`**. Likely a legacy notification job from the original Phase-5 alert work that was never carried into the repo.
+- The migration that scheduled it (`phase5_process_alerts_cron`) is on the remote-only list per `docs/MIGRATION_DRIFT_REMEDIATION.md`.
+
+**Risk:** If the function ever processes data with side effects, it's running unaudited (no source review possible) and unauthenticated (no cron-secret gate). If it's idempotent and dead, it's still daily noise in `cron.job_run_details`.
+
+**Recommended action:**
+1. Pull the deployed function source: `supabase functions download process-alerts --project-ref <ref>`.
+2. Review what it does.
+3. Either: commit source + add `x-cron-secret` auth (treat as a real job), OR delete it: `SELECT cron.unschedule('process-alerts-daily')` + delete the edge function via dashboard.
+4. Update `docs/ops/OPERATOR_PLAYBOOK.md` cron-verification table accordingly.
+
+Cross-reference: this is part of the broader migration-drift remediation in `docs/MIGRATION_DRIFT_REMEDIATION.md` (P1-10 in the same audit). When the operator runs `supabase db pull` with Docker, the phantom cron schedule will surface in the baseline; this entry can close once that's reconciled.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
 follow-up (item 5), Phase 3 audit (items 6-7), Phase 3 close-out
 forensics + smoke (items 8-10), Phase 4 close-out audit (item 11),
-and Phase 8 C1 (items 12-13).
+Phase 8 C1 (items 12-13), and audit P2-01 (item 15).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.

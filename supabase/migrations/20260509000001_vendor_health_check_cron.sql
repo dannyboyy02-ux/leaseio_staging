@@ -10,7 +10,11 @@
 --        ('vendor_health_check', '<same value>', 'Operational Monitoring Phase 2 cron')
 --      ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
 --   3. Set adapter API tokens as edge function secrets:
---        - SUPABASE_MANAGEMENT_TOKEN (read-only personal access token)
+--        - MANAGEMENT_API_TOKEN (read-only personal access token; not
+--          named SUPABASE_MANAGEMENT_TOKEN because Supabase reserves
+--          the SUPABASE_ prefix and silently refuses user-defined
+--          secrets with that prefix — see .env.example and the runtime
+--          code in supabase/functions/vendor-health-check/index.ts.)
 --        - VERCEL_ACCESS_TOKEN (read-only personal access token)
 --        - VERCEL_TEAM_ID (optional, only if using a team account)
 --      RESEND_API_KEY is already set for outbound transactional email.

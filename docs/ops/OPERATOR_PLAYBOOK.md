@@ -226,8 +226,9 @@ Five tokens across three vendors. Plus one number (the Anthropic cap value).
 5. **Copy the token** — you only see it once. Save to 1Password under "LeaseIO / Supabase Management Token" before doing anything else.
 6. In a terminal (the same Bash shell you've been using for `supabase` CLI commands):
    ```
-   supabase secrets set SUPABASE_MANAGEMENT_TOKEN='<paste the token here>'
+   supabase secrets set MANAGEMENT_API_TOKEN='<paste the token here>'
    ```
+   The token MUST be named `MANAGEMENT_API_TOKEN`, NOT `SUPABASE_MANAGEMENT_TOKEN`. Supabase reserves the `SUPABASE_` prefix for auto-injected secrets and silently refuses user-defined secrets with that prefix. The runtime code in `supabase/functions/vendor-health-check/index.ts` and `supabase/functions/_shared/monitoring/supabase.ts` reads `MANAGEMENT_API_TOKEN`.
 
 #### 5b. Vercel access token
 
@@ -354,6 +355,65 @@ These are launch-readiness items that don't matter until you're actively onboard
 Once you've done Stop 5 (monitoring tokens), execute the backup-restore drill at least once to validate the restore path works. The runbook is at `docs/ops/backup-restore-runbook.md`. Takes ~1-2 hours of clock time but ~15 min of attention; mostly waiting for the restore to complete.
 
 After the first run, add an annual reminder to your Google Calendar (Stop 4) so it doesn't get forgotten.
+
+---
+
+## 🔍 Cron deployment verification (run any time)
+
+**Why this matters:** Background jobs are part of the product surface — cleanup, monitoring, and approval-timer alerts all run on cron. Audit P2-01 (2026-05-13) flagged the absence of a routine check. This snippet is the routine check.
+
+Paste into the Supabase SQL editor (or run through MCP `execute_sql`). It returns one row per scheduled function with last-fire status. Anything older than expected or with a non-200 response is your signal.
+
+```sql
+WITH last_runs AS (
+  SELECT
+    j.jobid,
+    j.jobname,
+    j.schedule,
+    r.start_time,
+    r.status,
+    r.return_message,
+    ROW_NUMBER() OVER (PARTITION BY j.jobid ORDER BY r.start_time DESC) AS rn
+  FROM cron.job j
+  LEFT JOIN cron.job_run_details r ON r.jobid = j.jobid
+)
+SELECT
+  jobname,
+  schedule,
+  start_time          AS last_run_at,
+  status              AS last_run_status,
+  CASE
+    WHEN status IS NULL                                  THEN '⚠️ never run'
+    WHEN status = 'failed'                               THEN '❌ failed'
+    WHEN start_time < (now() - interval '36 hours')      THEN '⚠️ stale (>36h)'
+    ELSE '✅ ok'
+  END                 AS health,
+  return_message      AS last_message
+FROM last_runs
+WHERE rn = 1
+ORDER BY
+  CASE
+    WHEN status IS NULL                                  THEN 0
+    WHEN status = 'failed'                               THEN 1
+    WHEN start_time < (now() - interval '36 hours')      THEN 2
+    ELSE 3
+  END,
+  jobname;
+```
+
+Expected jobs (as of 2026-05-15):
+
+| Job | Schedule | Notes |
+|---|---|---|
+| `cleanup-expired-reports-daily`     | `30 8 * * *`  | Phase 8 — expires `lease_reports` rows past retention |
+| `detect-stuck-chains-daily`         | `0 9 * * *`   | Phase 7 — flags chains with no movement |
+| `process-delegate-timers-hourly`    | `5 * * * *`   | Phase 7 — activates delegate when primary doesn't act |
+| `send-counter-signature-reminder-daily` | `15 8 * * *` | Phase 5 — counter-signature reminders |
+| `send-lease-notifications-daily`    | `0 8 * * *`   | Renewal/expiration email alerts |
+| `vendor-health-check-daily`         | `0 6 * * *`   | Operational Monitoring Phase 2/3 |
+| `process-alerts-daily`              | `30 8 * * *`  | ⚠️ Orphan — see KNOWN_ISSUES |
+
+All current jobs (except the orphan above) use the canonical `private.cron_secrets` table for x-cron-secret auth. The older `current_setting('app.<name>', true)` pattern from migration 20260426000003 was superseded by `20260507260000_cron_secrets_table.sql`; live `cron.job` definitions have been rescheduled to read from the table.
 
 ---
 
