@@ -1,7 +1,8 @@
 # Migration Drift Remediation
 
-**Filed 2026-05-07 from the professional-grade audit.**
-**Severity:** P1 for production readiness. Not user-blocking right now.
+**Original filing:** 2026-05-07 (audit pass).
+**Last refreshed:** 2026-05-15 (audit P1-10 session — partial progress recorded; full remediation still owed).
+**Severity:** P1 for production readiness. Not user-blocking right now; blocks DR drills, fresh-environment spin-up, and SOC schema-as-code claims.
 
 ---
 
@@ -10,15 +11,16 @@
 The repo's `supabase/migrations/` directory and the live Supabase
 project's applied migration history are **out of sync in both
 directions**. Per the project's standing **Schema Change Rule**
-(`docs/CLAUDE.md`), every schema change must be committed as a
-`.sql` migration file. That rule has been violated multiple times
-(both before and during this build).
+(`CLAUDE.md`), every schema change must be committed as a
+`.sql` migration file. That rule has been violated multiple times,
+and is structurally violated by MCP `apply_migration` itself (see
+below).
 
 **Concrete consequences:**
 
 - A clean rebuild from `supabase/migrations/` will **not** reproduce
   the live schema. Tables, indexes, policies, and functions added
-  via Studio / MCP are missing.
+  via Studio / MCP without a matching committed file are missing.
 - New Supabase environments (staging, branches, disaster-recovery
   restore) will fail to come up correctly.
 - Any "schema as code" claim for SOC / customer audits is currently
@@ -28,152 +30,187 @@ directions**. Per the project's standing **Schema Change Rule**
 
 ---
 
-## What's drifted (counted 2026-05-07)
+## Root cause of the drift (added 2026-05-15)
 
-### Live migrations with NO matching local file (23)
+The 2026-05-07 doc treated drift as a historical-only issue. It is not.
+**Every call to `mcp__supabase__apply_migration` creates a new entry in
+the live `supabase_migrations.schema_migrations` table using the
+server's CURRENT timestamp as `version`, regardless of the timestamp
+embedded in the local filename.** Example confirmed via execute_sql
+on 2026-05-15:
 
-These were applied via Supabase Studio or MCP `apply_migration`
-without a corresponding `.sql` file being committed:
+| Local file | Live `version` | Live `name` |
+|---|---|---|
+| `20260515020000_security_invoker_audit_views.sql` | `20260515224221` | `security_invoker_audit_views` |
+| `20260515010000_lease_workflow_field_guard.sql`   | `20260515223204` | `lease_workflow_field_guard` |
+| `20260515000000_workspace_intended_plan.sql`      | `20260515205548` | `workspace_intended_plan` |
 
-```
-add_audit_intake_source_and_fix_constraints
-add_name_fields_to_invite_tokens
-backfill_silently_dropped_asset_type_v2
-change_set_items_unique_field_per_set
-change_set_items_update_rls
-change_set_requested_approver
-change_set_self_approval_columns
-create_dismissed_events_table
-create_processing_rate_limits_table
-create_user_preferences_table
-governance_audit_self_approved_event
-phase5_notifications_and_alert_rules
-phase5_process_alerts_cron
-risks_dismiss_columns_and_activity_type_v2
-risks_update_rls_for_dismiss
-sweep_h02_missing_delete_policies
-sweep_indexes_hot_join_paths
-sweep_m02_m03_remaining_rls_guardrails
-tmp_e2e_test_read_for_highlight_validation        ← dev-only, expected
-tmp_e2e_test_read_for_highlight_validation_v2     ← dev-only, expected
-tmp_e2e_test_read_v3_90ff8e4f                     ← dev-only, expected
-tmp_rent_schedule_diag_read                       ← dev-only, expected
-user_added_risks_and_templates
-```
+The local files' timestamps are the AUTHORING time (chosen by the
+human for ordering). The live versions are the APPLICATION time
+(stamped by the Management API at the moment the SQL ran).
 
-The 4 `tmp_*` entries are diagnostic reads that probably should be
-purged from the live `supabase_migrations.schema_migrations` table
-during remediation. The other 19 are real schema changes that need
-committed `.sql` files.
+This means `supabase migration list --linked` sees the same logical
+migration as both "local-only" (under filename timestamp) AND
+"remote-only" (under server timestamp). The 73/72/13 split as of
+2026-05-15 is mostly this artifact — the underlying schema is
+correct on live; the tracking table just doesn't know that.
 
-### Local files with NO matching live migration (28)
-
-These are repo files that don't appear in the live migration
-history:
-
-```
-0a5bc892-3356-4c7b-a9ba-ab4127f71c52
-0d54ba96-7d0d-472f-b799-bc96fbd8cb9c
-190dea19-fa36-49f3-8ea6-f8303be321f4
-254a3132-6e79-4b3f-b167-5bc1a659e7eb
-4375e762-9c10-44fe-8b17-4b207118973a
-45c75cb7-d5ac-47a8-976f-78c22669767a
-55d5da26-9c19-460a-945e-c267e7fa7d98
-5c24ae6a-a187-4d3d-bc87-dc3f3a73faca
-6c7086fd-0f2c-4396-845d-fc87a5c8fd67
-ab160a49-80b2-4a10-b70f-7ab6a808073b
-add_audit_intake_source
-add_notify_abstraction_complete                   ← may overlap fix this session
-add_status_changed_at
-audit_remediation
-audit_remediation_phase1
-c1c353dd-f462-4056-9271-0d22f28d624e
-c8fa0470-2653-4141-acbf-3a6bd1b36386
-d2749bd0-9fd1-41bb-a176-02c36fba3bd2
-df9ca410-8a17-4a03-a24d-667e6d590e74
-ed4a1140-2360-4526-b1ea-519c46531e72
-f0366553-6e50-4342-9ef5-cf40be5f6e43
-fd382fae-d42f-46ae-8b52-ce04cb57d00e
-governance_rls_tighten
-phase1_financial_columns
-phase1_lease_intake_lifecycle
-phase2_approval_roles
-phase6_notification_triggers
-schema_audit_fixes
-```
-
-The 11 UUID-named files are likely Lovable Studio artifacts that
-were applied once and then squashed/replaced under a different
-named migration. Most of the remaining named files (`phase1_*`,
-`phase2_*`, etc.) are pre-Phase-1 work that was reorganized when
-the official "Phase N Build Spec" naming convention started — and
-the live versions have different names than the local files.
+`supabase db push` does not have this problem (it pushes the file's
+version verbatim), but it requires Docker locally. MCP
+`apply_migration` is the wrong tool for the job — convenient, but
+poisons the migration history with every call.
 
 ---
 
-## Remediation path (requires Supabase CLI — owner runs locally)
+## Current state of drift (counted 2026-05-15)
 
-This step requires the `supabase` CLI to be installed and linked to
-the project. It cannot be done via the MCP tools because
-`supabase db pull` is a CLI-only operation that produces a
-context-aware diff against the local migration history.
+```
+$ npx supabase migration list --linked | awk ...
+Remote-only: 73
+Local-only:  72
+In-sync:     13
+```
+
+The 73 remote-only rows are roughly:
+- **~50 phantom rows** from MCP `apply_migration` calls — same NAME as
+  a local file but different `version`. The schema effect is in the
+  live DB; the tracking is just misaligned.
+- **~23 genuine drift** from Studio / MCP edits that were never
+  committed as files (per the 2026-05-07 audit).
+
+The 72 local-only files are roughly:
+- **~50 files** that ARE applied on live (same name) but tracked
+  under a different version key — see Root cause above.
+- **~22 historical files** that were superseded by later
+  reorganized migrations (UUID-named Lovable Studio artifacts,
+  `phase1_*` files renamed when the phase-spec naming convention
+  started).
+
+The 2026-05-07 doc listed specific filenames as "stale local-only."
+That list is no longer accurate: spot-checking against live shows
+several of those names (e.g. `audit_remediation`,
+`notify_abstraction_complete`, `governance_rls_tighten`) ARE applied
+on live. They're not stale — they're phantom-tracked. Archiving them
+based on filename alone would risk deleting active migrations.
+
+---
+
+## Remediation path (requires Supabase CLI + Docker — owner runs locally)
+
+This step requires the `supabase` CLI plus **Docker Desktop** running
+locally. `db pull` and `db dump` both spin up a Docker container
+internally to run pg_dump against the live project. It cannot be
+done via the MCP tools.
+
+### Step 0 — Install Docker Desktop
+
+Required by `supabase db pull` / `db dump`. Sessions in 2026-05-15
+without Docker confirmed neither command can run; the CLI fails with
+"docker client must be run with elevated privileges to connect" or
+"open //./pipe/docker_engine: The system cannot find the file specified."
 
 ### Step 1 — Snapshot before touching anything
 
 ```bash
 # From the repo root
-supabase db dump --schema public --data-only=false > _backup_schema_2026_05_07.sql
+supabase db dump --schema public -f _backup_schema_$(date +%Y_%m_%d).sql
 ```
 
 Keep this file. It's your safety net if anything goes sideways.
 
-### Step 2 — Pull the live schema diff
+### Step 2 — Generate the canonical baseline
 
 ```bash
+# This is the operative step. It writes a single migration that, when
+# replayed against an empty database, produces the current live schema.
 supabase db pull --schema public
 ```
 
-This generates a new `supabase/migrations/<timestamp>_remote_schema.sql`
-file containing every object on live that the local migration
-history does not produce. Inspect it before committing — it
-should describe roughly the 19 real drifted migrations from above
-plus any policy / index / function tweaks that were never captured.
+The file lands as `supabase/migrations/<timestamp>_remote_schema.sql`.
+Inspect it line by line before committing. It should describe:
+- `CREATE TABLE public.profiles`
+- `CREATE TABLE public.leases`
+- Every other base table that existing local migrations only ALTER
+- Every RLS policy currently in production
+- Every function, view, trigger, sequence, type, extension grant
+- Storage buckets + policies
 
-### Step 3 — Tag drifted-but-unused local files
+### Step 3 — Decide what to do with the existing local files
 
-Move the 28 local files that have no matching live migration into
-`supabase/migrations/_archived_2026_05_07/`. They are kept under
-`git history` for forensic reference but excluded from new
-deployments. Add a `README.md` in that folder explaining why.
+You have two clean options:
 
-### Step 4 — Verify a clean rebuild
+**Option A — Squash to the baseline.**
+Move every existing file in `supabase/migrations/` (except the new
+remote_schema.sql) to `supabase/migrations/_archived_pre_baseline/`.
+`supabase db reset` then runs only the baseline + future migrations.
+Loses migration granularity but gives a clean replayable chain.
+
+**Option B — Keep history, layer the baseline first.**
+Rename the baseline to a very early timestamp (e.g.
+`19700101000000_baseline.sql`), then teach `db reset` to run it first
+followed by the existing migrations. Existing migrations need to be
+idempotent (most are, since they use `IF NOT EXISTS` / `CREATE OR
+REPLACE`). Risk: some early migrations contain `CREATE TABLE` without
+`IF NOT EXISTS` and would fail on a baseline'd DB. Verify by attempting
+a clean reset.
+
+Recommendation: **Option A**. Future migrations build on the baseline,
+and the audit-driven migrations from 2026-05-15 (P1-09 views,
+P1-11 trigger, P1-06 storage policies, etc.) are already
+self-contained and would re-apply cleanly after the baseline.
+
+### Step 4 — Re-align the live `schema_migrations` table
+
+After Step 2, the live tracking table still has phantom-versioned
+rows from prior MCP `apply_migration` calls. Either:
+- Leave them alone (cosmetic only — `db reset` produces the right
+  schema regardless), or
+- Truncate `supabase_migrations.schema_migrations` and re-stamp it
+  with the post-baseline timeline. This requires elevated
+  privileges and a clear rollback plan.
+
+### Step 5 — Verify a clean rebuild
 
 ```bash
-# In a fresh Supabase project (or local Docker)
+# In a fresh Supabase project (or local Docker target)
 supabase db reset
 # Then run a smoke check that the app boots and a lease can be uploaded.
 ```
 
-### Step 5 — Going forward
+### Step 6 — Stop poisoning the history going forward
 
 Re-affirm the Schema Change Rule in `CLAUDE.md`:
 
 > **Every schema change MUST be authored as a `.sql` migration file
-> committed under `supabase/migrations/` BEFORE it is applied to
-> production.** No more direct Studio edits. No more
-> `mcp__claude_ai_Supabase__apply_migration` calls without a
-> matching committed file.
+> committed under `supabase/migrations/` AND applied via
+> `supabase db push` (CLI), not via `mcp__supabase__apply_migration`.**
 
-The `apply_migration` MCP tool is convenient but is what got us
-here. From now on:
-
-1. Author the migration as a file.
+The MCP tool is convenient but stamps the wrong version onto the
+tracking table. If `db push` isn't possible (no Docker), then:
+1. Author the file.
 2. Commit it.
-3. Apply it via `supabase db push` (CLI) or via `apply_migration`
-   *while pasting the file contents verbatim* so the file and the
-   live state stay in lockstep.
-4. Verify the live `supabase_migrations.schema_migrations` table
-   has a row whose `name` matches the file's `<timestamp>_<name>.sql`.
+3. Apply via MCP `apply_migration`, knowing this creates drift.
+4. File a follow-up to repair the drift on the next operator session.
+
+---
+
+## What's been done since the original filing
+
+Between 2026-05-07 and 2026-05-15, every schema change in this
+repo has been authored as a `.sql` file FIRST, committed, then
+applied. Specifically the audit-driven migrations:
+
+| Migration | Audit ID |
+|---|---|
+| `20260515000000_workspace_intended_plan.sql` | P0-01 |
+| `20260515010000_lease_workflow_field_guard.sql` | P1-11 |
+| `20260515020000_security_invoker_audit_views.sql` | P1-09 |
+| `20260515030000_lease_reports_storage_finalization_guard.sql` | P1-06 |
+
+All four are in `supabase/migrations/` AND applied to live, just
+with the version-mismatch caveat from the Root cause section above.
+After the operator runs Step 2, these will all show as in-sync
+(or be absorbed into the baseline).
 
 ---
 
@@ -181,20 +218,24 @@ here. From now on:
 
 | Scenario | Impact |
 |---|---|
-| Spinning up a staging environment | Will not have the missing 19 schema objects. Many features will silently break. |
+| Spinning up a staging environment | Will not have the missing 19+ schema objects. Many features will silently break. |
 | Disaster recovery (Supabase outage / data center loss) | Schema cannot be rebuilt from repo alone. Customer-data restore from backup works, but schema reconstruction relies on the surviving live state. |
 | Supabase branching for PRs (Pro plan) | Fresh branch will not match prod, so PR previews break. |
 | Phase 9 (firm layer) opens | Adding the firm-tier schema starts from ambiguous state. Future migrations may collide. |
 | Customer / SOC audit | "We use schema-as-code" is currently inaccurate. |
 
-**Time to remediate:** 1-2 hours for an owner with the Supabase CLI.
-The longest part is reviewing the `supabase db pull` output line by
-line before committing.
+**Time to remediate:** 1–2 hours for an owner with the Supabase CLI
+and Docker Desktop. The longest part is reviewing the `db pull`
+output line by line before committing.
 
 ---
 
 ## What this doc replaces
 
 This file supersedes any verbal claim that the repo migrations folder
-is the schema's source of truth. Until Step 5 is signed off, treat
+is the schema's source of truth. Until Step 6 is signed off, treat
 the live database as authoritative for schema-state questions.
+
+The session-context memory at
+`memory/session_context.md` references this remediation; both should
+be updated together when the operator completes Step 2.
