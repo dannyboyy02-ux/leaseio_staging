@@ -427,9 +427,19 @@ export default function AccountSettings() {
   }, [workspace?.id, workspace?.subscriptionStatus, searchParams, autoCheckoutFired]);
 
   const handleManagePayment = async () => {
+    if (!workspace?.id) {
+      toast.error('Select a workspace before opening the billing portal.');
+      return;
+    }
     setIsManagingPayment(true);
     try {
-      const { data, error } = await supabase.functions.invoke('customer-portal');
+      // P2-07: the portal call is workspace-scoped. The edge function
+      // verifies owner/admin and looks up Stripe from the workspace's
+      // stored stripe_customer_id (populated by the Stripe webhook),
+      // not from the caller's email.
+      const { data, error } = await supabase.functions.invoke('customer-portal', {
+        body: { workspaceId: workspace.id },
+      });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -438,7 +448,8 @@ export default function AccountSettings() {
       }
     } catch (error) {
       console.error('Error opening customer portal:', error);
-      toast.error('Failed to open billing portal. You may need an active subscription first.');
+      const msg = error instanceof Error ? error.message : 'Failed to open billing portal. You may need an active subscription first.';
+      toast.error(msg);
     } finally {
       setIsManagingPayment(false);
     }

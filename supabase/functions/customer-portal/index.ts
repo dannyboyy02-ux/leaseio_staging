@@ -15,7 +15,7 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
 
-    const supabaseClient = createClient(
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
       { auth: { persistSession: false } }
@@ -25,21 +25,73 @@ serve(async (req) => {
     if (!authHeader) throw new Error("No authorization header provided");
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError) throw new Error(`Authentication error: ${userError.message}`);
     const user = userData.user;
-    if (!user?.email) throw new Error("User not authenticated or email not available");
+    if (!user?.id) throw new Error("User not authenticated");
+
+    // P2-07: workspace-scoped lookup. Email-based stripe.customers.list
+    // returned whatever the first customer for that email happened to
+    // be, which in a multi-workspace account points at the wrong
+    // subscription. Now the caller must pass workspaceId, we verify
+    // owner/admin membership, and resolve the customer from
+    // workspaces.stripe_customer_id (populated by stripe-webhook).
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
+    const workspaceId = (body as { workspaceId?: string }).workspaceId;
+    if (!workspaceId || typeof workspaceId !== "string") {
+      return new Response(
+        JSON.stringify({ error: "workspaceId is required", reason: "bad_request" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+      );
+    }
+
+    const { data: workspace, error: wsErr } = await supabaseAdmin
+      .from("workspaces")
+      .select("id, owner_id, stripe_customer_id")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    if (wsErr || !workspace) {
+      return new Response(
+        JSON.stringify({ error: "Workspace not found", reason: "not_found" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 },
+      );
+    }
+
+    let canManageBilling = (workspace as any).owner_id === user.id;
+    if (!canManageBilling) {
+      const { data: membership } = await supabaseAdmin
+        .from("workspace_members")
+        .select("role")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+      canManageBilling = Boolean(membership);
+    }
+    if (!canManageBilling) {
+      return new Response(
+        JSON.stringify({
+          error: "Only workspace owners or admins can open the billing portal.",
+          reason: "not_authorized",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 },
+      );
+    }
+
+    const customerId = (workspace as any).stripe_customer_id as string | null;
+    if (!customerId) {
+      return new Response(
+        JSON.stringify({
+          error: "This workspace has no Stripe customer record. Start a subscription first.",
+          reason: "no_customer",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 409 },
+      );
+    }
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    
-    if (customers.data.length === 0) {
-      throw new Error("No Stripe customer found for this user. Please subscribe first.");
-    }
-    
-    const customerId = customers.data[0].id;
     const origin = req.headers.get("origin") || "http://localhost:5173";
-    
+
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${origin}/app/settings/account?tab=subscription`,
