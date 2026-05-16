@@ -1,14 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
+// Icons previously used by SECTION_CONFIG (Building2, Calendar, DollarSign,
+// FileText, Users, MapPin, RefreshCw, ScrollText) moved to
+// src/lib/leaseReviewSectionConfig.ts along with the data.
 import {
-  Building2,
-  Calendar,
-  DollarSign,
-  FileText,
   AlertTriangle,
-  Users,
-  MapPin,
-  RefreshCw,
-  ScrollText,
   Check,
   Pencil,
   X,
@@ -43,74 +38,13 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import type { ConfidenceScores } from '@/types/workflow';
 
-// Field configuration by section
-export const SECTION_CONFIG = {
-  parties: {
-    title: 'Parties',
-    icon: Users,
-    fields: [
-      { id: 'landlord_name', label: 'Landlord', icon: Building2 },
-      { id: 'tenant_name', label: 'Tenant', icon: Building2 },
-    ],
-  },
-  vendor: {
-    title: 'Vendor / Counterparty',
-    icon: Building2,
-    fields: [
-      { id: 'vendor_name', label: 'Vendor / Counterparty', icon: Building2 },
-      { id: 'vendor_address_line1', label: 'Address Line 1', icon: MapPin },
-      { id: 'vendor_address_line2', label: 'Address Line 2', icon: MapPin },
-      { id: 'vendor_city', label: 'City', icon: MapPin },
-      { id: 'vendor_state', label: 'State', icon: MapPin },
-      { id: 'vendor_zip', label: 'Zip Code', icon: MapPin },
-      { id: 'vendor_phone', label: 'Phone', icon: Building2 },
-    ],
-  },
-  property: {
-    title: 'Property',
-    icon: MapPin,
-    fields: [
-      { id: 'property_address', label: 'Property Address', icon: MapPin },
-      { id: 'square_footage', label: 'Square Footage', icon: Building2, type: 'number' },
-      { id: 'asset_type', label: 'Asset Type', icon: Building2 },
-      { id: 'location', label: 'Location', icon: MapPin },
-      { id: 'building', label: 'Building', icon: Building2 },
-      { id: 'region', label: 'Region', icon: MapPin },
-    ],
-  },
-  dates: {
-    title: 'Dates & Term',
-    icon: Calendar,
-    fields: [
-      { id: 'lease_start', label: 'Lease Start', icon: Calendar, type: 'date' },
-      { id: 'lease_end', label: 'Lease End', icon: Calendar, type: 'date' },
-      { id: 'rent_commencement_date', label: 'Rent Commencement', icon: Calendar, type: 'date' },
-      { id: 'term_months', label: 'Lease Term', icon: Calendar, type: 'term' },
-    ],
-  },
-  rent: {
-    title: 'Rent',
-    icon: DollarSign,
-    fields: [
-      { id: 'current_monthly_rent', label: 'Current Monthly Rent', icon: DollarSign, type: 'number' },
-      { id: 'base_rent_amount', label: 'Base Rent Amount', icon: DollarSign, type: 'number' },
-      { id: 'base_rent_frequency', label: 'Rent Frequency', icon: RefreshCw },
-      { id: 'security_deposit', label: 'Security Deposit', icon: DollarSign, type: 'number' },
-      { id: 'rent_escalation_type', label: 'Escalation Type', icon: RefreshCw },
-    ],
-  },
-  options: {
-    title: 'Options & Clauses',
-    icon: ScrollText,
-    fields: [
-      { id: 'renewal_options', label: 'Renewal Options', icon: RefreshCw, type: 'textarea' },
-      { id: 'termination_clauses', label: 'Termination Clauses', icon: FileText, type: 'textarea' },
-      { id: 'escalation_clauses', label: 'Escalation Clauses', icon: RefreshCw, type: 'textarea' },
-    ],
-  },
-} as const;
-
-export type SectionKey = keyof typeof SECTION_CONFIG;
+// P2-04: SECTION_CONFIG, SectionKey, findFieldLabel moved to
+// src/lib/leaseReviewSectionConfig.ts (pure module, no supabase
+// import, testable in vitest's node environment). Imported here for
+// the component definitions below and re-exported for backwards
+// compatibility with existing call sites.
+import { SECTION_CONFIG, findFieldLabel, type SectionKey } from '@/lib/leaseReviewSectionConfig';
+export { SECTION_CONFIG, findFieldLabel, type SectionKey };
 
 // Confidence badge component
 export const ConfidenceBadge = ({ confidence }: { confidence: number | null }) => {

@@ -55,7 +55,8 @@ import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
 import { isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStatusBadge";
 import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
 import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
-import { SectionCard, RisksSection, SECTION_CONFIG, getFieldConfidence, type SectionKey } from "@/components/leases/LeaseReviewSections";
+import { SectionCard, RisksSection, getFieldConfidence } from "@/components/leases/LeaseReviewSections";
+import { SECTION_CONFIG, findFieldLabel, type SectionKey } from "@/lib/leaseReviewSectionConfig";
 import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRiskDialog";
 import { Tier2CorrectionDialog } from "@/components/leases/Tier2CorrectionDialog";
 import { LeaseInsightsCard } from "@/components/leases/LeaseInsightsCard";
@@ -1088,13 +1089,7 @@ export default function LeaseReview() {
     if (!lease?.id || !isUnlockedForEditing || !activeChangeSet?.id) return;
     const originalValue = originalValues.current[fieldId];
     if (originalValue === newValue) return;
-    // `as const` on SECTION_CONFIG makes each section's fields a different
-    // readonly tuple type, so Object.values()+.flatMap can't reconcile them.
-    // Erase to a common shape for lookup.
-    const fieldLabel = (Object.values(SECTION_CONFIG)
-      .flatMap(s => s.fields as readonly { id: string; label: string }[]))
-      .find(f => f.id === fieldId)?.label ?? fieldId;
-    await stageFieldChange(activeChangeSet.id, fieldId, fieldLabel, originalValue ?? null, newValue);
+    await stageFieldChange(activeChangeSet.id, fieldId, findFieldLabel(fieldId), originalValue ?? null, newValue);
   }, [lease?.id, isUnlockedForEditing, activeChangeSet?.id, stageFieldChange]);
 
   // Track field corrections on blur
@@ -1106,11 +1101,7 @@ export default function LeaseReview() {
 
     // Stage change when unlocked for governance editing
     if (isUnlockedForEditing && activeChangeSet?.id) {
-      // See note above stageFieldImmediate — same SECTION_CONFIG type widening.
-      const fieldLabel = (Object.values(SECTION_CONFIG)
-        .flatMap(s => s.fields as readonly { id: string; label: string }[]))
-        .find(f => f.id === fieldId)?.label ?? fieldId;
-      await stageFieldChange(activeChangeSet.id, fieldId, fieldLabel, originalValue ?? null, currentValue);
+      await stageFieldChange(activeChangeSet.id, fieldId, findFieldLabel(fieldId), originalValue ?? null, currentValue);
     }
 
     const extractedJson = lease?.extracted_json as ExtractedJson | null;
