@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,7 +34,15 @@ export default function Upgrade() {
                 </li>
               ))}
             </ul>
-            <Button className="w-full">Upgrade to Business</Button>
+            {/* Route into the subscription tab pre-armed with autoCheckout=1.
+                AccountSettings.tsx (around line 414) reads this and fires
+                proceedWithCheckout('business'). Same handoff onboarding uses
+                — single source of truth for the Stripe checkout call. */}
+            <Button asChild className="w-full">
+              <Link to="/app/settings/account?tab=subscription&autoCheckout=1">
+                Upgrade to Business
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
