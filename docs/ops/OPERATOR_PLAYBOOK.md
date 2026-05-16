@@ -411,7 +411,7 @@ Expected jobs (as of 2026-05-15):
 | `send-counter-signature-reminder-daily` | `15 8 * * *` | Phase 5 — counter-signature reminders |
 | `send-lease-notifications-daily`    | `0 8 * * *`   | Renewal/expiration email alerts |
 | `vendor-health-check-daily`         | `0 6 * * *`   | Operational Monitoring Phase 2/3 |
-| `process-alerts-daily`              | `30 8 * * *`  | ⚠️ Orphan — see KNOWN_ISSUES |
+| `process-alerts-daily`              | `30 8 * * *`  | Evaluates `alert_rules` → inserts `notifications` (KNOWN_ISSUES #15 resolved 2026-05-15) |
 
 All current jobs (except the orphan above) use the canonical `private.cron_secrets` table for x-cron-secret auth. The older `current_setting('app.<name>', true)` pattern from migration 20260426000003 was superseded by `20260507260000_cron_secrets_table.sql`; live `cron.job` definitions have been rescheduled to read from the table.
 

@@ -432,25 +432,23 @@ during testing (real users may want to dry-run a reroute audit sweep).
 
 ## P2-01 cron / secret hygiene (2026-05-15)
 
-### Item #15: `process-alerts-daily` cron is orphaned — no source in repo, no auth header
+### Item #15: `process-alerts-daily` cron orphan — RESOLVED 2026-05-15
 
-Surfaced during P2-01 (audit P2-01 in `docs/LEASEIO_AI_BUILD_AUDIT_FINDINGS_2026-05-13.md`) on 2026-05-15 while sweeping cron-secret mechanism drift.
+Surfaced during P2-01 audit follow-up: the `process-alerts-daily` cron had no `x-cron-secret` header, the target function had no source in the repo, and the function did no auth check of its own.
 
-**State as of 2026-05-15:**
-- `cron.job` has a row named `process-alerts-daily` (schedule `30 8 * * *`).
-- The cron's HTTP POST has only `Content-Type: application/json` — no `x-cron-secret`, no `Authorization: Bearer`. Other crons all pass `x-cron-secret` from `private.cron_secrets`.
-- The target function `process-alerts` IS deployed (verify_jwt=false, version 18, last update ~2026-04-22) but **has no source in `supabase/functions/`**. Likely a legacy notification job from the original Phase-5 alert work that was never carried into the repo.
-- The migration that scheduled it (`phase5_process_alerts_cron`) is on the remote-only list per `docs/MIGRATION_DRIFT_REMEDIATION.md`.
+**Triage executed 2026-05-15:**
+1. Downloaded the deployed function source via `supabase functions download process-alerts` and committed it to `supabase/functions/process-alerts/index.ts`. The function is real and functional — it evaluates `alert_rules` (8 active rules across 2 workspaces) and inserts `notifications` rows for triggered conditions. Not dead code.
+2. Rewrote the function to add the canonical `x-cron-secret` check (matching `cleanup-expired-reports`, `send-counter-signature-reminder`, etc.). Reads `PROCESS_ALERTS_CRON_SECRET` from edge env.
+3. Added `[functions.process-alerts] verify_jwt = false` to `supabase/config.toml` so deployments pin the auth mode.
+4. Migration `20260515040000_process_alerts_cron_secret.sql` unschedules + reschedules `process-alerts-daily` with `x-cron-secret` forwarded from `private.cron_secrets`. Applied to live.
+5. Generated a 46-char secret, set as edge env via `supabase secrets set PROCESS_ALERTS_CRON_SECRET=...`, and inserted into `private.cron_secrets` under id `process_alerts`.
+6. Redeployed the function. Smoke tested live:
+   - No header → 401 ✅
+   - Wrong secret → 401 ✅
+   - Correct secret → 200 `{"processed":0,"timestamp":"..."}` ✅
+7. Updated `docs/ops/OPERATOR_PLAYBOOK.md` cron-verification table to remove the orphan flag.
 
-**Risk:** If the function ever processes data with side effects, it's running unaudited (no source review possible) and unauthenticated (no cron-secret gate). If it's idempotent and dead, it's still daily noise in `cron.job_run_details`.
-
-**Recommended action:**
-1. Pull the deployed function source: `supabase functions download process-alerts --project-ref <ref>`.
-2. Review what it does.
-3. Either: commit source + add `x-cron-secret` auth (treat as a real job), OR delete it: `SELECT cron.unschedule('process-alerts-daily')` + delete the edge function via dashboard.
-4. Update `docs/ops/OPERATOR_PLAYBOOK.md` cron-verification table accordingly.
-
-Cross-reference: this is part of the broader migration-drift remediation in `docs/MIGRATION_DRIFT_REMEDIATION.md` (P1-10 in the same audit). When the operator runs `supabase db pull` with Docker, the phantom cron schedule will surface in the baseline; this entry can close once that's reconciled.
+`{"processed":0,...}` indicates no leases currently trip the configured alert rules. That's a separate question — investigate alert_rules thresholds vs. actual lease data if alerts are expected to be firing — but the cron + auth chain is healthy end-to-end.
 
 ---
 

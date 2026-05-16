@@ -71,3 +71,10 @@ verify_jwt = false
 
 [functions.vendor-health-check]
 verify_jwt = false
+
+# process-alerts evaluates alert_rules + leases daily and inserts
+# notifications. Cron-only; auth via x-cron-secret header. Carried
+# into repo 2026-05-15 from off-repo Studio deployment (P2-01 follow-up,
+# KNOWN_ISSUES #15).
+[functions.process-alerts]
+verify_jwt = false
