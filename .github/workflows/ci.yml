@@ -30,6 +30,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Mirror-pair parity
+        run: npm run check:mirror-parity
+
       - name: Run tests
         run: npm test
 

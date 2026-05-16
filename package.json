@@ -9,13 +9,14 @@
     "typecheck:strict": "tsc --noEmit -p tsconfig.app.json --noImplicitAny",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "prebuild": "npm run typecheck:names && npm run typecheck",
+    "prebuild": "npm run typecheck:names && npm run typecheck && npm run check:mirror-parity",
     "typecheck:names": "node scripts/check-undefined-names.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
     "check:supabase-types": "node scripts/check-supabase-types.mjs",
+    "check:mirror-parity": "node scripts/check-mirror-parity.mjs",
     "smoke:security": "node scripts/smoke-audit-hardening.mjs"
   },
   "dependencies": {
