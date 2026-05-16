@@ -86,6 +86,11 @@ function daysUntil(dateStr: string): number {
 }
 
 export default function OperationsPage() {
+  // P2-02: explicit ops-admin gate. The previous design relied solely
+  // on RLS — non-ops users hit the route and saw an empty dashboard
+  // with no signal that they weren't authorized. Now we ask the DB
+  // upfront via the am_i_ops_admin SECURITY DEFINER RPC.
+  const [authStatus, setAuthStatus] = useState<'checking' | 'ok' | 'forbidden'>('checking');
   const [loading, setLoading] = useState(true);
   const [snapshots, setSnapshots] = useState<UsageSnapshot[]>([]);
   const [renewals, setRenewals] = useState<Renewal[]>([]);
@@ -119,7 +124,19 @@ export default function OperationsPage() {
     }
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await (supabase as any).rpc('am_i_ops_admin');
+      if (error || data !== true) {
+        setAuthStatus('forbidden');
+        setLoading(false);
+        return;
+      }
+      setAuthStatus('ok');
+      await fetchAll();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Group snapshots by (vendor, metric) and find latest + 30-day series
   const latestByMetric = useMemo(() => {
@@ -165,6 +182,29 @@ export default function OperationsPage() {
 
   const upcomingRenewals = renewals.filter((r) => daysUntil(r.renewal_date) <= 60 && daysUntil(r.renewal_date) >= 0);
 
+  if (authStatus === 'forbidden') {
+    return (
+      <AppLayout>
+        <AppHeader title="Operations" />
+        <div className="p-6 max-w-2xl">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertCircle className="h-4 w-4 text-destructive" />
+                Forbidden
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                This page is restricted to LeaseIO operations staff. If you believe you should have access, contact an existing operations admin.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <AppHeader
@@ -172,7 +212,7 @@ export default function OperationsPage() {
         subtitle="Vendor health, upcoming renewals, recent alerts"
       />
       <div className="p-6 space-y-6 max-w-7xl">
-        {loading && (
+        {(authStatus === 'checking' || loading) && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading…
           </div>
