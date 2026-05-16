@@ -103,38 +103,48 @@ serve(async (req) => {
   let rowsMarkedExpired = 0;
   let activityRowsWritten = 0;
 
-  // Collect every artifact path across expired rows. The bucket is
-  // `lease-reports` for both pdf and json paths (single bucket, so a
-  // single batched remove call covers both).
-  const allPaths: string[] = [];
-  for (const r of rows) {
-    if (r.pdf_storage_path) allPaths.push(r.pdf_storage_path);
-    if (r.json_storage_path) allPaths.push(r.json_storage_path);
-  }
+  // P2-06 fix: process row-by-row, and ALWAYS null the storage paths
+  // when we mark a row expired — even if the storage remove failed.
+  // Rationale: the lease-reports SELECT policy (phase8 migration)
+  // gates on `lr.pdf_storage_path = name OR lr.json_storage_path = name`.
+  // Nulling the paths means an orphaned blob can no longer be matched
+  // by any row → invisible to authenticated readers even if the bytes
+  // remain in the bucket. The companion migration also adds a
+  // status-and-time gate to the read policy so even a re-introduced
+  // path can't grant access to an expired report.
 
-  for (let i = 0; i < allPaths.length; i += STORAGE_REMOVE_CHUNK) {
-    const chunk = allPaths.slice(i, i + STORAGE_REMOVE_CHUNK);
-    const { data: removed, error: rmErr } = await supabaseAdmin.storage
-      .from("lease-reports")
-      .remove(chunk);
-    if (rmErr) {
-      // Don't abort the whole sweep on a single chunk failure — orphan
-      // storage is invisible to users (path-prefix RLS) and the row
-      // status update below makes the report disappear from the UI.
-      // Tracked by storageRemoveErrors counter.
-      console.warn(
-        `[cleanup-expired-reports] storage remove error for chunk starting at ${i}: ${rmErr.message}`,
-      );
-      storageRemoveErrors++;
-      continue;
+  for (const r of rows) {
+    const paths: string[] = [];
+    if (r.pdf_storage_path) paths.push(r.pdf_storage_path);
+    if (r.json_storage_path) paths.push(r.json_storage_path);
+
+    let thisRowRemoveError = false;
+    for (let i = 0; i < paths.length; i += STORAGE_REMOVE_CHUNK) {
+      const chunk = paths.slice(i, i + STORAGE_REMOVE_CHUNK);
+      const { data: removed, error: rmErr } = await supabaseAdmin.storage
+        .from("lease-reports")
+        .remove(chunk);
+      if (rmErr) {
+        console.warn(
+          `[cleanup-expired-reports] storage remove error for report ${r.id} chunk ${i}: ${rmErr.message}`,
+        );
+        thisRowRemoveError = true;
+        storageRemoveErrors++;
+        continue;
+      }
+      storageObjectsRemoved += (removed ?? []).length;
     }
-    storageObjectsRemoved += (removed ?? []).length;
-  }
 
-  for (const r of rows) {
+    // Mark expired AND null the paths. Done atomically as a single UPDATE
+    // so a partial-state row never exists. If thisRowRemoveError is true
+    // we accept an orphan blob in storage; the next row keeps trying.
     const { error: updateErr } = await supabaseAdmin
       .from("lease_reports")
-      .update({ status: "expired" })
+      .update({
+        status: "expired",
+        pdf_storage_path: null,
+        json_storage_path: null,
+      })
       .eq("id", r.id);
     if (updateErr) {
       console.error(
@@ -143,6 +153,7 @@ serve(async (req) => {
       continue;
     }
     rowsMarkedExpired++;
+    void thisRowRemoveError; // tracked in storageRemoveErrors
 
     // Per Phase 8 As-built A6: portfolio reports skip per-lease
     // activity rows because lease_activity_log.lease_id is NOT NULL.
