@@ -90,6 +90,11 @@ import { createLeaseNotification } from '@/lib/leaseNotifications';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { generateRentScheduleRows } from '@/lib/rentSchedule';
+import {
+  buildApproverCandidates,
+  mergeCandidateIds,
+  type ApproverProfile,
+} from '@/lib/approverCandidates';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -925,50 +930,56 @@ export default function LeaseReview() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: ws } = await (supabase as any)
-          .from('workspaces')
-          .select('owner_id')
-          .eq('id', lease.workspace_id)
-          .maybeSingle();
-        const { data: members } = await (supabase as any)
-          .from('workspace_members')
-          .select('user_id, role')
-          .eq('workspace_id', lease.workspace_id)
-          .eq('role', 'admin');
-        const { data: explicit } = await (supabase as any)
-          .from('workspace_approvers')
-          .select('user_id')
-          .eq('workspace_id', lease.workspace_id);
-        const ids = new Set<string>();
-        if (ws?.owner_id) ids.add(ws.owner_id);
-        for (const m of (members ?? []) as any[]) ids.add(m.user_id);
-        for (const e of (explicit ?? []) as any[]) ids.add(e.user_id);
-        if (user?.id) ids.delete(user.id); // can't request from yourself
-        const idArr = Array.from(ids);
-        if (idArr.length === 0) {
-          // Fallback: no other admins exist. Show the current user as the
-          // only option so the flow isn't blocked. (User typically picks
-          // Apply instead in this case, but keep the path open.)
-          if (user?.id) idArr.push(user.id);
-        }
-        const { data: profiles } = idArr.length
+        // Pull the three id sources in parallel.
+        const [{ data: ws }, { data: members }, { data: explicit }] = await Promise.all([
+          (supabase as any)
+            .from('workspaces')
+            .select('owner_id')
+            .eq('id', lease.workspace_id)
+            .maybeSingle(),
+          (supabase as any)
+            .from('workspace_members')
+            .select('user_id, role')
+            .eq('workspace_id', lease.workspace_id)
+            .eq('role', 'admin'),
+          (supabase as any)
+            .from('workspace_approvers')
+            .select('user_id')
+            .eq('workspace_id', lease.workspace_id),
+        ]);
+
+        // P2-04 extraction: dedup + self-exclusion + fallback live in
+        // src/lib/approverCandidates.ts under unit-test coverage.
+        const ownerId = (ws as { owner_id?: string } | null)?.owner_id ?? null;
+        const memberAdminIds = ((members ?? []) as Array<{ user_id: string }>).map((m) => m.user_id);
+        const explicitApproverIds = ((explicit ?? []) as Array<{ user_id: string }>).map((e) => e.user_id);
+        const idArr = mergeCandidateIds({
+          ownerId,
+          memberAdminIds,
+          explicitApproverIds,
+          selfId: user?.id ?? null,
+        });
+        const effectiveIds = idArr.length === 0 && user?.id ? [user.id] : idArr;
+
+        const { data: profiles } = effectiveIds.length
           ? await (supabase as any)
               .from('profiles')
               .select('id, first_name, last_name, email')
-              .in('id', idArr)
+              .in('id', effectiveIds)
           : { data: [] };
-        const ownerId = ws?.owner_id ?? null;
-        const candidates: ApproverCandidate[] = (profiles ?? []).map((p: any) => {
-          const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
-          const label = name ? `${name} (${p.email})` : p.email;
-          return { id: p.id, label, isOwner: p.id === ownerId };
+
+        const profilesById = new Map<string, ApproverProfile>(
+          ((profiles ?? []) as ApproverProfile[]).map((p) => [p.id, p]),
+        );
+
+        const candidates = buildApproverCandidates({
+          ownerId,
+          memberAdminIds,
+          explicitApproverIds,
+          selfId: user?.id ?? null,
+          profilesById,
         });
-        // Stable order: owner first, then alphabetical by label.
-        candidates.sort((a, b) => {
-          if (a.isOwner && !b.isOwner) return -1;
-          if (!a.isOwner && b.isOwner) return 1;
-          return a.label.localeCompare(b.label);
-        });
+
         if (!cancelled) {
           setApproverCandidates(candidates);
           // Default to the first non-self candidate (owner if present).
