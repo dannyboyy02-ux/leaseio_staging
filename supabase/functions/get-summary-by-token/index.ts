@@ -44,6 +44,9 @@ serve(async (req) => {
         'lease_start, escalation_rate, calc_total_commitment, calc_pv_liability, ' +
         'calc_straight_line_exp, calc_cash_pl_delta, lease_classification, covenant_flagged, ' +
         'financial_approved_at, financial_approved_by, requestor_id, ' +
+        // P2-10: per-lease discount rate override (migration 20260506220000).
+        // Effective rate is COALESCE(lease.discount_rate, workspace.discount_rate).
+        'discount_rate, discount_rate_basis, ' +
         'summary_share_token_expires_at'
       )
       .eq('summary_share_token', token)
@@ -152,7 +155,23 @@ serve(async (req) => {
       calcPvLiability: Number(lease.calc_pv_liability) || 0,
       calcStraightLineExp: Number(lease.calc_straight_line_exp) || 0,
       calcCashPlDelta: Number(lease.calc_cash_pl_delta) || 0,
-      discountRateUsed: Number(wsData?.discount_rate) || 5.5,
+      // P2-10: effective rate prefers the per-lease override and falls back
+      // to the workspace default. Mirrors the COALESCE pattern in
+      // v_lease_verification_audit and the migration 20260506220000 rule
+      // ("downstream consumers must read leases.discount_rate first and
+      // fall back to workspaces.discount_rate"). The 5.5% safety fallback
+      // covers the historical case where neither field is set.
+      discountRateUsed:
+        ((lease as any).discount_rate != null ? Number((lease as any).discount_rate) : null)
+        ?? (wsData?.discount_rate != null ? Number(wsData.discount_rate) : null)
+        ?? 5.5,
+      // Provenance so the public summary UI can disclose when the rate
+      // came from a per-lease IBR override versus the workspace default.
+      discountRateSource:
+        (lease as any).discount_rate != null
+          ? 'per_lease'
+          : (wsData?.discount_rate != null ? 'workspace_default' : 'fallback'),
+      discountRateBasis: (lease as any).discount_rate_basis ?? null,
 
       leaseClassification: lease.lease_classification || 'pending',
       covenantFlagged: Boolean(lease.covenant_flagged),
