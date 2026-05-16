@@ -89,6 +89,7 @@ import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from
 import { createLeaseNotification } from '@/lib/leaseNotifications';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { generateRentScheduleRows } from '@/lib/rentSchedule';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -1185,44 +1186,30 @@ export default function LeaseReview() {
   const handleGenerateSchedule = useCallback(async (mode: 'single' | 'annual') => {
     if (!leaseId || !form.lease_start || !form.base_rent_amount) return;
     const baseRent = parseFloat(form.base_rent_amount.replace(/[^0-9.]/g, '')) || 0;
-    if (!baseRent) { toast.error('Base rent amount is required to generate a schedule'); return; }
-    const startDate = new Date(form.lease_start);
-    const endDate = form.lease_end ? new Date(form.lease_end) : null;
-    const rows: Omit<RentScheduleEntry, 'id'>[] = [];
-    if (mode === 'single') {
-      rows.push({
-        period_start: startDate.toISOString().split('T')[0],
-        period_end: endDate ? endDate.toISOString().split('T')[0] : null,
-        monthly_amount: baseRent,
-        annual_amount: baseRent * 12,
-        notes: 'Generated — single period',
-        lease_id: leaseId,
-      } as any);
-    } else {
-      const escalationRate = lease?.escalation_rate ? Number(lease.escalation_rate) / 100 : 0;
-      if (!escalationRate) { toast.error('Escalation rate is required for annual schedule generation'); return; }
-      let current = startDate;
-      let rent = baseRent;
-      const end = endDate ?? new Date(startDate.getFullYear() + 5, startDate.getMonth(), startDate.getDate());
-      while (current < end) {
-        const next = new Date(current.getFullYear() + 1, current.getMonth(), current.getDate());
-        const periodEnd = next > end ? end : new Date(next.getTime() - 86400000);
-        rows.push({
-          period_start: current.toISOString().split('T')[0],
-          period_end: periodEnd.toISOString().split('T')[0],
-          monthly_amount: Math.round(rent * 100) / 100,
-          annual_amount: Math.round(rent * 12 * 100) / 100,
-          notes: null,
-          lease_id: leaseId,
-        } as any);
-        rent = rent * (1 + escalationRate);
-        current = next;
+    const escalationRate = lease?.escalation_rate ? Number(lease.escalation_rate) / 100 : 0;
+
+    // P2-04 extraction: rent + escalation math now lives in
+    // src/lib/rentSchedule.ts under unit-test coverage. This handler
+    // owns input parsing, error toasts, and the DB write.
+    const result = generateRentScheduleRows({
+      leaseId,
+      baseRent,
+      startDate: form.lease_start,
+      endDate: form.lease_end || null,
+      escalationRate,
+      mode,
+    });
+
+    if (result.ok === false) {
+      if (result.reason === 'invalid_base_rent') {
+        toast.error('Base rent amount is required to generate a schedule');
+      } else if (result.reason === 'missing_escalation_rate') {
+        toast.error('Escalation rate is required for annual schedule generation');
       }
+      return;
     }
-    // RentScheduleEntry (in RentScheduleTable.tsx) omits lease_id since it's
-    // a read-side display type, but the insert requires it. We add lease_id
-    // to every row above; cast bypasses the row-shape mismatch.
-    const { error } = await supabase.from('rent_schedules').insert(rows as any);
+
+    const { error } = await supabase.from('rent_schedules').insert(result.rows as any);
     if (error) { toast.error('Failed to generate schedule'); return; }
     const { data } = await supabase.from('rent_schedules').select('*').eq('lease_id', leaseId).order('period_start');
     if (data) setRentSchedule(data);
