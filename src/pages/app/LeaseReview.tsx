@@ -95,6 +95,7 @@ import {
   mergeCandidateIds,
   type ApproverProfile,
 } from '@/lib/approverCandidates';
+import { classifyRentScheduleDiff } from '@/lib/rentScheduleDiff';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -1167,26 +1168,26 @@ export default function LeaseReview() {
   const handleScheduleChange = useCallback(async (updated: RentScheduleEntry[]) => {
     setRentSchedule(updated);
     if (!leaseId) return;
-    // Upsert all rows, delete removed ones
-    const existingIds = rentSchedule.map(r => r.id);
-    const updatedIds = updated.map(r => r.id);
-    const deletedIds = existingIds.filter(id => !updatedIds.includes(id) && !id.startsWith('new-'));
-    if (deletedIds.length > 0) {
-      await supabase.from('rent_schedules').delete().in('id', deletedIds);
+
+    // P2-04 extraction: classify into delete/insert/update under unit-test
+    // coverage. This handler owns only the supabase calls.
+    const diff = classifyRentScheduleDiff(rentSchedule, updated);
+
+    if (diff.deleteIds.length > 0) {
+      await supabase.from('rent_schedules').delete().in('id', diff.deleteIds);
     }
-    for (const row of updated) {
-      if (row.id.startsWith('new-')) {
-        const { id: _id, ...rest } = row;
-        await supabase.from('rent_schedules').insert({ ...rest, lease_id: leaseId });
-      } else {
-        await supabase.from('rent_schedules').update({
-          period_start: row.period_start,
-          period_end: row.period_end,
-          monthly_amount: row.monthly_amount,
-          annual_amount: row.annual_amount,
-          notes: row.notes,
-        }).eq('id', row.id);
-      }
+    for (const row of diff.inserts) {
+      const { id: _id, ...rest } = row;
+      await supabase.from('rent_schedules').insert({ ...rest, lease_id: leaseId });
+    }
+    for (const row of diff.updates) {
+      await supabase.from('rent_schedules').update({
+        period_start: row.period_start,
+        period_end: row.period_end,
+        monthly_amount: row.monthly_amount,
+        annual_amount: row.annual_amount,
+        notes: row.notes,
+      }).eq('id', row.id);
     }
     // Re-fetch to get server-assigned IDs for new rows
     const { data } = await supabase.from('rent_schedules').select('*').eq('lease_id', leaseId).order('period_start');
