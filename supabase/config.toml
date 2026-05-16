@@ -78,3 +78,99 @@ verify_jwt = false
 # KNOWN_ISSUES #15).
 [functions.process-alerts]
 verify_jwt = false
+
+# ─────────────────────────────────────────────────────────────────────
+# P2-08: explicit verify_jwt = true for every other function in the
+# repo. Adding the stanza pins the desired behavior so a future
+# `supabase functions deploy` cannot accidentally flip it. The
+# scripts/check-edge-function-config.mjs CI check enforces that every
+# supabase/functions/<name>/index.ts has a matching stanza here.
+# ─────────────────────────────────────────────────────────────────────
+
+# Approval chain — Bearer JWT, per Phase 2 spec.
+[functions.resolve-approval-chain]
+verify_jwt = true
+
+[functions.act-on-chain-step]
+verify_jwt = true
+
+[functions.escalate-to-concept-approver]
+verify_jwt = true
+
+[functions.advance-to-final-review]
+verify_jwt = true
+
+[functions.assign-execution-owner]
+verify_jwt = true
+
+[functions.record-counter-signature]
+verify_jwt = true
+
+[functions.upload-lease-document]
+verify_jwt = true
+
+# Reroute + delegation — Phase 6/7 admin actions.
+[functions.process-pending-reroute-evaluations]
+verify_jwt = true
+
+[functions.reroute-audit-sweep]
+verify_jwt = true
+
+[functions.admin-trigger-manual-reroute]
+verify_jwt = true
+
+[functions.admin-override-step]
+verify_jwt = true
+
+[functions.voluntary-delegate-step]
+verify_jwt = true
+
+[functions.revoke-voluntary-delegation]
+verify_jwt = true
+
+[functions.declare-out-of-office]
+verify_jwt = true
+
+[functions.revoke-out-of-office]
+verify_jwt = true
+
+[functions.handle-deactivated-approver]
+verify_jwt = true
+
+# Legacy lifecycle actions (P1-11 — replaces direct browser updates).
+[functions.legacy-lease-action]
+verify_jwt = true
+
+# Reports — Phase 8.
+[functions.generate-lease-report]
+verify_jwt = true
+
+[functions.generate-portfolio-report]
+verify_jwt = true
+
+[functions.finalize-report-pdf]
+verify_jwt = true
+
+# AI surfaces — Bearer JWT + per-function plan/consent/rate gates (P1-04/05/12).
+[functions.ai-assistant]
+verify_jwt = true
+
+[functions.generate-lease-insights]
+verify_jwt = true
+
+[functions.record-classification-correction]
+verify_jwt = true
+
+# Billing — Bearer JWT + workspace ownership check (P1-02 + P2-07).
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.customer-portal]
+verify_jwt = true
+
+# Account / workspace lifecycle.
+[functions.delete-account]
+verify_jwt = true
+
+[functions.delete-workspace]
+verify_jwt = true

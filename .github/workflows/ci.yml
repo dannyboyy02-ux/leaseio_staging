@@ -33,6 +33,9 @@ jobs:
       - name: Mirror-pair parity
         run: npm run check:mirror-parity
 
+      - name: Edge function config completeness
+        run: npm run check:edge-function-config
+
       - name: Run tests
         run: npm test
 
