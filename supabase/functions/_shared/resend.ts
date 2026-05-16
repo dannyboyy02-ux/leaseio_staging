@@ -4,7 +4,20 @@
  * Never throws — returns { sent, error } so callers decide how to surface failures.
  */
 
-function escapeHtml(text: string): string {
+/**
+ * Escape user-controlled text before interpolating into an email HTML body.
+ *
+ * Email clients vary in how aggressively they sanitize HTML, so even text
+ * that's safe in a browser can render unexpectedly in Outlook/Gmail (and
+ * become a trust-erosion vector — a tenant_name containing `<a>` makes the
+ * email look like something LeaseIO didn't send). Audit P2-05.
+ *
+ * Accepts any input; null/undefined/non-string values return an empty
+ * string rather than throwing.
+ */
+export function escapeHtml(text: unknown): string {
+  if (text === null || text === undefined) return '';
+  const s = typeof text === 'string' ? text : String(text);
   const map: Record<string, string> = {
     '&': '&amp;',
     '<': '&lt;',
@@ -12,7 +25,7 @@ function escapeHtml(text: string): string {
     '"': '&quot;',
     "'": '&#039;',
   };
-  return text.replace(/[&<>"']/g, (m) => map[m]);
+  return s.replace(/[&<>"']/g, (m) => map[m]);
 }
 
 export interface SendInviteEmailOpts {

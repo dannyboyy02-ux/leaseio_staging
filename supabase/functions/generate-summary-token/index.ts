@@ -200,6 +200,17 @@ serve(async (req) => {
   }
 });
 
+// P2-05: submitterName is first_name + last_name from the profile.
+// Escape before interpolating into the email HTML \u2014 these are
+// user-supplied fields that could contain HTML/script that some email
+// clients would render.
+function escapeHtml(text: unknown): string {
+  if (text === null || text === undefined) return '';
+  const s = typeof text === 'string' ? text : String(text);
+  const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return s.replace(/[&<>"']/g, (m) => map[m]);
+}
+
 function generateApprovalEmailHtml({
   submitterName,
   shareUrl,
@@ -217,7 +228,7 @@ function generateApprovalEmailHtml({
           <div style="display: inline-block; background: #dcfce7; border-radius: 50%; width: 64px; height: 64px; line-height: 64px; text-align: center; font-size: 32px;">\u2705</div>
         </div>
         <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 8px;">Commitment Approved</h1>
-        <p style="color: #6b7280; margin: 0 0 24px;">Hi ${submitterName}, your lease commitment request has been approved and is ready to move forward.</p>
+        <p style="color: #6b7280; margin: 0 0 24px;">Hi ${escapeHtml(submitterName)}, your lease commitment request has been approved and is ready to move forward.</p>
         <p style="color: #374151; margin: 0 0 16px;">View the complete Financial Impact Summary including total commitment, estimated lease liability, and P&amp;L impact:</p>
         <div style="text-align: center; margin-bottom: 28px;">
           <a href="${shareUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 15px;">View Financial Impact Summary \u2192</a>

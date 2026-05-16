@@ -2586,7 +2586,15 @@ serve(async (req) => {
         const userEmail = authData?.user?.email;
         if (userEmail) {
           const siteUrl = Deno.env.get('SITE_URL') ?? 'https://theleaseio.com';
-          const displayName = extractValue(leaseData.tenant_name) || sanitizedFilename;
+          // P2-05: tenant_name + filename come from AI extraction / user
+          // upload and can contain arbitrary text. Escape before
+          // interpolating into the email HTML body. Subject stays as-is
+          // (email clients render subjects as text, not HTML).
+          const rawDisplayName = String(extractValue(leaseData.tenant_name) || sanitizedFilename || '');
+          const escapeEmailHtml = (s: string) => s.replace(/[&<>"']/g, (m) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;',
+          }[m]!));
+          const safeDisplayName = escapeEmailHtml(rawDisplayName);
           await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -2596,10 +2604,10 @@ serve(async (req) => {
             body: JSON.stringify({
               from: Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
               to: [userEmail],
-              subject: `${displayName} is ready for review`,
+              subject: `${rawDisplayName} is ready for review`,
               html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
                 <h2>Lease ready for review</h2>
-                <p><strong>${displayName}</strong> has been abstracted by AI and is ready for your review.</p>
+                <p><strong>${safeDisplayName}</strong> has been abstracted by AI and is ready for your review.</p>
                 <p style="margin:24px 0">
                   <a href="${siteUrl}/app/leases/${leaseId}/review"
                      style="background:#2563eb;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px">
@@ -2607,7 +2615,7 @@ serve(async (req) => {
                   </a>
                 </p>
               </div>`,
-              text: `${displayName} is ready for review: ${siteUrl}/app/leases/${leaseId}/review`,
+              text: `${rawDisplayName} is ready for review: ${siteUrl}/app/leases/${leaseId}/review`,
             }),
           });
         }

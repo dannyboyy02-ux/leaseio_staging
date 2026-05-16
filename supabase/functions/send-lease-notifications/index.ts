@@ -249,6 +249,15 @@ function generateSubject(eventType: string, daysUntil: number, property: string)
   }
 }
 
+// P2-05: per-call escapeHtml inline rather than importing _shared/resend.ts
+// to keep this function's bundle independent. Trivially equivalent.
+function escapeHtml(text: unknown): string {
+  if (text === null || text === undefined) return '';
+  const s = typeof text === 'string' ? text : String(text);
+  const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return s.replace(/[&<>"']/g, (m) => map[m]);
+}
+
 function generateEmailHtml(
   eventType: string,
   description: string | null,
@@ -311,10 +320,10 @@ function generateEmailHtml(
     <body style="${baseStyles} background-color: #f9fafb; padding: 20px;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
         <h2 style="color: ${headerColor};">${icon} ${title}</h2>
-        <p><strong>Property:</strong> ${property}</p>
+        <p><strong>Property:</strong> ${escapeHtml(property)}</p>
         <p><strong>Date:</strong> ${formattedDate}</p>
         <p><strong>Days Remaining:</strong> ${daysUntil} days</p>
-        ${description ? `<p><strong>Details:</strong> ${description}</p>` : ""}
+        ${description ? `<p><strong>Details:</strong> ${escapeHtml(description)}</p>` : ""}
         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
         <p style="color: #6b7280; font-size: 14px;">
           This notification was sent because you confirmed this date and enabled email notifications in LeaseIO.
