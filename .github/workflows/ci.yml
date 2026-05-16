@@ -75,3 +75,23 @@ jobs:
           SUPABASE_PRODUCTION_URL: ${{ secrets.SUPABASE_PRODUCTION_URL }}
           SUPABASE_PRODUCTION_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_PRODUCTION_SERVICE_ROLE_KEY }}
         run: npm run smoke:security
+
+  # P1-10 / P2-09: prove the migration chain reconstructs the full schema from
+  # scratch. `supabase start` boots a clean local stack and applies every file
+  # in supabase/migrations/ in order — if anything in the baseline references a
+  # not-yet-created object, has a syntax error, or conflicts with platform-owned
+  # objects, this job fails. Runs in parallel with test-and-build so the slow
+  # Docker-image phase doesn't block faster feedback on typecheck/test.
+  migration-replay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Replay migration chain on clean Postgres
+        run: supabase start

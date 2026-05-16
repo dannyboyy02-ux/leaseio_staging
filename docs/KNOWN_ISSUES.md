@@ -452,12 +452,165 @@ Surfaced during P2-01 audit follow-up: the `process-alerts-daily` cron had no `x
 
 ---
 
+## P1-10 baseline-exposed hardening regressions (2026-05-16)
+
+The P1-10 baseline squash (`supabase/migrations/20260516120000_baseline_schema.sql`)
+captured live production state verbatim. Three hardening guards that were
+supposed to be installed by archived migrations are missing from the live
+schema — confirmed via direct `pg_policies` query on prod, not just dump
+inspection. The baseline is faithful; production is the drift. Filed here
+rather than fixed inline because each deserves its own scoped migration with
+full reviewer routing.
+
+Common root-cause hypothesis (unverified): either the relevant hardening
+migration was never applied on prod despite being committed to repo, or it
+was applied and silently reverted via Studio/MCP at some later point. The
+`schema_migrations.created_by` audit trail was wiped during P1-10 reconcile,
+so attribution is no longer queryable from the live DB — use
+`docs/ops/schema_migrations_pre_baseline_2026-05-16.json` for historical
+attribution lookups.
+
+### Item #16: Governance audit INSERT policy reverted to pre-hardening state
+
+**Symptom:** Hardening migration `_archive/20260426000003_audit_remediation.sql`
+swaps `"workspace members can insert governance audit"` (any member can
+INSERT) for `"governance audit is service role append only" WITH CHECK
+(false)`. Live `pg_policies` shows the old permissive policy still active
+and the hardened one missing. Any workspace member can fabricate
+`lease_governance_audit` rows via direct PostgREST INSERT.
+
+**Severity:** Critical. `lease_governance_audit` is the system of record
+for unlock / change-set / relock events. Any tampering invalidates
+audit-defensible attribution.
+
+**Where to look:**
+- Live state: `SELECT polname, with_check FROM pg_policies WHERE tablename = 'lease_governance_audit';`
+- Hardened policy SQL: `supabase/migrations/_archive/20260426000003_audit_remediation.sql`
+- `audit_rls_smoke_check()` checks for the hardened policy name and would
+  return FALSE for the `governance_audit_append_only` key today — built-in
+  detection has been silently failing because nothing calls the smoke check
+  on a schedule. Consider wiring it as a cron with alerting.
+
+**Stub follow-up migration (`<ts>_restore_governance_audit_hardening.sql`):**
+
+```sql
+DROP POLICY IF EXISTS "workspace members can insert governance audit" ON public.lease_governance_audit;
+DROP POLICY IF EXISTS "governance audit is service role append only" ON public.lease_governance_audit;
+CREATE POLICY "governance audit is service role append only"
+  ON public.lease_governance_audit FOR INSERT TO authenticated
+  WITH CHECK (false);
+```
+
+**Pre-apply checklist:**
+- Verify all current writers to `lease_governance_audit` use service_role
+  (edge functions, not browser code). If any browser path inserts directly,
+  the hardening breaks it.
+- Route through `lease-repository-integrity-reviewer` and `lease-test-author`
+  (regression test asserting the hardened policy exists in production).
+- Post-apply: confirm via `audit_rls_smoke_check()`.
+
+**Decision:** Filed not fixed. P1-10 scope is migration-chain hygiene;
+surfacing a Critical governance regression mid-squash conflates two
+distinct workstreams.
+
+### Item #17: Change-set UPDATE policy missing draft-only status guard
+
+**Symptom:** Hardening migration `_archive/20260426000004_governance_rls_tighten.sql`
+was supposed to restrict `lease_change_sets` UPDATE to drafts only — once
+status flips to `pending_approval`, submitters should not be able to edit
+proposed values. Live `pg_policies` shows the unrestricted policy
+`"submitters and approvers can update change sets"` (no status check in
+USING clause). A submitter can modify a change set after submitting it for
+approval, altering values the approver may have already reviewed.
+
+**Severity:** Critical. Defeats the staged-approval premise — what the
+approver reads at decision time may not be what they were notified about.
+
+**Where to look:**
+- Live state: `SELECT polname, qual FROM pg_policies WHERE tablename = 'lease_change_sets' AND cmd = 'UPDATE';`
+- Original hardened policy: `supabase/migrations/_archive/20260426000004_governance_rls_tighten.sql`
+
+**Stub follow-up migration:** Add `AND status = 'draft'` to the USING
+clause; mirror in WITH CHECK. Bundle with #16 into a single
+`restore_governance_hardening` migration if scoped together. Same
+root-cause investigation as #16.
+
+**Decision:** Same as #16.
+
+### Item #18: `lease-reports` storage RLS policies use `foldername(w.name)` instead of `foldername(objects.name)`
+
+**Symptom:** The `"report owners insert lease-reports"` and
+`"report owners update lease-reports"` RLS policies on `storage.objects`
+reference `storage.foldername(w.name)` where `w` aliases `public.workspaces`.
+`w.name` is the workspace's human-readable display name (e.g., "Labs
+Analytix"), NOT the storage path. `storage.foldername("Labs Analytix")`
+returns `['Labs Analytix']` (one element); `[2]` is NULL; comparison
+always fails. The policies effectively `WITH CHECK (false)` for
+client-side uploads.
+
+**Severity:** High — with an unresolved practical-impact question.
+Client-side PDF report uploads (`src/hooks/useGenerateLeaseReport.tsx:110-115`,
+`src/hooks/useGeneratePortfolioReport.tsx:102-107`) call
+`supabase.storage.from('lease-reports').upload(...)` which goes through
+user-session RLS. **If RLS is being enforced as expected, every
+authenticated user trying to generate a report should be hitting
+"permission denied" today.** Two scenarios are possible:
+
+1. **The feature is silently failing for everyone.** Would explain
+   the absence of complaints if reports are rarely generated.
+2. **Supabase storage has an additional access path bypassing Postgres
+   RLS for some bucket configurations.** Possible if the storage
+   container does its own auth check that short-circuits before falling
+   through to Postgres RLS.
+
+**Operational verification needed BEFORE writing the fix:** test report
+generation as a non-admin authenticated user via the live app. If uploads
+succeed, the broken policy is masked by an external bypass and the fix
+is policy-correctness hygiene. If uploads fail, this is a P0 user-facing
+bug.
+
+**Where to look:**
+- Live state: `SELECT policyname, qual FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname LIKE '%lease-reports%';`
+- Companion file mirroring the bug:
+  `supabase/migrations/20260516120001_storage_policies.sql` (this commit) —
+  preserves prod state faithfully; not a regression introduced by P1-10.
+- Original migration: `supabase/migrations/_archive/20260507000000_lease_reports_storage_insert.sql`
+  — uses unqualified `name`, which in policy context
+  (`FROM lease_reports lr LEFT JOIN workspaces w …`) is ambiguous between
+  `objects.name` and `w.name`. `pg_dump` resolved it to `w.name`,
+  suggesting Postgres resolves it the same way at policy-execution time.
+
+**Stub follow-up migration:**
+
+```sql
+DROP POLICY IF EXISTS "report owners insert lease-reports" ON storage.objects;
+CREATE POLICY "report owners insert lease-reports" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (
+    bucket_id = 'lease-reports' AND EXISTS (
+      SELECT 1 FROM lease_reports lr
+      LEFT JOIN workspaces w ON w.id = lr.workspace_id
+      LEFT JOIN workspace_members wm ON wm.workspace_id = lr.workspace_id AND wm.user_id = auth.uid()
+      WHERE lr.id::text = (storage.foldername(objects.name))[2]
+        AND lr.workspace_id::text = (storage.foldername(objects.name))[1]
+        AND lr.pdf_storage_path IS NULL
+        AND (lr.generated_by = auth.uid() OR w.owner_id = auth.uid() OR wm.role = 'admin')
+    )
+  );
+-- mirror for UPDATE policy
+```
+
+**Decision:** Same as #16/#17 — filed not fixed. Fix needs operational
+verification of the silent-failure-vs-bypass question first.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
 follow-up (item 5), Phase 3 audit (items 6-7), Phase 3 close-out
 forensics + smoke (items 8-10), Phase 4 close-out audit (item 11),
-Phase 8 C1 (items 12-13), and audit P2-01 (item 15).
+Phase 8 C1 (items 12-13), audit P2-01 (item 15), and P1-10 baseline review
+(items 16-18).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.

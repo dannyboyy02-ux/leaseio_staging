@@ -1,0 +1,611 @@
+[
+  {
+    "version": "20260105034910",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260106041056",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260106045617",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260106052644",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260106053639",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260106055645",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260106064635",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260109053430",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260110043242",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260110050401",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260111043620",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260112033346",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260128013234",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260128025349",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260131041147",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260131042900",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260131224349",
+    "name": "",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260222023001",
+    "name": "add_status_changed_at_to_leases",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260222024248",
+    "name": "phase3_summary_share",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260222161242",
+    "name": "phase4_executed_record",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260222193019",
+    "name": "phase5_notifications_and_alert_rules",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260222193237",
+    "name": "phase5_process_alerts_cron",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260305030209",
+    "name": "add_escalation_columns",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260305225810",
+    "name": "security_rls_hardening",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260305230353",
+    "name": "fix_function_search_path",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260311153639",
+    "name": "add_missing_fk_indexes",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260421010153",
+    "name": "add_missing_lease_columns",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260421022632",
+    "name": "create_dismissed_events_table",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260421023034",
+    "name": "create_processing_rate_limits_table",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260421023042",
+    "name": "create_user_preferences_table",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260421043219",
+    "name": "add_name_fields_to_invite_tokens",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260422033601",
+    "name": "add_intake_source",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260422033610",
+    "name": "add_backdoor_toggle",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260422033619",
+    "name": "add_audit_user_lookup",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260422033633",
+    "name": "add_audit_intake_source_and_fix_constraints",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260422035519",
+    "name": "fix_notification_constraint_and_activity_log_fk",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260422145743",
+    "name": "fix_lifecycle_status_check_add_draft",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260423195614",
+    "name": "lease_review_field_additions",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260426050457",
+    "name": "lease_change_governance",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260426052423",
+    "name": "lease_governance_audit",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260426172738",
+    "name": "report_attributes_and_vendor_contact",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260429000001",
+    "name": "summary_share_token_expiry",
+    "created_by": null,
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260429000002",
+    "name": "profiles_explicit_policies",
+    "created_by": null,
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260429000003",
+    "name": "ai_consent",
+    "created_by": null,
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260429145726",
+    "name": "summary_share_token_expiry",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260429145737",
+    "name": "profiles_explicit_policies",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260429145741",
+    "name": "ai_consent",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260429155659",
+    "name": "locked_lease_vendor_carveout",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260430184518",
+    "name": "lease_archive_and_workspace_archive_cap",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501123432",
+    "name": "tmp_e2e_test_read_for_highlight_validation",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501131110",
+    "name": "tmp_e2e_test_read_for_highlight_validation_v2",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501133639",
+    "name": "tmp_e2e_test_read_v3_90ff8e4f",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501140628",
+    "name": "risks_dismiss_columns_and_activity_type_v2",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501143302",
+    "name": "risks_update_rls_for_dismiss",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501144335",
+    "name": "user_added_risks_and_templates",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501160733",
+    "name": "change_set_self_approval_columns",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501160754",
+    "name": "governance_audit_self_approved_event",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501162701",
+    "name": "change_set_items_update_rls",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501165328",
+    "name": "sweep_h02_missing_delete_policies",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501165453",
+    "name": "sweep_indexes_hot_join_paths",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501165948",
+    "name": "sweep_m02_m03_remaining_rls_guardrails",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501172530",
+    "name": "change_set_items_unique_field_per_set",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501173805",
+    "name": "change_set_requested_approver",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501194032",
+    "name": "backfill_silently_dropped_asset_type_v2",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260501202041",
+    "name": "tmp_rent_schedule_diag_read",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260502155910",
+    "name": "phase1_approval_policies",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260502160030",
+    "name": "phase1_revoke_rpc_anon",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260503015452",
+    "name": "phase2_lease_approval_chain",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260503131404",
+    "name": "phase3_lifecycle_expansion",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260505211610",
+    "name": "owner_workspace_mgmt",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260505234935",
+    "name": "phase4_lease_documents",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260506005436",
+    "name": "phase4_lease_documents_storage_rls_fix",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260506015230",
+    "name": "phase5_signator_activation",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260506124219",
+    "name": "phase6_chain_rerouting",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260506140647",
+    "name": "phase7_delegation_override",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260506210901",
+    "name": "phase8_disclosure_reports",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260507020029",
+    "name": "per_lease_discount_rate",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260507021841",
+    "name": "lease_asc842_inputs",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260507122710",
+    "name": "lease_reports_storage_insert",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260507123535",
+    "name": "profiles_notify_abstraction_complete",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260507130130",
+    "name": "fk_indexes_audit_p15",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260515205548",
+    "name": "workspace_intended_plan",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260515223204",
+    "name": "lease_workflow_field_guard",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260515224221",
+    "name": "security_invoker_audit_views",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260516014012",
+    "name": "ops_admins_table",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260516015817",
+    "name": "lease_reports_storage_expiry_gate",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  },
+  {
+    "version": "20260516021848",
+    "name": "profiles_email_lookup_index",
+    "created_by": "daniel.c.priest@gmail.com",
+    "idempotency_key": null,
+    "rollback": null
+  }
+]

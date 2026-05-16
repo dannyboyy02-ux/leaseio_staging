@@ -31,7 +31,7 @@ describe('locked-lease informational layout', () => {
 
   it('vendor carve-out migration omits vendor_* from the locked-lease comparison', () => {
     const migration = readRepoFile(
-      'supabase/migrations/20260429000004_locked_lease_vendor_carveout.sql'
+      'supabase/migrations/_archive/20260429000004_locked_lease_vendor_carveout.sql'
     );
 
     expect(migration).toContain('CREATE OR REPLACE FUNCTION public.prevent_locked_lease_edits()');

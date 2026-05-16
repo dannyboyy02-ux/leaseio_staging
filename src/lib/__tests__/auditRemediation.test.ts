@@ -43,7 +43,7 @@ describe('audit remediation guardrails', () => {
   });
 
   it('installs the database storage, model-lock, and entitlement guardrails', () => {
-    const migration = readRepoFile('supabase/migrations/20260426000003_audit_remediation.sql');
+    const migration = readRepoFile('supabase/migrations/_archive/20260426000003_audit_remediation.sql');
 
     expect(migration).toContain('authenticated_read_executed_leases');
     expect(migration).toContain('prevent_locked_lease_edits');
