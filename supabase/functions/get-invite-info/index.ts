@@ -41,11 +41,17 @@ serve(async (req) => {
     const expired  = new Date(invite.expires_at) < new Date();
     const accepted = invite.accepted_at !== null;
 
-    // Check if the invited email already has a LeaseIO account
-    const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
-    const userExists = users.some(
-      (u) => u.email?.toLowerCase() === invite.email.toLowerCase()
-    );
+    // P2-11: check via public.profiles (indexed via idx_profiles_email_lower)
+    // instead of the unpaginated auth.admin.listUsers() — that returned
+    // only the first 50 users, silently missing existing accounts beyond
+    // page 1. profiles is maintained 1:1 with auth.users via the
+    // on_auth_user_created trigger.
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .ilike('email', invite.email)
+      .maybeSingle();
+    const userExists = Boolean(existingProfile);
 
     return new Response(
       JSON.stringify({

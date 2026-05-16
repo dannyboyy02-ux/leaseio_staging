@@ -81,11 +81,17 @@ serve(async (req) => {
         );
       }
 
-      // Guard: email must not already have an account (prevent account takeover)
-      const { data: { users: existingUsers } } = await supabaseAdmin.auth.admin.listUsers();
-      const alreadyExists = existingUsers.some(
-        (u) => u.email?.toLowerCase() === invite.email.toLowerCase()
-      );
+      // Guard: email must not already have an account (prevent account takeover).
+      // P2-11: lookup via public.profiles (indexed via idx_profiles_email_lower)
+      // instead of unpaginated auth.admin.listUsers() — the prior call
+      // returned only the first 50 users, leaving the takeover guard
+      // open as soon as the user table grew past one page.
+      const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .ilike('email', invite.email)
+        .maybeSingle();
+      const alreadyExists = Boolean(existingProfile);
       if (alreadyExists) {
         return new Response(
           JSON.stringify({ ok: false, code: 'ACCOUNT_EXISTS', message: 'An account with this email already exists. Please log in instead.' }),
