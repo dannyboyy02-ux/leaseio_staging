@@ -1,7 +1,12 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "leaseio",
+  "description": "LeaseIO — AI-powered lease intake, abstraction, and audit-defensible repository for mid-market finance teams.",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dannyboyy02-ux/leaseio_staging"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +14,7 @@
     "typecheck:strict": "tsc --noEmit -p tsconfig.app.json --noImplicitAny",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "prebuild": "npm run typecheck:names && npm run typecheck && npm run check:mirror-parity",
+    "prebuild": "npm run typecheck:names && npm run typecheck && npm run check:mirror-parity && npm run check:edge-function-config",
     "typecheck:names": "node scripts/check-undefined-names.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -17,6 +22,7 @@
     "test:watch": "vitest",
     "check:supabase-types": "node scripts/check-supabase-types.mjs",
     "check:mirror-parity": "node scripts/check-mirror-parity.mjs",
+    "check:edge-function-config": "node scripts/check-edge-function-config.mjs",
     "smoke:security": "node scripts/smoke-audit-hardening.mjs"
   },
   "dependencies": {
