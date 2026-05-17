@@ -598,7 +598,15 @@ serve(async (req) => {
           .update({
             status: "approved",
             self_approved: true,
-            submitted_by: user.id,
+            // submitted_by intentionally NOT overwritten — preserves the
+            // original requester's attribution (set at createDraftChangeSet
+            // time). Previously this overwrote to user.id which was the
+            // admin self-approving, hiding the original requester from the
+            // audit trail and conflicting with the
+            // prevent_change_set_field_tampering trigger added in
+            // migration 20260517000000. The admin's identity is captured
+            // in reviewed_by + self_approved=true + the activity/audit
+            // rows below.
             submitted_at: now,
             reviewed_by: user.id,
             reviewed_at: now,
@@ -677,7 +685,15 @@ serve(async (req) => {
         .update({
           status: "pending_approval",
           self_approved: false,
-          submitted_by: user.id,
+          // submitted_by intentionally NOT overwritten — preserves the
+          // value set at createDraftChangeSet time. In the direct path
+          // (submitter creates and submits their own draft) that value
+          // is already user.id, so the prior overwrite was a no-op. In
+          // the approve_unlock_request path (admin acts on behalf of
+          // requester) it preserves the requester's attribution rather
+          // than overwriting it with the admin's id. Aligns with the
+          // prevent_change_set_field_tampering trigger added in
+          // migration 20260517000000.
           submitted_at: now,
           requested_approver_id: validatedApproverId,
         })

@@ -604,13 +604,242 @@ verification of the silent-failure-vs-bypass question first.
 
 ---
 
+## Governance hardening follow-up review (2026-05-16, items #19-23)
+
+Surfaced during reviewer pass on the second iteration of the governance
+hardening migration (`20260517000000_governance_hardening_followup.sql`).
+The current beat closes #16 + #17; these five are scope-adjacent findings
+that surfaced during review but were deliberately not bundled. Each gets
+its own scoped beat with its own reviewer routing.
+
+### Item #19: `cancel_change_set` two-UPDATE sequence is non-atomic
+
+**Symptom:** `supabase/functions/lease-governance-action/index.ts:748-758` (cancel_change_set action) performs two sequential UPDATEs: one on `lease_change_sets` (status → 'canceled'), then one on `leases` (re-lock). If the second UPDATE fails (network partition, transient DB error), the change set is canceled but the lease stays unlocked indefinitely. No compensating audit event is written. Pre-existing pattern not introduced by P1-10 or its follow-ups.
+
+**Severity:** Medium. Customer-visible (lease stays in unlocked-but-canceled limbo) but rare (requires Supabase JS client second-update failure between two same-session calls). No data corruption, just orphan state.
+
+**Where to look:**
+- `supabase/functions/lease-governance-action/index.ts:748-758` — the unprotected two-UPDATE block.
+- Same pattern likely exists in other state-transition actions in the same file (`submit_change_set`, `approve_change_set`, `reject_change_set`); audit for consistency.
+
+**Stub follow-up migration / fix:** Either wrap both UPDATEs in a single Postgres RPC SECURITY DEFINER function called via `supabase.rpc()`, OR add explicit error-checking on the second UPDATE that emits a compensating audit event and 500-response on failure. Cleaner choice is RPC; rolls both into one transaction.
+
+**Decision:** Filed not fixed. Pre-existing pattern, not in the named scope of #16/#17.
+
+### Item #20: `audit_rls_smoke_check()` doesn't assert `relrowsecurity = true` on governance tables
+
+**Symptom:** The smoke check function asserts policies EXIST but not that RLS is ENFORCED. If a Studio operator (or future ALTER TABLE) sets `relrowsecurity = false` on `lease_governance_audit`, `lease_change_sets`, or `lease_change_set_items`, all RLS policies become irrelevant and the smoke check would still return all keys = true.
+
+**Severity:** Medium. Low probability (disabling RLS is an obvious destructive action) but completely defeats the hardening if it happens.
+
+**Where to look:**
+- `audit_rls_smoke_check()` function body in `supabase/migrations/20260517000000_governance_hardening_followup.sql`. Add assertions like:
+```sql
+'lease_governance_audit_rls_enabled', (
+  SELECT relrowsecurity FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relname = 'lease_governance_audit'
+),
+```
+- Same for `lease_change_sets`, `lease_change_set_items`. Three keys total to add.
+
+**Decision:** Filed not fixed. Additive defense-in-depth; not blocking the current beat's named scope.
+
+### Item #21: `lease_unlock_requests` UPDATE policy is not asserted by smoke check; potential same-class gap as #17
+
+**Symptom:** The smoke check asserts SELECT policy `'workspace access can view unlock requests'` exists on `lease_unlock_requests`, but does NOT assert that UPDATE is restricted to service_role or admin only. If an authenticated user can PATCH their own request's `status='approved'` via PostgREST, they bypass the admin-review approval gate.
+
+**Severity:** Medium (pending live verification — may be High). Same attack class as #17 but on a different governance table.
+
+**Where to look:**
+- Live: `SELECT polname, cmd FROM pg_policies WHERE tablename = 'lease_unlock_requests';` — confirm whether an UPDATE policy exists and whether it gates writes to service_role/admin.
+- If no UPDATE policy exists: implicit deny for non-service-role is the current posture — same condition as `lease_governance_audit` UPDATE. Worth documenting explicitly. If a permissive UPDATE policy exists: that's an active vulnerability — escalate to High.
+
+**Stub follow-up:** Audit the table's policy surface first; if a gap is found, write a `restore_unlock_request_hardening` migration that adds the appropriate UPDATE policy AND extends `audit_rls_smoke_check()` with name-based + content-based assertions (same pattern as #16/#17).
+
+**Decision:** Filed not fixed pending verification. Out of the current beat's named scope.
+
+### Item #22: `audit_rls_smoke_check()` `GRANT EXECUTE TO authenticated` leaks security posture
+
+**Symptom:** Function is granted to `authenticated`, meaning any workspace member can call `SELECT public.audit_rls_smoke_check()` and learn which RLS policies and security triggers are present or absent in production. The function returns boolean values only (not policy text), so the leak is structural ("these checks are in place" / "these are not") — useful reconnaissance for someone probing the security surface, not direct data exfiltration.
+
+**Severity:** Low. Information-disclosure rather than authorization bypass. Originally flagged by security scanner as M2 during the first P1-10 review round; explicitly deferred in the follow-up scope per session decisions to avoid scope creep. Tracked here so the decision isn't held in conversational memory.
+
+**Where to look:**
+- `supabase/migrations/20260517000000_governance_hardening_followup.sql` line 470: `GRANT EXECUTE ON FUNCTION public.audit_rls_smoke_check() TO authenticated`.
+- Caller analysis: `scripts/smoke-audit-hardening.mjs` runs as service_role (uses SERVICE_ROLE_KEY) and does not need the `authenticated` grant. No frontend code calls this function. Tightening to `service_role`-only would not break any current consumer.
+
+**Stub follow-up migration:** `REVOKE EXECUTE ON FUNCTION public.audit_rls_smoke_check() FROM authenticated;` (the `TO service_role` grant from the follow-up migration remains).
+
+**Decision:** Filed not fixed. Information-disclosure level; not blocking the current beat.
+
+### Item #29: `enforce_workspace_entitlement_guard` trigger missing from prod — surfaced by smoke check post-`20260517000000` apply
+
+**Symptom:** First post-apply run of `audit_rls_smoke_check()` after the governance hardening follow-up landed (commit forthcoming, 2026-05-16) returned `workspace_entitlement_guard: false`. The Category A key asserts a BEFORE-UPDATE trigger named `enforce_workspace_entitlement_guard` exists on `public.workspaces`. Live `pg_trigger` query confirms the trigger does not exist on prod. The trigger was defined in archived migration `_archive/20260426000003_audit_remediation.sql` which never applied to live — same silent-non-application pattern as #16, #17, and #25.
+
+This is exactly the drift class the smoke check was rebuilt to catch in this beat (the function was shrunk from 15 keys to 4 by the prior migration 20260516130000, making this kind of drift invisible). The post-apply smoke check restored visibility and immediately surfaced a fourth instance of the pattern.
+
+**Severity:** Medium pending live verification of impact. The `enforce_workspace_entitlement_guard` trigger was supposed to prevent client-side mutation of workspace entitlement / billing columns (plan, document_limit, stripe_subscription_id, etc.) — fields that should only be writable by Stripe webhook / billing edge functions via service_role. Without the trigger, an authenticated workspace owner can PATCH their own `plan` from `'starter'` to `'business'` directly via PostgREST, bypassing billing entirely. **If exploitable today, severity escalates to High.** Verify the live RLS posture on `public.workspaces` UPDATE before treating as Medium.
+
+**Where to look:**
+- Live: `SELECT * FROM pg_trigger WHERE tgrelid = 'public.workspaces'::regclass AND NOT tgisinternal;` confirms absence.
+- Archived intent: `_archive/20260426000003_audit_remediation.sql` for the original trigger definition.
+- Live RLS: `SELECT polname, qual::text, with_check::text FROM pg_policies WHERE tablename = 'workspaces' AND cmd = 'UPDATE';` — does any policy permit authenticated UPDATE of billing columns? If yes, this is High and needs immediate hardening.
+
+**Stub follow-up migration:** Restore the trigger + function from the archived definition, after verifying the archived version's intent matches current schema (billing columns may have evolved since the archive). Extend `audit_rls_smoke_check()` is NOT needed — the key already exists, just needs to return true post-fix.
+
+**Decision:** Filed not fixed. Surfaced by the smoke check at the exact moment the migration intended — this is the design working as advertised. Same scope-discipline reasoning as #16/#17/#21/#25/#28: pre-existing baseline drift on a different table/trigger, deserves its own focused reviewer routing. Suggested next-beat bundling: #29 belongs with #25 ("restore archived hardening migrations that never applied to prod") as a related workstream — both are the same silent-non-application class on the same archived migration (`_archive/20260426000003`).
+
+---
+
+### Item #28: `lease_change_sets` INSERT policy is permissive — submitters can craft `change_summary` at INSERT time
+
+**Symptom:** Round 5 integrity reviewer surfaced that `prevent_change_set_field_tampering` is BEFORE UPDATE only — does not fire on INSERT. Live `pg_policies` confirms the INSERT policy `"workspace members can create change sets"` permits any workspace member to INSERT a `lease_change_sets` row directly via PostgREST with arbitrary column values, including a fabricated `change_summary`. The approver then sees a misleading summary on the pending_approval queue. Live grep of `src/` confirms zero browser-side `.insert()` calls to this table — every legitimate INSERT goes through `lease-governance-action/index.ts:192-200` using service_role, which bypasses RLS regardless.
+
+**Severity:** Medium.
+
+**Where to look:**
+- Live: `SELECT polname, qual::text, with_check::text FROM pg_policies WHERE tablename = 'lease_change_sets' AND cmd = 'INSERT';` confirms the permissive policy.
+- Edge function: `supabase/functions/lease-governance-action/index.ts:192-200` is the sole legitimate INSERT writer (service_role).
+- Frontend grep: no `.from('lease_change_sets').insert(` calls in `src/` confirms no browser-side writer.
+
+**Attribution asymmetry vs the UPDATE vector that #16/#17/the trigger closed:** the `prevent_change_set_field_tampering` trigger added in this beat makes `submitted_by` immutable post-INSERT. Even if an attacker exploits this INSERT vector to craft a misleading row, `submitted_by` is reliably the actual attacker's identity — they cannot hide behind a legitimate submitter's attribution. The UPDATE vector that #16/#17 closed was strictly more dangerous: it let attackers tamper with rows authored by other users, masking which user took which action. The INSERT vector here is "attacker can submit a misleading row under their own name" — still wrong, but the attacker's identity is captured truthfully in the audit chain. State this asymmetry explicitly so a future reader understands why #28 was filed-not-fixed despite being structurally similar to #21.
+
+**Stub follow-up:** Audit the INSERT policy across all governance tables; if `lease_change_sets` and `lease_unlock_requests` (#21) both permit authenticated INSERTs where service_role is the only legitimate writer, write a `restore_governance_table_writers` migration that (a) drops the permissive INSERT/UPDATE policies, (b) optionally adds explicit service_role-only policies for clarity, and (c) extends `audit_rls_smoke_check()` with assertions per the parent's `change_set_only_one_update_policy` pattern.
+
+**Decision:** Filed not fixed. Symmetric structural choice to #21 — pre-existing baseline permissiveness on a different write op (INSERT here, UPDATE on #21), same fix shape, same scope discipline. The "scope discipline" rule has to hold when bundling would be convenient, otherwise it's not a rule.
+
+**Suggested next-beat bundling:** #21 and #28 are mechanically identical fixes — tighten policy to service_role-only writers, verify no browser path, add smoke check assertion. Both deserve to be bundled into a single "governance-table writers tightening" beat rather than fragmented across two beats. The next-beat planner should treat them as one workstream.
+
+---
+
+### Item #27: Static migration-file tests may have naive-`toContain` false-positive pattern
+
+**Symptom:** Round 5 test-author surfaced that the Round 3 trigger-function test used `expect(migration).toContain('SECURITY DEFINER')` on the full migration file — which passed not because the trigger function had `SECURITY DEFINER` (it didn't, and shouldn't) but because `audit_rls_smoke_check()` (a separate function later in the same file) does. The test was providing false assurance that the trigger ran with elevated privileges; if SECURITY DEFINER had been added to the trigger by accident, the test would still have passed. Fixed in Round 5 by narrowing the assertion window to the function's declaration block.
+
+**Severity:** Medium. This is a TEST-BUG class — tests pass for the wrong reason. The same pattern may exist elsewhere in `src/lib/__tests__/auditRemediation.test.ts`, `src/lib/__tests__/lockedLeaseLayout.test.ts`, or any other static-migration-file test that uses `toContain` on a full file with multiple functions/policies/triggers. Any assertion about a specific named function/policy/trigger is suspect if the search isn't narrowed to that named object's declaration block.
+
+**Where to look:**
+- All test files matching `src/**/__tests__/*.test.ts` that read migration files via `readFileSync` and assert via `toContain`.
+- Particularly: anywhere a property is asserted of a specific named function/policy/trigger (e.g., "function X has SECURITY DEFINER", "policy Y uses WITH CHECK false", "trigger Z fires BEFORE UPDATE"). If the search isn't narrowed to that object's declaration via regex or substring extraction, the assertion may pass on an unrelated object with the same property.
+
+**Stub fix pattern (already applied in Round 5 to one test):**
+
+```typescript
+// Narrow to the named function's declaration window before asserting.
+const fnStart = migration.indexOf('CREATE OR REPLACE FUNCTION public.target_function_name()');
+const fnEnd = migration.indexOf('AS $$', fnStart);
+const declarationBlock = migration.slice(fnStart, fnEnd);
+expect(declarationBlock).not.toContain('SECURITY DEFINER');
+```
+
+**Decision:** Filed not fixed. Auditing every static-migration-file test for this pattern is its own beat — needs systematic walkthrough of every `toContain` against multi-object migration files. The Round 5 fix to the specific finding is in place; broader sweep deferred to a focused test-hygiene beat. Bundling here would expand scope from "governance hardening complete" to "audit all static tests for assertion-narrowing."
+
+---
+
+### Item #26: `scripts/smoke-audit-hardening.mjs` fails CI on any false return, including documented Category A drift candidates
+
+**Symptom:** The smoke script iterates every key returned by `audit_rls_smoke_check()` and exits 1 on any key that isn't true. Migration `20260517000000_governance_hardening_followup.sql` documents that `governance_unlock_policy` and `governance_change_set_policy` (Category A drift candidates) will return FALSE on first smoke run post-apply — the named SELECT policies were never applied to prod under those names (see #25). The script has no concept of "expected drift" — once the 4 SUPABASE_* GitHub Actions secrets are configured, the CI smoke step will fail-close immediately on every push until #25 is resolved.
+
+**Severity:** Medium. Not blocking today because the secrets aren't configured (the smoke step is silently skipped at `.github/workflows/ci.yml`). Becomes blocking the moment secrets are wired AND #25 hasn't been resolved AND no expected-false allowlist has been added.
+
+**Where to look:**
+- `scripts/smoke-audit-hardening.mjs:52` — `const failedChecks = Object.entries(result).filter(([, passed]) => passed !== true);`. The filter has no notion of categories.
+- `.github/workflows/ci.yml` lines 70-82 — the conditional skip on missing secrets.
+
+**Two stub remediation options:**
+
+(a) **Script-level allowlist (recommended, more durable):** add an `SMOKE_EXPECTED_FALSE` env var (comma-separated key names) that the script reads and excludes from the fail filter, logging them as "expected drift" rather than failures. Configured per-environment via CI secrets / dotenv.
+
+(b) **CI workflow conditional (simpler, more coupling):** keep the smoke step skipped until #25 lands, add a comment in `ci.yml` referencing #25. Then unblock manually after the rename migration applies.
+
+Pre-apply order matters: secrets wiring depends on knowing #25 + #26 are both green. If secrets get wired before either is resolved, the smoke step blocks all pushes to main.
+
+**Decision:** Filed not fixed. The smoke script + CI wiring is its own workstream (the smoke-test-secrets configuration decision is also still open from the prior pre-launch checklist). Bundling here would expand this beat from "governance hardening complete" into the broader CI-integration territory.
+
+---
+
+### Item #25: SELECT policy rename on `lease_unlock_requests` + `lease_change_sets` was never applied to prod
+
+**Symptom:** The archived migration `_archive/20260426000003_audit_remediation.sql` (lines ~200-220) intended to rename two SELECT policies from `"workspace members can view ..."` to `"workspace access can view ..."` — the latter name being more semantically accurate for the hardened workspace-membership-via-`is_workspace_member`-helper pattern. That archived migration never applied to prod (same silent-non-application class as #16 and #17). Live DB has the old `"workspace members can view"` names. Functionally equivalent — both grant SELECT to workspace members via the same predicate logic — but the smoke check function `audit_rls_smoke_check()` asserts the NEW names (`governance_unlock_policy` and `governance_change_set_policy` keys), so both return FALSE on every smoke run.
+
+**Severity:** Low. The SELECT policies under the old names provide equivalent access control (workspace members can read). This is a name-divergence issue, not a vulnerability. The smoke check's two false returns are documented in the migration header (Category A — drift) so they don't trigger the "stop immediately" Category B procedure.
+
+**Where to look:**
+- Archive: `supabase/migrations/_archive/20260426000003_audit_remediation.sql` lines ~200-225 for the intended CREATE POLICY statements.
+- Live state: `SELECT polname FROM pg_policies WHERE tablename IN ('lease_unlock_requests', 'lease_change_sets') AND cmd = 'SELECT';` shows the old names.
+- Smoke check assertions in `supabase/migrations/20260517000000_governance_hardening_followup.sql` reference the new names; these are the FALSE keys.
+
+**Stub follow-up migration (`<ts>_rename_governance_select_policies.sql`):**
+
+```sql
+-- Drop old names, recreate under hardened names. Predicates should match
+-- the archived hardening intent (workspace_member via is_workspace_member
+-- helper, NOT the older workspace_id IN (SELECT ...) pattern).
+DROP POLICY IF EXISTS "workspace members can view unlock requests" ON public.lease_unlock_requests;
+DROP POLICY IF EXISTS "workspace members can view change sets" ON public.lease_change_sets;
+
+CREATE POLICY "workspace access can view unlock requests"
+  ON public.lease_unlock_requests FOR SELECT
+  USING (public.is_workspace_member(workspace_id, auth.uid()));
+
+CREATE POLICY "workspace access can view change sets"
+  ON public.lease_change_sets FOR SELECT
+  USING (public.is_workspace_member(workspace_id, auth.uid()));
+```
+
+**Pre-apply checklist:** verify the archived predicate against the live ones — if they actually differ (not just by name), this isn't a pure rename and the substance of the difference needs reviewer routing. After apply, move `governance_unlock_policy` and `governance_change_set_policy` from Category A → Category B in the smoke check function header to restore the "MUST return true" posture for those keys.
+
+**Decision:** Filed not fixed. Rename is its own scoped beat. Bundling here would have required: (a) verifying the archived predicate matches the live one byte-for-byte (or surfacing the substance of any difference), (b) routing through reviewers for the substantive change, and (c) accepting that 2 of the 3 fixes in this beat are scope-adjacent rather than direct closures of #16/#17. Cleaner to file and address.
+
+---
+
+### Item #24: Governance hardening lacks behavioral SQL test (`supabase/tests/governance_hardening.test.sql`)
+
+**Symptom:** The vitest static tests in `src/lib/__tests__/auditRemediation.test.ts` defend against in-repo migration-file drift (someone editing the file to remove a guard) — useful but not behavioral. The live-DB layer is covered by `scripts/smoke-audit-hardening.mjs` (`npm run smoke:security`) which calls `audit_rls_smoke_check()` and verifies all 23 assertion keys return true. **Neither layer actually exercises the trigger's RAISE EXCEPTION behavior** (insert row, attempt PATCH `workspace_id`, assert exception with expected ERRCODE) or the items policy's WITH CHECK rejection.
+
+**Severity:** Medium. The trigger and items policies are correctly written and applied in production; behavioral verification is a defense-in-depth gap rather than a current vulnerability. The smoke check confirms the trigger EXISTS; it doesn't confirm Postgres ACTUALLY rejects the violating UPDATE.
+
+**Where to look:**
+- Add `supabase/tests/governance_hardening.test.sql` matching the pattern of `supabase/tests/phase8_disclosure_reports.test.sql` (typically 200-600 lines: setup → assertions → teardown). Cover:
+  - Setup: workspace + lease + change set with non-NULL `submitted_by` and `workspace_id`.
+  - Trigger test 1: `UPDATE lease_change_sets SET workspace_id = $other` → assert `RAISE EXCEPTION` with the documented message about workspace_id immutability.
+  - Trigger test 2: `UPDATE lease_change_sets SET submitted_by = $other` (where OLD.submitted_by is non-NULL) → assert exception.
+  - Trigger test 3: `UPDATE lease_change_sets SET change_summary = 'x'` (non-tampering field) → assert success (trigger doesn't fire on irrelevant columns).
+  - Policy test 4: simulated authenticated submitter PATCH `status='pending_approval'` on own draft via `set_config('request.jwt.claims', ...)` → assert 0 rows updated (WITH CHECK rejects).
+  - Items test 5: with parent set to `status='pending_approval'`, attempt `INSERT INTO lease_change_set_items (change_set_id, ...)` → assert WITH CHECK violation.
+- Add to `supabase/tests/README.md` test matrix (alongside the existing 9 phase test files).
+
+**Stub:** Pattern from `supabase/tests/phase8_disclosure_reports.test.sql:1-40` (header), `:50-150` (setup), `:200+` (DO blocks with `RAISE NOTICE 'PASS'`/`'FAIL <reason>'`). Run manually via `psql "$TEST_DATABASE_URL" -f supabase/tests/governance_hardening.test.sql` against a non-production database (local Supabase stack or staging branch).
+
+**Decision:** Filed not fixed. The scope is genuinely separate: writing the full SQL test file requires 200-600 lines of new test infrastructure (setup/teardown/JWT-simulation fixtures matching the `supabase/tests/phaseN_*.test.sql` pattern) AND CI integration work that is itself blocked on resolving the "no non-prod environment available" status noted in `supabase/tests/README.md:7-27` (filed 2026-05-03 — pending a Pro plan upgrade or local Docker stack in CI). That's two distinct workstreams (test file authorship + test infrastructure wiring) on top of this beat's named security scope. Bundling would put migration review and test-infrastructure review on the same critical path — different review surfaces, different reviewer routing. Behavioral verification is the right call long-term and should land in a focused testing-infrastructure beat that owns both pieces.
+
+---
+
+### Item #23: Edge function audit-write helpers (`insertAudit`, `logActivity`) swallow errors silently
+
+**Symptom:** `supabase/functions/lease-governance-action/index.ts:136-148` (`logActivity`) and `:150-157` (`insertAudit`) use `.then(({ error }) => { if (error) console.error(...) })` without propagating the error. If the audit INSERT fails (constraint violation, transient DB error, schema drift), the governance action still returns HTTP 200 to the caller. The state-change side of the operation (status flip, lease re-lock) succeeds; the audit row is silently missing. Pre-existing pattern.
+
+**Severity:** Medium. The hardening migration tightens write policies on `lease_governance_audit` but does not close this application-layer fire-and-forget gap. An auditor asking "where's the approval record for change set X" can find nothing.
+
+**Where to look:**
+- `supabase/functions/lease-governance-action/index.ts:136-157` for the helper definitions.
+- All callers of `insertAudit` and `logActivity` in the same file (search for the function names).
+- Similar pattern likely exists in `request-lease-unlock/index.ts:138-146` per prior reviews; audit for consistency.
+
+**Stub fix:** Promote audit-write failures to hard failures: `await` the insert and let the error propagate to the outer try/catch which returns 500 to the caller. OR (cleaner) wrap state-change and audit-write in a Postgres transaction via RPC so they succeed or fail atomically (same fix shape as #19).
+
+**Decision:** Filed not fixed. Pre-existing pattern, not in the named scope of #16/#17. Worth bundling with #19 in a "edge function atomicity + error handling" beat.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
 follow-up (item 5), Phase 3 audit (items 6-7), Phase 3 close-out
 forensics + smoke (items 8-10), Phase 4 close-out audit (item 11),
-Phase 8 C1 (items 12-13), audit P2-01 (item 15), and P1-10 baseline review
-(items 16-18).
+Phase 8 C1 (items 12-13), audit P2-01 (item 15), P1-10 baseline review
+(items 16-18), governance hardening follow-up review (items 19-28), and post-apply smoke check (item 29).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
