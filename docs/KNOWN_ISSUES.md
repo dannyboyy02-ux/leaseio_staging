@@ -673,22 +673,85 @@ its own scoped beat with its own reviewer routing.
 
 **Decision:** Filed not fixed. Information-disclosure level; not blocking the current beat.
 
-### Item #29: `enforce_workspace_entitlement_guard` trigger missing from prod — surfaced by smoke check post-`20260517000000` apply
+### Item #29: `enforce_workspace_entitlement_guard` trigger missing from prod — **billing-bypass vector, severity High, standalone P0 next beat**
 
-**Symptom:** First post-apply run of `audit_rls_smoke_check()` after the governance hardening follow-up landed (commit forthcoming, 2026-05-16) returned `workspace_entitlement_guard: false`. The Category A key asserts a BEFORE-UPDATE trigger named `enforce_workspace_entitlement_guard` exists on `public.workspaces`. Live `pg_trigger` query confirms the trigger does not exist on prod. The trigger was defined in archived migration `_archive/20260426000003_audit_remediation.sql` which never applied to live — same silent-non-application pattern as #16, #17, and #25.
+**Symptom:** First post-apply run of `audit_rls_smoke_check()` after the governance hardening follow-up landed (commit `896f4ed`, 2026-05-16) returned `workspace_entitlement_guard: false`. The Category A key asserts a BEFORE-UPDATE trigger named `enforce_workspace_entitlement_guard` exists on `public.workspaces`. Live `pg_trigger` query (2026-05-17) confirms the trigger does not exist on prod. The trigger was defined in archived migration `_archive/20260426000003_audit_remediation.sql` which never applied to live — same silent-non-application pattern as #16, #17, and #25.
 
-This is exactly the drift class the smoke check was rebuilt to catch in this beat (the function was shrunk from 15 keys to 4 by the prior migration 20260516130000, making this kind of drift invisible). The post-apply smoke check restored visibility and immediately surfaced a fourth instance of the pattern.
+**Severity: High (verified exploitable 2026-05-17).** Initially filed as "Medium pending live verification — may be High." Live verification confirmed the exploit path is open: the only UPDATE policy on `public.workspaces` is `"Owners can update their workspaces"` with `USING (owner_id = auth.uid())` and **no WITH CHECK clause** — any authenticated workspace owner can PATCH any column on their own workspace row via PostgREST, including billing columns. Exploitable today by anyone with a workspace.
 
-**Severity:** Medium pending live verification of impact. The `enforce_workspace_entitlement_guard` trigger was supposed to prevent client-side mutation of workspace entitlement / billing columns (plan, document_limit, stripe_subscription_id, etc.) — fields that should only be writable by Stripe webhook / billing edge functions via service_role. Without the trigger, an authenticated workspace owner can PATCH their own `plan` from `'starter'` to `'business'` directly via PostgREST, bypassing billing entirely. **If exploitable today, severity escalates to High.** Verify the live RLS posture on `public.workspaces` UPDATE before treating as Medium.
+**Exploit chain:**
+1. Workspace owner sends `PATCH /rest/v1/workspaces?id=eq.<their_id>` with body `{"plan": "business", "document_limit": 9999, "subscription_status": "active", "subscription_period_end": "2030-01-01"}`.
+2. PostgREST RLS USING check passes (owner_id matches). No WITH CHECK gate. UPDATE succeeds.
+3. Application now reads `plan='business'`. Business-tier features (per CLAUDE.md Strategic Rule 7: embedded AI assistant, portfolio intelligence, amendment comparison, custom approval playbook, audit package generator) all become accessible.
+4. `document_limit` becomes effectively unlimited. Every lease upload triggers Claude Opus extraction (~$1-3 per document per CLAUDE.md cost model) at LeaseIO's cost.
+5. Stripe webhook never sees the change — billing infrastructure is bypassed entirely.
+
+**Billing columns currently exposed on `public.workspaces`** (no column-level grant restriction, no trigger guard):
+- `plan` (text, NOT NULL, default 'pro')
+- `document_limit` (integer, NOT NULL, default 3)
+- `stripe_customer_id` (text, nullable)
+- `stripe_subscription_id` (text, nullable)
+- `subscription_status` (text, nullable)
+- `subscription_period_end` (timestamptz, nullable)
+- `intended_plan` (text, nullable)
 
 **Where to look:**
-- Live: `SELECT * FROM pg_trigger WHERE tgrelid = 'public.workspaces'::regclass AND NOT tgisinternal;` confirms absence.
-- Archived intent: `_archive/20260426000003_audit_remediation.sql` for the original trigger definition.
-- Live RLS: `SELECT polname, qual::text, with_check::text FROM pg_policies WHERE tablename = 'workspaces' AND cmd = 'UPDATE';` — does any policy permit authenticated UPDATE of billing columns? If yes, this is High and needs immediate hardening.
+- Live trigger absence: `SELECT tgname FROM pg_trigger WHERE tgrelid = 'public.workspaces'::regclass AND NOT tgisinternal;` returns only `update_workspaces_updated_at`.
+- Live policy: `SELECT polname, qual::text, with_check::text FROM pg_policies WHERE tablename = 'workspaces' AND cmd IN ('UPDATE', 'ALL');` confirms permissive single policy.
+- Archived intent: `_archive/20260426000003_audit_remediation.sql` for the original trigger + function definitions.
 
-**Stub follow-up migration:** Restore the trigger + function from the archived definition, after verifying the archived version's intent matches current schema (billing columns may have evolved since the archive). Extend `audit_rls_smoke_check()` is NOT needed — the key already exists, just needs to return true post-fix.
+**Stub follow-up:** Restore the trigger + function from the archived definition under pre-push reviewer routing per the rule added to CLAUDE.md this session. Verify the archived version's column list matches the current schema (billing columns may have evolved). Optionally: add column-level REVOKE on the billing columns as defense-in-depth.
 
-**Decision:** Filed not fixed. Surfaced by the smoke check at the exact moment the migration intended — this is the design working as advertised. Same scope-discipline reasoning as #16/#17/#21/#25/#28: pre-existing baseline drift on a different table/trigger, deserves its own focused reviewer routing. Suggested next-beat bundling: #29 belongs with #25 ("restore archived hardening migrations that never applied to prod") as a related workstream — both are the same silent-non-application class on the same archived migration (`_archive/20260426000003`).
+**Decision:** Filed not fixed in the originating beat (governance hardening completion), but **escalated immediately on live verification.** This is the next P0 beat — NOT bundled with #25 as previously suggested. The trigger-restoration scope is bigger and more urgent than the SELECT policy rename (#25), and warrants its own focused reviewer routing without being conflated with cosmetic cleanup.
+
+**Surfaced by the smoke check at the exact moment the migration intended** — this is the design working as advertised. The fact that the smoke check was rebuilt to its full key set in commit `896f4ed` (after weeks of being shrunk to 4 keys by 20260516130000) is what made this visible. Concrete validation of the "Restoring a previously-shrunk drift-detection function will surface drift on its first run" lesson added to CLAUDE.md the same session.
+
+---
+
+#### Post-verification work done 2026-05-17 (so tomorrow's session inherits without re-investigation)
+
+**Audit 1 — exploitation detection on live `public.workspaces`:** zero suspicious external rows. Three sub-queries run (status='active' AND no Stripe sub; paid plan AND no Stripe customer; high document_limit AND no Stripe). Two rows flagged, **both owned by `daniel.c.priest@gmail.com`** (auth.users id `c2dbf842-1021-4b1d-a59f-df2ecc575d8e`):
+- **"Labs Analytix"** (`c9dad4c7-...`): plan=`business`, document_limit=50, no Stripe. Known-legitimate dev/test workspace — Daniel manually set business tier for access to business-tier code paths (embedded AI assistant, etc.) without paying his own Stripe account. Common project-owner-dev pattern; not exploitation.
+- **"My Workspace"** (`b0f3c7a0-...`): plan=`pro`, document_limit=3. **False positive in the query** — `'pro'` is the column default (`column_default: 'pro'::text`) and `normalizePlanId` coerces to `'starter'` on read. Default-state workspace, not tampered.
+
+**Verdict: exposure, not incident.** The bypass has been live since ~April 2026; zero customer exploitation observed. No emergency mitigation warranted.
+
+**Audit 2 — legitimate authenticated writers on the 7 billing columns:** one only.
+- `src/pages/app/Onboarding.tsx:83-91` writes `intended_plan: selectedPlan` on **INSERT** (not UPDATE). The code's own comment at lines 75-79: *"Always create the workspace at Starter defaults. The entitlement-guard trigger in migration 20260426000003 rejects any authenticated insert that diverges from those defaults, so we omit plan / document_limit and let the DB defaults apply. Stripe checkout + the signed webhook (service role, which bypasses the trigger) own the promotion to Business. intended_plan persists the user's declared choice so AccountSettings can recover an abandoned Business checkout."* The frontend was written **assuming the trigger exists** — i.e., the frontend already operates as if the missing protection were in place.
+- No authenticated UPDATE writers on any of the 7 billing columns (`plan`, `document_limit`, `stripe_customer_id`, `stripe_subscription_id`, `subscription_status`, `subscription_period_end`, `intended_plan`). All other `.from('workspaces').update(...)` call sites touch only `name`, `timezone`, `report_*`, `default_notification_days`, `counter_signature_default_due_days`, `separation_of_duties_default` — non-billing.
+
+**Audit 3 — full inventory of `public.workspaces`:** clean except for the missing trigger. 4 policies + 1 trigger total:
+- POLICY `Owners can delete their workspaces` — DELETE, `owner_id = auth.uid()`
+- POLICY `Owners can update their workspaces` — UPDATE, `owner_id = auth.uid()`, **no WITH CHECK**
+- POLICY `Users can create workspaces` — INSERT, `owner_id = auth.uid()`
+- POLICY `Users can view workspaces they own or are members of` — SELECT
+- TRIGGER `update_workspaces_updated_at` — BEFORE UPDATE, just the timestamp updater
+
+No other drift. Mitigation scope is narrow: restore the one missing trigger.
+
+#### Design points for the next-beat migration (carry into the entitlement-guard beat)
+
+- **Trigger must be BEFORE INSERT OR UPDATE, not just UPDATE.** The archived version (`_archive/20260426000003_audit_remediation.sql`) was designed to cover both. Confirm by reading the archived definition.
+- **`intended_plan` must remain authenticated-writable on INSERT** (Onboarding.tsx's legitimate path) while the entitlement-state columns (`plan`, `document_limit`, `stripe_customer_id`, `stripe_subscription_id`, `subscription_status`, `subscription_period_end`) must reject authenticated divergence from defaults on INSERT and any change on UPDATE. Same service-role-carve-out pattern as the trigger shipped in 20260517000000 (`COALESCE(auth.role(), '') <> 'service_role'`).
+- **Frontend changes likely unnecessary.** Onboarding.tsx is already written for the trigger's presence (omits plan/document_limit on INSERT, expects DB defaults). Stripe webhook (`supabase/functions/stripe-webhook/index.ts:109-111`) uses service_role and bypasses the trigger. No browser writers to break.
+- **Smoke check key already exists** (`workspace_entitlement_guard` in `audit_rls_smoke_check()`), so no smoke check changes needed — the existing key flips from FALSE to TRUE post-apply, which is the success signal.
+- **Pre-apply checklist (per the rule added to CLAUDE.md this session):** pull `pg_attribute` for live `workspaces` columns; categorize every column into universal-immutable / service-role-only / authenticated-mutable; surface ambiguities; derive trigger code from categorization. Workspaces table has more columns than `lease_change_sets` (report settings, discount rate, region/department options, etc.) — the categorization will be longer.
+
+#### Meta-question — first agenda item for the next-beat session, BEFORE writing any SQL
+
+`_archive/20260426000003_audit_remediation.sql` has now produced four distinct vulnerabilities (#16, #17, #25, #29) because it "never applied to prod." We don't actually know why. Possibilities:
+- Migration was applied then Studio-reverted (someone clicked "drop policy" in Studio after)
+- Migration was added to the repo but never run via `db push` (the apply step was skipped)
+- Migration ran but failed mid-execution and rolled back without reaching the trigger/policy creates
+- Migration ran on a different branch / staging env but not prod
+
+Before restoring more pieces of this archived migration, the next session should investigate the mechanism. If the same thing that prevented original apply is still active, restoration migrations may face the same fate. Possible investigation paths:
+- `git log --follow --diff-filter=A` on the archived file to see when it was first committed
+- Check `docs/ops/schema_migrations_pre_baseline_2026-05-16.json` (the captured pre-reconcile state) — was the migration's version timestamp present? If yes, it was applied at some point. If no, it was committed but never applied.
+- Studio audit log if accessible (may not be retained that long)
+- Cross-reference with Daniel's calendar / Linear / Slack around the original commit date
+
+**Do this investigation FIRST. If the migration was applied-then-reverted, the restoration needs an additional defense (e.g., constraint instead of trigger, or a CI check that detects re-removal). If it was simply never applied, the standard restoration is sufficient.**
 
 ---
 
