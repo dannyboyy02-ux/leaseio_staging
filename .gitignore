@@ -27,6 +27,9 @@ dist-ssr
 public/locales/
 supabase/.temp/
 
+# Claude Code agent worktrees (transient scratch sandboxes)
+.claude/worktrees/
+
 # Environment variables (never commit secrets)
 .env
 .env.local
