@@ -72,9 +72,10 @@ export default function Onboarding() {
 
     try {
       // Always create the workspace at Starter defaults. The
-      // entitlement-guard trigger in migration 20260426000003 rejects any
-      // authenticated insert that diverges from those defaults, so we
-      // omit plan / document_limit and let the DB defaults apply.
+      // entitlement-guard trigger (migration 20260522000000, restoring the
+      // never-applied 20260426000003) rejects any authenticated insert that
+      // diverges from those defaults, so we omit plan / document_limit and
+      // let the DB defaults (starter / 15) apply.
       // Stripe checkout + the signed webhook (service role, which bypasses
       // the trigger) own the promotion to Business.
       //
