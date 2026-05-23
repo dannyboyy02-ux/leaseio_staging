@@ -914,13 +914,49 @@ CREATE POLICY "workspace access can view change sets"
 
 ---
 
+### Item #30: `check-subscription/index.ts` referenced in CLAUDE.md file map but absent from repo
+
+**Symptom:** CLAUDE.md's File-to-Feature Map ("Pricing & Billing") references `supabase/functions/{create-checkout,check-subscription,customer-portal}/index.ts`, and the #29 post-merge regression audit's Step 4 named `check-subscription` as the edge function that reads `plan`/`document_limit`. The file does not exist: `ls supabase/functions/check-subscription/index.ts` → No such file or directory; there is no `[functions.check-subscription]` stanza in `config.toml`; and `npm run check:edge-function-config` passes with 50 functions, none named `check-subscription`. Documentation/file-map drift, not a runtime bug — no code path imports or invokes it.
+
+**Severity:** Low (documentation drift, not a runtime bug). No runtime impact: nothing depends on the missing function. Subscription state is written by `stripe-webhook` (service_role) and read client-side from the `workspaces` row.
+
+**Where to look:**
+- CLAUDE.md File-to-Feature Map, the "Pricing & Billing" line referencing `{create-checkout,check-subscription,customer-portal}`.
+- `supabase/functions/` — `create-checkout` and `customer-portal` exist; `check-subscription` does not.
+- `config.toml` — no `[functions.check-subscription]` stanza.
+
+**Stub remediation:** Confirm whether `check-subscription` was removed intentionally. If so, update CLAUDE.md's file map to drop the reference (and sweep for any other stale mention). If it should exist (e.g., a planned subscription-status refresh endpoint), restore it under the Project Configuration Source-of-Truth rule.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-23 post-merge regression audit on the #29 fix (commits `66ac634` and `07eb2f7`) — pre-existing drift, NOT caused by either commit.
+
+---
+
+### Item #31: `documents_used` (workspaces quota counter) has no writer anywhere in the repo
+
+**Symptom:** During the #29 post-merge regression audit, a full sweep (`grep -rni documents_used supabase/functions supabase/migrations`, excluding `_archive`) found zero code that increments or resets `workspaces.documents_used`. The only references are the column definition (`integer DEFAULT 0 NOT NULL` in the baseline) and the #29 entitlement-guard's own checks. No edge function (notably **not** `process_lease`), RPC, trigger, or cron writes the counter. This validated the #29 migration's "documents_used (quota counter — verified no authenticated writer exists)" note, but raises a product-critical question: the usage/overage data source may not be wired up.
+
+**Severity:** Medium — flagged pending investigation. Product-critical if confirmed: the Starter $12/doc and Business $10/doc overage rates and the included-abstraction caps (15 / 50) need a backing counter. If `documents_used` is never incremented, overage billing and quota enforcement have no data source. (Not a #29 regression — guarding an unwritten column breaks nothing; the #29 guard merely surfaced the gap.)
+
+**Where to look:**
+- `supabase/functions/process_lease/index.ts` — the direct-upload lease creator and most likely intended increment point (per CLAUDE.md, lease records are created/updated here, not in `LeaseUploadModal.tsx`).
+- `supabase/functions/retry_lease/index.ts` and any extraction-completion path.
+- `src/components/.../QuotaWarningBanner.tsx` + tier constants in `src/config/pricing.ts` — confirm what the banner reads as "used" (it may compute from a `leases` count rather than `documents_used`).
+- Any `documents_used` read in `src/` — if the frontend reads it but nothing writes it, displayed usage is always 0.
+
+**Stub remediation:** Trace where a successful abstraction should increment the counter; determine whether quota/overage enforcement was intended at the `document_limit`/`documents_used` level or computed elsewhere (e.g., live `COUNT(leases)`); if a genuine gap is confirmed, file the implementation (increment on successful extraction, monthly reset, overage metering) as a downstream beat. Any increment/reset must run as service_role (or be wrapped in `DISABLE TRIGGER`) to satisfy the #29 entitlement guard.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-23 post-merge regression audit on the #29 fix (commits `66ac634` and `07eb2f7`) — pre-existing, NOT caused by either commit. Investigation-first: confirm the gap before scoping the fix beat.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
 follow-up (item 5), Phase 3 audit (items 6-7), Phase 3 close-out
 forensics + smoke (items 8-10), Phase 4 close-out audit (item 11),
 Phase 8 C1 (items 12-13), audit P2-01 (item 15), P1-10 baseline review
-(items 16-18), governance hardening follow-up review (items 19-28), and post-apply smoke check (item 29).
+(items 16-18), governance hardening follow-up review (items 19-28), post-apply smoke check (item 29),
+and the #29 post-merge regression audit (items 30-31).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
