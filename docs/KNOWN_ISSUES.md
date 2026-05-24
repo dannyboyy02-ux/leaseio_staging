@@ -954,6 +954,206 @@ So caps ARE enforced. The audit nonetheless surfaced two real, narrower residual
 
 ---
 
+### Item #32: `LeaseReview.tsx` post/approve actions bypass the canonical audit trail
+
+**Symptom:** Two legacy direct-write actions on the lease-review workbench violate the Lifecycle Transition Convention. `handlePostLease` (`src/pages/app/LeaseReview.tsx:1373`) is the terminal "post to repository" action: it sets `lifecycle_status: 'active'` in the UPDATE but omits `status_changed_at`, and writes no `lease_activity_log` `status_change` row (only an inline `audit_log` JSON column on the lease). `handleApproveLease` (`src/pages/app/LeaseReview.tsx:1396`) persists approval only by spreading `_approval` into `extracted_json` — no activity-log row, and the sub-key is overwritable by the next extraction write.
+
+**Severity:** High. The most audit-critical transition (lease going live) is invisible to the canonical audit log (the `AuditLog` page, stuck-lease detection, and dashboards key off `lease_activity_log` + `status_changed_at`), and `status_changed_at` goes stale. Directly undermines the "every change is attributable" promise. (Audit pass rated `handlePostLease` Critical; calibrated to High here — integrity/attribution gap, not data loss or security.) Verified 2026-05-24.
+
+**Where to look:**
+- `src/pages/app/LeaseReview.tsx:1373` (`handlePostLease`) and `:1396` (`handleApproveLease`).
+- Convention reference: CLAUDE.md "Lifecycle Transition Convention"; compliant exemplars are the form-path writer (`LeaseRequestForm.tsx`) and the edge writer (`act-on-chain-step/index.ts` → `updateLifecycle()` + `logStatusChange()`).
+
+**Stub remediation:** Add `status_changed_at: now()` to the post UPDATE and insert a `status_change` `lease_activity_log` row (top-level `from_status`/`to_status` + nested `details` + `routing_path: 'legacy'`). For approve, write a first-class `approval` activity row (user_id + timestamp) instead of burying it in `extracted_json`.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (data-integrity pass). Pre-existing; not tied to a recent commit.
+
+---
+
+### Item #33: `process_lease` extraction flips `lifecycle_status → executed` without `status_changed_at` / status_change log
+
+**Symptom:** The new-upload completion UPDATE in `supabase/functions/process_lease/index.ts:2444` sets `lifecycle_status: 'executed'` but never bumps `status_changed_at` and never emits a `status_change` `lease_activity_log` row (it logs domain events like `executed_terms_extracted`, but not the lifecycle transition per convention).
+
+**Severity:** High. Same class as #32 on the extraction path — lease enters `executed` with no attributable status_change record and a stale `status_changed_at`, breaking downstream consumers keyed on those fields.
+
+**Where to look:**
+- `supabase/functions/process_lease/index.ts:2444` (and audit any sibling lifecycle write in `retry_lease`).
+- Use the `updateLifecycle()` + `logStatusChange()` helper pattern from `act-on-chain-step` if a Deno-side equivalent exists; otherwise inline both shapes per convention with `routing_path` (e.g. `'extraction'`).
+
+**Stub remediation:** Add `status_changed_at` to the UPDATE and emit a `status_change` row (prior status → `executed`).
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (data-integrity pass). Pre-existing.
+
+---
+
+### Item #34: `useLifecycleWorkflow.ts` unused transition paths violate the convention (latent)
+
+**Symptom:** `submitForApproval` (`src/hooks/useLifecycleWorkflow.ts:200`), `takeApprovalAction` (`:293-314`), and `submitForExecutionApproval` (`:467`) UPDATE `lifecycle_status` without `status_changed_at`; the `status_change` rows they write (`:221`, `:486`) omit `from_status` and `routing_path` (`:221` also omits the nested `details.from/to`). Per the audit, only `createDraftLease` from this hook is actually wired (via `NewLease.tsx`); the three offending functions appear to be dead code.
+
+**Severity:** Latent (dead code today). Would be High if any path becomes live without remediation.
+
+**Where to look:** `src/hooks/useLifecycleWorkflow.ts:200,221,293-314,467,486`; confirm wiring via grep before acting.
+
+**Stub remediation:** Either delete the unused functions (preferred if confirmed dead) or bring them to convention before any caller is added.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (data-integrity pass).
+
+---
+
+### Item #35: `process_lease`/`retry_lease` rent-schedule rebuild is non-atomic (can wipe a confirmed schedule)
+
+**Symptom:** The rent-schedule rebuild does `rent_schedules.delete().eq(lease_id)` then re-inserts from fresh extraction (`supabase/functions/process_lease/index.ts:2540`, mirrored in `retry_lease`). The insert error is logged, not thrown (`:2557` `console.error`), so a partial failure leaves the prior schedule deleted with no rollback. Re-running extraction/retry on an already-reviewed lease silently replaces user-facing rent rows. Note `model_locked` only guards the executed-upload path, not retry.
+
+**Severity:** Medium. Possible loss of confirmed rent-schedule rows on partial failure; overwrite-on-re-extract is partly by-design but unguarded on the retry path.
+
+**Where to look:** `supabase/functions/process_lease/index.ts:2540-2557`; the equivalent block in `retry_lease/index.ts`.
+
+**Stub remediation:** Insert-then-swap, or wrap delete+insert in a transactional RPC; treat insert error as fatal; consider extending the `model_locked` guard to the retry path.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (data-integrity pass).
+
+---
+
+### Item #36: `process_lease` quota gate is a TOCTOU-racy `COUNT` (cap bypass under concurrency)
+
+**Symptom:** `assertProcessingQuota` (`supabase/functions/process_lease/index.ts:1069`) enforces the monthly-extraction and active-lease caps via read-only `COUNT(leases) >= limit` then proceeds. Concurrent uploads each observe the pre-increment count and all pass; the count-error path fails open (`:1080`), compounding it.
+
+**Severity:** Medium (low real-world frequency). Caps can be exceeded under concurrency → unbilled Opus spend. Distinct from #31 (that is the dead `documents_used` column; this is a race on the live count).
+
+**Where to look:** `supabase/functions/process_lease/index.ts:1069-1083` (monthly) and `:1104` (active-lease).
+
+**Stub remediation:** Atomic reserve (advisory lock, or `INSERT ... RETURNING` against a usage-reservation row) instead of count-then-go. Coordinate with any future #31 counter work — must run service_role per the #29 guard.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (data-integrity pass).
+
+---
+
+### Item #37: `profiles_insert_self` RLS policy uses `WITH CHECK (true)`, defeating the correct same-table policy
+
+**Symptom:** `public.profiles` has two permissive INSERT policies. The correct one, `profiles_insert_own` (`WITH CHECK (id = auth.uid())`, `supabase/migrations/20260516120000_baseline_schema.sql:4330`), is nullified because `profiles_insert_self` (`WITH CHECK (true)`, `:4334`) is OR'd in. An authenticated user could INSERT a profile row keyed to another real, not-yet-onboarded `auth.users` id, setting attacker-controlled `email`/`current_workspace_id`. Verified 2026-05-24: both policies present, not dropped by any later migration.
+
+**Severity:** Medium. Real RLS gap, but exploitability is limited — the PK blocks overwriting an existing profile, and the target UUID must be a real, profile-less `auth.users` id (profiles are normally auto-created at signup).
+
+**Where to look:** `supabase/migrations/20260516120000_baseline_schema.sql:4330,4334`.
+
+**Stub remediation:** New migration: `DROP POLICY "profiles_insert_self" ON public.profiles;` (keep only `profiles_insert_own`). Per the Schema Change Rule, write the `.sql` file first; confirm no legitimate writer relies on the permissive policy.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (backend-security pass).
+
+---
+
+### Item #38: `send-invite` accepts `role` from the request body without a whitelist
+
+**Symptom:** `supabase/functions/send-invite/index.ts:133` writes the invited `role` verbatim to `invite_tokens.role` / `workspace_members.role`. The DB enum/FK is the only guard.
+
+**Severity:** Low. The caller is already an authorized admin/owner and the DB enum likely rejects garbage, so blast radius is small.
+
+**Where to look:** `supabase/functions/send-invite/index.ts:133`.
+
+**Stub remediation:** Whitelist `role` against allowed values before insert.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (backend-security pass).
+
+---
+
+### Item #39: Member-management UI exposes controls broader than the owner-only RLS
+
+**Symptom:** `MemberRoleSelect.tsx` (`:34`) and `MembersPanel.tsx` (`:116`) show role-change/remove controls to any admin (`canManageWorkspaceMembers`), but the `workspace_members` UPDATE/DELETE RLS policies require `is_workspace_owner(...)` (`baseline_schema.sql:3787,3791`). A non-owner admin sees the controls but the write is rejected by RLS.
+
+**Severity:** Low. Broken-feature / confusing-error, NOT a privilege escalation (server is stricter than the UI).
+
+**Where to look:** `src/components/workspace/MemberRoleSelect.tsx:34`, `MembersPanel.tsx:116`; RLS at `baseline_schema.sql:3787,3791`.
+
+**Stub remediation:** Pick one model and align: hide the controls for non-owners, or relax the RLS to admins if admin-managed membership is intended.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (frontend-security pass).
+
+---
+
+### Item #40: `OperationsPage` renders DB-sourced URLs as `href` without scheme validation
+
+**Symptom:** `src/pages/app/OperationsPage.tsx:308,349` renders `account_url` / `upgrade_url` (from `vendor_renewal_calendar` / `vendor_alert_log`) directly as anchor `href`. A `javascript:` URL would execute on click. Both tables are operator/cron-populated and ops-admin-only (`rel="noreferrer" target="_blank"` already present).
+
+**Severity:** Low. Near-zero practical exposure (trusted, operator-only data path).
+
+**Where to look:** `src/pages/app/OperationsPage.tsx:308,349`.
+
+**Stub remediation:** Validate the scheme is `https:` before rendering the anchor.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (frontend-security pass).
+
+---
+
+### Item #41: `check-mirror-parity.mjs` strips all `//` lines, weakening Node↔Deno drift detection
+
+**Symptom:** `scripts/check-mirror-parity.mjs:88` `normalize()` filters every line matching `/^\s*\/\//`, broader than its stated "header docstring only" contract. A behavioral divergence expressed as a commented/uncommented line in one mirror could be masked. The two target pairs are currently byte-identical in body, so no live drift today.
+
+**Severity:** Low. Reduced confidence in the CI parity gate, not an active bug.
+
+**Where to look:** `scripts/check-mirror-parity.mjs:88` (`normalize`) vs `stripLeadingComment`.
+
+**Stub remediation:** Strip only the leading block comment (via `stripLeadingComment`); drop the per-line `//` filter in `normalize`.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (data-integrity pass).
+
+---
+
+### Item #42: Orphaned/unwired components ship in no bundle but clutter the tree
+
+**Symptom:** Four components have zero references anywhere: `src/components/workflow/AdminOverrideModal.tsx` (admin-override goes through `ChainViolationBanner` + `admin-override-step` instead), `src/components/dashboard/PendingApprovalsSection.tsx`, `src/components/dashboard/FinancialSummary.tsx`, and `src/components/dashboard/CommitmentHistory.tsx` (Dashboard.tsx imports a different set).
+
+**Severity:** Low/Medium. Dead files — harmless to runtime, misleading to readers and to the CLAUDE.md File-Map (see #43).
+
+**Where to look:** the four files above; confirm zero importers via grep before deleting.
+
+**Stub remediation:** Delete after confirming truly unused (or wire them if intended).
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (dead-ends pass).
+
+---
+
+### Item #43: CLAUDE.md File-to-Feature Map has drifted from the tree
+
+**Symptom:** Multiple stale entries in CLAUDE.md's File-to-Feature Map: `Portfolio.tsx` is labeled "STUB — placeholder, needs build" (Active Priorities + File-Map) but is actually built (~332 lines, real `useQuery` + `computePortfolioMetrics`); `ModelLockConfirmation.tsx` is listed (Lease Review group) but has been deleted; the Dashboard group lists `FinancialSummary, PendingApprovalsSection, CommitmentHistory` (all orphaned per #42) while omitting the 8 components Dashboard.tsx actually imports (`SummaryStrip, NeedsAction, LeasePipeline, UpcomingRisks, RecentActivity, PipelineByDepartment, IntakeTrend, PendingCounterSignatureCard`). Related to already-filed #30 (`check-subscription`).
+
+**Severity:** Medium (documentation integrity). Misleads file-scoping and the completion picture (Portfolio appears already built).
+
+**Where to look:** CLAUDE.md File-to-Feature Map (Dashboard, Lease Review, Portfolio groups) and Active Priorities (Portfolio intelligence line).
+
+**Stub remediation:** Reconcile the File-Map against the tree: drop deleted/orphaned entries, add the real Dashboard components, and re-classify `Portfolio.tsx` (and confirm whether the "portfolio intelligence dashboard" priority is now closed). Sweep for other stale references in the same pass.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (dead-ends pass).
+
+---
+
+### Item #44: `Reports.tsx` renders user-reachable "Coming soon" report cards
+
+**Symptom:** On the routed `/app/reports` page, 4 of 7 report cards (`portfolio`, `renewals`, `escalations`, `projections`) lack an `href` and render a visible "Coming soon" (`src/pages/Reports.tsx:198`). The three with hrefs route to real pages.
+
+**Severity:** Low/Medium. Real user-reachable dead-end UI; matters for launch polish.
+
+**Where to look:** `src/pages/Reports.tsx:198` (the card definitions / "Coming soon" branch).
+
+**Stub remediation:** Either wire the four reports, or hide the unbuilt cards until shipped (avoid surfacing "Coming soon" to paying users).
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (dead-ends pass).
+
+---
+
+### Item #45: ~18 of 97 `src/lib` exports are unused
+
+**Symptom:** A grep sweep found ~19% of `src/lib` exports with no importer. Worst offenders: 8 unused formatters in `src/lib/i18n.ts` (`formatNumber/formatShortDate/formatLongDate/formatDateTime/formatMonthYear/getDateLocale/formatRelativeDate/formatDateDistance`), 4 in `src/lib/dateFormatters.ts`, 5 `canAccess*` helpers in `src/lib/authorization.ts`, and `severityColor` in `reportGeneration.ts`.
+
+**Severity:** Low. Clutter. The unused `canAccess*` authorization helpers are a mild correctness smell (intended guards never called) — worth confirming nothing should be calling them.
+
+**Where to look:** `src/lib/i18n.ts`, `src/lib/dateFormatters.ts`, `src/lib/authorization.ts`, `src/lib/reportGeneration.ts`. Verify each via grep (some may be reached by dynamic/string paths — none found, but confirm before deleting).
+
+**Stub remediation:** Delete confirmed-dead exports; for the `canAccess*` helpers, first confirm no surface *should* be calling them.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (dead-ends pass).
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -961,7 +1161,8 @@ follow-up (item 5), Phase 3 audit (items 6-7), Phase 3 close-out
 forensics + smoke (items 8-10), Phase 4 close-out audit (item 11),
 Phase 8 C1 (items 12-13), audit P2-01 (item 15), P1-10 baseline review
 (items 16-18), governance hardening follow-up review (items 19-28), post-apply smoke check (item 29),
-and the #29 post-merge regression audit (items 30-31).
+the #29 post-merge regression audit (items 30-31),
+and the 2026-05-24 full-codebase audit — security / dead-ends / data-integrity passes (items 32-45).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
