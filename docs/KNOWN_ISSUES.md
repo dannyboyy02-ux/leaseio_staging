@@ -931,21 +931,26 @@ CREATE POLICY "workspace access can view change sets"
 
 ---
 
-### Item #31: `documents_used` (workspaces quota counter) has no writer anywhere in the repo
+### Item #31: `documents_used` (workspaces quota counter) is a dead column; enforcement runs off live lease counts instead
 
-**Symptom:** During the #29 post-merge regression audit, a full sweep (`grep -rni documents_used supabase/functions supabase/migrations`, excluding `_archive`) found zero code that increments or resets `workspaces.documents_used`. The only references are the column definition (`integer DEFAULT 0 NOT NULL` in the baseline) and the #29 entitlement-guard's own checks. No edge function (notably **not** `process_lease`), RPC, trigger, or cron writes the counter. This validated the #29 migration's "documents_used (quota counter — verified no authenticated writer exists)" note, but raises a product-critical question: the usage/overage data source may not be wired up.
+**Symptom:** A full sweep (`grep -rni documents_used`, excluding `_archive`) finds zero code that increments or resets `workspaces.documents_used`. The only references are the column definition (`integer DEFAULT 0 NOT NULL` in the baseline), the #29 entitlement-guard's checks, and **reads** — `AppContext.tsx:215` exposes it as `documentsUsed`, surfaced in the UI (see Finding A). It is always `0`.
 
-**Severity:** Medium — flagged pending investigation. Product-critical if confirmed: the Starter $12/doc and Business $10/doc overage rates and the included-abstraction caps (15 / 50) need a backing counter. If `documents_used` is never incremented, overage billing and quota enforcement have no data source. (Not a #29 regression — guarding an unwritten column breaks nothing; the #29 guard merely surfaced the gap.)
+**Investigation (2026-05-24): the original "enforcement has no data source" premise was wrong.** Quota *enforcement* is wired — it just never used `documents_used`. Both the hard gate and the customer banner compute from **live `COUNT(leases)`**:
+- Hard gate: `process_lease/index.ts:1051` `assertProcessingQuota()` (P1-03) blocks on `monthly_extractions` (leases with `uploaded_at` in trailing 30d + non-null `extracted_json`) and, for new leases, `active_leases` (`lifecycle_status='active' AND archived=false`). Rolling 30-day window ⇒ no calendar "monthly reset" needed either.
+- Soft poller: `_shared/monitoring/workspace_quotas.ts:55` `pollWorkspaceQuotas()` computes the same counts → writes `workspace_quota_snapshots`.
+- Banner: `QuotaWarningBanner.tsx:65` reads `workspace_quota_snapshots`, not the column.
 
-**Where to look:**
-- `supabase/functions/process_lease/index.ts` — the direct-upload lease creator and most likely intended increment point (per CLAUDE.md, lease records are created/updated here, not in `LeaseUploadModal.tsx`).
-- `supabase/functions/retry_lease/index.ts` and any extraction-completion path.
-- `src/components/.../QuotaWarningBanner.tsx` + tier constants in `src/config/pricing.ts` — confirm what the banner reads as "used" (it may compute from a `leases` count rather than `documents_used`).
-- Any `documents_used` read in `src/` — if the frontend reads it but nothing writes it, displayed usage is always 0.
+So caps ARE enforced. The audit nonetheless surfaced two real, narrower residuals:
 
-**Stub remediation:** Trace where a successful abstraction should increment the counter; determine whether quota/overage enforcement was intended at the `document_limit`/`documents_used` level or computed elsewhere (e.g., live `COUNT(leases)`); if a genuine gap is confirmed, file the implementation (increment on successful extraction, monthly reset, overage metering) as a downstream beat. Any increment/reset must run as service_role (or be wrapped in `DISABLE TRIGGER`) to satisfy the #29 entitlement guard.
+**Finding A — dead column drives a broken, always-zero usage meter (customer-facing, Medium).** `AppContext.tsx:215` reads `documents_used` → `documentsUsed`; `AccountSettings.tsx:952-960` renders it as a usage meter (`{documentsUsed} / {documentLimit}` + progress bar + 0.75/0.9 color thresholds). Because nothing writes the column, the meter always shows `0 / <limit>` — a customer at 14/15 abstractions sees "0 / 15". It is also the exact page the banner's "View plans / Upgrade" CTA deep-links to (`?tab=subscription`). Fix: repoint the meter at the live snapshot data the banner already consumes (`workspace_quota_snapshots`, metric `monthly_extractions`), or remove the meter. Routes through reviewers per CLAUDE.md (user-facing surface).
 
-**Decision:** Filed not fixed. Surfaced during the 2026-05-23 post-merge regression audit on the #29 fix (commits `66ac634` and `07eb2f7`) — pre-existing, NOT caused by either commit. Investigation-first: confirm the gap before scoping the fix beat.
+**Finding B — overage *billing* is unimplemented (product/revenue gap, needs a product call).** `overagePerDoc` ($12/$10) exists only as display config in `pricing.ts:40,67`. No code reports metered usage to Stripe; the gate **hard-blocks at the included cap** with `reason: 'quota_exceeded'` → upgrade prompt, rather than metering-and-charging per-doc above the cap. Possibly intentional — block-at-cap protects the 75% margin floor — so this is a revenue-opportunity decision, not a bug. Scope as its own downstream beat if meter-and-charge is desired.
+
+**Severity:** Low for the column itself (dead, harmless — quota enforcement does not depend on it). Medium for Finding A (misleading customer-facing meter, no money lost / usage blocked). Finding B is a product decision, not a defect.
+
+**Note for any future real counter:** the #29 guard now actively *blocks* non-`service_role` writes to `documents_used`, so any increment/reset must run as `service_role` (or under `DISABLE TRIGGER`). But given enforcement already works off live counts, a dedicated counter column may be unnecessary — prefer fixing the meter (Finding A) over reviving the column.
+
+**Decision:** Filed not fixed. Surfaced during the 2026-05-23 post-merge regression audit on the #29 fix (commits `66ac634`/`07eb2f7`); investigation completed 2026-05-24. Pre-existing, NOT caused by either commit. Findings A and B are independent follow-ups, neither blocking.
 
 ---
 
