@@ -2437,11 +2437,23 @@ serve(async (req) => {
       ? Math.round((new Date(extractedEnd).getTime() - new Date(extractedStart).getTime()) / (86400 * 30.4375 * 1000))
       : null;
 
+    // Lifecycle Transition Convention (CLAUDE.md): capture prior status
+    // before the UPDATE so we can emit a faithful from/to status_change
+    // row; set status_changed_at in the same UPDATE.
+    const { data: priorLeaseForLifecycle } = await supabaseAdmin
+      .from('leases')
+      .select('lifecycle_status')
+      .eq('id', leaseId)
+      .single();
+    const previousLifecycleStatus = (priorLeaseForLifecycle as { lifecycle_status?: string } | null)?.lifecycle_status ?? null;
+    const lifecycleChangedAt = new Date().toISOString();
+
     const { error: updateError } = await supabaseAdmin
       .from('leases')
       .update({
         status: 'Ready',
         lifecycle_status:       'executed',
+        status_changed_at:      lifecycleChangedAt,
         parent_lease_id:        parentLeaseId || null,
         landlord_name:          extractValue(leaseData.landlord_name),
         tenant_name:            extractValue(leaseData.tenant_name),
@@ -2463,11 +2475,26 @@ serve(async (req) => {
         square_footage:         extractValue(leaseData.square_footage),
         term_months:            termMonths,
         extracted_json:         leaseData,
-        processed_at:           new Date().toISOString(),
+        processed_at:           lifecycleChangedAt,
       })
       .eq('id', leaseId);
 
     if (updateError) throw new Error(`Failed to update lease: ${updateError.message}`);
+
+    const { error: statusLogError } = await supabaseAdmin.from('lease_activity_log').insert({
+      lease_id: leaseId,
+      user_id: user.id,
+      activity_type: 'status_change',
+      from_status: previousLifecycleStatus,
+      to_status: 'executed',
+      details: {
+        from: previousLifecycleStatus,
+        to: 'executed',
+        routing_path: 'extraction',
+        triggered_by: 'process_lease',
+      },
+    });
+    if (statusLogError) console.error('[process_lease] status_change log error:', statusLogError.message);
 
     // Recalculate financial projections using AI-extracted values so the
     // portfolio numbers stay accurate even when the request form was left blank.

@@ -972,7 +972,9 @@ So caps ARE enforced. The audit nonetheless surfaced two real, narrower residual
 
 ---
 
-### Item #33: `process_lease` extraction flips `lifecycle_status → executed` without `status_changed_at` / status_change log
+### Item #33: `process_lease` extraction flips `lifecycle_status → executed` without `status_changed_at` / status_change log — **RESOLVED 2026-05-24**
+
+**RESOLVED 2026-05-24** — The post-extraction UPDATE at `supabase/functions/process_lease/index.ts` now (1) reads the prior `lifecycle_status` from the lease via a single targeted select before the UPDATE, (2) sets `status_changed_at` on the same UPDATE (reused for `processed_at` so both reflect the same transition instant), and (3) emits a `status_change` row to `lease_activity_log` with top-level `from_status`/`to_status`, mirrored shape inside `details`, and `routing_path: 'extraction'`. Verified via mirror-parity + edge-function-config drift checks + vitest.
 
 **Symptom:** The new-upload completion UPDATE in `supabase/functions/process_lease/index.ts:2444` sets `lifecycle_status: 'executed'` but never bumps `status_changed_at` and never emits a `status_change` `lease_activity_log` row (it logs domain events like `executed_terms_extracted`, but not the lifecycle transition per convention).
 
