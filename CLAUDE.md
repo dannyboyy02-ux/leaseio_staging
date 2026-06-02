@@ -100,15 +100,15 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 
 **AI Extraction Pipeline:** `supabase/functions/process_lease/index.ts` (primary, two-pass), `supabase/functions/retry_lease/index.ts`
 
-**Lease Review & Confirmation:** `src/pages/app/LeaseReview.tsx` (primary workbench), `src/components/leases/{ExecutedTermsReview,LeaseReviewSections,NeedsReviewBanner,RentScheduleTable,VarianceReport,FailedLeaseBanner,ModelLockConfirmation,LeaseStatusBadge}.tsx`, `src/components/lifecycle/LifecycleStatusBadge.tsx`
+**Lease Review & Confirmation:** `src/pages/app/LeaseReview.tsx` (primary workbench), `src/components/leases/{ExecutedTermsReview,LeaseReviewSections,NeedsReviewBanner,RentScheduleTable,VarianceReport,FailedLeaseBanner,LeaseStatusBadge}.tsx`, `src/components/lifecycle/LifecycleStatusBadge.tsx`
 
 **Amendments:** `src/components/leases/{AmendmentChanges,AmendmentsList,UploadAmendmentDialog,UploadExecutedDocumentDialog}.tsx`
 
-**Approval Queue:** `src/pages/app/ApprovalQueue.tsx`, `src/components/dashboard/PendingApprovalsSection.tsx`
+**Approval Queue:** `src/pages/app/ApprovalQueue.tsx`
 
-**Dashboard:** `src/pages/Dashboard.tsx` + `src/components/dashboard/{FinancialSummary,OnboardingChecklist,PendingApprovalsSection,EscalationReviewPanel,CommitmentHistory,UpcomingEvents}.tsx`
+**Dashboard:** `src/pages/Dashboard.tsx` + `src/components/dashboard/{OnboardingChecklist,SummaryStrip,NeedsAction,LeasePipeline,UpcomingRisks,RecentActivity,PipelineByDepartment,IntakeTrend,UpcomingEvents,EscalationReviewPanel,PendingCounterSignatureCard}.tsx`
 
-**Portfolio:** `src/pages/app/Portfolio.tsx` (STUB — placeholder, needs build)
+**Portfolio:** `src/pages/app/Portfolio.tsx` + `src/lib/portfolioAnalytics.ts` (PV liability, asset/escalation mix, lease register, index-lease disclosure). **NOTE:** the page is built but NOT yet Business-tier gated despite the pricing model — see KNOWN_ISSUES #46.
 
 **Leases List:** `src/pages/Leases.tsx`, `src/components/leases/{EmptyLeaseState,DeleteLeaseDialog,LeaseExports}.tsx`
 
@@ -136,7 +136,6 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 - **Backdoor historical portfolio loader form** — toggle already exists in WorkspaceSettings.
 - **Free lease audit mode** — 5 docs, portfolio summary, upgrade CTA. Marketing-funnel surface, not a subscription tier.
 - **Amendment comparison intelligence in `process_lease`** — fetch parent lease terms, generate `_amendment_changes` array.
-- **Portfolio intelligence dashboard** — replace `Portfolio.tsx` stub with real analytics.
 - **AI operator** — GitHub Actions diff review, Vercel deploy webhook, nightly health check script.
 - **Phase 9 (firm layer foundation)** / **Phase 10 (firm UX)** — specs filed dormant; open only when explicitly invoked.
 

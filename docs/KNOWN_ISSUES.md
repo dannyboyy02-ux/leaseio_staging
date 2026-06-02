@@ -1120,7 +1120,9 @@ Verified via `pg_policy` query immediately post-apply: the only INSERT policy on
 
 ---
 
-### Item #43: CLAUDE.md File-to-Feature Map has drifted from the tree
+### Item #43: CLAUDE.md File-to-Feature Map has drifted from the tree — **RESOLVED 2026-06-02**
+
+**RESOLVED 2026-06-02** — Reconciled CLAUDE.md against the live tree: (a) **Lease Review** group now drops the deleted `ModelLockConfirmation.tsx`; (b) **Approval Queue** group now drops the orphaned `PendingApprovalsSection.tsx` (still flagged by #42); (c) **Dashboard** group now lists the 11 components Dashboard.tsx actually imports (`OnboardingChecklist, SummaryStrip, NeedsAction, LeasePipeline, UpcomingRisks, RecentActivity, PipelineByDepartment, IntakeTrend, UpcomingEvents, EscalationReviewPanel, PendingCounterSignatureCard`) instead of the prior 6 entries (3 of which were orphaned); (d) **Portfolio** group now reflects reality (the page is built — `Portfolio.tsx` + `src/lib/portfolioAnalytics.ts`, PV liability + asset/escalation mix + lease register + index-lease disclosure) with a forward-pointer to KNOWN_ISSUES #46 for the tier-gating gap that surfaced during this reconciliation; (e) **Active Priorities** drops the "Portfolio intelligence dashboard — replace `Portfolio.tsx` stub with real analytics" line (priority functionally satisfied; the tier-gating residual is filed as #46). Related-but-out-of-scope-for-this-pass: line 138 still lists "Amendment comparison intelligence in `process_lease`" as open even though `process_lease/index.ts:2416` already writes `_amendment_changes` — flagged for a future audit beat, not bundled here.
 
 **Symptom:** Multiple stale entries in CLAUDE.md's File-to-Feature Map: `Portfolio.tsx` is labeled "STUB — placeholder, needs build" (Active Priorities + File-Map) but is actually built (~332 lines, real `useQuery` + `computePortfolioMetrics`); `ModelLockConfirmation.tsx` is listed (Lease Review group) but has been deleted; the Dashboard group lists `FinancialSummary, PendingApprovalsSection, CommitmentHistory` (all orphaned per #42) while omitting the 8 components Dashboard.tsx actually imports (`SummaryStrip, NeedsAction, LeasePipeline, UpcomingRisks, RecentActivity, PipelineByDepartment, IntakeTrend, PendingCounterSignatureCard`). Related to already-filed #30 (`check-subscription`).
 
@@ -1164,6 +1166,24 @@ Verified via `pg_policy` query immediately post-apply: the only INSERT policy on
 
 ---
 
+### Item #46: `Portfolio.tsx` is not Business-tier gated despite Portfolio Intelligence being a Business-tier feature
+
+**Symptom:** The pricing model (CLAUDE.md Pricing table) classes "Portfolio Intelligence" as Business-tier only ("No" on Starter, "Yes" on Business). The implementation has no tier gate: the `/app/portfolio` route in `src/App.tsx` is wrapped only in `<ProtectedRoute>` (auth-only), the `AppSidebar.tsx` nav entry at line 60 omits `requiresBusiness: true` (so the lock icon at `:152` is never shown), and `Portfolio.tsx` itself does not call `canAccessFeature('business')`. Starter-tier workspaces can use the full Portfolio dashboard for free, undercutting the Business-tier positioning. Surfaced during the 2026-06-02 #43 File-Map reconciliation (the audit missed this because it focused on the "is the page built?" question, not the tier surface).
+
+**Severity:** Medium. Revenue-positioning gap, not a security or correctness bug. Concretely: a Starter customer on $249/mo gets one of the headline Business-tier features ($499/mo) at no extra charge. Whether the right fix is to gate the page or to relax the pricing table is a product decision.
+
+**Where to look:**
+- `src/App.tsx` line 269-274 (Portfolio route — no tier guard).
+- `src/components/layout/AppSidebar.tsx` line 60 (nav item missing `requiresBusiness: true`; line 152 is where the lock icon would render).
+- `src/pages/app/Portfolio.tsx` line 24+ (no `canAccessFeature('business')` check).
+- Reference exemplar: `src/components/ai/AiAssistant.tsx:33` and `src/pages/Reports.tsx:65` both correctly gate with `canAccessFeature('business')`.
+
+**Stub remediation:** Pick the model. If Portfolio remains Business-tier per CLAUDE.md: add `requiresBusiness: true` to the AppSidebar nav item (gets the lock icon for Starter), wrap the route in a tier-check (or render an upgrade prompt inside `Portfolio.tsx` when `canAccessFeature('business')` is false — matches the AI Assistant pattern), and confirm there's no backend RLS that already enforces it (there isn't — `leases` reads are workspace-scoped, not tier-scoped, so the gate must be UI-side). If Portfolio should be available to all tiers: drop "Portfolio Intelligence" from the Business-only row in CLAUDE.md pricing and update marketing copy accordingly.
+
+**Decision:** Filed not fixed — needs a product call (gate vs. relax). Surfaced during the 2026-06-02 CLAUDE.md File-Map reconciliation (closing of #43).
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -1172,7 +1192,8 @@ forensics + smoke (items 8-10), Phase 4 close-out audit (item 11),
 Phase 8 C1 (items 12-13), audit P2-01 (item 15), P1-10 baseline review
 (items 16-18), governance hardening follow-up review (items 19-28), post-apply smoke check (item 29),
 the #29 post-merge regression audit (items 30-31),
-and the 2026-05-24 full-codebase audit — security / dead-ends / data-integrity passes (items 32-45).
+the 2026-05-24 full-codebase audit — security / dead-ends / data-integrity passes (items 32-45),
+and the 2026-06-02 CLAUDE.md File-Map reconciliation pass (item 46).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
