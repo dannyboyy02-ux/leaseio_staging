@@ -170,6 +170,9 @@ export default function Reports() {
         <div className="grid gap-6 md:grid-cols-2">
           {reports
             .filter((r) => {
+              // KNOWN_ISSUES #44: hide unbuilt report cards (no href) instead
+              // of surfacing a "Coming soon" dead-end to paying users.
+              if (!r.href) return false;
               if (r.id === 'audit')        return canAccessReportsAuditLog(userRole);
               if (r.id === 'data-quality') return canAccessReportsDataQuality(userRole);
               if (r.requiresAdmin)         return isAdmin;

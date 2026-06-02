@@ -1132,7 +1132,9 @@ So caps ARE enforced. The audit nonetheless surfaced two real, narrower residual
 
 ---
 
-### Item #44: `Reports.tsx` renders user-reachable "Coming soon" report cards
+### Item #44: `Reports.tsx` renders user-reachable "Coming soon" report cards — **RESOLVED 2026-05-24**
+
+**RESOLVED 2026-05-24** — Added a `if (!r.href) return false;` predicate to the existing report-card filter chain in `src/pages/Reports.tsx`, so the four unbuilt cards (`portfolio`, `renewals`, `escalations`, `projections`) are no longer rendered. The legacy `report.href ? <Link/> : <span>Coming soon</span>` fallback is left in place as defense-in-depth (and as a clear signal to any future addition). When those reports ship and get an `href`, the filter will let them through automatically.
 
 **Symptom:** On the routed `/app/reports` page, 4 of 7 report cards (`portfolio`, `renewals`, `escalations`, `projections`) lack an `href` and render a visible "Coming soon" (`src/pages/Reports.tsx:198`). The three with hrefs route to real pages.
 
