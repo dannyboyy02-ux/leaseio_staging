@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Building2, ExternalLink, Landmark, Layers, PieChart, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Building2, ExternalLink, Landmark, Layers, Lock, PieChart, TrendingUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,11 +23,16 @@ function formatCurrency(amount: number): string {
 }
 
 export default function Portfolio() {
-  const { workspace } = useApp();
+  const { workspace, canAccessFeature } = useApp();
+  // KNOWN_ISSUES #46: Portfolio Intelligence is a Business-tier feature per the
+  // pricing model. Gate the page (matching the Reports / AI Assistant pattern)
+  // and skip the data fetch entirely for Starter workspaces. The AppSidebar nav
+  // item carries requiresBusiness:true so the route shows a lock for Starter.
+  const hasBusinessAccess = canAccessFeature('business');
 
   const { data, isLoading } = useQuery({
     queryKey: ['portfolio-page', workspace?.id],
-    enabled: !!workspace?.id,
+    enabled: !!workspace?.id && hasBusinessAccess,
     queryFn: async () => {
       const [{ data: leases, error }, { data: workspaceSettings, error: workspaceError }] = await Promise.all([
         supabase
@@ -108,6 +114,35 @@ export default function Portfolio() {
       };
     },
   });
+
+  if (!hasBusinessAccess) {
+    return (
+      <AppLayout>
+        <AppHeader
+          title="Portfolio"
+          subtitle="Live portfolio metrics, lease liability disclosure, and concentration views"
+        />
+        <div className="p-6">
+          <Card variant="ghost" className="border-2 border-dashed border-border">
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-6">
+                <Lock className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <Badge variant="business" className="mb-4">Business Plan</Badge>
+              <h3 className="text-lg font-semibold mb-2">Portfolio Intelligence is a Business-plan feature</h3>
+              <p className="text-sm text-muted-foreground max-w-md mb-6">
+                Upgrade to the Business plan to unlock portfolio-wide PV liability, asset and escalation
+                concentration, and the index-lease disclosure view.
+              </p>
+              <Button variant="accent" size="lg" asChild>
+                <Link to="/app/upgrade?feature=portfolio">Upgrade to Business</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
