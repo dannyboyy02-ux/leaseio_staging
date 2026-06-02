@@ -1032,7 +1032,9 @@ So caps ARE enforced. The audit nonetheless surfaced two real, narrower residual
 
 ---
 
-### Item #37: `profiles_insert_self` RLS policy uses `WITH CHECK (true)`, defeating the correct same-table policy
+### Item #37: `profiles_insert_self` RLS policy uses `WITH CHECK (true)`, defeating the correct same-table policy — **MIGRATION COMMITTED 2026-05-24 (pending live apply)**
+
+**MIGRATION COMMITTED 2026-05-24** — `supabase/migrations/20260524000000_drop_profiles_insert_self_policy.sql` is filed and committed: a single `DROP POLICY IF EXISTS "profiles_insert_self" ON public.profiles;` (idempotent). The correct `profiles_insert_own (WITH CHECK (id = auth.uid()))` policy is sufficient — profiles are auto-created at signup against the user's own `auth.uid()`, which the owning policy already permits. **Apply to live with `supabase db push` (or via `apply_migration`); the `npm run smoke:security` check will surface the live-state confirmation once secrets are wired.** Not yet RESOLVED until applied.
 
 **Symptom:** `public.profiles` has two permissive INSERT policies. The correct one, `profiles_insert_own` (`WITH CHECK (id = auth.uid())`, `supabase/migrations/20260516120000_baseline_schema.sql:4330`), is nullified because `profiles_insert_self` (`WITH CHECK (true)`, `:4334`) is OR'd in. An authenticated user could INSERT a profile row keyed to another real, not-yet-onboarded `auth.users` id, setting attacker-controlled `email`/`current_workspace_id`. Verified 2026-05-24: both policies present, not dropped by any later migration.
 

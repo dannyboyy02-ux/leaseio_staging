@@ -1,0 +1,24 @@
+-- ============================================================================
+-- Drop profiles_insert_self RLS policy  (KNOWN_ISSUES #37)
+-- ============================================================================
+--
+-- PROBLEM
+--   public.profiles had two permissive INSERT policies — PostgreSQL OR's
+--   permissive policies together, so the more permissive one wins:
+--     - profiles_insert_own:  WITH CHECK (id = auth.uid())   [correct]
+--     - profiles_insert_self: WITH CHECK (true)              [defeats the above]
+--   An authenticated user could INSERT a profile row keyed to another real,
+--   not-yet-onboarded auth.users id (bounded by the PK constraint and the
+--   auth.users FK, but otherwise unrestricted), setting attacker-controlled
+--   email / current_workspace_id ahead of that user's onboarding.
+--
+-- FIX
+--   Drop the permissive policy; keep only profiles_insert_own. No legitimate
+--   writer relies on profiles_insert_self — profiles are created at signup
+--   against the user's own auth.uid(), which profiles_insert_own already
+--   permits.
+--
+-- IDEMPOTENT: DROP POLICY IF EXISTS is naturally idempotent. Safe to replay.
+-- ============================================================================
+
+DROP POLICY IF EXISTS "profiles_insert_self" ON public.profiles;
