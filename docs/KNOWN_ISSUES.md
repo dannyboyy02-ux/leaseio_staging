@@ -954,7 +954,9 @@ So caps ARE enforced. The audit nonetheless surfaced two real, narrower residual
 
 ---
 
-### Item #32: `LeaseReview.tsx` post/approve actions bypass the canonical audit trail
+### Item #32: `LeaseReview.tsx` post/approve actions bypass the canonical audit trail — **RESOLVED 2026-05-24**
+
+**RESOLVED 2026-05-24** — `handlePostLease` now sets `status_changed_at` in the same UPDATE and emits a `status_change` row to `lease_activity_log` with top-level `from_status`/`to_status`, mirrored shape inside `details`, and `routing_path: 'legacy'`. `handleApproveLease` now writes a first-class `approval` activity row alongside the existing `extracted_json._approval` write (so attribution is no longer overwritable by re-extraction). Verified via vitest (443 tests passing) and TypeScript typecheck.
 
 **Symptom:** Two legacy direct-write actions on the lease-review workbench violate the Lifecycle Transition Convention. `handlePostLease` (`src/pages/app/LeaseReview.tsx:1373`) is the terminal "post to repository" action: it sets `lifecycle_status: 'active'` in the UPDATE but omits `status_changed_at`, and writes no `lease_activity_log` `status_change` row (only an inline `audit_log` JSON column on the lease). `handleApproveLease` (`src/pages/app/LeaseReview.tsx:1396`) persists approval only by spreading `_approval` into `extracted_json` — no activity-log row, and the sub-key is overwritable by the next extraction write.
 

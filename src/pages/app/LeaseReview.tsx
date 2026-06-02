@@ -1352,6 +1352,12 @@ export default function LeaseReview() {
 
     setPosting(true);
     try {
+      // Lifecycle Transition Convention (CLAUDE.md): capture prior status
+      // BEFORE the UPDATE, set status_changed_at in the same UPDATE, and emit
+      // a status_change row to lease_activity_log after success.
+      const previousLifecycleStatus = (lease.lifecycle_status as string | null) ?? null;
+      const lifecycleChangedAt = new Date().toISOString();
+
       const updateData: Record<string, any> = {
         landlord_name:          form.landlord_name          || null,
         tenant_name:            form.tenant_name            || null,
@@ -1371,6 +1377,7 @@ export default function LeaseReview() {
         escalation_clauses:     form.escalation_clauses     || null,
         termination_clauses:    form.termination_clauses    || null,
         lifecycle_status: 'active',
+        status_changed_at: lifecycleChangedAt,
         confirmed_sections: confirmedSections,
         audit_log: JSON.parse(JSON.stringify(auditLog)),
       };
@@ -1379,9 +1386,24 @@ export default function LeaseReview() {
         .from("leases")
         .update(updateData)
         .eq("id", lease.id);
-      
+
       if (error) throw error;
-      
+
+      const { error: logError } = await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user?.id ?? null,
+        activity_type: 'status_change',
+        from_status: previousLifecycleStatus,
+        to_status: 'active',
+        details: {
+          from: previousLifecycleStatus,
+          to: 'active',
+          routing_path: 'legacy',
+          triggered_by: 'lease_review_post',
+        },
+      });
+      if (logError) console.error('[handlePostLease] activity log error:', logError.message);
+
       toast.success("Lease posted successfully", { duration: 5000 });
       navigate('/app/leases');
     } catch (err) {
@@ -1444,15 +1466,30 @@ export default function LeaseReview() {
         .from("leases")
         .update(updateData)
         .eq("id", lease.id);
-      
+
       if (error) throw error;
-      
+
+      // Mirror the approval into the canonical audit log (previously only
+      // persisted inside extracted_json._approval, which is overwritable by
+      // re-extraction). Best-effort — the approve itself already succeeded.
+      const { error: logError } = await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user?.id ?? null,
+        activity_type: 'approval',
+        details: {
+          routing_path: 'legacy',
+          triggered_by: 'lease_review_approve',
+          approved_at: approvalMetadata.approved_at,
+        },
+      });
+      if (logError) console.error('[handleApproveLease] activity log error:', logError.message);
+
       // Update local state
       setLease((prev: any) => ({
         ...prev,
         extracted_json: updateData.extracted_json,
       }));
-      
+
       toast.success("Lease approved successfully");
     } catch (err) {
       console.error('Error approving lease:', err);
