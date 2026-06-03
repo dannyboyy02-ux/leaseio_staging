@@ -85,7 +85,7 @@ const buildExportData = (
 };
 
 // Download JSON file
-const downloadJSON = (
+export const downloadJSON = (
   lease: LeaseExportsProps['lease'],
   formValues: Record<string, string>,
   rentSchedule: RentScheduleEntry[]
@@ -105,7 +105,7 @@ const downloadJSON = (
 };
 
 // Convert to CSV and download
-const downloadCSV = (
+export const downloadCSV = (
   lease: LeaseExportsProps['lease'],
   formValues: Record<string, string>,
   rentSchedule: RentScheduleEntry[]

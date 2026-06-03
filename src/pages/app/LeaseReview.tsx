@@ -22,6 +22,9 @@ import {
   Unlock,
   Lock,
   Plus,
+  MoreHorizontal,
+  Archive,
+  Download,
 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -47,6 +50,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { type ImperativePanelHandle } from "react-resizable-panels";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -60,7 +70,7 @@ import { SECTION_CONFIG, findFieldLabel, type SectionKey } from "@/lib/leaseRevi
 import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRiskDialog";
 import { Tier2CorrectionDialog } from "@/components/leases/Tier2CorrectionDialog";
 import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
-import { LeaseExports } from "@/components/leases/LeaseExports";
+import { downloadJSON, downloadCSV } from "@/components/leases/LeaseExports";
 import { LeaseReviewStatusStrip } from "@/components/leases/LeaseReviewStatusStrip";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
@@ -181,6 +191,8 @@ export default function LeaseReview() {
   const navigate = useNavigate();
   const { user, userRole, userFunctionalRoles, workspace } = useApp();
   const [tier2CorrectionOpen, setTier2CorrectionOpen] = useState(false);
+  const [showAmendmentDialog, setShowAmendmentDialog] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const queryClient = useQueryClient();
   
   const [lease, setLease] = useState<any | null>(null);
@@ -2313,6 +2325,80 @@ export default function LeaseReview() {
     return <LockedLeaseDetail lease={lease} refetchLease={refetchLease} />;
   }
 
+  // Derive a single primary action for the header. This is the
+  // counterpart to the status strip: the strip names what's next; this
+  // button does it. Order = forward-progression priority.
+  type PrimaryAction = {
+    label: string;
+    icon: typeof CheckCircle;
+    onClick: () => void;
+    disabled?: boolean;
+    loading?: boolean;
+    variant?: 'default' | 'success';
+    tooltip?: string;
+  } | null;
+
+  const unreviewedLowConfCount = lowConfidenceFields.length - interactedLowConfFields.size;
+  const isUnlockedDraft = !lease.model_locked && activeChangeSet?.status === 'draft';
+  const canShowLock = !lease.model_locked && (lifecycleStatus === 'executed' || lifecycleStatus === 'active');
+
+  // Payload for inline Export JSON / CSV menu items. Mirrors what was
+  // previously passed to the old <LeaseExports/> button.
+  const exportLeasePayload = {
+    id: lease.id,
+    filename: lease.filename,
+    extracted_json: extractedJson,
+    landlord_name: lease.landlord_name,
+    tenant_name: lease.tenant_name,
+    lease_start: lease.lease_start,
+    lease_end: lease.lease_end,
+    base_rent_amount: lease.base_rent_amount,
+    current_monthly_rent: lease.current_monthly_rent,
+    status: lease.status,
+    lifecycle_status: lease.lifecycle_status,
+  };
+
+  const primaryAction: PrimaryAction = (() => {
+    if (isProcessing) return null;
+    if (isUnlockedDraft) return null; // handled by Cancel + Save Changes inline
+    if (unreviewedLowConfCount > 0) {
+      return {
+        label: `Review ${unreviewedLowConfCount} flagged field${unreviewedLowConfCount === 1 ? '' : 's'}`,
+        icon: AlertTriangle,
+        onClick: handleJumpToFirstFlagged,
+      };
+    }
+    if (!isApproved && !isLocked) {
+      return {
+        label: 'Approve lease',
+        icon: CheckCircle,
+        onClick: handleApproveLease,
+        disabled: approving || !canApprove,
+        loading: approving,
+        variant: 'success',
+        tooltip: !canApprove ? 'Mark all required sections reviewed first' : undefined,
+      };
+    }
+    if (canShowLock) {
+      return {
+        label: 'Lock lease',
+        icon: Lock,
+        onClick: () => setLockConfirmDialogOpen(true),
+        loading: submittingChanges,
+        variant: 'success',
+      };
+    }
+    if (isApproved && !lease.model_locked) {
+      return {
+        label: 'Reopen',
+        icon: RotateCcw,
+        onClick: handleReopenLease,
+        loading: reopening,
+      };
+    }
+    return null;
+  })();
+
   return (
     <AppLayout>
       {/* Phase 6 — submitter notification. Mounts at the top level so the
@@ -2348,130 +2434,95 @@ export default function LeaseReview() {
             </div>
           }
           actions={
-            <div className="flex items-center gap-2">
-              {/* Save Draft / Cancel — only when there's an open draft change set */}
-              {!lease.model_locked && activeChangeSet?.status === 'draft' && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => toast.success('Draft saved — changes are staged automatically as you type')}
-                  >
-                    Save Draft
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                    onClick={() => setCancelChangeSetDialogOpen(true)}
-                    disabled={cancelingChangeSet}
-                  >
-                    {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-                    Cancel
-                  </Button>
-                </>
-              )}
-              {/* Lock — initial activation OR re-lock with changes */}
-              {!lease.model_locked && (lifecycleStatus === 'executed' || lifecycleStatus === 'active') && (
+            isUnlockedDraft ? (
+              /* Unlocked-for-editing draft: focused set — save, cancel, archive. */
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={handleSync} disabled={saving}>
+                  {saving ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Save size={14} className="mr-1.5" />}
+                  Save changes
+                </Button>
                 <Button
                   size="sm"
-                  className="bg-success hover:bg-success/90 text-white"
-                  onClick={() => setLockConfirmDialogOpen(true)}
-                  disabled={submittingChanges}
-                >
-                  {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
-                  Lock
-                </Button>
-              )}
-              {/* Archive — always visible (locked, unlocked-for-editing, or
-                  active). Mirrors the LockedHeader where Archive sits next
-                  to Unlock at the far-right of the toolbar. */}
-              <ArchiveButton
-                leaseId={lease.id}
-                isArchived={!!lease.archived}
-                onChange={refetchLease}
-              />
-              {/* Other always-on toolbar items — hidden while unlocked for
-                  editing so the three edit buttons can take focus. */}
-              {!(!lease.model_locked && activeChangeSet?.status === 'draft') && (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
-                    Approval Queue
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                  {/* Upload Amendment button - only for master leases */}
-                  {isMasterLease && !isProcessing && (
-                    <UploadAmendmentDialog
-                      parentLeaseId={lease.id}
-                      parentFilename={lease.filename}
-                      onSuccess={() => setAmendmentsRefresh(prev => prev + 1)}
-                    />
-                  )}
-                  <LeaseExports
-                    lease={{
-                      id: lease.id,
-                      filename: lease.filename,
-                      extracted_json: extractedJson,
-                      landlord_name: lease.landlord_name,
-                      tenant_name: lease.tenant_name,
-                      lease_start: lease.lease_start,
-                      lease_end: lease.lease_end,
-                      base_rent_amount: lease.base_rent_amount,
-                      current_monthly_rent: lease.current_monthly_rent,
-                      status: lease.status,
-                      lifecycle_status: lease.lifecycle_status,
-                    }}
-                    formValues={form}
-                    rentSchedule={rentSchedule}
-                  />
-                </>
-              )}
-              {isPendingApproval && (
-                <NudgeApproverButton 
-                  leaseId={lease.id}
-                  lastNudgedAt={lease.last_nudged_at}
-                />
-              )}
-              {/* Reopen button - only shown when approved */}
-              {isApproved && (
-                <Button 
-                  onClick={handleReopenLease} 
-                  disabled={reopening} 
                   variant="outline"
-                  className="text-amber-600 border-amber-400 hover:bg-amber-50"
+                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                  onClick={() => setCancelChangeSetDialogOpen(true)}
+                  disabled={cancelingChangeSet}
                 >
-                  {reopening ? (
-                    <Loader2 className="animate-spin mr-2" size={16} />
-                  ) : (
-                    <FileText className="mr-2" size={16} />
-                  )}
-                  Reopen
+                  {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
+                  Discard
                 </Button>
-              )}
-              {/* Save Draft - only when not locked */}
-              {!isLocked && (
-                <Button onClick={handleSync} disabled={saving} variant="outline">
-                  {saving ? <Loader2 className="animate-spin mr-2" size={16} /> : <Save className="mr-2" size={16} />}
-                  Save Draft
-                </Button>
-              )}
-              {/* Approve Lease - only when not locked and not approved */}
-              {!isLocked && !isApproved && (
-                <Button 
-                  onClick={handleApproveLease} 
-                  disabled={approving || !canApprove}
-                  className="bg-green-600 hover:bg-green-700"
-                  title={!canApprove ? "Mark all required fields (Parties & Dates sections) as reviewed first" : "Approve this lease"}
-                >
-                  {approving ? (
-                    <Loader2 className="animate-spin mr-2" size={16} />
-                  ) : (
-                    <CheckCircle className="mr-2" size={16} />
-                  )}
-                  Approve Lease
-                </Button>
-              )}
-            </div>
+                <ArchiveButton leaseId={lease.id} isArchived={!!lease.archived} onChange={refetchLease} />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {/* Primary action — state-aware, visually dominant */}
+                {primaryAction && (
+                  <Button
+                    onClick={primaryAction.onClick}
+                    disabled={primaryAction.disabled || primaryAction.loading}
+                    className={primaryAction.variant === 'success' ? 'bg-green-600 hover:bg-green-700' : ''}
+                    title={primaryAction.tooltip}
+                  >
+                    {primaryAction.loading ? (
+                      <Loader2 className="animate-spin mr-2" size={16} />
+                    ) : (
+                      <primaryAction.icon className="mr-2" size={16} />
+                    )}
+                    {primaryAction.label}
+                  </Button>
+                )}
+
+                {/* State-specific secondary — nudge when pending */}
+                {isPendingApproval && (
+                  <NudgeApproverButton leaseId={lease.id} lastNudgedAt={lease.last_nudged_at} />
+                )}
+
+                {/* More menu — every other action lives here. Page should
+                    pull (primary), not present (toolbar of 7). */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" aria-label="More actions">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {!isLocked && (
+                      <DropdownMenuItem onClick={handleSync} disabled={saving}>
+                        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                        Save draft
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => navigate('/app/approvals')}>
+                      <ClipboardCheck className="h-4 w-4 mr-2" />
+                      Approval queue
+                    </DropdownMenuItem>
+                    {isMasterLease && !isProcessing && (
+                      <DropdownMenuItem onClick={() => setShowAmendmentDialog(true)}>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload amendment
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => downloadJSON(exportLeasePayload, form, rentSchedule)}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Export JSON
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => downloadCSV(exportLeasePayload, form, rentSchedule)}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Export CSV
+                    </DropdownMenuItem>
+                    {(userRole === 'admin' || userRole === 'owner') && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
+                          <Archive className="h-4 w-4 mr-2" />
+                          {lease.archived ? 'Restore from archive' : 'Archive'}
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )
           }
         />
 
@@ -3183,6 +3234,27 @@ export default function LeaseReview() {
       {/* Unified Lock Confirmation Dialog — adapts copy by context.
           (a) Re-lock with staged edits: submits change set for approval + re-locks.
           (b) Initial activation: lifecycle → active, model_locked → true. */}
+
+      {/* Controlled dialogs triggered from the More menu. Mount once at
+          the page level so the menu items can open them without
+          re-rendering the action bar. */}
+      {isMasterLease && (
+        <UploadAmendmentDialog
+          parentLeaseId={lease.id}
+          parentFilename={lease.filename}
+          onSuccess={() => setAmendmentsRefresh(prev => prev + 1)}
+          open={showAmendmentDialog}
+          onOpenChange={setShowAmendmentDialog}
+        />
+      )}
+      <ArchiveButton
+        leaseId={lease.id}
+        isArchived={!!lease.archived}
+        onChange={refetchLease}
+        open={showArchiveDialog}
+        onOpenChange={setShowArchiveDialog}
+      />
+
       <Dialog open={lockConfirmDialogOpen} onOpenChange={setLockConfirmDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           {(() => {

@@ -25,6 +25,10 @@ interface Props {
   onChange?: () => void;
   size?: 'sm' | 'default';
   variant?: 'outline' | 'ghost';
+  /** Controlled mode — when both provided, the component renders only the
+   * confirm dialog and the caller controls open state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -35,11 +39,22 @@ interface Props {
  * the maxArchivedLeases cap. The locked-lease trigger has a carve-out for
  * archived/archived_at/archived_by, so this works for locked leases too.
  */
-export function ArchiveButton({ leaseId, isArchived, onChange, size = 'sm', variant = 'outline' }: Props) {
+export function ArchiveButton({
+  leaseId,
+  isArchived,
+  onChange,
+  size = 'sm',
+  variant = 'outline',
+  open: controlledOpen,
+  onOpenChange,
+}: Props) {
   const { t } = useAppTranslation();
   const { userRole, refreshProfile } = useApp();
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined && onOpenChange !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? onOpenChange : setInternalOpen;
   const [busy, setBusy] = useState(false);
 
   const isAdmin = userRole === 'admin' || userRole === 'owner';
@@ -75,12 +90,14 @@ export function ArchiveButton({ leaseId, isArchived, onChange, size = 'sm', vari
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
-        <Button variant={variant} size={size}>
-          <Icon className="h-3.5 w-3.5 mr-1.5" />
-          {isArchived ? t('archive.unarchive') : t('archive.archive')}
-        </Button>
-      </AlertDialogTrigger>
+      {!isControlled && (
+        <AlertDialogTrigger asChild>
+          <Button variant={variant} size={size}>
+            <Icon className="h-3.5 w-3.5 mr-1.5" />
+            {isArchived ? t('archive.unarchive') : t('archive.archive')}
+          </Button>
+        </AlertDialogTrigger>
+      )}
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>

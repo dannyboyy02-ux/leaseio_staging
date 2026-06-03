@@ -21,14 +21,23 @@ interface UploadAmendmentDialogProps {
   parentLeaseId: string;
   parentFilename: string;
   onSuccess?: (leaseId: string) => void;
+  /** Controlled mode — when both provided, the component renders only the
+   * dialog content and the caller controls open state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function UploadAmendmentDialog({
   parentLeaseId,
   parentFilename,
   onSuccess,
+  open: controlledOpen,
+  onOpenChange,
 }: UploadAmendmentDialogProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined && onOpenChange !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? onOpenChange : setInternalOpen;
   const [file, setFile] = useState<File | null>(null);
   const [approverEmail, setApproverEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -107,12 +116,14 @@ export function UploadAmendmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <FileEdit size={14} className="mr-1" />
-          Upload Amendment
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm">
+            <FileEdit size={14} className="mr-1" />
+            Upload Amendment
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Upload Amendment</DialogTitle>
