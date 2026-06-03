@@ -218,9 +218,8 @@ export function SectionCard({
         {!isModelLocked && (
           isConfirmed ? (
             <Button
-              variant="outline"
               size="sm"
-              className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800"
+              className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
               onClick={() => onConfirmSection(sectionKey)}
               title="Reviewed — click to unmark"
             >

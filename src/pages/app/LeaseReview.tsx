@@ -1239,11 +1239,27 @@ export default function LeaseReview() {
   );
 
   // Bulk: mark all required sections reviewed in one click. Skips any
-  // already-confirmed key (toggle semantics preserved).
+  // already-confirmed key (toggle semantics preserved). Toasts the
+  // sections that were newly added so the user sees the result of the
+  // click and knows where to go to unmark.
   const handleConfirmAllRequired = useCallback(async () => {
-    const merged = Array.from(new Set([...confirmedSections, ...requiredSectionKeys]));
-    if (merged.length === confirmedSections.length) return;
+    const newlyAdded = requiredSectionKeys.filter((k) => !confirmedSections.includes(k));
+    if (newlyAdded.length === 0) return;
+    const merged = [...confirmedSections, ...newlyAdded];
     setConfirmedSections(merged);
+    const newlyAddedTitles = newlyAdded.map((k) => SECTION_CONFIG[k].title);
+    const formatter = (() => {
+      const LF = (Intl as unknown as { ListFormat?: new (locale: string, opts: { style: string; type: string }) => { format(items: string[]): string } }).ListFormat;
+      if (LF) {
+        try {
+          return new LF('en', { style: 'long', type: 'conjunction' }).format(newlyAddedTitles);
+        } catch {
+          /* fall through to join */
+        }
+      }
+      return newlyAddedTitles.join(', ');
+    })();
+    toast.success(`Marked ${formatter} reviewed`);
     if (lease?.id) {
       await supabase
         .from('leases')

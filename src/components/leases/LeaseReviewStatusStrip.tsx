@@ -13,6 +13,7 @@
 import { AlertTriangle, CheckCircle2, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Props {
   isProcessing: boolean;
@@ -40,7 +41,25 @@ interface DerivedState {
   cta?: { label: string; onClick: () => void };
 }
 
-function deriveState(props: Props): DerivedState {
+// Format a list of section titles using the platform's i18n list formatter
+// so 1/2/3+ items all read naturally in both English ("Parties and Dates",
+// "Parties, Dates, and Rent") and Spanish ("Partes y Fechas", "Partes,
+// Fechas y Renta"). Falls back to a comma join if Intl.ListFormat is
+// missing.
+function formatList(items: string[], language: 'en' | 'es'): string {
+  if (items.length === 0) return '';
+  const LF = (Intl as unknown as { ListFormat?: new (locale: string, opts: { style: string; type: string }) => { format(items: string[]): string } }).ListFormat;
+  if (LF) {
+    try {
+      return new LF(language === 'es' ? 'es' : 'en', { style: 'long', type: 'conjunction' }).format(items);
+    } catch {
+      /* fall through to join */
+    }
+  }
+  return items.join(', ');
+}
+
+function deriveState(props: Props, t: (key: string, opts?: Record<string, unknown>) => string, language: 'en' | 'es'): DerivedState {
   const {
     isProcessing,
     modelLocked,
@@ -57,30 +76,30 @@ function deriveState(props: Props): DerivedState {
   if (isProcessing) {
     return {
       tone: 'info',
-      label: 'Extracting',
-      detail: 'Reading the document. Fields will populate when extraction completes.',
+      label: t('strip.extracting_label'),
+      detail: t('strip.extracting_detail'),
     };
   }
 
   if (unreviewedLowConfCount > 0) {
     return {
       tone: 'attention',
-      label: `${unreviewedLowConfCount} fields need attention`,
-      detail: 'AI is unsure about these — verify them before approving.',
-      cta: { label: 'Review now', onClick: onReview },
+      label: t('strip.flagged_label', { count: unreviewedLowConfCount }),
+      detail: t('strip.flagged_detail'),
+      cta: { label: t('strip.review_cta'), onClick: onReview },
     };
   }
 
   if (!canApprove) {
     const sectionsList = requiredSectionTitles && requiredSectionTitles.length > 0
-      ? requiredSectionTitles.join(' and ')
-      : 'required sections';
+      ? formatList(requiredSectionTitles, language)
+      : t('strip.required_sections_fallback');
     return {
       tone: 'info',
-      label: 'Confirm required sections',
-      detail: `${sectionsList} must be marked reviewed to enable approval.`,
+      label: t('strip.confirm_required_label'),
+      detail: t('strip.confirm_required_detail', { sections: sectionsList }),
       cta: onConfirmAllRequired
-        ? { label: 'Mark required reviewed', onClick: onConfirmAllRequired }
+        ? { label: t('strip.mark_required_cta'), onClick: onConfirmAllRequired }
         : undefined,
     };
   }
@@ -88,33 +107,33 @@ function deriveState(props: Props): DerivedState {
   if (!isApproved) {
     return {
       tone: 'ready',
-      label: 'Ready to approve',
+      label: t('strip.ready_to_approve_label'),
       detail: lowConfidenceCount > 0
-        ? 'All flagged fields reviewed. Approve to advance the lease.'
-        : 'All required fields verified. Approve to advance the lease.',
+        ? t('strip.ready_to_approve_detail_after_flagged')
+        : t('strip.ready_to_approve_detail'),
     };
   }
 
   if (isApproved && !modelLocked) {
     return {
       tone: 'ready',
-      label: 'Ready to lock',
-      detail: 'Approved. Lock the model to finalize the lease record.',
+      label: t('strip.ready_to_lock_label'),
+      detail: t('strip.ready_to_lock_detail'),
     };
   }
 
   if (modelLocked && isPendingApproval) {
     return {
       tone: 'info',
-      label: 'Awaiting approval',
-      detail: 'Lease is locked and routed to approvers.',
+      label: t('strip.awaiting_approval_label'),
+      detail: t('strip.awaiting_approval_detail'),
     };
   }
 
   return {
     tone: 'success',
-    label: 'Approved & locked',
-    detail: 'Lease record is finalized.',
+    label: t('strip.final_label'),
+    detail: t('strip.final_detail'),
   };
 }
 
@@ -142,7 +161,8 @@ const TONE_STYLES: Record<Tone, { container: string; badge: string; icon: typeof
 };
 
 export function LeaseReviewStatusStrip(props: Props) {
-  const state = deriveState(props);
+  const { t, language } = useLanguage();
+  const state = deriveState(props, (key, opts) => String(t(`lease_review.${key}`, opts as any)), language);
 
   // Terminal "Approved & locked" state has no decision for the user —
   // the lifecycle badge in the title carries the same signal. Suppress

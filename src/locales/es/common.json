@@ -1,4 +1,27 @@
 {
+  "lease_review": {
+    "strip": {
+      "extracting_label": "Extrayendo",
+      "extracting_detail": "Leyendo el documento. Los campos se completarán cuando finalice la extracción.",
+      "flagged_label": "{{count}} campos necesitan atención",
+      "flagged_detail": "La IA no está segura — verifíquelos antes de aprobar.",
+      "review_cta": "Revisar ahora",
+      "confirm_required_label": "Confirmar las secciones requeridas",
+      "confirm_required_detail": "{{sections}} deben marcarse como revisadas para habilitar la aprobación.",
+      "required_sections_fallback": "Las secciones requeridas",
+      "mark_required_cta": "Marcar requeridas",
+      "ready_to_approve_label": "Listo para aprobar",
+      "ready_to_approve_detail": "Todos los campos requeridos están verificados. Apruebe para avanzar el arrendamiento.",
+      "ready_to_approve_detail_after_flagged": "Todos los campos señalados están revisados. Apruebe para avanzar el arrendamiento.",
+      "ready_to_lock_label": "Listo para bloquear",
+      "ready_to_lock_detail": "Aprobado. Bloquee el modelo para finalizar el registro del arrendamiento.",
+      "awaiting_approval_label": "Esperando aprobación",
+      "awaiting_approval_detail": "El arrendamiento está bloqueado y enviado a los aprobadores.",
+      "final_label": "Aprobado y bloqueado",
+      "final_detail": "El registro del arrendamiento está finalizado.",
+      "marked_reviewed_toast": "Se marcaron {{sections}} como revisadas."
+    }
+  },
   "nav": {
     "dashboard": "Panel",
     "leases": "Arrendamientos",
