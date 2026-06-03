@@ -145,6 +145,9 @@ verify_jwt = true
 [functions.generate-portfolio-report]
 verify_jwt = true
 
+[functions.generate-workspace-asc842-report]
+verify_jwt = true
+
 [functions.finalize-report-pdf]
 verify_jwt = true
 

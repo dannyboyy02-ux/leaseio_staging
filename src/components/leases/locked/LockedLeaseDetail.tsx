@@ -38,7 +38,6 @@ import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/R
 import { AmendmentsList } from '@/components/leases/AmendmentsList';
 import { SummaryShareControls } from '@/components/summary/SummaryShareControls';
 import { Asc842InputsTab } from '@/components/leases/Asc842InputsTab';
-import { GenerateDisclosureReportButton } from '@/components/reports/GenerateDisclosureReportButton';
 import { LeaseDiscountRateCard } from '@/components/leases/LeaseDiscountRateCard';
 
 interface PendingUnlockRequest {
@@ -674,12 +673,6 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
             </TabsContent>
 
             <TabsContent value="documents" className="space-y-4 mt-0">
-              <SectionCard title="ASC 842 Disclosure Report">
-                <GenerateDisclosureReportButton
-                  leaseId={lease.id}
-                  isModelLocked={!!lease.model_locked}
-                />
-              </SectionCard>
               <SectionCard title={t('locked_lease.documents.section_title')}>
                 <AmendmentsList parentLeaseId={lease.id} />
               </SectionCard>
