@@ -1214,6 +1214,20 @@ Verified via `pg_policy` query immediately post-apply: the only INSERT policy on
 
 ---
 
+### Item #49: `generate-lease-insights` deployed as a 410-Gone stub with no repo source
+
+**Symptom:** The `generate-lease-insights` slug still appears in the Supabase Edge Functions list, but the repo no longer contains a `supabase/functions/generate-lease-insights/` directory or a `[functions.generate-lease-insights]` config.toml stanza.
+
+**Severity:** Low — purely cosmetic. The Supabase MCP doesn't expose a delete tool, so on 2026-06-03 the function was redeployed (version 18) with a stub body that returns HTTP 410 + `{"ok": false, "reason": "function_retired"}` for every request. No Anthropic API calls, no Sonnet code, no surfaces with stale behavior. The repo-side CI guard (`check:edge-function-config`) only checks `supabase/functions/*` ↔ `config.toml` parity and is intentionally unaware of live deployments, so the repo stays green.
+
+**Where to look:** Supabase dashboard → Edge Functions → `generate-lease-insights`. Click delete when convenient.
+
+**Stub remediation:** Delete the function from the Supabase dashboard. No code change required.
+
+**Decision:** Filed for visibility. The stub is the durable safe state; deletion is a one-click cleanup whenever an operator is in the dashboard.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -1224,7 +1238,8 @@ Phase 8 C1 (items 12-13), audit P2-01 (item 15), P1-10 baseline review
 the #29 post-merge regression audit (items 30-31),
 the 2026-05-24 full-codebase audit — security / dead-ends / data-integrity passes (items 32-45),
 the 2026-06-02 CLAUDE.md File-Map reconciliation pass (item 46),
-and the 2026-06-03 lease-detail cosmetics pass (items 47-48).
+the 2026-06-03 lease-detail cosmetics pass (items 47-48),
+and the 2026-06-03 zombie-edge-function neutralization (item 49).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
