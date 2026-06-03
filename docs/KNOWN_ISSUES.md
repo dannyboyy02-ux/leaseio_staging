@@ -1188,6 +1188,32 @@ Verified via `pg_policy` query immediately post-apply: the only INSERT policy on
 
 ---
 
+### Item #47: Shape helpers duplicated between `generate-lease-report` and `generate-workspace-asc842-report`
+
+**Symptom:** The new `supabase/functions/generate-workspace-asc842-report/index.ts` duplicates ~150 lines of "shape" helpers (`asNumber`, `asString`, `pickClassification`, `shapeRentSchedule`, `shapeCitations`, `shapeEscalation`, `shapeRenewals`, `shapeTermination`, `shapeAuditEntries`, `shapeAsc842Inputs`) from `supabase/functions/generate-lease-report/index.ts`. Two callers, same code.
+
+**Severity:** Low. Maintenance burden — any shape change must be applied in both files. Was kept duplicated in 2026-06-03 because refactoring the working per-lease function in the same pass would have risked the disclosure flow.
+
+**Where to look:** `supabase/functions/_shared/` is the proper home. Extract to `_shared/lease_report_shapes.ts` and update both functions to import.
+
+**Stub remediation:** Move the helpers to `_shared/lease_report_shapes.ts`. Replace local definitions in both edge functions with imports. Verify both functions still produce identical output (snapshot the JSON sections before/after).
+
+**Decision:** Filed not fixed. Surfaced during the 2026-06-03 workspace ASC 842 report build.
+
+---
+
+### Item #48: Lease detail page no longer surfaces activity timeline inline
+
+**Symptom:** Per the 2026-06-03 lease-detail cleanup, the `ActivityTimeline` component is no longer rendered inside `LeaseReview.tsx` (it was rendered twice — main view + Documents tab — both removed). The audit log lives at `/app/reports/audit-log` now, with a deep link from the locked-lease header ("Audit trail" button).
+
+**Severity:** Note, not a bug. Filed so a future contributor doesn't add it back assuming it was a regression. The activity timeline is the same data, just centralized.
+
+**Where to look:** `src/components/leases/locked/LockedHeader.tsx` for the deep link; `src/pages/app/AuditLog.tsx` for the destination page; `src/components/lifecycle/ActivityTimeline.tsx` is still imported in non-lease contexts (admin operations / Phase 7 exceptions surfaces) — verify those callers remain valid.
+
+**Decision:** Filed for context. No action needed.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -1197,7 +1223,8 @@ Phase 8 C1 (items 12-13), audit P2-01 (item 15), P1-10 baseline review
 (items 16-18), governance hardening follow-up review (items 19-28), post-apply smoke check (item 29),
 the #29 post-merge regression audit (items 30-31),
 the 2026-05-24 full-codebase audit — security / dead-ends / data-integrity passes (items 32-45),
-and the 2026-06-02 CLAUDE.md File-Map reconciliation pass (item 46).
+the 2026-06-02 CLAUDE.md File-Map reconciliation pass (item 46),
+and the 2026-06-03 lease-detail cosmetics pass (items 47-48).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
