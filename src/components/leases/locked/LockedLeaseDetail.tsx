@@ -35,6 +35,7 @@ import { ArchiveButton } from '@/components/leases/ArchiveButton';
 
 import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/RentScheduleTable';
 import { AmendmentsList } from '@/components/leases/AmendmentsList';
+import { LeaseDocumentsTab } from '@/components/leases/LeaseDocumentsTab';
 import { SummaryShareControls } from '@/components/summary/SummaryShareControls';
 import { Asc842InputsTab } from '@/components/leases/Asc842InputsTab';
 import { LeaseDiscountRateCard } from '@/components/leases/LeaseDiscountRateCard';
@@ -670,6 +671,14 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
             </TabsContent>
 
             <TabsContent value="documents" className="space-y-4 mt-0">
+              <LeaseDocumentsTab
+                leaseId={lease.id}
+                filename={lease.filename ?? null}
+                storagePath={lease.storage_path ?? null}
+                executedFilename={lease.executed_filename ?? null}
+                executedStoragePath={lease.executed_storage_path ?? null}
+                isLocked={!!lease.model_locked}
+              />
               <SectionCard title={t('locked_lease.documents.section_title')}>
                 <AmendmentsList parentLeaseId={lease.id} />
               </SectionCard>
