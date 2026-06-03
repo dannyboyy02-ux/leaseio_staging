@@ -733,6 +733,7 @@
     "unlock_pending": "Solicitud de desbloqueo pendiente de aprobación",
     "admin_unlock": "Desbloquear",
     "approve_and_unlock": "Aprobar y desbloquear",
+    "view_audit_trail": "Historial de auditoría",
     "deny_unlock": "Rechazar",
     "unlock_requested_title": "Desbloqueo solicitado",
     "unlock_requested_reason": "Motivo: {{reason}}",
@@ -752,8 +753,7 @@
       "state": "Estado / Provincia",
       "zip": "Código postal",
       "asset_type": "Tipo de activo",
-      "requesting_department": "Departamento solicitante",
-      "intake_source": "Origen de ingreso"
+      "requesting_department": "Departamento solicitante"
     },
     "timing": {
       "section_title": "Vigencia del arrendamiento",

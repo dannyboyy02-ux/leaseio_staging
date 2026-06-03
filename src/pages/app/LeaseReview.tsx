@@ -66,7 +66,6 @@ import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/R
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
 import { AmendmentsList } from "@/components/leases/AmendmentsList";
 import { AmendmentChanges } from "@/components/leases/AmendmentChanges";
-import { ActivityTimeline } from "@/components/lifecycle/ActivityTimeline";
 import { PdfViewer } from "@/components/leases/PdfViewer";
 import { LifecycleStatusBadge } from "@/components/lifecycle/LifecycleStatusBadge";
 import { SummaryShareControls } from '@/components/summary/SummaryShareControls';
@@ -2198,13 +2197,6 @@ export default function LeaseReview() {
               lifecycleStatus={lease.lifecycle_status || ''}
             />
           )}
-
-          <Card>
-            <CardHeader><CardTitle>Activity Timeline</CardTitle></CardHeader>
-            <CardContent>
-              <ActivityTimeline leaseId={lease.id} />
-            </CardContent>
-          </Card>
         </div>
 
         {/* Phase 2 — Resubmit Dialog */}
@@ -3060,14 +3052,6 @@ export default function LeaseReview() {
                             refreshTrigger={amendmentsRefresh}
                           />
                         )}
-                        <Card className="shadow-none border overflow-hidden">
-                          <CardHeader className="bg-muted/30 border-b py-3">
-                            <CardTitle className="text-sm font-bold">Activity Timeline</CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-4">
-                            <ActivityTimeline leaseId={lease.id} />
-                          </CardContent>
-                        </Card>
                       </TabsContent>
 
                     </div>

@@ -1,5 +1,5 @@
-import { ChevronLeft, Lock, RotateCcw, Loader2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ChevronLeft, Lock, RotateCcw, Loader2, History } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { LifecycleStatusBadge } from '@/components/lifecycle/LifecycleStatusBadge';
@@ -99,6 +99,14 @@ export function LockedHeader({
               >
                 <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
                 {pendingUnlockRequest ? t('locked_lease.approve_and_unlock') : t('locked_lease.admin_unlock')}
+              </Button>
+            )}
+            {leaseId && (
+              <Button variant="ghost" size="sm" asChild>
+                <Link to={`/app/reports/audit-log?leaseId=${leaseId}`}>
+                  <History className="h-3.5 w-3.5 mr-1.5" />
+                  {t('locked_lease.view_audit_trail')}
+                </Link>
               </Button>
             )}
             {leaseId && (

@@ -403,7 +403,6 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
       { label: t('locked_lease.property.zip'), value: zip, aiExtracted: zipFromAi },
       { label: t('locked_lease.property.asset_type'), value: lease.asset_type },
       { label: t('locked_lease.property.requesting_department'), value: lease.requesting_department },
-      { label: t('locked_lease.property.intake_source'), value: lease.intake_source },
     ];
   }, [lease, extracted, t]);
 

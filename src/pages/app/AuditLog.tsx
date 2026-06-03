@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { 
-  Calendar, 
-  Filter, 
-  Download, 
-  ChevronLeft, 
+import {
+  Calendar,
+  Filter,
+  Download,
+  ChevronLeft,
   ChevronRight,
   ArrowRight,
-  FileText
+  FileText,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -33,56 +33,112 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { useApp } from "@/contexts/AppContext";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
 
-interface StateTransition {
+interface ActivityRow {
   id: string;
   lease_id: string;
+  activity_type: string;
   from_status: string | null;
-  to_status: string;
-  from_lifecycle: string | null;
-  to_lifecycle: string | null;
-  transitioned_by: string | null;
-  transition_reason: string | null;
-  metadata: any;
+  to_status: string | null;
+  details: Record<string, unknown> | null;
   created_at: string;
   leases?: {
     id: string;
     tenant_name: string | null;
     landlord_name: string | null;
-    filename: string;
+    filename: string | null;
+    request_title: string | null;
+    workspace_id: string;
+  } | null;
+  profiles?: {
+    email: string | null;
   } | null;
 }
 
 const PAGE_SIZE = 20;
 
+const ACTIVITY_LABELS: Record<string, string> = {
+  created: 'Created',
+  status_change: 'Status changed',
+  approval: 'Approved',
+  rejection: 'Rejected',
+  send_back: 'Sent back',
+  pause: 'Paused',
+  nudge_sent: 'Nudge sent',
+  document_upload: 'Document uploaded',
+  comment: 'Comment',
+  manager_approved: 'Manager approved',
+  manager_rejected: 'Manager rejected',
+  financial_approved: 'Financial approved',
+  financial_rejected: 'Financial rejected',
+  financial_returned: 'Returned for revision',
+  resubmitted: 'Resubmitted',
+  executed_uploaded: 'Executed document uploaded',
+  executed_terms_extracted: 'Executed terms extracted',
+  executed_terms_edited: 'Executed term edited',
+  classification_resolved: 'Classification resolved',
+  model_locked: 'Model locked',
+  change_submitted: 'Changes submitted',
+  unlock_approved: 'Unlock approved',
+  unlock_rejected: 'Unlock rejected',
+  change_approved: 'Changes approved',
+  change_rejected: 'Changes rejected',
+  change_canceled: 'Changes discarded',
+};
+
 export default function AuditLog() {
   const { t } = useAppTranslation();
-  const [transitions, setTransitions] = useState<StateTransition[]>([]);
+  const { workspace } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialLeaseId = searchParams.get('leaseId') ?? '';
+
+  const [entries, setEntries] = useState<ActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const [leaseIdFilter, setLeaseIdFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [leaseIdFilter, setLeaseIdFilter] = useState(initialLeaseId);
+  const [activityFilter, setActivityFilter] = useState<string>("");
 
   useEffect(() => {
-    fetchTransitions();
-  }, [page, leaseIdFilter, statusFilter]);
+    if (!workspace?.id) return;
+    fetchEntries();
+    // Keep URL in sync with active lease filter for shareable links.
+    const next = new URLSearchParams(searchParams);
+    if (leaseIdFilter) next.set('leaseId', leaseIdFilter);
+    else next.delete('leaseId');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, leaseIdFilter, activityFilter, workspace?.id]);
 
-  const fetchTransitions = async () => {
+  const fetchEntries = async () => {
+    if (!workspace?.id) return;
     setLoading(true);
-    
+
     let query = supabase
-      .from('lease_state_transitions')
+      .from('lease_activity_log')
       .select(`
-        *,
-        leases!lease_state_transitions_lease_id_fkey (
+        id,
+        lease_id,
+        activity_type,
+        from_status,
+        to_status,
+        details,
+        created_at,
+        leases!inner (
           id,
           tenant_name,
           landlord_name,
-          filename
+          filename,
+          request_title,
+          workspace_id
+        ),
+        profiles!lease_activity_log_user_id_fkey (
+          email
         )
       `, { count: 'exact' })
+      .eq('leases.workspace_id', workspace.id)
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
@@ -90,16 +146,16 @@ export default function AuditLog() {
       query = query.eq('lease_id', leaseIdFilter);
     }
 
-    if (statusFilter) {
-      query = query.or(`to_status.eq.${statusFilter},to_lifecycle.eq.${statusFilter}`);
+    if (activityFilter) {
+      query = query.eq('activity_type', activityFilter);
     }
 
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('Error fetching transitions:', error);
+      console.error('Error fetching activity log:', error);
     } else {
-      setTransitions(data || []);
+      setEntries((data as unknown as ActivityRow[]) || []);
       setTotalCount(count || 0);
     }
 
@@ -107,20 +163,26 @@ export default function AuditLog() {
   };
 
   const exportToCSV = () => {
-    const headers = [t('audit.timestamp'), t('audit.lease'), 'From Status', 'To Status', 'From Lifecycle', 'To Lifecycle', t('audit.reason')];
-    const rows = transitions.map(tr => [
-      format(new Date(tr.created_at), 'yyyy-MM-dd HH:mm:ss'),
-      tr.leases?.tenant_name || tr.leases?.filename || tr.lease_id,
-      tr.from_status || '',
-      tr.to_status,
-      tr.from_lifecycle || '',
-      tr.to_lifecycle || '',
-      tr.transition_reason || ''
+    const headers = [
+      t('audit.timestamp'),
+      t('audit.lease'),
+      'Activity',
+      'From Status',
+      'To Status',
+      'Routing Path',
+    ];
+    const rows = entries.map((row) => [
+      format(new Date(row.created_at), 'yyyy-MM-dd HH:mm:ss'),
+      row.leases?.request_title || row.leases?.tenant_name || row.leases?.filename || row.lease_id,
+      ACTIVITY_LABELS[row.activity_type] ?? row.activity_type,
+      row.from_status || '',
+      row.to_status || '',
+      (row.details && (row.details as Record<string, unknown>).routing_path as string) || '',
     ]);
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -133,9 +195,9 @@ export default function AuditLog() {
   const getStatusBadgeColor = (status: string | null) => {
     if (!status) return 'secondary';
     const normalized = status.toLowerCase();
-    if (normalized.includes('posted') || normalized.includes('ready')) return 'default';
+    if (normalized.includes('active') || normalized.includes('executed') || normalized.includes('approved')) return 'default';
     if (normalized.includes('failed') || normalized.includes('rejected')) return 'destructive';
-    if (normalized.includes('processing') || normalized.includes('pending')) return 'secondary';
+    if (normalized.includes('submitted') || normalized.includes('under_review')) return 'secondary';
     if (normalized.includes('draft')) return 'outline';
     return 'secondary';
   };
@@ -148,7 +210,7 @@ export default function AuditLog() {
         title={t('audit.title')}
         subtitle={t('audit.subtitle')}
         actions={
-          <Button onClick={exportToCSV} variant="outline">
+          <Button onClick={exportToCSV} variant="outline" disabled={entries.length === 0}>
             <Download size={16} className="mr-2" />
             {t('audit.export_csv')}
           </Button>
@@ -177,28 +239,23 @@ export default function AuditLog() {
                   }}
                 />
               </div>
-              <div className="w-[200px]">
-                <label className="text-xs text-muted-foreground mb-1 block">{t('audit.status')}</label>
+              <div className="w-[240px]">
+                <label className="text-xs text-muted-foreground mb-1 block">Activity type</label>
                 <Select
-                  value={statusFilter}
+                  value={activityFilter || 'all'}
                   onValueChange={(value) => {
-                    setStatusFilter(value === 'all' ? '' : value);
+                    setActivityFilter(value === 'all' ? '' : value);
                     setPage(0);
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={t('audit.all_statuses')} />
+                    <SelectValue placeholder="All activity types" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{t('audit.all_statuses')}</SelectItem>
-                    <SelectItem value="Draft">Draft</SelectItem>
-                    <SelectItem value="Pending Approval">Pending Approval</SelectItem>
-                    <SelectItem value="Review Required">Review Required</SelectItem>
-                    <SelectItem value="Posted">Posted</SelectItem>
-                    <SelectItem value="Rejected">Rejected</SelectItem>
-                    <SelectItem value="Processing">Processing</SelectItem>
-                    <SelectItem value="Ready">Ready</SelectItem>
-                    <SelectItem value="Failed">Failed</SelectItem>
+                    <SelectItem value="all">All activity types</SelectItem>
+                    {Object.entries(ACTIVITY_LABELS).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -206,7 +263,7 @@ export default function AuditLog() {
           </CardContent>
         </Card>
 
-        {/* Transitions Table */}
+        {/* Activity log table */}
         <Card>
           <CardContent className="p-0">
             <Table>
@@ -214,78 +271,75 @@ export default function AuditLog() {
                 <TableRow>
                   <TableHead>{t('audit.timestamp')}</TableHead>
                   <TableHead>{t('audit.lease')}</TableHead>
-                  <TableHead>{t('audit.transition')}</TableHead>
-                  <TableHead>{t('audit.reason')}</TableHead>
+                  <TableHead>Activity</TableHead>
+                  <TableHead>Transition</TableHead>
+                  <TableHead>Actor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                       {t('audit.loading')}
                     </TableCell>
                   </TableRow>
-                ) : transitions.length === 0 ? (
+                ) : entries.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                       {t('audit.no_transitions')}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  transitions.map((transition) => (
-                    <TableRow key={transition.id}>
+                  entries.map((row) => (
+                    <TableRow key={row.id}>
                       <TableCell className="text-sm">
                         <div className="flex items-center gap-2">
                           <Calendar size={14} className="text-muted-foreground" />
-                          {format(new Date(transition.created_at), 'MMM d, yyyy')}
+                          {format(new Date(row.created_at), 'MMM d, yyyy')}
                           <span className="text-muted-foreground">
-                            {format(new Date(transition.created_at), 'h:mm a')}
+                            {format(new Date(row.created_at), 'h:mm a')}
                           </span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Link 
-                          to={`/app/leases/${transition.lease_id}`}
+                        <Link
+                          to={`/app/leases/${row.lease_id}/review`}
                           className="flex items-center gap-2 hover:underline"
                         >
                           <FileText size={14} className="text-muted-foreground" />
                           <span className="truncate max-w-[200px]">
-                            {transition.leases?.tenant_name || transition.leases?.filename || 'Unknown'}
+                            {row.leases?.request_title || row.leases?.tenant_name || row.leases?.filename || 'Unknown'}
                           </span>
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          {/* Status transition */}
-                          {(transition.from_status || transition.to_status) && (
-                            <div className="flex items-center gap-1">
-                              {transition.from_status && (
-                                <Badge variant={getStatusBadgeColor(transition.from_status)}>
-                                  {transition.from_status}
-                                </Badge>
-                              )}
-                              <ArrowRight size={12} className="text-muted-foreground" />
-                              <Badge variant={getStatusBadgeColor(transition.to_status)}>
-                                {transition.to_status}
+                        <Badge variant="outline">
+                          {ACTIVITY_LABELS[row.activity_type] ?? row.activity_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {(row.from_status || row.to_status) ? (
+                          <div className="flex items-center gap-1">
+                            {row.from_status && (
+                              <Badge variant={getStatusBadgeColor(row.from_status)}>
+                                {row.from_status.replace(/_/g, ' ')}
                               </Badge>
-                            </div>
-                          )}
-                          {/* Lifecycle transition */}
-                          {transition.from_lifecycle !== transition.to_lifecycle && transition.to_lifecycle && (
-                            <div className="flex items-center gap-1 ml-2">
-                              {transition.from_lifecycle && (
-                                <>
-                                  <span className="text-xs text-muted-foreground">{transition.from_lifecycle}</span>
-                                  <ArrowRight size={10} className="text-muted-foreground" />
-                                </>
-                              )}
-                              <span className="text-xs font-medium">{transition.to_lifecycle}</span>
-                            </div>
-                          )}
-                        </div>
+                            )}
+                            {row.from_status && row.to_status && (
+                              <ArrowRight size={12} className="text-muted-foreground" />
+                            )}
+                            {row.to_status && (
+                              <Badge variant={getStatusBadgeColor(row.to_status)}>
+                                {row.to_status.replace(/_/g, ' ')}
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
-                        {transition.transition_reason || '-'}
+                        {row.profiles?.email || '—'}
                       </TableCell>
                     </TableRow>
                   ))

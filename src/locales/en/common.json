@@ -733,6 +733,7 @@
     "unlock_pending": "Unlock request pending admin approval",
     "admin_unlock": "Unlock",
     "approve_and_unlock": "Approve & Unlock",
+    "view_audit_trail": "Audit trail",
     "deny_unlock": "Deny",
     "unlock_requested_title": "Unlock requested",
     "unlock_requested_reason": "Reason: {{reason}}",
@@ -752,8 +753,7 @@
       "state": "State / Province",
       "zip": "ZIP / Postal code",
       "asset_type": "Asset type",
-      "requesting_department": "Requesting department",
-      "intake_source": "Intake source"
+      "requesting_department": "Requesting department"
     },
     "timing": {
       "section_title": "Lease Timing",
