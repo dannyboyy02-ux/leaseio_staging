@@ -61,6 +61,7 @@ import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRisk
 import { Tier2CorrectionDialog } from "@/components/leases/Tier2CorrectionDialog";
 import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
 import { LeaseExports } from "@/components/leases/LeaseExports";
+import { LeaseReviewStatusStrip } from "@/components/leases/LeaseReviewStatusStrip";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
 import { AmendmentsList } from "@/components/leases/AmendmentsList";
@@ -308,6 +309,30 @@ export default function LeaseReview() {
   const allLowConfFieldsInteracted = useMemo(() => {
     if (lowConfidenceFields.length === 0) return true;
     return lowConfidenceFields.every(field => interactedLowConfFields.has(field));
+  }, [lowConfidenceFields, interactedLowConfFields]);
+
+  // Status strip: jump-to-first-flagged-field action. Maps the field's
+  // section to the tab that surfaces it, then switches there. (DOM-level
+  // scroll-to-field can come later — the tab switch alone covers the
+  // most common case where the user just needs to find the section.)
+  const handleJumpToFirstFlagged = useCallback(() => {
+    const firstUnreviewed = lowConfidenceFields.find((f) => !interactedLowConfFields.has(f));
+    if (!firstUnreviewed) return;
+    const sectionForField: Record<string, SectionKey> = {};
+    (Object.entries(SECTION_CONFIG) as Array<[SectionKey, typeof SECTION_CONFIG[SectionKey]]>).forEach(([sectionKey, section]) => {
+      section.fields.forEach((field) => { sectionForField[field.id] = sectionKey; });
+    });
+    const sectionKey = sectionForField[firstUnreviewed];
+    const sectionToTab: Record<SectionKey, string> = {
+      parties: 'general',
+      property: 'general',
+      dates: 'general',
+      vendor: 'vendor',
+      rent: 'rent',
+      options: 'options',
+    };
+    const targetTab = sectionKey ? sectionToTab[sectionKey] : 'general';
+    if (targetTab) setActiveTab(targetTab);
   }, [lowConfidenceFields, interactedLowConfFields]);
 
   // Check approval state from extracted_json
@@ -2448,6 +2473,17 @@ export default function LeaseReview() {
               )}
             </div>
           }
+        />
+
+        <LeaseReviewStatusStrip
+          isProcessing={isProcessing}
+          modelLocked={!!lease.model_locked}
+          isApproved={isApproved}
+          isPendingApproval={isPendingApproval}
+          canApprove={canApprove}
+          lowConfidenceCount={lowConfidenceFields.length}
+          unreviewedLowConfCount={lowConfidenceFields.length - interactedLowConfFields.size}
+          onReview={handleJumpToFirstFlagged}
         />
 
         <div className="flex-1 px-6 overflow-hidden">
