@@ -810,10 +810,6 @@
     "documents": {
       "section_title": "Documents & Amendments"
     },
-    "audit": {
-      "title": "Audit Log",
-      "empty_hint": "No governance events recorded yet for this lease."
-    },
     "share": {
       "section_title": "Share Financial Summary"
     },

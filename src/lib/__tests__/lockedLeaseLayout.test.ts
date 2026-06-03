@@ -67,14 +67,4 @@ describe('locked-lease informational layout', () => {
     expect(source).toContain('onDenyUnlock');
   });
 
-  it('AuditTimelineCard reads from lease_governance_audit and lease_unlock_requests', () => {
-    const source = readRepoFile('src/components/leases/locked/AuditTimelineCard.tsx');
-
-    expect(source).toContain("from('lease_governance_audit')");
-    expect(source).toContain("from('lease_unlock_requests')");
-    // Read-only — must not mutate either table
-    expect(source).not.toContain('.insert(');
-    expect(source).not.toContain('.update(');
-    expect(source).not.toContain('.delete(');
-  });
 });

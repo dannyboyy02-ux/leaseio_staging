@@ -29,7 +29,6 @@ import { LockedHeader } from './LockedHeader';
 import { SectionCard } from './SectionCard';
 import { LabelValueGrid, type LabelValueRow } from './LabelValueGrid';
 import { VendorCard } from './VendorCard';
-import { AuditTimelineCard } from './AuditTimelineCard';
 import { CriticalDatesStrip } from './CriticalDatesStrip';
 import { ObligationsTab } from './ObligationsTab';
 import { ArchiveButton } from '@/components/leases/ArchiveButton';
@@ -496,8 +495,6 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
               <SectionCard title={t('locked_lease.timing.section_title')}>
                 <LabelValueGrid rows={timingRows} />
               </SectionCard>
-
-              <AuditTimelineCard leaseId={lease.id} workspaceId={lease.workspace_id} />
 
               <SectionCard title={t('locked_lease.share.section_title')} defaultOpen={false}>
                 <SummaryShareControls leaseId={lease.id} lifecycleStatus={lease.lifecycle_status ?? ''} />

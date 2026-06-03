@@ -810,10 +810,6 @@
     "documents": {
       "section_title": "Documentos y enmiendas"
     },
-    "audit": {
-      "title": "Registro de auditoría",
-      "empty_hint": "Aún no se registraron eventos de gobernanza para este arrendamiento."
-    },
     "share": {
       "section_title": "Compartir resumen financiero"
     },
