@@ -9,12 +9,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, FileJson, FileText } from 'lucide-react';
+import { FileJson, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useGenerateWorkspaceAsc842Report } from '@/hooks/useGenerateWorkspaceAsc842Report';
 
 interface ReportRow {
   id: string;
@@ -51,6 +52,40 @@ export default function DisclosureReportLibrary() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+  const {
+    generate: generateConsolidated,
+    stage: consolidatedStage,
+    isWorking: consolidatedWorking,
+    reset: resetConsolidated,
+  } = useGenerateWorkspaceAsc842Report();
+
+  async function handleGenerateConsolidated() {
+    if (!workspaceId) return;
+    try {
+      const result = await generateConsolidated(workspaceId);
+      if (result.leaseCount === 0) {
+        toast.message('No finalized leases yet — lock a lease first.');
+      } else {
+        toast.success(`Consolidated report ready (${result.leaseCount} leases)`);
+      }
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Could not generate consolidated report');
+      resetConsolidated();
+    }
+  }
+
+  function consolidatedLabel(): string {
+    switch (consolidatedStage) {
+      case 'requesting':
+        return 'Assembling lease data…';
+      case 'rendering':
+        return 'Rendering PDF…';
+      case 'downloading':
+        return 'Downloading…';
+      default:
+        return 'Generate consolidated report';
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -128,6 +163,29 @@ export default function DisclosureReportLibrary() {
         subtitle="ASC 842 disclosure reports generated for this workspace."
       />
       <div className="px-6 py-6 space-y-4 max-w-5xl">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Consolidated workspace report</CardTitle>
+            <CardDescription>
+              One PDF covering every finalized lease in this workspace. Includes a cover page,
+              table of contents, and the full ASC 842 disclosure for each lease.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={handleGenerateConsolidated}
+              disabled={consolidatedWorking || !workspaceId}
+            >
+              {consolidatedWorking ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4 mr-2" />
+              )}
+              {consolidatedLabel()}
+            </Button>
+          </CardContent>
+        </Card>
+
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Filter:</span>
           <Select value={filter} onValueChange={(v) => setFilter(v as Filter)}>
