@@ -324,6 +324,19 @@ export default function LeaseReview() {
     return lowConfidenceFields.every(field => interactedLowConfFields.has(field));
   }, [lowConfidenceFields, interactedLowConfFields]);
 
+  // Dirty signal — true when in-memory form differs from the last
+  // persisted snapshot. Drives (a) the visible "Save draft" secondary
+  // button so reviewers can't lose work to a navigate-away, and (b) a
+  // beforeunload guard for the same reason.
+  // savedAt bumps on each successful handleSync; included in deps so
+  // the memo re-evaluates after originalValues is repointed.
+  const isDirty = useMemo(() => {
+    return Object.keys(form).some(
+      (k) => (form[k] ?? '') !== (originalValues.current[k] ?? ''),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, savedAt]);
+
   // Warn the reviewer before navigating away with unsaved edits. The
   // visible "Save draft" button is the primary mitigation; this guard
   // is belt-and-suspenders for browser back/close/reload.
@@ -2359,19 +2372,6 @@ export default function LeaseReview() {
   const unreviewedLowConfCount = lowConfidenceFields.length - interactedLowConfFields.size;
   const isUnlockedDraft = !lease.model_locked && activeChangeSet?.status === 'draft';
   const canShowLock = !lease.model_locked && (lifecycleStatus === 'executed' || lifecycleStatus === 'active');
-
-  // Dirty signal — true when in-memory form differs from the last
-  // persisted snapshot. Drives (a) the visible "Save draft" secondary
-  // button so reviewers can't lose work to a navigate-away, and (b) a
-  // beforeunload guard for the same reason.
-  // savedAt bumps on each successful handleSync; included in deps so
-  // the memo re-evaluates after originalValues is repointed.
-  const isDirty = useMemo(() => {
-    return Object.keys(form).some(
-      (k) => (form[k] ?? '') !== (originalValues.current[k] ?? ''),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, savedAt]);
 
   // Payload for inline Export JSON / CSV menu items. Mirrors what was
   // previously passed to the old <LeaseExports/> button.
