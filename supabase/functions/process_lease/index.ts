@@ -993,8 +993,8 @@ function mergeOpusOverrides(sonnetMerged: any, opusMerged: any, targetFields: st
  * variant because process_lease's main flow wraps everything in a single
  * try/catch and formats errors uniformly. The shared helper returns a
  * Response which is the right shape for the other 4 AI functions
- * (ai-assistant, generate-lease-insights, generate-lease-analysis,
- * retry_lease) that are built around early-return-Response control flow.
+ * (ai-assistant, generate-lease-insights, retry_lease) that are built
+ * around early-return-Response control flow.
  *
  * If you change consent semantics (column name, error message), update
  * BOTH this function AND _shared/audit.ts:assertAiConsent.

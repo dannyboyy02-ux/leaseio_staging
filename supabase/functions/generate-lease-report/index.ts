@@ -7,13 +7,10 @@
 // section data plus the generated report id.
 //
 // PDF rendering is performed CLIENT-SIDE. @react-pdf/renderer is a
-// browser library; the existing codebase precedent (see
-// supabase/functions/generate-lease-analysis/index.ts and
-// src/components/leases/LeaseAnalysisExport.tsx) is for the edge
-// function to return structured data and the client to render the PDF
-// via pdf().toBlob(). The client subsequently uploads the PDF to the
-// same storage prefix and invokes finalize-report-pdf to record the
-// pdf_storage_path on the lease_reports row.
+// browser library; the edge function returns structured data and the
+// client renders the PDF via pdf().toBlob(). The client then uploads
+// the PDF to the same storage prefix and invokes finalize-report-pdf
+// to record the pdf_storage_path on the lease_reports row.
 //
 // AUTHORIZATION
 //   - Bearer JWT (verify_jwt = true)

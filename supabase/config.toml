@@ -33,9 +33,6 @@ verify_jwt = false
 [functions.revoke-invite]
 verify_jwt = false
 
-[functions.generate-lease-analysis]
-verify_jwt = false
-
 [functions.request-lease-unlock]
 verify_jwt = false
 
