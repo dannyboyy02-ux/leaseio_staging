@@ -58,11 +58,23 @@ A "dead-end state" is a state the user can reach via a single click and CANNOT e
 - Modals: do Escape and Enter behave sensibly?
 - Lists: do arrow keys navigate?
 
-## 7. Mobile / narrow viewport
+## 7. Responsive overflow — capability that hides at smaller widths
 
-- Action toolbars: do they wrap or truncate on a 768px viewport?
-- Modals: do they fit on a phone?
-- Status indicators: do they remain legible without horizontal scroll?
+This is a SIBLING of Class 1 — same psychology, different cause. A capability that exists but disappears off the right edge when the viewport (or a split panel) narrows is functionally a dead-end: the user doesn't know to scroll for it because there's no scroll cue.
+
+- **Tab strips:** at the narrowest reasonable viewport (or with a resizable split-panel at 50%), do all tabs remain visible? Do hidden tabs get cut off silently, or does the strip scroll with a visible cue? Tabs that disappear off the right edge with no overflow indicator are the canonical case — users assume those tabs don't exist.
+- **Action toolbars:** do they wrap, truncate with ellipsis, or push off-screen at 768px? At 50% split-panel width?
+- **Modals / dialogs:** do they fit on a phone? Do their action buttons stack or get cut?
+- **Status indicators / badges / chip rows:** legible without horizontal scroll?
+- **Sticky elements (headers, footers, status strips):** do they remain in their sticky position when the parent narrows, or do they overlap content?
+
+For tab strips specifically: prefer **short labels with full-text tooltips** + `overflow-x-auto` as the safety net. Never let a capability silently disappear because of layout.
+
+## 8. Mobile-only concerns
+
+- Touch targets: minimum 44×44 for primary actions.
+- Long-press menus: not assumed unless built.
+- Keyboard avoidance: forms that scroll behind a virtual keyboard.
 
 ## 8. Locale completeness
 

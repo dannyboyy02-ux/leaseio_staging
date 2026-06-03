@@ -2603,7 +2603,7 @@ export default function LeaseReview() {
                       <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight">
                         Source Document
                       </span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }}>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }} title="Collapse source document" aria-label="Collapse source document">
                         <ChevronLeft size={16} />
                       </Button>
                     </div>
@@ -2617,6 +2617,7 @@ export default function LeaseReview() {
                         setPendingCapture({ page, text });
                         setPdfCaptureMode(false);
                       }}
+                      onExitCapture={() => setPdfCaptureMode(false)}
                     />
                   </div>
                 </ResizablePanel>
@@ -2748,14 +2749,19 @@ export default function LeaseReview() {
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col px-4 pt-2">
-                  <TabsList className="shrink-0 justify-start">
-                    <TabsTrigger value="general">General Information</TabsTrigger>
-                    <TabsTrigger value="vendor">Vendor / Counterparty</TabsTrigger>
-                    <TabsTrigger value="rent">Rent</TabsTrigger>
-                    <TabsTrigger value="options">Options & Clauses</TabsTrigger>
-                    <TabsTrigger value="risks">Risks</TabsTrigger>
-                    <TabsTrigger value="asc842">ASC 842 Inputs</TabsTrigger>
-                    <TabsTrigger value="documents">Documents</TabsTrigger>
+                  {/* Tabs use shortened labels so the row fits the right
+                      panel even at 50% split (with PDF visible). Full
+                      labels surface as tooltips. overflow-x-auto is the
+                      safety net for very narrow viewports — tabs scroll
+                      horizontally rather than disappearing off the edge. */}
+                  <TabsList className="shrink-0 justify-start overflow-x-auto max-w-full">
+                    <TabsTrigger value="general" title="General Information">General</TabsTrigger>
+                    <TabsTrigger value="vendor" title="Vendor / Counterparty">Vendor</TabsTrigger>
+                    <TabsTrigger value="rent" title="Rent">Rent</TabsTrigger>
+                    <TabsTrigger value="options" title="Options & Clauses">Options</TabsTrigger>
+                    <TabsTrigger value="risks" title="Risks">Risks</TabsTrigger>
+                    <TabsTrigger value="asc842" title="ASC 842 Inputs">ASC 842</TabsTrigger>
+                    <TabsTrigger value="documents" title="Documents">Documents</TabsTrigger>
                   </TabsList>
 
                   <ScrollArea className="flex-1 h-full">

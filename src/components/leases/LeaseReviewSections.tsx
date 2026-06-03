@@ -630,16 +630,17 @@ export function RisksSection({ risks, onJumpToPage, leaseId, onRisksChanged }: R
                   </Badge>
                   {canDismiss && (
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 hover:border-destructive/40"
                       title="Dismiss this risk — it will be removed from this lease and excluded from all reports"
                       onClick={() => {
                         setDismissTarget(risk);
                         setDismissReason('');
                       }}
                     >
-                      <X size={14} />
+                      <X size={11} />
+                      Dismiss
                     </Button>
                   )}
                 </div>

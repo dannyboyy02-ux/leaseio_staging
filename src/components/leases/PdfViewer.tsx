@@ -30,6 +30,10 @@ interface PdfViewerProps {
    *  attach the selection to a user-added risk citation. */
   captureMode?: boolean;
   onCaptureSelection?: (page: number, text: string) => void;
+  /** Called when the user explicitly cancels capture mode without
+   * making a selection. Parent should set captureMode back to false
+   * while keeping any host dialog (e.g. AddRiskDialog) open. */
+  onExitCapture?: () => void;
 }
 
 function escapeHtml(s: string): string {
@@ -169,7 +173,7 @@ function isMetaSummary(s: string): boolean {
   );
 }
 
-export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captureMode, onCaptureSelection }: PdfViewerProps) {
+export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captureMode, onCaptureSelection, onExitCapture }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
@@ -427,27 +431,39 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
       {captureMode && (
         <div className="flex items-center justify-between gap-2 px-3 py-1 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 shrink-0">
           <span>Selection mode — highlight a clause in the PDF, then click <strong>Use selection</strong>.</span>
-          <Button
-            size="sm"
-            variant="default"
-            className="h-6 text-[11px] bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50"
-            disabled={!pendingSelectionText}
-            onClick={confirmCapture}
-          >
-            Use selection
-          </Button>
+          <div className="flex items-center gap-1.5">
+            {onExitCapture && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 text-[11px] text-amber-900 hover:bg-amber-100"
+                onClick={onExitCapture}
+              >
+                Cancel
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="default"
+              className="h-6 text-[11px] bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50"
+              disabled={!pendingSelectionText}
+              onClick={confirmCapture}
+            >
+              Use selection
+            </Button>
+          </div>
         </div>
       )}
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b bg-background shrink-0">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={prevPage} disabled={currentPage <= 1}>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={prevPage} disabled={currentPage <= 1} title="Previous page" aria-label="Previous page">
             <ChevronLeft size={14} />
           </Button>
           <span className="text-xs text-muted-foreground tabular-nums">
             {numPages > 0 ? `${currentPage} / ${numPages}` : '—'}
           </span>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={nextPage} disabled={currentPage >= numPages}>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={nextPage} disabled={currentPage >= numPages} title="Next page" aria-label="Next page">
             <ChevronRight size={14} />
           </Button>
           {(targetValue || targetHighlight) && (
@@ -483,11 +499,11 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomOut} disabled={scale <= 0.5}>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomOut} disabled={scale <= 0.5} title="Zoom out" aria-label="Zoom out">
             <ZoomOut size={14} />
           </Button>
           <span className="text-xs text-muted-foreground w-10 text-center">{Math.round(scale * 100)}%</span>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomIn} disabled={scale >= 2.5}>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomIn} disabled={scale >= 2.5} title="Zoom in" aria-label="Zoom in">
             <ZoomIn size={14} />
           </Button>
         </div>
