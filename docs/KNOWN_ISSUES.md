@@ -1214,6 +1214,29 @@ Verified via `pg_policy` query immediately post-apply: the only INSERT policy on
 
 ---
 
+### Item #50: Executed-vs-pipeline reconciliation UI removed; underlying data still computed
+
+**Symptom:** The two UI surfaces that consumed the executed-stage reconciliation data — `ExecutedTermsReview` (editable 7-row comparison + per-field confidence + audit-logged corrections) and `VarianceReport` (5-row Match/Variance summary) — were deleted from the lease workbench 2026-06-04. The underlying columns and writer code are still load-bearing for other surfaces:
+
+- `executed_*` columns on `leases` (executed_tenant_name, executed_landlord_name, executed_commencement_date, executed_expiry_date, executed_monthly_payment, executed_rent_review_clause, executed_break_clause, executed_extraction_confidence) — still populated by `supabase/functions/process_lease/index.ts` (lines 1977, 2018) when an executed PDF is processed. `executed_monthly_payment` in particular is consumed by `ai-assistant`, `process-alerts`, `generate-lease-report`, and `generate-workspace-asc842-report` as a fallback for the monthly amount.
+- `variance_*` columns (variance_monthly_payment, variance_commencement_days, variance_expiry_days, variance_tenant_name_match, variance_landlord_name_match) — still populated by `process_lease` and still consumed by `src/pages/Reports.tsx:85` as the "Variance Outliers" panel data source.
+- Activity-log types `'executed_terms_extracted'` and `'executed_terms_edited'` remain in the `lifecycle.ts` enum. The "extracted" entry is still emitted by process_lease; the "edited" entry no longer has a writer (the only call site was inside `ExecutedTermsReview.tsx`, deleted).
+
+**Severity:** Low. Nothing breaks. The columns continue to fill correctly. Future contributors might be confused by columns that have writers but no per-lease UI consumer — this note exists so they understand the columns power Reports and edge functions, not the deleted panels.
+
+**Where to look:** `supabase/functions/process_lease/index.ts:1977,2018`; `src/pages/Reports.tsx:85`; `src/types/lifecycle.ts`; the removed components live at `git log -- src/components/leases/ExecutedTermsReview.tsx src/components/leases/VarianceReport.tsx`.
+
+**Stub remediation:** None required. If we ever decide the variance signal is purely vestigial:
+1. Confirm Reports.tsx Variance Outliers panel is actually used (it's currently hidden behind `varianceLeases.length > 0` so already self-suppresses).
+2. Drop the writer + columns in a coordinated migration.
+3. Remove `executed_terms_edited` from the activity-type enum.
+
+For now, leave alone.
+
+**Decision:** Filed for context. No action needed.
+
+---
+
 ### Item #49: `generate-lease-insights` deployed as a 410-Gone stub with no repo source
 
 **Symptom:** The `generate-lease-insights` slug still appears in the Supabase Edge Functions list, but the repo no longer contains a `supabase/functions/generate-lease-insights/` directory or a `[functions.generate-lease-insights]` config.toml stanza.
@@ -1239,7 +1262,8 @@ the #29 post-merge regression audit (items 30-31),
 the 2026-05-24 full-codebase audit — security / dead-ends / data-integrity passes (items 32-45),
 the 2026-06-02 CLAUDE.md File-Map reconciliation pass (item 46),
 the 2026-06-03 lease-detail cosmetics pass (items 47-48),
-and the 2026-06-03 zombie-edge-function neutralization (item 49).
+the 2026-06-03 zombie-edge-function neutralization (item 49),
+and the 2026-06-04 executed-vs-pipeline UI removal (item 50).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.

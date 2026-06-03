@@ -80,8 +80,6 @@ import { PdfViewer } from "@/components/leases/PdfViewer";
 import { LifecycleStatusBadge } from "@/components/lifecycle/LifecycleStatusBadge";
 import { SummaryShareControls } from '@/components/summary/SummaryShareControls';
 import { UploadExecutedDocumentDialog } from "@/components/leases/UploadExecutedDocumentDialog";
-import { ExecutedTermsReview } from "@/components/leases/ExecutedTermsReview";
-import { VarianceReport } from "@/components/leases/VarianceReport";
 import { LeaseDocumentsTab } from "@/components/leases/LeaseDocumentsTab";
 import { DocumentsPanel } from "@/components/leases/documents/DocumentsPanel";
 import { CounterSignaturePanel } from "@/components/leases/CounterSignaturePanel";
@@ -2831,60 +2829,12 @@ export default function LeaseReview() {
                         {isAmendment && extractedJson?._amendment_changes && extractedJson._amendment_changes.length > 0 && (
                           <AmendmentChanges changes={extractedJson._amendment_changes} />
                         )}
-                        {/* Executed terms review (executed stage + active staged-editing) */}
-                        {(lifecycleStatus === 'executed' || lifecycleStatus === 'active') && (() => {
-                          // Match handleSync's source-of-truth chain (around line 1323):
-                          // freshly-parsed form value, then lease DB values. Keeps the
-                          // pipeline column in sync with whatever the user is editing.
-                          const parsedFormRent = form.current_monthly_rent
-                            ? parseFloat(form.current_monthly_rent.replace(/[^0-9.]/g, '')) || null
-                            : null;
-                          const pipelineMonthlyValue =
-                            parsedFormRent ?? lease.current_monthly_rent ?? lease.monthly_payment ?? null;
-                          return (
+                        {/* Unlock + change-set status cards. The executed-
+                            terms reconciliation surface (ExecutedTermsReview +
+                            VarianceReport) was removed 2026-06-04; the
+                            unlock/staging affordances below remain. */}
+                        {(lifecycleStatus === 'executed' || lifecycleStatus === 'active') && (
                           <>
-                            <ExecutedTermsReview
-                              leaseId={lease.id}
-                              pipelineTerms={{
-                                tenant_name: form.tenant_name || null,
-                                landlord_name: form.landlord_name || null,
-                                lease_start: form.lease_start || null,
-                                lease_end: form.lease_end || null,
-                                current_monthly_rent: parsedFormRent,
-                                monthly_payment: pipelineMonthlyValue,
-                              }}
-                              executedTerms={{
-                                executed_tenant_name: lease.executed_tenant_name ?? null,
-                                executed_landlord_name: lease.executed_landlord_name ?? null,
-                                executed_commencement_date: lease.executed_commencement_date ?? null,
-                                executed_expiry_date: lease.executed_expiry_date ?? null,
-                                executed_monthly_payment: lease.executed_monthly_payment ?? null,
-                                executed_rent_review_clause: lease.executed_rent_review_clause ?? null,
-                                executed_break_clause: lease.executed_break_clause ?? null,
-                                executed_extraction_confidence:
-                                  (lease.executed_extraction_confidence as Record<string, number> | null) ?? null,
-                              }}
-                              canEdit={!lease.model_locked}
-                              onTermUpdated={refetchLease}
-                              changeSetId={activeChangeSet?.status === 'draft' ? activeChangeSet.id : undefined}
-                              onStagedCountChange={setStagedItemCount}
-                            />
-                            <VarianceReport
-                              leaseFilename={lease.filename || ''}
-                              // Nullish-coalesce (??) so a legitimate $0 rent isn't substituted for the fallback.
-                              pipelineMonthly={pipelineMonthlyValue}
-                              executedMonthly={lease.executed_monthly_payment ?? null}
-                              variance_monthly_payment={lease.variance_monthly_payment != null ? Number(lease.variance_monthly_payment) : null}
-                              variance_commencement_days={lease.variance_commencement_days != null ? Number(lease.variance_commencement_days) : null}
-                              variance_expiry_days={lease.variance_expiry_days != null ? Number(lease.variance_expiry_days) : null}
-                              variance_tenant_name_match={lease.variance_tenant_name_match != null ? Boolean(lease.variance_tenant_name_match) : null}
-                              variance_landlord_name_match={lease.variance_landlord_name_match != null ? Boolean(lease.variance_landlord_name_match) : null}
-                            />
-                            {/* Lock action lives in the AppHeader actions slot
-                                (see Save Draft / Cancel / Lock buttons there).
-                                The legacy <ModelLockConfirmation> was removed —
-                                handleLockAction now handles both initial activation
-                                and re-lock-with-changes from one Lock button. */}
                             {lease.model_locked && isAdminUser && pendingUnlockRequest && (
                               <Card className="shadow-none border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
@@ -2980,7 +2930,7 @@ export default function LeaseReview() {
                                   </p>
                                   <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
                                     {activeChangeSet.status === 'draft'
-                                      ? `Edit the executed terms above. ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} staged.`
+                                      ? `Edits are staged for approval — ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} pending.`
                                       : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
                                   </p>
                                   {/* Save Draft / Cancel / Lock now live in the AppHeader actions slot. */}
@@ -2988,8 +2938,7 @@ export default function LeaseReview() {
                               </Card>
                             )}
                           </>
-                          );
-                        })()}
+                        )}
                       </TabsContent>
 
                       {/* Vendor / Counterparty */}
