@@ -20,7 +20,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
-import { enforceWorkspaceRateLimit } from "../_shared/audit.ts";
 import {
   buildLeaseDisclosureSections,
   type Asc842Inputs,
@@ -191,16 +190,69 @@ function shapeAsc842Inputs(row: Record<string, unknown> | null | undefined): Asc
     pv_substantially_all_fair_value: typeof r.pv_substantially_all_fair_value === "boolean" ? r.pv_substantially_all_fair_value : null,
     pv_to_fair_value_pct: asNumber(r.pv_to_fair_value_pct),
     asset_fair_value: asNumber(r.asset_fair_value),
-    specialized_no_alternative_use: typeof r.specialized_no_alternative_use === "boolean" ? r.specialized_no_alternative_use : null,
-    specialized_no_alternative_use_basis: asString(r.specialized_no_alternative_use_basis),
-    short_term_election: typeof r.short_term_election === "boolean" ? r.short_term_election : null,
-    short_term_election_basis: asString(r.short_term_election_basis),
-    practical_expedients_applied: Array.isArray(r.practical_expedients_applied)
-      ? (r.practical_expedients_applied as string[])
-      : null,
-    related_party_disclosure: asString(r.related_party_disclosure),
-    auditor_attention_notes: asString(r.auditor_attention_notes),
+    specialized_asset_no_alt_use: typeof r.specialized_asset_no_alt_use === "boolean" ? r.specialized_asset_no_alt_use : null,
+    classification_criteria_basis: asString(r.classification_criteria_basis),
+    renewal_options_rc_term_months: asNumber(r.renewal_options_rc_term_months),
+    renewal_options_rc_basis: asString(r.renewal_options_rc_basis),
+    short_term_lease_election: typeof r.short_term_lease_election === "boolean" ? r.short_term_lease_election : null,
+    short_term_lease_election_basis: asString(r.short_term_lease_election_basis),
+    variable_payments_description: asString(r.variable_payments_description),
+    variable_payments_estimated_annual: asNumber(r.variable_payments_estimated_annual),
+    sublease_income_annual: asNumber(r.sublease_income_annual),
+    sublease_basis: asString(r.sublease_basis),
+    last_updated_at: asString(r.last_updated_at),
+    last_updated_by_label: asString(r.last_updated_by),
   };
+}
+
+// Inlined per-workspace hourly rate limiter. Mirrors _shared/audit.ts ->
+// enforceWorkspaceRateLimit so the deploy bundle stays small (matches
+// the per-lease generate-lease-report pattern).
+async function enforceWorkspaceRateLimit(
+  supabaseAdmin: any,
+  workspaceId: string | null,
+  functionName: string,
+  requestOrigin: string | null,
+  limit = 20,
+): Promise<Response | null> {
+  if (!workspaceId) return null;
+  const windowStart = new Date();
+  windowStart.setUTCMinutes(0, 0, 0);
+  const windowStartIso = windowStart.toISOString();
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("processing_rate_limits")
+    .select("id, request_count")
+    .eq("workspace_id", workspaceId)
+    .eq("function_name", functionName)
+    .eq("window_start", windowStartIso)
+    .maybeSingle();
+  if (existingError) {
+    throw new Error(`Failed to check rate limit: ${existingError.message}`);
+  }
+  if (existing && existing.request_count >= limit) {
+    return jsonResponse(
+      { error: "Rate limit exceeded. Please wait before retrying." },
+      429,
+      requestOrigin,
+    );
+  }
+  const nextCount = (existing?.request_count || 0) + 1;
+  const { error: upsertError } = await supabaseAdmin
+    .from("processing_rate_limits")
+    .upsert(
+      {
+        workspace_id: workspaceId,
+        function_name: functionName,
+        window_start: windowStartIso,
+        request_count: nextCount,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "workspace_id,function_name,window_start" },
+    );
+  if (upsertError) {
+    throw new Error(`Failed to update rate limit: ${upsertError.message}`);
+  }
+  return null;
 }
 
 const LEASE_SELECT = "id, workspace_id, lifecycle_status, model_locked, model_locked_at, model_locked_by, lease_classification, lease_classification_set_at, lease_classification_set_by, signator_attestation, signator_approved_at, request_title, filename, asset_type, landlord_name, tenant_name, property_address, lease_start, lease_end, term_months, executed_monthly_payment, current_monthly_rent, monthly_payment, escalation_type, escalation_rate, renewal_options, termination_clauses, escalation_clauses, security_deposit, calc_total_commitment, calc_pv_liability, calc_straight_line_exp, calc_cash_pl_delta, extracted_json, discount_rate, discount_rate_basis, discount_rate_set_at, discount_rate_set_by";
