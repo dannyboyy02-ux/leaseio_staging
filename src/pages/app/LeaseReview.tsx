@@ -1201,12 +1201,14 @@ export default function LeaseReview() {
     });
   }, []);
 
-  // Confirm section as reviewed
+  // Toggle a section's reviewed state. Previously this only appended,
+  // causing duplicates if the (then-hidden) prop fired twice.
   const handleConfirmSection = useCallback(async (sectionKey: string) => {
-    const newConfirmed = [...confirmedSections, sectionKey];
+    const isAlready = confirmedSections.includes(sectionKey);
+    const newConfirmed = isAlready
+      ? confirmedSections.filter((k) => k !== sectionKey)
+      : [...confirmedSections, sectionKey];
     setConfirmedSections(newConfirmed);
-    
-    // Persist to database
     if (lease?.id) {
       await supabase
         .from('leases')
@@ -1214,6 +1216,41 @@ export default function LeaseReview() {
         .eq('id', lease.id);
     }
   }, [confirmedSections, lease?.id]);
+
+  // Required sections derived from TIER1_REQUIRED_FIELDS — the same
+  // gate canApprove uses. Only these need to be marked reviewed to
+  // unlock Approve. Today: parties (landlord/tenant) and dates
+  // (lease_start/lease_end). Computing dynamically so the gate stays
+  // honest if TIER1_REQUIRED_FIELDS or SECTION_CONFIG change.
+  const requiredSectionKeys = useMemo(() => {
+    const out = new Set<SectionKey>();
+    Object.entries(SECTION_CONFIG).forEach(([sectionKey, section]) => {
+      const hasRequired = section.fields.some((f) =>
+        (TIER1_REQUIRED_FIELDS as readonly string[]).includes(f.id),
+      );
+      if (hasRequired) out.add(sectionKey as SectionKey);
+    });
+    return Array.from(out);
+  }, []);
+
+  const requiredSectionTitles = useMemo(
+    () => requiredSectionKeys.map((k) => SECTION_CONFIG[k].title),
+    [requiredSectionKeys],
+  );
+
+  // Bulk: mark all required sections reviewed in one click. Skips any
+  // already-confirmed key (toggle semantics preserved).
+  const handleConfirmAllRequired = useCallback(async () => {
+    const merged = Array.from(new Set([...confirmedSections, ...requiredSectionKeys]));
+    if (merged.length === confirmedSections.length) return;
+    setConfirmedSections(merged);
+    if (lease?.id) {
+      await supabase
+        .from('leases')
+        .update({ confirmed_sections: merged })
+        .eq('id', lease.id);
+    }
+  }, [confirmedSections, requiredSectionKeys, lease?.id]);
 
   // Rent schedule: persist inline edits
   const handleScheduleChange = useCallback(async (updated: RentScheduleEntry[]) => {
@@ -2579,6 +2616,8 @@ export default function LeaseReview() {
           lowConfidenceCount={lowConfidenceFields.length}
           unreviewedLowConfCount={lowConfidenceFields.length - interactedLowConfFields.size}
           onReview={handleJumpToFirstFlagged}
+          requiredSectionTitles={requiredSectionTitles}
+          onConfirmAllRequired={handleConfirmAllRequired}
         />
 
         <div className="flex-1 px-6 overflow-hidden">

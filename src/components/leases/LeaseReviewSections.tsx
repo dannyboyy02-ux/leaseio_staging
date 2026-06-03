@@ -210,11 +210,36 @@ export function SectionCard({
       "shadow-none border overflow-hidden",
       isConfirmed && !isModelLocked && "border-green-300 bg-green-50/10"
     )}>
-      <CardHeader className="bg-muted/30 border-b py-3">
+      <CardHeader className="bg-muted/30 border-b py-3 flex flex-row items-center justify-between gap-3 space-y-0">
         <CardTitle className="text-sm font-bold flex items-center gap-2">
           <Icon size={16} className="text-primary" />
           {section.title}
         </CardTitle>
+        {!isModelLocked && (
+          isConfirmed ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800"
+              onClick={() => onConfirmSection(sectionKey)}
+              title="Reviewed — click to unmark"
+            >
+              <Check size={12} />
+              Reviewed
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => onConfirmSection(sectionKey)}
+              title="Mark this section reviewed"
+            >
+              <ShieldCheck size={12} />
+              Mark reviewed
+            </Button>
+          )
+        )}
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
         {section.fields.map((field) => {

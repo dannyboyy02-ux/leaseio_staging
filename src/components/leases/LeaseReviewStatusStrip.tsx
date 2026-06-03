@@ -23,6 +23,12 @@ interface Props {
   lowConfidenceCount: number;
   unreviewedLowConfCount: number;
   onReview: () => void;
+  /** Titles of sections that gate approval (e.g. "Parties", "Dates &
+   * Term"). Surfaced in the "Confirm required sections" state so the
+   * reviewer knows exactly which sections to mark. */
+  requiredSectionTitles?: string[];
+  /** Bulk action: mark every required section reviewed in one click. */
+  onConfirmAllRequired?: () => void;
 }
 
 type Tone = 'info' | 'attention' | 'ready' | 'success';
@@ -44,6 +50,8 @@ function deriveState(props: Props): DerivedState {
     lowConfidenceCount,
     unreviewedLowConfCount,
     onReview,
+    requiredSectionTitles,
+    onConfirmAllRequired,
   } = props;
 
   if (isProcessing) {
@@ -64,10 +72,16 @@ function deriveState(props: Props): DerivedState {
   }
 
   if (!canApprove) {
+    const sectionsList = requiredSectionTitles && requiredSectionTitles.length > 0
+      ? requiredSectionTitles.join(' and ')
+      : 'required sections';
     return {
       tone: 'info',
       label: 'Confirm required sections',
-      detail: 'Mark each required section reviewed to enable approval.',
+      detail: `${sectionsList} must be marked reviewed to enable approval.`,
+      cta: onConfirmAllRequired
+        ? { label: 'Mark required reviewed', onClick: onConfirmAllRequired }
+        : undefined,
     };
   }
 
