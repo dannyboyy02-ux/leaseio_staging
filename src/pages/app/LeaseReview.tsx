@@ -193,6 +193,7 @@ export default function LeaseReview() {
   const [tier2CorrectionOpen, setTier2CorrectionOpen] = useState(false);
   const [showAmendmentDialog, setShowAmendmentDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [savedAt, setSavedAt] = useState(0);
   const queryClient = useQueryClient();
   
   const [lease, setLease] = useState<any | null>(null);
@@ -322,6 +323,19 @@ export default function LeaseReview() {
     if (lowConfidenceFields.length === 0) return true;
     return lowConfidenceFields.every(field => interactedLowConfFields.has(field));
   }, [lowConfidenceFields, interactedLowConfFields]);
+
+  // Warn the reviewer before navigating away with unsaved edits. The
+  // visible "Save draft" button is the primary mitigation; this guard
+  // is belt-and-suspenders for browser back/close/reload.
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   // Status strip: jump-to-first-flagged-field action. Maps the field's
   // section to the tab that surfaces it, then switches there. (DOM-level
@@ -1370,6 +1384,10 @@ export default function LeaseReview() {
         .update(updateData)
         .eq("id", lease.id);
       if (error) throw error;
+      // Mark current form as the new persisted snapshot so isDirty
+      // returns to false (hides the visible "Save draft" button).
+      originalValues.current = { ...form };
+      setSavedAt((n) => n + 1);
       toast.success("Lease saved successfully");
     } catch (err) {
       toast.error("Save failed");
@@ -2342,6 +2360,19 @@ export default function LeaseReview() {
   const isUnlockedDraft = !lease.model_locked && activeChangeSet?.status === 'draft';
   const canShowLock = !lease.model_locked && (lifecycleStatus === 'executed' || lifecycleStatus === 'active');
 
+  // Dirty signal — true when in-memory form differs from the last
+  // persisted snapshot. Drives (a) the visible "Save draft" secondary
+  // button so reviewers can't lose work to a navigate-away, and (b) a
+  // beforeunload guard for the same reason.
+  // savedAt bumps on each successful handleSync; included in deps so
+  // the memo re-evaluates after originalValues is repointed.
+  const isDirty = useMemo(() => {
+    return Object.keys(form).some(
+      (k) => (form[k] ?? '') !== (originalValues.current[k] ?? ''),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, savedAt]);
+
   // Payload for inline Export JSON / CSV menu items. Mirrors what was
   // previously passed to the old <LeaseExports/> button.
   const exportLeasePayload = {
@@ -2451,16 +2482,26 @@ export default function LeaseReview() {
                   {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
                   Discard
                 </Button>
-                <ArchiveButton leaseId={lease.id} isArchived={!!lease.archived} onChange={refetchLease} />
+                {(userRole === 'admin' || userRole === 'owner') && (
+                  <Button size="sm" variant="outline" onClick={() => setShowArchiveDialog(true)}>
+                    <Archive className="h-3.5 w-3.5 mr-1.5" />
+                    {lease.archived ? 'Restore' : 'Archive'}
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                {/* Primary action — state-aware, visually dominant */}
+                {/* Primary action — state-aware, visually dominant.
+                    font-semibold + shadow + slight x-padding pull the
+                    eye regardless of variant. */}
                 {primaryAction && (
                   <Button
                     onClick={primaryAction.onClick}
                     disabled={primaryAction.disabled || primaryAction.loading}
-                    className={primaryAction.variant === 'success' ? 'bg-green-600 hover:bg-green-700' : ''}
+                    className={
+                      'font-semibold shadow-sm px-5 ' +
+                      (primaryAction.variant === 'success' ? 'bg-green-600 hover:bg-green-700 text-white' : '')
+                    }
                     title={primaryAction.tooltip}
                   >
                     {primaryAction.loading ? (
@@ -2477,6 +2518,16 @@ export default function LeaseReview() {
                   <NudgeApproverButton leaseId={lease.id} lastNudgedAt={lease.last_nudged_at} />
                 )}
 
+                {/* Save draft surfaces as a visible secondary the moment
+                    the form is dirty. Reversibility > frequency: it's a
+                    paid feature people would resent losing work to. */}
+                {isDirty && !isLocked && (
+                  <Button size="sm" variant="outline" onClick={handleSync} disabled={saving}>
+                    {saving ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Save size={14} className="mr-1.5" />}
+                    Save draft
+                  </Button>
+                )}
+
                 {/* More menu — every other action lives here. Page should
                     pull (primary), not present (toolbar of 7). */}
                 <DropdownMenu>
@@ -2486,20 +2537,13 @@ export default function LeaseReview() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
+                    {/* Most reversible / most frequent first. Destructive
+                        and state-changing actions sit below the
+                        separator. */}
                     {!isLocked && (
                       <DropdownMenuItem onClick={handleSync} disabled={saving}>
                         {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                         Save draft
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem onClick={() => navigate('/app/approvals')}>
-                      <ClipboardCheck className="h-4 w-4 mr-2" />
-                      Approval queue
-                    </DropdownMenuItem>
-                    {isMasterLease && !isProcessing && (
-                      <DropdownMenuItem onClick={() => setShowAmendmentDialog(true)}>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload amendment
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem onClick={() => downloadJSON(exportLeasePayload, form, rentSchedule)}>
@@ -2510,14 +2554,24 @@ export default function LeaseReview() {
                       <Download className="h-4 w-4 mr-2" />
                       Export CSV
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/app/approvals')}>
+                      <ClipboardCheck className="h-4 w-4 mr-2" />
+                      Approval queue
+                    </DropdownMenuItem>
+                    {(isMasterLease && !isProcessing) || (userRole === 'admin' || userRole === 'owner') ? (
+                      <DropdownMenuSeparator />
+                    ) : null}
+                    {isMasterLease && !isProcessing && (
+                      <DropdownMenuItem onClick={() => setShowAmendmentDialog(true)}>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload amendment
+                      </DropdownMenuItem>
+                    )}
                     {(userRole === 'admin' || userRole === 'owner') && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
-                          <Archive className="h-4 w-4 mr-2" />
-                          {lease.archived ? 'Restore from archive' : 'Archive'}
-                        </DropdownMenuItem>
-                      </>
+                      <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
+                        <Archive className="h-4 w-4 mr-2" />
+                        {lease.archived ? 'Restore from archive' : 'Archive'}
+                      </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>

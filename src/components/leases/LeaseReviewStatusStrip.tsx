@@ -129,6 +129,14 @@ const TONE_STYLES: Record<Tone, { container: string; badge: string; icon: typeof
 
 export function LeaseReviewStatusStrip(props: Props) {
   const state = deriveState(props);
+
+  // Terminal "Approved & locked" state has no decision for the user —
+  // the lifecycle badge in the title carries the same signal. Suppress
+  // the strip so the page stops talking when there's nothing to say.
+  if (state.tone === 'success' && !state.cta && !props.isProcessing) {
+    return null;
+  }
+
   const styles = TONE_STYLES[state.tone];
   const Icon = styles.icon;
   const iconClasses = state.tone === 'info' && props.isProcessing ? 'h-4 w-4 animate-spin' : 'h-4 w-4';

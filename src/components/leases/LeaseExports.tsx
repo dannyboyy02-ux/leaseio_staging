@@ -1,33 +1,28 @@
-import { Download, FileJson, FileSpreadsheet } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+// Export helpers for lease data.
+//
+// The previous LeaseExports wrapping component was retired 2026-06-03
+// when the LeaseReview action bar collapsed to a single state-aware
+// primary + More menu. Callers now invoke downloadJSON / downloadCSV
+// directly from the More menu items. This file kept as the home for
+// the helpers so call sites don't have to move.
+
 import type { RentScheduleEntry } from './RentScheduleTable';
 
-interface LeaseExportsProps {
-  lease: {
-    id: string;
-    filename: string;
-    extracted_json: Record<string, any> | null;
-    landlord_name: string | null;
-    tenant_name: string | null;
-    property_address?: string | null;
-    lease_start: string | null;
-    lease_end: string | null;
-    base_rent_amount: string | null;
-    current_monthly_rent: number | null;
-    status: string;
-    lifecycle_status: string | null;
-  };
-  formValues: Record<string, string>;
-  rentSchedule: RentScheduleEntry[];
+interface ExportLease {
+  id: string;
+  filename: string;
+  extracted_json: Record<string, any> | null;
+  landlord_name: string | null;
+  tenant_name: string | null;
+  property_address?: string | null;
+  lease_start: string | null;
+  lease_end: string | null;
+  base_rent_amount: string | null;
+  current_monthly_rent: number | null;
+  status: string;
+  lifecycle_status: string | null;
 }
 
-// Helper to get value from extracted field (handles both string and object formats)
 const getExtractedValue = (field: any): string | null => {
   if (!field) return null;
   if (typeof field === 'string') return field;
@@ -38,21 +33,18 @@ const getExtractedValue = (field: any): string | null => {
   return null;
 };
 
-// Build flat export data from lease and form values
 const buildExportData = (
-  lease: LeaseExportsProps['lease'],
+  lease: ExportLease,
   formValues: Record<string, string>,
-  rentSchedule: RentScheduleEntry[]
+  rentSchedule: RentScheduleEntry[],
 ) => {
   const extracted = lease.extracted_json || {};
-  
-  // Merge extracted values with user-edited form values (form values take precedence)
+
   const fields = {
     id: lease.id,
     filename: lease.filename,
     status: lease.status,
     lifecycle_status: lease.lifecycle_status,
-    // Core fields - prefer form values, fallback to extracted
     landlord_name: formValues.landlord_name || lease.landlord_name || getExtractedValue(extracted.landlord_name),
     tenant_name: formValues.tenant_name || lease.tenant_name || getExtractedValue(extracted.tenant_name),
     property_address: formValues.property_address || getExtractedValue(extracted.property_address),
@@ -72,7 +64,7 @@ const buildExportData = (
 
   return {
     lease: fields,
-    rent_schedule: rentSchedule.map(entry => ({
+    rent_schedule: rentSchedule.map((entry) => ({
       period_start: entry.period_start,
       period_end: entry.period_end,
       monthly_amount: entry.monthly_amount,
@@ -84,17 +76,16 @@ const buildExportData = (
   };
 };
 
-// Download JSON file
 export const downloadJSON = (
-  lease: LeaseExportsProps['lease'],
+  lease: ExportLease,
   formValues: Record<string, string>,
-  rentSchedule: RentScheduleEntry[]
+  rentSchedule: RentScheduleEntry[],
 ) => {
   const data = buildExportData(lease, formValues, rentSchedule);
   const jsonString = JSON.stringify(data, null, 2);
   const blob = new Blob([jsonString], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
-  
+
   const a = document.createElement('a');
   a.href = url;
   a.download = `lease-${lease.id.slice(0, 8)}-export.json`;
@@ -104,39 +95,35 @@ export const downloadJSON = (
   URL.revokeObjectURL(url);
 };
 
-// Convert to CSV and download
 export const downloadCSV = (
-  lease: LeaseExportsProps['lease'],
+  lease: ExportLease,
   formValues: Record<string, string>,
-  rentSchedule: RentScheduleEntry[]
+  rentSchedule: RentScheduleEntry[],
 ) => {
   const data = buildExportData(lease, formValues, rentSchedule);
   const leaseFields = data.lease;
-  
-  // Lease data CSV
+
   const leaseHeaders = Object.keys(leaseFields);
-  const leaseValues = Object.values(leaseFields).map(v => {
+  const leaseValues = Object.values(leaseFields).map((v) => {
     if (v === null || v === undefined) return '';
-    // Escape quotes and wrap in quotes if contains comma
     const str = String(v);
     if (str.includes(',') || str.includes('"') || str.includes('\n')) {
       return `"${str.replace(/"/g, '""')}"`;
     }
     return str;
   });
-  
+
   let csvContent = '### LEASE DATA ###\n';
   csvContent += leaseHeaders.join(',') + '\n';
   csvContent += leaseValues.join(',') + '\n\n';
-  
-  // Rent schedule CSV (if present)
+
   if (data.rent_schedule.length > 0) {
     csvContent += '### RENT SCHEDULE ###\n';
     const scheduleHeaders = ['period_start', 'period_end', 'monthly_amount', 'annual_amount', 'notes'];
     csvContent += scheduleHeaders.join(',') + '\n';
-    
-    data.rent_schedule.forEach(entry => {
-      const row = scheduleHeaders.map(header => {
+
+    data.rent_schedule.forEach((entry) => {
+      const row = scheduleHeaders.map((header) => {
         const val = entry[header as keyof typeof entry];
         if (val === null || val === undefined) return '';
         const str = String(val);
@@ -148,10 +135,10 @@ export const downloadCSV = (
       csvContent += row.join(',') + '\n';
     });
   }
-  
+
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
-  
+
   const a = document.createElement('a');
   a.href = url;
   a.download = `lease-${lease.id.slice(0, 8)}-export.csv`;
@@ -160,26 +147,3 @@ export const downloadCSV = (
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
-
-export function LeaseExports({ lease, formValues, rentSchedule }: LeaseExportsProps) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Download size={14} className="mr-1" />
-          Export
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => downloadJSON(lease, formValues, rentSchedule)}>
-          <FileJson size={14} className="mr-2" />
-          Download JSON
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => downloadCSV(lease, formValues, rentSchedule)}>
-          <FileSpreadsheet size={14} className="mr-2" />
-          Download CSV
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
