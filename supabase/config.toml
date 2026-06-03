@@ -155,9 +155,6 @@ verify_jwt = true
 [functions.ai-assistant]
 verify_jwt = true
 
-[functions.generate-lease-insights]
-verify_jwt = true
-
 [functions.record-classification-correction]
 verify_jwt = true
 
