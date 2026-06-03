@@ -51,15 +51,15 @@
     "archived_by": "Archived by {{name}}"
   },
   "archive": {
-    "archive": "Archive",
-    "unarchive": "Unarchive",
-    "archived_toast": "Lease archived",
-    "unarchived_toast": "Lease unarchived",
-    "failed": "Failed to update archive state",
-    "confirm_archive_title": "Archive this lease?",
-    "confirm_archive_desc": "Archiving moves the lease out of your active set. It frees an active slot but counts toward your archive cap. The lease itself is preserved and can be unarchived at any time.",
-    "confirm_unarchive_title": "Unarchive this lease?",
-    "confirm_unarchive_desc": "Unarchiving puts the lease back in the active set. It will count toward your active-lease cap again."
+    "archive": "Delete",
+    "unarchive": "Restore",
+    "archived_toast": "Lease deleted",
+    "unarchived_toast": "Lease restored",
+    "failed": "Failed to update lease",
+    "confirm_archive_title": "Delete this lease?",
+    "confirm_archive_desc": "Deleting moves the lease out of your active set and frees an active slot. The record is preserved (audit trail, attachments, history) and can be restored at any time.",
+    "confirm_unarchive_title": "Restore this lease?",
+    "confirm_unarchive_desc": "Restoring puts the lease back in the active set. It will count toward your active-lease cap again."
   },
   "landing": {
     "nav": {

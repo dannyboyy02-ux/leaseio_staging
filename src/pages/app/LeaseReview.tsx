@@ -70,7 +70,7 @@ import { SECTION_CONFIG, findFieldLabel, type SectionKey } from "@/lib/leaseRevi
 import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRiskDialog";
 import { Tier2CorrectionDialog } from "@/components/leases/Tier2CorrectionDialog";
 import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
-import { downloadJSON, downloadCSV } from "@/components/leases/LeaseExports";
+import { downloadCSV } from "@/components/leases/LeaseExports";
 import { LeaseReviewStatusStrip } from "@/components/leases/LeaseReviewStatusStrip";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
@@ -2485,7 +2485,7 @@ export default function LeaseReview() {
                 {(userRole === 'admin' || userRole === 'owner') && (
                   <Button size="sm" variant="outline" onClick={() => setShowArchiveDialog(true)}>
                     <Archive className="h-3.5 w-3.5 mr-1.5" />
-                    {lease.archived ? 'Restore' : 'Archive'}
+                    {lease.archived ? 'Restore' : 'Delete'}
                   </Button>
                 )}
               </div>
@@ -2546,17 +2546,9 @@ export default function LeaseReview() {
                         Save draft
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onClick={() => downloadJSON(exportLeasePayload, form, rentSchedule)}>
-                      <Download className="h-4 w-4 mr-2" />
-                      Export JSON
-                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => downloadCSV(exportLeasePayload, form, rentSchedule)}>
                       <Download className="h-4 w-4 mr-2" />
                       Export CSV
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate('/app/approvals')}>
-                      <ClipboardCheck className="h-4 w-4 mr-2" />
-                      Approval queue
                     </DropdownMenuItem>
                     {(isMasterLease && !isProcessing) || (userRole === 'admin' || userRole === 'owner') ? (
                       <DropdownMenuSeparator />
@@ -2570,7 +2562,7 @@ export default function LeaseReview() {
                     {(userRole === 'admin' || userRole === 'owner') && (
                       <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
                         <Archive className="h-4 w-4 mr-2" />
-                        {lease.archived ? 'Restore from archive' : 'Archive'}
+                        {lease.archived ? 'Restore' : 'Delete'}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>

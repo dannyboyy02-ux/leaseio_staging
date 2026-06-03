@@ -1,10 +1,10 @@
 // Export helpers for lease data.
 //
-// The previous LeaseExports wrapping component was retired 2026-06-03
-// when the LeaseReview action bar collapsed to a single state-aware
-// primary + More menu. Callers now invoke downloadJSON / downloadCSV
-// directly from the More menu items. This file kept as the home for
-// the helpers so call sites don't have to move.
+// The wrapping LeaseExports component was retired 2026-06-03 when the
+// LeaseReview action bar collapsed to a single state-aware primary +
+// More menu. The JSON export item was further removed 2026-06-04 — the
+// SMB finance audience consumes CSV via spreadsheet workflows; JSON
+// payloads were never the deliverable. This file is now CSV-only.
 
 import type { RentScheduleEntry } from './RentScheduleTable';
 
@@ -74,25 +74,6 @@ const buildExportData = (
     extracted_json_raw: extracted,
     export_date: new Date().toISOString(),
   };
-};
-
-export const downloadJSON = (
-  lease: ExportLease,
-  formValues: Record<string, string>,
-  rentSchedule: RentScheduleEntry[],
-) => {
-  const data = buildExportData(lease, formValues, rentSchedule);
-  const jsonString = JSON.stringify(data, null, 2);
-  const blob = new Blob([jsonString], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `lease-${lease.id.slice(0, 8)}-export.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 };
 
 export const downloadCSV = (

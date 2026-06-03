@@ -51,15 +51,15 @@
     "archived_by": "Archivado por {{name}}"
   },
   "archive": {
-    "archive": "Archivar",
-    "unarchive": "Desarchivar",
-    "archived_toast": "Arrendamiento archivado",
-    "unarchived_toast": "Arrendamiento desarchivado",
-    "failed": "No se pudo actualizar el estado de archivado",
-    "confirm_archive_title": "¿Archivar este arrendamiento?",
-    "confirm_archive_desc": "Archivar mueve el arrendamiento fuera del conjunto activo. Libera un cupo activo pero cuenta para su cupo de archivados. El arrendamiento se conserva y puede desarchivarse en cualquier momento.",
-    "confirm_unarchive_title": "¿Desarchivar este arrendamiento?",
-    "confirm_unarchive_desc": "Desarchivar devuelve el arrendamiento al conjunto activo. Volverá a contar para su cupo de arrendamientos activos."
+    "archive": "Eliminar",
+    "unarchive": "Restaurar",
+    "archived_toast": "Arrendamiento eliminado",
+    "unarchived_toast": "Arrendamiento restaurado",
+    "failed": "No se pudo actualizar el arrendamiento",
+    "confirm_archive_title": "¿Eliminar este arrendamiento?",
+    "confirm_archive_desc": "Eliminar mueve el arrendamiento fuera del conjunto activo y libera un cupo activo. El registro se conserva (auditoría, adjuntos, historial) y puede restaurarse en cualquier momento.",
+    "confirm_unarchive_title": "¿Restaurar este arrendamiento?",
+    "confirm_unarchive_desc": "Restaurar devuelve el arrendamiento al conjunto activo. Volverá a contar para su cupo de arrendamientos activos."
   },
   "landing": {
     "nav": {
