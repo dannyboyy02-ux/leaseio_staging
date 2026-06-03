@@ -2632,12 +2632,14 @@ export default function LeaseReview() {
                 <div className="px-4 pt-3 space-y-2">
                   {showPdfPanel && isPdfCollapsed && (
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 mb-1"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
                       onClick={() => { pdfPanelRef.current?.expand(); setIsPdfCollapsed(false); }}
+                      title="Re-open the source document panel"
                     >
-                      <ChevronRight size={16} />
+                      <ChevronRight size={14} />
+                      Show source document
                     </Button>
                   )}
                   {isFailedStatus(lease?.status) && (
