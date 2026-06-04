@@ -3019,8 +3019,8 @@ export default function LeaseReview() {
                     <TabsTrigger value="rent" title="Rent">Rent</TabsTrigger>
                     <TabsTrigger value="options" title="Options & Clauses">Options</TabsTrigger>
                     <TabsTrigger value="risks" title="Risks">Risks</TabsTrigger>
-                    <TabsTrigger value="asc842" title="ASC 842 Inputs">ASC 842</TabsTrigger>
                     <TabsTrigger value="documents" title="Documents">Documents</TabsTrigger>
+                    <TabsTrigger value="asc842" title="ASC 842 Inputs">ASC 842</TabsTrigger>
                   </TabsList>
 
                   <ScrollArea className="flex-1 h-full">
