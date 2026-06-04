@@ -2632,14 +2632,15 @@ export default function LeaseReview() {
   // the bottom of the tab's content. Replaces the per-section footers.
   // Uses green for confirmed (matches the page color scheme); outline
   // for unconfirmed. No "Mark" verb in the label — the button just
-  // says "Reviewed" and its visual state announces what's true.
+  // says "Reviewed" and its visual state announces what's true. The
+  // approve action lives at the top of the page header — we
+  // deliberately don't duplicate it here.
   const renderTabFooter = (tabKey: string) => {
     if (lease?.model_locked) return null;
     const confirmed = isTabConfirmed(tabKey);
     const nextTab = REVIEW_TABS.find(
       (t) => t.key !== tabKey && !t.sections.every((s) => confirmedSections.includes(s)),
     );
-    const showApprovePath = !nextTab && canApprove;
     return (
       <div className="border-t pt-3 mt-2 flex items-center justify-between gap-2">
         {confirmed ? (
@@ -2674,17 +2675,6 @@ export default function LeaseReview() {
             title={`Go to ${nextTab.title}`}
           >
             Next: {nextTab.title}
-            <ChevronRight size={12} />
-          </Button>
-        ) : showApprovePath ? (
-          <Button
-            size="sm"
-            className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
-            onClick={handleApproveLease}
-            title="Approve the lease"
-          >
-            <CheckCircle size={12} />
-            Ready to approve
             <ChevronRight size={12} />
           </Button>
         ) : null}
