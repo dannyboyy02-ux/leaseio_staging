@@ -160,7 +160,24 @@ interface ExtractedJson {
 }
 
 // Tier-1 required fields that must be marked as reviewed before approval
-const TIER1_REQUIRED_FIELDS = ['landlord_name', 'tenant_name', 'lease_start', 'lease_end'];
+// Section traversal order — the order the reviewer naturally walks
+// through the workbench. Tabs cluster sections; within General the
+// order matches how the fields render top-to-bottom (Parties → Property
+// → Dates). All six sections gate approval: the reviewer must mark
+// every AI-extracted section reviewed before the lease can advance.
+const SECTION_TRAVERSAL_ORDER: SectionKey[] = [
+  'parties', 'property', 'dates', 'vendor', 'rent', 'options',
+];
+
+// Tab each section lives in. Used to switch tabs when advancing.
+const SECTION_TO_TAB: Record<SectionKey, string> = {
+  parties: 'general',
+  property: 'general',
+  dates: 'general',
+  vendor: 'vendor',
+  rent: 'rent',
+  options: 'options',
+};
 
 interface Risk {
   id: string;
@@ -211,9 +228,8 @@ export default function LeaseReview() {
   const [targetPage, setTargetPage] = useState<number | undefined>(undefined);
   const [targetHighlight, setTargetHighlight] = useState<string | undefined>(undefined);
   const [targetValue, setTargetValue] = useState<string | undefined>(undefined);
-  const [verifiedFields, setVerifiedFields] = useState<Set<string>>(new Set());
   const [confirmedSections, setConfirmedSections] = useState<string[]>([]);
-  
+
   // Audit tracking
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const originalValues = useRef<Record<string, string>>({});
@@ -406,28 +422,17 @@ export default function LeaseReview() {
   // Hide it (full-width tabs) when the lease is active and fully locked.
   const showPdfPanel = lifecycleStatus !== 'active' || !lease?.model_locked;
 
-  // Check if all Tier-1 required fields are reviewed (either confirmed via section or verified individually)
-  const allTier1FieldsReviewed = useMemo(() => {
-    // A field is considered "reviewed" if:
-    // 1. Its section is confirmed, OR
-    // 2. The field itself is in verifiedFields
-    const sectionForField: Record<string, string> = {};
-    Object.entries(SECTION_CONFIG).forEach(([sectionKey, section]) => {
-      section.fields.forEach(field => {
-        sectionForField[field.id] = sectionKey;
-      });
-    });
+  // Approval gate: every AI-extracted section must be marked reviewed.
+  // No more field-level "verified" carve-out — sections are the unit of
+  // human attestation. This closes the silent-approval gap where a
+  // reviewer could approve a lease without ever looking at Vendor,
+  // Property, Rent, or Options.
+  const allSectionsReviewed = useMemo(
+    () => SECTION_TRAVERSAL_ORDER.every((k) => confirmedSections.includes(k)),
+    [confirmedSections],
+  );
 
-    return TIER1_REQUIRED_FIELDS.every(fieldId => {
-      const sectionKey = sectionForField[fieldId];
-      const sectionConfirmed = sectionKey && confirmedSections.includes(sectionKey);
-      const fieldVerified = verifiedFields.has(fieldId);
-      return sectionConfirmed || fieldVerified;
-    });
-  }, [confirmedSections, verifiedFields]);
-
-  // Can approve only if: not processing, all Tier-1 fields reviewed
-  const canApprove = !isProcessing && allTier1FieldsReviewed;
+  const canApprove = !isProcessing && allSectionsReviewed;
 
   // Phase 2 — open resubmit dialog pre-populated with current values
   const openResubmit = () => {
@@ -1188,21 +1193,8 @@ export default function LeaseReview() {
     }
   }, [lease?.extracted_json]);
 
-  // Toggle field verification
-  const handleVerifyField = useCallback((fieldId: string) => {
-    setVerifiedFields(prev => {
-      const next = new Set(prev);
-      if (next.has(fieldId)) {
-        next.delete(fieldId);
-      } else {
-        next.add(fieldId);
-      }
-      return next;
-    });
-  }, []);
-
-  // Toggle a section's reviewed state. Previously this only appended,
-  // causing duplicates if the (then-hidden) prop fired twice.
+  // Toggle a section's reviewed state. Persists. Toggle semantics so a
+  // user can correct a wrong confirmation by clicking the green pill.
   const handleConfirmSection = useCallback(async (sectionKey: string) => {
     const isAlready = confirmedSections.includes(sectionKey);
     const newConfirmed = isAlready
@@ -1217,33 +1209,74 @@ export default function LeaseReview() {
     }
   }, [confirmedSections, lease?.id]);
 
-  // Required sections derived from TIER1_REQUIRED_FIELDS — the same
-  // gate canApprove uses. Only these need to be marked reviewed to
-  // unlock Approve. Today: parties (landlord/tenant) and dates
-  // (lease_start/lease_end). Computing dynamically so the gate stays
-  // honest if TIER1_REQUIRED_FIELDS or SECTION_CONFIG change.
-  const requiredSectionKeys = useMemo(() => {
-    const out = new Set<SectionKey>();
-    Object.entries(SECTION_CONFIG).forEach(([sectionKey, section]) => {
-      const hasRequired = section.fields.some((f) =>
-        (TIER1_REQUIRED_FIELDS as readonly string[]).includes(f.id),
-      );
-      if (hasRequired) out.add(sectionKey as SectionKey);
-    });
-    return Array.from(out);
-  }, []);
-
-  const requiredSectionTitles = useMemo(
-    () => requiredSectionKeys.map((k) => SECTION_CONFIG[k].title),
-    [requiredSectionKeys],
+  // Compute the next unconfirmed section in traversal order, given the
+  // section the user just confirmed. Returns null if none remains.
+  const nextUnconfirmedAfter = useCallback(
+    (currentKey: SectionKey, justConfirmed?: SectionKey): SectionKey | null => {
+      const confirmedSet = new Set(confirmedSections);
+      if (justConfirmed) confirmedSet.add(justConfirmed);
+      const currentIdx = SECTION_TRAVERSAL_ORDER.indexOf(currentKey);
+      // Look forward first
+      for (let i = currentIdx + 1; i < SECTION_TRAVERSAL_ORDER.length; i++) {
+        if (!confirmedSet.has(SECTION_TRAVERSAL_ORDER[i])) return SECTION_TRAVERSAL_ORDER[i];
+      }
+      // Then wrap around to find any earlier unconfirmed section.
+      for (let i = 0; i < currentIdx; i++) {
+        if (!confirmedSet.has(SECTION_TRAVERSAL_ORDER[i])) return SECTION_TRAVERSAL_ORDER[i];
+      }
+      return null;
+    },
+    [confirmedSections],
   );
 
-  // Bulk: mark all required sections reviewed in one click. Skips any
-  // already-confirmed key (toggle semantics preserved). Toasts the
-  // sections that were newly added so the user sees the result of the
-  // click and knows where to go to unmark.
+  // Advance: switch tab if needed, scroll the target section's header
+  // into view. Used by the section footer's "Next: X →" button and the
+  // "Mark reviewed and continue" combined gesture.
+  const handleSectionAdvance = useCallback((targetKey: SectionKey) => {
+    const targetTab = SECTION_TO_TAB[targetKey];
+    if (targetTab) setActiveTab(targetTab);
+    // Give the tab content a tick to mount before scrolling.
+    setTimeout(() => {
+      const el = document.querySelector(`[data-section-key="${targetKey}"]`);
+      if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }, []);
+
+  // Combined: confirm the current section AND advance to the next
+  // unconfirmed one. Used by the section footer's primary button when
+  // the section is not yet confirmed.
+  const handleConfirmAndAdvance = useCallback(async (sectionKey: SectionKey) => {
+    if (!confirmedSections.includes(sectionKey)) {
+      const newConfirmed = [...confirmedSections, sectionKey];
+      setConfirmedSections(newConfirmed);
+      if (lease?.id) {
+        await supabase
+          .from('leases')
+          .update({ confirmed_sections: newConfirmed })
+          .eq('id', lease.id);
+      }
+    }
+    const next = nextUnconfirmedAfter(sectionKey, sectionKey);
+    if (next) handleSectionAdvance(next);
+  }, [confirmedSections, lease?.id, nextUnconfirmedAfter, handleSectionAdvance]);
+
+  // All sections gate approval now. Titles surface to the strip.
+  const requiredSectionTitles = useMemo(
+    () => SECTION_TRAVERSAL_ORDER.map((k) => SECTION_CONFIG[k].title),
+    [],
+  );
+  const remainingSectionTitles = useMemo(
+    () => SECTION_TRAVERSAL_ORDER
+      .filter((k) => !confirmedSections.includes(k))
+      .map((k) => SECTION_CONFIG[k].title),
+    [confirmedSections],
+  );
+  const confirmedSectionCount = SECTION_TRAVERSAL_ORDER.filter((k) => confirmedSections.includes(k)).length;
+
+  // Bulk: mark every required section reviewed in one click. Toasts the
+  // sections that were newly added so the user sees what changed.
   const handleConfirmAllRequired = useCallback(async () => {
-    const newlyAdded = requiredSectionKeys.filter((k) => !confirmedSections.includes(k));
+    const newlyAdded = SECTION_TRAVERSAL_ORDER.filter((k) => !confirmedSections.includes(k));
     if (newlyAdded.length === 0) return;
     const merged = [...confirmedSections, ...newlyAdded];
     setConfirmedSections(merged);
@@ -1266,7 +1299,7 @@ export default function LeaseReview() {
         .update({ confirmed_sections: merged })
         .eq('id', lease.id);
     }
-  }, [confirmedSections, requiredSectionKeys, lease?.id]);
+  }, [confirmedSections, lease?.id]);
 
   // Rent schedule: persist inline edits
   const handleScheduleChange = useCallback(async (updated: RentScheduleEntry[]) => {
@@ -1533,8 +1566,8 @@ export default function LeaseReview() {
 
   // Approve lease - stores approval in extracted_json._approval
   const handleApproveLease = async () => {
-    if (!allTier1FieldsReviewed) {
-      toast.error("Please mark all required fields (Landlord, Tenant, Lease Start, Lease End) as reviewed before approving");
+    if (!allSectionsReviewed) {
+      toast.error("Mark every section reviewed before approving the lease.");
       return;
     }
 
@@ -2451,14 +2484,19 @@ export default function LeaseReview() {
       };
     }
     if (!isApproved && !isLocked) {
+      // Label encodes WHY the button is disabled when canApprove is
+      // false: "Pending Review" tells the user review is incomplete,
+      // not just that the button doesn't work. Flips to "Ready to
+      // Approve" the moment all sections are confirmed.
+      const ready = canApprove && !approving;
       return {
-        label: 'Approve lease',
-        icon: CheckCircle,
+        label: ready ? 'Ready to Approve' : 'Pending Review',
+        icon: ready ? CheckCircle : Clock,
         onClick: handleApproveLease,
         disabled: approving || !canApprove,
         loading: approving,
-        variant: 'success',
-        tooltip: !canApprove ? 'Mark all required sections reviewed first' : undefined,
+        variant: ready ? 'success' : undefined,
+        tooltip: !canApprove ? 'Mark every section reviewed to enable approval' : undefined,
       };
     }
     if (canShowLock) {
@@ -2632,6 +2670,9 @@ export default function LeaseReview() {
           lowConfidenceCount={lowConfidenceFields.length}
           unreviewedLowConfCount={lowConfidenceFields.length - interactedLowConfFields.size}
           onReview={handleJumpToFirstFlagged}
+          confirmedSectionCount={confirmedSectionCount}
+          totalRequiredSections={SECTION_TRAVERSAL_ORDER.length}
+          remainingSectionTitles={remainingSectionTitles}
           requiredSectionTitles={requiredSectionTitles}
           onConfirmAllRequired={handleConfirmAllRequired}
         />
@@ -2831,7 +2872,6 @@ export default function LeaseReview() {
                             form={form}
                             extractedJson={extractedJson}
                             confidenceScores={confidenceScores}
-                            verifiedFields={verifiedFields}
                             isLocked={isLocked && !isUnlockedForEditing}
                             isModelLocked={!!lease?.model_locked}
                             hideConfidence={lifecycleStatus === 'active'}
@@ -2840,10 +2880,12 @@ export default function LeaseReview() {
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
-                            onVerifyField={handleVerifyField}
                             onJumpToPage={jumpToPage}
                             confirmedSections={confirmedSections}
                             onConfirmSection={handleConfirmSection}
+                            onConfirmAndAdvance={handleConfirmAndAdvance}
+                            onAdvance={handleSectionAdvance}
+                            traversalOrder={SECTION_TRAVERSAL_ORDER}
                           />
                         ))}
                         {/* Amendment: Parent Lease Comparison */}
@@ -3011,7 +3053,6 @@ export default function LeaseReview() {
                           form={form}
                           extractedJson={extractedJson}
                           confidenceScores={confidenceScores}
-                          verifiedFields={verifiedFields}
                           isLocked={isLocked && !isUnlockedForEditing}
                           isModelLocked={!!lease?.model_locked}
                           hideConfidence={lifecycleStatus === 'active'}
@@ -3019,10 +3060,12 @@ export default function LeaseReview() {
                           onFieldFocus={handleFieldFocus}
                           onFieldBlur={trackFieldCorrection}
                           onFieldStaged={stageFieldImmediate}
-                          onVerifyField={handleVerifyField}
                           onJumpToPage={jumpToPage}
                           confirmedSections={confirmedSections}
                           onConfirmSection={handleConfirmSection}
+                          onConfirmAndAdvance={handleConfirmAndAdvance}
+                          onAdvance={handleSectionAdvance}
+                          traversalOrder={SECTION_TRAVERSAL_ORDER}
                         />
                       </TabsContent>
 
@@ -3035,7 +3078,6 @@ export default function LeaseReview() {
                             form={form}
                             extractedJson={extractedJson}
                             confidenceScores={confidenceScores}
-                            verifiedFields={verifiedFields}
                             isLocked={isLocked}
                             isModelLocked={!!lease?.model_locked}
                             hideConfidence={lifecycleStatus === 'active'}
@@ -3043,10 +3085,12 @@ export default function LeaseReview() {
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
-                            onVerifyField={handleVerifyField}
                             onJumpToPage={jumpToPage}
                             confirmedSections={confirmedSections}
                             onConfirmSection={handleConfirmSection}
+                            onConfirmAndAdvance={handleConfirmAndAdvance}
+                            onAdvance={handleSectionAdvance}
+                            traversalOrder={SECTION_TRAVERSAL_ORDER}
                           />
                         ))}
                         <RentScheduleTable
@@ -3070,7 +3114,6 @@ export default function LeaseReview() {
                             form={form}
                             extractedJson={extractedJson}
                             confidenceScores={confidenceScores}
-                            verifiedFields={verifiedFields}
                             isLocked={isLocked}
                             isModelLocked={!!lease?.model_locked}
                             hideConfidence={lifecycleStatus === 'active'}
@@ -3078,10 +3121,12 @@ export default function LeaseReview() {
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
-                            onVerifyField={handleVerifyField}
                             onJumpToPage={jumpToPage}
                             confirmedSections={confirmedSections}
                             onConfirmSection={handleConfirmSection}
+                            onConfirmAndAdvance={handleConfirmAndAdvance}
+                            onAdvance={handleSectionAdvance}
+                            traversalOrder={SECTION_TRAVERSAL_ORDER}
                           />
                         ))}
                       </TabsContent>

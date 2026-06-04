@@ -9,6 +9,7 @@ import {
   X,
   Target,
   ShieldCheck,
+  ChevronRight,
   Sparkles,
   CheckCircle2,
   XCircle,
@@ -125,7 +126,6 @@ interface SectionCardProps {
   form: Record<string, string>;
   extractedJson: Record<string, any> | null;
   confidenceScores: ConfidenceScores;
-  verifiedFields: Set<string>;
   isLocked: boolean;
   isModelLocked: boolean;
   assetTypes?: string[];
@@ -138,10 +138,18 @@ interface SectionCardProps {
    * explicitly to avoid a closure-staleness race against form state.
    */
   onFieldStaged?: (fieldId: string, newValue: string) => void;
-  onVerifyField: (fieldId: string) => void;
   onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
   confirmedSections: string[];
   onConfirmSection: (sectionKey: string) => void;
+  /** Mark this section reviewed AND advance to the next unconfirmed
+   * section. Used by the section footer's primary CTA. */
+  onConfirmAndAdvance: (sectionKey: SectionKey) => void;
+  /** Advance to a specific section without changing confirm state.
+   * Used by the "Next: X" button when this section is already
+   * confirmed. */
+  onAdvance: (targetKey: SectionKey) => void;
+  /** Section traversal order for computing this section's "next." */
+  traversalOrder: SectionKey[];
   /** When true, suppress the per-field confidence badge. Set after a lease
    *  has been initially activated — confidence is a review-time signal, not
    *  relevant once the lease is in production use. */
@@ -153,7 +161,6 @@ export function SectionCard({
   form,
   extractedJson,
   confidenceScores,
-  verifiedFields,
   isLocked,
   isModelLocked,
   assetTypes,
@@ -161,10 +168,12 @@ export function SectionCard({
   onFieldFocus,
   onFieldBlur,
   onFieldStaged,
-  onVerifyField,
   onJumpToPage,
   confirmedSections,
   onConfirmSection,
+  onConfirmAndAdvance,
+  onAdvance,
+  traversalOrder,
   hideConfidence = false,
 }: SectionCardProps) {
   const { language } = useLanguage();
@@ -188,9 +197,6 @@ export function SectionCard({
     if (fieldConf !== null && fieldConf < 0.80) {
       return 'border-amber-400 border-2';
     }
-    if (verifiedFields.has(fieldId)) {
-      return 'border-green-200 bg-green-50/20';
-    }
     return '';
   };
 
@@ -206,39 +212,18 @@ export function SectionCard({
     fieldId.includes('rent') || fieldId.includes('deposit');
 
   return (
-    <Card className={cn(
-      "shadow-none border overflow-hidden",
-      isConfirmed && !isModelLocked && "border-green-300 bg-green-50/10"
-    )}>
-      <CardHeader className="bg-muted/30 border-b py-3 flex flex-row items-center justify-between gap-3 space-y-0">
+    <Card
+      data-section-key={sectionKey}
+      className={cn(
+        "shadow-none border overflow-hidden",
+        isConfirmed && !isModelLocked && "border-green-300 bg-green-50/10",
+      )}
+    >
+      <CardHeader className="bg-muted/30 border-b py-3">
         <CardTitle className="text-sm font-bold flex items-center gap-2">
           <Icon size={16} className="text-primary" />
           {section.title}
         </CardTitle>
-        {!isModelLocked && (
-          isConfirmed ? (
-            <Button
-              size="sm"
-              className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
-              onClick={() => onConfirmSection(sectionKey)}
-              title="Reviewed — click to unmark"
-            >
-              <Check size={12} />
-              Reviewed
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={() => onConfirmSection(sectionKey)}
-              title="Mark this section reviewed"
-            >
-              <ShieldCheck size={12} />
-              Mark reviewed
-            </Button>
-          )
-        )}
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
         {section.fields.map((field) => {
@@ -307,23 +292,6 @@ export function SectionCard({
                   {field.label}
                   {!isModelLocked && !hideConfidence && <ConfidenceBadge confidence={fieldConfidence} />}
                 </Label>
-                {!isModelLocked && (
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "h-6 w-6 transition-colors",
-                        verifiedFields.has(field.id)
-                          ? "text-green-600"
-                          : "text-muted-foreground hover:text-green-600",
-                      )}
-                      onClick={() => onVerifyField(field.id)}
-                    >
-                      <ShieldCheck size={12} />
-                    </Button>
-                  </div>
-                )}
               </div>
 
               {/* Textarea (auto-resize) */}
@@ -520,6 +488,66 @@ export function SectionCard({
           );
         })}
       </CardContent>
+      {/* Footer affordance — bottom of the section is where the reviewer
+          ends up after reading the fields. "Mark reviewed and continue"
+          is the inevitable next gesture; once confirmed, "Reviewed"
+          pill stays toggleable and "Next: X →" advances forward. */}
+      {!isModelLocked && (() => {
+        const nextKey = (() => {
+          const confirmedSet = new Set(confirmedSections);
+          const currentIdx = traversalOrder.indexOf(sectionKey as SectionKey);
+          for (let i = currentIdx + 1; i < traversalOrder.length; i++) {
+            if (!confirmedSet.has(traversalOrder[i])) return traversalOrder[i];
+          }
+          for (let i = 0; i < currentIdx; i++) {
+            if (!confirmedSet.has(traversalOrder[i])) return traversalOrder[i];
+          }
+          return null;
+        })();
+        const nextTitle = nextKey ? SECTION_CONFIG[nextKey].title : null;
+
+        return (
+          <div className="border-t bg-muted/20 px-4 py-3 flex items-center justify-between gap-2">
+            {isConfirmed ? (
+              <>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => onConfirmSection(sectionKey)}
+                  title="Reviewed — click to unmark"
+                >
+                  <Check size={12} />
+                  Reviewed
+                </Button>
+                {nextKey && nextTitle ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={() => onAdvance(nextKey)}
+                    title={`Go to ${nextTitle}`}
+                  >
+                    Next: {nextTitle}
+                    <ChevronRight size={12} />
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted-foreground">All sections reviewed</span>
+                )}
+              </>
+            ) : (
+              <Button
+                size="sm"
+                className="h-7 text-xs gap-1 ml-auto"
+                onClick={() => onConfirmAndAdvance(sectionKey as SectionKey)}
+              >
+                <ShieldCheck size={12} />
+                {nextKey ? 'Mark reviewed and continue' : 'Mark reviewed'}
+                {nextKey && <ChevronRight size={12} />}
+              </Button>
+            )}
+          </div>
+        );
+      })()}
     </Card>
   );
 }

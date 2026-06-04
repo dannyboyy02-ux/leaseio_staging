@@ -24,9 +24,15 @@ interface Props {
   lowConfidenceCount: number;
   unreviewedLowConfCount: number;
   onReview: () => void;
-  /** Titles of sections that gate approval (e.g. "Parties", "Dates &
-   * Term"). Surfaced in the "Confirm required sections" state so the
-   * reviewer knows exactly which sections to mark. */
+  /** Number of required sections currently confirmed. */
+  confirmedSectionCount?: number;
+  /** Total number of required sections. */
+  totalRequiredSections?: number;
+  /** Titles of sections still needing review — surfaced inline so the
+   * reviewer can see what's left without scrolling. */
+  remainingSectionTitles?: string[];
+  /** Titles of all required sections (fallback when remaining list is
+   * not provided). */
   requiredSectionTitles?: string[];
   /** Bulk action: mark every required section reviewed in one click. */
   onConfirmAllRequired?: () => void;
@@ -69,6 +75,9 @@ function deriveState(props: Props, t: (key: string, opts?: Record<string, unknow
     lowConfidenceCount,
     unreviewedLowConfCount,
     onReview,
+    confirmedSectionCount,
+    totalRequiredSections,
+    remainingSectionTitles,
     requiredSectionTitles,
     onConfirmAllRequired,
   } = props;
@@ -91,13 +100,22 @@ function deriveState(props: Props, t: (key: string, opts?: Record<string, unknow
   }
 
   if (!canApprove) {
-    const sectionsList = requiredSectionTitles && requiredSectionTitles.length > 0
-      ? formatList(requiredSectionTitles, language)
-      : t('strip.required_sections_fallback');
+    // Progress meter wording. Names what's left, not what's done — the
+    // reviewer needs to know where to go next, not pat themselves on
+    // the back.
+    const done = confirmedSectionCount ?? 0;
+    const total = totalRequiredSections ?? requiredSectionTitles?.length ?? 0;
+    const remaining = remainingSectionTitles && remainingSectionTitles.length > 0
+      ? formatList(remainingSectionTitles, language)
+      : (requiredSectionTitles && requiredSectionTitles.length > 0
+        ? formatList(requiredSectionTitles, language)
+        : t('strip.required_sections_fallback'));
     return {
       tone: 'info',
-      label: t('strip.confirm_required_label'),
-      detail: t('strip.confirm_required_detail', { sections: sectionsList }),
+      label: total > 0
+        ? t('strip.progress_label', { done, total })
+        : t('strip.confirm_required_label'),
+      detail: t('strip.progress_detail', { sections: remaining }),
       cta: onConfirmAllRequired
         ? { label: t('strip.mark_required_cta'), onClick: onConfirmAllRequired }
         : undefined,
