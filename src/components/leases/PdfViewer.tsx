@@ -257,6 +257,20 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
     return () => document.removeEventListener('selectionchange', handler);
   }, [captureMode]);
 
+  // Escape exits capture mode — universal expectation for any modal-ish
+  // selection state. Mirrors the Cancel button in the amber bar.
+  useEffect(() => {
+    if (!captureMode || !onExitCapture) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onExitCapture();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [captureMode, onExitCapture]);
+
   const confirmCapture = () => {
     if (!pendingSelectionText || !onCaptureSelection) return;
     onCaptureSelection(currentPage, pendingSelectionText);
@@ -429,14 +443,14 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
   return (
     <div ref={containerRef} className={cn('flex flex-col h-full', captureMode && 'ring-2 ring-amber-400/60 rounded')}>
       {captureMode && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 shrink-0">
-          <span>Selection mode — highlight a clause in the PDF, then click <strong>Use selection</strong>.</span>
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 shrink-0">
+          <span className="flex-1 min-w-[180px]">Selection mode — highlight a clause in the PDF, then click <strong>Use selection</strong>. (Esc to cancel.)</span>
+          <div className="flex items-center gap-1.5 shrink-0">
             {onExitCapture && (
               <Button
                 size="sm"
-                variant="ghost"
-                className="h-6 text-[11px] text-amber-900 hover:bg-amber-100"
+                variant="outline"
+                className="h-6 text-[11px] border-amber-400 text-amber-900 hover:bg-amber-100"
                 onClick={onExitCapture}
               >
                 Cancel

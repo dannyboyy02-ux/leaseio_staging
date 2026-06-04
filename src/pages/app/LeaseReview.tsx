@@ -44,6 +44,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -247,6 +257,11 @@ export default function LeaseReview() {
   const [uploadingStageFile, setUploadingStageFile] = useState(false);
   const [runningAbstraction, setRunningAbstraction] = useState(false);
   const [editingRequest, setEditingRequest] = useState(false);
+  // Separate edit state for the Internal Notes card so clicking Edit
+  // on Notes doesn't silently open the Report Attributes editor too
+  // (they used to share editingRequest and both rendered as if the
+  // user had hit Edit on the OTHER card).
+  const [editingNotes, setEditingNotes] = useState(false);
   const [requestEdits, setRequestEdits] = useState({
     request_title: '',
     requesting_department: '',
@@ -272,6 +287,7 @@ export default function LeaseReview() {
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
   const [cancelChangeSetDialogOpen, setCancelChangeSetDialogOpen] = useState(false);
+  const [cancelRequestDialogOpen, setCancelRequestDialogOpen] = useState(false);
   const [lockConfirmDialogOpen, setLockConfirmDialogOpen] = useState(false);
   const [cancelingChangeSet, setCancelingChangeSet] = useState(false);
   // Approver candidates for "Request Approval" flow. Populated when the
@@ -410,7 +426,15 @@ export default function LeaseReview() {
 
   // Check status states
   const isReviewRequired = lifecycleStatusTyped != null && isEquivalent(lifecycleStatusTyped, 'under_review');
-  const isPendingApproval = false;
+  // Pending approval = lease has been submitted/locked and is awaiting
+  // approver action. Drives NudgeApproverButton visibility and the
+  // status strip's awaiting-approval branch. Previously hardcoded false
+  // which silently disabled both surfaces — chain-workflow leases never
+  // surfaced their actual state.
+  const isPendingApproval = lifecycleStatusTyped != null && (
+    isEquivalent(lifecycleStatusTyped, 'submitted')
+    || isEquivalent(lifecycleStatusTyped, 'under_review')
+  );
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lifecycleStatus === 'active';
   // Lock editing when approved, posted, or pending approval
@@ -618,7 +642,8 @@ export default function LeaseReview() {
       } : prev);
 
       setEditingRequest(false);
-      toast.success('Report attributes updated');
+      setEditingNotes(false);
+      toast.success('Lease details updated');
     } catch (err) {
       console.error('Error saving request edits:', err);
       toast.error('Failed to save changes');
@@ -1912,7 +1937,7 @@ export default function LeaseReview() {
 
   if (loading)
     return (
-      <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
+      <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Loading lease…</div>
     );
 
   // Show processing indicator
@@ -2032,11 +2057,7 @@ export default function LeaseReview() {
                   <Button
                     variant="outline"
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => {
-                      if (window.confirm('Are you sure you want to cancel this lease request? This action cannot be undone.')) {
-                        updateLifecycleStatus('cancelled');
-                      }
-                    }}
+                    onClick={() => setCancelRequestDialogOpen(true)}
                   >
                     Cancel Request
                   </Button>
@@ -2222,13 +2243,13 @@ export default function LeaseReview() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle>Internal Notes</CardTitle>
-                {!editingRequest && (
-                  <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>Edit</Button>
+                {!editingNotes && (
+                  <Button variant="ghost" size="sm" onClick={() => setEditingNotes(true)}>Edit</Button>
                 )}
-                {editingRequest && (
+                {editingNotes && (
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={() => {
-                      setEditingRequest(false);
+                      setEditingNotes(false);
                       setRequestEdits(prev => ({ ...prev, request_description: lease.request_description || (lease as any).notes || '' }));
                     }}>Cancel</Button>
                     <Button size="sm" disabled={savingEdits} onClick={saveRequestEdits}>
@@ -2239,7 +2260,7 @@ export default function LeaseReview() {
                 )}
               </CardHeader>
               <CardContent>
-                {editingRequest ? (
+                {editingNotes ? (
                   <textarea
                     rows={4}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -2647,6 +2668,7 @@ export default function LeaseReview() {
           <Button
             size="sm"
             aria-pressed="true"
+            aria-label="Tab reviewed — click to unmark"
             className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white pr-1.5"
             onClick={() => handleConfirmTab(tabKey)}
             title="Reviewed — click to unmark"
@@ -2862,8 +2884,16 @@ export default function LeaseReview() {
                       <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight">
                         Source Document
                       </span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }} title="Collapse source document" aria-label="Collapse source document">
-                        <ChevronLeft size={16} />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 gap-1 text-[11px]"
+                        onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }}
+                        title="Hide the source document panel"
+                        aria-label="Hide source document"
+                      >
+                        <ChevronLeft size={12} />
+                        Hide source
                       </Button>
                     </div>
                     <PdfViewer
@@ -2952,18 +2982,18 @@ export default function LeaseReview() {
                     </div>
                   )}
                   {Array.isArray(extractedJson?._tier2_warnings) && extractedJson._tier2_warnings.length > 0 && (
-                    <div className="rounded-lg border border-blue-300 bg-blue-50 p-4">
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
                       <div className="flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-blue-800 text-sm mb-1">Classification Check</h4>
-                          <p className="text-xs text-blue-700/80 mb-2">
+                          <h4 className="font-semibold text-amber-900 text-sm mb-1">Classification Check</h4>
+                          <p className="text-xs text-amber-800 mb-2">
                             The AI classifier flagged possible mismatches between this document and how it was uploaded. Review and confirm before finalizing.
                           </p>
-                          <ul className="text-sm text-blue-700 space-y-1">
+                          <ul className="text-sm text-amber-900 space-y-1">
                             {extractedJson._tier2_warnings.map((warning, i) => (
                               <li key={i} className="flex items-start gap-2">
-                                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
                                 <span>{warning}</span>
                               </li>
                             ))}
@@ -2972,7 +3002,7 @@ export default function LeaseReview() {
                             <button
                               type="button"
                               onClick={() => setTier2CorrectionOpen(true)}
-                              className="mt-2 text-xs font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900"
+                              className="mt-2 text-xs font-medium text-amber-800 underline underline-offset-2 hover:text-amber-900"
                             >
                               AI got this wrong? Submit a correction
                             </button>
@@ -2998,12 +3028,6 @@ export default function LeaseReview() {
                         </div>
                       </div>
                     </div>
-                  )}
-                  {lowConfidenceFields.length > 0 && (
-                    <Badge variant="outline" className="text-amber-600 border-amber-400">
-                      <AlertTriangle size={10} className="mr-1" />
-                      {lowConfidenceFields.length} fields need attention
-                    </Badge>
                   )}
                 </div>
 
@@ -3392,47 +3416,6 @@ export default function LeaseReview() {
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
-
-        {/* Sticky Post Lease Footer */}
-        {isReviewRequired && (
-          <div className="sticky bottom-0 border-t bg-background p-4 flex justify-between items-center shadow-lg">
-            <div className="flex items-center gap-4">
-              {lowConfidenceFields.length > 0 ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  <span>
-                    {allLowConfFieldsInteracted 
-                      ? "All fields reviewed" 
-                      : `${lowConfidenceFields.length - interactedLowConfFields.size} field(s) require attention`
-                    }
-                  </span>
-                </div>
-              ) : (
-                <span className="text-sm text-muted-foreground">Ready to post</span>
-              )}
-              {auditLog.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  {auditLog.length} change{auditLog.length !== 1 ? 's' : ''} tracked
-                </Badge>
-              )}
-              <Badge variant="outline" className="text-xs">
-                {confirmedSections.length}/{Object.keys(SECTION_CONFIG).length} sections reviewed
-              </Badge>
-            </div>
-            <Button 
-              disabled={!allLowConfFieldsInteracted || posting}
-              onClick={handlePostLease}
-              className="min-w-[140px]"
-            >
-              {posting ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <CheckCircle className="h-4 w-4 mr-2" />
-              )}
-              Post Lease
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Rename Dialog */}
@@ -3456,18 +3439,50 @@ export default function LeaseReview() {
         </DialogContent>
       </Dialog>
 
-      {/* Cancel Confirmation Dialog */}
+      {/* Cancel-lease-request confirmation. Replaces a native
+          window.confirm so the dialog matches the design system and
+          surfaces in i18n surfaces. */}
+      <AlertDialog open={cancelRequestDialogOpen} onOpenChange={setCancelRequestDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this lease request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The lease will be marked cancelled and removed from the active pipeline. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep request</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setCancelRequestDialogOpen(false);
+                updateLifecycleStatus('cancelled');
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Cancel request
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Discard-staged-changes Confirmation Dialog */}
       <Dialog open={cancelChangeSetDialogOpen} onOpenChange={setCancelChangeSetDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Cancel changes?</DialogTitle>
+            <DialogTitle>
+              {stagedItemCount === 0
+                ? 'Discard changes?'
+                : `Discard ${stagedItemCount} staged change${stagedItemCount === 1 ? '' : 's'}?`}
+            </DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel? Your changes will not be saved and the lease will lock.
+              {stagedItemCount === 0
+                ? 'The lease will re-lock with no edits applied. This cannot be undone.'
+                : `${stagedItemCount} field edit${stagedItemCount === 1 ? '' : 's'} will be discarded and the lease will re-lock. This cannot be undone.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelChangeSetDialogOpen(false)} disabled={cancelingChangeSet}>
-              Keep Editing
+              Keep editing
             </Button>
             <Button
               variant="destructive"
@@ -3475,7 +3490,7 @@ export default function LeaseReview() {
               disabled={cancelingChangeSet}
             >
               {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Yes, cancel
+              {stagedItemCount === 0 ? 'Discard' : `Discard ${stagedItemCount} change${stagedItemCount === 1 ? '' : 's'}`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3576,7 +3591,7 @@ export default function LeaseReview() {
                 )}
                 <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
                   {isReLock
-                    ? 'This action is irreversible from this screen. To make further edits later, request another unlock.'
+                    ? 'To make further edits later, you’ll need to request another unlock.'
                     : 'You can request to unlock the record after activation, but each unlock requires a new approval cycle.'}
                 </div>
                 <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-2 sm:flex-wrap sm:justify-end">

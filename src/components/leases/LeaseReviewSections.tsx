@@ -459,7 +459,11 @@ export function SectionCard({
                 </div>
               )}
 
-              {!value && field.type !== 'term' && (
+              {/* Empty-field hint is informational ABOUT extraction —
+                  don't render it once the AI has confidence in the
+                  field (meaning extraction did happen; the user may
+                  have intentionally cleared it). */}
+              {!value && field.type !== 'term' && !isAIExtracted && (
                 <p className="text-[10px] text-muted-foreground mt-1 italic">
                   Field is empty — not extracted or not present in document
                 </p>

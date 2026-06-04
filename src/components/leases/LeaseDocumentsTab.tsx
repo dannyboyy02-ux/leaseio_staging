@@ -243,9 +243,11 @@ export function LeaseDocumentsTab({
           </p>
         )}
 
-        {/* Generate Lease Summary — available once the lease is locked (finalized).
-            Deterministic template, no AI call, no plan gate. */}
-        {isLocked ? (
+        {/* Generate Lease Summary — only render once the lease is
+            locked (finalized). Before lock the row is a dead-end with
+            no action available; hiding it entirely is cleaner than
+            rendering greyed-out text that the user can't act on. */}
+        {isLocked && (
           <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <FileText className="h-4 w-4 text-blue-600 shrink-0" />
@@ -275,18 +277,6 @@ export function LeaseDocumentsTab({
                 </>
               )}
             </Button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3 opacity-60">
-            <div className="flex items-center gap-2 min-w-0">
-              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Lease Summary</p>
-                <p className="text-xs text-muted-foreground">
-                  Available after the lease is finalized (model-locked)
-                </p>
-              </div>
-            </div>
           </div>
         )}
       </CardContent>
