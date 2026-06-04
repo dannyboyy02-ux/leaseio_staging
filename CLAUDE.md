@@ -244,6 +244,14 @@ LeaseIO has six project-level subagents in `.claude/agents/`. Routing review thr
 
 **Routing in practice:** no user-facing surface, no data-path impact → auditor + security + test-author. Add **product-polish** for user-facing surfaces. Add **integrity-reviewer** for data/audit/governance/reporting paths. Invoke **explorer** first on unfamiliar areas. Independent reviewers run in parallel (one message, multiple `Agent` calls).
 
+**The hard rule on polish:** the product owner should never be the first to notice an obvious UX problem on a surface that just changed. If they are, the polish agent failed to surface it and the routing failed to catch the miss. "Obvious" = visible in a screenshot, reachable in one click, present in a state the happy path crosses. To enforce this, polish review on UI changes is NOT a diff sweep — it is a surface sweep + state walk. Specifically:
+
+1. Invoke `lease-product-polish` on the full screens the change touched, not just the diff. Issues regularly live in surrounding UI the diff didn't modify (the collapsed-PDF dead-end, the tab strip overflow, the redundant button next to the new one).
+2. Have the agent walk every lifecycle state, not the happy path. Approved-then-unmark, error states, empty states, narrow viewport, terminal states all hide bugs.
+3. Surface findings WITH recommendations BEFORE the user looks at the preview. If they have to discover it, you were too late.
+
+The polish agent's own brief at `.claude/agents/lease-product-polish.md` codifies this. When invoking it, prompt for the broad sweep explicitly — don't just hand it the diff.
+
 **Surfacing findings:** Every Critical/High finding must be surfaced to me **before any fix** — present the agent, `file:line`, the agent's one-line description + risk + suggested fix, and your own true-finding-vs-false-positive assessment; then wait for my decision (fix / defer-with-reason / dismiss). Do not auto-remediate, bundle, or decide on my behalf. Mediums/Lows: summarize and address at your discretion, but record any deferrals in the change summary. A change with an unaddressed Critical/High is not complete even if it "works."
 
 **Pre-existing issues are their own beat.** When a reviewer/baseline pass surfaces issues that predate the current change, file them in `docs/KNOWN_ISSUES.md` with a stub remediation + root-cause hypothesis — do NOT bundle the fix into the current commit. (Full rationale + the smoke-check categorization rule for governance-hardening migrations are in `docs/CLAUDE_md_archive.md`.)
