@@ -72,6 +72,7 @@ import { Tier2CorrectionDialog } from "@/components/leases/Tier2CorrectionDialog
 import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
 import { downloadCSV } from "@/components/leases/LeaseExports";
 import { LeaseReviewStatusStrip } from "@/components/leases/LeaseReviewStatusStrip";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
 import { AmendmentsList } from "@/components/leases/AmendmentsList";
@@ -210,6 +211,7 @@ export default function LeaseReview() {
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
   const queryClient = useQueryClient();
+  const { language, t } = useLanguage();
   
   const [lease, setLease] = useState<any | null>(null);
   const [risks, setRisks] = useState<Risk[]>([]);
@@ -1230,16 +1232,28 @@ export default function LeaseReview() {
   );
 
   // Advance: switch tab if needed, scroll the target section's header
-  // into view. Used by the section footer's "Next: X →" button and the
-  // "Mark reviewed and continue" combined gesture.
+  // into view. Radix Tabs unmounts inactive TabsContent so the target
+  // anchor doesn't exist at setActiveTab call time — a fixed timeout
+  // races against React commit + Radix transition. We poll across a
+  // handful of animation frames (cap ~10 = ~160ms at 60fps) until the
+  // anchor mounts, then scroll. Stops cleanly if the user navigated
+  // away in the meantime.
   const handleSectionAdvance = useCallback((targetKey: SectionKey) => {
     const targetTab = SECTION_TO_TAB[targetKey];
     if (targetTab) setActiveTab(targetTab);
-    // Give the tab content a tick to mount before scrolling.
-    setTimeout(() => {
-      const el = document.querySelector(`[data-section-key="${targetKey}"]`);
-      if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 80);
+    const selector = `[data-section-key="${targetKey}"]`;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.querySelector(selector);
+      if (el) {
+        (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (attempts++ < 10) {
+        requestAnimationFrame(tryScroll);
+      }
+    };
+    requestAnimationFrame(tryScroll);
   }, []);
 
   // Combined: confirm the current section AND advance to the next
@@ -1285,14 +1299,14 @@ export default function LeaseReview() {
       const LF = (Intl as unknown as { ListFormat?: new (locale: string, opts: { style: string; type: string }) => { format(items: string[]): string } }).ListFormat;
       if (LF) {
         try {
-          return new LF('en', { style: 'long', type: 'conjunction' }).format(newlyAddedTitles);
+          return new LF(language === 'es' ? 'es' : 'en', { style: 'long', type: 'conjunction' }).format(newlyAddedTitles);
         } catch {
           /* fall through to join */
         }
       }
       return newlyAddedTitles.join(', ');
     })();
-    toast.success(`Marked ${formatter} reviewed`);
+    toast.success(String(t('lease_review.strip.marked_reviewed_toast', { sections: formatter })));
     if (lease?.id) {
       await supabase
         .from('leases')
@@ -2886,6 +2900,8 @@ export default function LeaseReview() {
                             onConfirmAndAdvance={handleConfirmAndAdvance}
                             onAdvance={handleSectionAdvance}
                             traversalOrder={SECTION_TRAVERSAL_ORDER}
+                            canApprove={canApprove}
+                            onApprove={handleApproveLease}
                           />
                         ))}
                         {/* Amendment: Parent Lease Comparison */}
@@ -3066,6 +3082,8 @@ export default function LeaseReview() {
                           onConfirmAndAdvance={handleConfirmAndAdvance}
                           onAdvance={handleSectionAdvance}
                           traversalOrder={SECTION_TRAVERSAL_ORDER}
+                          canApprove={canApprove}
+                          onApprove={handleApproveLease}
                         />
                       </TabsContent>
 
@@ -3091,6 +3109,8 @@ export default function LeaseReview() {
                             onConfirmAndAdvance={handleConfirmAndAdvance}
                             onAdvance={handleSectionAdvance}
                             traversalOrder={SECTION_TRAVERSAL_ORDER}
+                            canApprove={canApprove}
+                            onApprove={handleApproveLease}
                           />
                         ))}
                         <RentScheduleTable
@@ -3127,6 +3147,8 @@ export default function LeaseReview() {
                             onConfirmAndAdvance={handleConfirmAndAdvance}
                             onAdvance={handleSectionAdvance}
                             traversalOrder={SECTION_TRAVERSAL_ORDER}
+                            canApprove={canApprove}
+                            onApprove={handleApproveLease}
                           />
                         ))}
                       </TabsContent>

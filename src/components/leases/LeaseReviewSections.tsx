@@ -150,6 +150,14 @@ interface SectionCardProps {
   onAdvance: (targetKey: SectionKey) => void;
   /** Section traversal order for computing this section's "next." */
   traversalOrder: SectionKey[];
+  /** Whether the lease as a whole is ready to approve (all required
+   * sections confirmed AND not currently approving). Drives the
+   * terminal section footer's "Ready to approve →" forward link. */
+  canApprove?: boolean;
+  /** Called when the user clicks the terminal "Ready to approve →"
+   * button in the final section's footer. Should fire the same
+   * approval path as the page header's primary action. */
+  onApprove?: () => void;
   /** When true, suppress the per-field confidence badge. Set after a lease
    *  has been initially activated — confidence is a review-time signal, not
    *  relevant once the lease is in production use. */
@@ -174,6 +182,8 @@ export function SectionCard({
   onConfirmAndAdvance,
   onAdvance,
   traversalOrder,
+  canApprove,
+  onApprove,
   hideConfidence = false,
 }: SectionCardProps) {
   const { language } = useLanguage();
@@ -510,14 +520,20 @@ export function SectionCard({
           <div className="border-t bg-muted/20 px-4 py-3 flex items-center justify-between gap-2">
             {isConfirmed ? (
               <>
+                {/* Reviewed pill — solid green announces state, the X
+                    inside makes the unmark gesture obvious without
+                    relying on a hover tooltip. aria-pressed flags the
+                    toggle to assistive tech. */}
                 <Button
                   size="sm"
-                  className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
+                  aria-pressed="true"
+                  className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white pr-1.5"
                   onClick={() => onConfirmSection(sectionKey)}
                   title="Reviewed — click to unmark"
                 >
                   <Check size={12} />
                   Reviewed
+                  <X size={11} className="opacity-70 ml-0.5" />
                 </Button>
                 {nextKey && nextTitle ? (
                   <Button
@@ -530,6 +546,21 @@ export function SectionCard({
                     Next: {nextTitle}
                     <ChevronRight size={12} />
                   </Button>
+                ) : canApprove && onApprove ? (
+                  /* Terminal section confirmed AND the whole lease is
+                     ready — close the loop with a forward link that
+                     fires the same approve path as the header primary,
+                     so the user doesn't have to find their way back up. */
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={onApprove}
+                    title="Approve the lease"
+                  >
+                    <CheckCircle2 size={12} />
+                    Ready to approve
+                    <ChevronRight size={12} />
+                  </Button>
                 ) : (
                   <span className="text-xs text-muted-foreground">All sections reviewed</span>
                 )}
@@ -540,7 +571,7 @@ export function SectionCard({
                 className="h-7 text-xs gap-1 ml-auto"
                 onClick={() => onConfirmAndAdvance(sectionKey as SectionKey)}
               >
-                <ShieldCheck size={12} />
+                {nextKey ? <ShieldCheck size={12} /> : <CheckCircle2 size={12} />}
                 {nextKey ? 'Mark reviewed and continue' : 'Mark reviewed'}
                 {nextKey && <ChevronRight size={12} />}
               </Button>

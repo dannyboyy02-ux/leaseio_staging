@@ -195,15 +195,20 @@ export function LeaseReviewStatusStrip(props: Props) {
 
   return (
     <div
-      className={`flex items-center justify-between gap-4 border rounded-lg px-4 py-2.5 mx-6 mt-3 ${styles.container}`}
+      className={`flex items-start justify-between gap-4 border rounded-lg px-4 py-2.5 mx-6 mt-3 ${styles.container}`}
       role="status"
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <Badge className={`gap-1.5 ${styles.badge}`} variant="secondary">
+      <div className="flex items-start gap-3 min-w-0 flex-1 flex-wrap">
+        <Badge className={`gap-1.5 shrink-0 ${styles.badge}`} variant="secondary">
           <Icon className={iconClasses} />
           {state.label}
         </Badge>
-        <span className="text-sm text-muted-foreground truncate">{state.detail}</span>
+        {/* Wrap rather than truncate — the detail line IS the answer to
+            "what should I do next?" and clipping it off the right edge
+            of a narrow split-panel viewport is a dead-end. */}
+        <span className="text-sm text-muted-foreground break-words" title={state.detail}>
+          {state.detail}
+        </span>
       </div>
       {state.cta && (
         <Button size="sm" onClick={state.cta.onClick}>
