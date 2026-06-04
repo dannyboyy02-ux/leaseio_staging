@@ -1297,9 +1297,12 @@ export default function LeaseReview() {
   );
 
   // Toggle every section in a tab. Confirming a tab marks all its
-  // sections at once; unmarking does the inverse. After confirming,
-  // auto-advance to the next unconfirmed tab so the reviewer keeps
-  // moving forward without scrolling back to the tab strip.
+  // sections at once; unmarking does the inverse. Unmarking a tab
+  // while the lease is approved is the user's explicit "I want to
+  // change something" signal — we revert the approval in the same DB
+  // write so fields re-open for editing and the header primary action
+  // flips back from Lock Lease to Pending Review. Confirming auto-
+  // advances to the next unconfirmed tab.
   const handleConfirmTab = useCallback(async (tabKey: string) => {
     const tab = REVIEW_TABS.find((t) => t.key === tabKey);
     if (!tab) return;
@@ -1308,12 +1311,24 @@ export default function LeaseReview() {
       ? confirmedSections.filter((s) => !tab.sections.includes(s as SectionKey))
       : Array.from(new Set([...confirmedSections, ...tab.sections]));
     setConfirmedSections(newConfirmed);
-    if (lease?.id) {
-      await supabase
-        .from('leases')
-        .update({ confirmed_sections: newConfirmed })
-        .eq('id', lease.id);
+
+    // Unmark while approved → revert approval in the same update.
+    const shouldRevertApproval = allIn && isApproved;
+    const updatePayload: Record<string, any> = { confirmed_sections: newConfirmed };
+    if (shouldRevertApproval) {
+      const currentExtractedJson = (lease?.extracted_json || {}) as ExtractedJson;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { _approval, ...rest } = currentExtractedJson;
+      updatePayload.extracted_json = rest;
+      setLease((prev: any) => prev ? { ...prev, extracted_json: rest } : prev);
     }
+    if (lease?.id) {
+      await supabase.from('leases').update(updatePayload).eq('id', lease.id);
+    }
+    if (shouldRevertApproval) {
+      toast.message('Tab reopened — lease unapproved and editable.');
+    }
+
     if (!allIn) {
       const nextTab = REVIEW_TABS.find(
         (t) => t.key !== tabKey && !t.sections.every((s) => newConfirmed.includes(s)),
