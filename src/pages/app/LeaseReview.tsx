@@ -426,14 +426,15 @@ export default function LeaseReview() {
 
   // Check status states
   const isReviewRequired = lifecycleStatusTyped != null && isEquivalent(lifecycleStatusTyped, 'under_review');
-  // Pending approval = lease has been submitted/locked and is awaiting
-  // approver action. Drives NudgeApproverButton visibility and the
-  // status strip's awaiting-approval branch. Previously hardcoded false
-  // which silently disabled both surfaces — chain-workflow leases never
-  // surfaced their actual state.
+  // Pending approval = workbench-reachable lifecycle states where the
+  // lease has been submitted but the chain hasn't completed. Drives
+  // NudgeApproverButton visibility and the status strip's awaiting-
+  // approval branch. Note: 'submitted' and 'under_review' don't reach
+  // the workbench (they hit the isIntakeStage early-return above), so
+  // only the chain "pending approval" states matter here.
   const isPendingApproval = lifecycleStatusTyped != null && (
-    isEquivalent(lifecycleStatusTyped, 'submitted')
-    || isEquivalent(lifecycleStatusTyped, 'under_review')
+    isEquivalent(lifecycleStatusTyped, 'final_review')
+    || isEquivalent(lifecycleStatusTyped, 'pending_counter_signature')
   );
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lifecycleStatus === 'active';
@@ -641,9 +642,16 @@ export default function LeaseReview() {
         vendor_phone: requestEdits.vendor_phone,
       } : prev);
 
+      // Toast names what was open at save time so the user gets an
+      // accurate confirmation of scope.
+      const message = editingRequest && editingNotes
+        ? 'Lease details updated'
+        : editingNotes
+          ? 'Notes updated'
+          : 'Report attributes updated';
       setEditingRequest(false);
       setEditingNotes(false);
-      toast.success('Lease details updated');
+      toast.success(message);
     } catch (err) {
       console.error('Error saving request edits:', err);
       toast.error('Failed to save changes');
@@ -2138,13 +2146,18 @@ export default function LeaseReview() {
                 )}
                 {editingRequest && (
                   <div className="flex items-center gap-2">
+                    {/* Preserve request_description on cancel so an
+                        in-flight Notes draft isn't silently nuked
+                        when the user cancels Report Attributes. The
+                        two cards share `requestEdits` but cancelling
+                        one should only reset its own fields. */}
                     <Button variant="ghost" size="sm" onClick={() => {
                       setEditingRequest(false);
-                      setRequestEdits({
+                      setRequestEdits(prev => ({
+                        ...prev,
                         request_title: lease.request_title || '',
                         requesting_department: lease.requesting_department || '',
                         vendor_name: lease.vendor_name || '',
-                        request_description: lease.request_description || lease.notes || '',
                         asset_type: (lease as any).asset_type || '',
                         region: (lease as any).region || '',
                         location: (lease as any).location || '',
@@ -2155,7 +2168,7 @@ export default function LeaseReview() {
                         vendor_state: (lease as any).vendor_state || '',
                         vendor_zip: (lease as any).vendor_zip || '',
                         vendor_phone: (lease as any).vendor_phone || '',
-                      });
+                      }));
                     }}>Cancel</Button>
                     <Button size="sm" disabled={savingEdits} onClick={saveRequestEdits}>
                       {savingEdits ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
@@ -2880,14 +2893,14 @@ export default function LeaseReview() {
                   className={cn(isPdfCollapsed && "min-w-0")}
                 >
                   <div className="flex h-full flex-col bg-muted/50 relative">
-                    <div className="p-2 border-b flex justify-between bg-background items-center">
-                      <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight">
+                    <div className="p-2 border-b flex justify-between bg-background items-center gap-2 min-w-0">
+                      <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight truncate min-w-0">
                         Source Document
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-6 gap-1 text-[11px]"
+                        className="h-6 gap-1 text-[11px] shrink-0"
                         onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }}
                         title="Hide the source document panel"
                         aria-label="Hide source document"
@@ -2982,11 +2995,14 @@ export default function LeaseReview() {
                     </div>
                   )}
                   {Array.isArray(extractedJson?._tier2_warnings) && extractedJson._tier2_warnings.length > 0 && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 border-l-4 border-l-amber-500">
                       <div className="flex items-start gap-3">
                         <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-amber-900 text-sm mb-1">Classification Check</h4>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-semibold text-amber-900 text-sm">Classification Check</h4>
+                            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 font-medium">AI</span>
+                          </div>
                           <p className="text-xs text-amber-800 mb-2">
                             The AI classifier flagged possible mismatches between this document and how it was uploaded. Review and confirm before finalizing.
                           </p>
@@ -3471,12 +3487,12 @@ export default function LeaseReview() {
           <DialogHeader>
             <DialogTitle>
               {stagedItemCount === 0
-                ? 'Discard changes?'
+                ? 'Exit edit mode?'
                 : `Discard ${stagedItemCount} staged change${stagedItemCount === 1 ? '' : 's'}?`}
             </DialogTitle>
             <DialogDescription>
               {stagedItemCount === 0
-                ? 'The lease will re-lock with no edits applied. This cannot be undone.'
+                ? 'No staged changes will be lost. The lease will exit edit mode.'
                 : `${stagedItemCount} field edit${stagedItemCount === 1 ? '' : 's'} will be discarded and the lease will re-lock. This cannot be undone.`}
             </DialogDescription>
           </DialogHeader>
@@ -3490,7 +3506,7 @@ export default function LeaseReview() {
               disabled={cancelingChangeSet}
             >
               {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              {stagedItemCount === 0 ? 'Discard' : `Discard ${stagedItemCount} change${stagedItemCount === 1 ? '' : 's'}`}
+              {stagedItemCount === 0 ? 'Exit edit mode' : `Discard ${stagedItemCount} change${stagedItemCount === 1 ? '' : 's'}`}
             </Button>
           </DialogFooter>
         </DialogContent>

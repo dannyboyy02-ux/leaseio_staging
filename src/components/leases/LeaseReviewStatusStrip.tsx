@@ -140,7 +140,7 @@ function deriveState(props: Props, t: (key: string, opts?: Record<string, unknow
     };
   }
 
-  if (modelLocked && isPendingApproval) {
+  if (isPendingApproval) {
     return {
       tone: 'info',
       label: t('strip.awaiting_approval_label'),

@@ -1251,6 +1251,20 @@ For now, leave alone.
 
 ---
 
+### Item #51: `handleConfirmTab` useCallback has a stale-closure smell
+
+**Symptom:** `src/pages/app/LeaseReview.tsx:handleConfirmTab` reads `isApproved` and `lease.extracted_json` inside its body but doesn't list them in the dependency array. Works in practice because the parent re-renders refresh the callback on every render — but the React dep-array contract isn't honored and a future change that makes the parent more stable could surface the stale-closure as a real bug.
+
+**Severity:** Low. Currently behaves correctly because of render frequency. Not user-visible.
+
+**Where to look:** `src/pages/app/LeaseReview.tsx:handleConfirmTab` (search for the function; dep array currently does not include `isApproved` or `lease?.extracted_json`).
+
+**Stub remediation:** Add `isApproved` and `lease?.extracted_json` to the dependency array, OR rewrite to read those values via a ref so the dep array stays minimal. Either is fine; the ref approach avoids a tighter re-render coupling.
+
+**Decision:** Filed not fixed. Pre-existing; surfaced during the 2026-06-04 polish re-sweep on the all-sections-gate UX. Bundling this fix into the polish batch would have mixed concerns; deferred per the "pre-existing issues are their own beat" rule.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A

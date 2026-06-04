@@ -164,7 +164,9 @@ export function LeaseDocumentsTab({
       <CardHeader className="bg-muted/30 border-b py-3">
         <CardTitle className="text-sm font-bold">Documents</CardTitle>
         <CardDescription className="text-xs">
-          Original files and on-demand summaries for this lease
+          {isLocked
+            ? 'Original files and on-demand summaries for this lease'
+            : 'Original files for this lease'}
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4 space-y-2">
@@ -240,6 +242,14 @@ export function LeaseDocumentsTab({
         {!hasDocuments && (
           <p className="text-xs text-muted-foreground py-2">
             No documents uploaded for this lease yet.
+          </p>
+        )}
+
+        {/* Pre-lock hint about the summary — preserves discoverability
+            without rendering an inert row the user can't act on. */}
+        {!isLocked && (
+          <p className="text-xs text-muted-foreground italic mt-1">
+            A 1–2 page lease summary becomes available after the lease is locked.
           </p>
         )}
 
