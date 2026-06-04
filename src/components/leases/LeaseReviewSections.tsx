@@ -139,25 +139,6 @@ interface SectionCardProps {
    */
   onFieldStaged?: (fieldId: string, newValue: string) => void;
   onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
-  confirmedSections: string[];
-  onConfirmSection: (sectionKey: string) => void;
-  /** Mark this section reviewed AND advance to the next unconfirmed
-   * section. Used by the section footer's primary CTA. */
-  onConfirmAndAdvance: (sectionKey: SectionKey) => void;
-  /** Advance to a specific section without changing confirm state.
-   * Used by the "Next: X" button when this section is already
-   * confirmed. */
-  onAdvance: (targetKey: SectionKey) => void;
-  /** Section traversal order for computing this section's "next." */
-  traversalOrder: SectionKey[];
-  /** Whether the lease as a whole is ready to approve (all required
-   * sections confirmed AND not currently approving). Drives the
-   * terminal section footer's "Ready to approve →" forward link. */
-  canApprove?: boolean;
-  /** Called when the user clicks the terminal "Ready to approve →"
-   * button in the final section's footer. Should fire the same
-   * approval path as the page header's primary action. */
-  onApprove?: () => void;
   /** When true, suppress the per-field confidence badge. Set after a lease
    *  has been initially activated — confidence is a review-time signal, not
    *  relevant once the lease is in production use. */
@@ -177,13 +158,6 @@ export function SectionCard({
   onFieldBlur,
   onFieldStaged,
   onJumpToPage,
-  confirmedSections,
-  onConfirmSection,
-  onConfirmAndAdvance,
-  onAdvance,
-  traversalOrder,
-  canApprove,
-  onApprove,
   hideConfidence = false,
 }: SectionCardProps) {
   const { language } = useLanguage();
@@ -197,7 +171,6 @@ export function SectionCard({
   const [termUnit, setTermUnit] = useState<'months' | 'years'>('months');
   const section = SECTION_CONFIG[sectionKey];
   const Icon = section.icon;
-  const isConfirmed = confirmedSections.includes(sectionKey);
 
   const getFieldBorderClass = (fieldId: string) => {
     const fieldConf = getFieldConfidence(extractedJson, fieldId);
@@ -224,10 +197,7 @@ export function SectionCard({
   return (
     <Card
       data-section-key={sectionKey}
-      className={cn(
-        "shadow-none border overflow-hidden",
-        isConfirmed && !isModelLocked && "border-green-300 bg-green-50/10",
-      )}
+      className={cn("shadow-none border overflow-hidden")}
     >
       <CardHeader className="bg-muted/30 border-b py-3">
         <CardTitle className="text-sm font-bold flex items-center gap-2">
@@ -498,87 +468,6 @@ export function SectionCard({
           );
         })}
       </CardContent>
-      {/* Footer affordance — bottom of the section is where the reviewer
-          ends up after reading the fields. "Mark reviewed and continue"
-          is the inevitable next gesture; once confirmed, "Reviewed"
-          pill stays toggleable and "Next: X →" advances forward. */}
-      {!isModelLocked && (() => {
-        const nextKey = (() => {
-          const confirmedSet = new Set(confirmedSections);
-          const currentIdx = traversalOrder.indexOf(sectionKey as SectionKey);
-          for (let i = currentIdx + 1; i < traversalOrder.length; i++) {
-            if (!confirmedSet.has(traversalOrder[i])) return traversalOrder[i];
-          }
-          for (let i = 0; i < currentIdx; i++) {
-            if (!confirmedSet.has(traversalOrder[i])) return traversalOrder[i];
-          }
-          return null;
-        })();
-        const nextTitle = nextKey ? SECTION_CONFIG[nextKey].title : null;
-
-        return (
-          <div className="border-t bg-muted/20 px-4 py-3 flex items-center justify-between gap-2">
-            {isConfirmed ? (
-              <>
-                {/* Reviewed pill — solid green announces state, the X
-                    inside makes the unmark gesture obvious without
-                    relying on a hover tooltip. aria-pressed flags the
-                    toggle to assistive tech. */}
-                <Button
-                  size="sm"
-                  aria-pressed="true"
-                  className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white pr-1.5"
-                  onClick={() => onConfirmSection(sectionKey)}
-                  title="Reviewed — click to unmark"
-                >
-                  <Check size={12} />
-                  Reviewed
-                  <X size={11} className="opacity-70 ml-0.5" />
-                </Button>
-                {nextKey && nextTitle ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => onAdvance(nextKey)}
-                    title={`Go to ${nextTitle}`}
-                  >
-                    Next: {nextTitle}
-                    <ChevronRight size={12} />
-                  </Button>
-                ) : canApprove && onApprove ? (
-                  /* Terminal section confirmed AND the whole lease is
-                     ready — close the loop with a forward link that
-                     fires the same approve path as the header primary,
-                     so the user doesn't have to find their way back up. */
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
-                    onClick={onApprove}
-                    title="Approve the lease"
-                  >
-                    <CheckCircle2 size={12} />
-                    Ready to approve
-                    <ChevronRight size={12} />
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">All sections reviewed</span>
-                )}
-              </>
-            ) : (
-              <Button
-                size="sm"
-                className="h-7 text-xs gap-1 ml-auto"
-                onClick={() => onConfirmAndAdvance(sectionKey as SectionKey)}
-              >
-                {nextKey ? <ShieldCheck size={12} /> : <CheckCircle2 size={12} />}
-                {nextKey ? 'Mark reviewed and continue' : 'Mark reviewed'}
-                {nextKey && <ChevronRight size={12} />}
-              </Button>
-            )}
-          </div>
-        );
-      })()}
     </Card>
   );
 }

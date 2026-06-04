@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import {
   FileText,
   CheckCircle,
+  Check,
   Save,
   Loader2,
   ChevronLeft,
@@ -161,24 +162,22 @@ interface ExtractedJson {
 }
 
 // Tier-1 required fields that must be marked as reviewed before approval
-// Section traversal order — the order the reviewer naturally walks
-// through the workbench. Tabs cluster sections; within General the
-// order matches how the fields render top-to-bottom (Parties → Property
-// → Dates). All six sections gate approval: the reviewer must mark
-// every AI-extracted section reviewed before the lease can advance.
-const SECTION_TRAVERSAL_ORDER: SectionKey[] = [
-  'parties', 'property', 'dates', 'vendor', 'rent', 'options',
+// Tab is the unit of human attestation. Each tab groups one or more
+// sections; the reviewer confirms a whole tab at once via a single
+// "Reviewed" affordance at the bottom of the tab content. Internally
+// confirmation is still persisted per-section so the data shape doesn't
+// change — the UI just lifts the gesture to the tab level.
+type ReviewTab = { key: string; title: string; sections: SectionKey[] };
+const REVIEW_TABS: ReviewTab[] = [
+  { key: 'general', title: 'General Information', sections: ['parties', 'property', 'dates'] },
+  { key: 'vendor', title: 'Vendor', sections: ['vendor'] },
+  { key: 'rent', title: 'Rent', sections: ['rent'] },
+  { key: 'options', title: 'Options', sections: ['options'] },
 ];
-
-// Tab each section lives in. Used to switch tabs when advancing.
-const SECTION_TO_TAB: Record<SectionKey, string> = {
-  parties: 'general',
-  property: 'general',
-  dates: 'general',
-  vendor: 'vendor',
-  rent: 'rent',
-  options: 'options',
-};
+const SECTION_TRAVERSAL_ORDER: SectionKey[] = REVIEW_TABS.flatMap((t) => t.sections);
+const SECTION_TO_TAB: Record<SectionKey, string> = Object.fromEntries(
+  REVIEW_TABS.flatMap((t) => t.sections.map((s) => [s, t.key])),
+) as Record<SectionKey, string>;
 
 interface Risk {
   id: string;
@@ -1273,6 +1272,87 @@ export default function LeaseReview() {
     const next = nextUnconfirmedAfter(sectionKey, sectionKey);
     if (next) handleSectionAdvance(next);
   }, [confirmedSections, lease?.id, nextUnconfirmedAfter, handleSectionAdvance]);
+
+  // Tab-level helpers — the user-facing unit of attestation. A tab is
+  // confirmed iff every section it contains is confirmed.
+  const isTabConfirmed = useCallback(
+    (tabKey: string) => {
+      const tab = REVIEW_TABS.find((t) => t.key === tabKey);
+      if (!tab) return false;
+      return tab.sections.every((s) => confirmedSections.includes(s));
+    },
+    [confirmedSections],
+  );
+
+  const confirmedTabsCount = useMemo(
+    () => REVIEW_TABS.filter((t) => t.sections.every((s) => confirmedSections.includes(s))).length,
+    [confirmedSections],
+  );
+
+  const remainingTabTitles = useMemo(
+    () => REVIEW_TABS
+      .filter((t) => !t.sections.every((s) => confirmedSections.includes(s)))
+      .map((t) => t.title),
+    [confirmedSections],
+  );
+
+  // Toggle every section in a tab. Confirming a tab marks all its
+  // sections at once; unmarking does the inverse. After confirming,
+  // auto-advance to the next unconfirmed tab so the reviewer keeps
+  // moving forward without scrolling back to the tab strip.
+  const handleConfirmTab = useCallback(async (tabKey: string) => {
+    const tab = REVIEW_TABS.find((t) => t.key === tabKey);
+    if (!tab) return;
+    const allIn = tab.sections.every((s) => confirmedSections.includes(s));
+    const newConfirmed = allIn
+      ? confirmedSections.filter((s) => !tab.sections.includes(s as SectionKey))
+      : Array.from(new Set([...confirmedSections, ...tab.sections]));
+    setConfirmedSections(newConfirmed);
+    if (lease?.id) {
+      await supabase
+        .from('leases')
+        .update({ confirmed_sections: newConfirmed })
+        .eq('id', lease.id);
+    }
+    if (!allIn) {
+      const nextTab = REVIEW_TABS.find(
+        (t) => t.key !== tabKey && !t.sections.every((s) => newConfirmed.includes(s)),
+      );
+      if (nextTab) {
+        setActiveTab(nextTab.key);
+        // Reuse the same retry-loop pattern to scroll the first
+        // section into view once the tab content mounts.
+        const selector = `[data-section-key="${nextTab.sections[0]}"]`;
+        let attempts = 0;
+        const tryScroll = () => {
+          const el = document.querySelector(selector);
+          if (el) {
+            (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+          }
+          if (attempts++ < 10) requestAnimationFrame(tryScroll);
+        };
+        requestAnimationFrame(tryScroll);
+      }
+    }
+  }, [confirmedSections, lease?.id]);
+
+  const handleAdvanceTab = useCallback((targetTabKey: string) => {
+    const tab = REVIEW_TABS.find((t) => t.key === targetTabKey);
+    if (!tab) return;
+    setActiveTab(targetTabKey);
+    const selector = `[data-section-key="${tab.sections[0]}"]`;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.querySelector(selector);
+      if (el) {
+        (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+      if (attempts++ < 10) requestAnimationFrame(tryScroll);
+    };
+    requestAnimationFrame(tryScroll);
+  }, []);
 
   // All sections gate approval now. Titles surface to the strip.
   const requiredSectionTitles = useMemo(
@@ -2533,6 +2613,70 @@ export default function LeaseReview() {
     return null;
   })();
 
+  // Inline tab footer — one Reviewed affordance per tab, rendered at
+  // the bottom of the tab's content. Replaces the per-section footers.
+  // Uses green for confirmed (matches the page color scheme); outline
+  // for unconfirmed. No "Mark" verb in the label — the button just
+  // says "Reviewed" and its visual state announces what's true.
+  const renderTabFooter = (tabKey: string) => {
+    if (lease?.model_locked) return null;
+    const confirmed = isTabConfirmed(tabKey);
+    const nextTab = REVIEW_TABS.find(
+      (t) => t.key !== tabKey && !t.sections.every((s) => confirmedSections.includes(s)),
+    );
+    const showApprovePath = !nextTab && canApprove;
+    return (
+      <div className="border-t pt-3 mt-2 flex items-center justify-between gap-2">
+        {confirmed ? (
+          <Button
+            size="sm"
+            aria-pressed="true"
+            className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white pr-1.5"
+            onClick={() => handleConfirmTab(tabKey)}
+            title="Reviewed — click to unmark"
+          >
+            <Check size={12} />
+            Reviewed
+            <X size={11} className="opacity-70 ml-0.5" />
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800"
+            onClick={() => handleConfirmTab(tabKey)}
+          >
+            <Check size={12} />
+            Reviewed
+          </Button>
+        )}
+        {nextTab ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => handleAdvanceTab(nextTab.key)}
+            title={`Go to ${nextTab.title}`}
+          >
+            Next: {nextTab.title}
+            <ChevronRight size={12} />
+          </Button>
+        ) : showApprovePath ? (
+          <Button
+            size="sm"
+            className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
+            onClick={handleApproveLease}
+            title="Approve the lease"
+          >
+            <CheckCircle size={12} />
+            Ready to approve
+            <ChevronRight size={12} />
+          </Button>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <AppLayout>
       {/* Phase 6 — submitter notification. Mounts at the top level so the
@@ -2684,10 +2828,10 @@ export default function LeaseReview() {
           lowConfidenceCount={lowConfidenceFields.length}
           unreviewedLowConfCount={lowConfidenceFields.length - interactedLowConfFields.size}
           onReview={handleJumpToFirstFlagged}
-          confirmedSectionCount={confirmedSectionCount}
-          totalRequiredSections={SECTION_TRAVERSAL_ORDER.length}
-          remainingSectionTitles={remainingSectionTitles}
-          requiredSectionTitles={requiredSectionTitles}
+          confirmedSectionCount={confirmedTabsCount}
+          totalRequiredSections={REVIEW_TABS.length}
+          remainingSectionTitles={remainingTabTitles}
+          requiredSectionTitles={REVIEW_TABS.map((t) => t.title)}
           onConfirmAllRequired={handleConfirmAllRequired}
         />
 
@@ -2895,13 +3039,6 @@ export default function LeaseReview() {
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
                             onJumpToPage={jumpToPage}
-                            confirmedSections={confirmedSections}
-                            onConfirmSection={handleConfirmSection}
-                            onConfirmAndAdvance={handleConfirmAndAdvance}
-                            onAdvance={handleSectionAdvance}
-                            traversalOrder={SECTION_TRAVERSAL_ORDER}
-                            canApprove={canApprove}
-                            onApprove={handleApproveLease}
                           />
                         ))}
                         {/* Amendment: Parent Lease Comparison */}
@@ -3060,6 +3197,7 @@ export default function LeaseReview() {
                             )}
                           </>
                         )}
+                        {renderTabFooter('general')}
                       </TabsContent>
 
                       {/* Vendor / Counterparty */}
@@ -3077,14 +3215,8 @@ export default function LeaseReview() {
                           onFieldBlur={trackFieldCorrection}
                           onFieldStaged={stageFieldImmediate}
                           onJumpToPage={jumpToPage}
-                          confirmedSections={confirmedSections}
-                          onConfirmSection={handleConfirmSection}
-                          onConfirmAndAdvance={handleConfirmAndAdvance}
-                          onAdvance={handleSectionAdvance}
-                          traversalOrder={SECTION_TRAVERSAL_ORDER}
-                          canApprove={canApprove}
-                          onApprove={handleApproveLease}
                         />
+                        {renderTabFooter('vendor')}
                       </TabsContent>
 
                       {/* Rent */}
@@ -3104,13 +3236,6 @@ export default function LeaseReview() {
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
                             onJumpToPage={jumpToPage}
-                            confirmedSections={confirmedSections}
-                            onConfirmSection={handleConfirmSection}
-                            onConfirmAndAdvance={handleConfirmAndAdvance}
-                            onAdvance={handleSectionAdvance}
-                            traversalOrder={SECTION_TRAVERSAL_ORDER}
-                            canApprove={canApprove}
-                            onApprove={handleApproveLease}
                           />
                         ))}
                         <RentScheduleTable
@@ -3123,6 +3248,7 @@ export default function LeaseReview() {
                           onGenerateSchedule={handleGenerateSchedule}
                           canGenerate={!!(form.lease_start && form.base_rent_amount)}
                         />
+                        {renderTabFooter('rent')}
                       </TabsContent>
 
                       {/* Options & Clauses */}
@@ -3142,15 +3268,9 @@ export default function LeaseReview() {
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
                             onJumpToPage={jumpToPage}
-                            confirmedSections={confirmedSections}
-                            onConfirmSection={handleConfirmSection}
-                            onConfirmAndAdvance={handleConfirmAndAdvance}
-                            onAdvance={handleSectionAdvance}
-                            traversalOrder={SECTION_TRAVERSAL_ORDER}
-                            canApprove={canApprove}
-                            onApprove={handleApproveLease}
                           />
                         ))}
+                        {renderTabFooter('options')}
                       </TabsContent>
 
                       {/* Risks */}
