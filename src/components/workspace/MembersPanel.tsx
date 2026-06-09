@@ -112,11 +112,19 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
   });
 
   const handleRemoveMember = async (memberId: string) => {
+    const target = members?.find((m) => m.id === memberId);
     try {
       const { error } = await supabase.from('workspace_members').delete().eq('id', memberId);
       if (error) throw error;
       toast.success('Member removed');
       refetchMembers();
+      if (target) {
+        await (supabase as any).from('workspace_activity_log').insert({
+          workspace_id: workspaceId,
+          event_type: 'member_removed',
+          details: { target_user_id: target.user_id },
+        });
+      }
     } catch (error) {
       console.error('Error removing member:', error);
       toast.error('Failed to remove member');
@@ -225,6 +233,8 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
                           memberId={member.id}
                           currentRole={member.role as WorkspaceRole}
                           onRoleChanged={() => refetchMembers()}
+                          workspaceId={workspaceId}
+                          targetUserId={member.user_id}
                         />
                         {canManage && (
                           <Button

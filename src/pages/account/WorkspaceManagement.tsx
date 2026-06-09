@@ -148,6 +148,8 @@ export default function WorkspaceManagement() {
     },
   });
 
+  const useGridLayout = ownedMeta.length + memberOnly.length > 5;
+
   // Reset manage-members sheet if the workspace we were managing is gone.
   useEffect(() => {
     if (manageMembersWorkspaceId && !ownedIds.includes(manageMembersWorkspaceId)) {
@@ -241,7 +243,7 @@ export default function WorkspaceManagement() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
+            <div className={useGridLayout ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-3'}>
               {ownedMeta.map((ws) => {
                 const isActive = activeWorkspace?.id === ws.id;
                 return (

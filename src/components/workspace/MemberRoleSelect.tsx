@@ -16,6 +16,8 @@ interface MemberRoleSelectProps {
   currentRole: WorkspaceRole;
   onRoleChanged: () => void;
   disabled?: boolean;
+  workspaceId?: string;
+  targetUserId?: string;
 }
 
 export function MemberRoleSelect({
@@ -23,6 +25,8 @@ export function MemberRoleSelect({
   currentRole,
   onRoleChanged,
   disabled,
+  workspaceId,
+  targetUserId,
 }: MemberRoleSelectProps) {
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -40,6 +44,14 @@ export function MemberRoleSelect({
 
       toast.success('Role updated successfully');
       onRoleChanged();
+
+      if (workspaceId && targetUserId) {
+        await (supabase as any).from('workspace_activity_log').insert({
+          workspace_id: workspaceId,
+          event_type: 'member_added',
+          details: { target_user_id: targetUserId, role: newRole, previous_role: currentRole },
+        });
+      }
     } catch (error) {
       console.error('Error updating role:', error);
       toast.error('Failed to update role');

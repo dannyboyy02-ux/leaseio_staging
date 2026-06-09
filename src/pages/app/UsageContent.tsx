@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Sparkles, ArrowRight, Archive, Activity } from 'lucide-react';
+import { Sparkles, ArrowRight, Archive, Activity, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { supabase } from '@/integrations/supabase/client';
+import { PLANS } from '@/config/pricing';
+import type { SubscriptionPlan } from '@/config/pricing';
 
 interface RecentArchive {
   id: string;
@@ -33,7 +35,7 @@ interface Props {
 
 export function UsageContent({ showHeader = false }: Props) {
   const { t } = useAppTranslation();
-  const { workspace } = useApp();
+  const { workspace, availableWorkspaces } = useApp();
   const [recent, setRecent] = useState<RecentArchive[]>([]);
 
   useEffect(() => {
@@ -78,6 +80,11 @@ export function UsageContent({ showHeader = false }: Props) {
   const archivedPct = archivedMax > 0 ? Math.min((archivedUsed / archivedMax) * 100, 100) : 0;
   const showUpgrade = activePct >= 75 || archivedPct >= 75;
 
+  const planConfig = PLANS[workspace.plan as SubscriptionPlan] ?? PLANS.starter;
+  const maxWorkspaces = planConfig.maxWorkspaces;
+  const ownedCount = availableWorkspaces.filter((w) => w.role === 'owner').length;
+  const workspacePct = maxWorkspaces > 0 ? Math.min((ownedCount / maxWorkspaces) * 100, 100) : 0;
+
   return (
     <div className="space-y-6">
       {showHeader && (
@@ -115,7 +122,7 @@ export function UsageContent({ showHeader = false }: Props) {
         </Card>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -160,6 +167,28 @@ export function UsageContent({ showHeader = false }: Props) {
             <Progress value={archivedPct} variant={usageTone(archivedPct)} className="h-2" />
             <p className="text-xs text-muted-foreground">
               {t('usage.percent_used', { percent: Math.round(archivedPct) })}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              {t('usage.workspaces')}
+            </CardTitle>
+            <CardDescription className="text-xs">
+              {t('usage.workspaces_desc')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-3xl font-bold text-foreground">{ownedCount}</span>
+              <span className="text-sm text-muted-foreground">/ {maxWorkspaces}</span>
+            </div>
+            <Progress value={workspacePct} variant={usageTone(workspacePct)} className="h-2" />
+            <p className="text-xs text-muted-foreground">
+              {t('usage.percent_used', { percent: Math.round(workspacePct) })}
             </p>
           </CardContent>
         </Card>

@@ -72,7 +72,9 @@
     "recent_archives_desc": "The 10 most recent archive actions in this workspace.",
     "recent_archives_empty": "No leases have been archived yet.",
     "untitled_lease": "Untitled lease",
-    "archived_by": "Archived by {{name}}"
+    "archived_by": "Archived by {{name}}",
+    "workspaces": "Workspaces",
+    "workspaces_desc": "Workspaces you own on this plan."
   },
   "archive": {
     "archive": "Delete",
