@@ -112,7 +112,7 @@ export function WorkspaceCommandPalette({
         <CommandEmpty>{t("common.no_results", { defaultValue: "No results." })}</CommandEmpty>
 
         {workspace ? (
-          <CommandGroup heading={t("workspace.create.search_placeholder")}>
+          <CommandGroup heading={t("workspace.create.current_heading")}>
             <CommandItem disabled value={`current-${workspace.id}`}>
               <WorkspaceAvatar id={workspace.id} name={workspace.name} size="sm" className="mr-2" />
               <span className="flex-1 truncate">{workspace.name}</span>
@@ -124,7 +124,7 @@ export function WorkspaceCommandPalette({
         {recentWorkspaces.length > 0 ? (
           <>
             <CommandSeparator />
-            <CommandGroup heading="Recent">
+            <CommandGroup heading={t("workspace.create.recent_heading")}>
               {recentWorkspaces.map((w) => (
                 <CommandItem key={w.id} value={w.name} onSelect={() => handleSelect(w.id)}>
                   <WorkspaceAvatar id={w.id} name={w.name} size="sm" className="mr-2" />
@@ -143,7 +143,7 @@ export function WorkspaceCommandPalette({
         {alphaWorkspaces.length > 0 ? (
           <>
             <CommandSeparator />
-            <CommandGroup heading="All workspaces">
+            <CommandGroup heading={t("workspace.create.all_heading")}>
               {alphaWorkspaces.map((w) => (
                 <CommandItem key={w.id} value={w.name} onSelect={() => handleSelect(w.id)}>
                   <WorkspaceAvatar id={w.id} name={w.name} size="sm" className="mr-2" />

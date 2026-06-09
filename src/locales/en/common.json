@@ -689,7 +689,6 @@
       "timeout_unpaid_title": "Setup is taking longer than expected",
       "timeout_unpaid_body": "You'll get an email when it's ready, or contact support.",
       "timeout_close": "Close",
-      "timeout_manage": "Manage workspaces",
       "error_not_eligible_title": "Multi-workspace is a Business feature",
       "error_not_eligible_body": "Upgrade your workspace to Business to create additional workspaces.",
       "error_cap_reached_title": "You've reached the workspace limit",
@@ -704,7 +703,6 @@
       "error_payment_failed_title": "Your card was declined",
       "error_payment_failed_safe_line": "No charge was made to your card.",
       "error_payment_failed_cta": "Update card",
-      "error_payment_failed_retry": "Try again",
       "error_3ds_canceled_title": "Authentication cancelled",
       "error_3ds_canceled_body": "Your bank's verification step was cancelled. No charge was made.",
       "error_3ds_retry": "Try again",
@@ -712,7 +710,14 @@
       "error_unavailable_body": "Payment configuration is missing. Please contact support.",
       "pending_resume_label": "Resume setup",
       "pending_badge": "Pending payment",
-      "pending_workspace_aria": "{{name}} (pending payment)"
+      "pending_workspace_aria": "{{name}} (pending payment)",
+      "current_heading": "Current",
+      "recent_heading": "Recent",
+      "all_heading": "All workspaces",
+      "resume_dialog_intro": "Payment for this workspace wasn't finished. Authenticate to complete setup; you won't be charged twice.",
+      "resume_button": "Authenticate & finish setup",
+      "resume_unavailable_title": "We couldn't resume this workspace",
+      "resume_unavailable_body": "The payment session for this workspace has expired. Remove it and try again from the sidebar."
     }
   },
   "integrations": {

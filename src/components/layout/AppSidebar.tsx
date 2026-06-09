@@ -80,6 +80,10 @@ export function AppSidebar() {
   // --- Phase 2: multi-workspace switcher state ---
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // When set, opening NewWorkspaceDialog enters resume mode — it re-fetches the
+  // existing PaymentIntent for this pending workspace and lets the user finish
+  // the 3DS flow (spec §P2.11 mitigation for the orphan-after-tab-close trap).
+  const [resumeWorkspaceId, setResumeWorkspaceId] = useState<string | null>(null);
 
   // Create-eligibility: caller owns ≥1 active Business workspace + ownedCount <
   // Business cap. Derived from availableWorkspaces (server re-checks server-side
@@ -286,17 +290,32 @@ export function AppSidebar() {
                   ws.role === 'owner' &&
                   (ws.subscription_status === 'incomplete' ||
                     ws.subscription_status === 'incomplete_expired');
+                // Spec §P2.11: pending-creation rows open the dialog in resume
+                // mode (re-fetches the existing PaymentIntent so the user can
+                // finish 3DS), instead of switching INTO an unactivated
+                // workspace and trapping them there.
+                const onSelect = isPending
+                  ? () => {
+                      setResumeWorkspaceId(ws.id);
+                      setNewWorkspaceOpen(true);
+                    }
+                  : () => handleSwitchWithRecent(ws.id);
                 return (
                   <DropdownMenuItem
                     key={ws.id}
-                    onClick={() => handleSwitchWithRecent(ws.id)}
+                    onClick={onSelect}
                     className="flex items-center gap-2"
+                    aria-label={
+                      isPending
+                        ? t('workspace.create.pending_workspace_aria', { name: ws.name })
+                        : undefined
+                    }
                   >
                     <WorkspaceAvatar id={ws.id} name={ws.name} size="sm" />
                     <span className="flex-1 truncate">{ws.name}</span>
                     {isPending ? (
-                      <span className="text-[10px] text-muted-foreground">
-                        {t('workspace.create.pending_badge')}
+                      <span className="text-[10px] text-primary font-medium">
+                        {t('workspace.create.pending_resume_label')}
                       </span>
                     ) : (
                       <Check
@@ -312,7 +331,12 @@ export function AppSidebar() {
             })()}
             {(canCreate || atCap) ? <DropdownMenuSeparator /> : null}
             {canCreate ? (
-              <DropdownMenuItem onClick={() => setNewWorkspaceOpen(true)}>
+              <DropdownMenuItem
+                onClick={() => {
+                  setResumeWorkspaceId(null);
+                  setNewWorkspaceOpen(true);
+                }}
+              >
                 {t('workspace.create.cta')}
               </DropdownMenuItem>
             ) : null}
@@ -330,12 +354,22 @@ export function AppSidebar() {
       </div>
 
       {/* Phase 2 dialogs */}
-      <NewWorkspaceDialog open={newWorkspaceOpen} onOpenChange={setNewWorkspaceOpen} />
+      <NewWorkspaceDialog
+        open={newWorkspaceOpen}
+        onOpenChange={(o) => {
+          setNewWorkspaceOpen(o);
+          if (!o) setResumeWorkspaceId(null);
+        }}
+        resumeWorkspaceId={resumeWorkspaceId}
+      />
       <WorkspaceCommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         canCreate={canCreate}
-        onCreate={() => setNewWorkspaceOpen(true)}
+        onCreate={() => {
+          setResumeWorkspaceId(null);
+          setNewWorkspaceOpen(true);
+        }}
       />
       {/* /Phase 2 */}
 

@@ -48,9 +48,8 @@ describe("getStripe — publishable key prefix assertion (fail closed)", () => {
 
   it("returns null when VITE_STRIPE_PUBLISHABLE_KEY is missing (empty string)", async () => {
     setEnv(undefined, "development");
-    const { getStripe, isStripeAvailable } = await import("../stripe");
+    const { getStripe } = await import("../stripe");
     expect(getStripe()).toBeNull();
-    expect(isStripeAvailable()).toBe(false);
     expect(loadStripeMock).not.toHaveBeenCalled();
   });
 
@@ -109,13 +108,4 @@ describe("getStripe — publishable key prefix assertion (fail closed)", () => {
     expect(loadStripeMock).toHaveBeenCalledTimes(1);
   });
 
-  it("isStripeAvailable mirrors getStripe nullability without triggering a second load", async () => {
-    setEnv("pk_test_abc", "development");
-    const mod = await import("../stripe");
-    expect(mod.isStripeAvailable()).toBe(true);
-    expect(mod.isStripeAvailable()).toBe(true);
-    // Even after isStripeAvailable() is called twice, loadStripe is invoked at
-    // most once (singleton behavior).
-    expect(loadStripeMock).toHaveBeenCalledTimes(1);
-  });
 });

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,15 @@ interface NewWorkspaceDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Optional pre-filled name (e.g. when launched from a recovery affordance). */
   initialName?: string;
+  /**
+   * Resume an existing pending workspace by id. When set, the dialog opens
+   * directly into the confirm step using the existing Stripe PaymentIntent
+   * (re-fetched via the preview endpoint), bypassing the name + new-sub
+   * creation path. This is the spec §P2.11 mitigation for the HIGH-sec
+   * "3DS network-fail or tab-close → workspace orphans" finding — without
+   * it, a user can see the pending workspace but can't finish paying.
+   */
+  resumeWorkspaceId?: string | null;
 }
 
 const POLL_INTERVAL_MS = 2000;
@@ -98,11 +108,18 @@ function randomKey(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: NewWorkspaceDialogProps) {
+export function NewWorkspaceDialog({
+  open,
+  onOpenChange,
+  initialName = "",
+  resumeWorkspaceId = null,
+}: NewWorkspaceDialogProps) {
   const { t } = useAppTranslation();
+  const navigate = useNavigate();
   const { switchWorkspace } = useApp();
+  const isResume = !!resumeWorkspaceId;
 
-  const [step, setStep] = useState<DialogStep>("name");
+  const [step, setStep] = useState<DialogStep>(isResume ? "preview" : "name");
   const [name, setName] = useState<string>(initialName);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
@@ -117,6 +134,16 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
   // for recovery WITHOUT keeping it in component state any longer than needed.
   const clientSecretRef = useRef<string | null>(null);
 
+  // Cleanup pollers on unmount / dialog close. The poll runs as an async loop
+  // gated by a boolean flag in the closure — flip it and the loop exits before
+  // its next setState. Spec §P2.11 mandates "AbortController + cleanup"; the
+  // boolean is functionally equivalent here because there's no in-flight
+  // fetch/subscription to abort (we await a setTimeout between rounds, then
+  // check the flag), and Supabase's PostgREST client cannot accept an
+  // AbortSignal on the relevant query method. Declared before
+  // pollForActivation so the function's first read isn't a forward reference.
+  const pollCleanupRef = useRef<(() => void) | null>(null);
+
   // Reset everything on dialog close so a fresh open starts clean.
   useEffect(() => {
     if (!open) {
@@ -127,10 +154,21 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
       setCreatedWorkspaceId(null);
       idempotencyKeyRef.current = null;
       clientSecretRef.current = null;
-    } else if (idempotencyKeyRef.current === null) {
+      return;
+    }
+    if (idempotencyKeyRef.current === null) {
       idempotencyKeyRef.current = randomKey();
     }
-  }, [open, initialName]);
+    // Resume path: as soon as the dialog opens for a pending workspace, fetch
+    // the existing PaymentIntent via the preview endpoint and route into the
+    // confirm step. The standard new-workspace path is name-driven and waits
+    // for the user — resume has no name input, so it auto-runs.
+    if (isResume) {
+      setStep("preview");
+      void runPreview(resumeWorkspaceId!);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runPreview is stable within this render
+  }, [open, initialName, isResume, resumeWorkspaceId]);
 
   // Non-dismissable during the payment window. onOpenChange is the dialog's
   // close path; suppress it for the in-flight steps.
@@ -141,14 +179,16 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
     onOpenChange(next);
   };
 
-  async function runPreview() {
+  async function runPreview(workspaceIdForResume?: string) {
     setStep("preview");
     setError(null);
     try {
-      // NOTE: do NOT log the response body — the preview itself doesn't carry a
-      // clientSecret, but downstream `confirm` does, and discipline lives here.
+      // NOTE: do NOT log the response body — the resume branch carries the
+      // existing PI clientSecret, and discipline lives here.
+      const body: { mode: "preview"; workspaceId?: string } = { mode: "preview" };
+      if (workspaceIdForResume) body.workspaceId = workspaceIdForResume;
       const { data, error: invokeError } = await supabase.functions.invoke("create-workspace", {
-        body: { mode: "preview" },
+        body,
       });
       if (invokeError) {
         setError({ reason: "stripe_unverified", message: invokeError.message });
@@ -165,7 +205,31 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
         chargedToday?: number;
         count?: number;
         cap?: number;
+        resume?: { workspaceId: string; name: string; clientSecret: string } | null;
       };
+      // Resume branch: the server returned an existing-PI clientSecret. Skip
+      // the name step entirely and route straight to confirm with the resumed
+      // workspace's name + the existing PaymentIntent secret.
+      if (workspaceIdForResume) {
+        if (!resp.ok || !resp.resume) {
+          setError({ reason: resp.reason ?? "resume_unavailable" });
+          setStep("error");
+          return;
+        }
+        clientSecretRef.current = resp.resume.clientSecret;
+        setCreatedWorkspaceId(resp.resume.workspaceId);
+        setName(resp.resume.name);
+        setPreview({
+          cardLast4: resp.cardLast4 ?? null,
+          cardBrand: resp.cardBrand ?? null,
+          priceMonthly: resp.priceMonthly ?? 499,
+          chargedToday: resp.chargedToday ?? 499,
+          count: resp.count ?? 0,
+          cap: resp.cap ?? 10,
+        });
+        setStep("confirm");
+        return;
+      }
       if (!resp.ok || resp.eligible !== true) {
         setError({
           reason: resp.reason ?? "not_eligible",
@@ -194,47 +258,66 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
     setStep("confirming");
     setError(null);
 
-    // 1) Server: create the workspace + an incomplete subscription, return
-    //    the PaymentIntent client_secret. We deliberately do not log `data`.
-    const { data, error: invokeError } = await supabase.functions.invoke("create-workspace", {
-      body: {
-        mode: "confirm",
-        name: name.trim(),
-        idempotencyKey: idempotencyKeyRef.current,
-      },
-    });
-    if (invokeError) {
-      setError({ reason: "stripe_error", message: invokeError.message });
-      setStep("error");
-      return;
-    }
-    const resp = data as ConfirmResult;
-    if (!resp.ok) {
-      setError({ reason: resp.reason ?? "stripe_error", message: resp.error });
-      setStep("error");
-      return;
-    }
-    if (!resp.workspaceId) {
-      setError({ reason: "stripe_error", message: "Server did not return a workspaceId" });
-      setStep("error");
-      return;
-    }
-    setCreatedWorkspaceId(resp.workspaceId);
-    // Idempotent replay (duplicate) — the server returned the prior workspace.
-    if (resp.status === "duplicate") {
-      // Treat as activating; poll the live state and let the existing branches resolve.
-      void pollForActivation(resp.workspaceId);
-      return;
-    }
+    let workspaceId: string;
+    let clientSecret: string | null;
+    let piStatus: string | null;
 
-    const piStatus = resp.paymentIntentStatus ?? null;
-    const clientSecret = resp.clientSecret ?? null;
-    clientSecretRef.current = clientSecret;
+    if (isResume) {
+      // Resume path — workspace + subscription already exist. The preview call
+      // populated clientSecretRef + createdWorkspaceId. Skip the server confirm
+      // (a re-call would create a duplicate sub) and drive confirmCardPayment
+      // directly on the existing PI.
+      if (!createdWorkspaceId || !clientSecretRef.current) {
+        setError({ reason: "resume_unavailable" });
+        setStep("error");
+        return;
+      }
+      workspaceId = createdWorkspaceId;
+      clientSecret = clientSecretRef.current;
+      piStatus = null; // unknown — let the confirmCardPayment branch handle it
+    } else {
+      // 1) Server: create the workspace + an incomplete subscription, return
+      //    the PaymentIntent client_secret. We deliberately do not log `data`.
+      const { data, error: invokeError } = await supabase.functions.invoke("create-workspace", {
+        body: {
+          mode: "confirm",
+          name: name.trim(),
+          idempotencyKey: idempotencyKeyRef.current,
+        },
+      });
+      if (invokeError) {
+        setError({ reason: "stripe_error", message: invokeError.message });
+        setStep("error");
+        return;
+      }
+      const resp = data as ConfirmResult;
+      if (!resp.ok) {
+        setError({ reason: resp.reason ?? "stripe_error", message: resp.error });
+        setStep("error");
+        return;
+      }
+      if (!resp.workspaceId) {
+        setError({ reason: "stripe_error", message: "Server did not return a workspaceId" });
+        setStep("error");
+        return;
+      }
+      setCreatedWorkspaceId(resp.workspaceId);
+      // Idempotent replay (duplicate) — the server returned the prior workspace.
+      if (resp.status === "duplicate") {
+        // Treat as activating; poll the live state and let the existing branches resolve.
+        void pollForActivation(resp.workspaceId);
+        return;
+      }
+      workspaceId = resp.workspaceId;
+      piStatus = resp.paymentIntentStatus ?? null;
+      clientSecret = resp.clientSecret ?? null;
+      clientSecretRef.current = clientSecret;
+    }
 
     // 2) If the PI is already succeeded (no-3DS card), go straight to polling.
     if (piStatus === "succeeded") {
       clientSecretRef.current = null;
-      void pollForActivation(resp.workspaceId);
+      void pollForActivation(workspaceId);
       return;
     }
 
@@ -269,7 +352,7 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
         const status = retrieve.paymentIntent?.status;
         if (status === "succeeded") {
           clientSecretRef.current = null;
-          void pollForActivation(resp.workspaceId);
+          void pollForActivation(workspaceId);
           return;
         }
       } catch {
@@ -277,9 +360,13 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
       }
 
       // PI is genuinely not succeeded; clean up the orphan workspace.
-      await supabase.functions
-        .invoke("create-workspace", { body: { mode: "cancel", workspaceId: resp.workspaceId } })
-        .catch(() => {});
+      // Skip cancel in resume mode — the orphan already existed; tearing it
+      // down here would erase the user's retry path.
+      if (!isResume) {
+        await supabase.functions
+          .invoke("create-workspace", { body: { mode: "cancel", workspaceId } })
+          .catch(() => {});
+      }
       clientSecretRef.current = null;
 
       const reason =
@@ -294,7 +381,7 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
 
     // Success — clear the secret from memory immediately, then poll.
     clientSecretRef.current = null;
-    void pollForActivation(resp.workspaceId);
+    void pollForActivation(workspaceId);
   }
 
   // Narrow poll on the new workspace's subscription_status — RLS-owner-readable.
@@ -332,13 +419,11 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
     if (aborted) return;
 
     // Timeout — branch the copy honestly: did the PI actually succeed?
+    // clientSecretRef is null by now (we cleared after confirmCardPayment);
+    // infer "paid" from workspace state instead — any non-NULL, non-incomplete
+    // subscription_status is evidence the Stripe webhook is en route.
     let paid = false;
     try {
-      const cs = clientSecretRef.current;
-      // clientSecretRef is null by now (we cleared after confirmCardPayment).
-      // We can still infer "paid" from workspace state: any non-NULL
-      // subscription_status is evidence of a Stripe write attempt; the
-      // distinction we care about is "the webhook IS coming" vs "it isn't."
       const { data: row } = await supabase
         .from("workspaces")
         .select("subscription_status")
@@ -346,18 +431,15 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
         .maybeSingle();
       const status = (row as { subscription_status: string | null } | null)?.subscription_status ?? null;
       paid = status !== null && status !== "incomplete" && status !== "incomplete_expired";
-      // Suppress the unused-var lint for cs — kept intentionally as documentation.
-      void cs;
     } catch {
       paid = false;
     }
     setStep(paid ? "timeout_paid" : "timeout_unpaid");
   }
 
-  // Cleanup pollers on unmount / dialog close. The poll runs as an async loop
-  // gated by a boolean flag in the closure — flip it and the loop exits before
-  // its next setState. Same pattern as AbortController for fetch.
-  const pollCleanupRef = useRef<(() => void) | null>(null);
+  // Cleanup pollers on unmount / dialog close. pollCleanupRef declared at the
+  // top of the component (above pollForActivation) so the function's first read
+  // isn't a forward reference.
   useEffect(() => {
     if (!open) {
       pollCleanupRef.current?.();
@@ -392,7 +474,9 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
         onEscapeKeyDown={(e) => isInFlight && e.preventDefault()}
         onInteractOutside={(e) => isInFlight && e.preventDefault()}
       >
-        {step === "name" || step === "preview" ? (
+        {/* In resume mode there is no name step — the dialog opens directly into
+            preview-in-flight, then into the confirm panel rendered below. */}
+        {(step === "name" || (step === "preview" && !isResume)) ? (
           <>
             <DialogHeader>
               <DialogTitle>{t("workspace.create.dialog_title")}</DialogTitle>
@@ -416,7 +500,7 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
                 {t("workspace.create.dialog_cancel")}
               </Button>
               <Button
-                onClick={runPreview}
+                onClick={() => runPreview()}
                 disabled={step === "preview" || name.trim().length < 1}
               >
                 {step === "preview" ? (
@@ -432,14 +516,32 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
           </>
         ) : null}
 
+        {/* Resume-mode in-flight preview: show a loader while we fetch the
+            existing PaymentIntent. No name input — name is server-supplied. */}
+        {step === "preview" && isResume ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>{t("workspace.create.activating_title", { name: name.trim() || "" })}</DialogTitle>
+              <DialogDescription>{t("workspace.create.confirm_button_loading")}</DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          </>
+        ) : null}
+
         {(step === "confirm" || step === "confirming" || step === "three_ds") && preview ? (
           <>
             <DialogHeader>
               <DialogTitle>{t("workspace.create.confirm_title", { name: name.trim() })}</DialogTitle>
-              <DialogDescription>{t("workspace.create.confirm_intro")}</DialogDescription>
+              <DialogDescription>
+                {isResume
+                  ? t("workspace.create.resume_dialog_intro")
+                  : t("workspace.create.confirm_intro")}
+              </DialogDescription>
             </DialogHeader>
             <ul className="space-y-2 py-2 text-sm">
-              <li>• {t("workspace.create.confirm_bullet_today")}</li>
+              {!isResume ? <li>• {t("workspace.create.confirm_bullet_today")}</li> : null}
               <li>
                 •{" "}
                 {t("workspace.create.confirm_bullet_recurring", {
@@ -459,6 +561,8 @@ export function NewWorkspaceDialog({ open, onOpenChange, initialName = "" }: New
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     {t("workspace.create.confirm_button_loading")}
                   </>
+                ) : isResume ? (
+                  t("workspace.create.resume_button")
                 ) : (
                   t("workspace.create.confirm_button")
                 )}
@@ -598,12 +702,18 @@ function ErrorPane({
       titleKey = "workspace.create.error_3ds_canceled_title";
       bodyKey = "workspace.create.error_3ds_canceled_body";
       break;
+    case "resume_unavailable":
+      titleKey = "workspace.create.resume_unavailable_title";
+      bodyKey = "workspace.create.resume_unavailable_body";
+      break;
     case "unavailable":
     default:
       titleKey = "workspace.create.error_unavailable_title";
       bodyKey = "workspace.create.error_unavailable_body";
       break;
   }
+
+  const navigate = useNavigate();
 
   return (
     <>
@@ -615,6 +725,9 @@ function ErrorPane({
           {t(bodyKey, error.reason === "cap_reached" ? { count: error.count, cap: error.cap } : {})}
         </DialogDescription>
       </DialogHeader>
+      {/* extraSafeLine renders Stripe's decline string. Render as TEXT only:
+          React auto-escapes children, so it's safe today. Do NOT migrate this
+          to <Trans>, Markdown, or dangerouslySetInnerHTML without sanitization. */}
       {extraSafeLine ? (
         <p className="text-sm text-muted-foreground py-2">{extraSafeLine}</p>
       ) : null}
@@ -628,7 +741,14 @@ function ErrorPane({
           </Button>
         ) : null}
         {primaryHref && primaryLabelKey ? (
-          <Button onClick={() => (window.location.href = primaryHref!)}>{t(primaryLabelKey)}</Button>
+          <Button
+            onClick={() => {
+              onClose();
+              navigate(primaryHref!);
+            }}
+          >
+            {t(primaryLabelKey)}
+          </Button>
         ) : null}
       </DialogFooter>
     </>

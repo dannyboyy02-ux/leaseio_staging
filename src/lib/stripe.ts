@@ -34,8 +34,3 @@ export function getStripe(): Promise<Stripe | null> | null {
   stripePromise = loadStripe(key);
   return stripePromise;
 }
-
-/** True iff Stripe is wired correctly for this build. */
-export function isStripeAvailable(): boolean {
-  return getStripe() !== null;
-}

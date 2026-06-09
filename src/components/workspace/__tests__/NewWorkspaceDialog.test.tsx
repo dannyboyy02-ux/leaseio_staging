@@ -45,7 +45,13 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("@/lib/stripe", () => ({
   getStripe: () => getStripeMock(),
-  isStripeAvailable: () => true,
+}));
+
+// useNavigate is read at component-mount time for the ErrorPane's primary
+// CTA — we mock it to avoid wrapping every test in MemoryRouter.
+const navigateMock = vi.fn();
+vi.mock("react-router-dom", () => ({
+  useNavigate: () => navigateMock,
 }));
 
 vi.mock("@/contexts/AppContext", () => ({
@@ -101,6 +107,7 @@ beforeEach(() => {
   confirmCardPaymentMock.mockReset();
   retrievePaymentIntentMock.mockReset();
   getStripeMock.mockReset();
+  navigateMock.mockReset();
   setupStripeMock();
   // Default: workspaces table read returns an active Business row (poll succeeds).
   fromMock.mockImplementation(() =>

@@ -27,6 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setIsLoading(false);
+        // Mirror the explicit signOut() cleanup into the supabase-emitted
+        // SIGNED_OUT event so token-expiry / refresh-failure logouts also clear
+        // the recent-workspaces list (defense in depth on a shared device).
+        if (event === 'SIGNED_OUT') {
+          void import('@/components/workspace/WorkspaceCommandPalette')
+            .then(({ clearRecentWorkspaces }) => clearRecentWorkspaces())
+            .catch(() => { /* non-fatal */ });
+        }
       }
     );
 

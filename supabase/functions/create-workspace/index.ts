@@ -8,7 +8,12 @@
 //
 // Modes (request body { mode, name?, idempotencyKey?, workspaceId? }):
 //   preview  — read-only: returns card last4 + price + eligibility so the modal
-//              can render honest consent copy. No writes.
+//              can render honest consent copy. When body.workspaceId is supplied
+//              AND points to a pending-creation workspace owned by the caller,
+//              ALSO returns `resume: { workspaceId, name, clientSecret }` so the
+//              dialog can re-drive the existing PaymentIntent (spec §P2.11
+//              mitigation for the "3DS network-fail or tab-close → orphans"
+//              finding). No writes.
 //   confirm  — atomic gated insert via create_workspace_locked() RPC, then
 //              create an ON-SESSION default_incomplete Stripe subscription and
 //              return its PaymentIntent client_secret. Does NOT promote the
@@ -140,6 +145,62 @@ serve(async (req) => {
   // ── PREVIEW ───────────────────────────────────────────────────────────
   if (mode === "preview") {
     const card = await resolveCustomerAndCard(stripe, supabaseAdmin, user.id, user.email);
+
+    // Resume branch — caller is opening the dialog for an existing pending
+    // workspace. We re-fetch the PaymentIntent from the existing subscription
+    // and return its clientSecret so the dialog can drive confirmCardPayment
+    // without creating a duplicate sub. Strict checks: workspace must exist,
+    // be owned by the caller, be in incomplete state, and have a linked
+    // subscription. Anything else is "resume_unavailable".
+    let resume: { workspaceId: string; name: string; clientSecret: string } | null = null;
+    if (body.workspaceId && typeof body.workspaceId === "string") {
+      const { data: ws } = await supabaseAdmin
+        .from("workspaces")
+        .select("id, name, owner_id, subscription_status, stripe_subscription_id")
+        .eq("id", body.workspaceId)
+        .eq("owner_id", user.id)
+        .maybeSingle();
+      const wsRow = ws as {
+        id: string;
+        name: string;
+        owner_id: string;
+        subscription_status: string | null;
+        stripe_subscription_id: string | null;
+      } | null;
+      // Only resumable while the sub is still incomplete and a Stripe sub id
+      // is known. expired / no-sub falls through to "resume_unavailable".
+      if (
+        wsRow &&
+        wsRow.stripe_subscription_id &&
+        (wsRow.subscription_status === "incomplete" ||
+          wsRow.subscription_status === "incomplete_expired")
+      ) {
+        try {
+          const sub = await stripe.subscriptions.retrieve(wsRow.stripe_subscription_id, {
+            expand: ["latest_invoice.payment_intent"],
+          });
+          const latestInvoice = sub.latest_invoice as Stripe.Invoice | null;
+          const pi = (latestInvoice?.payment_intent ?? null) as Stripe.PaymentIntent | null;
+          if (pi?.client_secret && pi.status !== "succeeded" && pi.status !== "canceled") {
+            resume = {
+              workspaceId: wsRow.id,
+              name: wsRow.name,
+              clientSecret: pi.client_secret,
+            };
+          }
+        } catch (e) {
+          // Stripe lookup failed — leave resume null and let the client surface
+          // resume_unavailable. We never leak Stripe error text to the response.
+          console.error("[create-workspace] resume: subscription retrieve failed", (e as Error).message);
+        }
+      }
+      // If the caller asked for resume but we can't fulfill it, fail closed
+      // with a typed reason — don't return a misleading "eligible" payload.
+      if (!resume) {
+        return jsonResponse({ ok: false, reason: "resume_unavailable" }, 404, origin);
+      }
+    }
+
     // Eligibility snapshot (advisory; the authoritative gate is the RPC).
     const [{ count: ownedCount }, { count: bizCount }] = await Promise.all([
       supabaseAdmin.from("workspaces").select("id", { count: "exact", head: true }).eq("owner_id", user.id),
@@ -151,7 +212,12 @@ serve(async (req) => {
         .in("subscription_status", ["active", "trialing"]),
     ]);
     const cap = WORKSPACE_LIMITS.business;
-    const eligible = (bizCount ?? 0) >= 1 && (ownedCount ?? 0) < cap && card.ok;
+    // In resume mode we report eligible=true regardless of the cap (the workspace
+    // already exists; the cap was enforced at creation time). Card must still
+    // resolve so the dialog can render the "•••• 4242" line.
+    const eligible = resume
+      ? card.ok
+      : (bizCount ?? 0) >= 1 && (ownedCount ?? 0) < cap && card.ok;
     return jsonResponse(
       {
         ok: true,
@@ -163,6 +229,7 @@ serve(async (req) => {
         chargedToday: BUSINESS_MONTHLY_PRICE_USD,
         count: ownedCount ?? 0,
         cap,
+        resume,
       },
       200,
       origin,
