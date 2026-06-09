@@ -669,6 +669,11 @@ function ErrorPane({
     case "not_eligible":
       titleKey = "workspace.create.error_not_eligible_title";
       bodyKey = "workspace.create.error_not_eligible_body";
+      // Always-render pattern: a Starter / non-Business user clicking the
+      // "+ New workspace" entry lands here. Surface a direct upgrade path
+      // instead of stranding them on a dead-end modal.
+      primaryHref = "/app/settings/account?tab=subscription";
+      primaryLabelKey = "workspace.create.error_not_eligible_cta";
       break;
     case "cap_reached":
       titleKey = "workspace.create.error_cap_reached_title";

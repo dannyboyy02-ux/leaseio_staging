@@ -12,7 +12,8 @@ import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 //     recents are suppressed (noise).
 //   - Alpha ordering: non-active, non-recent workspaces appear sorted by name.
 //   - The active workspace is rendered as the current-marker, not in alpha.
-//   - "+ New workspace" entry shows only when canCreate is true.
+//   - "+ New workspace" entry is always rendered (always-render pattern —
+//     ineligibility is surfaced by the dialog, not by hiding the affordance).
 //   - Esc / setting open=false closes (CommandDialog uses Radix; tested by
 //     toggling the open prop and checking the input disappears).
 //   - pushRecentWorkspace pushes newest-first, dedupes, caps at 3.
@@ -78,7 +79,6 @@ describe("WorkspaceCommandPalette — ordering + create entry", () => {
       <WorkspaceCommandPalette
         open={true}
         onOpenChange={() => {}}
-        canCreate={true}
         onCreate={() => {}}
       />,
     );
@@ -112,7 +112,6 @@ describe("WorkspaceCommandPalette — ordering + create entry", () => {
       <WorkspaceCommandPalette
         open={true}
         onOpenChange={() => {}}
-        canCreate={true}
         onCreate={() => {}}
       />,
     );
@@ -144,7 +143,6 @@ describe("WorkspaceCommandPalette — ordering + create entry", () => {
       <WorkspaceCommandPalette
         open={true}
         onOpenChange={() => {}}
-        canCreate={false}
         onCreate={() => {}}
       />,
     );
@@ -152,31 +150,23 @@ describe("WorkspaceCommandPalette — ordering + create entry", () => {
     expect(screen.queryByText("Recent")).toBeNull();
   });
 
-  it("shows '+ New workspace' entry when canCreate=true; omits it when false", () => {
+  it("always renders the '+ New workspace' entry regardless of plan/cap", () => {
+    // The dialog handles eligibility on click (upgrade prompt for Starter,
+    // cap_reached for at-cap Business). The palette never gates the entry.
     const wss: MockWs[] = [
-      { id: "a", name: "Alpha", plan: "business", subscription_status: "active", role: "owner" },
+      // Starter, single workspace — would historically have hidden the entry.
+      { id: "a", name: "Alpha", plan: "starter", subscription_status: null, role: "owner" },
     ];
     setApp(wss, "a");
 
-    const { rerender } = render(
+    render(
       <WorkspaceCommandPalette
         open={true}
         onOpenChange={() => {}}
-        canCreate={true}
         onCreate={() => {}}
       />,
     );
     expect(screen.queryByText("workspace.create.cta_palette")).not.toBeNull();
-
-    rerender(
-      <WorkspaceCommandPalette
-        open={true}
-        onOpenChange={() => {}}
-        canCreate={false}
-        onCreate={() => {}}
-      />,
-    );
-    expect(screen.queryByText("workspace.create.cta_palette")).toBeNull();
   });
 
   it("clicking a workspace calls switchWorkspace and closes the palette", () => {
@@ -191,7 +181,6 @@ describe("WorkspaceCommandPalette — ordering + create entry", () => {
       <WorkspaceCommandPalette
         open={true}
         onOpenChange={onOpenChange}
-        canCreate={false}
         onCreate={() => {}}
       />,
     );
@@ -213,7 +202,6 @@ describe("WorkspaceCommandPalette — ordering + create entry", () => {
       <WorkspaceCommandPalette
         open={true}
         onOpenChange={() => {}}
-        canCreate={false}
         onCreate={() => {}}
       />,
     );
@@ -223,7 +211,6 @@ describe("WorkspaceCommandPalette — ordering + create entry", () => {
       <WorkspaceCommandPalette
         open={false}
         onOpenChange={() => {}}
-        canCreate={false}
         onCreate={() => {}}
       />,
     );

@@ -29,8 +29,11 @@ const RECENT_THRESHOLD = 5;
 interface WorkspaceCommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** True iff the current user is eligible to create a new workspace. */
-  canCreate: boolean;
+  /**
+   * Open the new-workspace dialog. Always rendered in the palette regardless
+   * of plan/cap — the dialog itself surfaces the right gate (upgrade prompt /
+   * cap_reached / no_card) based on the server preview.
+   */
   onCreate: () => void;
 }
 
@@ -68,7 +71,6 @@ export function clearRecentWorkspaces() {
 export function WorkspaceCommandPalette({
   open,
   onOpenChange,
-  canCreate,
   onCreate,
 }: WorkspaceCommandPaletteProps) {
   const { t } = useAppTranslation();
@@ -159,22 +161,18 @@ export function WorkspaceCommandPalette({
           </>
         ) : null}
 
-        {canCreate ? (
-          <>
-            <CommandSeparator />
-            <CommandGroup>
-              <CommandItem
-                value="__new_workspace__"
-                onSelect={() => {
-                  onOpenChange(false);
-                  onCreate();
-                }}
-              >
-                <span className="flex-1">{t("workspace.create.cta_palette")}</span>
-              </CommandItem>
-            </CommandGroup>
-          </>
-        ) : null}
+        <CommandSeparator />
+        <CommandGroup>
+          <CommandItem
+            value="__new_workspace__"
+            onSelect={() => {
+              onOpenChange(false);
+              onCreate();
+            }}
+          >
+            <span className="flex-1">{t("workspace.create.cta_palette")}</span>
+          </CommandItem>
+        </CommandGroup>
       </CommandList>
     </CommandDialog>
   );

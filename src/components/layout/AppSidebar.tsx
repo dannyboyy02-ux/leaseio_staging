@@ -25,8 +25,6 @@ import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { PLANS } from '@/config/pricing';
-import { computeWorkspaceCreateEligibility } from '@/lib/workspaceCreateEligibility';
 import { shouldOpenCommandPalette } from '@/lib/cmdKHandler';
 import { NewWorkspaceDialog } from '@/components/workspace/NewWorkspaceDialog';
 import {
@@ -85,17 +83,11 @@ export function AppSidebar() {
   // the 3DS flow (spec §P2.11 mitigation for the orphan-after-tab-close trap).
   const [resumeWorkspaceId, setResumeWorkspaceId] = useState<string | null>(null);
 
-  // Create-eligibility: caller owns ≥1 active Business workspace + ownedCount <
-  // Business cap. Derived from availableWorkspaces (server re-checks server-side
-  // in create-workspace; this is purely affordance gating). Per spec §P2.11
-  // we deliberately compute from "any active Business owned" — NOT from the
-  // currently-active workspace's plan — so a Business owner viewing a Starter
-  // workspace still sees the CTA.
-  const businessCap = PLANS.business.maxWorkspaces;
-  const { canCreate, atCap } = useMemo(
-    () => computeWorkspaceCreateEligibility(availableWorkspaces, businessCap),
-    [availableWorkspaces, businessCap],
-  );
+  // The "+ New workspace" entry is always rendered (regardless of plan/cap).
+  // The dialog enforces eligibility on click via the server preview and
+  // routes ineligible users into a contextual upgrade / cap_reached /
+  // no_card prompt. Hiding the entry stranded users with no signal that the
+  // feature exists.
   const showPalette = availableWorkspaces.length > 5;
 
   // Cmd/Ctrl+K → open palette. Suppress when any other modal (Dialog/Sheet) is
@@ -329,22 +321,21 @@ export function AppSidebar() {
                 );
               });
             })()}
-            {(canCreate || atCap) ? <DropdownMenuSeparator /> : null}
-            {canCreate ? (
-              <DropdownMenuItem
-                onClick={() => {
-                  setResumeWorkspaceId(null);
-                  setNewWorkspaceOpen(true);
-                }}
-              >
-                {t('workspace.create.cta')}
-              </DropdownMenuItem>
-            ) : null}
-            {atCap ? (
-              <DropdownMenuItem onClick={() => navigate('/app/account/workspaces')}>
-                {t('workspace.create.cta_at_cap')}
-              </DropdownMenuItem>
-            ) : null}
+            <DropdownMenuSeparator />
+            {/* Always-render pattern: the "+ New workspace" entry is visible to
+                every user regardless of plan/cap. Eligibility is enforced when
+                the dialog opens — non-Business users get an upgrade prompt,
+                at-cap Business users get a cap_reached message. Hiding the
+                entry stranded users with no path forward (e.g. a Starter user
+                with no obvious upgrade signal). */}
+            <DropdownMenuItem
+              onClick={() => {
+                setResumeWorkspaceId(null);
+                setNewWorkspaceOpen(true);
+              }}
+            >
+              {t('workspace.create.cta')}
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate('/app/account/workspaces')}>
               {t('workspace.create.manage_link')}
@@ -365,7 +356,6 @@ export function AppSidebar() {
       <WorkspaceCommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
-        canCreate={canCreate}
         onCreate={() => {
           setResumeWorkspaceId(null);
           setNewWorkspaceOpen(true);

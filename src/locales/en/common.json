@@ -661,8 +661,6 @@
     "manage_billing": "Open Billing & Plan",
     "create": {
       "cta": "+ New workspace · $499/mo",
-      "cta_at_cap": "Manage workspaces (at limit)",
-      "cta_at_cap_label": "Workspace limit reached",
       "cta_palette": "Create a new Business workspace · $499/mo",
       "search_placeholder": "Search workspaces…",
       "search_hint": "Search workspaces… (⌘K)",
@@ -692,6 +690,7 @@
       "timeout_close": "Close",
       "error_not_eligible_title": "Multi-workspace is a Business feature",
       "error_not_eligible_body": "Upgrade your workspace to Business to create additional workspaces.",
+      "error_not_eligible_cta": "Upgrade to Business",
       "error_cap_reached_title": "You've reached the workspace limit",
       "error_cap_reached_body": "You currently own {{count}} of {{cap}} workspaces. Delete one or contact support to discuss higher limits.",
       "error_no_card_title": "We couldn't find a saved card",

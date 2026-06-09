@@ -70,8 +70,6 @@ import { MembersPanel } from '@/components/workspace/MembersPanel';
 import { RenameWorkspaceInline } from '@/components/workspace/RenameWorkspaceInline';
 import { DeleteWorkspaceDialog } from '@/components/workspace/DeleteWorkspaceDialog';
 import { NewWorkspaceDialog } from '@/components/workspace/NewWorkspaceDialog';
-import { computeWorkspaceCreateEligibility } from '@/lib/workspaceCreateEligibility';
-import { PLANS } from '@/config/pricing';
 
 interface WorkspaceMeta {
   id: string;
@@ -92,14 +90,11 @@ export default function WorkspaceManagement() {
   const [deleteTarget, setDeleteTarget] = useState<WorkspaceMeta | null>(null);
   const [leaveTarget, setLeaveTarget] = useState<{ id: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  // Phase 2: create-new-workspace affordance (mirrors the sidebar logic — must
-  // own ≥1 active Business workspace + under the Business cap). Server re-checks
-  // authoritatively in create-workspace.
+  // Phase 2: create-new-workspace affordance. Always rendered — the dialog
+  // surfaces the right gate (upgrade prompt / cap_reached / no_card) based on
+  // the server preview, so a Starter user sees a clear path forward instead
+  // of an empty page.
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
-  const { canCreate, atCap } = useMemo(
-    () => computeWorkspaceCreateEligibility(availableWorkspaces, PLANS.business.maxWorkspaces),
-    [availableWorkspaces],
-  );
 
   // Split availableWorkspaces by ownership (we have role per row already).
   const ownedIds = useMemo(
@@ -227,16 +222,10 @@ export default function WorkspaceManagement() {
                 Full management — rename, manage members, delete.
               </p>
             </div>
-            {canCreate ? (
-              <Button onClick={() => setNewWorkspaceOpen(true)} className="shrink-0">
-                <Plus className="h-4 w-4 mr-1.5" />
-                {t('workspace.create.cta')}
-              </Button>
-            ) : atCap ? (
-              <Button variant="outline" disabled className="shrink-0">
-                {t('workspace.create.cta_at_cap_label')}
-              </Button>
-            ) : null}
+            <Button onClick={() => setNewWorkspaceOpen(true)} className="shrink-0">
+              <Plus className="h-4 w-4 mr-1.5" />
+              {t('workspace.create.cta')}
+            </Button>
           </div>
 
           {ownedLoading && ownedIds.length > 0 ? (
