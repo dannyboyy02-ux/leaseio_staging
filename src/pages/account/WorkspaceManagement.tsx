@@ -29,6 +29,7 @@ import {
   Settings,
   Crown,
   ExternalLink,
+  Plus,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -64,9 +65,13 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { MembersPanel } from '@/components/workspace/MembersPanel';
 import { RenameWorkspaceInline } from '@/components/workspace/RenameWorkspaceInline';
 import { DeleteWorkspaceDialog } from '@/components/workspace/DeleteWorkspaceDialog';
+import { NewWorkspaceDialog } from '@/components/workspace/NewWorkspaceDialog';
+import { computeWorkspaceCreateEligibility } from '@/lib/workspaceCreateEligibility';
+import { PLANS } from '@/config/pricing';
 
 interface WorkspaceMeta {
   id: string;
@@ -80,12 +85,21 @@ interface WorkspaceMeta {
 
 export default function WorkspaceManagement() {
   const { user, workspace: activeWorkspace, availableWorkspaces, refreshProfile, switchWorkspace } = useApp();
+  const { t } = useAppTranslation();
   const queryClient = useQueryClient();
 
   const [manageMembersWorkspaceId, setManageMembersWorkspaceId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkspaceMeta | null>(null);
   const [leaveTarget, setLeaveTarget] = useState<{ id: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Phase 2: create-new-workspace affordance (mirrors the sidebar logic — must
+  // own ≥1 active Business workspace + under the Business cap). Server re-checks
+  // authoritatively in create-workspace.
+  const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const { canCreate, atCap } = useMemo(
+    () => computeWorkspaceCreateEligibility(availableWorkspaces, PLANS.business.maxWorkspaces),
+    [availableWorkspaces],
+  );
 
   // Split availableWorkspaces by ownership (we have role per row already).
   const ownedIds = useMemo(
@@ -203,13 +217,27 @@ export default function WorkspaceManagement() {
       <div className="p-6 max-w-5xl mx-auto space-y-8">
         {/* Owned workspaces */}
         <section>
-          <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
-            <Crown className="h-4 w-4 text-amber-500" />
-            Workspaces you own
-          </h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Full management — rename, manage members, delete.
-          </p>
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Crown className="h-4 w-4 text-amber-500" />
+                Workspaces you own
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Full management — rename, manage members, delete.
+              </p>
+            </div>
+            {canCreate ? (
+              <Button onClick={() => setNewWorkspaceOpen(true)} className="shrink-0">
+                <Plus className="h-4 w-4 mr-1.5" />
+                {t('workspace.create.cta')}
+              </Button>
+            ) : atCap ? (
+              <Button variant="outline" disabled className="shrink-0">
+                {t('workspace.create.cta_at_cap_label')}
+              </Button>
+            ) : null}
+          </div>
 
           {ownedLoading && ownedIds.length > 0 ? (
             <div className="space-y-3">
@@ -401,6 +429,12 @@ export default function WorkspaceManagement() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Phase 2 — Create new workspace */}
+      <NewWorkspaceDialog
+        open={newWorkspaceOpen}
+        onOpenChange={setNewWorkspaceOpen}
+      />
 
       {/* Delete dialog — type-name confirmation */}
       {deleteTarget && (

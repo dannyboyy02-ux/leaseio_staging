@@ -662,6 +662,7 @@
     "create": {
       "cta": "+ New workspace · $499/mo",
       "cta_at_cap": "Manage workspaces (at limit)",
+      "cta_at_cap_label": "Workspace limit reached",
       "cta_palette": "Create a new Business workspace · $499/mo",
       "search_placeholder": "Search workspaces…",
       "search_hint": "Search workspaces… (⌘K)",
