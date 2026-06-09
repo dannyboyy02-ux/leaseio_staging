@@ -713,3 +713,37 @@ Two pressure-tests (lease-product-polish + lease-security-scanner) folded in:
 10. Reviewer pass (auditor + security + polish + test-author) BEFORE merging
     to main and BEFORE the cron is scheduled (operator step in playbook).
 
+
+---
+
+# Phase 3 As-built — Ownership transfer (2026-06-09)
+
+Built per §4.2 with no contract deviations:
+
+- `supabase/functions/transfer-workspace-ownership/index.ts` — Bearer JWT
+  (`verify_jwt = true` stanza in config.toml), owner-only (403 with the same
+  answer for not-found-vs-not-yours), UUID-validated body, accepted-member
+  target check (`user_id IS NOT NULL AND accepted_at IS NOT NULL`), low-ceiling
+  workspace rate limit (5, matching delete-workspace).
+- **Operation order hardening (implementation detail, not a spec change):**
+  member-row mutations run BEFORE the `owner_id` swap — target promoted to
+  admin, prior owner demoted/upserted to admin, then the swap. A mid-sequence
+  failure leaves only harmless extra admin rows, never a swapped owner with a
+  stranded prior owner. The swap itself is guarded with
+  `.eq('owner_id', <prior>)` so a concurrent transfer can't double-fire.
+- Audit row: `owner_transferred` with `details:{ from, to,
+  prior_owner_new_role:'admin', billing_remains_on_customer, billing_transferred:false }`
+  per §4.2(4). Non-fatal on insert error (logged loudly) — matches the
+  delete-workspace precedent.
+- UI: `src/components/workspace/TransferOwnershipDialog.tsx`, wired into the
+  owned-workspace cards on `/app/account/workspaces`. Target picker lists only
+  accepted members (mirrors the server rule); amber consequences box surfaces
+  the v1 billing limitation (§4.2(5)); explicit acknowledgment checkbox gates
+  the confirm button. "Transfer" action renders only when `member_count > 1`;
+  the dialog also carries an invite-first empty state for the
+  unaccepted-invites-only case. Plain-English copy matching the sibling
+  DeleteWorkspaceDialog (the management page surface is not yet i18n-keyed —
+  pre-existing scope, unchanged here).
+- **Deploy note:** function not yet deployed — `supabase functions deploy
+  transfer-workspace-ownership` is an operator step (it bundles the current
+  `_shared/cors.ts`, which is already `.vercel.app`-aware).

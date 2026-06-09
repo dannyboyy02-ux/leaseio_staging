@@ -30,6 +30,7 @@ import {
   Crown,
   ExternalLink,
   Plus,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -70,6 +71,7 @@ import { MembersPanel } from '@/components/workspace/MembersPanel';
 import { RenameWorkspaceInline } from '@/components/workspace/RenameWorkspaceInline';
 import { DeleteWorkspaceDialog } from '@/components/workspace/DeleteWorkspaceDialog';
 import { NewWorkspaceDialog } from '@/components/workspace/NewWorkspaceDialog';
+import { TransferOwnershipDialog } from '@/components/workspace/TransferOwnershipDialog';
 
 interface WorkspaceMeta {
   id: string;
@@ -87,6 +89,7 @@ export default function WorkspaceManagement() {
   const queryClient = useQueryClient();
 
   const [manageMembersWorkspaceId, setManageMembersWorkspaceId] = useState<string | null>(null);
+  const [transferTarget, setTransferTarget] = useState<WorkspaceMeta | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkspaceMeta | null>(null);
   const [leaveTarget, setLeaveTarget] = useState<{ id: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -190,6 +193,14 @@ export default function WorkspaceManagement() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleAfterTransfer = async () => {
+    // The workspace moves from "owned" to "member of" — the prior owner
+    // stays an admin member, so no active-workspace fallback is needed.
+    setTransferTarget(null);
+    await refreshProfile();
+    queryClient.invalidateQueries({ queryKey: ['account-owned-workspaces'] });
   };
 
   const handleAfterDelete = async () => {
@@ -316,6 +327,16 @@ export default function WorkspaceManagement() {
                           </Link>
                         </Button>
                       )}
+                      {ws.member_count > 1 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setTransferTarget(ws)}
+                        >
+                          <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
+                          Transfer
+                        </Button>
+                      )}
                       <div className="flex-1" />
                       <Button
                         size="sm"
@@ -428,6 +449,18 @@ export default function WorkspaceManagement() {
         open={newWorkspaceOpen}
         onOpenChange={setNewWorkspaceOpen}
       />
+
+      {/* Phase 3 — Transfer ownership */}
+      {transferTarget && (
+        <TransferOwnershipDialog
+          open={transferTarget !== null}
+          onOpenChange={(o) => !o && setTransferTarget(null)}
+          workspaceId={transferTarget.id}
+          workspaceName={transferTarget.name}
+          ownerId={transferTarget.owner_id}
+          onTransferred={handleAfterTransfer}
+        />
+      )}
 
       {/* Delete dialog — type-name confirmation */}
       {deleteTarget && (

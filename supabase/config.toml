@@ -179,3 +179,8 @@ verify_jwt = true
 
 [functions.sweep-pending-workspaces]
 verify_jwt = false
+
+# Phase 3 — owner-only, service-role inside (workspaces UPDATE policy
+# blocks authenticated owner_id reassignment).
+[functions.transfer-workspace-ownership]
+verify_jwt = true
