@@ -66,11 +66,18 @@ export function RenameWorkspaceInline({
       toast.success('Workspace renamed');
       setEditing(false);
       onRenamed?.(trimmed);
-      await (supabase as any).from('workspace_activity_log').insert({
-        workspace_id: workspaceId,
-        event_type: 'renamed',
-        details: { from_name: currentName, to_name: trimmed },
-      });
+      // Fire-and-forget: an audit-write failure must not surface as a
+      // rename failure — the rename above already committed.
+      (supabase as any)
+        .from('workspace_activity_log')
+        .insert({
+          workspace_id: workspaceId,
+          event_type: 'renamed',
+          details: { from_name: currentName, to_name: trimmed },
+        })
+        .then(({ error: auditError }: { error: unknown }) => {
+          if (auditError) console.error('Failed to log workspace rename:', auditError);
+        });
     } catch (err) {
       console.error('Error renaming workspace:', err);
       toast.error('Failed to rename — only the workspace owner can rename');

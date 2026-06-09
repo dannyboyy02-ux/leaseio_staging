@@ -74,7 +74,8 @@
     "untitled_lease": "Untitled lease",
     "archived_by": "Archived by {{name}}",
     "workspaces": "Workspaces",
-    "workspaces_desc": "Workspaces you own on this plan."
+    "workspaces_desc": "Workspaces you own on this plan.",
+    "workspaces_upgrade_hint": "Your plan includes one workspace. Upgrade to Business to run multiple workspaces."
   },
   "archive": {
     "archive": "Delete",

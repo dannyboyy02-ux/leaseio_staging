@@ -45,12 +45,19 @@ export function MemberRoleSelect({
       toast.success('Role updated successfully');
       onRoleChanged();
 
+      // Fire-and-forget: an audit-write failure must not surface as a
+      // role-change failure — the role update above already committed.
       if (workspaceId && targetUserId) {
-        await (supabase as any).from('workspace_activity_log').insert({
-          workspace_id: workspaceId,
-          event_type: 'member_added',
-          details: { target_user_id: targetUserId, role: newRole, previous_role: currentRole },
-        });
+        (supabase as any)
+          .from('workspace_activity_log')
+          .insert({
+            workspace_id: workspaceId,
+            event_type: 'member_role_changed',
+            details: { target_user_id: targetUserId, role: newRole, previous_role: currentRole },
+          })
+          .then(({ error: auditError }: { error: unknown }) => {
+            if (auditError) console.error('Failed to log member_role_changed:', auditError);
+          });
       }
     } catch (error) {
       console.error('Error updating role:', error);

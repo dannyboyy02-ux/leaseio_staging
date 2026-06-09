@@ -74,7 +74,8 @@
     "untitled_lease": "Arrendamiento sin título",
     "archived_by": "Archivado por {{name}}",
     "workspaces": "Espacios de trabajo",
-    "workspaces_desc": "Espacios de trabajo que posee en este plan."
+    "workspaces_desc": "Espacios de trabajo que posee en este plan.",
+    "workspaces_upgrade_hint": "Su plan incluye un espacio de trabajo. Actualice a Business para gestionar varios espacios de trabajo."
   },
   "archive": {
     "archive": "Eliminar",

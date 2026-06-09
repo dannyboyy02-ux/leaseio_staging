@@ -118,12 +118,19 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
       if (error) throw error;
       toast.success('Member removed');
       refetchMembers();
+      // Fire-and-forget: an audit-write failure must not surface as a
+      // removal failure — the delete above already committed.
       if (target) {
-        await (supabase as any).from('workspace_activity_log').insert({
-          workspace_id: workspaceId,
-          event_type: 'member_removed',
-          details: { target_user_id: target.user_id },
-        });
+        (supabase as any)
+          .from('workspace_activity_log')
+          .insert({
+            workspace_id: workspaceId,
+            event_type: 'member_removed',
+            details: { target_user_id: target.user_id },
+          })
+          .then(({ error: auditError }: { error: unknown }) => {
+            if (auditError) console.error('Failed to log member_removed:', auditError);
+          });
       }
     } catch (error) {
       console.error('Error removing member:', error);

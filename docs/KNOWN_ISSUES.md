@@ -1267,6 +1267,34 @@ For now, leave alone.
 
 ---
 
+### Item #52: Member role-change and removal queries are not workspace-scoped client-side
+
+**Symptom:** The `workspace_members` UPDATE (role change) and DELETE (remove member) queries filter only by row PK (`.eq('id', memberId)`), with no `.eq('workspace_id', workspaceId)` constraint. RLS (`is_workspace_owner`) is the sole enforcement layer — the DB correctly blocks cross-workspace writes, but the client query expresses no scope intent of its own.
+
+**Severity:** High (defense-in-depth, not an active vulnerability). Surfaced by lease-security-scanner during the Workspace Management Phase 4 review (2026-06-09). Pre-existing code (predates Phase 4) — filed, not bundled, per the pre-existing-issues rule.
+
+**Root-cause hypothesis:** The original WorkspaceSettings member controls were written when the panel could only ever render the active workspace, so PK-only filtering was implicitly scoped. The MembersPanel extraction made the component workspace-agnostic without revisiting the query predicates.
+
+**Where to look:** `src/components/workspace/MemberRoleSelect.tsx` (the `workspace_members` UPDATE), `src/components/workspace/MembersPanel.tsx` `handleRemoveMember` (the DELETE).
+
+**Stub remediation:** Add `.eq('workspace_id', workspaceId)` to both queries (MemberRoleSelect already receives `workspaceId` as a prop; MembersPanel has it in scope). Pure belt-and-braces — no behavior change when RLS is intact.
+
+---
+
+### Item #53: `workspace_activity_log.event_type` has no CHECK constraint
+
+**Symptom:** Any authenticated workspace member permitted by the insert policy can write rows with arbitrary `event_type` strings — including service-role-reserved values like `'owner_transferred'` — poisoning the workspace audit trail. Integrity currently depends entirely on client discipline.
+
+**Severity:** High (audit-trail integrity). Surfaced by lease-security-scanner during the Workspace Management Phase 4 review (2026-06-09). Pre-existing schema (Phase 1 migration, already applied) — filed, not bundled.
+
+**Root-cause hypothesis:** The Phase 1 migration documented the event-type vocabulary in a comment (`created | activated | renamed | owner_transferred | member_added | member_removed`) but never enforced it as a constraint; client-side writers were trusted to stay within it.
+
+**Where to look:** `supabase/migrations/20260609120000_workspace_management_phase1.sql:32` (column definition + comment); client writers in `RenameWorkspaceInline.tsx`, `MemberRoleSelect.tsx`, `MembersPanel.tsx`.
+
+**Stub remediation:** New migration adding a CHECK constraint enumerating allowed values — must include `'member_role_changed'` (added by the Phase 4 fix pass as the correct event for role changes; the Phase 1 comment predates it). Consider going further: restrict the client INSERT policy to the client-writable subset (`renamed`, `member_added`, `member_removed`, `member_role_changed`) so `created`/`activated`/`owner_transferred` are service-role-only.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -1280,7 +1308,8 @@ the 2026-06-02 CLAUDE.md File-Map reconciliation pass (item 46),
 the 2026-06-03 lease-detail cosmetics pass (items 47-48),
 the 2026-06-03 zombie-edge-function neutralization (item 49),
 the 2026-06-04 executed-vs-pipeline UI removal (item 50),
-and the 2026-06-09 Workspace Management Phase 1 fix pass (item 51).
+the 2026-06-09 Workspace Management Phase 1 fix pass (item 51),
+and the 2026-06-09 Workspace Management Phase 4 review pass (items 52-53).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.

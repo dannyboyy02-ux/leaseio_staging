@@ -78,12 +78,17 @@ export function UsageContent({ showHeader = false }: Props) {
   const archivedMax = workspace.maxArchivedLeases ?? 0;
   const activePct = activeMax > 0 ? Math.min((activeUsed / activeMax) * 100, 100) : 0;
   const archivedPct = archivedMax > 0 ? Math.min((archivedUsed / archivedMax) * 100, 100) : 0;
-  const showUpgrade = activePct >= 75 || archivedPct >= 75;
 
   const planConfig = PLANS[workspace.plan as SubscriptionPlan] ?? PLANS.starter;
   const maxWorkspaces = planConfig.maxWorkspaces;
   const ownedCount = availableWorkspaces.filter((w) => w.role === 'owner').length;
   const workspacePct = maxWorkspaces > 0 ? Math.min((ownedCount / maxWorkspaces) * 100, 100) : 0;
+  // Single-workspace plans always sit at 1/1 — that's the normal state, not
+  // an approaching limit, so the meter and the banner only apply when the
+  // plan actually allows multiple workspaces.
+  const isMultiWorkspacePlan = maxWorkspaces > 1;
+  const showUpgrade =
+    activePct >= 75 || archivedPct >= 75 || (isMultiWorkspacePlan && workspacePct >= 75);
 
   return (
     <div className="space-y-6">
@@ -186,10 +191,21 @@ export function UsageContent({ showHeader = false }: Props) {
               <span className="text-3xl font-bold text-foreground">{ownedCount}</span>
               <span className="text-sm text-muted-foreground">/ {maxWorkspaces}</span>
             </div>
-            <Progress value={workspacePct} variant={usageTone(workspacePct)} className="h-2" />
-            <p className="text-xs text-muted-foreground">
-              {t('usage.percent_used', { percent: Math.round(workspacePct) })}
-            </p>
+            {isMultiWorkspacePlan ? (
+              <>
+                <Progress value={workspacePct} variant={usageTone(workspacePct)} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  {t('usage.percent_used', { percent: Math.round(workspacePct) })}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('usage.workspaces_upgrade_hint')}{' '}
+                <Link to="/app/upgrade" className="text-accent underline underline-offset-2">
+                  {t('usage.upgrade_plan')}
+                </Link>
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -148,7 +148,9 @@ export default function WorkspaceManagement() {
     },
   });
 
-  const useGridLayout = ownedMeta.length + memberOnly.length > 5;
+  // ownedIds is derived synchronously from AppContext — using ownedMeta
+  // (async query, starts []) here caused a list→grid layout jump on load.
+  const useGridLayout = ownedIds.length + memberOnly.length > 5;
 
   // Reset manage-members sheet if the workspace we were managing is gone.
   useEffect(() => {
