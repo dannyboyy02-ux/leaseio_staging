@@ -123,31 +123,47 @@ serve(async (req) => {
     // event (append-only audit) and advances the request state machine off
     // 'pending' (which nothing else does on the happy path).
     if (entitled) {
-      const { data: reqRow } = await supabaseAdmin
-        .from("workspace_creation_requests")
-        .select("idempotency_key, status")
-        .eq("workspace_id", workspaceId)
-        .maybeSingle();
-      if (reqRow && (reqRow as { status: string }).status === "pending") {
-        await supabaseAdmin
+      // Best-effort audit/state reconciliation — NOT entitlement-critical (the
+      // entitlement update above already committed). Wrapped so a transient
+      // failure here can never 500 the webhook and force needless Stripe
+      // retries of a successful entitlement write.
+      try {
+        const { data: reqRow } = await supabaseAdmin
           .from("workspace_creation_requests")
-          .update({ status: "active", updated_at: new Date().toISOString() })
-          .eq("workspace_id", workspaceId);
-        const { data: wsRow } = await supabaseAdmin
-          .from("workspaces")
-          .select("owner_id")
-          .eq("id", workspaceId)
+          .select("idempotency_key, status")
+          .eq("workspace_id", workspaceId)
           .maybeSingle();
-        await supabaseAdmin.from("workspace_activity_log").insert({
-          workspace_id: workspaceId,
-          user_id: (wsRow as { owner_id: string } | null)?.owner_id ?? null,
-          event_type: "activated",
-          details: {
-            subscription_id: subscription.id,
-            status: subscription.status,
-            idempotency_key: (reqRow as { idempotency_key: string }).idempotency_key,
-          },
-        });
+        if (reqRow && (reqRow as { status: string }).status === "pending") {
+          await supabaseAdmin
+            .from("workspace_creation_requests")
+            .update({ status: "active", updated_at: new Date().toISOString() })
+            .eq("workspace_id", workspaceId);
+          const { data: wsRow } = await supabaseAdmin
+            .from("workspaces")
+            .select("owner_id")
+            .eq("id", workspaceId)
+            .maybeSingle();
+          const ownerId = (wsRow as { owner_id: string } | null)?.owner_id ?? null;
+          if (!ownerId) {
+            console.warn("[stripe-webhook] activated event: owner lookup missed for", workspaceId);
+          }
+          await supabaseAdmin.from("workspace_activity_log").insert({
+            workspace_id: workspaceId,
+            user_id: ownerId,
+            event_type: "activated",
+            details: {
+              subscription_id: subscription.id,
+              status: subscription.status,
+              idempotency_key: (reqRow as { idempotency_key: string }).idempotency_key,
+            },
+          });
+        }
+      } catch (reconErr) {
+        console.error(
+          "[stripe-webhook] reconciliation (non-fatal) failed for",
+          workspaceId,
+          reconErr instanceof Error ? reconErr.message : reconErr,
+        );
       }
     }
   }

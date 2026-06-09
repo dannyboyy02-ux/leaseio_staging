@@ -1251,6 +1251,22 @@ For now, leave alone.
 
 ---
 
+### Item #51: `deleted_workspaces` has no `deletion_reason` discriminator
+
+**Symptom:** Workspace deletions now arrive from three semantically different sources — an owner deleting a populated workspace (`delete-workspace`), a user cancelling a still-pending multi-workspace creation (`create-workspace` cancel mode), a Stripe-error rollback of a never-activated workspace (`create-workspace` confirm), and the abandonment cron (`sweep-pending-workspaces`). All write the same `deleted_workspaces` shape. A query for "workspaces customers lost" cannot, without joining to `workspace_creation_requests`, tell a real populated-workspace deletion from a never-live rollback/abandonment.
+
+**Severity:** Medium — forensic clarity, not correctness or security. Surfaced by the repository-integrity reviewer during the Workspace Management Phase 1 fix pass (2026-06-09). Filed (not bundled) per the reviewer's recommendation.
+
+**Root-cause hypothesis:** `deleted_workspaces` was designed (baseline schema) for the single owner-delete path; Phase 1 added three more deletion sources without a discriminator column, so the table conflates "lost real data" with "cleaned up an unpaid shell."
+
+**Where to look:** `supabase/migrations/20260516120000_baseline_schema.sql:931` (table); insert sites at `supabase/functions/delete-workspace/index.ts:303`, `supabase/functions/create-workspace/index.ts` (cancel + rollback), `supabase/functions/sweep-pending-workspaces/index.ts`.
+
+**Stub remediation:** New migration adding `deletion_reason text` (e.g. `'owner_delete' | 'pending_cancel' | 'stripe_rollback' | 'abandonment_sweep'`) to `deleted_workspaces`; stamp it at each of the four insert sites. Backfill existing rows to `'owner_delete'` (the only pre-Phase-1 source).
+
+**Decision:** Filed for a follow-up. The current rows are still recoverable (distinguishable by joining `workspace_creation_requests.status`), so this is a clarity improvement, not a data-loss fix.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -1263,7 +1279,8 @@ the 2026-05-24 full-codebase audit — security / dead-ends / data-integrity pas
 the 2026-06-02 CLAUDE.md File-Map reconciliation pass (item 46),
 the 2026-06-03 lease-detail cosmetics pass (items 47-48),
 the 2026-06-03 zombie-edge-function neutralization (item 49),
-and the 2026-06-04 executed-vs-pipeline UI removal (item 50).
+the 2026-06-04 executed-vs-pipeline UI removal (item 50),
+and the 2026-06-09 Workspace Management Phase 1 fix pass (item 51).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
