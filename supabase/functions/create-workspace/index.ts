@@ -188,16 +188,31 @@ serve(async (req) => {
       return jsonResponse({ ok: false, reason: "not_pending" }, 409, origin);
     }
 
-    // Cancel any incomplete subscription Stripe created for this workspace.
+    // Re-derive truth from Stripe before deleting (the DB mirror can lag the
+    // webhook). If payment actually succeeded, refuse to cancel — never destroy
+    // a paid workspace. Only cancel/delete when Stripe confirms no live sub.
+    const incompleteSubIds: string[] = [];
+    let liveSub = false;
     try {
-      const subs = await stripe.subscriptions.list({ status: "incomplete", limit: 100 });
-      for (const s of subs.data) {
-        if (s.metadata?.workspace_id === workspaceId) {
-          await stripe.subscriptions.cancel(s.id).catch(() => {});
-        }
+      const found = await stripe.subscriptions.search({
+        query: `metadata['workspace_id']:'${workspaceId}'`,
+        limit: 20,
+      });
+      for (const s of found.data) {
+        if (["active", "trialing", "past_due", "unpaid"].includes(s.status)) liveSub = true;
+        else if (s.status === "incomplete") incompleteSubIds.push(s.id);
       }
     } catch (e) {
-      console.warn("[create-workspace] cancel: stripe cleanup failed:", (e as Error)?.message);
+      // Can't confirm Stripe state → fail safe, don't delete.
+      console.warn("[create-workspace] cancel: stripe search failed:", (e as Error)?.message);
+      return jsonResponse({ ok: false, reason: "stripe_unverified" }, 502, origin);
+    }
+    if (liveSub) {
+      // Payment landed after all — this is now a real paid workspace.
+      return jsonResponse({ ok: false, reason: "already_active" }, 409, origin);
+    }
+    for (const sid of incompleteSubIds) {
+      await stripe.subscriptions.cancel(sid).catch(() => {});
     }
 
     // Delete the pending workspace (no leases yet) + forensic row + dedupe mark.
@@ -241,7 +256,20 @@ serve(async (req) => {
     .select("current_workspace_id")
     .eq("id", user.id)
     .maybeSingle();
-  const anchorWs = (prof as { current_workspace_id: string | null } | null)?.current_workspace_id ?? null;
+  let anchorWs = (prof as { current_workspace_id: string | null } | null)?.current_workspace_id ?? null;
+  if (!anchorWs) {
+    // No current workspace set — anchor on the caller's earliest owned
+    // workspace so the rate limit always applies (a Business owner always owns
+    // ≥1). Avoids the LOW gap where a NULL current_workspace_id skips the cap.
+    const { data: firstWs } = await supabaseAdmin
+      .from("workspaces")
+      .select("id")
+      .eq("owner_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    anchorWs = (firstWs as { id: string } | null)?.id ?? null;
+  }
   if (anchorWs) {
     const rl = await enforceWorkspaceRateLimit(supabaseAdmin, anchorWs, "create-workspace", origin, 10);
     if (rl) return rl;
@@ -310,8 +338,11 @@ serve(async (req) => {
       { idempotencyKey: `ws_create_${idempotencyKey}` },
     );
 
-    const invoice = subscription.latest_invoice as Stripe.Invoice | null;
-    const pi = invoice?.payment_intent as Stripe.PaymentIntent | null;
+    // In the basil API version `payment_intent` is not declared on Stripe.Invoice;
+    // the expand populates it at runtime. Cast through unknown to read it safely.
+    const invoice = subscription.latest_invoice as unknown as
+      { payment_intent?: Stripe.PaymentIntent | null } | null;
+    const pi = invoice?.payment_intent ?? null;
     const clientSecret = pi?.client_secret ?? null;
 
     return jsonResponse(
@@ -331,6 +362,18 @@ serve(async (req) => {
     // unpaid workspace lingers, and mark the dedupe row failed.
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[create-workspace] subscription create failed, rolling back:", msg);
+    // Durable forensic record of the failed $499 attempt BEFORE the cascade
+    // removes the workspace (and its `created` audit row). Mirrors cancel mode.
+    await supabaseAdmin.from("deleted_workspaces").insert({
+      original_workspace_id: workspaceId,
+      owner_id: user.id,
+      workspace_name: name,
+      workspace_plan: "starter",
+      lease_count_at_deletion: 0,
+      member_count_at_deletion: 1,
+      storage_objects_purged: 0,
+      deleted_by: user.id,
+    });
     await supabaseAdmin.from("workspaces").delete().eq("id", workspaceId);
     await supabaseAdmin
       .from("workspace_creation_requests")

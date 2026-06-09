@@ -29,7 +29,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405, headers: jsonHeaders });
   }
 
-  const cronSecret = Deno.env.get("CRON_SECRET");
+  const cronSecret = Deno.env.get("SWEEP_PENDING_WORKSPACES_CRON_SECRET");
   const provided = req.headers.get("x-cron-secret");
   if (!cronSecret || provided !== cronSecret) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
@@ -90,7 +90,7 @@ serve(async (req) => {
       continue;
     }
 
-    // Activated in the meantime → finalize the request, leave the workspace.
+    // Activated in the meantime (per the DB) → finalize the request, leave it.
     if (w.plan === "business" && w.subscription_status && ["active", "trialing"].includes(w.subscription_status)) {
       await supabaseAdmin
         .from("workspace_creation_requests")
@@ -100,16 +100,48 @@ serve(async (req) => {
       continue;
     }
 
-    // Still pending/unpaid → cancel any incomplete sub, delete the workspace.
+    // CRITICAL: the plan/subscription_status columns are written ONLY by the
+    // webhook and can lag or drop (e.g. live webhook not yet configured). We
+    // MUST NOT delete based on the DB mirror alone — re-derive truth from Stripe
+    // before destroying anything. A workspace whose payment actually succeeded
+    // would otherwise be deleted while its $499/mo subscription survives.
+    let liveSub = false;
+    const incompleteSubIds: string[] = [];
     try {
-      const subs = await stripe.subscriptions.list({ status: "incomplete", limit: 100 });
-      for (const s of subs.data) {
-        if (s.metadata?.workspace_id === workspaceId) {
-          await stripe.subscriptions.cancel(s.id).catch(() => {});
-        }
+      const found = await stripe.subscriptions.search({
+        query: `metadata['workspace_id']:'${workspaceId}'`,
+        limit: 20,
+      });
+      for (const s of found.data) {
+        if (["active", "trialing", "past_due", "unpaid"].includes(s.status)) liveSub = true;
+        else if (s.status === "incomplete") incompleteSubIds.push(s.id);
       }
     } catch (e) {
-      console.warn("[sweep-pending-workspaces] stripe cleanup failed:", (e as Error)?.message);
+      // Cannot confirm Stripe state → fail SAFE: skip, never delete blindly.
+      console.warn("[sweep-pending-workspaces] stripe search failed, skipping for safety:", (e as Error)?.message);
+      skipped++;
+      continue;
+    }
+
+    if (liveSub) {
+      // Paid/active despite the lagging DB mirror — NEVER delete. Mark the
+      // request active; the webhook (or its eventual re-fire) owns the
+      // entitlement promotion. The Starter-but-paid mirror is a separate
+      // webhook-delivery concern, not something the sweep should resolve by
+      // becoming a second entitlement writer.
+      await supabaseAdmin
+        .from("workspace_creation_requests")
+        .update({ status: "active", updated_at: new Date().toISOString() })
+        .eq("idempotency_key", row.idempotency_key);
+      activated++;
+      continue;
+    }
+
+    // Stripe confirms no live subscription → safe to clean up. Cancel any
+    // lingering incomplete subs (not just by a status filter that could miss a
+    // half-promoted state) and delete the lease-free workspace.
+    for (const sid of incompleteSubIds) {
+      await stripe.subscriptions.cancel(sid).catch(() => {});
     }
 
     await supabaseAdmin.from("workspaces").delete().eq("id", workspaceId);

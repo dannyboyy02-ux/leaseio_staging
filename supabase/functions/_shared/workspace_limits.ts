@@ -18,9 +18,3 @@ export const BUSINESS_MONTHLY_PRICE_ID = "price_1SntqQH03PByDjY3MrvOjOsu";
 
 // Per-workspace Business price in USD, for honest consent copy ("$499 today").
 export const BUSINESS_MONTHLY_PRICE_USD = 499;
-
-/** Cap lookup with a safe default (unknown/legacy plans → Starter's cap of 1). */
-export function workspaceCapForPlan(plan: string | null | undefined): number {
-  if (plan && plan in WORKSPACE_LIMITS) return WORKSPACE_LIMITS[plan];
-  return WORKSPACE_LIMITS.starter;
-}

@@ -114,6 +114,42 @@ serve(async (req) => {
       .eq("id", workspaceId);
 
     if (error) throw new Error(`Failed to update workspace subscription: ${error.message}`);
+
+    // Reconcile the multi-workspace creation request and log the activation
+    // exactly once, on the pending -> active transition. The first/onboarding
+    // workspace has no workspace_creation_requests row, so this is naturally
+    // scoped to additional workspaces created via create-workspace. The webhook
+    // remains the SOLE entitlement writer; this only records the activation
+    // event (append-only audit) and advances the request state machine off
+    // 'pending' (which nothing else does on the happy path).
+    if (entitled) {
+      const { data: reqRow } = await supabaseAdmin
+        .from("workspace_creation_requests")
+        .select("idempotency_key, status")
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      if (reqRow && (reqRow as { status: string }).status === "pending") {
+        await supabaseAdmin
+          .from("workspace_creation_requests")
+          .update({ status: "active", updated_at: new Date().toISOString() })
+          .eq("workspace_id", workspaceId);
+        const { data: wsRow } = await supabaseAdmin
+          .from("workspaces")
+          .select("owner_id")
+          .eq("id", workspaceId)
+          .maybeSingle();
+        await supabaseAdmin.from("workspace_activity_log").insert({
+          workspace_id: workspaceId,
+          user_id: (wsRow as { owner_id: string } | null)?.owner_id ?? null,
+          event_type: "activated",
+          details: {
+            subscription_id: subscription.id,
+            status: subscription.status,
+            idempotency_key: (reqRow as { idempotency_key: string }).idempotency_key,
+          },
+        });
+      }
+    }
   }
 
   try {
