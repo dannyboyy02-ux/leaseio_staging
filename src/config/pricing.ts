@@ -13,6 +13,15 @@ export interface PlanConfig {
   maxUsers: number;
   maxActiveLeases: number;
   maxArchivedLeases: number;
+  /**
+   * Maximum workspaces a single account holder may OWN on this plan.
+   * Starter is single-workspace; Business enables owner-level multi-workspace
+   * (each additional workspace is its own Business subscription). The cap is
+   * enforced server-side in the create-workspace edge function under an advisory
+   * lock — this value is the shared source of truth (mirrored in
+   * supabase/functions/_shared/workspace_limits.ts).
+   */
+  maxWorkspaces: number;
   abstractionsIncluded: number;
   overagePerDoc: number;
   featureKeys: string[];
@@ -36,6 +45,7 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
     maxUsers: 3,
     maxActiveLeases: 15,
     maxArchivedLeases: 50,
+    maxWorkspaces: 1,
     abstractionsIncluded: 15,
     overagePerDoc: 12,
     featureKeys: [
@@ -63,6 +73,7 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
     maxUsers: -1,
     maxActiveLeases: 50,
     maxArchivedLeases: 250,
+    maxWorkspaces: 10,
     abstractionsIncluded: 50,
     overagePerDoc: 10,
     featureKeys: [

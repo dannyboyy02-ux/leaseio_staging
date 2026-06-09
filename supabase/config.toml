@@ -171,3 +171,11 @@ verify_jwt = true
 
 [functions.delete-workspace]
 verify_jwt = true
+
+# Multi-workspace (owner-level, Business). create-workspace is Bearer-JWT +
+# server-side eligibility/cap; sweep-pending-workspaces is cron-only (x-cron-secret).
+[functions.create-workspace]
+verify_jwt = true
+
+[functions.sweep-pending-workspaces]
+verify_jwt = false
