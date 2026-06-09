@@ -16,7 +16,7 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:5173",
 ];
 
-const ALLOWED_HOST_SUFFIXES = [".lovableproject.com", ".lovable.app"];
+const ALLOWED_HOST_SUFFIXES = [".lovableproject.com", ".lovable.app", ".vercel.app"];
 
 function parseHost(origin: string): string | null {
   try {

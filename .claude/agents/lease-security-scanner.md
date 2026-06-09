@@ -47,7 +47,10 @@ You are LeaseIO's security reviewer. LeaseIO is a multi-tenant SaaS: every works
 - File path construction from user input.
 
 ## 6. CORS and origin policy
-- `cors.ts` allowlist drift — new domains added without strict-hostname matching.
+- `cors.ts` allowlist drift — new domains added without strict-hostname matching (e.g. `requestOrigin.includes('lovable.app')` would match `lovable.app.evil.com`; use `host.endsWith(suffix)` on a parsed `URL.hostname`).
+- **Allowlist completeness** — every host the frontend is actually served from must be present. On ANY change to `_shared/cors.ts`, the two inline-CORS functions (`send-invite/index.ts`, `resend-invite/index.ts`), or `.env.example`/`APP_URL` config, enumerate currently-supported deployment surfaces (production custom domain, current platform's preview suffix — Vercel `.vercel.app`, Lovable `.lovable.app` / `.lovableproject.com` — localhost dev hosts) and confirm each is allowlisted. A platform switch (e.g. Lovable → Vercel) that adds a new preview suffix without updating the allowlist produces silent CORS rejection at the browser (logs show only OPTIONS, never POST) — flag this as HIGH.
+- **Inline-vs-shared drift** — `send-invite/index.ts` and `resend-invite/index.ts` inline their CORS allowlist (cannot import from `../_shared/`). Any change to `_shared/cors.ts` must be mirrored into both inline copies in the same commit. Diff these three files against each other on every cors.ts touch.
+- **Deploy parity** — the deployed edge function bundles a frozen snapshot of `_shared/cors.ts`; the file in the repo is NOT the file the deployed function runs. Any allowlist change must be followed by redeploying every frontend-invoked function (grep `supabase.functions.invoke` for the list). Flag any cors.ts edit committed without a corresponding redeploy plan.
 - `Access-Control-Allow-Origin: *` on functions that don't need it.
 
 ## 7. Rate limiting and abuse

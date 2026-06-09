@@ -73,7 +73,7 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:5173',
 ];
-const ALLOWED_HOST_SUFFIXES = ['.lovableproject.com', '.lovable.app'];
+const ALLOWED_HOST_SUFFIXES = ['.lovableproject.com', '.lovable.app', '.vercel.app'];
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   let isAllowed = false;
