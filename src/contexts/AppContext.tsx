@@ -9,6 +9,12 @@ export interface WorkspaceBasic {
   id: string;
   name: string;
   plan: SubscriptionPlan;
+  /**
+   * Live Stripe-derived status for the workspace (null when no sub).
+   * Surfaced in the switcher so a pending-creation workspace can show a
+   * "Resume setup" affordance. Owned-only — membership rows leave it null.
+   */
+  subscription_status: string | null;
   role: WorkspaceRole | "owner";
 }
 
@@ -244,7 +250,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const { data: ownedWs } = await (supabase as any)
           .from("workspaces")
-          .select("id, name, plan")
+          .select("id, name, plan, subscription_status")
           .eq("owner_id", authUser.id);
 
         const { data: membershipWs } = await (supabase as any)
@@ -258,6 +264,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: w.id,
             name: w.name || "Unnamed",
             plan: normalizePlanId(w.plan),
+            subscription_status: (w.subscription_status as string | null) ?? null,
             role: "owner" as const,
           })),
           ...(membershipWs ?? [])
@@ -266,6 +273,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               id: m.workspace_id,
               name: m.workspaces?.name || "Unnamed",
               plan: normalizePlanId(m.workspaces?.plan),
+              subscription_status: null,
               role: m.role as WorkspaceRole,
             })),
         ];

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -25,6 +25,13 @@ import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { PLANS } from '@/config/pricing';
+import { NewWorkspaceDialog } from '@/components/workspace/NewWorkspaceDialog';
+import {
+  WorkspaceCommandPalette,
+  pushRecentWorkspace,
+} from '@/components/workspace/WorkspaceCommandPalette';
+import { WorkspaceAvatar } from '@/components/workspace/WorkspaceAvatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -67,6 +74,69 @@ export function AppSidebar() {
   const { user, workspace, canAccessFeature, userRole, userFunctionalRoles, availableWorkspaces, switchWorkspace } = useApp();
   const { signOut, user: authUser } = useAuth();
   const { t, language, setLanguage } = useLanguage();
+
+  // --- Phase 2: multi-workspace switcher state ---
+  const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Create-eligibility: caller owns ≥1 active Business workspace + ownedCount <
+  // Business cap. Derived from availableWorkspaces (server re-checks server-side
+  // in create-workspace; this is purely affordance gating). Per spec §P2.11
+  // we deliberately compute from "any active Business owned" — NOT from the
+  // currently-active workspace's plan — so a Business owner viewing a Starter
+  // workspace still sees the CTA.
+  const businessCap = PLANS.business.maxWorkspaces;
+  const { ownedCount, hasActiveBusiness } = useMemo(() => {
+    let owned = 0;
+    let activeBiz = false;
+    for (const w of availableWorkspaces) {
+      if (w.role === 'owner') {
+        owned++;
+        if (
+          w.plan === 'business' &&
+          w.subscription_status &&
+          ['active', 'trialing'].includes(w.subscription_status)
+        ) {
+          activeBiz = true;
+        }
+      }
+    }
+    return { ownedCount: owned, hasActiveBusiness: activeBiz };
+  }, [availableWorkspaces]);
+
+  const canCreate = hasActiveBusiness && ownedCount < businessCap;
+  const atCap = hasActiveBusiness && ownedCount >= businessCap;
+  const showPalette = availableWorkspaces.length > 5;
+
+  // Cmd/Ctrl+K → open palette. Suppress when any other modal (Dialog/Sheet) is
+  // open or when focus is in an input/textarea/contenteditable.
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key !== 'k' || (!e.metaKey && !e.ctrlKey)) return;
+      if (newWorkspaceOpen) return;
+      const activeAttr = document.body.getAttribute('data-scroll-locked');
+      // Radix Dialog and Sheet both set [data-state="open"] on portal nodes and
+      // lock scroll on the body via the data-scroll-locked attribute — the
+      // simplest portable check.
+      if (activeAttr) return;
+      const focused = document.activeElement as HTMLElement | null;
+      if (focused) {
+        const tag = focused.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || focused.isContentEditable) {
+          return;
+        }
+      }
+      e.preventDefault();
+      setPaletteOpen(true);
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [newWorkspaceOpen]);
+
+  function handleSwitchWithRecent(workspaceId: string) {
+    switchWorkspace(workspaceId);
+    pushRecentWorkspace(workspaceId);
+  }
 
   // Phase 2 — approval badge count (pending items needing current user's action)
   const [approvalBadge, setApprovalBadge] = useState(0);
@@ -187,38 +257,101 @@ export function AppSidebar() {
 
       {/* Workspace Switcher */}
       <div className="px-3 py-2 border-b border-sidebar-border">
-        {availableWorkspaces.length > 1 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+              {workspace ? (
+                <WorkspaceAvatar id={workspace.id} name={workspace.name} size="sm" />
+              ) : (
                 <Building2 className="h-3.5 w-3.5 text-sidebar-foreground/60 shrink-0" />
-                <span className="flex-1 text-left truncate font-medium">{workspace?.name}</span>
-                <ChevronsUpDown className="h-3.5 w-3.5 text-sidebar-foreground/40 shrink-0" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Switch workspace</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {availableWorkspaces.map((ws) => (
-                <DropdownMenuItem
-                  key={ws.id}
-                  onClick={() => switchWorkspace(ws.id)}
-                  className="flex items-center gap-2"
-                >
-                  <Check className={cn("h-3.5 w-3.5", ws.id === workspace?.id ? "opacity-100" : "opacity-0")} />
-                  <span className="flex-1 truncate">{ws.name}</span>
-                  <span className="text-xs text-muted-foreground capitalize">{ws.role}</span>
+              )}
+              <span className="flex-1 text-left truncate font-medium">{workspace?.name}</span>
+              <ChevronsUpDown className="h-3.5 w-3.5 text-sidebar-foreground/40 shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64">
+            {showPalette ? (
+              <>
+                <DropdownMenuItem onClick={() => setPaletteOpen(true)} className="text-xs text-muted-foreground">
+                  {t('workspace.create.search_hint')}
                 </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-sidebar-foreground/80">
-            <Building2 className="h-3.5 w-3.5 text-sidebar-foreground/60 shrink-0" />
-            <span className="truncate font-medium">{workspace?.name}</span>
-          </div>
-        )}
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              Switch workspace
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {(() => {
+              // When the palette is the primary navigation, we still surface the
+              // active workspace + a small slice (current + 3 alpha others) so the
+              // dropdown isn't a dead end. Otherwise we list everything.
+              const listed = showPalette
+                ? [
+                    ...availableWorkspaces.filter((w) => w.id === workspace?.id),
+                    ...availableWorkspaces
+                      .filter((w) => w.id !== workspace?.id)
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .slice(0, 3),
+                  ]
+                : availableWorkspaces;
+              return listed.map((ws) => {
+                const isPending =
+                  ws.role === 'owner' &&
+                  (ws.subscription_status === 'incomplete' ||
+                    ws.subscription_status === 'incomplete_expired');
+                return (
+                  <DropdownMenuItem
+                    key={ws.id}
+                    onClick={() => handleSwitchWithRecent(ws.id)}
+                    className="flex items-center gap-2"
+                  >
+                    <WorkspaceAvatar id={ws.id} name={ws.name} size="sm" />
+                    <span className="flex-1 truncate">{ws.name}</span>
+                    {isPending ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        {t('workspace.create.pending_badge')}
+                      </span>
+                    ) : (
+                      <Check
+                        className={cn(
+                          'h-3.5 w-3.5',
+                          ws.id === workspace?.id ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />
+                    )}
+                  </DropdownMenuItem>
+                );
+              });
+            })()}
+            {(canCreate || atCap) ? <DropdownMenuSeparator /> : null}
+            {canCreate ? (
+              <DropdownMenuItem onClick={() => setNewWorkspaceOpen(true)}>
+                {t('workspace.create.cta')}
+              </DropdownMenuItem>
+            ) : null}
+            {atCap ? (
+              <DropdownMenuItem onClick={() => navigate('/app/account/workspaces')}>
+                {t('workspace.create.cta_at_cap')}
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate('/app/account/workspaces')}>
+              {t('workspace.create.manage_link')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      {/* Phase 2 dialogs */}
+      <NewWorkspaceDialog open={newWorkspaceOpen} onOpenChange={setNewWorkspaceOpen} />
+      <WorkspaceCommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        canCreate={canCreate}
+        onCreate={() => setNewWorkspaceOpen(true)}
+      />
+      {/* /Phase 2 */}
 
       {/* Main Navigation — flat list, no section labels */}
       <nav className="flex-1 py-6 px-3">

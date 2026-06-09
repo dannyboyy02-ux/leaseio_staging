@@ -65,6 +65,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Clear cross-session UI state the recent-workspaces list (Phase 2 spec §P2.11):
+    // it survives logout otherwise and reveals workspace ids the prior user
+    // touched to whoever signs in next on this device.
+    try {
+      const { clearRecentWorkspaces } = await import('@/components/workspace/WorkspaceCommandPalette');
+      clearRecentWorkspaces();
+    } catch {
+      /* dynamic import failures are non-fatal — logout still proceeds */
+    }
   };
 
   const resetPassword = async (email: string) => {
