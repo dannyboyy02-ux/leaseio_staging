@@ -26,6 +26,8 @@ import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { PLANS } from '@/config/pricing';
+import { computeWorkspaceCreateEligibility } from '@/lib/workspaceCreateEligibility';
+import { shouldOpenCommandPalette } from '@/lib/cmdKHandler';
 import { NewWorkspaceDialog } from '@/components/workspace/NewWorkspaceDialog';
 import {
   WorkspaceCommandPalette,
@@ -86,46 +88,30 @@ export function AppSidebar() {
   // currently-active workspace's plan — so a Business owner viewing a Starter
   // workspace still sees the CTA.
   const businessCap = PLANS.business.maxWorkspaces;
-  const { ownedCount, hasActiveBusiness } = useMemo(() => {
-    let owned = 0;
-    let activeBiz = false;
-    for (const w of availableWorkspaces) {
-      if (w.role === 'owner') {
-        owned++;
-        if (
-          w.plan === 'business' &&
-          w.subscription_status &&
-          ['active', 'trialing'].includes(w.subscription_status)
-        ) {
-          activeBiz = true;
-        }
-      }
-    }
-    return { ownedCount: owned, hasActiveBusiness: activeBiz };
-  }, [availableWorkspaces]);
-
-  const canCreate = hasActiveBusiness && ownedCount < businessCap;
-  const atCap = hasActiveBusiness && ownedCount >= businessCap;
+  const { canCreate, atCap } = useMemo(
+    () => computeWorkspaceCreateEligibility(availableWorkspaces, businessCap),
+    [availableWorkspaces, businessCap],
+  );
   const showPalette = availableWorkspaces.length > 5;
 
   // Cmd/Ctrl+K → open palette. Suppress when any other modal (Dialog/Sheet) is
-  // open or when focus is in an input/textarea/contenteditable.
+  // open or when focus is in an input/textarea/contenteditable. The decision
+  // logic lives in shouldOpenCommandPalette() so it can be unit-tested.
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key !== 'k' || (!e.metaKey && !e.ctrlKey)) return;
-      if (newWorkspaceOpen) return;
-      const activeAttr = document.body.getAttribute('data-scroll-locked');
-      // Radix Dialog and Sheet both set [data-state="open"] on portal nodes and
-      // lock scroll on the body via the data-scroll-locked attribute — the
-      // simplest portable check.
-      if (activeAttr) return;
       const focused = document.activeElement as HTMLElement | null;
-      if (focused) {
-        const tag = focused.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || focused.isContentEditable) {
-          return;
-        }
-      }
+      const shouldOpen = shouldOpenCommandPalette({
+        key: e.key,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+        // Radix Dialog and Sheet both lock scroll on the body via the
+        // data-scroll-locked attribute — the portable check.
+        dialogOpen: document.body.getAttribute('data-scroll-locked') !== null,
+        newWorkspaceOpen,
+        focusedTag: focused?.tagName ?? null,
+        focusedContentEditable: !!focused?.isContentEditable,
+      });
+      if (!shouldOpen) return;
       e.preventDefault();
       setPaletteOpen(true);
     }

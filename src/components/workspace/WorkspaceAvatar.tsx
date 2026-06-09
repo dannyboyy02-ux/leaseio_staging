@@ -20,7 +20,9 @@ const PALETTE = [
   { bg: "bg-fuchsia-200", fg: "text-fuchsia-900" },
 ];
 
-function hashStringToIndex(s: string, mod: number): number {
+// Exported for unit tests; do not depend on these from other components — use
+// the WorkspaceAvatar component instead.
+export function hashStringToIndex(s: string, mod: number): number {
   // Cheap and deterministic. Identical ids => identical color across renders
   // and sessions.
   let h = 0;
@@ -28,7 +30,9 @@ function hashStringToIndex(s: string, mod: number): number {
   return Math.abs(h) % mod;
 }
 
-function deriveInitials(name: string): string {
+export const WORKSPACE_AVATAR_PALETTE = PALETTE;
+
+export function deriveInitials(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "?";
   // Pull initials from the first two whitespace-separated tokens; fallback to
