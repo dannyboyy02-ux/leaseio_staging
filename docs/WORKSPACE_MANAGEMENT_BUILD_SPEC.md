@@ -378,3 +378,338 @@ activating).
 - **MED/LOW** correlation id in `details`; rename before/after; transfer
   NULL-user_id guard; sweep actor sentinel.
 - Removed v1 §9.5 (owner coverage) — confirmed non-issue.
+
+---
+
+# Phase 2 Addendum — Switcher UX + create flow (the user-facing layer)
+
+**Status:** DRAFT (pre-build, pending pressure-test)
+**Date:** 2026-06-09 (added after Phase 1 applied to staging)
+
+Phase 1 built the capability layer (tables, RPC, edge functions, webhook
+reconciliation) and applied it to staging; the edge-function deploys were
+**held back** for a coordinated rollout with Phase 2 (no caller exists until
+the UI ships and `stripe-webhook` shouldn't be redeployed alone). Phase 2
+ships the user-facing surface that makes multi-workspace real, plus the
+coordinated function deploys.
+
+## P2.0 New external dependency + env
+
+- **`@stripe/stripe-js`** (client-only) — required for `stripe.confirmCardPayment`
+  in the confirmation modal, the in-app 3DS authentication step. Lightweight
+  (~30KB gz), Stripe-maintained, the standard pairing for off-session-incomplete
+  + on-session-confirm. Add via `npm install @stripe/stripe-js`. **No new
+  bundler config.**
+- **`VITE_STRIPE_PUBLISHABLE_KEY`** — new env var. **Test mode** (`pk_test_…`)
+  for staging, **live mode** (`pk_live_…`) for production. Must match the
+  Stripe account whose secret key the edge function uses. **Operator must set
+  before Phase 2 deploy; the UI fails closed (banner "Multi-workspace
+  unavailable, contact support") if the key is missing.**
+- `.env.example` updated to document the name only (no value).
+
+## P2.1 Workspace switcher (sidebar) — `src/components/layout/AppSidebar.tsx:188-221`
+
+Upgrade the existing dropdown (it already conditionally renders for
+`length > 1`) into the Slack-style affordance:
+
+- **Always rendered** when the user is signed in (drops the
+  `length > 1` conditional), because we need the "+ New workspace" entry even
+  for single-workspace users. A single-workspace user with no eligibility
+  sees just their workspace + the management link (no "+" CTA — see eligibility).
+- **Initials avatar** (`<WorkspaceAvatar id={ws.id} name={ws.name} />`) — new
+  small primitive at `src/components/workspace/WorkspaceAvatar.tsx`. Rounded
+  square (`h-6 w-6` in dropdown, `h-9 w-9` in management cards), 2-letter
+  initials from name (first letter of first two words, fallback first 2 chars),
+  deterministic background color from a hash of `id` (palette of 8 muted
+  Tailwind tones — accessible-contrast text foreground). No new column on
+  `workspaces`; both inputs already exist.
+- **Dropdown contents** in order: current workspace marker → other workspaces
+  (alpha) → divider → **"+ New workspace"** (when eligible — see P2.4) →
+  **"Manage workspaces"** (links to `/app/account/workspaces`).
+- **Eligibility for "+ New workspace" entry** is computed client-side from
+  `availableWorkspaces` + `workspace.plan` (the active workspace's plan
+  determines the gate UX-side; the server re-checks the real plan + cap). The
+  CTA is shown when the active workspace is `business` AND
+  `ownedCount < maxWorkspaces`; hidden otherwise. (A Starter user never sees
+  the affordance; a Business user at cap sees "Workspace limit reached" as a
+  disabled entry that opens the management page on click.)
+- **Past 5 workspaces → command palette.** When `availableWorkspaces.length > 5`,
+  the dropdown's first row becomes **"Search workspaces… (⌘K)"**; clicking it
+  (or pressing Cmd/Ctrl+K anywhere in the app) opens a `cmdk` palette
+  (`src/components/ui/command.tsx`, vendored) with type-to-filter, ↑↓/Enter/Esc,
+  and the same "+ New workspace" entry pinned at the bottom. Recent workspaces
+  (last 3 switched-to, tracked client-side in `localStorage` under
+  `lease:recentWorkspaces`) appear above the alphabetical list.
+- **Global Cmd/Ctrl+K listener** — registered in `AppLayout.tsx` (one
+  listener, scoped to authenticated routes). Confirmed free of conflicts (only
+  global binding today is Cmd+B → sidebar toggle, `sidebar.tsx:20`). Does NOT
+  fire while a `Dialog`/`Sheet` is open (palette is suppressed when any other
+  modal is open, so it doesn't compete with form input).
+- **Switch action** uses existing `switchWorkspace` (`AppContext.tsx:290-297`).
+  No optimistic update — the existing full re-fetch is acceptable for a rare
+  action and avoids stale React Query state across workspaces.
+
+## P2.2 New-workspace dialog — `src/components/workspace/NewWorkspaceDialog.tsx` (new)
+
+Two-step modal. **Step 1 (name):** simple input, max 100 chars, trimmed
+client-side, Submit calls `create-workspace` `mode:'preview'`. Errors
+(`no_card_on_file` → "Add a payment method" linking to `customer-portal`;
+`no_customer` → same; `not_eligible` → quiet error; `cap_reached` → cap
+copy) replace step 2 with the appropriate message. **Step 2 (consent):**
+the confirmation modal — see P2.3.
+
+Lives in `src/components/workspace/`. Opened from (a) the sidebar
+"+ New workspace" entry, (b) the management page CTA (Phase 4), (c) the Cmd+K
+palette's "+ New workspace" item.
+
+## P2.3 Confirmation modal — the money path UX
+
+This is the highest-stakes screen of the feature. Copy is final, not
+suggested:
+
+> ### Create **{name}**
+> Business workspaces have their own subscriptions.
+> 
+> - You'll be charged **$499 today** to start.
+> - **$499/month** going forward, billed to **{cardBrand} •••• {cardLast4}**.
+> - This workspace gets its own monthly abstraction allowance — it does NOT
+>   share with your other workspaces.
+> 
+> [ Cancel ] [ **Confirm & create** ]
+
+Behavior on **Confirm & create**:
+1. Generate an `idempotencyKey` **once at modal open** (stable client UUID,
+   stored in component state). Reused for every retry within the same dialog
+   instance. **Never regenerated per click** (CRIT pressure-test).
+2. Disable both buttons; spinner on the primary; the modal becomes
+   non-dismissable for the rest of the flow (no Esc, no overlay-click) to
+   avoid orphaning a pending workspace + sub.
+3. Call `create-workspace` `mode:'confirm'` with `{ name, idempotencyKey }`.
+4. On `ok:false`:
+   - `cap_reached` / `not_eligible` → swap modal content to copy + "Manage
+     workspaces" link, close button reappears.
+   - `payment_failed` / `stripe_error` → swap to decline copy with
+     the Stripe message + "Update card" link to `customer-portal`. Server has
+     already rolled back the workspace.
+   - `bad_request` / `invalid_name` → return to step 1 with the input focused.
+5. On `ok:true`:
+   - If `paymentIntentStatus === 'succeeded'` or `'requires_capture'` →
+     proceed to "Activating…" (step 6).
+   - Else (`requires_action` or `requires_confirmation`) → call
+     `stripe.confirmCardPayment(clientSecret, { payment_method: undefined })`
+     via `@stripe/stripe-js`. This is the in-app 3DS step (the modal IS the
+     on-session context). If `confirmCardPayment` resolves with no error and
+     `paymentIntent.status === 'succeeded'` → "Activating…". If it errors
+     (user cancels 3DS, wrong code, etc.) → call `create-workspace`
+     `mode:'cancel'` with the returned `workspaceId` to clean up, then surface
+     the Stripe error + "Try again" / "Use a different card" CTA.
+6. **"Activating…" state.** The webhook is what actually flips the workspace
+   to Business. UI polls `workspaces.subscription_status` via the existing
+   `AppContext.fetchProfile()` (triggered every 2s via a `setInterval` until
+   the active workspace shows Business, max 30s). On success → toast
+   ("Workspace {name} is ready") + two CTAs: **Switch to it** /
+   **Stay here**. (Do not switch involuntarily — pressure-test §6.2.) On 30s
+   timeout → "Activation taking longer than usual — refresh the page in a
+   minute" + close (the workspace IS active in Stripe; webhook just lagged.
+   This is a known-acceptable corner case.)
+
+Modal accessibility: focus trap, labeled inputs, primary button is the
+default-Enter target, secondary cancel is Esc target (except during steps 4-6
+where Esc is suppressed).
+
+## P2.4 Stripe client wiring — `src/lib/stripe.ts` (new)
+
+Tiny module: lazy `loadStripe(VITE_STRIPE_PUBLISHABLE_KEY)` on first call,
+caches the Promise, exports `getStripe()`. If `VITE_STRIPE_PUBLISHABLE_KEY`
+is missing, `getStripe()` returns `null` and the dialog surfaces a "Multi-
+workspace temporarily unavailable" error (fail closed).
+
+## P2.5 Coordinated edge-function deploys (Phase 1 carry-over)
+
+Held back from Phase 1 by design. Deploy together at the end of Phase 2,
+**after the UI is reviewed clean and merged**, in this order:
+1. `stripe-webhook` (carries the reconciliation block — additive, never breaks
+   the existing path).
+2. `create-workspace` (new).
+3. `sweep-pending-workspaces` (new; not yet wired to a cron schedule — that's
+   the operator's last step, see P2.7).
+
+All three use the shared `_shared/cors.ts` (`.vercel.app`-aware), so they
+inherit the suffix-fix from the prior CORS commit.
+
+## P2.6 Operator setup checklist (added to `docs/ops/OPERATOR_PLAYBOOK.md`)
+
+Before Phase 2 is "shippable to a customer":
+1. Set `VITE_STRIPE_PUBLISHABLE_KEY` in Vercel (test+live).
+2. Set `SWEEP_PENDING_WORKSPACES_CRON_SECRET` (32+ char random) as a Supabase
+   secret + matching `private.cron_secrets` row.
+3. Schedule the cron: `SELECT cron.schedule('sweep-pending-workspaces',
+   '17 * * * *', $$SELECT net.http_post(...)$$);` (mirror the existing cron
+   pattern — exact SQL in playbook).
+4. **Live-mode Stripe webhook destination** — already an outstanding ops item
+   per CLAUDE.md; this feature inherits the dependency. Webhook must include
+   `customer.subscription.created/updated/deleted` (already required for
+   single-workspace billing).
+
+## P2.7 What Phase 2 explicitly does NOT do
+
+- Owner transfer UI (Phase 3).
+- Settings → Usage row (Phase 4).
+- Rename / member-event client-side logging (Phase 4).
+- 3-up grid on management page (Phase 4).
+- Spanish translation (Phase 4).
+
+## P2.8 Test plan (`lease-test-author`)
+
+- Eligibility-shown matrix: Starter / Business-under-cap / Business-at-cap /
+  Business-no-card — each renders the right entry (visible/disabled/hidden).
+- Switcher: >1 / ≤5 / >5 workspaces — dropdown vs palette.
+- Cmd+K opens palette; suppressed while a Dialog is open; alpha + recent
+  ordering; Esc closes.
+- Confirmation modal: idempotency key stable across retries, disabled during
+  in-flight, all error branches render correct copy.
+- 3DS: simulate `requires_action` → confirmCardPayment success → Activating →
+  Switch to it; simulate 3DS user-cancel → cancel mode called → workspace
+  cleaned up.
+- Activation polling: webhook arrives within 30s → success; webhook timeout →
+  "taking longer" copy.
+- Initials avatar: deterministic color per id; 1-word names; emoji-only
+  names; very long names truncate cleanly.
+
+## P2.9 Subagent routing
+- `lease-code-auditor` + `lease-security-scanner` always-on.
+- `lease-product-polish` — state-walk on the confirmation modal (10 states:
+  step1 / step1-error / step2 / step2-confirming / 3DS-in-progress /
+  3DS-error / activating / activated-success / activation-timeout / cap-reached);
+  surface sweep on the sidebar (1, 2-5, 6+ workspaces; Starter, Business,
+  no-card states).
+- `lease-test-author` for the test plan.
+- No `lease-repository-integrity-reviewer` for Phase 2 (no schema or
+  audit-shape changes; data layer was Phase 1's lane).
+
+## P2.10 Open items to confirm during pressure-test
+1. **Test-mode key in staging** — confirm the staging Stripe account is in test
+   mode so I can validate the full flow without real money.
+2. **3DS test cards** — Stripe's `4000 0025 0000 3155` (3DS required) and
+   `4000 0027 6000 3184` (3DS optional/insufficient funds) — these need to be
+   on the owner's customer in test mode to exercise the path.
+3. **Cron schedule cadence** — once an hour matches the 2h cutoff with margin;
+   confirm.
+
+## P2.11 Changelog v2 → v3 (Phase 2 pressure-test)
+Two pressure-tests (lease-product-polish + lease-security-scanner) folded in:
+
+- **HIGH (sec)** activation polling target — `fetchProfile()` cannot observe
+  `subscription_status` on the new workspace; `availableWorkspaces` selects
+  only `id/name/plan`. **Fix:** narrow query on `workspaces.id =
+  newWorkspaceId` selecting `id, plan, subscription_status`, polled until
+  Business+active or 30s timeout, then a final `fetchProfile()` to refresh
+  state. Mandatory `useEffect` cleanup + AbortController on the poll.
+- **HIGH (polish)** "+ New workspace" eligibility was gated on the ACTIVE
+  workspace's plan, stranding a Business owner viewing one of their Starter
+  workspaces. **Fix:** eligibility is "user owns any Business workspace with
+  an active sub, AND ownedCount < cap." Derived from `availableWorkspaces`
+  client-side (server re-checks).
+- **HIGH (polish)** no pre-click cost disclosure. **Fix:** sidebar entry label
+  is "**+ New workspace · $499/mo**" (or "+ New workspace (Workspace limit
+  reached)" when at cap). Same disclosure in the Cmd+K palette entry and the
+  management-page CTA.
+- **HIGH (sec)** `clientSecret` hygiene unspecified. **Fix:** spec mandates
+  (a) the dialog NEVER logs the `create-workspace` response body, (b) global
+  Sentry `beforeSend` scrub for `client_secret` and `pi_*_secret_*` patterns
+  (note: Sentry not yet wired per CLAUDE.md but rule lands now), (c) the
+  React `useState` holding the secret is set to `null` immediately after
+  `confirmCardPayment` resolves, (d) the secret is never put in URL/router
+  state, (e) idempotencyKey lives in a `useRef` initialized in the modal-open
+  effect — **not** localStorage / sessionStorage.
+- **HIGH (sec)** 3DS network-fail or tab-close → workspace orphans + leaked
+  `clientSecret` could be completed out-of-band. **Fix:** (1) on
+  `confirmCardPayment` error, the client calls
+  `stripe.retrievePaymentIntent(clientSecret)` first; if `succeeded`,
+  treat as paid (proceed to Activating) — do NOT call cancel; only call
+  cancel when status is `requires_payment_method` / `requires_action`
+  un-completed. (2) The sidebar switcher visibly marks any pending-creation
+  workspace (`workspace_creation_requests.status='pending'` + active workspace
+  shows `plan='starter'`) with a "Resume setup" affordance opening the
+  modal in a recovery mode that re-fetches the existing PaymentIntent via the
+  preview endpoint.
+- **HIGH (polish)** "Activation taking longer than usual" copy lies in one
+  branch. **Fix:** branch-aware copy. If PaymentIntent is `succeeded` on
+  Stripe and the 30s timeout fires, copy is "Your workspace is paid — we're
+  finishing setup. Refresh in a minute or check **Manage workspaces**." If PI
+  isn't succeeded, copy is "Setup is taking longer than expected. You'll get
+  an email when it's ready, or contact support." The client uses
+  `retrievePaymentIntent` once at timeout to decide which copy.
+- **HIGH (sec)** publishable-key prefix assertion. **Fix:**
+  `src/lib/stripe.ts` asserts `MODE === 'production'` ⇒ key starts with
+  `pk_live_`; non-prod ⇒ `pk_test_`. Fail closed with the same
+  "Multi-workspace temporarily unavailable" banner. CI build also rejects
+  prefix mismatch.
+- **MED (polish + sec)** Cmd+K suppression covers `Dialog` AND `Sheet`;
+  >5-workspace dropdown still renders the active workspace + last 3 recent +
+  top 3 alpha + Search affordance (not just the search row); on mobile (no
+  Cmd key), the "Search workspaces…" dropdown row is itself tappable and
+  opens the palette. The palette ignores Cmd+K when focus is in an input
+  (let the input handle the keystroke).
+- **MED (polish)** "Switch to it" is the default-Enter primary post-success;
+  "Stay here" is secondary. **No auto-switch** — the polish review's 5s
+  auto-switch is rejected as it's confusing; explicit click is the cleaner
+  pattern.
+- **MED (polish)** decline copy must explicitly state "**No charge was made
+  to your card**" as a mandatory line above the Stripe-provided decline
+  reason.
+- **MED (polish)** `no_card_on_file` copy must not blame the user: "We
+  couldn't find a saved card — add one to continue" + portal link.
+- **MED (sec)** activation polling target is a NARROW query on the new
+  `workspaceId` (see HIGH-sec #1) with `select('id, plan,
+  subscription_status').eq('id', newWorkspaceId).maybeSingle()`. RLS allows
+  the owner to read; the existing entitlement update writes plan +
+  subscription_status atomically (`stripe-webhook` line 103-114), so a
+  single field read is sufficient. Stop polling on (a) Business+active,
+  (b) 30s timeout, or (c) component unmount via `AbortController` +
+  `clearInterval`.
+- **MED (sec)** `pg_cron` schedule uses the `private.cron_secrets` pattern
+  (matching `vendor-health-check`), NOT the inline-secret-literal pattern.
+  The playbook snippet is updated accordingly.
+- **MED (sec)** webhook reconciliation block must be defensive about the
+  Phase 1 tables existing in the env it's deployed to. The current code
+  already wraps in `try/catch` (non-fatal) so a missing table just logs and
+  skips — verified. Spec adds: confirm Phase 1 migration applied to every
+  env before the webhook redeploy.
+- **LOW (polish)** "Workspace limit reached" entry is enabled + relabeled
+  "Manage workspaces (at limit)" — no disabled-but-clickable trap.
+- **LOW (polish)** recent-workspaces in the palette appear only when
+  `availableWorkspaces.length >= 5` (otherwise noise).
+- **LOW (polish + sec)** i18n keys from day one in
+  `src/locales/en/common.json` (Spanish file untouched until Phase 4) —
+  do NOT hardcode strings. Cleared with CLAUDE.md "locales updated
+  together" rule by deferring only the ES additions.
+- **LOW (sec)** `localStorage` for recent workspaces is cleared on logout
+  in `AuthContext`.
+- **LOW (sec)** `VITE_STRIPE_PUBLISHABLE_KEY` added to `.env.example` as
+  part of the Phase 2 PR (not a follow-up).
+- **LOW (polish)** "$499 today" — US-only acknowledged; tax/total deferred.
+
+## P2.12 Phase 2 Build Order (post-pressure-test)
+
+1. `package.json` + `.env.example` + `src/lib/stripe.ts` (publishable key
+   loader + prefix assertion).
+2. `src/components/workspace/WorkspaceAvatar.tsx` (initials + deterministic
+   color).
+3. `src/components/workspace/NewWorkspaceDialog.tsx` (name step + confirm
+   modal + 3DS handling + activation polling + all error branches +
+   i18n-keyed copy).
+4. `src/components/layout/AppSidebar.tsx` — upgrade the switcher
+   (always-render, avatars, "+" entry with `· $499/mo`, palette trigger).
+5. `src/components/layout/AppLayout.tsx` — global Cmd+K listener
+   (Dialog/Sheet/input suppression).
+6. `src/components/workspace/WorkspaceCommandPalette.tsx` (new) — the cmdk
+   wrapper with recent + alpha + search.
+7. `src/contexts/AuthContext.tsx` — clear `lease:recentWorkspaces` on
+   logout.
+8. i18n keys in `src/locales/en/common.json`.
+9. Coordinated edge-function deploys: `stripe-webhook` → `create-workspace`
+   → `sweep-pending-workspaces`.
+10. Reviewer pass (auditor + security + polish + test-author) BEFORE merging
+    to main and BEFORE the cron is scheduled (operator step in playbook).
+
