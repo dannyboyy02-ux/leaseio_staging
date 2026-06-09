@@ -660,8 +660,8 @@
     "billing_desc": "Manage billing, plan, and invoices for this workspace",
     "manage_billing": "Open Billing & Plan",
     "create": {
-      "cta": "+ New workspace · $499/mo",
-      "cta_palette": "Create a new Business workspace · $499/mo",
+      "cta": "+ New workspace",
+      "cta_palette": "Create a new workspace",
       "search_placeholder": "Search workspaces…",
       "search_hint": "Search workspaces… (⌘K)",
       "manage_link": "Manage workspaces",
