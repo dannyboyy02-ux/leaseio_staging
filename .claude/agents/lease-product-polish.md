@@ -112,6 +112,17 @@ For tab strips specifically: prefer **short labels with full-text tooltips** + `
 - New copy added in English without a Spanish counterpart shows as a missing-translation warning to ES users.
 - Hardcoded English in a file that has i18n elsewhere is a half-finished feature.
 
+## 9. Visual rendering sanity — what the pixels actually say
+
+This class is missed when reviewers read JSX and locale strings as two separate files instead of mentally rendering them together. The fix is to read the button as the user sees it — icon + space + label, end-to-end.
+
+- **Icon/text symbol collision.** When a button renders an icon component AND its label string embeds the same symbol as a literal character, the user sees the symbol twice. The canonical case: a Lucide `<Plus />` icon next to an i18n string that itself starts with `"+ "` — the button renders as `+ + New workspace`. Same class for `<ArrowRight />` next to `"→ Next"`, `<X />` next to `"× Close"`, `<Check />` next to `"✓ Confirm"`. **Check:** when a button uses an icon component, the label string in BOTH locales must NOT also encode that symbol.
+- **Affordance glyphs encoded in i18n strings.** Locale values like `"+ New workspace"`, `"→ Continue"`, or `"× Cancel"` push UI affordances into the translation layer where they're invisible to JSX review. Translators may also strip or duplicate them. **Rule:** symbols that represent affordances (add, advance, close, confirm) belong in the component layer as icon components, never in the locale string. Locale strings carry words, not glyphs.
+- **Double iconography.** A button that has both an `icon` prop AND wraps an icon child, or a CardHeader with both a `<CardIcon />` and an emoji prefix in the title, produces the same class of duplication.
+- **Spacing that reads as collision.** An icon with `mr-1.5` next to a label that starts with a leading space, or a flex container with `gap-2` between children that are themselves padded — read the rendered whitespace, not the source whitespace.
+
+The general technique: for every button, badge, chip, and card header on the surface you're reviewing, **mentally render it** — what does the user's eye see, left to right? If the rendered glyphs duplicate, flag it. This catch is fast (seconds per element) and prevents the embarrassing screenshot-level miss.
+
 # Output format
 
 For each finding, write:

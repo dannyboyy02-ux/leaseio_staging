@@ -688,7 +688,7 @@
       "admin_member_hint": "Usted es administrador aquí: cambie a este espacio de trabajo para administrar miembros desde la Configuración del Espacio de Trabajo."
     },
     "create": {
-      "cta": "+ Nuevo espacio de trabajo",
+      "cta": "Nuevo espacio de trabajo",
       "cta_palette": "Crear un nuevo espacio de trabajo",
       "search_placeholder": "Buscar espacios de trabajo…",
       "search_hint": "Buscar espacios de trabajo… (⌘K)",

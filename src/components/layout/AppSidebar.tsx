@@ -19,6 +19,7 @@ import {
   Moon,
   Monitor,
   Languages,
+  Plus,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
@@ -334,6 +335,7 @@ export function AppSidebar() {
                 setNewWorkspaceOpen(true);
               }}
             >
+              <Plus className="h-4 w-4 mr-2" />
               {t('workspace.create.cta')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />

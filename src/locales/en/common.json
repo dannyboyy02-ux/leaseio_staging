@@ -688,7 +688,7 @@
       "admin_member_hint": "You're an admin here — switch to this workspace to manage members from Workspace Settings."
     },
     "create": {
-      "cta": "+ New workspace",
+      "cta": "New workspace",
       "cta_palette": "Create a new workspace",
       "search_placeholder": "Search workspaces…",
       "search_hint": "Search workspaces… (⌘K)",
