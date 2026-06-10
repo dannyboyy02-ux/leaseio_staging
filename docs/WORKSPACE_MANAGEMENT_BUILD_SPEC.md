@@ -780,6 +780,11 @@ writes). Resolution, superseding the initial as-built section above:
   existence oracle contradicting its own comment).
 - Audit details additionally record `target_prior_role` so the new owner's
   before-state is recoverable from the one row.
+- **§4.2(4) deviation:** the details record `billing_remains_on_prior_owner:
+  true` (boolean) instead of the raw `stripe_customer_id` — the audit row is
+  readable by every workspace member via the SELECT policy, and the customer
+  id is recoverable from `workspaces` by anyone who legitimately needs it
+  (security pre-push review, 2026-06-09).
 - UI: dialog strings extracted to `workspace.transfer.*` (en + es); fetch
   errors render a retry pane distinct from the genuine empty state; the
   empty state offers an "Open Manage members" action; the Transfer action

@@ -1363,6 +1363,18 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 ---
 
+### Item #59: `enforceWorkspaceRateLimit` read-then-upsert is not atomic
+
+**Symptom:** The shared helper (`supabase/functions/_shared/audit.ts:226-261`) reads `request_count`, then upserts `count + 1` — concurrent requests in the same window can each read the same count and both pass, overshooting the cap. For owner-gated functions (delete-workspace, transfer-workspace-ownership, ceiling 5/hr) abuse value is minimal since only the verified owner can reach the limiter; the broader exposure is the AI/processing functions sharing the helper.
+
+**Severity:** Low. Surfaced by lease-security-scanner during the transfer-RPC pre-push review (2026-06-09). Pre-existing shared-helper behavior — filed, not bundled.
+
+**Where to look:** `supabase/functions/_shared/audit.ts:226-261`; all `enforceWorkspaceRateLimit` call sites (grep).
+
+**Stub remediation:** Atomic increment — single UPSERT with `request_count = processing_rate_limits.request_count + 1` ON CONFLICT (or an RPC doing INSERT ... ON CONFLICT DO UPDATE ... RETURNING) and compare the returned count to the limit. Fix once in the helper; all callers inherit. (A cousin of this helper's "document processing request" copy being wrong for non-processing callers — add an optional label param in the same pass.)
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -1378,7 +1390,8 @@ the 2026-06-03 zombie-edge-function neutralization (item 49),
 the 2026-06-04 executed-vs-pipeline UI removal (item 50),
 the 2026-06-09 Workspace Management Phase 1 fix pass (item 51),
 the 2026-06-09 Workspace Management Phase 4 review pass (items 52-53),
-and the 2026-06-09 Workspace Management Phase 3 five-reviewer pass (items 54-58).
+the 2026-06-09 Workspace Management Phase 3 five-reviewer pass (items 54-58),
+and the 2026-06-09 transfer-RPC pre-push security review (item 59).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.

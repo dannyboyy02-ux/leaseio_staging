@@ -125,7 +125,10 @@ describe('transfer_workspace_ownership_locked (migration) — audit row', () => 
     expect(block).toContain("'to', p_target_user_id");
     expect(block).toContain("'prior_owner_new_role', 'admin'");
     expect(block).toContain("'target_prior_role', v_target.role");
-    expect(block).toContain("'billing_remains_on_customer', v_ws.stripe_customer_id");
+    // Boolean, NOT the raw Stripe customer id — the row is member-readable
+    // (spec §4.2(4) deviation, recorded in the as-built).
+    expect(block).toContain("'billing_remains_on_prior_owner', true");
+    expect(block).not.toContain('stripe_customer_id');
     expect(block).toContain("'billing_transferred', false");
     // The actor is the caller (prior owner), not NULL/system.
     expect(block).toContain('p_caller_id');
@@ -133,13 +136,20 @@ describe('transfer_workspace_ownership_locked (migration) — audit row', () => 
 });
 
 describe('transfer_workspace_ownership_locked (migration) — grants', () => {
-  it('is SECURITY DEFINER with a pinned search_path', () => {
+  it('is SECURITY DEFINER with a pinned search_path (pg_temp last) and postgres owner', () => {
     const block = section(sqlSrc, 'CREATE OR REPLACE FUNCTION', 'DECLARE');
     expect(block).toContain('SECURITY DEFINER');
-    expect(block).toContain('SET search_path = public');
+    expect(block).toContain('SET search_path = public, pg_temp');
+    // Definer identity must not depend on which role applies the migration.
+    expect(sqlSrc).toContain(
+      'ALTER FUNCTION public.transfer_workspace_ownership_locked(uuid, uuid, uuid) OWNER TO postgres;',
+    );
   });
 
   it('EXECUTE is revoked from PUBLIC/anon/authenticated and granted to service_role only', () => {
+    // Load-bearing: the baseline grants ALL ON FUNCTIONS to anon/authenticated
+    // by default — without these REVOKEs any authenticated user could call
+    // the RPC with an arbitrary p_caller_id via /rest/v1/rpc.
     const block = sqlSrc.slice(sqlSrc.indexOf('REVOKE ALL'));
     expect(block).toContain('FROM PUBLIC');
     expect(block).toContain('FROM anon');

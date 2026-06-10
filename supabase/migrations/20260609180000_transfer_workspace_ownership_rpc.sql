@@ -28,7 +28,7 @@ CREATE OR REPLACE FUNCTION public.transfer_workspace_ownership_locked(
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_ws RECORD;
@@ -36,7 +36,7 @@ DECLARE
 BEGIN
   -- Lock the workspace row: serializes concurrent transfers (and any other
   -- owner_id change) for the duration of the transaction.
-  SELECT id, owner_id, stripe_customer_id INTO v_ws
+  SELECT id, owner_id INTO v_ws
   FROM public.workspaces
   WHERE id = p_workspace_id
   FOR UPDATE;
@@ -74,7 +74,12 @@ BEGIN
   -- 2. Mandatorily demote prior owner to admin — upsert when they have no
   -- member row (workspaces created via the create-workspace edge function
   -- do not give the owner one). Never strand the prior owner.
-  UPDATE public.workspace_members SET role = 'admin'
+  -- COALESCE keeps a (schema-unconstrained) accepted_at-NULL row from
+  -- leaving the demoted owner permanently ineligible as a future target.
+  UPDATE public.workspace_members
+  SET role = 'admin',
+      accepted_at = COALESCE(accepted_at, now()),
+      invited_at = COALESCE(invited_at, now())
   WHERE workspace_id = p_workspace_id AND user_id = v_ws.owner_id;
   IF NOT FOUND THEN
     INSERT INTO public.workspace_members (workspace_id, user_id, role, invited_at, accepted_at)
@@ -103,7 +108,11 @@ BEGIN
       'to', p_target_user_id,
       'prior_owner_new_role', 'admin',
       'target_prior_role', v_target.role,
-      'billing_remains_on_customer', v_ws.stripe_customer_id,
+      -- Boolean instead of the raw Stripe customer id (spec §4.2(4)
+      -- deviation, recorded in the as-built): the audit row is readable by
+      -- every workspace member, and the id is recoverable from workspaces
+      -- by anyone who legitimately needs it.
+      'billing_remains_on_prior_owner', true,
       'billing_transferred', false
     )
   );
@@ -115,6 +124,10 @@ BEGIN
   );
 END;
 $$;
+
+-- Pin the definer identity regardless of which role applies the migration
+-- (CLI vs Studio/MCP differ) — parity with is_workspace_member et al.
+ALTER FUNCTION public.transfer_workspace_ownership_locked(uuid, uuid, uuid) OWNER TO postgres;
 
 REVOKE ALL ON FUNCTION public.transfer_workspace_ownership_locked(uuid, uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.transfer_workspace_ownership_locked(uuid, uuid, uuid) FROM anon;
