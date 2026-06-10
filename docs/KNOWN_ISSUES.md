@@ -1321,6 +1321,10 @@ For now, leave alone.
 
 **Stub remediation:** One audit-hardening migration (bundle with #53 + #54): AFTER UPDATE OF role / AFTER DELETE triggers on `workspace_members` and AFTER UPDATE OF name ON `workspaces` writing `workspace_activity_log` in the same transaction (actor from `auth.uid()`, before/after from OLD/NEW); remove the client-side writes; wire `member_added` from `accept-invite` (or a member-insert trigger); regenerate types and drop the `(supabase as any)` casts. Security-class migration — reviewer routing before push. Note the trigger-ordering gotcha in CLAUDE.md (alphabetical firing; inventory existing triggers from the live DB first).
 
+Two LOWs from the 2026-06-09 remediation re-review fold in here:
+- `previous_role` in the client's `member_removed` write comes from the page-load member snapshot, not the deleted row — a role changed in another session is recorded stale. The AFTER DELETE trigger MUST source it from `OLD.role` (this is the motivation; don't drop it during the bundle).
+- Residual post-commit race in the transfer RPC: a member-removal of the target that blocks on the RPC's FOR UPDATE proceeds after commit and deletes the NEW OWNER's freshly-promoted member row (not data loss — `workspaces.owner_id` holds and `is_workspace_member` covers owners — but it recreates the owner-with-no-member-row state). The AFTER DELETE trigger can detect `OLD.user_id = workspaces.owner_id` and log it distinctly (or re-insert per the owner-self-row convention).
+
 ---
 
 ### Item #56: Lease-meter "approaching limit" CTA on Usage sends Business users to a page selling them Business
