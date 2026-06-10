@@ -1295,6 +1295,70 @@ For now, leave alone.
 
 ---
 
+### Item #54: `workspace_activity_log` INSERT policy permits forgeable rows by any member
+
+**Symptom:** The authenticated INSERT policy requires membership and `user_id = auth.uid()`, but nothing restricts WHICH `event_type` a member may write — a plain member can insert a legitimate-valued but false `owner_transferred` / `renamed` / `member_removed` row. Combined with #53 (no CHECK constraint), the workspace audit trail is forgeable by its own subjects. The omission side is equally real: members mutating via direct REST skip logging entirely, since client-side audit writes are voluntary.
+
+**Severity:** Medium (audit-trail integrity, defense-in-depth — RLS still prevents cross-workspace writes and edits/deletes). Surfaced by lease-security-scanner during the Phase 3 review (2026-06-09). Pre-existing schema (Phase 1 migration) — filed, not bundled.
+
+**Root-cause hypothesis:** The Phase 1 policy mirrored `lease_activity_log`'s INSERT policy shape without considering that workspace-lifecycle events include service-role-reserved vocabulary.
+
+**Where to look:** `supabase/migrations/20260609120000_workspace_management_phase1.sql:58-65` (policy); client writers in `RenameWorkspaceInline.tsx`, `MemberRoleSelect.tsx`, `MembersPanel.tsx`.
+
+**Stub remediation:** Remediate together with #53 and #55 as one audit-hardening migration: restrict client-insertable event_types to the genuinely client-written subset, keep `created`/`activated`/`owner_transferred` service-role-only.
+
+---
+
+### Item #55: Member-event audit writes should move server-side (trigger), not live in client discipline
+
+**Symptom:** `member_role_changed` / `member_removed` / `renamed` audit rows are written client-side, fire-and-forget (deliberate, so an audit failure can't masquerade as an operation failure — 2026-06-09 fix pass). The integrity reviewer's assessment: for permission changes, the structural answer is atomicity, not silent drop — a tab close right after the success toast can drop the row, and direct-REST mutations log nothing. Related gaps: `member_added` is documented vocabulary (migration comment, spec §2) but has NO writer anywhere (`accept-invite` logs nothing); `workspace_activity_log` is absent from the generated `src/integrations/supabase/types.ts`, forcing `(supabase as any)` casts on every client writer.
+
+**Severity:** High (audit-trail completeness for permission changes). Surfaced by lease-repository-integrity-reviewer during the Phase 3 review (2026-06-09). Filed by owner decision: fix `user_id` stamping now (done), build the structural fix as its own beat.
+
+**Root-cause hypothesis:** Spec §6.5 chose client-side writes via the constrained INSERT policy to resolve a writer-model contradiction; that resolved WHO may write but left WHETHER a write happens to client discipline.
+
+**Where to look:** `src/components/workspace/{MemberRoleSelect,MembersPanel,RenameWorkspaceInline}.tsx`; `supabase/functions/accept-invite/index.ts` (missing `member_added` writer); `supabase/migrations/20260609120000_workspace_management_phase1.sql`.
+
+**Stub remediation:** One audit-hardening migration (bundle with #53 + #54): AFTER UPDATE OF role / AFTER DELETE triggers on `workspace_members` and AFTER UPDATE OF name ON `workspaces` writing `workspace_activity_log` in the same transaction (actor from `auth.uid()`, before/after from OLD/NEW); remove the client-side writes; wire `member_added` from `accept-invite` (or a member-insert trigger); regenerate types and drop the `(supabase as any)` casts. Security-class migration — reviewer routing before push. Note the trigger-ordering gotcha in CLAUDE.md (alphabetical firing; inventory existing triggers from the live DB first).
+
+---
+
+### Item #56: Lease-meter "approaching limit" CTA on Usage sends Business users to a page selling them Business
+
+**Symptom:** `UsageContent.tsx`'s approaching-limit banner fires for lease/archive saturation on any plan; for Business users the CTA routed to `/app/upgrade`, which unconditionally pitches the Business plan with an `autoCheckout=1` handoff. The 2026-06-09 fix retargeted the banner CTA to subscription management when `plan === 'business'`, but `Upgrade.tsx` itself remains plan-unaware: any Business user who reaches `/app/upgrade` by other paths (sidebar, deep link) is still sold their current plan.
+
+**Severity:** Medium (misleading dead-end; potential duplicate-checkout confusion — `create-checkout` server-side behavior for an already-subscribed customer unverified). Surfaced by lease-product-polish during the Phase 3 review (2026-06-09). The banner half is fixed; the `Upgrade.tsx` half is pre-existing — filed, not bundled.
+
+**Where to look:** `src/pages/app/Upgrade.tsx` (plan-unaware pitch + autoCheckout link); `src/pages/settings/AccountSettings.tsx:414` (autoCheckout reader); `supabase/functions/create-checkout/index.ts` (verify behavior for an already-Business customer).
+
+**Stub remediation:** Make `Upgrade.tsx` plan-aware: for Business users render "You're on Business" + a Manage subscription link instead of the checkout CTA; verify `create-checkout` rejects/no-ops for an already-active Business subscription.
+
+---
+
+### Item #57: Owner Workspace Management surface is hardcoded English
+
+**Symptom:** `WorkspaceManagement.tsx` (section headers, card actions, leave/delete confirmations) and `DeleteWorkspaceDialog.tsx` are entirely hardcoded English, predating the workstream's i18n standard (Phase 2 shipped `workspace.create.*`, Phase 3 shipped `workspace.transfer.*` in both locales). A Spanish-locale user gets a mixed-language management page, including the delete confirmation.
+
+**Severity:** Low-Medium (locale consistency; comprehension on a destructive dialog). Surfaced by lease-product-polish (2026-06-09). Pre-existing — filed, not bundled.
+
+**Where to look:** `src/pages/account/WorkspaceManagement.tsx`, `src/components/workspace/DeleteWorkspaceDialog.tsx`, `src/components/workspace/MembersPanel.tsx` (toasts + a few inline strings).
+
+**Stub remediation:** Extract to `workspace.manage.*` / `workspace.delete.*` keys in en + es in one pass; update the jsdom tests that assert literal strings.
+
+---
+
+### Item #58: Leaving your only workspace strands the session in a zero-workspace state
+
+**Symptom:** `handleLeaveWorkspace` in `WorkspaceManagement.tsx` looks for a fallback workspace to switch to; when the departed workspace was the user's ONLY one, no fallback exists and the flow proceeds anyway, refreshing into an app state with no active workspace and no recovery surface.
+
+**Severity:** Medium (user stranded; recoverable only by re-invite). Surfaced by lease-product-polish (2026-06-09). Pre-existing (Owner Workspace Management Checkpoint 3) — filed, not bundled.
+
+**Where to look:** `src/pages/account/WorkspaceManagement.tsx:171-196`; whatever AppContext renders when `availableWorkspaces` is empty.
+
+**Stub remediation:** Either block Leave when it's the last workspace (with copy explaining why), or build an explicit "no workspaces" recovery screen (create-new or accept-invite paths) and route into it.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -1309,7 +1373,8 @@ the 2026-06-03 lease-detail cosmetics pass (items 47-48),
 the 2026-06-03 zombie-edge-function neutralization (item 49),
 the 2026-06-04 executed-vs-pipeline UI removal (item 50),
 the 2026-06-09 Workspace Management Phase 1 fix pass (item 51),
-and the 2026-06-09 Workspace Management Phase 4 review pass (items 52-53).
+the 2026-06-09 Workspace Management Phase 4 review pass (items 52-53),
+and the 2026-06-09 Workspace Management Phase 3 five-reviewer pass (items 54-58).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.

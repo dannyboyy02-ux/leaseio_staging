@@ -68,10 +68,12 @@ export function RenameWorkspaceInline({
       onRenamed?.(trimmed);
       // Fire-and-forget: an audit-write failure must not surface as a
       // rename failure — the rename above already committed.
+      const { data: sessionData } = await supabase.auth.getSession();
       (supabase as any)
         .from('workspace_activity_log')
         .insert({
           workspace_id: workspaceId,
+          user_id: sessionData.session?.user?.id ?? null,
           event_type: 'renamed',
           details: { from_name: currentName, to_name: trimmed },
         })

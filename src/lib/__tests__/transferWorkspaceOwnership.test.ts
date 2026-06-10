@@ -2,27 +2,23 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// Static-source coverage for the Phase 3 ownership-transfer edge function
-// (spec §4.2). Deno functions can't run under vitest, so — per repo
-// convention (see workspaceLimits.test.ts) — we pin the load-bearing source
-// blocks with readFileSync, narrowing the search window to each block's
-// declaration before asserting. Full-file toContain is a known false-positive
-// trap (a matching string elsewhere in the file would mask a regression).
+// Static-source coverage for the Phase 3 ownership transfer (spec §4.2 +
+// the same-day hardening pass). The transfer is split across two sources:
 //
-// What we pin:
-//   1. Owner-only authorization (caller must equal workspaces.owner_id).
-//   2. Target eligibility: accepted member only (user_id AND accepted_at
-//      both NOT NULL) — excludes invited-but-unaccepted rows.
-//   3. Member-row mutations happen BEFORE the owner_id swap (consistency
-//      guarantee documented in the function header).
-//   4. The swap carries an owner-guard predicate (.eq("owner_id",
-//      ws.owner_id)) so a concurrent transfer can't double-apply.
-//   5. The audit row: event_type "owner_transferred" with
-//      billing_transferred: false (v1 limitation surfaced in the trail).
-//   6. The prior owner is demoted to 'admin' on both paths (update of an
-//      existing member row, insert fallback when none exists).
+//   - supabase/migrations/20260609180000_transfer_workspace_ownership_rpc.sql
+//     — the atomic SECURITY DEFINER RPC that owns ALL mutations + the audit
+//     row in one transaction (added after the reviewer pass found the
+//     original inline edge-function writes could log a transfer that never
+//     committed).
+//   - supabase/functions/transfer-workspace-ownership/index.ts — auth,
+//     validation, rate limiting, and delegation to the RPC.
+//
+// Deno functions / SQL can't run under vitest, so — per repo convention
+// (see workspaceLimits.test.ts) — we pin the load-bearing source blocks with
+// readFileSync, narrowing the search window to each block's declaration
+// before asserting. Full-file toContain is a known false-positive trap.
 
-const src = readFileSync(
+const fnSrc = readFileSync(
   join(
     process.cwd(),
     'supabase/functions/transfer-workspace-ownership/index.ts',
@@ -30,8 +26,16 @@ const src = readFileSync(
   'utf8',
 );
 
-/** Slice the source between two unique markers; fail loudly if either moved. */
-function section(start: string, end: string): string {
+const sqlSrc = readFileSync(
+  join(
+    process.cwd(),
+    'supabase/migrations/20260609180000_transfer_workspace_ownership_rpc.sql',
+  ),
+  'utf8',
+);
+
+/** Slice a source between two unique markers; fail loudly if either moved. */
+function section(src: string, start: string, end: string): string {
   const i = src.indexOf(start);
   expect(i, `start marker not found: "${start}"`).toBeGreaterThan(-1);
   const j = src.indexOf(end, i + start.length);
@@ -39,104 +43,179 @@ function section(start: string, end: string): string {
   return src.slice(i, j);
 }
 
-describe('transfer-workspace-ownership — authorization', () => {
-  it('rejects callers who are not the workspace owner (403)', () => {
-    const block = section(
-      'Authorization: load workspace, verify owner',
-      'Validate target: accepted member only',
-    );
-    expect(block).toContain('ws.owner_id !== user.id');
-    expect(block).toMatch(/reason:\s*"not_owner"/);
-    expect(block).toMatch(/403/);
+// ─────────────────────────────────────────────────────────────────────────
+// Migration: the atomic RPC
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('transfer_workspace_ownership_locked (migration) — locking & authorization', () => {
+  it('locks the workspace row FOR UPDATE before any check', () => {
+    const block = section(sqlSrc, 'Lock the workspace row', 'no workspace-existence');
+    expect(block).toContain('FROM public.workspaces');
+    expect(block).toContain('FOR UPDATE');
+  });
+
+  it('answers not_found for BOTH missing and not-yours (no existence oracle)', () => {
+    const block = section(sqlSrc, 'Same answer for', 'already_owner');
+    expect(block).toContain('IF NOT FOUND OR v_ws.owner_id IS DISTINCT FROM p_caller_id');
+    expect(block).toMatch(/'reason',\s*'not_found'/);
   });
 
   it('rejects transferring to the current owner (already_owner)', () => {
-    const block = section(
-      'Authorization: load workspace, verify owner',
-      'Validate target: accepted member only',
-    );
-    expect(block).toContain('targetUserId === ws.owner_id');
-    expect(block).toMatch(/reason:\s*"already_owner"/);
+    const block = section(sqlSrc, "'already_owner'", 'Accepted member only');
+    expect(block).toBeTruthy();
+    expect(sqlSrc).toContain("IF p_target_user_id = v_ws.owner_id THEN");
   });
 });
 
-describe('transfer-workspace-ownership — target eligibility', () => {
-  it('requires an ACCEPTED member: user_id AND accepted_at both NOT NULL, scoped to the workspace', () => {
-    const block = section(
-      'Validate target: accepted member only',
-      'Rate limit',
-    );
-    expect(block).toContain('.eq("workspace_id", workspaceId)');
-    expect(block).toContain('.eq("user_id", targetUserId)');
-    expect(block).toContain('.not("user_id", "is", null)');
-    expect(block).toContain('.not("accepted_at", "is", null)');
-  });
-
-  it('rejects a non-member / unaccepted target with target_not_accepted_member', () => {
-    const block = section(
-      'Validate target: accepted member only',
-      'Rate limit',
-    );
-    expect(block).toMatch(/reason:\s*"target_not_accepted_member"/);
+describe('transfer_workspace_ownership_locked (migration) — target eligibility', () => {
+  it('requires an ACCEPTED member, scoped to the workspace, and locks the member row', () => {
+    const block = section(sqlSrc, 'Accepted member only', '1. Promote target');
+    expect(block).toContain('workspace_id = p_workspace_id');
+    expect(block).toContain('user_id = p_target_user_id');
+    expect(block).toContain('accepted_at IS NOT NULL');
+    expect(block).toContain('FOR UPDATE');
+    expect(block).toMatch(/'reason',\s*'target_not_accepted_member'/);
   });
 });
 
-describe('transfer-workspace-ownership — prior-owner demotion', () => {
-  it("demotes the prior owner to 'admin' on the update path AND the insert fallback", () => {
-    const block = section('Mandatorily demote prior owner', 'Swap owner_id');
-    // Update path (member row exists).
-    expect(block).toContain('.update({ role: "admin" })');
-    // Insert fallback (prior owner had no member row) — also admin, with an
-    // accepted_at so they aren't an "invited" phantom in their own workspace.
-    const insertIdx = block.indexOf('.insert({');
-    expect(insertIdx, 'insert fallback not found in demotion block').toBeGreaterThan(-1);
-    const insertBlock = block.slice(insertIdx, block.indexOf('})', insertIdx));
-    expect(insertBlock).toMatch(/role:\s*"admin"/);
-    expect(insertBlock).toMatch(/user_id:\s*ws\.owner_id/);
-    expect(insertBlock).toContain('accepted_at:');
+describe('transfer_workspace_ownership_locked (migration) — mutations', () => {
+  it('promotes the target to admin and RAISEs (full rollback) on zero rows', () => {
+    const block = section(sqlSrc, '1. Promote target', '2. Mandatorily demote');
+    expect(block).toContain("SET role = 'admin' WHERE id = v_target.id");
+    expect(block).toContain('RAISE EXCEPTION');
+    expect(block).toContain('transfer_conflict');
   });
 
-  it('member-row mutations (promote target, demote prior owner) happen BEFORE the owner_id swap', () => {
-    const promoteIdx = src.indexOf("Ensure target's member row is admin");
-    const demoteIdx = src.indexOf('Mandatorily demote prior owner');
-    const swapIdx = src.indexOf('Swap owner_id');
+  it("demotes the prior owner to 'admin' on the update path AND the insert fallback (accepted_at stamped)", () => {
+    const block = section(sqlSrc, '2. Mandatorily demote', '3. Swap owner');
+    expect(block).toContain("SET role = 'admin'");
+    expect(block).toContain('user_id = v_ws.owner_id');
+    expect(block).toContain('INSERT INTO public.workspace_members');
+    expect(block).toMatch(/'admin',\s*now\(\),\s*now\(\)/);
+  });
+
+  it('swaps owner_id guarded on the prior owner and RAISEs on a concurrent change', () => {
+    const block = section(sqlSrc, '3. Swap owner', '4. Audit row');
+    expect(block).toContain('SET owner_id = p_target_user_id');
+    expect(block).toContain('AND owner_id = v_ws.owner_id');
+    expect(block).toContain('RAISE EXCEPTION');
+    expect(block).toContain('owner changed concurrently');
+  });
+
+  it('mutations are ordered promote → demote → swap → audit, all inside the function body', () => {
+    const promoteIdx = sqlSrc.indexOf('1. Promote target');
+    const demoteIdx = sqlSrc.indexOf('2. Mandatorily demote');
+    const swapIdx = sqlSrc.indexOf('3. Swap owner');
+    const auditIdx = sqlSrc.indexOf('4. Audit row');
+    const endIdx = sqlSrc.indexOf('END;');
     expect(promoteIdx).toBeGreaterThan(-1);
     expect(demoteIdx).toBeGreaterThan(promoteIdx);
     expect(swapIdx).toBeGreaterThan(demoteIdx);
+    expect(auditIdx).toBeGreaterThan(swapIdx);
+    expect(endIdx).toBeGreaterThan(auditIdx);
   });
 });
 
-describe('transfer-workspace-ownership — owner_id swap', () => {
-  it('the swap UPDATE is guarded by the prior owner_id (no double-apply under concurrency)', () => {
-    const block = section('Swap owner_id', 'Audit row');
-    expect(block).toContain('.update({ owner_id: targetUserId })');
-    expect(block).toContain('.eq("id", workspaceId)');
-    expect(block).toContain('.eq("owner_id", ws.owner_id)');
+describe('transfer_workspace_ownership_locked (migration) — audit row', () => {
+  it('logs owner_transferred in the SAME transaction with the spec §4.2(4) shape + target_prior_role', () => {
+    const block = section(sqlSrc, '4. Audit row', 'RETURN jsonb_build_object');
+    expect(block).toContain('INSERT INTO public.workspace_activity_log');
+    expect(block).toContain("'owner_transferred'");
+    expect(block).toContain("'from', v_ws.owner_id");
+    expect(block).toContain("'to', p_target_user_id");
+    expect(block).toContain("'prior_owner_new_role', 'admin'");
+    expect(block).toContain("'target_prior_role', v_target.role");
+    expect(block).toContain("'billing_remains_on_customer', v_ws.stripe_customer_id");
+    expect(block).toContain("'billing_transferred', false");
+    // The actor is the caller (prior owner), not NULL/system.
+    expect(block).toContain('p_caller_id');
   });
 });
 
-describe('transfer-workspace-ownership — audit row', () => {
-  it('logs owner_transferred with from/to and billing_transferred: false (v1 limitation surfaced)', () => {
-    const block = section('Audit row', 'ok: true');
-    expect(block).toContain('workspace_activity_log');
-    expect(block).toMatch(/event_type:\s*"owner_transferred"/);
-    expect(block).toMatch(/from:\s*ws\.owner_id/);
-    expect(block).toMatch(/to:\s*targetUserId/);
-    expect(block).toMatch(/billing_transferred:\s*false/);
-    expect(block).toMatch(/prior_owner_new_role:\s*"admin"/);
+describe('transfer_workspace_ownership_locked (migration) — grants', () => {
+  it('is SECURITY DEFINER with a pinned search_path', () => {
+    const block = section(sqlSrc, 'CREATE OR REPLACE FUNCTION', 'DECLARE');
+    expect(block).toContain('SECURITY DEFINER');
+    expect(block).toContain('SET search_path = public');
   });
 
-  it('the success response also surfaces billingTransferred: false so the UI can tell the prior owner', () => {
-    const block = src.slice(src.indexOf('ok: true'));
+  it('EXECUTE is revoked from PUBLIC/anon/authenticated and granted to service_role only', () => {
+    const block = sqlSrc.slice(sqlSrc.indexOf('REVOKE ALL'));
+    expect(block).toContain('FROM PUBLIC');
+    expect(block).toContain('FROM anon');
+    expect(block).toContain('FROM authenticated');
+    expect(block).toContain('GRANT EXECUTE');
+    expect(block).toContain('TO service_role');
+    expect(block).not.toContain('TO authenticated');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Edge function: auth, validation, delegation
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('transfer-workspace-ownership (edge fn) — validation', () => {
+  it('validates both body fields as UUIDs before any query', () => {
+    const block = section(fnSrc, 'const workspaceId = body?.workspaceId', 'Advisory owner pre-check');
+    expect(block).toContain('UUID_RE.test(workspaceId)');
+    expect(block).toContain('UUID_RE.test(targetUserId)');
+  });
+
+  it('pre-check answers the SAME 404 for missing and not-yours (no existence oracle)', () => {
+    const block = section(fnSrc, 'Advisory owner pre-check', 'Rate limit');
+    expect(block).toContain('.owner_id !== user.id');
+    expect(block).toMatch(/reason:\s*"not_found"/);
+    expect(block).toMatch(/404/);
+    // The old 403 not_owner split was an existence oracle — keep it gone.
+    expect(fnSrc).not.toContain('"not_owner"');
+  });
+});
+
+describe('transfer-workspace-ownership (edge fn) — rate limit', () => {
+  it('enforces the shared workspace rate limit, wrapped so a helper throw cannot escape as a CORS-less 500', () => {
+    const block = section(fnSrc, 'Rate limit', 'Atomic transfer via RPC');
+    expect(block).toContain('enforceWorkspaceRateLimit');
+    expect(block).toContain('"transfer-workspace-ownership"');
+    expect(block).toContain('try {');
+    expect(block).toContain('} catch');
+  });
+
+  it('the rate limit runs AFTER the owner pre-check (non-owners cannot burn the quota)', () => {
+    const preIdx = fnSrc.indexOf('Advisory owner pre-check');
+    // The call site, not the import at the top of the file.
+    const rateIdx = fnSrc.indexOf('await enforceWorkspaceRateLimit(');
+    expect(preIdx).toBeGreaterThan(-1);
+    expect(rateIdx).toBeGreaterThan(preIdx);
+  });
+});
+
+describe('transfer-workspace-ownership (edge fn) — RPC delegation', () => {
+  it('delegates to transfer_workspace_ownership_locked with the verified caller id', () => {
+    const block = section(fnSrc, 'Atomic transfer via RPC', 'if (rpcError)');
+    expect(block).toContain('"transfer_workspace_ownership_locked"');
+    expect(block).toContain('p_workspace_id: workspaceId');
+    expect(block).toContain('p_caller_id: user.id');
+    expect(block).toContain('p_target_user_id: targetUserId');
+  });
+
+  it('maps transfer_conflict to 409 and other RPC errors to 500', () => {
+    const block = section(fnSrc, 'if (rpcError)', 'const outcome');
+    expect(block).toContain('transfer_conflict');
+    expect(block).toMatch(/reason:\s*"conflict"/);
+    expect(block).toContain('409');
+  });
+
+  it('the success response surfaces billingTransferred: false so the UI can tell the prior owner', () => {
+    const block = fnSrc.slice(fnSrc.indexOf('ok: true'));
     expect(block).toMatch(/billingTransferred:\s*false/);
     expect(block).toMatch(/priorOwnerNewRole:\s*"admin"/);
   });
-});
 
-describe('transfer-workspace-ownership — rate limit', () => {
-  it('enforces the shared workspace rate limit with a low ceiling', () => {
-    const block = section('Rate limit', "Ensure target's member row is admin");
-    expect(block).toContain('enforceWorkspaceRateLimit');
-    expect(block).toContain('"transfer-workspace-ownership"');
+  it('does NOT write workspace tables or the audit log directly (mutations live in the RPC)', () => {
+    // The function may read workspaces (pre-check) but must not update
+    // members/workspaces or insert audit rows outside the transaction.
+    expect(fnSrc).not.toContain('.update(');
+    expect(fnSrc).not.toContain('.insert(');
+    expect(fnSrc).not.toContain('workspace_activity_log');
   });
 });

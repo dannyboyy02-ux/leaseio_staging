@@ -121,12 +121,14 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
       // Fire-and-forget: an audit-write failure must not surface as a
       // removal failure — the delete above already committed.
       if (target) {
+        const { data: sessionData } = await supabase.auth.getSession();
         (supabase as any)
           .from('workspace_activity_log')
           .insert({
             workspace_id: workspaceId,
+            user_id: sessionData.session?.user?.id ?? null,
             event_type: 'member_removed',
-            details: { target_user_id: target.user_id },
+            details: { target_user_id: target.user_id, previous_role: target.role },
           })
           .then(({ error: auditError }: { error: unknown }) => {
             if (auditError) console.error('Failed to log member_removed:', auditError);

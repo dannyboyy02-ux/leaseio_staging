@@ -219,10 +219,12 @@ serve(async (req) => {
     }
   }
 
-  // Global ooo_declared activity row — anchored to a workspace-level
-  // log. We don't have a workspace_activity_log; the spec says "Insert
-  // global activity log" so we attach it to the most recent affected
-  // lease, or to a sentinel via lease_id NULL. lease_activity_log
+  // Global ooo_declared activity row — anchored to a lease-level log.
+  // (public.workspace_activity_log now exists — 2026-06-09 Workspace
+  // Management Phase 1 — but it's scoped to workspace-lifecycle events,
+  // not approval-routing ones, so this stays on lease_activity_log.)
+  // The spec says "Insert global activity log" so we attach it to the
+  // most recent affected lease. lease_activity_log
   // requires lease_id NOT NULL, so we attach to one of the routed
   // leases (or skip if none — declaring future OOO with no current
   // affected steps is a no-op for the audit log here, captured by the

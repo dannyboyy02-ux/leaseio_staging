@@ -79,7 +79,11 @@ interface WorkspaceMeta {
   owner_id: string;
   plan: string | null;
   created_at: string;
+  /** Accepted members, owner-inclusive (the owner may have no member row
+   *  on workspaces created via the create-workspace edge function). */
   member_count: number;
+  /** Invited-but-unaccepted workspace_members rows. */
+  pending_invite_count: number;
   lease_count: number;
 }
 
@@ -127,20 +131,28 @@ export default function WorkspaceManagement() {
       // later; for v1 keep it simple).
       const enriched = await Promise.all(
         base.map(async (w) => {
-          const [{ count: memberCount }, { count: leaseCount }] = await Promise.all([
+          const [{ data: memberRows }, { count: leaseCount }] = await Promise.all([
             supabase
               .from('workspace_members')
-              .select('user_id', { count: 'exact', head: true })
+              .select('user_id, accepted_at')
               .eq('workspace_id', w.id),
             supabase
               .from('leases')
               .select('id', { count: 'exact', head: true })
               .eq('workspace_id', w.id),
           ]);
+          // Count accepted members only — pending invites previously
+          // inflated the member count on this audit-minded surface. The
+          // owner is counted even without a member row (create-workspace
+          // workspaces don't give them one).
+          const rows = memberRows ?? [];
+          const accepted = rows.filter((r) => r.accepted_at !== null);
+          const ownerHasRow = accepted.some((r) => r.user_id === w.owner_id);
           return {
             ...w,
             name: w.name ?? 'Unnamed workspace',
-            member_count: memberCount ?? 0,
+            member_count: accepted.length + (ownerHasRow ? 0 : 1),
+            pending_invite_count: rows.length - accepted.length,
             lease_count: leaseCount ?? 0,
           };
         }),
@@ -290,6 +302,8 @@ export default function WorkspaceManagement() {
                             <span className="inline-flex items-center gap-1">
                               <Users className="h-3 w-3" />
                               {ws.member_count} member{ws.member_count === 1 ? '' : 's'}
+                              {ws.pending_invite_count > 0 &&
+                                ` · ${ws.pending_invite_count} pending`}
                             </span>
                             <span className="inline-flex items-center gap-1">
                               <FileText className="h-3 w-3" />
@@ -327,26 +341,46 @@ export default function WorkspaceManagement() {
                           </Link>
                         </Button>
                       )}
-                      {ws.member_count > 1 && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setTransferTarget(ws)}
-                        >
-                          <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
-                          Transfer
-                        </Button>
-                      )}
-                      <div className="flex-1" />
+                      {/* Always rendered: gating on member counts hid the
+                          capability from solo owners, and the dialog's
+                          invite-first empty state teaches the path. */}
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteTarget(ws)}
+                        onClick={() => setTransferTarget(ws)}
                       >
-                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                        Delete
+                        <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
+                        {t('workspace.transfer.cta')}
                       </Button>
+                      {useGridLayout ? (
+                        // Narrow grid cards wrap the action row, which would
+                        // land Delete flush against Transfer — keep the
+                        // destructive action visually isolated on its own row.
+                        <div className="basis-full flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteTarget(ws)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                            Delete
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex-1" />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => setDeleteTarget(ws)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                            Delete
+                          </Button>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -388,6 +422,14 @@ export default function WorkspaceManagement() {
                             </Badge>
                           )}
                         </div>
+                        {/* A just-demoted prior owner lands here with the
+                            section's "member access" framing — remind admins
+                            they still manage members via Workspace Settings. */}
+                        {ws.role === 'admin' && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {t('workspace.transfer.admin_member_hint')}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         {!isActive && (
@@ -459,6 +501,7 @@ export default function WorkspaceManagement() {
           workspaceName={transferTarget.name}
           ownerId={transferTarget.owner_id}
           onTransferred={handleAfterTransfer}
+          onManageMembers={() => setManageMembersWorkspaceId(transferTarget.id)}
         />
       )}
 

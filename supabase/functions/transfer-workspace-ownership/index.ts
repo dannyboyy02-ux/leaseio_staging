@@ -1,27 +1,25 @@
-// transfer-workspace-ownership — Workspace Management Phase 3 (spec §4.2)
+// transfer-workspace-ownership — Workspace Management Phase 3 (spec §4.2).
 //
 // Transfers control of a workspace from the current owner to an accepted
-// member. Service-role is required because the workspaces UPDATE policy
-// is `WITH CHECK (owner_id = auth.uid())` — an authenticated reassignment
-// would be rejected the moment owner_id changes (KNOWN_ISSUES #29 class).
+// member. The actual transfer is a single atomic SECURITY DEFINER RPC
+// (transfer_workspace_ownership_locked, migration 20260609180000): the
+// workspace row is locked FOR UPDATE, every mutation (promote target,
+// mandatorily demote prior owner, swap owner_id) and the owner_transferred
+// audit row commit in one transaction, so the audit trail can never assert
+// a transfer the database didn't do. Service-role is required because the
+// workspaces UPDATE policy blocks authenticated owner_id reassignment.
 //
 // AUTHORIZATION
 //   - Caller must present a valid Bearer JWT (verify_jwt = true at deploy)
-//   - Caller's user.id MUST equal workspaces.owner_id for the target
-//   - targetUserId must be an ACCEPTED member of the workspace
-//     (user_id IS NOT NULL AND accepted_at IS NOT NULL — excludes
-//     invited-but-unaccepted rows)
+//   - Caller's user.id MUST equal workspaces.owner_id — enforced both by
+//     a pre-check here (so non-owners can't burn the rate-limit quota)
+//     and authoritatively inside the RPC under the row lock.
+//   - "Missing" and "not yours" get the SAME 404 answer — no
+//     workspace-existence oracle for non-owners.
 //
-// GUARANTEES
-//   - The prior owner is mandatorily demoted to an `admin` member row
-//     (upserted if they had none) — never stranded outside the workspace.
-//   - Member-row mutations happen BEFORE the owner_id swap so a failure
-//     mid-sequence never leaves the workspace in an inconsistent state
-//     (extra admin rows are harmless; a swapped owner without a demoted
-//     prior owner is not).
-//   - v1 LIMITATION (surfaced in the response and the audit row): the
-//     Stripe subscription stays on the original owner's customer.
-//     Control transfers; billing does not.
+// v1 LIMITATION (surfaced in the response and the audit row): the Stripe
+// subscription stays on the original owner's customer. Control transfers;
+// billing does not.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -114,194 +112,106 @@ serve(async (req) => {
     );
   }
 
-  // ── Authorization: load workspace, verify owner ─────────────────────
-  const { data: workspace, error: wsError } = await supabaseAdmin
+  // ── Advisory owner pre-check ─────────────────────────────────────────
+  // Keeps non-owners from burning the workspace's rate-limit quota. The
+  // RPC re-checks authoritatively under the row lock; this read can be
+  // stale without harm. Missing and not-yours get the same 404.
+  const { data: preWs, error: preError } = await supabaseAdmin
     .from("workspaces")
-    .select("id, owner_id, name, stripe_customer_id")
+    .select("id, owner_id")
     .eq("id", workspaceId)
     .maybeSingle();
-  if (wsError) {
-    console.error("[transfer-workspace-ownership] load workspace error:", wsError.message);
+  if (preError) {
+    console.error("[transfer-workspace-ownership] precheck error:", preError.message);
     return jsonResponse(
       { ok: false, error: "Failed to load workspace", reason: "internal" },
       500,
       origin,
     );
   }
-  if (!workspace) {
+  if (!preWs || (preWs as { owner_id: string }).owner_id !== user.id) {
     return jsonResponse(
       { ok: false, error: "Workspace not found", reason: "not_found" },
       404,
       origin,
     );
   }
-  const ws = workspace as {
-    id: string;
-    owner_id: string;
-    name: string | null;
-    stripe_customer_id: string | null;
-  };
-  if (ws.owner_id !== user.id) {
-    // Same answer for "not yours" and "doesn't exist for you" — don't
-    // leak workspace existence to non-owners.
-    return jsonResponse(
-      { ok: false, error: "Forbidden", reason: "not_owner" },
-      403,
-      origin,
-    );
-  }
-  if (targetUserId === ws.owner_id) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: "Target is already the owner of this workspace",
-        reason: "already_owner",
-      },
-      400,
-      origin,
-    );
-  }
 
-  // ── Validate target: accepted member only ───────────────────────────
-  const { data: targetMember, error: targetError } = await supabaseAdmin
-    .from("workspace_members")
-    .select("id, user_id, role, accepted_at")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", targetUserId)
-    .not("user_id", "is", null)
-    .not("accepted_at", "is", null)
-    .maybeSingle();
-  if (targetError) {
-    console.error("[transfer-workspace-ownership] target lookup error:", targetError.message);
+  // ── Rate limit (low ceiling — transfers are rare) ────────────────────
+  // Wrapped: the helper throws on rate-limit-table errors, and an uncaught
+  // throw would surface to the browser as a CORS failure (no headers on
+  // the platform 500), not a JSON error.
+  try {
+    const rateLimitResponse = await enforceWorkspaceRateLimit(
+      supabaseAdmin,
+      workspaceId,
+      "transfer-workspace-ownership",
+      origin,
+      5,
+    );
+    if (rateLimitResponse) return rateLimitResponse;
+  } catch (err) {
+    console.error(
+      "[transfer-workspace-ownership] rate limit check failed:",
+      (err as Error)?.message,
+    );
     return jsonResponse(
-      { ok: false, error: "Failed to validate target member", reason: "internal" },
+      { ok: false, error: "Rate limit check failed", reason: "internal" },
       500,
       origin,
     );
   }
-  if (!targetMember) {
-    return jsonResponse(
-      {
-        ok: false,
-        error:
-          "Target must be a member of this workspace who has accepted their invite",
-        reason: "target_not_accepted_member",
-      },
-      400,
-      origin,
-    );
-  }
-
-  // ── Rate limit (low ceiling — transfers are rare) ───────────────────
-  const rateLimitResponse = await enforceWorkspaceRateLimit(
-    supabaseAdmin,
-    workspaceId,
-    "transfer-workspace-ownership",
-    origin,
-    5,
-  );
-  if (rateLimitResponse) return rateLimitResponse;
 
   console.log(
     `[transfer-workspace-ownership] Owner ${user.id} transferring workspace ${workspaceId} to ${targetUserId}`,
   );
 
-  // ── 1. Ensure target's member row is admin ──────────────────────────
-  const { error: targetPromoteError } = await supabaseAdmin
-    .from("workspace_members")
-    .update({ role: "admin" })
-    .eq("id", (targetMember as { id: string }).id)
-    .eq("workspace_id", workspaceId);
-  if (targetPromoteError) {
-    console.error(
-      "[transfer-workspace-ownership] target promote error:",
-      targetPromoteError.message,
-    );
+  // ── Atomic transfer via RPC ──────────────────────────────────────────
+  const { data: result, error: rpcError } = await supabaseAdmin.rpc(
+    "transfer_workspace_ownership_locked",
+    {
+      p_workspace_id: workspaceId,
+      p_caller_id: user.id,
+      p_target_user_id: targetUserId,
+    },
+  );
+  if (rpcError) {
+    const conflict = rpcError.message?.includes("transfer_conflict");
+    console.error("[transfer-workspace-ownership] rpc error:", rpcError.message);
     return jsonResponse(
-      { ok: false, error: "Failed to promote target member", reason: "internal" },
-      500,
+      conflict
+        ? {
+            ok: false,
+            error: "The workspace changed while transferring — reload and retry",
+            reason: "conflict",
+          }
+        : { ok: false, error: "Failed to transfer ownership", reason: "internal" },
+      conflict ? 409 : 500,
       origin,
     );
   }
 
-  // ── 2. Mandatorily demote prior owner to admin member ───────────────
-  // The prior owner usually has a member row already; upsert covers the
-  // case where they don't, so they are never stranded outside the
-  // workspace they just handed over.
-  const { data: priorOwnerRow, error: priorLookupError } = await supabaseAdmin
-    .from("workspace_members")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", ws.owner_id)
-    .maybeSingle();
-  if (priorLookupError) {
-    console.error(
-      "[transfer-workspace-ownership] prior owner lookup error:",
-      priorLookupError.message,
-    );
-    return jsonResponse(
-      { ok: false, error: "Failed to prepare prior owner demotion", reason: "internal" },
-      500,
-      origin,
-    );
-  }
-  const priorOwnerWrite = priorOwnerRow
-    ? supabaseAdmin
-        .from("workspace_members")
-        .update({ role: "admin" })
-        .eq("id", (priorOwnerRow as { id: string }).id)
-        .eq("workspace_id", workspaceId)
-    : supabaseAdmin.from("workspace_members").insert({
-        workspace_id: workspaceId,
-        user_id: ws.owner_id,
-        role: "admin",
-        accepted_at: new Date().toISOString(),
-      });
-  const { error: priorOwnerError } = await priorOwnerWrite;
-  if (priorOwnerError) {
-    console.error(
-      "[transfer-workspace-ownership] prior owner demotion error:",
-      priorOwnerError.message,
-    );
-    return jsonResponse(
-      { ok: false, error: "Failed to demote prior owner", reason: "internal" },
-      500,
-      origin,
-    );
-  }
-
-  // ── 3. Swap owner_id (last — member rows are already consistent) ────
-  const { error: swapError } = await supabaseAdmin
-    .from("workspaces")
-    .update({ owner_id: targetUserId })
-    .eq("id", workspaceId)
-    .eq("owner_id", ws.owner_id);
-  if (swapError) {
-    console.error("[transfer-workspace-ownership] owner swap error:", swapError.message);
-    return jsonResponse(
-      { ok: false, error: "Failed to transfer ownership", reason: "internal" },
-      500,
-      origin,
-    );
-  }
-
-  // ── 4. Audit row (non-fatal on error; the transfer is done) ─────────
-  const { error: auditError } = await supabaseAdmin
-    .from("workspace_activity_log")
-    .insert({
-      workspace_id: workspaceId,
-      user_id: user.id,
-      event_type: "owner_transferred",
-      details: {
-        from: ws.owner_id,
-        to: targetUserId,
-        prior_owner_new_role: "admin",
-        billing_remains_on_customer: ws.stripe_customer_id,
-        billing_transferred: false,
-      },
-    });
-  if (auditError) {
-    console.error("[transfer-workspace-ownership] audit insert error:", auditError.message);
+  const outcome = result as {
+    ok: boolean;
+    reason?: string;
+    new_owner_id?: string;
+    billing_transferred?: boolean;
+  } | null;
+  if (!outcome?.ok) {
+    const reason = outcome?.reason ?? "internal";
+    const status =
+      reason === "not_found" ? 404
+      : reason === "already_owner" || reason === "target_not_accepted_member" ? 400
+      : 500;
+    const message =
+      reason === "not_found"
+        ? "Workspace not found"
+        : reason === "already_owner"
+          ? "Target is already the owner of this workspace"
+          : reason === "target_not_accepted_member"
+            ? "Target must be a member of this workspace who has accepted their invite"
+            : "Failed to transfer ownership";
+    return jsonResponse({ ok: false, error: message, reason }, status, origin);
   }
 
   return jsonResponse(

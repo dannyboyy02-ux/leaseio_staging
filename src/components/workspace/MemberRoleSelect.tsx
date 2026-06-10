@@ -48,10 +48,12 @@ export function MemberRoleSelect({
       // Fire-and-forget: an audit-write failure must not surface as a
       // role-change failure — the role update above already committed.
       if (workspaceId && targetUserId) {
+        const { data: sessionData } = await supabase.auth.getSession();
         (supabase as any)
           .from('workspace_activity_log')
           .insert({
             workspace_id: workspaceId,
+            user_id: sessionData.session?.user?.id ?? null,
             event_type: 'member_role_changed',
             details: { target_user_id: targetUserId, role: newRole, previous_role: currentRole },
           })

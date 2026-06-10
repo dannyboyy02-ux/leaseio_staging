@@ -97,8 +97,10 @@ export function UsageContent({ showHeader = false }: Props) {
           <Badge variant={workspace.plan === 'business' ? 'business' : 'secondary'}>
             {t(`plan.${workspace.plan}`)}
           </Badge>
+          {/* "Manage subscription" must land on subscription management,
+              not the Business sales pitch — /app/upgrade pre-arms checkout. */}
           <Button variant="outline" size="sm" asChild>
-            <Link to="/app/upgrade">
+            <Link to="/app/settings/account?tab=subscription">
               <Sparkles className="h-3.5 w-3.5 mr-1.5" />
               {t('usage.manage_subscription')}
             </Link>
@@ -117,9 +119,21 @@ export function UsageContent({ showHeader = false }: Props) {
                 {t('usage.approaching_limit_desc')}
               </p>
             </div>
+            {/* A Business user already owns the top plan — "upgrade" would
+                loop them into buying what they have. Send them to subscription
+                management instead. */}
             <Button variant="accent" size="sm" asChild>
-              <Link to="/app/upgrade" className="flex items-center gap-1.5">
-                {t('usage.upgrade_plan')}
+              <Link
+                to={
+                  workspace.plan === 'business'
+                    ? '/app/settings/account?tab=subscription'
+                    : '/app/upgrade'
+                }
+                className="flex items-center gap-1.5"
+              >
+                {workspace.plan === 'business'
+                  ? t('usage.manage_subscription')
+                  : t('usage.upgrade_plan')}
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </Button>
@@ -202,7 +216,7 @@ export function UsageContent({ showHeader = false }: Props) {
               <p className="text-xs text-muted-foreground">
                 {t('usage.workspaces_upgrade_hint')}{' '}
                 <Link to="/app/upgrade" className="text-accent underline underline-offset-2">
-                  {t('usage.upgrade_plan')}
+                  {t('usage.workspaces_upgrade_link')}
                 </Link>
               </p>
             )}

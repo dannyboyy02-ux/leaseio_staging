@@ -321,6 +321,12 @@ INSERT policy: rename (`RenameWorkspaceInline.tsx:61`) → `renamed`
 event. (Resolves the CRITICAL writer-model contradiction: these are client
 writes, now permitted by the constrained INSERT policy.)
 
+*As-built (2026-06-09 review pass):* role changes log `member_role_changed`
+(not `member_added` — that vocabulary slot is reserved for actual additions,
+currently unwired; see KNOWN_ISSUES #55). The role-change writer lives in
+`MemberRoleSelect.tsx`, not MembersPanel. All three client writes stamp
+`user_id` from the session.
+
 ---
 
 ## 7. Security model
@@ -747,3 +753,41 @@ Built per §4.2 with no contract deviations:
 - **Deploy note:** function not yet deployed — `supabase functions deploy
   transfer-workspace-ownership` is an operator step (it bundles the current
   `_shared/cors.ts`, which is already `.vercel.app`-aware).
+
+## Phase 3 hardening as-built (2026-06-09, same-day review pass)
+
+The five-reviewer pass on the initial Phase 3 build surfaced a CRITICAL
+(lost-update race returning ok:true + a false `owner_transferred` audit row)
+and two HIGHs (zero-row-blind target promote; no transaction across the
+writes). Resolution, superseding the initial as-built section above:
+
+- The transfer is now a single SECURITY DEFINER RPC,
+  `transfer_workspace_ownership_locked` (migration `20260609180000`), which
+  locks the workspace row `FOR UPDATE` and performs validation, target
+  promote, mandatory prior-owner demotion, owner swap, and the audit insert
+  in ONE transaction. Any conflict RAISEs and rolls everything back — the
+  audit row exists if and only if the transfer committed. EXECUTE is
+  service-role only.
+- The edge function authenticates, validates UUIDs, runs an advisory
+  owner pre-check (so non-owners can't burn the rate-limit quota),
+  rate-limits (call wrapped in try/catch — the shared helper throws on
+  table errors, which would otherwise surface as a CORS failure), then
+  delegates to the RPC and maps reasons to statuses (`not_found` → 404,
+  `already_owner`/`target_not_accepted_member` → 400, `transfer_conflict`
+  → 409).
+- **Correction to the initial as-built note:** "missing" and "not yours"
+  now both answer 404 (the initial build answered 404 vs 403, which was an
+  existence oracle contradicting its own comment).
+- Audit details additionally record `target_prior_role` so the new owner's
+  before-state is recoverable from the one row.
+- UI: dialog strings extracted to `workspace.transfer.*` (en + es); fetch
+  errors render a retry pane distinct from the genuine empty state; the
+  empty state offers an "Open Manage members" action; the Transfer action
+  always renders on owned cards (the member-count gate both hid the
+  capability on create-workspace workspaces, where the owner has no member
+  row, and false-fired on pending invites). Owned-card member counts now
+  count accepted members (owner-inclusive) with a separate "N pending"
+  suffix.
+- Deploy note: migration must be applied BEFORE the function deploy
+  (reviewer routing for the security migration happens before push, per
+  CLAUDE.md).

@@ -48,6 +48,22 @@ vi.mock("sonner", () => ({
   },
 }));
 
+// Key-passthrough, mirroring the NewWorkspaceDialog test convention — the
+// dialog renders workspace.transfer.* keys so assertions pin keys, not copy.
+vi.mock("@/hooks/useAppTranslation", () => ({
+  useAppTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => {
+      if (opts && typeof opts === "object") {
+        const params = Object.entries(opts)
+          .map(([k, v]) => `${k}=${String(v)}`)
+          .join(",");
+        return params ? `${key}(${params})` : key;
+      }
+      return key;
+    },
+  }),
+}));
+
 vi.mock("@/components/ui/select", () => ({
   Select: ({
     value,
@@ -149,13 +165,50 @@ describe("TransferOwnershipDialog — empty state", () => {
     setMembers([], []);
     renderDialog();
 
-    expect(await screen.findByText("No eligible members yet")).toBeTruthy();
+    expect(await screen.findByText("workspace.transfer.empty_title")).toBeTruthy();
     // The footer confirm button is conditionally rendered only when eligible
     // members exist — Cancel remains, Transfer must be absent.
     expect(
-      screen.queryByRole("button", { name: "Transfer ownership" }),
+      screen.queryByRole("button", { name: "workspace.transfer.confirm" }),
     ).toBeNull();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "workspace.transfer.cancel" }),
+    ).toBeTruthy();
+  });
+
+  it("offers the Manage members escape hatch: closes the dialog and fires onManageMembers", async () => {
+    setMembers([], []);
+    const onManageMembers = vi.fn();
+    const props = renderDialog({ onManageMembers });
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "workspace.transfer.empty_cta" }),
+    );
+    expect(props.onOpenChange).toHaveBeenCalledWith(false);
+    expect(onManageMembers).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TransferOwnershipDialog — fetch error state", () => {
+  it("renders the error pane with a retry action — NOT the empty state — when the members query fails", async () => {
+    fromMock.mockImplementation((table: string) => {
+      if (table === "workspace_members") {
+        return thenableBuilder({ data: null, error: new Error("boom") });
+      }
+      throw new Error(`unexpected table: ${table}`);
+    });
+    renderDialog();
+
+    expect(await screen.findByText("workspace.transfer.error_title")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "workspace.transfer.retry" }),
+    ).toBeTruthy();
+    // A transient fetch error must not tell the owner they have no members.
+    expect(screen.queryByText("workspace.transfer.empty_title")).toBeNull();
+    // And no confirm button either.
+    expect(
+      screen.queryByRole("button", { name: "workspace.transfer.confirm" }),
+    ).toBeNull();
   });
 });
 
@@ -173,7 +226,7 @@ describe("TransferOwnershipDialog — confirm gating", () => {
     renderDialog();
 
     const transferBtn = await screen.findByRole("button", {
-      name: "Transfer ownership",
+      name: "workspace.transfer.confirm",
     });
     // Nothing selected, nothing acknowledged.
     expect(transferBtn.hasAttribute("disabled")).toBe(true);
@@ -199,12 +252,12 @@ describe("TransferOwnershipDialog — confirm gating", () => {
     invokeMock.mockResolvedValueOnce({ data: { ok: true }, error: null });
     const props = renderDialog();
 
-    await screen.findByRole("button", { name: "Transfer ownership" });
+    await screen.findByRole("button", { name: "workspace.transfer.confirm" });
     fireEvent.change(screen.getByTestId("transfer-target-select"), {
       target: { value: "u2" },
     });
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Transfer ownership" }));
+    fireEvent.click(screen.getByRole("button", { name: "workspace.transfer.confirm" }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("transfer-workspace-ownership", {
@@ -227,12 +280,12 @@ describe("TransferOwnershipDialog — confirm gating", () => {
     });
     const props = renderDialog();
 
-    await screen.findByRole("button", { name: "Transfer ownership" });
+    await screen.findByRole("button", { name: "workspace.transfer.confirm" });
     fireEvent.change(screen.getByTestId("transfer-target-select"), {
       target: { value: "u2" },
     });
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Transfer ownership" }));
+    fireEvent.click(screen.getByRole("button", { name: "workspace.transfer.confirm" }));
 
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith(

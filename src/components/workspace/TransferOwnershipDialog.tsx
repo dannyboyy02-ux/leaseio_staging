@@ -1,21 +1,21 @@
 // TransferOwnershipDialog — Workspace Management Phase 3 (spec §4.2).
 //
 // Lets the workspace owner hand control to an accepted member. Backed by
-// the transfer-workspace-ownership edge function (owner-only, service-role
-// inside — the workspaces UPDATE policy blocks authenticated owner_id
-// reassignment). The prior owner is mandatorily demoted to admin and
-// stays a member.
+// the transfer-workspace-ownership edge function, which delegates to the
+// atomic transfer_workspace_ownership_locked RPC (owner-only; the prior
+// owner is mandatorily demoted to admin and stays a member).
 //
 // v1 LIMITATION surfaced here and acknowledged via checkbox: the Stripe
 // subscription stays on the original owner's payment method. Control
 // transfers; billing does not.
 //
-// Server-side enforcement is duplicated in the edge function (auth as
-// owner + accepted-member target) — UI is defense out, not defense alone.
+// Server-side enforcement is duplicated in the edge function + RPC (auth
+// as owner + accepted-member target) — UI is defense out, not defense
+// alone.
 
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRightLeft, Loader2, UserPlus } from 'lucide-react';
+import { ArrowRightLeft, Loader2, UserPlus, AlertTriangle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -36,6 +36,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface TransferOwnershipDialogProps {
   open: boolean;
@@ -46,6 +47,11 @@ interface TransferOwnershipDialogProps {
   ownerId: string;
   /** Called once the edge function returns ok=true. Caller refetches AppContext. */
   onTransferred: () => void;
+  /**
+   * Optional escape hatch for the no-eligible-members empty state: closes
+   * the dialog and opens member management for this workspace.
+   */
+  onManageMembers?: () => void;
 }
 
 interface EligibleMember {
@@ -61,7 +67,9 @@ export function TransferOwnershipDialog({
   workspaceName,
   ownerId,
   onTransferred,
+  onManageMembers,
 }: TransferOwnershipDialogProps) {
+  const { t } = useAppTranslation();
   const [targetUserId, setTargetUserId] = useState<string>('');
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -74,9 +82,14 @@ export function TransferOwnershipDialog({
     }
   }, [open, workspaceId]);
 
-  // Accepted members only — mirrors the edge function's eligibility rule
+  // Accepted members only — mirrors the server's eligibility rule
   // (user_id present + accepted_at present), minus the current owner.
-  const { data: eligible = [], isLoading } = useQuery({
+  const {
+    data: eligible = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ['transfer-eligible-members', workspaceId],
     enabled: open && !!workspaceId,
     queryFn: async (): Promise<EligibleMember[]> => {
@@ -127,18 +140,21 @@ export function TransferOwnershipDialog({
       );
       if (error || !(data as any)?.ok) {
         const msg =
-          (data as any)?.error || error?.message || 'Failed to transfer ownership';
+          (data as any)?.error || error?.message || t('workspace.transfer.failed');
         toast.error(msg);
         return;
       }
       toast.success(
-        `Ownership of "${workspaceName}" transferred to ${selected.name}. You are now an admin.`,
+        t('workspace.transfer.success', {
+          workspace: workspaceName,
+          name: selected.name,
+        }),
       );
       onOpenChange(false);
       onTransferred();
     } catch (err) {
       console.error('transfer-workspace-ownership error:', err);
-      toast.error('Failed to transfer ownership');
+      toast.error(t('workspace.transfer.failed'));
     } finally {
       setBusy(false);
     }
@@ -150,11 +166,10 @@ export function TransferOwnershipDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowRightLeft className="h-5 w-5 text-muted-foreground" />
-            Transfer ownership
+            {t('workspace.transfer.title')}
           </DialogTitle>
           <DialogDescription className="pt-2 text-foreground">
-            Hand control of <strong>{workspaceName}</strong> to another member.
-            You'll stay in the workspace as an admin.
+            {t('workspace.transfer.description', { workspace: workspaceName })}
           </DialogDescription>
         </DialogHeader>
 
@@ -162,23 +177,52 @@ export function TransferOwnershipDialog({
           <div className="flex items-center justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
+        ) : isError ? (
+          // Distinct from the genuine empty state: a transient fetch error
+          // must not tell an owner with eligible members they have none.
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm">
+            <p className="flex items-center gap-2 font-medium text-destructive">
+              <AlertTriangle className="h-4 w-4" />
+              {t('workspace.transfer.error_title')}
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {t('workspace.transfer.error_desc')}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              onClick={() => refetch()}
+            >
+              {t('workspace.transfer.retry')}
+            </Button>
+          </div>
         ) : eligible.length === 0 ? (
           <div className="rounded-md border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
             <p className="flex items-center gap-2 font-medium text-foreground">
               <UserPlus className="h-4 w-4" />
-              No eligible members yet
+              {t('workspace.transfer.empty_title')}
             </p>
-            <p className="mt-1.5 text-xs">
-              Ownership can only be transferred to a member who has accepted
-              their invite. Invite someone from Manage members, then come back
-              once they've joined.
-            </p>
+            <p className="mt-1.5 text-xs">{t('workspace.transfer.empty_desc')}</p>
+            {onManageMembers && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3"
+                onClick={() => {
+                  onOpenChange(false);
+                  onManageMembers();
+                }}
+              >
+                {t('workspace.transfer.empty_cta')}
+              </Button>
+            )}
           </div>
         ) : (
           <>
             <div className="space-y-2">
               <Label htmlFor="transfer-target" className="text-sm">
-                New owner
+                {t('workspace.transfer.target_label')}
               </Label>
               <Select
                 value={targetUserId}
@@ -186,7 +230,7 @@ export function TransferOwnershipDialog({
                 disabled={busy}
               >
                 <SelectTrigger id="transfer-target">
-                  <SelectValue placeholder="Select a member…" />
+                  <SelectValue placeholder={t('workspace.transfer.target_placeholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {eligible.map((m) => (
@@ -200,15 +244,12 @@ export function TransferOwnershipDialog({
 
             <div className="rounded-md border border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 dark:border-amber-800 p-3 text-sm">
               <p className="font-medium text-amber-900 dark:text-amber-200">
-                What happens when you transfer
+                {t('workspace.transfer.consequences_title')}
               </p>
               <ul className="mt-2 space-y-0.5 text-xs text-amber-800 dark:text-amber-300 list-disc list-inside">
-                <li>The new owner gets full control — rename, members, delete</li>
-                <li>You become an admin and keep access to the workspace</li>
-                <li>
-                  The subscription stays on your payment method for now —
-                  contact support to move billing
-                </li>
+                <li>{t('workspace.transfer.consequence_control')}</li>
+                <li>{t('workspace.transfer.consequence_admin')}</li>
+                <li>{t('workspace.transfer.consequence_billing')}</li>
               </ul>
             </div>
 
@@ -224,8 +265,7 @@ export function TransferOwnershipDialog({
                 htmlFor="transfer-ack"
                 className="text-xs font-normal leading-snug text-muted-foreground"
               >
-                I understand the subscription stays on my payment method and I
-                will no longer control this workspace.
+                {t('workspace.transfer.ack_label')}
               </Label>
             </div>
           </>
@@ -233,12 +273,14 @@ export function TransferOwnershipDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {t('workspace.transfer.cancel')}
           </Button>
-          {eligible.length > 0 && (
+          {!isLoading && !isError && eligible.length > 0 && (
             <Button onClick={handleTransfer} disabled={!canTransfer}>
               {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              {busy ? 'Transferring…' : 'Transfer ownership'}
+              {busy
+                ? t('workspace.transfer.confirming')
+                : t('workspace.transfer.confirm')}
             </Button>
           )}
         </DialogFooter>

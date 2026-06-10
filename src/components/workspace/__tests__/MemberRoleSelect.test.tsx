@@ -30,6 +30,15 @@ const toastErrorMock = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (...args: unknown[]) => fromMock(...args),
+    auth: {
+      // The audit write stamps the actor from the session (Phase 3 review:
+      // actor-less rows are indistinguishable from system writes).
+      getSession: () =>
+        Promise.resolve({
+          data: { session: { user: { id: "actor-1" } } },
+          error: null,
+        }),
+    },
   },
 }));
 
@@ -127,11 +136,15 @@ describe("MemberRoleSelect — audit-trail correctness", () => {
     await waitFor(() => expect(insertMock).toHaveBeenCalledTimes(1));
     const payload = insertMock.mock.calls[0][0] as {
       workspace_id: string;
+      user_id: string | null;
       event_type: string;
       details: Record<string, unknown>;
     };
     expect(payload.event_type).toBe("member_role_changed");
     expect(payload.workspace_id).toBe("ws-1");
+    // Actor stamped from the session — an actor-less permission change is
+    // indistinguishable from a system write (Phase 3 review finding).
+    expect(payload.user_id).toBe("actor-1");
     expect(payload.details).toEqual({
       target_user_id: "u2",
       role: "editor",
