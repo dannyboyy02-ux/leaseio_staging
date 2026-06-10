@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
 import { supabase } from "@/integrations/supabase/client";
 import { getStripe } from "@/lib/stripe";
@@ -43,6 +44,7 @@ import { useApp } from "@/contexts/AppContext";
 //     there"; PI not succeeded → "longer than expected, you'll get an email."
 
 type DialogStep =
+  | "acknowledge"   // step 0 — price-awareness gate (before name); suppressible
   | "name"          // step 1 — name input
   | "preview"       // step 1 → 2 in-flight (calling preview)
   | "confirm"       // step 2 — consent modal
@@ -53,6 +55,18 @@ type DialogStep =
   | "timeout_paid"  // 30s timeout, but PI did succeed (webhook lag)
   | "timeout_unpaid"// 30s timeout, PI did not succeed
   | "error";
+
+// Acknowledge-step substate. The price-awareness gate fires the existing
+// `mode: "preview"` eligibility call on open; this drives which variant of the
+// gate renders. Kept separate from `step` so the background fetch never yanks
+// the user out of the acknowledge panel.
+type AckState =
+  | "loading"   // eligibility call in flight
+  | "ready"     // Business + card + under cap → show the price gate
+  | "starter"   // not on Business → route to upgrade
+  | "no_card"   // no card / no Stripe customer → route to billing
+  | "cap"       // at the workspace cap → informational
+  | "error";    // eligibility call failed
 
 interface ErrorState {
   reason: string;
@@ -99,6 +113,33 @@ interface NewWorkspaceDialogProps {
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 30000;
 
+// Per-device suppression of the price-awareness gate. Stored in localStorage,
+// NOT a profile column: this is an awareness nag, not legal consent — the
+// binding consent (the confirm step, with the real card + exact charge) is
+// never suppressible and always renders. A new device legitimately re-shows
+// the awareness gate. Only ever set by an eligible Business owner.
+export const ACK_SUPPRESS_KEY = "workspace_create_acknowledge_dismissed";
+
+function ackSuppressed(): boolean {
+  try {
+    return localStorage.getItem(ACK_SUPPRESS_KEY) === "1";
+  } catch {
+    return false; // storage blocked (private mode) → always show the gate
+  }
+}
+
+// Each workspace's subscription anchors to its creation day (no proration), so
+// the renewal day is "today". Format it for the awareness copy: English uses an
+// ordinal ("10th"), Spanish uses the cardinal ("10", as in "el 10 de cada mes").
+function renewalDayLabel(lang: string): string {
+  const day = new Date().getDate();
+  if (lang?.startsWith("es")) return String(day);
+  const v = day % 100;
+  const suffix =
+    v >= 11 && v <= 13 ? "th" : ["th", "st", "nd", "rd"][day % 10] ?? "th";
+  return `${day}${suffix}`;
+}
+
 function randomKey(): string {
   // Stable client UUIDish — 24+ hex chars. crypto.randomUUID is safer than
   // Math.random for an idempotency key the server treats as a unique row PK.
@@ -114,16 +155,22 @@ export function NewWorkspaceDialog({
   initialName = "",
   resumeWorkspaceId = null,
 }: NewWorkspaceDialogProps) {
-  const { t } = useAppTranslation();
+  const { t, lang } = useAppTranslation();
   const navigate = useNavigate();
   const { switchWorkspace } = useApp();
   const isResume = !!resumeWorkspaceId;
 
-  const [step, setStep] = useState<DialogStep>(isResume ? "preview" : "name");
+  // Initial step: resume jumps straight to the PI re-fetch; otherwise the
+  // price-awareness gate unless the owner suppressed it (then straight to name).
+  const [step, setStep] = useState<DialogStep>(
+    isResume ? "preview" : ackSuppressed() ? "name" : "acknowledge",
+  );
   const [name, setName] = useState<string>(initialName);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [error, setError] = useState<ErrorState | null>(null);
   const [createdWorkspaceId, setCreatedWorkspaceId] = useState<string | null>(null);
+  const [ackState, setAckState] = useState<AckState>("loading");
+  const [suppress, setSuppress] = useState<boolean>(false);
 
   // Idempotency key lives in a ref so a re-render doesn't reroll it, and so a
   // closed-and-reopened dialog gets a FRESH key (the reset on dialog close is
@@ -147,11 +194,16 @@ export function NewWorkspaceDialog({
   // Reset everything on dialog close so a fresh open starts clean.
   useEffect(() => {
     if (!open) {
-      setStep("name");
+      // Reset to the SAME entry step the useState initializer derives, not a
+      // hardcoded "name" — otherwise a non-suppressed reopen paints the name
+      // step for one frame before the open branch flips it back to the gate.
+      setStep(isResume ? "preview" : ackSuppressed() ? "name" : "acknowledge");
       setName(initialName);
       setPreview(null);
       setError(null);
       setCreatedWorkspaceId(null);
+      setAckState("loading");
+      setSuppress(false);
       idempotencyKeyRef.current = null;
       clientSecretRef.current = null;
       return;
@@ -166,8 +218,19 @@ export function NewWorkspaceDialog({
     if (isResume) {
       setStep("preview");
       void runPreview(resumeWorkspaceId!);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runPreview is stable within this render
+    // Standard path: open into the price-awareness gate (unless suppressed) and
+    // fire the eligibility check in the background. Suppressed owners skip
+    // straight to the name step — the binding confirm step still gates the
+    // actual charge for them.
+    if (ackSuppressed()) {
+      setStep("name");
+    } else {
+      setStep("acknowledge");
+      void runAcknowledgePreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runPreview/runAcknowledgePreview are stable within this render
   }, [open, initialName, isResume, resumeWorkspaceId]);
 
   // Non-dismissable during the payment window. onOpenChange is the dialog's
@@ -178,6 +241,75 @@ export function NewWorkspaceDialog({
     if (!next && isInFlight) return;
     onOpenChange(next);
   };
+
+  // Price-awareness gate: run the SAME eligibility check the confirm path uses
+  // (`mode: "preview"`, no name required), but route the result into `ackState`
+  // instead of advancing `step`. Drives which variant of the gate renders. The
+  // dollar amounts on the "ready" gate are static (no proration — each
+  // workspace is its own subscription, full $499 today), so we never block the
+  // copy on this call; it only decides Business-vs-Starter-vs-no-card.
+  async function runAcknowledgePreview() {
+    setAckState("loading");
+    setError(null);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("create-workspace", {
+        body: { mode: "preview" },
+      });
+      if (invokeError) {
+        setAckState("error");
+        return;
+      }
+      const resp = data as {
+        ok: boolean;
+        eligible?: boolean;
+        reason?: string | null;
+        count?: number;
+        cap?: number;
+      };
+      if (!resp.ok) {
+        setAckState("error");
+        return;
+      }
+      if (resp.eligible === true) {
+        // Eligibility only — do NOT cache card details here. The binding confirm
+        // panel re-fetches via runPreview() at name → confirm so the card it
+        // shows is the live default card, never a stale snapshot from this gate.
+        setAckState("ready");
+        return;
+      }
+      // Not eligible — branch on the typed reason into a specific gate variant.
+      setError({ reason: resp.reason ?? "not_eligible", count: resp.count, cap: resp.cap });
+      switch (resp.reason) {
+        case "not_eligible":
+          setAckState("starter");
+          break;
+        case "no_card_on_file":
+        case "no_customer":
+          setAckState("no_card");
+          break;
+        case "cap_reached":
+          setAckState("cap");
+          break;
+        default:
+          setAckState("error");
+      }
+    } catch {
+      setAckState("error");
+    }
+  }
+
+  // Advance from the awareness gate to the name step. The eligibility call
+  // already ran, so the name → confirm transition reuses it (no second preview).
+  function handleAckContinue() {
+    if (suppress) {
+      try {
+        localStorage.setItem(ACK_SUPPRESS_KEY, "1");
+      } catch {
+        // Storage blocked — the gate just shows again next time. No-op.
+      }
+    }
+    setStep("name");
+  }
 
   async function runPreview(workspaceIdForResume?: string) {
     setStep("preview");
@@ -474,6 +606,130 @@ export function NewWorkspaceDialog({
         onEscapeKeyDown={(e) => isInFlight && e.preventDefault()}
         onInteractOutside={(e) => isInFlight && e.preventDefault()}
       >
+        {/* Step 0 — price-awareness gate. Fires before the name step so the
+            owner learns the money stake before investing in a name. NOT the
+            binding consent: the confirm step still shows the real card + exact
+            charge and is never suppressible. */}
+        {step === "acknowledge" ? (
+          ackState === "loading" ? (
+            <>
+              <DialogHeader>
+                {/* Neutral title while eligibility is unknown — don't assert
+                    "adds to your subscription" to a user who may be on Starter. */}
+                <DialogTitle>{t("workspace.create.dialog_title")}</DialogTitle>
+                <DialogDescription>{t("workspace.create.acknowledge_loading")}</DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-center py-6">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            </>
+          ) : ackState === "ready" ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{t("workspace.create.acknowledge_title")}</DialogTitle>
+                <DialogDescription>{t("workspace.create.acknowledge_intro")}</DialogDescription>
+              </DialogHeader>
+              <ul className="space-y-2 py-2 text-sm">
+                <li>• {t("workspace.create.acknowledge_bullet_today")}</li>
+                <li>
+                  •{" "}
+                  {t("workspace.create.acknowledge_bullet_recurring", {
+                    day: renewalDayLabel(lang),
+                  })}
+                </li>
+                <li>• {t("workspace.create.confirm_bullet_quota")}</li>
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                {t("workspace.create.acknowledge_next_step")}
+              </p>
+              <label className="flex items-center gap-2 pt-2 cursor-pointer select-none">
+                <Checkbox
+                  checked={suppress}
+                  onCheckedChange={(v) => setSuppress(v === true)}
+                  aria-label={t("workspace.create.acknowledge_suppress")}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {t("workspace.create.acknowledge_suppress")}
+                </span>
+              </label>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                  {t("workspace.create.dialog_cancel")}
+                </Button>
+                <Button onClick={handleAckContinue} autoFocus>
+                  {t("workspace.create.dialog_continue")}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            // starter / no_card / cap / error — route or inform; never strand.
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {ackState === "starter"
+                    ? t("workspace.create.error_not_eligible_title")
+                    : ackState === "no_card"
+                      ? t("workspace.create.error_no_card_title")
+                      : ackState === "cap"
+                        ? t("workspace.create.error_cap_reached_title")
+                        : t("workspace.create.error_stripe_unverified_title")}
+                </DialogTitle>
+                <DialogDescription>
+                  {ackState === "starter"
+                    ? t("workspace.create.error_not_eligible_body")
+                    : ackState === "no_card"
+                      ? t("workspace.create.error_no_card_body")
+                      : ackState === "cap"
+                        ? t("workspace.create.error_cap_reached_body", {
+                            count: error?.count,
+                            cap: error?.cap,
+                          })
+                        : t("workspace.create.error_stripe_unverified_body")}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                  {t("workspace.create.timeout_close")}
+                </Button>
+                {ackState === "starter" ? (
+                  <Button
+                    onClick={() => {
+                      onOpenChange(false);
+                      navigate("/app/upgrade");
+                    }}
+                  >
+                    {t("workspace.create.error_not_eligible_cta")}
+                  </Button>
+                ) : ackState === "no_card" ? (
+                  <Button
+                    onClick={() => {
+                      onOpenChange(false);
+                      navigate("/app/settings/account?tab=subscription");
+                    }}
+                  >
+                    {t("workspace.create.error_no_card_cta")}
+                  </Button>
+                ) : ackState === "cap" ? (
+                  // The cap copy tells the owner to delete a workspace — give
+                  // them the door to do it instead of a Close-only dead-end.
+                  <Button
+                    onClick={() => {
+                      onOpenChange(false);
+                      navigate("/app/account/workspaces");
+                    }}
+                  >
+                    {t("workspace.create.manage_link")}
+                  </Button>
+                ) : ackState === "error" ? (
+                  <Button variant="secondary" onClick={() => void runAcknowledgePreview()}>
+                    {t("workspace.create.acknowledge_retry")}
+                  </Button>
+                ) : null}
+              </DialogFooter>
+            </>
+          )
+        ) : null}
+
         {/* In resume mode there is no name step — the dialog opens directly into
             preview-in-flight, then into the confirm panel rendered below. */}
         {(step === "name" || (step === "preview" && !isResume)) ? (
@@ -670,9 +926,9 @@ function ErrorPane({
       titleKey = "workspace.create.error_not_eligible_title";
       bodyKey = "workspace.create.error_not_eligible_body";
       // Always-render pattern: a Starter / non-Business user clicking the
-      // "+ New workspace" entry lands here. Surface a direct upgrade path
-      // instead of stranding them on a dead-end modal.
-      primaryHref = "/app/settings/account?tab=subscription";
+      // "+ New workspace" entry lands here. Route to the upgrade page (parity
+      // with the acknowledge-gate "starter" variant — same outcome, one door).
+      primaryHref = "/app/upgrade";
       primaryLabelKey = "workspace.create.error_not_eligible_cta";
       break;
     case "cap_reached":

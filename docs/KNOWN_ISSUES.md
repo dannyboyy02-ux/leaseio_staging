@@ -1375,6 +1375,20 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 ---
 
+### Item #60: Itemized per-workspace billing — forward-looking invariant (NOT a defect)
+
+**Context:** Daniel flagged (2026-06-10) that owners of multiple workspaces will want an itemized bill showing the cost of each workspace, not just a summarized total. This item exists to pin the architectural invariant that makes that surface buildable later, so it isn't accidentally optimized away.
+
+**The invariant to preserve:** Each workspace is its own independent Stripe subscription, created in `create-workspace/index.ts` with `metadata: { workspace_id, plan_id, billing_interval }` stamped on the subscription (`index.ts:403`). Because each workspace = one subscription = its own invoice stream, Stripe already itemizes billing per workspace. The future itemized-billing page is therefore **pure frontend work** — list the customer's subscriptions, join each subscription's `workspace_id` metadata back to `workspaces.name`, and offer a summary ↔ itemized toggle + per-workspace billing history. **If we ever stop stamping `workspace_id` onto the subscription metadata, the itemized view becomes impossible to build cleanly** — that one line is the load-bearing dependency.
+
+**Related design fact (decided 2026-06-10):** There is no proration. A new workspace's subscription anchors its billing cycle to creation time and charges the full $499 that day (`create-workspace/index.ts:392-393`, "no billing_cycle_anchor (keeps '$499 today' honest)"). The price-awareness gate in `NewWorkspaceDialog.tsx` states this honestly ("$499 today, then $499/month on this date"). Switching to shared-subscription + proration would re-introduce proration math AND make the itemized view harder (one invoice with many lines vs. clean per-subscription invoices) — explicitly NOT the chosen direction.
+
+**Severity:** N/A — forward-looking note. No action required until the itemized-billing surface is scheduled.
+
+**Where to look:** `supabase/functions/create-workspace/index.ts:392-403`; the future page would live alongside `src/pages/app/UsageContent.tsx` / the account subscription tab.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A

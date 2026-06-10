@@ -62,8 +62,15 @@ vi.mock("@/contexts/AppContext", () => ({
   }),
 }));
 
+// Mutable so a single test can flip the UI language (Spanish) to exercise the
+// renewalDayLabel cardinal-vs-ordinal branch. Defaults to "en"; reset in
+// afterEach so it never leaks across tests.
+let langValue = "en";
 vi.mock("@/hooks/useAppTranslation", () => ({
   useAppTranslation: () => ({
+    get lang() {
+      return langValue;
+    },
     t: (key: string, opts?: Record<string, unknown>) => {
       if (opts && typeof opts === "object") {
         // Surface params so we can assert on them.
@@ -77,7 +84,7 @@ vi.mock("@/hooks/useAppTranslation", () => ({
   }),
 }));
 
-import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
+import { NewWorkspaceDialog, ACK_SUPPRESS_KEY } from "../NewWorkspaceDialog";
 
 // --- Helpers --------------------------------------------------------------
 
@@ -113,11 +120,17 @@ beforeEach(() => {
   fromMock.mockImplementation(() =>
     buildFromBuilder({ id: "ws-1", plan: "business", subscription_status: "active" }),
   );
+  // Suppress the price-awareness gate by default so the existing flow tests
+  // open straight at the name step. The dedicated gate describe block clears
+  // this in its own beforeEach to exercise the gate itself.
+  localStorage.setItem(ACK_SUPPRESS_KEY, "1");
 });
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  localStorage.clear();
+  langValue = "en";
 });
 
 // Convenience: drive the dialog to step 2 (confirm) by typing a name and
@@ -482,6 +495,189 @@ describe("NewWorkspaceDialog — 3DS error -> retrievePaymentIntent guard -> can
   });
 });
 
+describe("NewWorkspaceDialog — price-awareness gate (before name)", () => {
+  // The gate is the default (un-suppressed) entry point. Clear the suppression
+  // the module beforeEach sets so these tests see the gate.
+  beforeEach(() => {
+    localStorage.removeItem(ACK_SUPPRESS_KEY);
+  });
+
+  function mockEligibility(resp: Record<string, unknown>) {
+    invokeMock.mockResolvedValueOnce({ data: resp, error: null });
+  }
+
+  it("eligible Business owner sees the gate, then Continue advances to the name step", async () => {
+    mockEligibility({
+      ok: true,
+      eligible: true,
+      cardLast4: "4242",
+      cardBrand: "visa",
+      priceMonthly: 499,
+      chargedToday: 499,
+      count: 1,
+      cap: 10,
+    });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    // Gate copy is shown, name input is NOT yet present.
+    expect(await screen.findByText("workspace.create.acknowledge_title")).toBeTruthy();
+    expect(screen.queryByLabelText(/dialog_name_label/)).toBeNull();
+    // The eligibility check used mode:"preview" with NO name.
+    const previewCall = invokeMock.mock.calls.find(
+      (c) => (c[1] as { body?: { mode?: string } })?.body?.mode === "preview",
+    );
+    expect(previewCall).toBeDefined();
+    expect((previewCall![1] as { body: Record<string, unknown> }).body).not.toHaveProperty("name");
+
+    // Continue → name step.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /dialog_continue/ }));
+    });
+    expect(screen.getByLabelText(/dialog_name_label/)).toBeTruthy();
+  });
+
+  it("re-fetches preview on name → confirm so the confirm panel shows the LIVE card, not a gate snapshot", async () => {
+    // Gate eligibility call (no card needed for the gate display).
+    mockEligibility({ ok: true, eligible: true, count: 1, cap: 10 });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    await screen.findByText("workspace.create.acknowledge_title");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /dialog_continue/ }));
+    });
+    // The confirm step pulls a FRESH preview (live card), not the gate snapshot.
+    mockEligibility({
+      ok: true,
+      eligible: true,
+      cardLast4: "4242",
+      cardBrand: "visa",
+      priceMonthly: 499,
+      chargedToday: 499,
+      count: 1,
+      cap: 10,
+    });
+    fireEvent.change(screen.getByLabelText(/dialog_name_label/), {
+      target: { value: "Acme Inc." },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /dialog_continue/ }));
+    });
+    expect(await screen.findByText(/workspace.create.confirm_title/)).toBeTruthy();
+    // TWO preview calls: the gate eligibility check + the confirm-step refresh.
+    const previewCalls = invokeMock.mock.calls.filter(
+      (c) => (c[1] as { body?: { mode?: string } })?.body?.mode === "preview",
+    );
+    expect(previewCalls.length).toBe(2);
+  });
+
+  it("the cap variant offers a Manage-workspaces escape (not a Close-only dead-end)", async () => {
+    mockEligibility({ ok: true, eligible: false, reason: "cap_reached", count: 10, cap: 10 });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    await screen.findByText(/workspace.create.error_cap_reached_title/);
+    const manageBtn = screen.getByRole("button", { name: /workspace.create.manage_link/ });
+    fireEvent.click(manageBtn);
+    expect(navigateMock).toHaveBeenCalledWith("/app/account/workspaces");
+  });
+
+  it("the suppress checkbox writes the localStorage flag on Continue", async () => {
+    mockEligibility({
+      ok: true,
+      eligible: true,
+      cardLast4: "4242",
+      cardBrand: "visa",
+      priceMonthly: 499,
+      chargedToday: 499,
+      count: 1,
+      cap: 10,
+    });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    await screen.findByText("workspace.create.acknowledge_title");
+    fireEvent.click(screen.getByLabelText(/acknowledge_suppress/));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /dialog_continue/ }));
+    });
+    expect(localStorage.getItem(ACK_SUPPRESS_KEY)).toBe("1");
+  });
+
+  it("a Starter owner sees the upgrade variant and routes to /app/upgrade", async () => {
+    mockEligibility({ ok: true, eligible: false, reason: "not_eligible" });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    expect(await screen.findByText("workspace.create.error_not_eligible_title")).toBeTruthy();
+    // No name input — they never reach it.
+    expect(screen.queryByLabelText(/dialog_name_label/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /error_not_eligible_cta/ }));
+    expect(navigateMock).toHaveBeenCalledWith("/app/upgrade");
+  });
+
+  it("no card on file shows the billing variant and routes to the subscription tab", async () => {
+    mockEligibility({ ok: true, eligible: false, reason: "no_card_on_file" });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    expect(await screen.findByText("workspace.create.error_no_card_title")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /error_no_card_cta/ }));
+    expect(navigateMock).toHaveBeenCalledWith("/app/settings/account?tab=subscription");
+  });
+
+  it("at the workspace cap shows the cap variant with count + cap params", async () => {
+    mockEligibility({ ok: true, eligible: false, reason: "cap_reached", count: 10, cap: 10 });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    const title = await screen.findByText(/workspace.create.error_cap_reached_title/);
+    expect(title).toBeTruthy();
+    const body = screen.getByText(/workspace.create.error_cap_reached_body/);
+    expect(body.textContent).toContain("count=10");
+    expect(body.textContent).toContain("cap=10");
+  });
+
+  it("suppressed owners skip the gate and open at the name step (preview deferred to confirm)", async () => {
+    localStorage.setItem(ACK_SUPPRESS_KEY, "1");
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    // Name step immediately; gate copy absent; no eligibility call yet.
+    expect(screen.getByLabelText(/dialog_name_label/)).toBeTruthy();
+    expect(screen.queryByText("workspace.create.acknowledge_title")).toBeNull();
+    expect(
+      invokeMock.mock.calls.filter(
+        (c) => (c[1] as { body?: { mode?: string } })?.body?.mode === "preview",
+      ).length,
+    ).toBe(0);
+  });
+
+  it("resume mode bypasses the gate entirely", async () => {
+    // Resume preview returns the existing-PI payload.
+    mockEligibility({
+      ok: true,
+      eligible: true,
+      cardLast4: "4242",
+      cardBrand: "visa",
+      priceMonthly: 499,
+      chargedToday: 499,
+      count: 1,
+      cap: 10,
+      resume: { workspaceId: "ws-9", name: "Resumed WS", clientSecret: "pi_secret_resume" },
+    });
+    await act(async () => {
+      render(
+        <NewWorkspaceDialog open={true} onOpenChange={() => {}} resumeWorkspaceId="ws-9" />,
+      );
+    });
+    // Goes straight to the confirm panel — never shows the gate.
+    expect(await screen.findByText(/workspace.create.confirm_title/)).toBeTruthy();
+    expect(screen.queryByText("workspace.create.acknowledge_title")).toBeNull();
+  });
+});
+
 describe("NewWorkspaceDialog — confirm button disabled during in-flight", () => {
   it("Confirm button shows loading state while confirm is in-flight", async () => {
     render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
@@ -514,5 +710,244 @@ describe("NewWorkspaceDialog — confirm button disabled during in-flight", () =
       data: { ok: false, reason: "stripe_error", error: "wrap-up" },
       error: null,
     });
+  });
+});
+
+// New coverage for the price-awareness gate's edge behaviors that the original
+// gate block didn't pin: the reopen-reset step derivation, the loading-frame
+// neutral title, the renewalDayLabel ordinal/cardinal helper, and ackSuppressed
+// failing open when localStorage throws.
+describe("NewWorkspaceDialog — gate edge cases", () => {
+  beforeEach(() => {
+    // These tests exercise the un-suppressed gate; the module beforeEach set the
+    // suppression flag for the legacy flow tests, so clear it here.
+    localStorage.removeItem(ACK_SUPPRESS_KEY);
+  });
+
+  function mockEligibility(resp: Record<string, unknown>) {
+    invokeMock.mockResolvedValueOnce({ data: resp, error: null });
+  }
+
+  // (a) Regression: a non-suppressed REOPEN must land on the gate, not the name
+  // step. The reset effect derives the entry step from ackSuppressed() rather
+  // than hardcoding "name" — if it regressed to a hardcoded "name", a reopened
+  // dialog would silently skip the price gate.
+  it("a non-suppressed reopen lands on the gate, not the name step", async () => {
+    const onOpenChange = vi.fn();
+    // Open #1 — eligible gate.
+    mockEligibility({ ok: true, eligible: true, count: 1, cap: 10 });
+    const { rerender } = render(
+      <NewWorkspaceDialog open={true} onOpenChange={onOpenChange} />,
+    );
+    await act(async () => {});
+    await screen.findByText("workspace.create.acknowledge_title");
+
+    // Close.
+    rerender(<NewWorkspaceDialog open={false} onOpenChange={onOpenChange} />);
+
+    // Reopen — must show the GATE again (acknowledge), NOT the name input.
+    mockEligibility({ ok: true, eligible: true, count: 1, cap: 10 });
+    await act(async () => {
+      rerender(<NewWorkspaceDialog open={true} onOpenChange={onOpenChange} />);
+    });
+    expect(await screen.findByText("workspace.create.acknowledge_title")).toBeTruthy();
+    // The name input must NOT be present on reopen — that's the regression guard.
+    expect(screen.queryByLabelText(/dialog_name_label/)).toBeNull();
+  });
+
+  // (c) While eligibility is unknown (loading), the title must be the NEUTRAL
+  // dialog_title — never acknowledge_title — so a user who turns out to be on
+  // Starter doesn't briefly read "adds to your subscription".
+  it("the loading frame shows the neutral dialog_title, not acknowledge_title", async () => {
+    // Hold the eligibility call open so we can observe the loading frame.
+    let resolveInvoke: (value: unknown) => void;
+    invokeMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveInvoke = resolve;
+        }),
+    );
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+
+    // Loading frame: neutral title + loading description, NOT the acknowledge title.
+    expect(screen.getByText("workspace.create.dialog_title")).toBeTruthy();
+    expect(screen.getByText("workspace.create.acknowledge_loading")).toBeTruthy();
+    expect(screen.queryByText("workspace.create.acknowledge_title")).toBeNull();
+
+    // Resolve as Starter — the loading title must NEVER have leaked acknowledge copy.
+    await act(async () => {
+      resolveInvoke!({
+        data: { ok: true, eligible: false, reason: "not_eligible" },
+        error: null,
+      });
+    });
+    expect(await screen.findByText("workspace.create.error_not_eligible_title")).toBeTruthy();
+    // The acknowledge_title was never shown at any point in this flow.
+    expect(screen.queryByText("workspace.create.acknowledge_title")).toBeNull();
+  });
+
+  // (b) renewalDayLabel — English ordinal. The helper is module-private, so we
+  // pin its contract end-to-end: the rendered recurring bullet threads the
+  // computed day through the mock t() (which echoes params), and we control
+  // "today" via fake timers. Covers the ordinal edge cases 1st/2nd/3rd/11th/
+  // 21st/22nd plus a vanilla "th".
+  const ordinalCases: Array<[string, string]> = [
+    ["2026-06-01T12:00:00", "1st"],
+    ["2026-06-02T12:00:00", "2nd"],
+    ["2026-06-03T12:00:00", "3rd"],
+    ["2026-06-04T12:00:00", "4th"],
+    ["2026-06-11T12:00:00", "11th"],
+    ["2026-06-12T12:00:00", "12th"],
+    ["2026-06-13T12:00:00", "13th"],
+    ["2026-06-21T12:00:00", "21st"],
+    ["2026-06-22T12:00:00", "22nd"],
+    ["2026-06-23T12:00:00", "23rd"],
+  ];
+
+  for (const [dateStr, expected] of ordinalCases) {
+    it(`renders the English ordinal "${expected}" for ${dateStr.slice(0, 10)}`, async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date(dateStr));
+      mockEligibility({ ok: true, eligible: true, count: 1, cap: 10 });
+      await act(async () => {
+        render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+      });
+      await screen.findByText("workspace.create.acknowledge_title");
+      // The recurring bullet echoes `day=<ordinal>` via the mock t().
+      const bullet = screen.getByText(/acknowledge_bullet_recurring/);
+      expect(bullet.textContent).toContain(`day=${expected}`);
+    });
+  }
+
+  it("renders the Spanish CARDINAL (no ordinal suffix) for the recurring day", async () => {
+    langValue = "es";
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-21T12:00:00"));
+    mockEligibility({ ok: true, eligible: true, count: 1, cap: 10 });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    await screen.findByText("workspace.create.acknowledge_title");
+    const bullet = screen.getByText(/acknowledge_bullet_recurring/);
+    // Spanish uses the bare cardinal "21" — NOT "21st".
+    expect(bullet.textContent).toContain("day=21");
+    expect(bullet.textContent).not.toContain("21st");
+  });
+
+  // (d) ackSuppressed() must fail OPEN: if localStorage.getItem throws (private
+  // mode / blocked storage), the gate must STILL show — never skip silently to
+  // the name step on the assumption the user suppressed it.
+  it("fails open and shows the gate when localStorage.getItem throws", async () => {
+    const getItemSpy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new Error("storage blocked");
+      });
+    try {
+      mockEligibility({ ok: true, eligible: true, count: 1, cap: 10 });
+      await act(async () => {
+        render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+      });
+      // Gate is shown (fail-open), and the eligibility call fired.
+      expect(await screen.findByText("workspace.create.acknowledge_title")).toBeTruthy();
+      expect(screen.queryByLabelText(/dialog_name_label/)).toBeNull();
+      const previewCall = invokeMock.mock.calls.find(
+        (c) => (c[1] as { body?: { mode?: string } })?.body?.mode === "preview",
+      );
+      expect(previewCall).toBeDefined();
+    } finally {
+      getItemSpy.mockRestore();
+    }
+  });
+
+  // (e) Eligibility-call FAILURE → the gate's error variant. This is the
+  // never-strand guarantee: a transport-level invoke error must not leave the
+  // user on a spinner. It must surface the stripe_unverified copy AND the
+  // acknowledge_retry affordance (the gate's own retry, distinct from the
+  // confirm-step error pane).
+  it("an invokeError on the eligibility call shows the gate error variant with a retry button", async () => {
+    invokeMock.mockResolvedValueOnce({ data: null, error: { message: "network down" } });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    expect(
+      await screen.findByText("workspace.create.error_stripe_unverified_title"),
+    ).toBeTruthy();
+    // The gate's retry affordance is present; the user is not stranded.
+    expect(screen.getByRole("button", { name: /acknowledge_retry/ })).toBeTruthy();
+    // No name input — they never advanced past the gate.
+    expect(screen.queryByLabelText(/dialog_name_label/)).toBeNull();
+  });
+
+  // resp.ok === false (server returned a non-OK body, not a transport error)
+  // must also land on the error variant — the eligibility branch checks ok
+  // separately from invokeError, so this is a distinct code path.
+  it("a non-ok eligibility response body shows the gate error variant", async () => {
+    mockEligibility({ ok: false });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    expect(
+      await screen.findByText("workspace.create.error_stripe_unverified_title"),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /acknowledge_retry/ })).toBeTruthy();
+  });
+
+  // The retry button must actually RE-FIRE the eligibility call and recover —
+  // error → retry → ready → Continue → name. If the retry stopped re-invoking
+  // or stopped resetting ackState, a transient failure would become permanent.
+  it("the gate retry button re-fires eligibility and recovers to the ready gate", async () => {
+    // First eligibility call fails.
+    invokeMock.mockResolvedValueOnce({ data: null, error: { message: "blip" } });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    await screen.findByText("workspace.create.error_stripe_unverified_title");
+
+    // Second eligibility call (the retry) succeeds.
+    mockEligibility({ ok: true, eligible: true, count: 1, cap: 10 });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /acknowledge_retry/ }));
+    });
+
+    // Recovered: the ready gate renders and the error copy is gone.
+    expect(await screen.findByText("workspace.create.acknowledge_title")).toBeTruthy();
+    expect(
+      screen.queryByText("workspace.create.error_stripe_unverified_title"),
+    ).toBeNull();
+    // Exactly two eligibility (preview) calls fired: the initial + the retry.
+    expect(
+      invokeMock.mock.calls.filter(
+        (c) => (c[1] as { body?: { mode?: string } })?.body?.mode === "preview",
+      ).length,
+    ).toBe(2);
+  });
+
+  // no_customer at the GATE maps to the no_card variant (route to billing).
+  // The existing error-branch suite covers no_customer only at the confirm/
+  // preview ErrorPane; the gate's switch is a separate mapping.
+  it("no_customer at the gate shows the no_card billing variant and routes to the subscription tab", async () => {
+    mockEligibility({ ok: true, eligible: false, reason: "no_customer" });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    expect(await screen.findByText("workspace.create.error_no_card_title")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /error_no_card_cta/ }));
+    expect(navigateMock).toHaveBeenCalledWith("/app/settings/account?tab=subscription");
+  });
+
+  // An unrecognized not-eligible reason falls through the gate switch's default
+  // to the error variant — never a blank panel, never a silent advance.
+  it("an unknown not-eligible reason falls back to the gate error variant", async () => {
+    mockEligibility({ ok: true, eligible: false, reason: "something_unexpected" });
+    await act(async () => {
+      render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
+    });
+    expect(
+      await screen.findByText("workspace.create.error_stripe_unverified_title"),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /acknowledge_retry/ })).toBeTruthy();
   });
 });
