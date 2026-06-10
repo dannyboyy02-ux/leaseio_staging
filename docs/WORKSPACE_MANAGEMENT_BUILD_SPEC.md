@@ -796,3 +796,11 @@ writes). Resolution, superseding the initial as-built section above:
 - Deploy note: migration must be applied BEFORE the function deploy
   (reviewer routing for the security migration happens before push, per
   CLAUDE.md).
+- **Deployed 2026-06-10:** both reviewers returned clean; migration applied
+  via MCP (recorded as live version `20260610004735` — apply-time timestamp,
+  same benign filename-vs-version drift as Phase 1's `20260609052500` /
+  `20260609120000`; do NOT drift-repair per CLAUDE.md). Live RPC verified:
+  owner `postgres`, SECURITY DEFINER, `search_path=public, pg_temp`, EXECUTE
+  limited to `postgres`/`service_role`. `transfer-workspace-ownership`
+  deployed (v1, verify_jwt) bundling the current `.vercel.app`-aware
+  `_shared/cors.ts`; deployed files verified byte-identical to the repo.
