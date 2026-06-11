@@ -37,11 +37,12 @@ The most common reason this fails: the monthly Price IDs hardcoded in the code o
 5. In the **"Description"** field (optional), type: `LeaseIO live subscription sync`
 
 6. Under **"Select events"**, click **"Select events"** or **"+ Add events"**.
-   Search for and add these four events — no more, no fewer:
+   Search for and add these five events — no more, no fewer:
    - `checkout.session.completed`
    - `customer.subscription.created`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
+   - `payment_intent.succeeded`  ← required for single-lease credits (limit wall / Workstream C). Omitting it means a "buy 1 lease" charge succeeds but the credit is never granted. Add it on both the sandbox and live endpoints.
 
 7. Click **"Add endpoint"** to save.
 

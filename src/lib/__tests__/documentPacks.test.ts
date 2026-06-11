@@ -209,7 +209,11 @@ describe('stripe-webhook document-pack classification', () => {
     const src = read(WEBHOOK);
     const fn = src.slice(
       src.indexOf('async function applyDocumentPack'),
-      src.indexOf('try {', src.indexOf('async function applyDocumentPack')),
+      // Bound at the next function (applySingleLeaseCredit) rather than the
+      // next `try {`: Workstream C added applySingleLeaseCredit immediately
+      // after, whose `const plan:` type annotation would otherwise leak into
+      // this window and trip the negative assertions below.
+      src.indexOf('async function applySingleLeaseCredit'),
     );
     expect(fn.length).toBeGreaterThan(0);
     expect(fn).toContain('await stripe.subscriptions.list({');
@@ -220,7 +224,7 @@ describe('stripe-webhook document-pack classification', () => {
     const src = read(WEBHOOK);
     const fn = src.slice(
       src.indexOf('async function applyDocumentPack'),
-      src.indexOf('try {', src.indexOf('async function applyDocumentPack')),
+      src.indexOf('async function applySingleLeaseCredit'),
     );
     expect(fn).toContain('s.metadata?.addon_type === ADDON_TYPE_DOCUMENT_PACK');
     expect(fn).toContain('s.metadata?.workspace_id === workspaceId');
@@ -232,7 +236,7 @@ describe('stripe-webhook document-pack classification', () => {
     const src = read(WEBHOOK);
     const fn = src.slice(
       src.indexOf('async function applyDocumentPack'),
-      src.indexOf('try {', src.indexOf('async function applyDocumentPack')),
+      src.indexOf('async function applySingleLeaseCredit'),
     );
     // The single update writes only the capacity column.
     expect(fn).toContain('.update({ addon_document_capacity: total })');
@@ -266,34 +270,50 @@ describe('stripe-webhook document-pack classification', () => {
 describe('process_lease pack-aware quota math', () => {
   const FN = 'supabase/functions/process_lease/index.ts';
 
-  it('reads addon_document_capacity alongside plan when computing quota', () => {
-    const src = read(FN);
-    const fn = src.slice(
-      src.indexOf('async function assertProcessingQuota'),
+  // The quota check was split + renamed during the Workstream C review-fix pass:
+  // assertProcessingQuota -> checkProcessingQuota (a side-effect-free DECISION;
+  // the credit claim moved to consumeCreditOrBlock). The window now runs from the
+  // checkProcessingQuota declaration to the "// Monthly extractions" comment that
+  // opens the count section.
+  function quotaHead(src: string): string {
+    return src.slice(
+      src.indexOf('async function checkProcessingQuota'),
       src.indexOf('// Monthly extractions'),
     );
+  }
+
+  it('reads addon_document_capacity alongside plan when computing quota', () => {
+    const fn = quotaHead(read(FN));
     expect(fn.length).toBeGreaterThan(0);
-    expect(fn).toContain(".select('plan, addon_document_capacity')");
+    // Base limit now comes from document_limit (webhook-managed plan entitlement);
+    // the select also pulls purchased_lease_credits for the needs_credit decision.
+    expect(fn).toContain(
+      ".select('plan, document_limit, addon_document_capacity, purchased_lease_credits')",
+    );
   });
 
   it('clamps the addon to >= 0 so a bad value can never shrink the base cap', () => {
-    const src = read(FN);
-    const fn = src.slice(
-      src.indexOf('async function assertProcessingQuota'),
-      src.indexOf('// Monthly extractions'),
-    );
+    const fn = quotaHead(read(FN));
     expect(fn).toContain('const addon = Math.max(0, Number(');
     expect(fn).toContain('?.addon_document_capacity ?? 0');
   });
 
-  it('adds the addon to BOTH active_leases and monthly_extractions limits', () => {
+  it('adds the addon to a single limit applied to BOTH active and monthly caps', () => {
+    const fn = quotaHead(read(FN));
+    // The refactor folds the per-metric limits into one `limit = baseLimit + addon`
+    // derived from document_limit (PLAN_QUOTAS is now only the fallback when the
+    // column is null) — that single value gates both the monthly and active caps.
+    expect(fn).toContain('const baseLimit = Number.isFinite(Number(wsRow?.document_limit))');
+    expect(fn).toContain('PLAN_QUOTAS[plan].monthly_extractions');
+    expect(fn).toContain('const limit = baseLimit + addon');
+
+    // ...and both over-cap comparisons read that same `limit`.
     const src = read(FN);
-    const fn = src.slice(
-      src.indexOf('async function assertProcessingQuota'),
-      src.indexOf('// Monthly extractions'),
+    const body = src.slice(
+      src.indexOf('async function checkProcessingQuota'),
+      src.indexOf('async function consumeCreditOrBlock'),
     );
-    const limits = fn.slice(fn.indexOf('const limits = {'), fn.indexOf('};', fn.indexOf('const limits = {')));
-    expect(limits).toContain('active_leases: base.active_leases + addon');
-    expect(limits).toContain('monthly_extractions: base.monthly_extractions + addon');
+    expect(body).toContain('const overMonthly = monthlyExtractions >= limit;');
+    expect(body).toContain('overActive = active >= limit;');
   });
 });

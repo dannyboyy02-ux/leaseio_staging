@@ -1023,17 +1023,29 @@ async function assertAiConsent(
 }
 
 /**
- * P1-03 backend quota gate. Enforces:
+ * P1-03 backend quota gate (check phase — NO side effects).
+ *
+ * Enforces:
  *   - active_leases cap (only when isNewLease=true; re-extracting an
  *     existing lease doesn't add to the active count)
  *   - monthly_extractions cap (always; an extraction always costs AI)
  *
- * Limits mirror src/config/pricing.ts. starter: 15 active / 15 mo.
- * business: 50 active / 50 mo. Unknown/null plan defaults to starter.
+ * Base caps come from workspaces.document_limit (the webhook-managed plan
+ * entitlement — same column the client meter reads, so server and UI agree),
+ * falling back to PLAN_QUOTAS if the column is null. Document packs add
+ * addon_document_capacity to both caps.
  *
- * Returns a 402 Payment Required response when the workspace would
- * exceed the cap, with a structured body the frontend renders as an
- * upgrade prompt. Returns null when the call may proceed.
+ * Returns a DECISION, not a side effect:
+ *   - { kind: 'ok' }            — under cap, proceed.
+ *   - { kind: 'needs_credit' }  — NEW-lease upload over a cap, but the workspace
+ *                                 holds ≥1 single-lease credit. The credit is
+ *                                 NOT spent here — the caller claims it only
+ *                                 AFTER Tier 2 confirms the document is a lease
+ *                                 (so a rejected non-lease never burns a credit).
+ *   - { kind: 'block', response } — over cap with no credit (or a re-extraction
+ *                                 over the monthly cap — credits cover new
+ *                                 leases only). 200 + structured quota_exceeded
+ *                                 body the frontend renders as the limit wall.
  *
  * "Monthly" = trailing 30 days, matching the soft-quota poller in
  * _shared/monitoring/workspace_quotas.ts. Uses leases.uploaded_at —
@@ -1048,31 +1060,60 @@ const PLAN_QUOTAS: Record<string, PlanQuotaLimits> = {
   business: { active_leases: 50, monthly_extractions: 50 },
 };
 
-async function assertProcessingQuota(
+type QuotaDecision =
+  | { kind: 'ok' }
+  | { kind: 'needs_credit' }
+  | { kind: 'block'; response: Response };
+
+function quotaBlockResponse(
+  corsHeaders: Record<string, string>,
+  metric: 'monthly_extractions' | 'active_leases',
+  plan: string,
+  current: number,
+  limit: number,
+): Response {
+  // 200 + structured body, same pattern as tier2_classification_failed —
+  // the frontend's `supabase.functions.invoke` swallows non-2xx into a
+  // generic FunctionsHttpError, but parses the body cleanly on 200.
+  const error = metric === 'monthly_extractions'
+    ? `This workspace has reached its monthly AI extraction limit (${limit}/mo on ${plan}). Buy more capacity or wait for the rolling 30-day window to roll over.`
+    : `This workspace has reached its active-lease limit (${limit} on ${plan}). Archive an existing lease or buy more capacity before uploading more.`;
+  return new Response(
+    JSON.stringify({ ok: false, error, reason: 'quota_exceeded', metric, plan, current, limit }),
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+  );
+}
+
+async function checkProcessingQuota(
   supabaseAdmin: ReturnType<typeof createClient>,
   workspaceId: string | null,
   corsHeaders: Record<string, string>,
   opts: { isNewLease: boolean },
-): Promise<Response | null> {
-  if (!workspaceId) return null;
+): Promise<QuotaDecision> {
+  if (!workspaceId) return { kind: 'ok' };
 
   const { data: ws } = await supabaseAdmin
     .from('workspaces')
-    .select('plan, addon_document_capacity')
+    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits')
     .eq('id', workspaceId)
     .maybeSingle();
-  const plan = ((ws as { plan?: string } | null)?.plan === 'business') ? 'business' : 'starter';
-  const base = PLAN_QUOTAS[plan];
+  const wsRow = ws as {
+    plan?: string;
+    document_limit?: number;
+    addon_document_capacity?: number;
+    purchased_lease_credits?: number;
+  } | null;
+  const plan = (wsRow?.plan === 'business') ? 'business' : 'starter';
 
-  // Document packs raise BOTH the monthly-abstraction allowance and the
-  // active-lease cap by the workspace's total active pack capacity (written
-  // only by the Stripe webhook, guarded by the #29 entitlement trigger).
-  // Defensive: clamp to >= 0 so a bad value can never shrink the base cap.
-  const addon = Math.max(0, Number((ws as { addon_document_capacity?: number } | null)?.addon_document_capacity ?? 0));
-  const limits = {
-    active_leases: base.active_leases + addon,
-    monthly_extractions: base.monthly_extractions + addon,
-  };
+  // Base cap = the workspace's document_limit (webhook-managed plan entitlement,
+  // the same source the client meter reads), with PLAN_QUOTAS as a fallback.
+  const baseLimit = Number.isFinite(Number(wsRow?.document_limit))
+    ? Number(wsRow?.document_limit)
+    : PLAN_QUOTAS[plan].monthly_extractions;
+  // Packs raise BOTH caps. Clamp addon >= 0 so a bad value can't shrink it.
+  const addon = Math.max(0, Number(wsRow?.addon_document_capacity ?? 0));
+  const credits = Math.max(0, Number(wsRow?.purchased_lease_credits ?? 0));
+  const limit = baseLimit + addon;
 
   // Monthly extractions — always checked.
   const since30dIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -1083,17 +1124,15 @@ async function assertProcessingQuota(
     .gte('uploaded_at', since30dIso)
     .not('extracted_json', 'is', null);
   if (extractionErr) {
-    console.error('[process_lease] quota: extraction count failed:', extractionErr.message);
-    // Fail open on a count error — same posture as the rate-limit
-    // helper. We don't want a transient DB blip to block paying
+    // Fail open on a count error — a transient DB blip shouldn't block paying
     // customers; the soft-quota dashboard catches drift over time.
-    return null;
+    console.error('[process_lease] quota: extraction count failed:', extractionErr.message);
+    return { kind: 'ok' };
   }
   const monthlyExtractions = monthlyExtractionCount ?? 0;
-  const overMonthly = monthlyExtractions >= limits.monthly_extractions;
+  const overMonthly = monthlyExtractions >= limit;
 
-  // Active leases — only for genuinely new uploads. Re-extracting an
-  // executed document on an existing lease doesn't add to the count.
+  // Active leases — only for genuinely new uploads.
   let overActive = false;
   let active = 0;
   if (opts.isNewLease) {
@@ -1104,60 +1143,62 @@ async function assertProcessingQuota(
       .eq('lifecycle_status', 'active')
       .eq('archived', false);
     if (activeErr) {
-      console.error('[process_lease] quota: active count failed:', activeErr.message);
-      return null;
+      // Fail open for the ACTIVE metric only — a confirmed monthly breach must
+      // still block. (Previously returned null here, leaking an over-monthly
+      // upload through on any active-count hiccup.)
+      console.error('[process_lease] quota: active count failed, skipping active check:', activeErr.message);
+    } else {
+      active = activeCount ?? 0;
+      overActive = active >= limit;
     }
-    active = activeCount ?? 0;
-    overActive = active >= limits.active_leases;
   }
 
-  if (overMonthly || overActive) {
-    // A purchased single-lease credit ("buy 1 lease" at the overage rate)
-    // covers this ONE upload through both caps. consume_lease_credit is an
-    // atomic claim (UPDATE guarded by > 0, service_role-only RPC), so two
-    // concurrent uploads can never spend the same credit. Exactly one credit
-    // is spent per upload regardless of which cap(s) tripped.
-    const { data: claimed, error: claimErr } = await supabaseAdmin.rpc(
-      'consume_lease_credit',
-      { p_workspace_id: workspaceId },
-    );
-    if (claimErr) {
-      console.error('[process_lease] quota: credit claim failed:', claimErr.message);
-      // Fall through to the block response — never extract unpaid over-cap.
-    } else if (claimed === true) {
-      console.log(`[process_lease] quota: single-lease credit consumed for ${workspaceId}`);
-      return null;
-    }
+  if (!overMonthly && !overActive) return { kind: 'ok' };
 
-    // 200 + structured body, same pattern as tier2_classification_failed —
-    // the frontend's `supabase.functions.invoke` swallows non-2xx into a
-    // generic FunctionsHttpError, but parses the body cleanly on 200.
-    const body = overMonthly
-      ? {
-          ok: false,
-          error: `This workspace has reached its monthly AI extraction limit (${limits.monthly_extractions}/mo on ${plan}). Buy more capacity or wait for the rolling 30-day window to roll over.`,
-          reason: 'quota_exceeded',
-          metric: 'monthly_extractions',
-          plan,
-          current: monthlyExtractions,
-          limit: limits.monthly_extractions,
-        }
-      : {
-          ok: false,
-          error: `This workspace has reached its active-lease limit (${limits.active_leases} on ${plan}). Archive an existing lease or buy more capacity before uploading more.`,
-          reason: 'quota_exceeded',
-          metric: 'active_leases',
-          plan,
-          current: active,
-          limit: limits.active_leases,
-        };
-    return new Response(JSON.stringify(body), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+  // Single-lease credits cover NEW-lease uploads only (the wall sells "add a
+  // lease"); a re-extraction over the monthly cap blocks. Defer the actual
+  // claim to after Tier 2 — here we only decide whether to proceed.
+  if (opts.isNewLease && credits > 0) return { kind: 'needs_credit' };
+
+  const metric: 'monthly_extractions' | 'active_leases' = overMonthly ? 'monthly_extractions' : 'active_leases';
+  return {
+    kind: 'block',
+    response: quotaBlockResponse(
+      corsHeaders,
+      metric,
+      plan,
+      metric === 'monthly_extractions' ? monthlyExtractions : active,
+      limit,
+    ),
+  };
+}
+
+/**
+ * Spend the single-lease credit reserved by a 'needs_credit' decision, AFTER
+ * Tier 2 has confirmed the document is a lease. The claim is atomic
+ * (consume_lease_credit: UPDATE guarded by > 0, service_role-only) and writes a
+ * debit row attributing the spend to p_leaseId. Returns a block Response if the
+ * credit could not be claimed (race: another concurrent upload spent the last
+ * one between check and now), else null to proceed.
+ */
+async function consumeCreditOrBlock(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  workspaceId: string,
+  leaseId: string | null,
+  corsHeaders: Record<string, string>,
+): Promise<Response | null> {
+  const { data: claimed, error: claimErr } = await supabaseAdmin.rpc('consume_lease_credit', {
+    p_workspace_id: workspaceId,
+    p_lease_id: leaseId,
+  });
+  if (!claimErr && claimed === true) {
+    console.log(`[process_lease] quota: single-lease credit consumed for ${workspaceId} (lease ${leaseId})`);
+    return null;
   }
-
-  return null;
+  if (claimErr) console.error('[process_lease] quota: credit claim failed:', claimErr.message);
+  // Never extract unpaid over-cap. Plan unknown here is fine — the body only
+  // needs reason:'quota_exceeded' for the frontend to surface the wall.
+  return quotaBlockResponse(corsHeaders, 'monthly_extractions', 'your plan', 0, 0);
 }
 
 async function extractLeaseDataWithClaude(
@@ -1811,15 +1852,16 @@ serve(async (req) => {
       );
       if (rateLimitResponse) return rateLimitResponse;
 
-      // P1-03 quota gate on executed-upload path: only monthly extraction
-      // cap applies (the underlying lease already exists).
-      const quotaResp = await assertProcessingQuota(
+      // P1-03 quota gate on executed-upload path: only the monthly extraction
+      // cap applies (the underlying lease already exists). Re-extractions don't
+      // consume credits — a non-new upload over the monthly cap just blocks.
+      const execQuota = await checkProcessingQuota(
         supabaseAdmin,
         existingLease.workspace_id,
         corsHeaders,
         { isNewLease: false },
       );
-      if (quotaResp) return quotaResp;
+      if (execQuota.kind === 'block') return execQuota.response;
 
       const timestamp = Date.now();
       const bucketPrefix = existingLease.workspace_id
@@ -2159,17 +2201,20 @@ serve(async (req) => {
     );
     if (rateLimitResponse) return rateLimitResponse;
 
-    // P1-03 quota gate on new-upload path: both active-lease cap and
-    // monthly extraction cap apply. Runs BEFORE storage upload + AI
-    // calls so the workspace sees an upgrade prompt instead of a
-    // partially-created record.
-    const quotaResp = await assertProcessingQuota(
+    // P1-03 quota gate on new-upload path: both active-lease and monthly caps
+    // apply. The CHECK runs BEFORE storage upload + AI so a hard-blocked
+    // workspace (over cap, no credit) sees the limit wall instead of a
+    // partially-created record. When the workspace is over cap but holds a
+    // single-lease credit, we proceed and claim the credit only AFTER Tier 2
+    // confirms the document is a lease (so a rejected non-lease never burns it).
+    const quotaDecision = await checkProcessingQuota(
       supabaseAdmin,
       resolvedWorkspaceId,
       corsHeaders,
       { isNewLease: true },
     );
-    if (quotaResp) return quotaResp;
+    if (quotaDecision.kind === 'block') return quotaDecision.response;
+    const needsCreditClaim = quotaDecision.kind === 'needs_credit';
 
     const leaseId = crypto.randomUUID();
     const storagePath = `${user.id}/${leaseId}/${sanitizedFilename}`;
@@ -2291,6 +2336,22 @@ serve(async (req) => {
       }
     } catch (e) {
       console.warn('[process_lease] Tier 2 passed activity-log insert threw:', e);
+    }
+
+    // Tier 2 confirmed this is a lease — NOW spend the reserved single-lease
+    // credit (over-cap path only). Doing it here means a Tier-2-rejected
+    // non-lease above never burns a paid credit. If the claim fails (a
+    // concurrent upload spent the last credit between check and now), block:
+    // mark this lease Failed and surface the wall instead of a free extraction.
+    if (needsCreditClaim && resolvedWorkspaceId) {
+      const blockResp = await consumeCreditOrBlock(supabaseAdmin, resolvedWorkspaceId, leaseId, corsHeaders);
+      if (blockResp) {
+        await supabaseAdmin
+          .from('leases')
+          .update({ status: 'Failed', error_message: 'Lease limit reached — no capacity available.' })
+          .eq('id', leaseId);
+        return blockResp;
+      }
     }
 
     let leaseData: LeaseExtractionResult;

@@ -14,6 +14,8 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
+import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
+import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
 import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { supabase } from '@/integrations/supabase/client';
@@ -52,7 +54,19 @@ export default function ImportHistory() {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const { workspace } = useApp();
+  const quota = useWorkspaceQuota();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [limitWallOpen, setLimitWallOpen] = useState(false);
+
+  // Limit wall gate — at the cap (no credit), upload opens the wall instead.
+  // The server re-checks in process_lease, so this is UX, not enforcement.
+  const openUpload = () => {
+    if (quota.blocked) {
+      setLimitWallOpen(true);
+    } else {
+      setUploadModalOpen(true);
+    }
+  };
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedLease, setSelectedLease] = useState<ImportRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -98,7 +112,7 @@ export default function ImportHistory() {
 
   useEffect(() => {
     if (searchParams.get('action') === 'upload') {
-      setUploadModalOpen(true);
+      openUpload();
       setSearchParams({});
     }
   }, [searchParams, setSearchParams]);
@@ -195,7 +209,7 @@ export default function ImportHistory() {
         title={t('import.history')}
         subtitle={`${imports.length} ${t('import.documents_imported')}`}
         actions={
-          <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
+          <Button variant="accent" onClick={() => openUpload()}>
             <Plus className="h-4 w-4 mr-2" />
             {t('import.upload_lease')}
           </Button>
@@ -216,7 +230,7 @@ export default function ImportHistory() {
             <p className="text-muted-foreground mb-4">
               {t('import.upload_first')}
             </p>
-            <Button variant="accent" onClick={() => setUploadModalOpen(true)}>
+            <Button variant="accent" onClick={() => openUpload()}>
               <Plus className="h-4 w-4 mr-2" />
               {t('import.upload_lease')}
             </Button>
@@ -343,11 +357,17 @@ export default function ImportHistory() {
         )}
       </div>
 
-      <LeaseUploadModal 
-        open={uploadModalOpen} 
+      <LeaseUploadModal
+        open={uploadModalOpen}
         onOpenChange={setUploadModalOpen}
         onSuccess={handleUploadSuccess}
+        onQuotaExceeded={() => {
+          setUploadModalOpen(false);
+          setLimitWallOpen(true);
+        }}
       />
+
+      <LimitReachedDialog open={limitWallOpen} onOpenChange={setLimitWallOpen} />
 
       <DeleteLeaseDialog
         open={deleteDialogOpen}

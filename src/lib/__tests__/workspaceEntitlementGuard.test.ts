@@ -316,17 +316,31 @@ describe('purchased_lease_credits entitlement guard (single-lease credits)', () 
     );
   });
 
-  it('consume_lease_credit is an atomic claim guarded by > 0 and returns false when no credit', () => {
+  it('consume_lease_credit is an atomic claim guarded by > 0 and writes an attributable debit row', () => {
     const m = readRepoFile(MIGRATION);
+    // The signature gained p_lease_id (uuid DEFAULT NULL) so the spend is
+    // attributable; drop the prior single-arg signature first to keep exactly
+    // one definition.
+    expect(m).toContain('DROP FUNCTION IF EXISTS public.consume_lease_credit(uuid);');
     const fn = m.slice(
       m.indexOf('CREATE OR REPLACE FUNCTION public.consume_lease_credit'),
       m.indexOf('ALTER FUNCTION public.consume_lease_credit'),
     );
     expect(fn.length).toBeGreaterThan(0);
+    expect(fn).toContain('p_lease_id uuid DEFAULT NULL');
     // Single UPDATE with the > 0 guard — two concurrent uploads can't both win.
     expect(fn).toContain('SET purchased_lease_credits = purchased_lease_credits - 1');
     expect(fn).toContain('AND purchased_lease_credits > 0');
-    expect(fn).toContain('RETURN COALESCE(v_claimed, false)');
+    // On a successful claim it records a debit row (workspace + lease) and
+    // returns true; otherwise returns false. (Replaces the prior single
+    // `RETURN COALESCE(v_claimed, false)` tail.)
+    expect(fn).toContain('IF COALESCE(v_claimed, false) THEN');
+    expect(fn).toContain(
+      'INSERT INTO public.lease_credit_consumptions (workspace_id, lease_id)',
+    );
+    expect(fn).toContain('VALUES (p_workspace_id, p_lease_id)');
+    expect(fn).toContain('RETURN true;');
+    expect(fn).toContain('RETURN false;');
     expect(fn).not.toContain('SECURITY DEFINER');
   });
 
@@ -338,10 +352,36 @@ describe('purchased_lease_credits entitlement guard (single-lease credits)', () 
       m.indexOf('-- 5.'),
     );
     expect(grants.length).toBeGreaterThan(0);
-    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM PUBLIC');
-    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM anon');
-    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM authenticated');
-    expect(grants).toContain('GRANT EXECUTE ON FUNCTION public.consume_lease_credit(uuid) TO service_role');
+    // Grants now reference the new (uuid, uuid) signature.
+    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid, uuid) FROM PUBLIC');
+    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid, uuid) FROM anon');
+    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid, uuid) FROM authenticated');
+    expect(grants).toContain('GRANT EXECUTE ON FUNCTION public.consume_lease_credit(uuid, uuid) TO service_role');
+  });
+
+  it('lease_credit_consumptions is an append-only, member-readable debit ledger with no write policies', () => {
+    const m = readRepoFile(MIGRATION);
+    // The new debit table lives between section 2b and section 3.
+    const table = m.slice(
+      m.indexOf('CREATE TABLE IF NOT EXISTS public.lease_credit_consumptions'),
+      m.indexOf('-- 3.'),
+    );
+    expect(table.length).toBeGreaterThan(0);
+    expect(table).toContain('workspace_id uuid NOT NULL REFERENCES public.workspaces(id)');
+    expect(table).toContain('lease_id uuid');
+    expect(table).toContain('consumed_at timestamptz NOT NULL DEFAULT now()');
+    // RLS on, member SELECT-only — only service_role (RLS-exempt, via the RPC)
+    // can write.
+    expect(table).toContain(
+      'ALTER TABLE public.lease_credit_consumptions ENABLE ROW LEVEL SECURITY',
+    );
+    const polStart = table.indexOf(
+      'CREATE POLICY "Members can read their workspace credit consumptions"',
+    );
+    expect(polStart).toBeGreaterThan(-1);
+    const polBlock = table.slice(polStart, polStart + 240);
+    expect(polBlock).toContain('FOR SELECT');
+    expect(polBlock).toContain('is_workspace_member(workspace_id, auth.uid())');
   });
 
   it('ledger has UNIQUE payment_intent_id and positive-quantity CHECK (webhook-retry idempotency)', () => {

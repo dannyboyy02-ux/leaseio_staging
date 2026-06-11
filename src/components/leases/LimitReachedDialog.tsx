@@ -1,27 +1,31 @@
 // LimitReachedDialog — the "limit wall" (Workstream C).
 //
 // Shown when a workspace at its lease limit tries to start intake (Add Lease
-// on /app/leases, New Request on the dashboard, or the upload modal's server
-// backstop). Plan-aware: it never tells a Business workspace to "upgrade to
-// Business". Three doors, cheapest-per-lease first:
+// on /app/leases, New Request on the dashboard, Upload on /app/imports, or the
+// upload modal's server backstop). Plan-aware: it never tells a Business
+// workspace to "upgrade to Business". Doors, cheapest-per-lease first:
 //   1. Upgrade plan      — Starter only → subscription tab.
 //   2. Buy a pack        — both tiers → DocumentPackDialog (from $7/lease).
 //   3. Buy 1 lease       — one-time charge at the plan's overage rate
 //                          ($12 starter / $10 business) granting one credit.
+//   + Archive a lease    — free, only when the ACTIVE-lease cap tripped.
 // Non-admins see the contact-your-admin message instead of pay flows.
 //
-// The single-lease purchase reuses the manage-document-pack edge function
-// (mode buy_single) and the NewWorkspaceDialog/DocumentPackDialog on-session
-// 3DS pattern; the webhook grants the credit via the idempotent ledger, and
-// we poll for the credit before declaring success so "you can upload now" is
-// true when the user reads it.
+// Double-charge defenses (review HIGHs): the single-lease idempotency key is
+// generated ONCE per consent session (a "Try payment again" retry reuses it),
+// and a workspace-scoped "payment pending" marker (set when a charge succeeds
+// but the grant webhook outruns our poll) replaces the pay door with a
+// "payment received — credit on the way" panel on reopen, so a user who just
+// paid is never offered the same charge again.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
+  Archive,
   ArrowUpRight,
   CheckCircle2,
+  Clock,
   CreditCard,
   Loader2,
   Package,
@@ -44,6 +48,8 @@ import { DocumentPackDialog } from "@/components/workspace/DocumentPackDialog";
 
 type SingleStep = "idle" | "consent" | "processing" | "success" | "error";
 
+const pendingMarkerKey = (workspaceId: string) => `lease_credit_pending:${workspaceId}`;
+
 export function LimitReachedDialog({
   open,
   onOpenChange,
@@ -60,14 +66,58 @@ export function LimitReachedDialog({
   const currentPlan = normalizePlanId(workspace?.plan);
   const overagePerDoc = PLANS[currentPlan].overagePerDoc;
   const cheapestPackPerLease = Math.min(...DOCUMENT_PACKS.map(packPerLeasePrice));
+  const cheapestPackMonthly = Math.min(...DOCUMENT_PACKS.map((p) => p.priceMonthly));
 
   const [packDialogOpen, setPackDialogOpen] = useState(false);
   const [singleStep, setSingleStep] = useState<SingleStep>("idle");
   const [singleError, setSingleError] = useState<string | null>(null);
+  const [paymentPending, setPaymentPending] = useState(false);
   const preCreditsRef = useRef(0);
+  const idempotencyRef = useRef<string | null>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
 
-  function resetAndClose(next: boolean) {
-    if (!next) setSingleStep("idle");
+  const wsId = workspace?.id ?? null;
+  const markerKey = wsId ? pendingMarkerKey(wsId) : null;
+
+  // On open: surface a recent-but-unconfirmed purchase as a "credit on the way"
+  // panel instead of the pay doors (never re-offer a charge to someone who just
+  // paid), and reset any stale inline step. While pending, poll for the grant.
+  useEffect(() => {
+    if (!open) return;
+    const pending = markerKey ? sessionStorage.getItem(markerKey) === "1" : false;
+    setPaymentPending(pending);
+    setSingleError(null);
+    setSingleStep(pending ? "success" : "idle");
+    if (!pending) return;
+
+    let cancelled = false;
+    (async () => {
+      for (let i = 0; i < 20 && !cancelled; i++) {
+        await refreshProfile().catch(() => {});
+        if (cancelled) return;
+        if ((workspace?.purchasedLeaseCredits ?? 0) > 0) {
+          if (markerKey) sessionStorage.removeItem(markerKey);
+          if (!cancelled) setPaymentPending(false);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, markerKey]);
+
+  function requestClose(next: boolean) {
+    // Never let the dialog be dismissed mid-charge — the PaymentIntent is in
+    // flight and a stale reopen would be confusing.
+    if (!next && singleStep === "processing") return;
+    if (!next) {
+      setSingleStep("idle");
+      setSingleError(null);
+    }
     onOpenChange(next);
   }
 
@@ -77,9 +127,11 @@ export function LimitReachedDialog({
     setSingleStep("processing");
     setSingleError(null);
     try {
-      const idempotencyKey = crypto.randomUUID();
+      // Reuse the consent-session key across retries so an ambiguous failure +
+      // "Try payment again" can't double-charge (one key per intended purchase).
+      if (!idempotencyRef.current) idempotencyRef.current = crypto.randomUUID();
       const { data, error } = await supabase.functions.invoke("manage-document-pack", {
-        body: { mode: "buy_single", workspaceId: workspace.id, idempotencyKey },
+        body: { mode: "buy_single", workspaceId: workspace.id, idempotencyKey: idempotencyRef.current },
       });
       if (error) throw error;
       const resp = data as {
@@ -122,8 +174,11 @@ export function LimitReachedDialog({
         }
       }
 
-      // Poll until the webhook grants the credit, so the success copy
-      // ("you can add your lease now") is true when shown.
+      // Payment succeeded — this key is now spent; a fresh purchase needs a new one.
+      idempotencyRef.current = null;
+
+      // Poll until the webhook grants the credit, so "you can add your lease
+      // now" is true when shown.
       let confirmed = false;
       for (let i = 0; i < 12; i++) {
         const { data: row } = await supabase
@@ -141,8 +196,17 @@ export function LimitReachedDialog({
         await new Promise((r) => setTimeout(r, 1500));
       }
       await refreshProfile().catch(() => {});
+      if (!openRef.current) return; // dialog closed mid-flight — don't flip state
+      if (confirmed) {
+        if (markerKey) sessionStorage.removeItem(markerKey);
+        setPaymentPending(false);
+      } else {
+        // Paid but grant not yet visible — mark pending so a reopen shows the
+        // "credit on the way" panel rather than the pay door again.
+        if (markerKey) sessionStorage.setItem(markerKey, "1");
+        setPaymentPending(true);
+      }
       setSingleStep("success");
-      setSingleError(confirmed ? null : t("limit_wall.single_pending"));
     } catch {
       setSingleError(t("packs.error_generic"));
       setSingleStep("error");
@@ -153,15 +217,17 @@ export function LimitReachedDialog({
     quota.blockedMetric === "active_leases"
       ? t("limit_wall.body_active", { used: quota.activeUsed, limit: quota.activeLimit })
       : t("limit_wall.body_monthly", { used: quota.monthlyUsed, limit: quota.monthlyLimit });
+  const title =
+    quota.blockedMetric === "active_leases" ? t("limit_wall.title_active") : t("limit_wall.title_monthly");
 
   return (
     <>
-      <Dialog open={open} onOpenChange={resetAndClose}>
+      <Dialog open={open} onOpenChange={requestClose}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
-              {t("limit_wall.title")}
+              {title}
             </DialogTitle>
             <DialogDescription>{metricLine}</DialogDescription>
           </DialogHeader>
@@ -173,14 +239,20 @@ export function LimitReachedDialog({
             </div>
           ) : singleStep === "success" ? (
             <div className="space-y-4 py-2 text-center">
-              <CheckCircle2 className="h-10 w-10 text-success mx-auto" />
+              {paymentPending ? (
+                <Clock className="h-10 w-10 text-amber-500 mx-auto" />
+              ) : (
+                <CheckCircle2 className="h-10 w-10 text-success mx-auto" />
+              )}
               <div>
-                <p className="font-medium">{t("limit_wall.single_success_title")}</p>
+                <p className="font-medium">
+                  {paymentPending ? t("limit_wall.single_pending_title") : t("limit_wall.single_success_title")}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  {singleError ?? t("limit_wall.single_success_desc")}
+                  {paymentPending ? t("limit_wall.single_pending") : t("limit_wall.single_success_desc")}
                 </p>
               </div>
-              <Button className="w-full" onClick={() => resetAndClose(false)}>
+              <Button className="w-full" onClick={() => requestClose(false)}>
                 {t("common.done")}
               </Button>
             </div>
@@ -194,9 +266,7 @@ export function LimitReachedDialog({
                 <Button variant="outline" onClick={() => setSingleStep("idle")}>
                   {t("common.back")}
                 </Button>
-                <Button onClick={() => handleBuySingle()}>
-                  {t("packs.try_payment_again")}
-                </Button>
+                <Button onClick={() => handleBuySingle()}>{t("packs.try_payment_again")}</Button>
               </div>
             </div>
           ) : singleStep === "consent" ? (
@@ -225,19 +295,38 @@ export function LimitReachedDialog({
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">{t("limit_wall.member_note")}</p>
               <div className="flex justify-end">
-                <Button variant="outline" onClick={() => resetAndClose(false)}>
+                <Button variant="outline" onClick={() => requestClose(false)}>
                   {t("common.close")}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Free door — archive an active lease (only when the active cap
+                  tripped; never hide the $0 path on a payment wall) */}
+              {quota.blockedMetric === "active_leases" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    requestClose(false);
+                    navigate("/app/leases");
+                  }}
+                  className="group flex w-full items-start gap-3 rounded-md border border-border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+                >
+                  <Archive className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium text-sm">{t("limit_wall.archive_title")}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("limit_wall.archive_desc")}</p>
+                  </div>
+                </button>
+              )}
+
               {/* Door 1 — upgrade (Starter only; Business has no higher tier) */}
               {currentPlan === "starter" && (
                 <button
                   type="button"
                   onClick={() => {
-                    resetAndClose(false);
+                    requestClose(false);
                     navigate("/app/settings/account?tab=subscription");
                   }}
                   className="group flex w-full items-start gap-3 rounded-md border border-border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
@@ -265,7 +354,7 @@ export function LimitReachedDialog({
                 <div>
                   <p className="font-medium text-sm">{t("limit_wall.pack_title")}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {t("limit_wall.pack_desc", { price: cheapestPackPerLease })}
+                    {t("limit_wall.pack_desc", { price: cheapestPackPerLease, monthly: cheapestPackMonthly })}
                   </p>
                 </div>
               </button>
@@ -281,14 +370,12 @@ export function LimitReachedDialog({
                   <p className="font-medium text-sm">
                     {t("limit_wall.single_title", { price: overagePerDoc })}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {t("limit_wall.single_desc")}
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t("limit_wall.single_desc")}</p>
                 </div>
               </button>
 
               <div className="flex justify-end pt-1">
-                <Button variant="ghost" size="sm" onClick={() => resetAndClose(false)}>
+                <Button variant="ghost" size="sm" onClick={() => requestClose(false)}>
                   {t("common.close")}
                 </Button>
               </div>
@@ -297,8 +384,16 @@ export function LimitReachedDialog({
         </DialogContent>
       </Dialog>
 
-      {/* Pack purchase flow, mounted alongside so the wall can hand off to it. */}
-      <DocumentPackDialog open={packDialogOpen} onOpenChange={setPackDialogOpen} />
+      {/* Pack purchase flow. When it closes after a purchase that cleared the
+          block, close the wall too — never strand a paying customer on a wall
+          that still says "you've reached your limit". */}
+      <DocumentPackDialog
+        open={packDialogOpen}
+        onOpenChange={(next) => {
+          setPackDialogOpen(next);
+          if (!next && !quota.blocked) requestClose(false);
+        }}
+      />
     </>
   );
 }

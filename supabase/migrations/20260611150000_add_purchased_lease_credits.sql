@@ -78,6 +78,36 @@ CREATE POLICY "Members can read their workspace credit purchases"
   FOR SELECT
   USING (is_workspace_member(workspace_id, auth.uid()));
 
+-- 2b. Append-only consumption ledger (debit side) -----------------------------
+-- Makes a spent credit attributable: every consume writes one row linking the
+-- credit to the lease/upload that spent it. purchases − consumptions = balance,
+-- decomposable after the fact (the bare counter alone was not — integrity H2).
+CREATE TABLE IF NOT EXISTS public.lease_credit_consumptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  lease_id uuid,
+  consumed_at timestamptz NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE public.lease_credit_consumptions IS
+  'Append-only debit ledger: one row per single-lease credit spent, linking it '
+  'to the lease that consumed it. Written only by consume_lease_credit() '
+  '(process_lease, service_role). Member-readable; never updated or deleted. '
+  'NOTE: ON DELETE CASCADE — deleting a workspace removes its billing-history '
+  'rows; the forensic record of the workspace itself lives in deleted_workspaces.';
+
+CREATE INDEX IF NOT EXISTS lease_credit_consumptions_workspace_idx
+  ON public.lease_credit_consumptions (workspace_id, consumed_at DESC);
+
+ALTER TABLE public.lease_credit_consumptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Members can read their workspace credit consumptions"
+  ON public.lease_credit_consumptions;
+CREATE POLICY "Members can read their workspace credit consumptions"
+  ON public.lease_credit_consumptions
+  FOR SELECT
+  USING (is_workspace_member(workspace_id, auth.uid()));
+
 -- 3. Grant trigger — one increment per ledger row -----------------------------
 CREATE OR REPLACE FUNCTION public.grant_lease_credits_on_purchase()
 RETURNS trigger
@@ -101,7 +131,16 @@ CREATE TRIGGER increment_lease_credits
   EXECUTE FUNCTION public.grant_lease_credits_on_purchase();
 
 -- 4. Atomic consume RPC (service_role only) -----------------------------------
-CREATE OR REPLACE FUNCTION public.consume_lease_credit(p_workspace_id uuid)
+-- Claims one credit AND records the debit in one transaction, so a spend is
+-- always attributable. p_lease_id is the lease the credit covers (nullable
+-- only defensively). Drop the prior single-arg signature first so the RPC has
+-- exactly one definition.
+DROP FUNCTION IF EXISTS public.consume_lease_credit(uuid);
+
+CREATE OR REPLACE FUNCTION public.consume_lease_credit(
+  p_workspace_id uuid,
+  p_lease_id uuid DEFAULT NULL
+)
 RETURNS boolean
 LANGUAGE plpgsql
 SET search_path = public, pg_catalog
@@ -114,24 +153,31 @@ BEGIN
   WHERE id = p_workspace_id
     AND purchased_lease_credits > 0
   RETURNING true INTO v_claimed;
-  RETURN COALESCE(v_claimed, false);
+
+  IF COALESCE(v_claimed, false) THEN
+    INSERT INTO public.lease_credit_consumptions (workspace_id, lease_id)
+    VALUES (p_workspace_id, p_lease_id);
+    RETURN true;
+  END IF;
+  RETURN false;
 END;
 $$;
 
-ALTER FUNCTION public.consume_lease_credit(uuid) OWNER TO postgres;
+ALTER FUNCTION public.consume_lease_credit(uuid, uuid) OWNER TO postgres;
 
-COMMENT ON FUNCTION public.consume_lease_credit(uuid) IS
+COMMENT ON FUNCTION public.consume_lease_credit(uuid, uuid) IS
   'Atomically spends one single-lease credit (UPDATE guarded by > 0, so '
-  'concurrent uploads cannot double-spend). Called only by process_lease '
+  'concurrent uploads cannot double-spend) AND writes a lease_credit_consumptions '
+  'debit row linking it to p_lease_id. Called only by process_lease '
   '(service_role) when a workspace is over its caps. Returns true if a credit '
   'was claimed.';
 
 -- Only service_role may execute — an authenticated user must never be able to
 -- spend (or probe) credits directly.
-REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM anon;
-REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM authenticated;
-GRANT EXECUTE ON FUNCTION public.consume_lease_credit(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid, uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid, uuid) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_lease_credit(uuid, uuid) TO service_role;
 
 -- 5. Re-derive the entitlement guard to cover purchased_lease_credits ---------
 CREATE OR REPLACE FUNCTION public.prevent_workspace_entitlement_edits()

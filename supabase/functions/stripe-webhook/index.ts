@@ -2,7 +2,11 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
-import { ADDON_TYPE_DOCUMENT_PACK, ADDON_TYPE_SINGLE_LEASE } from "../_shared/document_packs.ts";
+import {
+  ADDON_TYPE_DOCUMENT_PACK,
+  ADDON_TYPE_SINGLE_LEASE,
+  SINGLE_LEASE_PRICE_CENTS,
+} from "../_shared/document_packs.ts";
 
 const PRICE_IDS: Record<string, string> = {
   starter: "price_1SntpyH03PByDjY31dGmC0E2",
@@ -244,16 +248,51 @@ serve(async (req) => {
       console.warn("[stripe-webhook] single-lease PI missing workspace_id", pi.id);
       return;
     }
-    const quantity = Number.parseInt(pi.metadata?.quantity ?? "1", 10) || 1;
+
+    // Trust the money, not the metadata. The only legitimate writer
+    // (manage-document-pack) stamps quantity="1" and charges
+    // SINGLE_LEASE_PRICE_CENTS[plan] to the workspace's own customer — so
+    // validate the grant against the workspace's billing state, not against
+    // self-asserted metadata. Defends the ledger if the single_lease tag is
+    // ever reused with different semantics (refund flow, dashboard PI, etc.).
+    const { data: ws } = await supabaseAdmin
+      .from("workspaces")
+      .select("plan, stripe_customer_id")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    const wsRow = ws as { plan?: string; stripe_customer_id?: string | null } | null;
+    if (!wsRow) {
+      console.warn("[stripe-webhook] single-lease PI references unknown workspace", workspaceId, pi.id);
+      return;
+    }
+    const plan: "starter" | "business" = wsRow.plan === "business" ? "business" : "starter";
+    const expectedCents = SINGLE_LEASE_PRICE_CENTS[plan];
+    const paidCents = pi.amount_received ?? pi.amount ?? 0;
+    const piCustomer = typeof pi.customer === "string" ? pi.customer : pi.customer?.id ?? null;
+
+    // Clamp quantity to exactly 1 (the only supported single-lease purchase),
+    // and require the charge to cover the price and belong to this workspace's
+    // customer. Reject rather than over-grant on any mismatch.
+    if (paidCents < expectedCents) {
+      console.error(`[stripe-webhook] single-lease PI underpaid: ${paidCents} < ${expectedCents}`, pi.id);
+      return;
+    }
+    if (wsRow.stripe_customer_id && piCustomer && piCustomer !== wsRow.stripe_customer_id) {
+      console.error("[stripe-webhook] single-lease PI customer mismatch", pi.id);
+      return;
+    }
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const purchasedBy = uuidRe.test(pi.metadata?.purchased_by ?? "") ? pi.metadata?.purchased_by : null;
+
     const { error } = await supabaseAdmin
       .from("lease_credit_purchases")
       .upsert(
         {
           workspace_id: workspaceId,
           payment_intent_id: pi.id,
-          quantity,
-          amount_cents: pi.amount_received ?? pi.amount ?? 0,
-          purchased_by: pi.metadata?.purchased_by ?? null,
+          quantity: 1,
+          amount_cents: paidCents,
+          purchased_by: purchasedBy,
         },
         { onConflict: "payment_intent_id", ignoreDuplicates: true },
       );

@@ -166,8 +166,17 @@ describe('stripe-webhook single-lease credit grant (static-source)', () => {
 
   it('never increments purchased_lease_credits directly — the DB trigger is the single writer', () => {
     const fn = applyFnBlock();
+    // The grant column is never touched here — only the ledger row is written;
+    // the AFTER INSERT trigger increments purchased_lease_credits.
     expect(fn).not.toContain('purchased_lease_credits');
-    expect(fn).not.toContain('.from("workspaces")');
+    // Workstream C added a validation SELECT on workspaces (plan + customer, to
+    // validate the charge against billing state), so the function now reads the
+    // table. The intent that survives: it must never WRITE the workspaces row —
+    // no .update/.upsert on workspaces, and the only .from("workspaces") use is
+    // the read-only validation .select(...).
+    expect(fn).toContain('.from("workspaces")\n      .select(');
+    const wsWrites = fn.match(/\.from\("workspaces"\)\s*\.\s*(update|upsert|insert|delete)/g);
+    expect(wsWrites, 'applySingleLeaseCredit must never write the workspaces row').toBeNull();
   });
 
   it('skips (does not throw) when the PI is missing workspace_id metadata', () => {
@@ -192,63 +201,115 @@ describe('stripe-webhook single-lease credit grant (static-source)', () => {
 // ---------------------------------------------------------------------------
 
 describe('process_lease single-lease credit consumption (static-source)', () => {
-  function overCapBlock(): { src: string; block: string; blockStart: number } {
+  // The over-cap credit flow was split during the Workstream C review-fix pass:
+  //   * checkProcessingQuota(...) is a side-effect-free DECISION returning
+  //     { kind: 'ok' | 'needs_credit' | 'block' } — it no longer touches the RPC.
+  //   * consumeCreditOrBlock(...) does the atomic claim and returns a block
+  //     Response (fail-closed) or null (allow). It is invoked from the NEW-lease
+  //     call site AFTER Tier 2 confirms the document is a lease, so a rejected
+  //     non-lease never burns a paid credit.
+  function consumeFn(): string {
     const src = read(PROCESS);
-    const blockStart = src.indexOf('if (overMonthly || overActive)');
+    const start = src.indexOf('async function consumeCreditOrBlock');
     const end = src.indexOf('async function extractLeaseDataWithClaude');
-    expect(blockStart).toBeGreaterThan(-1);
-    expect(end).toBeGreaterThan(blockStart);
-    return { src, block: src.slice(blockStart, end), blockStart };
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return src.slice(start, end);
   }
 
-  it('claims a credit via the consume_lease_credit RPC only AFTER a cap has tripped', () => {
-    const { src, block, blockStart } = overCapBlock();
-    expect(block).toContain("'consume_lease_credit'");
-    expect(block).toContain('{ p_workspace_id: workspaceId }');
-    // Exactly one call site (the quoted RPC name; prose comments are unquoted),
-    // and it lives inside the over-cap branch — an under-cap upload must never
-    // spend a paid credit.
-    const CALL = "'consume_lease_credit'";
+  it('claims a credit via the consume_lease_credit RPC (2-arg) inside consumeCreditOrBlock only', () => {
+    const src = read(PROCESS);
+    const fn = consumeFn();
+    expect(fn).toContain("supabaseAdmin.rpc('consume_lease_credit'");
+    // New two-arg shape: workspace + lease (the debit row attributes the spend).
+    expect(fn).toContain('p_workspace_id: workspaceId');
+    expect(fn).toContain('p_lease_id: leaseId');
+    // Exactly one RPC call site (the quoted RPC name; prose comments are
+    // unquoted), and it lives inside consumeCreditOrBlock — the side-effect-free
+    // checkProcessingQuota decision must never spend a credit.
+    const CALL = "rpc('consume_lease_credit'";
     expect(src.indexOf(CALL)).toBe(src.lastIndexOf(CALL));
-    expect(src.indexOf(CALL)).toBeGreaterThan(blockStart);
+    const consumeStart = src.indexOf('async function consumeCreditOrBlock');
+    const consumeEnd = src.indexOf('async function extractLeaseDataWithClaude');
+    expect(src.indexOf(CALL)).toBeGreaterThan(consumeStart);
+    expect(src.indexOf(CALL)).toBeLessThan(consumeEnd);
+  });
+
+  it('the claim is gated behind the needsCreditClaim guard, which sits AFTER the tier2-passed log', () => {
+    const src = read(PROCESS);
+    // The new-lease call site reserves the credit at the decision step...
+    const reserve = src.indexOf("const needsCreditClaim = quotaDecision.kind === 'needs_credit'");
+    expect(reserve).toBeGreaterThan(-1);
+    // ...the tier2-passed activity log runs next...
+    const tier2Passed = src.indexOf("activity_type: 'tier2_classification_passed'", reserve);
+    expect(tier2Passed).toBeGreaterThan(reserve);
+    // ...and the actual spend (consumeCreditOrBlock under the needsCreditClaim
+    // guard) happens AFTER that log, so a Tier-2-rejected non-lease never burns
+    // a paid credit.
+    const guard = src.indexOf('if (needsCreditClaim && resolvedWorkspaceId)', tier2Passed);
+    expect(guard).toBeGreaterThan(tier2Passed);
+    const call = src.indexOf('await consumeCreditOrBlock(', guard);
+    expect(call).toBeGreaterThan(guard);
   });
 
   it('returns null (allows the upload) when the claim returns exactly true', () => {
-    const { block } = overCapBlock();
-    const claimed = block.indexOf('else if (claimed === true)');
-    expect(claimed).toBeGreaterThan(-1);
-    // Window ends where the block-response construction begins (slicing to the
-    // next '}' would stop inside the log line's `${workspaceId}` literal).
-    const branch = block.slice(claimed, block.indexOf('const body = overMonthly'));
+    const fn = consumeFn();
+    // Allow only on a clean claim: no error AND claimed strictly true.
+    expect(fn).toContain('if (!claimErr && claimed === true)');
+    const allow = fn.indexOf('if (!claimErr && claimed === true)');
+    // Window ends where the fall-through block response begins.
+    const branch = fn.slice(allow, fn.indexOf('return quotaBlockResponse'));
     expect(branch.length).toBeGreaterThan(0);
     expect(branch).toContain('return null;');
   });
 
-  it('fails CLOSED on a claim error — falls through to the block response, never extracts', () => {
-    const { block } = overCapBlock();
-    const errStart = block.indexOf('if (claimErr)');
-    expect(errStart).toBeGreaterThan(-1);
-    const errBranch = block.slice(
-      errStart,
-      block.indexOf('else if (claimed === true)'),
-    );
-    expect(errBranch.length).toBeGreaterThan(0);
-    // Logged, but no early allow: a transient RPC failure must not grant a
-    // free over-cap extraction (contrast with the fail-open count errors).
-    expect(errBranch).toContain('console.error');
-    expect(errBranch).not.toContain('return null');
-    expect(errBranch).not.toContain('return new Response');
+  it('fails CLOSED on a claim error / no credit — returns the block response, never allows', () => {
+    const fn = consumeFn();
+    // A transient RPC failure is logged but must NOT grant a free over-cap
+    // extraction; the only non-allow exit is the block response.
+    expect(fn).toContain('if (claimErr) console.error');
+    // The single early allow is the clean-claim path above; everything else
+    // falls through to the block response.
+    const allowReturns = fn.match(/return null;/g) ?? [];
+    expect(allowReturns.length).toBe(1);
+    // The fall-through (error OR no-credit) returns the structured wall.
+    expect(fn).toContain('return quotaBlockResponse(');
   });
 
   it('blocks with the structured quota_exceeded body when no credit is claimed', () => {
-    const { block } = overCapBlock();
-    // Both cap variants carry reason + metric so the limit wall can render.
-    expect(block).toContain("reason: 'quota_exceeded'");
-    expect(block).toContain("metric: 'monthly_extractions'");
-    expect(block).toContain("metric: 'active_leases'");
+    const src = read(PROCESS);
+    // quotaBlockResponse carries reason + metric so the limit wall can render,
+    // and consumeCreditOrBlock emits one when the claim fails.
+    const helper = src.slice(
+      src.indexOf('function quotaBlockResponse'),
+      src.indexOf('async function checkProcessingQuota'),
+    );
+    expect(helper).toContain("reason: 'quota_exceeded'");
+    expect(helper).toContain('metric,');
     // 200 + structured body (functions.invoke swallows non-2xx bodies).
-    const resp = block.indexOf('return new Response(JSON.stringify(body)');
+    const resp = helper.indexOf('return new Response(');
     expect(resp).toBeGreaterThan(-1);
-    expect(block.slice(resp, resp + 200)).toContain('status: 200');
+    expect(helper).toContain('status: 200');
+    // The block decision also surfaces both metric variants from the check.
+    const check = src.slice(
+      src.indexOf('async function checkProcessingQuota'),
+      src.indexOf('async function consumeCreditOrBlock'),
+    );
+    expect(check).toContain("'monthly_extractions'");
+    expect(check).toContain("'active_leases'");
+  });
+
+  it('re-extraction (isNewLease:false) never claims a credit — it only blocks', () => {
+    const src = read(PROCESS);
+    // The executed/re-extraction call site passes isNewLease:false and acts only
+    // on a 'block' decision; there is no needsCreditClaim / consumeCreditOrBlock
+    // wired to that path (credits sell "add a lease", not re-runs).
+    const execStart = src.indexOf('const execQuota = await checkProcessingQuota(');
+    expect(execStart).toBeGreaterThan(-1);
+    const execBlock = src.slice(execStart, execStart + 400);
+    expect(execBlock).toContain('isNewLease: false');
+    expect(execBlock).toContain('if (execQuota.kind === \'block\') return execQuota.response;');
+    expect(execBlock).not.toContain('consumeCreditOrBlock');
+    expect(execBlock).not.toContain('needsCreditClaim');
   });
 });

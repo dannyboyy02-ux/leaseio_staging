@@ -697,13 +697,16 @@
     "error_payment_canceled": "Verification was canceled. You can try the payment again."
   },
   "limit_wall": {
-    "title": "You've reached your lease limit",
+    "title_monthly": "You've used this month's AI abstractions",
+    "title_active": "You've reached your active-lease limit",
     "body_monthly": "This workspace has used {{used}} of {{limit}} AI abstractions in the last 30 days.",
     "body_active": "This workspace has {{used}} of {{limit}} active leases.",
+    "archive_title": "Archive a lease — free",
+    "archive_desc": "No longer tracking a lease? Archive it to free a slot at no cost.",
     "upgrade_title": "Upgrade to Business",
-    "upgrade_desc": "${{price}}/month — {{included}} abstractions included, plus the AI assistant, portfolio intelligence, and unlimited users.",
+    "upgrade_desc": "${{price}}/month — {{included}} abstractions and active leases included, plus the AI assistant, portfolio intelligence, and unlimited users.",
     "pack_title": "Add a capacity pack",
-    "pack_desc": "From ${{price}} per lease — a monthly pack that raises your limit. Cancel anytime.",
+    "pack_desc": "From ${{price}} per lease (packs from ${{monthly}}/mo) — raises your limit. Cancel anytime.",
     "single_title": "Buy 1 lease — ${{price}} one-time",
     "single_desc": "Need just one more right now? A single credit lets your next lease through.",
     "single_consent_title": "Buy 1 lease for ${{price}}",
@@ -713,7 +716,8 @@
     "single_confirm": "Pay ${{price}}",
     "single_success_title": "Credit added",
     "single_success_desc": "You can add your lease now — the credit is used automatically.",
-    "single_pending": "Payment confirmed. Your credit will be ready in a moment — try your upload shortly.",
+    "single_pending_title": "Payment confirmed",
+    "single_pending": "Your credit will be ready in a moment — try your upload shortly. No need to pay again.",
     "member_note": "This workspace is at its lease limit. Only workspace admins can buy more capacity — contact your admin to purchase additional leases."
   },
   "quota_banner": {
