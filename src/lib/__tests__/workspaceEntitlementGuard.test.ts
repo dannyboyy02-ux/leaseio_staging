@@ -159,3 +159,64 @@ describe('workspace entitlement guard — KNOWN_ISSUES #29', () => {
     expect(archived).toContain("COALESCE(auth.role(), '') <> 'authenticated'");
   });
 });
+
+// ============================================================================
+// addon_document_capacity — document packs (2026-06-11)
+//
+// The pack-capacity column is a billing-managed entitlement: an authenticated
+// owner who could PATCH it would self-grant unlimited abstraction capacity (the
+// #29 billing-bypass class). The CREATE OR REPLACE in this migration is the
+// LIVE guard definition (last-applied wins), so its column coverage — including
+// the new column on BOTH branches — is what protects prod.
+// ============================================================================
+describe('addon_document_capacity entitlement guard (document packs)', () => {
+  const MIGRATION = 'supabase/migrations/20260611120000_add_addon_document_capacity.sql';
+
+  it('adds the column NOT NULL DEFAULT 0', () => {
+    const m = readRepoFile(MIGRATION);
+    expect(m).toContain('ADD COLUMN IF NOT EXISTS addon_document_capacity integer NOT NULL DEFAULT 0');
+  });
+
+  it('re-derives the guard covering addon_document_capacity on INSERT and UPDATE', () => {
+    const m = readRepoFile(MIGRATION);
+    const fn = m.slice(
+      m.indexOf('CREATE OR REPLACE FUNCTION public.prevent_workspace_entitlement_edits'),
+      m.indexOf('ALTER FUNCTION public.prevent_workspace_entitlement_edits'),
+    );
+    expect(fn.length).toBeGreaterThan(0);
+    // Carve-out preserved.
+    expect(fn).toContain("COALESCE(auth.role(), '') = 'service_role'");
+    expect(fn).not.toContain('SECURITY DEFINER');
+    // INSERT branch pins the new column to 0.
+    const insertBranch = fn.slice(fn.indexOf("IF TG_OP = 'INSERT' THEN"), fn.indexOf("-- TG_OP = 'UPDATE'"));
+    expect(insertBranch).toContain('NEW.addon_document_capacity IS DISTINCT FROM 0');
+    // UPDATE branch blocks any change (service_role already short-circuited).
+    const updateBranch = fn.slice(fn.indexOf("-- TG_OP = 'UPDATE'"));
+    expect(updateBranch).toContain('NEW.addon_document_capacity IS DISTINCT FROM OLD.addon_document_capacity');
+    // Regression: every other guarded column must still be present in the
+    // re-derived function (a CREATE OR REPLACE that dropped one would silently
+    // unguard it).
+    for (const col of [
+      'plan', 'document_limit', 'documents_used', 'billing_interval',
+      'stripe_customer_id', 'stripe_subscription_id', 'subscription_status',
+      'subscription_period_end', 'max_archived_leases',
+    ]) {
+      expect(updateBranch).toContain(`NEW.${col} IS DISTINCT FROM OLD.${col}`);
+    }
+  });
+
+  it('recreates the trigger so the replay binds to the replaced function', () => {
+    const m = readRepoFile(MIGRATION);
+    expect(m).toContain('DROP TRIGGER IF EXISTS enforce_workspace_entitlement_guard ON public.workspaces');
+    expect(m).toContain('BEFORE INSERT OR UPDATE ON public.workspaces');
+  });
+
+  it('does NOT guard intended_plan (still writable for recovery)', () => {
+    const m = readRepoFile(MIGRATION);
+    const fn = m.slice(
+      m.indexOf('CREATE OR REPLACE FUNCTION'),
+      m.indexOf('ALTER FUNCTION'),
+    );
+    expect(fn).not.toContain('intended_plan');
+  });
+});

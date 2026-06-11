@@ -36,6 +36,10 @@ export interface Workspace {
   maxArchivedLeases: number;
   archivedLeasesUsed: number;
   documentLimit: number;
+  // Extra monthly-abstraction + active-lease capacity from active document
+  // packs (sum of pack sizes, mirrored from Stripe by the webhook). 0 when no
+  // pack. Effective allowance = documentLimit + addonDocumentCapacity.
+  addonDocumentCapacity: number;
   // AI abstractions in the trailing 30 days — a live count mirroring
   // process_lease's assertProcessingQuota window. NOT the dead
   // workspaces.documents_used DB column (KNOWN_ISSUES #31).

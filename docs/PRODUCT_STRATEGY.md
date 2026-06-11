@@ -1,6 +1,6 @@
 # LeaseIO Product Strategy — Tiers, Firm Layer, and Architecture Decisions
 
-**Status:** Strategic decision document. Ratified 2026-05-04.
+**Status:** Strategic decision document. Ratified 2026-05-04 (last updated 2026-06-11).
 **Owner:** Daniel
 **Audience:** Claude Code, future contributors, anyone making decisions that span phases.
 
@@ -102,6 +102,28 @@ The build order is:
 2. Phase 9: Firm layer foundation (firm entity, firm members, firm-level Stripe billing, firm-aware RLS)
 3. Phase 10: Firm UX (cross-workspace inbox, firm dashboard, child workspace management)
 4. Phase 11+ (post-launch): firm-level reporting, white-labeling, advanced firm roles, client onboarding flows
+
+---
+
+## Decision 4 — Document capacity packs (recurring monthly add-on)  *(2026-06-11)*
+
+**Decided:** A workspace at or near its monthly abstraction limit can buy a recurring **document pack** that raises both its monthly-abstraction allowance and its active-lease cap. Available on **both tiers**.
+
+**Pricing:** 10 leases/$90 ($9/ea) · 20/$160 ($8/ea) · 50/$350 ($7/ea).
+
+**Rationale (market-researched + pressure-tested):**
+- **Cheaper than overage, always.** Overage is $12/doc (Starter) / $10/doc (Business). The smallest pack ($9/ea) beats both, so packs are the rational relief valve and overage is the expensive convenience. ($100/10-pack would have tied Business overage — hence $90.)
+- **Margin floor holds.** Two-pass extraction costs ≈ $0.50–0.60/doc; doubled per the 75%-margin rule = $1.20, so the floor sits at ≈ $4.80/lease. Worst-case pack price ($7) clears it with ~45% headroom.
+- **Doesn't cannibalize the upgrade path.** Starter + 20-pack ($409, 35 docs) still loses to Business ($499, 50 docs + all Business features) on value; at high volume the ladder pushes toward Business, as intended.
+- **Undercuts the market.** Competitor per-doc AI abstraction runs ~$20–25 (Prophia/LeaseLens/Lextract); $7–9/lease undercuts by 2–3× while staying well above cost.
+
+**Architecture:** Each pack is its **own Stripe subscription** (not a line item on the plan subscription), tagged `metadata.addon_type='document_pack'` + `pack_size`. Full price charged on purchase, **no proration**, **cancel-at-period-end** (capacity persists until the period ends; leases are never touched). Capacity is **additive** — `workspaces.addon_document_capacity` is the sum of the workspace's active/trialing pack sizes, written **only** by the Stripe webhook and guarded by the #29 entitlement trigger. Separate-subscription (vs. shared-subscription line items) was chosen because it (a) charges full price immediately with a clean cycle, (b) yields clean per-pack invoice streams that directly feed the future itemized-billing surface (KNOWN_ISSUES #60), and (c) cancels independently of the plan.
+
+**A pack raises BOTH caps** (monthly abstractions AND active-lease storage) by its size — "a pack of N leases" as a user reads it. The two base caps are equal (15/15, 50/50), so adding to both keeps them coherent.
+
+**Quota window stays rolling-30-day** (NOT billing-period-aligned). The alignment rewrite was scoped then **descoped (2026-06-11)**: the proven rolling window self-resets and is the same window the usage meter shows; the only motivation for alignment (copy contradicting a rolling window) was already solved with honest copy. Rewriting the margin-protecting enforcement path was judged not worth the risk.
+
+**At-cap behavior** (when packs ship alongside the limit wall, Workstream C): hard-block stays the default; packs and a one-off single-lease purchase are the relief options offered in the wall. Auto-charged overage is opt-in only (avoids bill-shock disputes).
 
 ---
 

@@ -42,6 +42,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ANNUAL_DISCOUNT_PERCENT, PLANS, PLAN_ORDER, isUpgrade, normalizePlanId } from '@/config/pricing';
 import { trialDaysRemaining } from '@/lib/trialStatus';
+import { DocumentPackDialog } from '@/components/workspace/DocumentPackDialog';
 import type { SubscriptionPlan } from '@/types';
 
 const timezones = [
@@ -154,6 +155,7 @@ export default function AccountSettings() {
   const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<string | null>(null);
   const [confirmDowngradePlan, setConfirmDowngradePlan] = useState<string | null>(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [packDialogOpen, setPackDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   // Billing interval selection for the in-app upgrade flow. Defaults
   // monthly; can be set to 'annual' via the toggle on the plan grid OR
@@ -179,6 +181,14 @@ export default function AccountSettings() {
       // cleanup below). Without this the success branch re-fired in a loop.
       const next = new URLSearchParams(searchParams);
       next.delete('checkout');
+      navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
+    }
+
+    // Deep-link from the quota banner's "Add capacity" CTA opens the pack dialog.
+    if (searchParams.get('packs') === '1') {
+      setPackDialogOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('packs');
       navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
     }
 
@@ -491,10 +501,11 @@ export default function AccountSettings() {
       })
     : null;
   const trialDaysLeft = trialDaysRemaining(workspace?.subscriptionPeriodEnd);
+  // Effective allowance = base plan limit + active document-pack capacity.
+  const addonCapacity = workspace?.addonDocumentCapacity ?? 0;
+  const effectiveLimit = (workspace?.documentLimit ?? 0) + addonCapacity;
   const usageRatio =
-    workspace && workspace.documentLimit > 0
-      ? workspace.documentsUsed / workspace.documentLimit
-      : 0;
+    workspace && effectiveLimit > 0 ? workspace.documentsUsed / effectiveLimit : 0;
   const railTriggerClass =
     'w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
 
@@ -1033,7 +1044,10 @@ export default function AccountSettings() {
                       <div className="flex items-baseline justify-between mb-2">
                         <span className="text-sm font-medium">{t('account.document_usage')}</span>
                         <span className="text-sm text-muted-foreground">
-                          {workspace.documentsUsed} / {workspace.documentLimit}
+                          {workspace.documentsUsed} / {effectiveLimit}
+                          {addonCapacity > 0 && (
+                            <span className="text-xs"> {t('account.usage_includes_pack', { count: addonCapacity })}</span>
+                          )}
                         </span>
                       </div>
                       <Progress
@@ -1093,6 +1107,28 @@ export default function AccountSettings() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Lease capacity packs */}
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('packs.card_title')}</CardTitle>
+                <CardDescription>{t('packs.card_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">
+                    {addonCapacity > 0
+                      ? t('packs.card_current', { count: addonCapacity })
+                      : t('packs.card_none')}
+                  </p>
+                  {isAdminUser && (
+                    <Button variant="outline" size="sm" onClick={() => setPackDialogOpen(true)}>
+                      {t('packs.card_cta')}
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Plans */}
             <div>
@@ -1380,6 +1416,9 @@ export default function AccountSettings() {
           </div>
         </Tabs>
       </div>
+
+      {/* Document capacity pack purchase/manage dialog */}
+      <DocumentPackDialog open={packDialogOpen} onOpenChange={setPackDialogOpen} />
 
       {/* Upgrade Confirmation Dialog */}
       <AlertDialog open={!!confirmUpgradePlan} onOpenChange={() => setConfirmUpgradePlan(null)}>

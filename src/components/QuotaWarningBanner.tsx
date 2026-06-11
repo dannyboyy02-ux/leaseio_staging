@@ -134,6 +134,13 @@ export function QuotaWarningBanner() {
             {isCritical ? ' Upgrade to keep growing without interruption.' : ' Plan ahead for an upgrade.'}
           </p>
         </div>
+        {/* Packs raise the abstraction + active-lease caps, so offer a pack CTA
+            on exactly those two metrics (not archive/member caps). */}
+        {(banner.metric === 'monthly_extractions' || banner.metric === 'active_leases') && (
+          <Button asChild size="sm" variant="outline">
+            <Link to="/app/settings/account?tab=subscription&packs=1">Add capacity</Link>
+          </Button>
+        )}
         <Button asChild size="sm" variant={isCritical ? 'destructive' : 'outline'}>
           <Link to="/app/settings/account?tab=subscription">
             {isCritical ? 'Upgrade now' : 'View plans'}

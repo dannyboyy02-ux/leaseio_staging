@@ -244,9 +244,14 @@ describe('AccountSettings subscription tab', () => {
     expect(derivation).toContain(': null');
   });
 
-  it('usage meter guards against division by zero/undefined documentLimit', () => {
+  it('usage meter guards against division by zero and counts pack capacity', () => {
+    // Effective allowance = base documentLimit + active document-pack capacity;
+    // the ratio guards on the effective limit so a 0 limit can't divide-by-zero.
+    const derivation = sliceBetween(source, 'const addonCapacity', 'const usageRatio');
+    expect(derivation).toContain('workspace?.addonDocumentCapacity ?? 0');
+    expect(derivation).toContain('(workspace?.documentLimit ?? 0) + addonCapacity');
     const ratio = sliceBetween(source, 'const usageRatio', ';');
-    expect(ratio).toContain('workspace.documentLimit > 0');
+    expect(ratio).toContain('effectiveLimit > 0');
     expect(ratio).toContain(': 0');
   });
 

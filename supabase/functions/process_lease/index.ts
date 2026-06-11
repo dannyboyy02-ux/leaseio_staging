@@ -1058,11 +1058,21 @@ async function assertProcessingQuota(
 
   const { data: ws } = await supabaseAdmin
     .from('workspaces')
-    .select('plan')
+    .select('plan, addon_document_capacity')
     .eq('id', workspaceId)
     .maybeSingle();
   const plan = ((ws as { plan?: string } | null)?.plan === 'business') ? 'business' : 'starter';
-  const limits = PLAN_QUOTAS[plan];
+  const base = PLAN_QUOTAS[plan];
+
+  // Document packs raise BOTH the monthly-abstraction allowance and the
+  // active-lease cap by the workspace's total active pack capacity (written
+  // only by the Stripe webhook, guarded by the #29 entitlement trigger).
+  // Defensive: clamp to >= 0 so a bad value can never shrink the base cap.
+  const addon = Math.max(0, Number((ws as { addon_document_capacity?: number } | null)?.addon_document_capacity ?? 0));
+  const limits = {
+    active_leases: base.active_leases + addon,
+    monthly_extractions: base.monthly_extractions + addon,
+  };
 
   // Monthly extractions — always checked.
   const since30dIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();

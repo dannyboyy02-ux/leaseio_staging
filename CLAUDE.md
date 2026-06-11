@@ -86,6 +86,7 @@ Canonical helpers: `src/lib/lifecycleStates.ts` (+ Deno mirror); pure chain logi
 **No unlimited tiers. 75% gross-margin floor at max usage even if AI costs double.**
 
 - **Onboarding Packs** (one-time historical load): Starter 15 docs/$200 · Growth 50 docs/$500 · Portfolio 150 docs/$1,200 · additional $12/doc.
+- **Document Capacity Packs** (recurring monthly add-on, both tiers): 10 leases/$90 ($9/ea) · 20/$160 ($8/ea) · 50/$350 ($7/ea). Each pack is its OWN Stripe subscription (full price on purchase, no proration, cancel-at-period-end) tagged `metadata.addon_type='document_pack'` so the webhook never confuses it with a plan sub. A pack raises BOTH the monthly-abstraction allowance AND the active-lease cap by its size; capacity is additive (`workspaces.addon_document_capacity` = sum of active pack sizes, written only by the webhook, guarded by the #29 entitlement trigger). Every pack's per-lease price beats both overage rates, so a pack is always the cheaper relief valve. Quota stays the proven rolling-30-day window (NOT billing-period-aligned — descoped 2026-06-11; honest copy covers the rolling semantics). Config: `DOCUMENT_PACKS` in `pricing.ts` + Deno mirror `supabase/functions/_shared/document_packs.ts`; Stripe Price IDs from `STRIPE_PRICE_PACK_{10,20,50}` env (fail-closed if unset).
 - **Free Lease Audit** (GTM lead magnet, NOT a tier): 5 docs free → portfolio summary → upgrade CTA to Starter.
 
 ---
