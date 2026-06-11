@@ -23,6 +23,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
+import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
+import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
 import { AddLeaseDialog } from '@/components/leases/AddLeaseDialog';
 import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
@@ -90,10 +92,23 @@ export default function Leases() {
   const { t } = useLanguage();
   const { workspace } = useApp();
   const [searchParams] = useSearchParams();
+  const quota = useWorkspaceQuota();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addLeaseDialogOpen, setAddLeaseDialogOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [limitWallOpen, setLimitWallOpen] = useState(false);
+
+  // Limit wall gate — at the cap (with no spendable credit), intake entry
+  // points open the wall instead of the chooser. The server re-checks in
+  // process_lease, so this is UX, not enforcement.
+  const handleAddLease = () => {
+    if (quota.blocked) {
+      setLimitWallOpen(true);
+    } else {
+      setAddLeaseDialogOpen(true);
+    }
+  };
   const [selectedLease, setSelectedLease] = useState<LeaseRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [expirationFilter, setExpirationFilter] = useState<'all' | '30' | '90' | '120'>(
@@ -354,7 +369,7 @@ export default function Leases() {
         title={t('leases.title')}
         subtitle={headerSubtitle}
         actions={
-          <Button variant="accent" onClick={() => setAddLeaseDialogOpen(true)}>
+          <Button variant="accent" onClick={handleAddLease}>
             <Plus className="mr-2 h-4 w-4" />
             Add Lease
           </Button>
@@ -367,7 +382,7 @@ export default function Leases() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : leases.length === 0 ? (
-          <EmptyLeaseState onAddLease={() => setAddLeaseDialogOpen(true)} />
+          <EmptyLeaseState onAddLease={handleAddLease} />
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -566,7 +581,13 @@ export default function Leases() {
         open={uploadModalOpen}
         onOpenChange={setUploadModalOpen}
         onSuccess={(leaseId) => { fetchLeases(); navigate(`/app/leases/${leaseId}`); }}
+        onQuotaExceeded={() => {
+          setUploadModalOpen(false);
+          setLimitWallOpen(true);
+        }}
       />
+
+      <LimitReachedDialog open={limitWallOpen} onOpenChange={setLimitWallOpen} />
     </AppLayout>
   );
 }

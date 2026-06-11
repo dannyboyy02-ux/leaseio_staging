@@ -29,6 +29,17 @@ export const DOCUMENT_PACKS: Record<string, DocumentPack> = {
 /** Metadata tag stamped on every pack subscription. */
 export const ADDON_TYPE_DOCUMENT_PACK = "document_pack";
 
+/** Metadata tag stamped on every one-time single-lease PaymentIntent. */
+export const ADDON_TYPE_SINGLE_LEASE = "single_lease";
+
+// One-time single-lease price per plan, in cents — the plan's overage rate.
+// Mirrors overagePerDoc in src/config/pricing.ts ($12 starter / $10 business).
+// Charged as a direct PaymentIntent amount (no Stripe Price object needed).
+export const SINGLE_LEASE_PRICE_CENTS: Record<"starter" | "business", number> = {
+  starter: 1200,
+  business: 1000,
+};
+
 /** Resolve a pack's Stripe Price ID from env, or null if unconfigured. */
 export function packPriceId(pack: DocumentPack): string | null {
   return Deno.env.get(pack.priceEnvVar) ?? null;

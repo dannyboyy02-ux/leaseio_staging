@@ -101,7 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, addon_document_capacity, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end";
+        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -231,6 +231,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         addonDocumentCapacity: Math.max(
           0,
           Number((resolvedWorkspace as any).addon_document_capacity ?? 0),
+        ),
+        purchasedLeaseCredits: Math.max(
+          0,
+          Number((resolvedWorkspace as any).purchased_lease_credits ?? 0),
         ),
         documentsUsed: monthlyRes.count || 0,
         timezone: resolvedWorkspace.timezone || profile.timezone || "America/New_York",

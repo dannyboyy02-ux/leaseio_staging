@@ -166,8 +166,10 @@ describe('stripe-webhook document-pack classification', () => {
 
   it('classifies via the shared ADDON_TYPE_DOCUMENT_PACK metadata tag', () => {
     const src = read(WEBHOOK);
-    expect(src).toContain(
-      'import { ADDON_TYPE_DOCUMENT_PACK } from "../_shared/document_packs.ts"',
+    // The import also carries ADDON_TYPE_SINGLE_LEASE since Workstream C —
+    // match on members, not the exact line.
+    expect(src).toMatch(
+      /import \{[^}]*ADDON_TYPE_DOCUMENT_PACK[^}]*\} from "\.\.\/_shared\/document_packs\.ts"/,
     );
     const fn = src.slice(
       src.indexOf('function isDocumentPack'),

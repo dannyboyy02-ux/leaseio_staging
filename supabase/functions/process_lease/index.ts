@@ -1090,26 +1090,12 @@ async function assertProcessingQuota(
     return null;
   }
   const monthlyExtractions = monthlyExtractionCount ?? 0;
-  if (monthlyExtractions >= limits.monthly_extractions) {
-    // 200 + structured body, same pattern as tier2_classification_failed —
-    // the frontend's `supabase.functions.invoke` swallows non-2xx into a
-    // generic FunctionsHttpError, but parses the body cleanly on 200.
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: `This workspace has reached its monthly AI extraction limit (${limits.monthly_extractions}/mo on ${plan}). Upgrade to Business or wait for the rolling 30-day window to roll over.`,
-        reason: 'quota_exceeded',
-        metric: 'monthly_extractions',
-        plan,
-        current: monthlyExtractions,
-        limit: limits.monthly_extractions,
-      }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    );
-  }
+  const overMonthly = monthlyExtractions >= limits.monthly_extractions;
 
   // Active leases — only for genuinely new uploads. Re-extracting an
   // executed document on an existing lease doesn't add to the count.
+  let overActive = false;
+  let active = 0;
   if (opts.isNewLease) {
     const { count: activeCount, error: activeErr } = await supabaseAdmin
       .from('leases')
@@ -1121,21 +1107,54 @@ async function assertProcessingQuota(
       console.error('[process_lease] quota: active count failed:', activeErr.message);
       return null;
     }
-    const active = activeCount ?? 0;
-    if (active >= limits.active_leases) {
-      return new Response(
-        JSON.stringify({
+    active = activeCount ?? 0;
+    overActive = active >= limits.active_leases;
+  }
+
+  if (overMonthly || overActive) {
+    // A purchased single-lease credit ("buy 1 lease" at the overage rate)
+    // covers this ONE upload through both caps. consume_lease_credit is an
+    // atomic claim (UPDATE guarded by > 0, service_role-only RPC), so two
+    // concurrent uploads can never spend the same credit. Exactly one credit
+    // is spent per upload regardless of which cap(s) tripped.
+    const { data: claimed, error: claimErr } = await supabaseAdmin.rpc(
+      'consume_lease_credit',
+      { p_workspace_id: workspaceId },
+    );
+    if (claimErr) {
+      console.error('[process_lease] quota: credit claim failed:', claimErr.message);
+      // Fall through to the block response — never extract unpaid over-cap.
+    } else if (claimed === true) {
+      console.log(`[process_lease] quota: single-lease credit consumed for ${workspaceId}`);
+      return null;
+    }
+
+    // 200 + structured body, same pattern as tier2_classification_failed —
+    // the frontend's `supabase.functions.invoke` swallows non-2xx into a
+    // generic FunctionsHttpError, but parses the body cleanly on 200.
+    const body = overMonthly
+      ? {
           ok: false,
-          error: `This workspace has reached its active-lease limit (${limits.active_leases} on ${plan}). Archive an existing lease or upgrade to Business before uploading more.`,
+          error: `This workspace has reached its monthly AI extraction limit (${limits.monthly_extractions}/mo on ${plan}). Buy more capacity or wait for the rolling 30-day window to roll over.`,
+          reason: 'quota_exceeded',
+          metric: 'monthly_extractions',
+          plan,
+          current: monthlyExtractions,
+          limit: limits.monthly_extractions,
+        }
+      : {
+          ok: false,
+          error: `This workspace has reached its active-lease limit (${limits.active_leases} on ${plan}). Archive an existing lease or buy more capacity before uploading more.`,
           reason: 'quota_exceeded',
           metric: 'active_leases',
           plan,
           current: active,
           limit: limits.active_leases,
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
-    }
+        };
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   return null;

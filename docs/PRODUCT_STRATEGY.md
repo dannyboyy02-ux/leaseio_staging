@@ -123,7 +123,7 @@ The build order is:
 
 **Quota window stays rolling-30-day** (NOT billing-period-aligned). The alignment rewrite was scoped then **descoped (2026-06-11)**: the proven rolling window self-resets and is the same window the usage meter shows; the only motivation for alignment (copy contradicting a rolling window) was already solved with honest copy. Rewriting the margin-protecting enforcement path was judged not worth the risk.
 
-**At-cap behavior** (when packs ship alongside the limit wall, Workstream C): hard-block stays the default; packs and a one-off single-lease purchase are the relief options offered in the wall. Auto-charged overage is opt-in only (avoids bill-shock disputes).
+**At-cap behavior** (limit wall, shipped 2026-06-11): hard-block stays the default. The wall (`LimitReachedDialog`) gates the Leases "Add Lease" and Dashboard "New Request" entry points (plus a server backstop in the upload modal) and offers plan-aware doors: upgrade (Starter only), a capacity pack, or a **one-time single lease at the overage rate** ($12/$10 → one `purchased_lease_credits` credit, granted via an idempotent payment ledger and consumed atomically by `process_lease` when over cap). There is NO auto-charged overage — every over-cap dollar is an explicit, consented purchase. Non-admins are told to contact their admin.
 
 ---
 

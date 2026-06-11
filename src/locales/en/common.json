@@ -696,6 +696,26 @@
     "three_ds_note": "Complete the verification in the secure popup from your bank to finish.",
     "error_payment_canceled": "Verification was canceled. You can try the payment again."
   },
+  "limit_wall": {
+    "title": "You've reached your lease limit",
+    "body_monthly": "This workspace has used {{used}} of {{limit}} AI abstractions in the last 30 days.",
+    "body_active": "This workspace has {{used}} of {{limit}} active leases.",
+    "upgrade_title": "Upgrade to Business",
+    "upgrade_desc": "${{price}}/month — {{included}} abstractions included, plus the AI assistant, portfolio intelligence, and unlimited users.",
+    "pack_title": "Add a capacity pack",
+    "pack_desc": "From ${{price}} per lease — a monthly pack that raises your limit. Cancel anytime.",
+    "single_title": "Buy 1 lease — ${{price}} one-time",
+    "single_desc": "Need just one more right now? A single credit lets your next lease through.",
+    "single_consent_title": "Buy 1 lease for ${{price}}",
+    "single_consent_charge": "${{price}} is charged today to your card on file. One-time — nothing recurring.",
+    "single_consent_grant": "You get 1 lease credit, used automatically on your next upload over the limit.",
+    "single_consent_compare": "Buying more than a couple? A pack is cheaper — from ${{packPrice}} per lease.",
+    "single_confirm": "Pay ${{price}}",
+    "single_success_title": "Credit added",
+    "single_success_desc": "You can add your lease now — the credit is used automatically.",
+    "single_pending": "Payment confirmed. Your credit will be ready in a moment — try your upload shortly.",
+    "member_note": "This workspace is at its lease limit. Only workspace admins can buy more capacity — contact your admin to purchase additional leases."
+  },
   "quota_banner": {
     "metric_active_leases": "active leases",
     "metric_archived_leases": "archived leases",

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
-import { ADDON_TYPE_DOCUMENT_PACK } from "../_shared/document_packs.ts";
+import { ADDON_TYPE_DOCUMENT_PACK, ADDON_TYPE_SINGLE_LEASE } from "../_shared/document_packs.ts";
 
 const PRICE_IDS: Record<string, string> = {
   starter: "price_1SntpyH03PByDjY31dGmC0E2",
@@ -233,8 +233,45 @@ serve(async (req) => {
     }
   }
 
+  // Grant a single-lease credit for a succeeded one-time PaymentIntent. The
+  // ledger's UNIQUE(payment_intent_id) makes webhook retries idempotent — the
+  // duplicate insert no-ops and the grant trigger never fires twice. The
+  // workspace counter is incremented by the lease_credit_purchases AFTER
+  // INSERT trigger, not here, so grant accounting has exactly one writer.
+  async function applySingleLeaseCredit(pi: Stripe.PaymentIntent) {
+    const workspaceId = pi.metadata?.workspace_id;
+    if (!workspaceId) {
+      console.warn("[stripe-webhook] single-lease PI missing workspace_id", pi.id);
+      return;
+    }
+    const quantity = Number.parseInt(pi.metadata?.quantity ?? "1", 10) || 1;
+    const { error } = await supabaseAdmin
+      .from("lease_credit_purchases")
+      .upsert(
+        {
+          workspace_id: workspaceId,
+          payment_intent_id: pi.id,
+          quantity,
+          amount_cents: pi.amount_received ?? pi.amount ?? 0,
+          purchased_by: pi.metadata?.purchased_by ?? null,
+        },
+        { onConflict: "payment_intent_id", ignoreDuplicates: true },
+      );
+    if (error) {
+      throw new Error(`Failed to record lease credit purchase: ${error.message}`);
+    }
+  }
+
   try {
     switch (event.type) {
+      case "payment_intent.succeeded": {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        if (pi.metadata?.addon_type === ADDON_TYPE_SINGLE_LEASE) {
+          await applySingleLeaseCredit(pi);
+        }
+        break;
+      }
+
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const workspaceId = session.metadata?.workspace_id ?? null;

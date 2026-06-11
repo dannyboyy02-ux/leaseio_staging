@@ -26,7 +26,9 @@ import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { enforceWorkspaceRateLimit } from "../_shared/audit.ts";
 import {
   ADDON_TYPE_DOCUMENT_PACK,
+  ADDON_TYPE_SINGLE_LEASE,
   DOCUMENT_PACKS,
+  SINGLE_LEASE_PRICE_CENTS,
   packPriceId,
 } from "../_shared/document_packs.ts";
 
@@ -41,7 +43,7 @@ function jsonResponse(payload: unknown, status: number, origin: string | null) {
 }
 
 interface RequestBody {
-  mode?: "preview" | "confirm" | "cancel";
+  mode?: "preview" | "confirm" | "cancel" | "buy_single";
   workspaceId?: string;
   packId?: string;
   subscriptionId?: string;
@@ -51,8 +53,10 @@ interface RequestBody {
 interface WorkspaceRow {
   id: string;
   owner_id: string;
+  plan: string | null;
   stripe_customer_id: string | null;
   addon_document_capacity: number | null;
+  purchased_lease_credits: number | null;
 }
 
 // Owner OR workspace admin may manage billing (matches create-checkout).
@@ -186,7 +190,7 @@ serve(async (req) => {
   // Load + authorize the workspace.
   const { data: wsData } = await supabaseAdmin
     .from("workspaces")
-    .select("id, owner_id, stripe_customer_id, addon_document_capacity")
+    .select("id, owner_id, plan, stripe_customer_id, addon_document_capacity, purchased_lease_credits")
     .eq("id", workspaceId)
     .maybeSingle();
   const ws = wsData as WorkspaceRow | null;
@@ -206,6 +210,9 @@ serve(async (req) => {
     configured: Boolean(packPriceId(p)),
   }));
 
+  const plan: "starter" | "business" = ws.plan === "business" ? "business" : "starter";
+  const singleLeasePriceCents = SINGLE_LEASE_PRICE_CENTS[plan];
+
   // ── PREVIEW ───────────────────────────────────────────────────────────
   if (mode === "preview") {
     const card = await resolveCard(stripe, supabaseAdmin, ws, user.email);
@@ -218,12 +225,75 @@ serve(async (req) => {
         cardLast4: card.ok ? card.cardLast4 : null,
         cardBrand: card.ok ? card.cardBrand : null,
         currentCapacity: Math.max(0, Number(ws.addon_document_capacity ?? 0)),
+        currentCredits: Math.max(0, Number(ws.purchased_lease_credits ?? 0)),
+        singleLeasePriceUsd: singleLeasePriceCents / 100,
         activePacks,
         catalog,
       },
       200,
       origin,
     );
+  }
+
+  // ── BUY SINGLE (one-time credit at the overage rate) ────────────────────
+  if (mode === "buy_single") {
+    const idempotencyKey = body.idempotencyKey;
+    if (!idempotencyKey || typeof idempotencyKey !== "string" || idempotencyKey.length < 8) {
+      return jsonResponse({ ok: false, reason: "bad_request", error: "idempotencyKey required" }, 400, origin);
+    }
+    const rl = await enforceWorkspaceRateLimit(supabaseAdmin, workspaceId, "manage-document-pack", origin, 10);
+    if (rl) return rl;
+
+    const card = await resolveCard(stripe, supabaseAdmin, ws, user.email);
+    if (!card.ok) return jsonResponse({ ok: false, reason: card.reason }, 402, origin);
+
+    try {
+      // On-session one-time charge at the plan's overage rate. confirm: true
+      // settles no-3DS cards immediately; a 3DS card returns requires_action
+      // with a client_secret for the dialog to drive confirmCardPayment.
+      // The webhook (payment_intent.succeeded) grants the credit via the
+      // idempotent ledger — this function never writes entitlements.
+      const pi = await stripe.paymentIntents.create(
+        {
+          amount: singleLeasePriceCents,
+          currency: "usd",
+          customer: card.customerId,
+          payment_method: card.pmId,
+          confirm: true,
+          off_session: false,
+          description: "LeaseIO — single lease credit",
+          metadata: {
+            workspace_id: workspaceId,
+            addon_type: ADDON_TYPE_SINGLE_LEASE,
+            quantity: "1",
+            purchased_by: user.id,
+          },
+        },
+        { idempotencyKey: `single_${workspaceId}_${idempotencyKey}` },
+      );
+
+      return jsonResponse(
+        {
+          ok: true,
+          paymentIntentStatus: pi.status,
+          clientSecret: pi.status === "requires_action" ? pi.client_secret : null,
+          priceUsd: singleLeasePriceCents / 100,
+        },
+        200,
+        origin,
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[manage-document-pack] single-lease PI failed:", msg);
+      // Card declines surface as Stripe errors here (confirm: true). Return a
+      // typed reason without leaking Stripe internals.
+      const isCardError = typeof e === "object" && e !== null && (e as { type?: string }).type === "StripeCardError";
+      return jsonResponse(
+        { ok: false, reason: isCardError ? "payment_failed" : "stripe_error" },
+        isCardError ? 402 : 502,
+        origin,
+      );
+    }
   }
 
   // ── CANCEL ────────────────────────────────────────────────────────────
