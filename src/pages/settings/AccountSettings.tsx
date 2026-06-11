@@ -34,6 +34,7 @@ import {
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -150,6 +151,8 @@ export default function AccountSettings() {
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null);
   const [isManagingPayment, setIsManagingPayment] = useState(false);
   const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<string | null>(null);
+  const [confirmDowngradePlan, setConfirmDowngradePlan] = useState<string | null>(null);
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   // Billing interval selection for the in-app upgrade flow. Defaults
   // monthly; can be set to 'annual' via the toggle on the plan grid OR
@@ -164,10 +167,10 @@ export default function AccountSettings() {
 
     const checkout = searchParams.get('checkout');
     if (checkout === 'success') {
-      toast.success('Subscription activated successfully!');
+      toast.success(t('account.checkout_success'));
       refreshProfile();
     } else if (checkout === 'canceled') {
-      toast.info('Checkout was canceled');
+      toast.info(t('account.checkout_canceled'));
     }
 
     // Pre-arm billing interval from onboarding handoff. Stays in state
@@ -177,6 +180,7 @@ export default function AccountSettings() {
     if (billing === 'annual' || billing === 'monthly') {
       setBillingInterval(billing);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, refreshProfile]);
 
   useEffect(() => {
@@ -458,6 +462,27 @@ export default function AccountSettings() {
   const currentPlan = normalizePlanId(workspace?.plan);
 
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
+
+  // Real billing dates come from subscription_period_end (mirrored from
+  // Stripe by the webhook). Null until first checkout; guard every render
+  // on validity so the UI never shows "Invalid Date".
+  const periodEndMs = workspace?.subscriptionPeriodEnd
+    ? new Date(workspace.subscriptionPeriodEnd).getTime()
+    : NaN;
+  const formattedPeriodEnd = Number.isFinite(periodEndMs)
+    ? new Date(periodEndMs).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null;
+  const trialDaysLeft = Number.isFinite(periodEndMs)
+    ? Math.max(0, Math.ceil((periodEndMs - Date.now()) / 86_400_000))
+    : null;
+  const usageRatio =
+    workspace && workspace.documentLimit > 0
+      ? workspace.documentsUsed / workspace.documentLimit
+      : 0;
   const railTriggerClass =
     'w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
 
@@ -507,7 +532,7 @@ export default function AccountSettings() {
             {/* Phase 7 — out-of-office routing for chain approvals */}
             <TabsTrigger value="out-of-office" className={railTriggerClass}>
               <CalendarOff className="h-4 w-4" />
-              Out of Office
+              {t('account.out_of_office')}
             </TabsTrigger>
 
             {isAdminUser && (
@@ -829,9 +854,9 @@ export default function AccountSettings() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <p className="text-sm font-medium">Abstraction complete</p>
+                    <p className="text-sm font-medium">{t('account.notify_abstraction_complete')}</p>
                     <p className="text-xs text-muted-foreground">
-                      Email me when AI finishes extracting a lease
+                      {t('account.notify_abstraction_complete_desc')}
                     </p>
                   </div>
                   <Switch
@@ -849,20 +874,44 @@ export default function AccountSettings() {
 
           {/* Subscription */}
           <TabsContent value="subscription" className="space-y-6 mt-0">
+            {/* Skeleton while workspace data loads — prevents the billing
+                cards rendering undefined values / 0-of-undefined meters. */}
+            {!workspace ? (
+              <div className="space-y-6">
+                <Skeleton className="h-44 w-full" />
+                <Skeleton className="h-72 w-full" />
+              </div>
+            ) : (
+            <>
             {/* Trial banner — visible while subscription is in Stripe's trial window. */}
-            {workspace?.subscriptionStatus === 'trialing' && workspace?.subscriptionPeriodEnd && (
+            {workspace.subscriptionStatus === 'trialing' && formattedPeriodEnd && (
               <Card className="border-accent/50 bg-accent/5">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{t('account.trial_banner_title')}</CardTitle>
                   <CardDescription>
                     {t('account.trial_banner_desc', {
-                      date: new Date(workspace.subscriptionPeriodEnd).toLocaleDateString(
-                        language === 'es' ? 'es-419' : 'en-US',
-                        { month: 'long', day: 'numeric', year: 'numeric' },
-                      ),
+                      days: t('account.trial_days_left', { count: trialDaysLeft ?? 0 }),
+                      date: formattedPeriodEnd,
                     })}
                   </CardDescription>
                 </CardHeader>
+                {isAdminUser && (
+                  <CardContent>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleManagePayment}
+                      disabled={isManagingPayment}
+                    >
+                      {isManagingPayment ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CreditCard className="h-4 w-4 mr-2" />
+                      )}
+                      {t('account.add_payment_method')}
+                    </Button>
+                  </CardContent>
+                )}
               </Card>
             )}
 
@@ -879,15 +928,19 @@ export default function AccountSettings() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleManagePayment}
-                      disabled={isManagingPayment}
-                    >
-                      {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      {t('account.update_payment_method')}
-                    </Button>
+                    {isAdminUser ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleManagePayment}
+                        disabled={isManagingPayment}
+                      >
+                        {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                        {t('account.update_payment_method')}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -908,16 +961,20 @@ export default function AccountSettings() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button
-                      size="sm"
-                      onClick={() => proceedWithCheckout('business')}
-                      disabled={isUpgrading === 'business'}
-                    >
-                      {isUpgrading === 'business' ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : null}
-                      {t('account.recovery_callout_cta')}
-                    </Button>
+                    {isAdminUser ? (
+                      <Button
+                        size="sm"
+                        onClick={() => proceedWithCheckout('business')}
+                        disabled={isUpgrading === 'business'}
+                      >
+                        {isUpgrading === 'business' ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : null}
+                        {t('account.recovery_callout_cta')}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -929,17 +986,15 @@ export default function AccountSettings() {
                   <CardTitle className="flex items-center gap-2">
                     {t('account.current_plan')}
                     <Badge variant={currentPlan === 'business' ? 'business' : 'secondary'}>
-                      {PLANS[currentPlan]?.name || currentPlan}
+                      {t(PLANS[currentPlan].nameKey)}
                     </Badge>
                   </CardTitle>
-                  {currentPlan !== 'starter' && (
+                  {/* Renewal date is shown for ANY active paid subscription —
+                      paid Starter renews too. Guarded on subscription state +
+                      a valid period end, never on plan tier. */}
+                  {workspace.subscriptionStatus === 'active' && formattedPeriodEnd && (
                     <CardDescription>
-                      {t('account.renews_on')}{' '}
-                      {new Date(workspace?.renewalDate || '').toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
+                      {t('account.renews_on')} {formattedPeriodEnd}
                     </CardDescription>
                   )}
                 </CardHeader>
@@ -949,34 +1004,41 @@ export default function AccountSettings() {
                       <div className="flex items-baseline justify-between mb-2">
                         <span className="text-sm font-medium">{t('account.document_usage')}</span>
                         <span className="text-sm text-muted-foreground">
-                          {workspace?.documentsUsed} / {workspace?.documentLimit}
+                          {workspace.documentsUsed} / {workspace.documentLimit}
                         </span>
                       </div>
                       <Progress
-                        value={workspace ? Math.min((workspace.documentsUsed / workspace.documentLimit) * 100, 100) : 0}
+                        value={Math.min(usageRatio * 100, 100)}
                         variant={
-                          workspace && (workspace.documentsUsed / workspace.documentLimit) >= 0.9
+                          usageRatio >= 0.9
                             ? 'destructive'
-                            : workspace && (workspace.documentsUsed / workspace.documentLimit) >= 0.75
+                            : usageRatio >= 0.75
                             ? 'warning'
                             : 'accent'
                         }
                         className="h-2"
                       />
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        {t('account.usage_window_note')}
+                      </p>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={handleManagePayment}
-                      disabled={isManagingPayment}
-                    >
-                      {isManagingPayment ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <CreditCard className="h-4 w-4 mr-2" />
-                      )}
-                      {t('account.manage_payment')}
-                    </Button>
+                    {isAdminUser ? (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={handleManagePayment}
+                        disabled={isManagingPayment}
+                      >
+                        {isManagingPayment ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <CreditCard className="h-4 w-4 mr-2" />
+                        )}
+                        {t('account.manage_payment')}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -989,17 +1051,15 @@ export default function AccountSettings() {
                 <CardContent>
                   <div className="space-y-3">
                     <div>
-                      <p className="text-sm font-medium">{workspace?.name}</p>
+                      <p className="text-sm font-medium">{workspace.name}</p>
                       <p className="text-sm text-muted-foreground">{user?.email || ''}</p>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={handleManagePayment}
-                      disabled={isManagingPayment}
-                    >
-                      {t('account.update_billing')}
-                    </Button>
+                    {/* Intentionally no second button — payment methods,
+                        invoices, and billing contact all live behind the one
+                        "Open billing portal" CTA on the Current Plan card. */}
+                    <p className="text-xs text-muted-foreground">
+                      {t('account.billing_portal_note')}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -1025,7 +1085,7 @@ export default function AccountSettings() {
                   </span>
                 </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 {PLAN_ORDER.map((planId, index) => {
                   const plan = PLANS[planId];
                   const isCurrent = currentPlan === planId;
@@ -1077,10 +1137,10 @@ export default function AccountSettings() {
                             <Check className="h-4 w-4 mr-1" />
                             {t('account.current')}
                           </Button>
-                        ) : isUpgradeOption ? (
-                          <Button 
-                            variant="accent" 
-                            size="sm" 
+                        ) : !isAdminUser ? null : isUpgradeOption ? (
+                          <Button
+                            variant="accent"
+                            size="sm"
                             className="w-full"
                             onClick={() => handleUpgrade(planId)}
                             disabled={isUpgrading === planId}
@@ -1090,18 +1150,17 @@ export default function AccountSettings() {
                             ) : null}
                             {t('common.upgrade')}
                           </Button>
-                        ) : planId !== 'starter' ? (
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
+                        ) : (
+                          /* Any non-current, non-upgrade plan is a downgrade
+                             target. Confirmation dialog spells out the feature
+                             loss before opening the billing portal. */
+                          <Button
+                            variant="outline"
+                            size="sm"
                             className="w-full"
-                            onClick={handleManagePayment}
+                            onClick={() => setConfirmDowngradePlan(planId)}
                           >
                             {t('account.downgrade')}
-                          </Button>
-                        ) : (
-                          <Button variant="ghost" size="sm" className="w-full" disabled>
-                            {t('account.free_tier')}
                           </Button>
                         )}
                       </CardContent>
@@ -1111,8 +1170,8 @@ export default function AccountSettings() {
               </div>
             </div>
 
-            {/* Cancel Subscription - only show if subscribed */}
-            {currentPlan !== 'starter' && (
+            {/* Cancel Subscription - only show if subscribed, admin-only */}
+            {currentPlan !== 'starter' && isAdminUser && (
               <Card className="border-destructive/50">
                 <CardHeader>
                   <CardTitle className="text-destructive">{t('account.cancel_subscription')}</CardTitle>
@@ -1124,14 +1183,18 @@ export default function AccountSettings() {
                   <p className="text-sm text-muted-foreground mb-4">
                     {t('account.cancel_warning')}
                   </p>
-                  <Button 
+                  {/* Confirmation dialog first — destructive action must never
+                      jump straight to the Stripe portal (C2, 2026-06-11). */}
+                  <Button
                     variant="destructive"
-                    onClick={handleManagePayment}
+                    onClick={() => setConfirmCancelOpen(true)}
                   >
                     {t('account.cancel_subscription')}
                   </Button>
                 </CardContent>
               </Card>
+            )}
+            </>
             )}
           </TabsContent>
 
@@ -1280,16 +1343,77 @@ export default function AccountSettings() {
       <AlertDialog open={!!confirmUpgradePlan} onOpenChange={() => setConfirmUpgradePlan(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Plan Change</AlertDialogTitle>
+            <AlertDialogTitle>{t('account.upgrade_confirm_title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              You are upgrading from {PLANS[currentPlan]?.name} to {confirmUpgradePlan ? PLANS[confirmUpgradePlan as SubscriptionPlan]?.name : ''}. 
-              You'll be charged the difference prorated for your current billing period.
+              {t('account.upgrade_confirm_desc', {
+                from: t(PLANS[currentPlan].nameKey),
+                to: confirmUpgradePlan
+                  ? t(PLANS[normalizePlanId(confirmUpgradePlan)].nameKey)
+                  : '',
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={() => confirmUpgradePlan && proceedWithCheckout(confirmUpgradePlan)}>
-              Continue to Checkout
+              {t('account.upgrade_confirm_cta')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Downgrade Confirmation Dialog — spells out Business feature loss
+          before handing off to the billing portal. */}
+      <AlertDialog open={!!confirmDowngradePlan} onOpenChange={() => setConfirmDowngradePlan(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('account.downgrade_confirm_title', {
+                plan: confirmDowngradePlan
+                  ? t(PLANS[normalizePlanId(confirmDowngradePlan)].nameKey)
+                  : '',
+              })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('account.downgrade_confirm_desc')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmDowngradePlan(null);
+                handleManagePayment();
+              }}
+            >
+              {t('account.downgrade_confirm_cta')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Subscription Confirmation Dialog — shows the concrete
+          end-of-access date when the period end is known. */}
+      <AlertDialog open={confirmCancelOpen} onOpenChange={setConfirmCancelOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('account.cancel_confirm')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {formattedPeriodEnd
+                ? t('account.cancel_confirm_desc_date', { date: formattedPeriodEnd })
+                : t('account.cancel_confirm_desc')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setConfirmCancelOpen(false);
+                handleManagePayment();
+              }}
+            >
+              {t('account.cancel_subscription')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

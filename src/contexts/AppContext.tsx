@@ -193,7 +193,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Active leases now exclude archived rows so an admin archive frees a
       // slot even if lifecycle_status is still 'active'.
-      const [activeRes, archivedRes] = await Promise.all([
+      // Monthly extractions mirror process_lease's assertProcessingQuota
+      // (uploaded in the trailing 30 days with a completed extraction) —
+      // the workspaces.documents_used column is dead and always 0
+      // (KNOWN_ISSUES #31), so the usage meter must count live rows.
+      const since30dIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const [activeRes, archivedRes, monthlyRes] = await Promise.all([
         (supabase as any)
           .from("leases")
           .select("id", { count: "exact", head: true })
@@ -205,6 +210,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .select("id", { count: "exact", head: true })
           .eq("workspace_id", resolvedWorkspace.id)
           .eq("archived", true),
+        (supabase as any)
+          .from("leases")
+          .select("id", { count: "exact", head: true })
+          .eq("workspace_id", resolvedWorkspace.id)
+          .gte("uploaded_at", since30dIso)
+          .not("extracted_json", "is", null),
       ]);
 
       setUserRole(resolvedRole);
@@ -218,11 +229,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         maxArchivedLeases: archiveLimit,
         archivedLeasesUsed: archivedRes.count || 0,
         documentLimit,
-        documentsUsed: resolvedWorkspace.documents_used ?? 0,
+        documentsUsed: monthlyRes.count || 0,
         timezone: resolvedWorkspace.timezone || profile.timezone || "America/New_York",
         defaultNotificationDays: resolvedWorkspace.default_notification_days ?? 90,
         createdAt: resolvedWorkspace.created_at || profile.created_at,
-        renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         updatedAt:
           resolvedWorkspace.updated_at || resolvedWorkspace.created_at || profile.created_at,
         subscriptionStatus:

@@ -36,12 +36,14 @@ export interface Workspace {
   maxArchivedLeases: number;
   archivedLeasesUsed: number;
   documentLimit: number;
+  // AI abstractions in the trailing 30 days — a live count mirroring
+  // process_lease's assertProcessingQuota window. NOT the dead
+  // workspaces.documents_used DB column (KNOWN_ISSUES #31).
   documentsUsed: number;
   timezone: string;
   defaultNotificationDays: number;
   createdAt: string;
   updatedAt: string;
-  renewalDate: string;
   // Subscription state mirrored from Stripe via stripe-webhook. Null
   // for workspaces that haven't checked out yet (the workspace `plan`
   // column may be set optimistically in onboarding before payment).

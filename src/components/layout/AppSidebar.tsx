@@ -185,6 +185,16 @@ export function AppSidebar() {
   const currentPlan = workspace?.plan || 'starter';
   const planLabel = t(`plan.${currentPlan}`);
 
+  // Trial countdown pill — rendered above the user menu while the
+  // workspace subscription is in Stripe's trial window. Clicking it
+  // deep-links to the subscription tab.
+  const trialDaysLeft = useMemo(() => {
+    if (workspace?.subscriptionStatus !== 'trialing' || !workspace.subscriptionPeriodEnd) return null;
+    const end = new Date(workspace.subscriptionPeriodEnd).getTime();
+    if (Number.isNaN(end)) return null;
+    return Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
+  }, [workspace?.subscriptionStatus, workspace?.subscriptionPeriodEnd]);
+
   const getPlanBadgeVariant = () => {
     switch (currentPlan) {
       case 'business':
@@ -403,6 +413,15 @@ export function AppSidebar() {
 
       {/* User Menu — single bottom-left entry, Claude.ai-style. */}
       <div className="p-3 border-t border-sidebar-border">
+        {trialDaysLeft !== null && (
+          <Link
+            to="/app/settings/account?tab=subscription"
+            className="mb-2 flex items-center justify-center gap-1.5 rounded-md border border-amber-400/50 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {t('account.trial_pill', { count: trialDaysLeft })}
+          </Link>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
