@@ -285,6 +285,28 @@ serve(async (req) => {
   const rl = await enforceWorkspaceRateLimit(supabaseAdmin, workspaceId, "manage-document-pack", origin, 10);
   if (rl) return rl;
 
+  // Defense against operator misconfiguration: confirm the resolved Stripe
+  // Price actually charges what the catalog advertises (and is a recurring
+  // monthly price) before we create a subscription. A price id pointed at the
+  // wrong amount would otherwise charge a number that doesn't match the consent
+  // copy the user just agreed to. Fail closed on any mismatch.
+  try {
+    const price = await stripe.prices.retrieve(priceId);
+    const expectedCents = pack.priceMonthlyUsd * 100;
+    if (
+      price.unit_amount !== expectedCents ||
+      price.currency !== "usd" ||
+      price.recurring?.interval !== "month"
+    ) {
+      console.error(
+        `[manage-document-pack] price mismatch for ${pack.id}: got ${price.unit_amount} ${price.currency} ${price.recurring?.interval}, expected ${expectedCents} usd month`,
+      );
+      return jsonResponse({ ok: false, reason: "pack_price_mismatch" }, 503, origin);
+    }
+  } catch {
+    return jsonResponse({ ok: false, reason: "pack_not_configured" }, 503, origin);
+  }
+
   const card = await resolveCard(stripe, supabaseAdmin, ws, user.email);
   if (!card.ok) return jsonResponse({ ok: false, reason: card.reason }, 402, origin);
 
@@ -324,8 +346,10 @@ serve(async (req) => {
       origin,
     );
   } catch (e) {
+    // Log the full Stripe error server-side; return a generic reason so we
+    // never leak internal detail (price/customer ids) to the client.
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[manage-document-pack] subscription create failed:", msg);
-    return jsonResponse({ ok: false, reason: "stripe_error", error: msg }, 502, origin);
+    return jsonResponse({ ok: false, reason: "stripe_error" }, 502, origin);
   }
 });

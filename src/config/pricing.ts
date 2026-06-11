@@ -127,9 +127,13 @@ export interface DocumentPackConfig {
   size: number;
   /** Monthly price in USD (whole dollars). */
   priceMonthly: number;
-  /** i18n key for the pack's display name. */
+  /** i18n key for the pack's display name (used as the catalog/consent title). */
   nameKey: string;
-  /** Env var holding the Stripe recurring Price ID (server-side). */
+  /**
+   * Env var holding the Stripe recurring Price ID. Server-side only — the
+   * browser never resolves it; this field exists so the client/Deno catalogs
+   * can be parity-checked (documentPacks.test.ts) on the same env-var name.
+   */
   stripePriceEnvVar: string;
 }
 

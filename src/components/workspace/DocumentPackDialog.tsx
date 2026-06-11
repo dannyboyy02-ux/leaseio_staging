@@ -47,7 +47,8 @@ interface PreviewResponse {
   catalog: Array<{ id: string; size: number; priceMonthlyUsd: number; configured: boolean }>;
 }
 
-type Step = "loading" | "catalog" | "consent" | "processing" | "success" | "error";
+type Step = "loading" | "catalog" | "consent" | "processing" | "finalizing" | "success" | "error";
+type ErrorKind = "payment" | "payment_canceled" | "generic";
 
 export function DocumentPackDialog({
   open,
@@ -56,18 +57,30 @@ export function DocumentPackDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { workspace, refreshProfile } = useApp();
+  const { workspace, refreshProfile, userRole } = useApp();
   const { t, lang } = useAppTranslation();
+  const isAdminUser = userRole === "admin" || userRole === "owner";
 
   const [step, setStep] = useState<Step>("loading");
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<ErrorKind>("generic");
+  const [awaiting3ds, setAwaiting3ds] = useState(false);
+  const [capacityConfirmed, setCapacityConfirmed] = useState(false);
   const [busySubId, setBusySubId] = useState<string | null>(null);
   const clientSecretRef = useRef<string | null>(null);
+  // Capacity before the current purchase, so finalizing can poll for the rise.
+  const preCapacityRef = useRef<number>(0);
 
   const currentPlan = normalizePlanId(workspace?.plan);
   const overagePerDoc = PLANS[currentPlan].overagePerDoc;
+
+  function fail(kind: ErrorKind, msg: string) {
+    setErrorKind(kind);
+    setErrorMsg(msg);
+    setStep("error");
+  }
 
   const loadPreview = useCallback(async () => {
     if (!workspace?.id) return;
@@ -83,6 +96,7 @@ export function DocumentPackDialog({
       setPreview(resp);
       setStep("catalog");
     } catch {
+      setErrorKind("generic");
       setErrorMsg(t("packs.error_generic"));
       setStep("error");
     }
@@ -108,7 +122,15 @@ export function DocumentPackDialog({
 
   async function handleBuy(packId: string) {
     if (!workspace?.id) return;
+    // Defense in depth — only admins can complete a purchase (the server also
+    // enforces this); the catalog already hides buy affordances for non-admins.
+    if (!isAdminUser) {
+      fail("generic", t("packs.admin_only"));
+      return;
+    }
     setSelectedPackId(packId);
+    setAwaiting3ds(false);
+    preCapacityRef.current = workspace.addonDocumentCapacity ?? 0;
     setStep("processing");
     setErrorMsg(null);
     try {
@@ -124,15 +146,15 @@ export function DocumentPackDialog({
         paymentIntentStatus?: string | null;
       };
       if (!resp?.ok) {
-        // pack_not_configured / no_card_on_file / stripe_error etc.
-        setErrorMsg(
-          resp?.reason === "pack_not_configured"
+        // pack_not_configured / pack_price_mismatch / no_card / stripe_error etc.
+        fail(
+          "generic",
+          resp?.reason === "pack_not_configured" || resp?.reason === "pack_price_mismatch"
             ? t("packs.error_not_configured")
             : resp?.reason === "no_card_on_file" || resp?.reason === "no_customer"
             ? t("packs.error_no_card")
             : t("packs.error_generic"),
         );
-        setStep("error");
         return;
       }
 
@@ -143,8 +165,7 @@ export function DocumentPackDialog({
       }
       const clientSecret = resp.clientSecret ?? null;
       if (!clientSecret) {
-        setErrorMsg(t("packs.error_generic"));
-        setStep("error");
+        fail("generic", t("packs.error_generic"));
         return;
       }
       clientSecretRef.current = clientSecret;
@@ -152,29 +173,60 @@ export function DocumentPackDialog({
       const stripePromise = getStripe();
       const stripe = stripePromise ? await stripePromise : null;
       if (!stripe) {
-        setErrorMsg(t("packs.error_unavailable"));
-        setStep("error");
+        fail("generic", t("packs.error_unavailable"));
         return;
       }
+      // A 3DS challenge surfaces a bank popup over the dialog — narrate it.
+      setAwaiting3ds(true);
       const result = await stripe.confirmCardPayment(clientSecret);
       clientSecretRef.current = null;
+      setAwaiting3ds(false);
       if (result.error) {
-        setErrorMsg(result.error.message ?? t("packs.error_payment"));
-        setStep("error");
+        // A user-dismissed 3DS challenge is recoverable; offer a softer retry
+        // back to the same pack's consent rather than a hard failure.
+        const canceled =
+          result.error.code === "payment_intent_authentication_failure" ? false : true;
+        fail(
+          canceled ? "payment_canceled" : "payment",
+          canceled
+            ? t("packs.error_payment_canceled")
+            : result.error.message ?? t("packs.error_payment"),
+        );
         return;
       }
       await finishSuccess();
     } catch {
-      setErrorMsg(t("packs.error_generic"));
-      setStep("error");
+      fail("generic", t("packs.error_generic"));
     }
   }
 
+  // The webhook mirrors capacity asynchronously. Poll the workspace row for the
+  // capacity rise so "Capacity added" only shows once it's real — falling back
+  // to a softer "appears shortly" message if the webhook is slow.
   async function finishSuccess() {
-    // Webhook mirrors capacity asynchronously; refresh so the meter/cards pick
-    // it up. We don't block on a poll — the success copy says it may take a moment.
-    setStep("success");
+    setCapacityConfirmed(false);
+    setStep("finalizing");
+    const target = preCapacityRef.current;
+    const wsId = workspace?.id;
+    let confirmed = false;
+    if (wsId) {
+      for (let i = 0; i < 12; i++) {
+        const { data } = await supabase
+          .from("workspaces")
+          .select("addon_document_capacity")
+          .eq("id", wsId)
+          .maybeSingle();
+        const cap = Number((data as { addon_document_capacity?: number } | null)?.addon_document_capacity ?? 0);
+        if (cap > target) {
+          confirmed = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
     await refreshProfile().catch(() => {});
+    setCapacityConfirmed(confirmed);
+    setStep("success");
   }
 
   async function handleCancel(sub: ActivePack) {
@@ -188,8 +240,7 @@ export function DocumentPackDialog({
       if (!(data as { ok?: boolean })?.ok) throw new Error("cancel_failed");
       await loadPreview();
     } catch {
-      setErrorMsg(t("packs.error_generic"));
-      setStep("error");
+      fail("generic", t("packs.error_generic"));
     } finally {
       setBusySubId(null);
     }
@@ -224,14 +275,24 @@ export function DocumentPackDialog({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 {t("common.close")}
               </Button>
-              <Button onClick={() => loadPreview()}>{t("account.retry")}</Button>
+              {/* A payment-class failure keeps the chosen pack — retry the charge
+                  from consent rather than dumping the user back to the catalog. */}
+              {(errorKind === "payment" || errorKind === "payment_canceled") && selectedPackId ? (
+                <Button onClick={() => setStep("consent")}>{t("packs.try_payment_again")}</Button>
+              ) : (
+                <Button onClick={() => loadPreview()}>{t("account.retry")}</Button>
+              )}
             </div>
           </div>
         )}
 
         {step === "catalog" && preview && (
           <div className="space-y-4">
-            {!preview.eligible ? (
+            {!isAdminUser ? (
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                {t("packs.admin_only")}
+              </div>
+            ) : !preview.eligible ? (
               <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
                 {t("packs.no_card_banner")}
               </div>
@@ -303,7 +364,7 @@ export function DocumentPackDialog({
                         )}
                       >
                         <div>
-                          <p className="font-medium">{t("packs.pack_label", { size: pack.size })}</p>
+                          <p className="font-medium">{t(pack.nameKey)}</p>
                           <p className="text-xs text-muted-foreground">
                             {t("packs.per_lease", { price: perLease })}
                             {configured ? "" : ` · ${t("packs.unavailable")}`}
@@ -327,7 +388,7 @@ export function DocumentPackDialog({
         {step === "consent" && selectedPack && preview && (
           <div className="space-y-4">
             <div className="rounded-md border border-border p-4 space-y-2 text-sm">
-              <p className="font-medium">{t("packs.pack_label", { size: selectedPack.size })}</p>
+              <p className="font-medium">{t(selectedPack.nameKey)}</p>
               <ul className="space-y-1 text-muted-foreground">
                 <li>{t("packs.consent_charge", { price: selectedPack.priceMonthly })}</li>
                 <li>{t("packs.consent_recurring", { price: selectedPack.priceMonthly })}</li>
@@ -355,9 +416,19 @@ export function DocumentPackDialog({
         )}
 
         {step === "processing" && (
+          <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin mb-2" />
+            <p>{t("packs.processing")}</p>
+            {awaiting3ds && (
+              <p className="mt-2 text-xs text-muted-foreground">{t("packs.three_ds_note")}</p>
+            )}
+          </div>
+        )}
+
+        {step === "finalizing" && (
           <div className="flex items-center justify-center py-10 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin mr-2" />
-            {t("packs.processing")}
+            {t("packs.finalizing")}
           </div>
         )}
 
@@ -366,7 +437,9 @@ export function DocumentPackDialog({
             <CheckCircle2 className="h-10 w-10 text-success mx-auto" />
             <div>
               <p className="font-medium">{t("packs.success_title")}</p>
-              <p className="text-sm text-muted-foreground">{t("packs.success_desc")}</p>
+              <p className="text-sm text-muted-foreground">
+                {capacityConfirmed ? t("packs.success_desc") : t("packs.success_pending")}
+              </p>
             </div>
             <Button className="w-full" onClick={() => onOpenChange(false)}>
               {t("common.done")}

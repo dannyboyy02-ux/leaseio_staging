@@ -1425,6 +1425,44 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 ---
 
+### Item #64: Document-pack purchase idempotency key is per-attempt, not per-intent
+
+**Severity:** Low. **Surfaced 2026-06-11** (Workstream B integrity review). Pre-existing-by-design.
+
+**Symptom:** `DocumentPackDialog.handleBuy` generates a fresh `crypto.randomUUID()` per call; the server namespaces it `pack_<workspaceId>_<key>`. Stripe idempotency therefore only dedupes a literal retry of one call — it does NOT stop a user from buying the same pack twice (close dialog → reopen → buy again). Because capacity is intentionally additive (stacking is a feature), an accidental duplicate is silently honored as 2× capacity AND 2× recurring charge.
+
+**Why deferred not fixed:** intentional stacking and accidental duplicate are indistinguishable without a product rule. Today the consent→processing transition unmounts the buy button, so a fast double-click is already unlikely; the residual risk is a deliberate-looking re-purchase.
+
+**Fix (when scoped):** derive the idempotency key from a stable intent (e.g. `pack_<workspaceId>_<packId>_<preview-nonce>`) so a same-session re-confirm of the same pack collapses while genuine stacking (new dialog session) still creates a new sub; or add a soft "you already have an active N-pack — add another?" confirm. Defer to product.
+
+**Where to look:** `src/components/workspace/DocumentPackDialog.tsx` (`handleBuy`); `supabase/functions/manage-document-pack/index.ts` (confirm idempotencyKey).
+
+---
+
+### Item #65: Document-pack webhook silently drops a paid grant if `workspace_id` metadata is missing
+
+**Severity:** Low. **Surfaced 2026-06-11** (Workstream B integrity review).
+
+**Symptom:** `stripe-webhook`'s `applyDocumentPack` returns early with only a `console.warn` if a pack subscription event lacks `metadata.workspace_id` (or customer). In normal flow this never happens — `manage-document-pack` always stamps `workspace_id` — but a pack sub created out-of-band in the Stripe dashboard, or a future code path that forgets the tag, would leave the customer's paid capacity un-mirrored with no durable trail. Unlike a mis-attributed plan sub (loud — no Business features), a dropped pack grant is quiet (the customer just never sees the slots they paid for). Brushes the "no silent vendor failures" hard rule.
+
+**Fix (when scoped):** on the missing-`workspace_id` branch, write an append-only audit / dead-letter row (or emit a monitored alert per OPERATIONAL_MONITORING_SPEC) so a dropped paid grant is attributable and recoverable, not just logged.
+
+**Where to look:** `supabase/functions/stripe-webhook/index.ts` (`applyDocumentPack`, the early-return guards).
+
+---
+
+### Item #66: `src/integrations/supabase/types.ts` not regenerated for `addon_document_capacity`
+
+**Severity:** Low (cosmetic / type-safety). **Surfaced 2026-06-11** (Workstream B audit).
+
+**Symptom:** The new `workspaces.addon_document_capacity` column is read in `AppContext.tsx` via an `as any` cast because the auto-generated `types.ts` predates the column. Consistent with the file's established cast pattern, but the column should be reflected in the generated types after the migration applies.
+
+**Fix:** run the Supabase type generation (`supabase gen types` / MCP `generate_typescript_types`) after the migration is applied to staging, commit the regenerated `types.ts`, and drop the `as any` at the `addon_document_capacity` read site.
+
+**Where to look:** `src/integrations/supabase/types.ts`; `src/contexts/AppContext.tsx` (mapping).
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A

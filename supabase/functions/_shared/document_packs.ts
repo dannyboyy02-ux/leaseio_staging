@@ -33,12 +33,3 @@ export const ADDON_TYPE_DOCUMENT_PACK = "document_pack";
 export function packPriceId(pack: DocumentPack): string | null {
   return Deno.env.get(pack.priceEnvVar) ?? null;
 }
-
-/** Map a Stripe Price ID back to its pack (by checking each pack's env var). */
-export function packForPriceId(priceId: string | null | undefined): DocumentPack | null {
-  if (!priceId) return null;
-  for (const pack of Object.values(DOCUMENT_PACKS)) {
-    if (Deno.env.get(pack.priceEnvVar) === priceId) return pack;
-  }
-  return null;
-}

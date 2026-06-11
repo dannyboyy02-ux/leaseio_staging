@@ -17,6 +17,7 @@ import { AlertTriangle, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { Button } from '@/components/ui/button';
 
 interface QuotaSnapshot {
@@ -28,20 +29,6 @@ interface QuotaSnapshot {
   recorded_at: string;
 }
 
-const METRIC_LABELS: Record<string, string> = {
-  active_leases:        'active leases',
-  archived_leases:      'archived leases',
-  monthly_extractions:  'extractions this month',
-  member_count:         'workspace members',
-};
-
-const METRIC_NOUN: Record<string, string> = {
-  active_leases:       'active lease cap',
-  archived_leases:     'archive cap',
-  monthly_extractions: 'monthly extraction cap',
-  member_count:        'member cap',
-};
-
 function dismissalKey(workspaceId: string, metric: string, pctBucket: number): string {
   // Bucket the pct so a dismissal at 82% sticks until pct crosses
   // a new bucket (90, 95). Returning to 80% later restarts the
@@ -50,7 +37,9 @@ function dismissalKey(workspaceId: string, metric: string, pctBucket: number): s
 }
 
 export function QuotaWarningBanner() {
-  const { workspace } = useApp();
+  const { workspace, userRole } = useApp();
+  const { t } = useAppTranslation();
+  const isAdminUser = userRole === 'admin' || userRole === 'owner';
   const [snapshots, setSnapshots] = useState<QuotaSnapshot[]>([]);
   const [dismissedTick, setDismissedTick] = useState(0);
 
@@ -103,8 +92,12 @@ export function QuotaWarningBanner() {
     : false;
   if (dismissed) return null;
 
-  const label = METRIC_LABELS[banner.metric] ?? banner.metric.replace(/_/g, ' ');
-  const noun = METRIC_NOUN[banner.metric] ?? `${banner.metric} cap`;
+  // Per-metric label/noun via i18n, with a graceful fallback for any future
+  // metric that lacks a key.
+  const fallback = banner.metric.replace(/_/g, ' ');
+  const label = t(`quota_banner.metric_${banner.metric}`, { defaultValue: fallback });
+  const noun = t(`quota_banner.noun_${banner.metric}`, { defaultValue: fallback });
+  const tierSuffix = banner.tier ? t('quota_banner.tier_suffix', { tier: banner.tier }) : '';
 
   const handleDismiss = () => {
     if (isCritical) return;
@@ -127,30 +120,39 @@ export function QuotaWarningBanner() {
         <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${isCritical ? 'text-red-700' : 'text-amber-700'}`} />
         <div className="flex-1">
           <p className={`text-sm font-medium ${isCritical ? 'text-red-900' : 'text-amber-900'}`}>
-            {isCritical ? 'Critical: ' : ''}You've used {Math.round(pct)}% of your {noun}
+            {t(isCritical ? 'quota_banner.used_pct_critical' : 'quota_banner.used_pct', {
+              pct: Math.round(pct),
+              noun,
+            })}
           </p>
           <p className={`text-xs ${isCritical ? 'text-red-800' : 'text-amber-800'}`}>
-            {banner.current_value.toLocaleString()} of {banner.limit_value?.toLocaleString()} {label}{banner.tier ? ` on the ${banner.tier} plan` : ''}.
-            {isCritical ? ' Upgrade to keep growing without interruption.' : ' Plan ahead for an upgrade.'}
+            {t('quota_banner.detail', {
+              current: banner.current_value.toLocaleString(),
+              limit: banner.limit_value?.toLocaleString() ?? '',
+              label,
+              tierSuffix,
+            })}
+            {t(isCritical ? 'quota_banner.guidance_critical' : 'quota_banner.guidance_warning')}
           </p>
         </div>
         {/* Packs raise the abstraction + active-lease caps, so offer a pack CTA
-            on exactly those two metrics (not archive/member caps). */}
-        {(banner.metric === 'monthly_extractions' || banner.metric === 'active_leases') && (
+            on exactly those two metrics — and only to admins, who can complete
+            the purchase (non-admins are told to contact their admin instead). */}
+        {isAdminUser && (banner.metric === 'monthly_extractions' || banner.metric === 'active_leases') && (
           <Button asChild size="sm" variant="outline">
-            <Link to="/app/settings/account?tab=subscription&packs=1">Add capacity</Link>
+            <Link to="/app/settings/account?tab=subscription&packs=1">{t('quota_banner.add_capacity')}</Link>
           </Button>
         )}
         <Button asChild size="sm" variant={isCritical ? 'destructive' : 'outline'}>
           <Link to="/app/settings/account?tab=subscription">
-            {isCritical ? 'Upgrade now' : 'View plans'}
+            {t(isCritical ? 'quota_banner.upgrade_now' : 'quota_banner.view_plans')}
           </Link>
         </Button>
         {!isCritical && (
           <button
             type="button"
             onClick={handleDismiss}
-            aria-label="Dismiss"
+            aria-label={t('quota_banner.dismiss')}
             className="p-1 rounded hover:bg-amber-100 text-amber-700"
           >
             <X className="h-4 w-4" />

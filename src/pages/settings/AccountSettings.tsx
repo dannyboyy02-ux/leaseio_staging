@@ -1046,7 +1046,7 @@ export default function AccountSettings() {
                         <span className="text-sm text-muted-foreground">
                           {workspace.documentsUsed} / {effectiveLimit}
                           {addonCapacity > 0 && (
-                            <span className="text-xs"> {t('account.usage_includes_pack', { count: addonCapacity })}</span>
+                            <span className="text-xs"> {t('account.usage_includes_pack', { base: workspace.documentLimit, count: addonCapacity })}</span>
                           )}
                         </span>
                       </div>
@@ -1115,16 +1115,21 @@ export default function AccountSettings() {
                 <CardDescription>{t('packs.card_desc')}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    {addonCapacity > 0
-                      ? t('packs.card_current', { count: addonCapacity })
-                      : t('packs.card_none')}
-                  </p>
-                  {isAdminUser && (
-                    <Button variant="outline" size="sm" onClick={() => setPackDialogOpen(true)}>
-                      {t('packs.card_cta')}
-                    </Button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      {addonCapacity > 0
+                        ? t('packs.card_current', { count: addonCapacity })
+                        : t('packs.card_none')}
+                    </p>
+                    {isAdminUser && (
+                      <Button variant="outline" size="sm" onClick={() => setPackDialogOpen(true)}>
+                        {t('packs.card_cta')}
+                      </Button>
+                    )}
+                  </div>
+                  {!isAdminUser && (
+                    <p className="text-xs text-muted-foreground">{t('packs.admin_only')}</p>
                   )}
                 </div>
               </CardContent>
