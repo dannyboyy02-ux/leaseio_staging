@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
 import { User, Workspace, WorkspaceRole, SubscriptionPlan } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
@@ -44,7 +44,6 @@ type WorkspaceRow = {
   owner_id: string;
   plan: string | null;
   document_limit: number | null;
-  documents_used: number | null;
   timezone: string | null;
   default_notification_days: number | null;
   created_at: string;
@@ -102,7 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end";
+        "id, name, owner_id, plan, document_limit, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -305,6 +304,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await fetchProfile();
   };
 
+  // Stable identity for refreshProfile — fetchProfile is recreated on every
+  // render, so exposing it directly would change the context value's identity
+  // each render and refire any consumer effect that depends on it (caused the
+  // ?checkout=success toast/fetch loop, 2026-06-11). A ref keeps the latest
+  // closure while the callback identity stays constant.
+  const fetchProfileRef = useRef(fetchProfile);
+  fetchProfileRef.current = fetchProfile;
+  const stableRefreshProfile = useCallback(() => fetchProfileRef.current(), []);
+
   const switchWorkspace = async (workspaceId: string) => {
     if (!authUser) return;
     await (supabase as any)
@@ -359,7 +367,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         setIsLoading,
-        refreshProfile,
+        refreshProfile: stableRefreshProfile,
         canAccessFeature,
         hasPermission,
         hasFunctionalRole,

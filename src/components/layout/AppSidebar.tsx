@@ -56,6 +56,7 @@ import {
   isSubmitterOnly,
 } from '@/lib/authorization';
 import { supabase } from '@/integrations/supabase/client';
+import { trialDaysRemaining } from '@/lib/trialStatus';
 
 // Top nav items — rendered before Approvals
 const topNavItems = [
@@ -188,12 +189,13 @@ export function AppSidebar() {
   // Trial countdown pill — rendered above the user menu while the
   // workspace subscription is in Stripe's trial window. Clicking it
   // deep-links to the subscription tab.
-  const trialDaysLeft = useMemo(() => {
-    if (workspace?.subscriptionStatus !== 'trialing' || !workspace.subscriptionPeriodEnd) return null;
-    const end = new Date(workspace.subscriptionPeriodEnd).getTime();
-    if (Number.isNaN(end)) return null;
-    return Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
-  }, [workspace?.subscriptionStatus, workspace?.subscriptionPeriodEnd]);
+  const trialDaysLeft = useMemo(
+    () =>
+      workspace?.subscriptionStatus === 'trialing'
+        ? trialDaysRemaining(workspace.subscriptionPeriodEnd)
+        : null,
+    [workspace?.subscriptionStatus, workspace?.subscriptionPeriodEnd],
+  );
 
   const getPlanBadgeVariant = () => {
     switch (currentPlan) {
@@ -414,12 +416,17 @@ export function AppSidebar() {
       {/* User Menu — single bottom-left entry, Claude.ai-style. */}
       <div className="p-3 border-t border-sidebar-border">
         {trialDaysLeft !== null && (
+          /* The sidebar is dark navy in BOTH themes (--sidebar-background),
+             so the pill uses a single translucent-amber treatment — a light
+             bg-amber-50 would render as a glaring near-white block. */
           <Link
             to="/app/settings/account?tab=subscription"
-            className="mb-2 flex items-center justify-center gap-1.5 rounded-md border border-amber-400/50 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
+            className="mb-2 flex items-center justify-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-400/20"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            {t('account.trial_pill', { count: trialDaysLeft })}
+            {trialDaysLeft === 0
+              ? t('account.trial_pill_today')
+              : t('account.trial_pill', { count: trialDaysLeft })}
           </Link>
         )}
         <DropdownMenu>

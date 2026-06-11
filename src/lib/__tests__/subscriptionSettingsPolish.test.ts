@@ -196,10 +196,11 @@ describe('AccountSettings subscription tab', () => {
   const source = readRepoFile('src/pages/settings/AccountSettings.tsx');
 
   it('cancel button opens the confirmation dialog instead of calling the billing portal directly', () => {
-    // Narrow to the cancel card (admin-gated, paid plans only).
+    // Narrow to the cancel card. Gated on subscription state (so paid Starter
+    // is included — plan tier is not a proxy for "has a subscription") + admin.
     const cancelCard = sliceBetween(
       source,
-      "{currentPlan !== 'starter' && isAdminUser && (",
+      "['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&",
       '</Card>',
     );
     expect(cancelCard).toContain('onClick={() => setConfirmCancelOpen(true)}');
@@ -267,18 +268,33 @@ describe('AccountSettings subscription tab', () => {
 describe('AppSidebar trial countdown pill', () => {
   const source = readRepoFile('src/components/layout/AppSidebar.tsx');
 
-  it('computes days left only while trialing, with NaN and negative clamps', () => {
-    const memo = sliceBetween(source, 'const trialDaysLeft = useMemo', '});');
-    expect(memo).toContain("workspace?.subscriptionStatus !== 'trialing'");
-    expect(memo).toContain('!workspace.subscriptionPeriodEnd');
-    expect(memo).toContain('Number.isNaN(end)');
-    // Negative remainders clamp to 0 days — never "-1 days left".
-    expect(memo).toContain('Math.max(0, Math.ceil((end - Date.now()) / 86_400_000))');
+  it('computes days left only while trialing, via the shared trialDaysRemaining helper', () => {
+    const memo = sliceBetween(source, 'const trialDaysLeft = useMemo', ');');
+    expect(memo).toContain("workspace?.subscriptionStatus === 'trialing'");
+    expect(memo).toContain('trialDaysRemaining(workspace.subscriptionPeriodEnd)');
+    expect(memo).toContain(': null');
+    // The clamp/NaN logic lives in the shared helper, imported here.
+    expect(source).toContain("import { trialDaysRemaining } from '@/lib/trialStatus'");
   });
 
   it('renders the pill only when a count exists and deep-links to the subscription tab', () => {
     const pill = sliceBetween(source, '{trialDaysLeft !== null && (', '</Link>');
     expect(pill).toContain('to="/app/settings/account?tab=subscription"');
     expect(pill).toContain("t('account.trial_pill', { count: trialDaysLeft })");
+    // Day-of-charge collapses to a dedicated "ends today" string.
+    expect(pill).toContain("t('account.trial_pill_today')");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Shared trial-days helper — single source of truth for both surfaces
+// ---------------------------------------------------------------------------
+
+describe('trialDaysRemaining helper', () => {
+  it('clamps negatives to 0 and returns null for missing/invalid input', () => {
+    const source = readRepoFile('src/lib/trialStatus.ts');
+    expect(source).toContain('Math.max(0, Math.ceil((end - Date.now()) / 86_400_000))');
+    expect(source).toContain('Number.isNaN(end)');
+    expect(source).toContain('if (!periodEnd) return null');
   });
 });

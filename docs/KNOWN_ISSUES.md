@@ -942,7 +942,7 @@ CREATE POLICY "workspace access can view change sets"
 
 So caps ARE enforced. The audit nonetheless surfaced two real, narrower residuals:
 
-**Finding A — dead column drives a broken, always-zero usage meter (customer-facing, Medium).** `AppContext.tsx:215` reads `documents_used` → `documentsUsed`; `AccountSettings.tsx:952-960` renders it as a usage meter (`{documentsUsed} / {documentLimit}` + progress bar + 0.75/0.9 color thresholds). Because nothing writes the column, the meter always shows `0 / <limit>` — a customer at 14/15 abstractions sees "0 / 15". It is also the exact page the banner's "View plans / Upgrade" CTA deep-links to (`?tab=subscription`). Fix: repoint the meter at the live snapshot data the banner already consumes (`workspace_quota_snapshots`, metric `monthly_extractions`), or remove the meter. Routes through reviewers per CLAUDE.md (user-facing surface).
+**Finding A — dead column drove a broken, always-zero usage meter (customer-facing, Medium). RESOLVED 2026-06-11.** `AppContext.tsx` read `documents_used` → `documentsUsed`; `AccountSettings.tsx` rendered it as a usage meter (`{documentsUsed} / {documentLimit}` + progress bar + 0.75/0.9 color thresholds). Because nothing writes the column, the meter always showed `0 / <limit>` — a customer at 14/15 abstractions saw "0 / 15". **As-built fix (deviation from the originally-suggested approach):** rather than repointing at `workspace_quota_snapshots`, `AppContext` now computes `documentsUsed` as a **live trailing-30-day count** (leases with `uploaded_at >= now-30d AND extracted_json NOT NULL`), exactly mirroring `process_lease`'s `assertProcessingQuota` window — so the customer meter and the server's hard gate can never disagree (no snapshot-staleness window). The dead `documents_used` was also removed from the AppContext select string + `WorkspaceRow` type (the DB column still exists, guarded by the #29 entitlement trigger; only the unused frontend fetch was dropped). Meter relabeled "AI Abstractions" with a rolling-window note. Reviewer-cleared (auditor/security/polish/test-author), 570 tests. The dead-column note above and Finding B below remain open.
 
 **Finding B — overage *billing* is unimplemented (product/revenue gap, needs a product call).** `overagePerDoc` ($12/$10) exists only as display config in `pricing.ts:40,67`. No code reports metered usage to Stripe; the gate **hard-blocks at the included cap** with `reason: 'quota_exceeded'` → upgrade prompt, rather than metering-and-charging per-doc above the cap. Possibly intentional — block-at-cap protects the 75% margin floor — so this is a revenue-opportunity decision, not a bug. Scope as its own downstream beat if meter-and-charge is desired.
 
@@ -1386,6 +1386,42 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 **Severity:** N/A — forward-looking note. No action required until the itemized-billing surface is scheduled.
 
 **Where to look:** `supabase/functions/create-workspace/index.ts:392-403`; the future page would live alongside `src/pages/app/UsageContent.tsx` / the account subscription tab.
+
+---
+
+### Item #61: `create-checkout` resolves the Stripe customer by caller email (the P2-07 class, re-surfacing)
+
+**Severity:** Medium. **Pre-existing** — surfaced 2026-06-11 by the security scanner during the subscription-tab polish pass; NOT introduced by that change.
+
+**Symptom:** `create-checkout/index.ts:137-141` resolves/creates the Stripe customer with `stripe.customers.list({ email })` — the exact pattern P2-07 already fixed in `customer-portal` (which resolves from `workspaces.stripe_customer_id`). An account holder who is admin of two workspaces shares one email-keyed Stripe customer across both. Combined with the per-workspace-subscription architecture (#60) and the recovery-checkout button on the subscription tab (`proceedWithCheckout('business')`), a checkout can bind to a customer record already carrying another workspace's billing state.
+
+**Fix (its own beat, not bundled):** mirror P2-07 — prefer `workspaces.stripe_customer_id` when present, fall back to email lookup only for a workspace's first-ever checkout, and stamp the resolved customer id back onto the workspace. Two adjacent pre-existing LOWs in the same function to sweep in the same pass: (a) `workspaceId` is presence-checked but not type-checked (`customer-portal:41` does `typeof === "string"`) → a non-string body produces a raw 500; (b) `Invalid plan: ${planId}` reflects raw user input into the JSON error body (`index.ts:69,178`) — return a static message + `reason: 'invalid_plan'` instead.
+
+**Where to look:** `supabase/functions/create-checkout/index.ts:69,71-73,137-141,178`; reference fix in `supabase/functions/customer-portal/index.ts`.
+
+---
+
+### Item #62: "Your subscription renews on {{date}}" still shows after a cancel-at-period-end (no Stripe flag mirror)
+
+**Severity:** Low/Medium (copy correctness). **Surfaced 2026-06-11** (polish pass); deferred because the proper fix needs webhook work.
+
+**Symptom:** When a user cancels via the billing portal, Stripe keeps `status='active'` with `cancel_at_period_end=true`. Nothing in the repo mirrors that flag (grep: zero hits for `cancel_at_period_end`). The subscription tab's Current Plan card therefore shows "Your subscription renews on {{date}}" for a subscription that is actually ending on that date — copy that contradicts the user's own cancel action; they may think the cancel failed and try again or email support.
+
+**Fix:** mirror `cancel_at_period_end` (and ideally `cancel_at`) onto `workspaces` via `stripe-webhook` (`customer.subscription.updated`), then branch the Current Plan copy: "Ends on {{date}} (canceled)" vs "Renews on {{date}}". Frontend half is trivial once the column exists; the webhook half is the work. Repository-integrity lane (touches the Stripe→DB mirror).
+
+**Where to look:** `supabase/functions/stripe-webhook/index.ts` (subscription.updated handler); `src/pages/settings/AccountSettings.tsx` (Current Plan `renews_on` block); `src/contexts/AppContext.tsx` (`WorkspaceRow` + mapping).
+
+---
+
+### Item #63: No sidebar billing signal for `past_due` (only `trialing` gets a pill)
+
+**Severity:** Low (UX gap). **Surfaced 2026-06-11** (polish pass).
+
+**Symptom:** The new sidebar trial pill (`AppSidebar.tsx`) shows for `subscriptionStatus === 'trialing'`, but `past_due` — a strictly more urgent billing state (a payment has already failed) — has no global signal. The user only sees it if they navigate to the subscription tab, where the past-due banner lives.
+
+**Fix:** add a red "Payment failed" pill in the same sidebar slot for `['past_due','unpaid','incomplete'].includes(subscriptionStatus)`, deep-linking to `?tab=subscription`. Reuses the trial-pill pattern exactly. Small, self-contained follow-up.
+
+**Where to look:** `src/components/layout/AppSidebar.tsx` (trial pill block, just above the user menu).
 
 ---
 

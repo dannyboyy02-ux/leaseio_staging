@@ -41,6 +41,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ANNUAL_DISCOUNT_PERCENT, PLANS, PLAN_ORDER, isUpgrade, normalizePlanId } from '@/config/pricing';
+import { trialDaysRemaining } from '@/lib/trialStatus';
 import type { SubscriptionPlan } from '@/types';
 
 const timezones = [
@@ -51,7 +52,7 @@ const timezones = [
 ];
 
 export default function AccountSettings() {
-  const { user, workspace, userRole, refreshProfile } = useApp();
+  const { user, workspace, userRole, refreshProfile, isLoading } = useApp();
   const { user: authUser, signOut } = useAuth();
   const { t, language } = useLanguage();
   const navigate = useNavigate();
@@ -166,11 +167,19 @@ export default function AccountSettings() {
     if (tab) setActiveTab(tab);
 
     const checkout = searchParams.get('checkout');
-    if (checkout === 'success') {
-      toast.success(t('account.checkout_success'));
-      refreshProfile();
-    } else if (checkout === 'canceled') {
-      toast.info(t('account.checkout_canceled'));
+    if (checkout === 'success' || checkout === 'canceled') {
+      if (checkout === 'success') {
+        toast.success(t('account.checkout_success'));
+        refreshProfile();
+      } else {
+        toast.info(t('account.checkout_canceled'));
+      }
+      // Strip the param immediately so the toast/refresh fires exactly once —
+      // never on refresh, back-nav, or a re-render (mirrors the autoCheckout
+      // cleanup below). Without this the success branch re-fired in a loop.
+      const next = new URLSearchParams(searchParams);
+      next.delete('checkout');
+      navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
     }
 
     // Pre-arm billing interval from onboarding handoff. Stays in state
@@ -384,7 +393,7 @@ export default function AccountSettings() {
 
   const proceedWithCheckout = async (planId: string) => {
     if (!workspace?.id) {
-      toast.error('Create or select a workspace before starting checkout.');
+      toast.error(t('account.checkout_no_workspace'));
       return;
     }
 
@@ -399,11 +408,15 @@ export default function AccountSettings() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
-        window.open(data.url, '_blank');
+        // Same-tab redirect — Stripe round-trips back via the success/cancel
+        // URLs. window.open('_blank') after an await is outside the click
+        // gesture and gets popup-blocked in Safari/Firefox, silently no-op'ing
+        // every billing CTA (H1, 2026-06-11).
+        window.location.href = data.url;
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to start checkout. Please try again.';
+      const msg = error instanceof Error ? error.message : t('account.checkout_failed');
       toast.error(msg);
     } finally {
       setIsUpgrading(null);
@@ -432,7 +445,7 @@ export default function AccountSettings() {
 
   const handleManagePayment = async () => {
     if (!workspace?.id) {
-      toast.error('Select a workspace before opening the billing portal.');
+      toast.error(t('account.portal_no_workspace'));
       return;
     }
     setIsManagingPayment(true);
@@ -448,11 +461,12 @@ export default function AccountSettings() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
-        window.open(data.url, '_blank');
+        // Same-tab redirect (see proceedWithCheckout) — avoids popup blockers.
+        window.location.href = data.url;
       }
     } catch (error) {
       console.error('Error opening customer portal:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to open billing portal. You may need an active subscription first.';
+      const msg = error instanceof Error ? error.message : t('account.portal_failed');
       toast.error(msg);
     } finally {
       setIsManagingPayment(false);
@@ -476,9 +490,7 @@ export default function AccountSettings() {
         year: 'numeric',
       })
     : null;
-  const trialDaysLeft = Number.isFinite(periodEndMs)
-    ? Math.max(0, Math.ceil((periodEndMs - Date.now()) / 86_400_000))
-    : null;
+  const trialDaysLeft = trialDaysRemaining(workspace?.subscriptionPeriodEnd);
   const usageRatio =
     workspace && workspace.documentLimit > 0
       ? workspace.documentsUsed / workspace.documentLimit
@@ -874,13 +886,26 @@ export default function AccountSettings() {
 
           {/* Subscription */}
           <TabsContent value="subscription" className="space-y-6 mt-0">
-            {/* Skeleton while workspace data loads — prevents the billing
-                cards rendering undefined values / 0-of-undefined meters. */}
-            {!workspace ? (
+            {/* Skeleton while the workspace fetch is in flight. */}
+            {isLoading && !workspace ? (
               <div className="space-y-6">
                 <Skeleton className="h-44 w-full" />
                 <Skeleton className="h-72 w-full" />
               </div>
+            ) : !workspace ? (
+              /* Fetch finished but no workspace resolved (error / none selected)
+                 — never strand the user on skeletons forever. */
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{t('account.billing_unavailable_title')}</CardTitle>
+                  <CardDescription>{t('account.billing_unavailable_desc')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" size="sm" onClick={() => refreshProfile()}>
+                    {t('account.retry')}
+                  </Button>
+                </CardContent>
+              </Card>
             ) : (
             <>
             {/* Trial banner — visible while subscription is in Stripe's trial window. */}
@@ -889,14 +914,16 @@ export default function AccountSettings() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{t('account.trial_banner_title')}</CardTitle>
                   <CardDescription>
-                    {t('account.trial_banner_desc', {
-                      days: t('account.trial_days_left', { count: trialDaysLeft ?? 0 }),
-                      date: formattedPeriodEnd,
-                    })}
+                    {trialDaysLeft === 0
+                      ? t('account.trial_banner_desc_today')
+                      : t('account.trial_banner_desc', {
+                          days: t('account.trial_days_left', { count: trialDaysLeft ?? 0 }),
+                          date: formattedPeriodEnd,
+                        })}
                   </CardDescription>
                 </CardHeader>
-                {isAdminUser && (
-                  <CardContent>
+                <CardContent>
+                  {isAdminUser ? (
                     <Button
                       size="sm"
                       variant="outline"
@@ -910,8 +937,10 @@ export default function AccountSettings() {
                       )}
                       {t('account.add_payment_method')}
                     </Button>
-                  </CardContent>
-                )}
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                  )}
+                </CardContent>
               </Card>
             )}
 
@@ -1119,8 +1148,13 @@ export default function AccountSettings() {
                           </span>
                           <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
                         </div>
+                        {billingInterval === 'annual' && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {t('account.billed_annually', { total: plan.price.annual.toLocaleString() })}
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground mt-1">
-                          {plan.maxActiveLeases === -1 ? 'Unlimited' : plan.maxActiveLeases} {plan.maxActiveLeases === 1 ? t('account.lease') : t('account.leases')}
+                          {t('account.abstractions_included', { count: plan.abstractionsIncluded })}
                         </p>
                       </CardHeader>
                       <CardContent className="flex-1 flex flex-col">
@@ -1168,10 +1202,18 @@ export default function AccountSettings() {
                   );
                 })}
               </div>
+              {!isAdminUser && (
+                <p className="text-xs text-muted-foreground mt-3">
+                  {t('account.plan_changes_admin_only')}
+                </p>
+              )}
             </div>
 
-            {/* Cancel Subscription - only show if subscribed, admin-only */}
-            {currentPlan !== 'starter' && isAdminUser && (
+            {/* Cancel Subscription — shown for any active/paid subscription
+                (paid Starter included; plan tier is not a proxy for "has a
+                subscription"), admin-only. */}
+            {['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&
+              isAdminUser && (
               <Card className="border-destructive/50">
                 <CardHeader>
                   <CardTitle className="text-destructive">{t('account.cancel_subscription')}</CardTitle>
