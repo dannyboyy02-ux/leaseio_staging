@@ -1447,7 +1447,9 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 **Fix (when scoped):** on the missing-`workspace_id` branch, write an append-only audit / dead-letter row (or emit a monitored alert per OPERATIONAL_MONITORING_SPEC) so a dropped paid grant is attributable and recoverable, not just logged.
 
-**Where to look:** `supabase/functions/stripe-webhook/index.ts` (`applyDocumentPack`, the early-return guards).
+**Extension (2026-06-11, Workstream C):** the same silent-drop shape now exists on `applySingleLeaseCredit` (missing `workspace_id` on a `payment_intent.succeeded` event → `console.warn` + 200 ack, paid one-time charge never granted). And one broader gap in the same lane: there is no reconciliation sweep comparing succeeded single-lease PaymentIntents against the `lease_credit_purchases` ledger, so a missed/undelivered webhook event (see the five-event subscription requirement in `OPERATOR_PLAYBOOK.md`) is permanently silent. Scoped remediation should cover both functions' drop branches plus a periodic reconcile (e.g. in `manage-document-pack` preview or the nightly health check).
+
+**Where to look:** `supabase/functions/stripe-webhook/index.ts` (`applyDocumentPack` + `applySingleLeaseCredit` early-return guards).
 
 ---
 
@@ -1460,6 +1462,30 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 **Fix:** run the Supabase type generation (`supabase gen types` / MCP `generate_typescript_types`) after the migration is applied to staging, commit the regenerated `types.ts`, and drop the `as any` at the `addon_document_capacity` read site.
 
 **Where to look:** `src/integrations/supabase/types.ts`; `src/contexts/AppContext.tsx` (mapping).
+
+**Extension (2026-06-11, Workstream C):** the regen must also pick up `workspaces.purchased_lease_credits`, the `lease_credit_purchases` table, and the `consume_lease_credit` RPC (currently bridged with `as any` casts in `AppContext.tsx` and a manual row cast in `LimitReachedDialog.tsx`).
+
+---
+
+### Item #67: `retry_lease` has no processing-quota gate
+
+**Severity:** Low/Medium (cost exposure, not tenant isolation). **Pre-existing** — surfaced 2026-06-11 by the Workstream C security review; NOT introduced by that change.
+
+**Symptom:** `supabase/functions/retry_lease/index.ts` enforces AI consent and rate limiting but never calls `assertProcessingQuota`. An over-cap workspace can keep triggering paid Opus extractions by retrying failed leases. The window is bounded (retries only apply to existing failed leases + the per-workspace rate limit), and the same bypass is what makes the single-lease credit's "Opus failure after consume" loss path recoverable for free — so any fix must preserve free retries of an *already-quota-passed* upload while blocking retry-as-quota-evasion. Needs a deliberate design, not a blanket gate.
+
+**Where to look:** `supabase/functions/retry_lease/index.ts`; `assertProcessingQuota` in `process_lease/index.ts`.
+
+---
+
+### Item #68: Intake entry buttons and LeaseUploadModal are hardcoded English
+
+**Severity:** Medium (i18n completeness). **Pre-existing** — surfaced 2026-06-11 by the Workstream C polish review; NOT introduced by that change.
+
+**Symptom:** The gated entry points — Dashboard "New Request" (`Dashboard.tsx`), Leases "Add Lease" (`Leases.tsx`), the `AddLeaseDialog` chooser, and the entire `LeaseUploadModal` (titles, steps, errors) — are raw English strings. A Spanish-language user clicks an English button and lands on the fully-translated, usted-toned limit wall: mixed-language whiplash at the billing moment. Same class as the resolved Owner Workspace Management item (#57).
+
+**Fix (when scoped):** move all four surfaces' copy into `common.json` (en + es) in one sweep; polish-review the Spanish for usted consistency with the billing surfaces.
+
+**Where to look:** `src/pages/Dashboard.tsx`, `src/pages/Leases.tsx`, `src/components/leases/{AddLeaseDialog,LeaseUploadModal}.tsx`.
 
 ---
 

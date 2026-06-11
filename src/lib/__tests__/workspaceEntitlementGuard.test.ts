@@ -220,3 +220,183 @@ describe('addon_document_capacity entitlement guard (document packs)', () => {
     expect(fn).not.toContain('intended_plan');
   });
 });
+
+// ============================================================================
+// purchased_lease_credits — single-lease credits (Workstream C, 2026-06-11)
+//
+// Same #29 billing-bypass class as the pack column: an authenticated owner who
+// could PATCH purchased_lease_credits would self-grant free over-cap uploads.
+// This migration is the 3rd re-derivation of the guard (last-applied wins), so
+// its column coverage is the LIVE protection — including every prior column,
+// which a CREATE OR REPLACE that dropped one would silently unguard.
+// ============================================================================
+describe('purchased_lease_credits entitlement guard (single-lease credits)', () => {
+  const MIGRATION =
+    'supabase/migrations/20260611150000_add_purchased_lease_credits.sql';
+
+  // The 10 columns guarded BEFORE this migration; all must survive the
+  // re-derivation alongside the new purchased_lease_credits (11 total).
+  const PRIOR_GUARDED_COLUMNS = [
+    'plan',
+    'document_limit',
+    'documents_used',
+    'addon_document_capacity',
+    'billing_interval',
+    'stripe_customer_id',
+    'stripe_subscription_id',
+    'subscription_status',
+    'subscription_period_end',
+    'max_archived_leases',
+  ];
+
+  function guardFn(m: string): string {
+    const start = m.indexOf(
+      'CREATE OR REPLACE FUNCTION public.prevent_workspace_entitlement_edits',
+    );
+    const end = m.indexOf(
+      'ALTER FUNCTION public.prevent_workspace_entitlement_edits',
+    );
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return m.slice(start, end);
+  }
+
+  it('adds the column NOT NULL DEFAULT 0 (so existing rows and new inserts start at zero)', () => {
+    const m = readRepoFile(MIGRATION);
+    expect(m).toContain(
+      'ADD COLUMN IF NOT EXISTS purchased_lease_credits integer NOT NULL DEFAULT 0',
+    );
+  });
+
+  it('re-derives the guard covering purchased_lease_credits on INSERT and UPDATE', () => {
+    const fn = guardFn(readRepoFile(MIGRATION));
+    // Carve-out + posture preserved.
+    expect(fn).toContain("COALESCE(auth.role(), '') = 'service_role'");
+    expect(fn).not.toContain('SECURITY DEFINER');
+    expect(fn).toContain("ERRCODE = 'check_violation'");
+    // INSERT branch pins the new column to 0.
+    const insertBranch = fn.slice(
+      fn.indexOf("IF TG_OP = 'INSERT' THEN"),
+      fn.indexOf("-- TG_OP = 'UPDATE'"),
+    );
+    expect(insertBranch).toContain('NEW.purchased_lease_credits IS DISTINCT FROM 0');
+    // UPDATE branch blocks any non-service_role change.
+    const updateBranch = fn.slice(fn.indexOf("-- TG_OP = 'UPDATE'"));
+    expect(updateBranch).toContain(
+      'NEW.purchased_lease_credits IS DISTINCT FROM OLD.purchased_lease_credits',
+    );
+  });
+
+  it('preserves every previously guarded column in the re-derived UPDATE branch', () => {
+    const fn = guardFn(readRepoFile(MIGRATION));
+    const updateBranch = fn.slice(fn.indexOf("-- TG_OP = 'UPDATE'"));
+    for (const col of PRIOR_GUARDED_COLUMNS) {
+      expect(updateBranch, `guard still covers ${col}`).toContain(
+        `NEW.${col} IS DISTINCT FROM OLD.${col}`,
+      );
+    }
+  });
+
+  it('does NOT guard intended_plan (still writable for abandoned-checkout recovery)', () => {
+    const fn = guardFn(readRepoFile(MIGRATION));
+    expect(fn).not.toContain('intended_plan');
+  });
+
+  it('recreates the trigger so the replay binds to the replaced function', () => {
+    const m = readRepoFile(MIGRATION);
+    expect(m).toContain(
+      'DROP TRIGGER IF EXISTS enforce_workspace_entitlement_guard ON public.workspaces',
+    );
+    const trigStart = m.indexOf('CREATE TRIGGER enforce_workspace_entitlement_guard');
+    expect(trigStart).toBeGreaterThan(-1);
+    const trigBlock = m.slice(trigStart, trigStart + 220);
+    expect(trigBlock).toContain('BEFORE INSERT OR UPDATE ON public.workspaces');
+    expect(trigBlock).toContain(
+      'EXECUTE FUNCTION public.prevent_workspace_entitlement_edits()',
+    );
+  });
+
+  it('consume_lease_credit is an atomic claim guarded by > 0 and returns false when no credit', () => {
+    const m = readRepoFile(MIGRATION);
+    const fn = m.slice(
+      m.indexOf('CREATE OR REPLACE FUNCTION public.consume_lease_credit'),
+      m.indexOf('ALTER FUNCTION public.consume_lease_credit'),
+    );
+    expect(fn.length).toBeGreaterThan(0);
+    // Single UPDATE with the > 0 guard — two concurrent uploads can't both win.
+    expect(fn).toContain('SET purchased_lease_credits = purchased_lease_credits - 1');
+    expect(fn).toContain('AND purchased_lease_credits > 0');
+    expect(fn).toContain('RETURN COALESCE(v_claimed, false)');
+    expect(fn).not.toContain('SECURITY DEFINER');
+  });
+
+  it('consume_lease_credit is executable ONLY by service_role (REVOKE PUBLIC/anon/authenticated)', () => {
+    const m = readRepoFile(MIGRATION);
+    // Narrow to the grants section between the RPC's COMMENT and section 5.
+    const grants = m.slice(
+      m.indexOf('REVOKE ALL ON FUNCTION public.consume_lease_credit'),
+      m.indexOf('-- 5.'),
+    );
+    expect(grants.length).toBeGreaterThan(0);
+    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM PUBLIC');
+    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM anon');
+    expect(grants).toContain('REVOKE ALL ON FUNCTION public.consume_lease_credit(uuid) FROM authenticated');
+    expect(grants).toContain('GRANT EXECUTE ON FUNCTION public.consume_lease_credit(uuid) TO service_role');
+  });
+
+  it('ledger has UNIQUE payment_intent_id and positive-quantity CHECK (webhook-retry idempotency)', () => {
+    const m = readRepoFile(MIGRATION);
+    const table = m.slice(
+      m.indexOf('CREATE TABLE IF NOT EXISTS public.lease_credit_purchases'),
+      m.indexOf('-- 3.'),
+    );
+    expect(table.length).toBeGreaterThan(0);
+    expect(table).toContain('payment_intent_id text NOT NULL UNIQUE');
+    expect(table).toContain('quantity integer NOT NULL CHECK (quantity > 0)');
+    expect(table).toContain('amount_cents integer NOT NULL CHECK (amount_cents >= 0)');
+  });
+
+  it('ledger RLS is enabled with a member SELECT-only policy and no write policies', () => {
+    const m = readRepoFile(MIGRATION);
+    const section = m.slice(
+      m.indexOf('CREATE TABLE IF NOT EXISTS public.lease_credit_purchases'),
+      m.indexOf('-- 3.'),
+    );
+    expect(section).toContain(
+      'ALTER TABLE public.lease_credit_purchases ENABLE ROW LEVEL SECURITY',
+    );
+    const polStart = section.indexOf(
+      'CREATE POLICY "Members can read their workspace credit purchases"',
+    );
+    expect(polStart).toBeGreaterThan(-1);
+    const polBlock = section.slice(polStart, polStart + 260);
+    expect(polBlock).toContain('FOR SELECT');
+    expect(polBlock).toContain('is_workspace_member(workspace_id, auth.uid())');
+    // No INSERT/UPDATE/DELETE/ALL policies anywhere in the migration — only
+    // service_role (RLS-exempt) can write the ledger.
+    expect(m).not.toContain('FOR INSERT');
+    expect(m).not.toContain('FOR UPDATE');
+    expect(m).not.toContain('FOR DELETE');
+    expect(m).not.toContain('FOR ALL');
+  });
+
+  it('grant trigger fires AFTER INSERT on the ledger and increments by NEW.quantity', () => {
+    const m = readRepoFile(MIGRATION);
+    const fn = m.slice(
+      m.indexOf('CREATE OR REPLACE FUNCTION public.grant_lease_credits_on_purchase'),
+      m.indexOf('ALTER FUNCTION public.grant_lease_credits_on_purchase'),
+    );
+    expect(fn.length).toBeGreaterThan(0);
+    expect(fn).toContain(
+      'SET purchased_lease_credits = purchased_lease_credits + NEW.quantity',
+    );
+    expect(fn).toContain('WHERE id = NEW.workspace_id');
+    const trigStart = m.indexOf('CREATE TRIGGER increment_lease_credits');
+    expect(trigStart).toBeGreaterThan(-1);
+    const trigBlock = m.slice(trigStart, trigStart + 220);
+    expect(trigBlock).toContain('AFTER INSERT ON public.lease_credit_purchases');
+    expect(trigBlock).toContain(
+      'EXECUTE FUNCTION public.grant_lease_credits_on_purchase()',
+    );
+  });
+});
