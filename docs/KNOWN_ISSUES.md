@@ -1659,3 +1659,13 @@ green.
 **Stub remediation:** Next constraint snapshot: after a live `SELECT activity_type, count(*)` confirms zero rows, drop the twelve dead values and comment the writer spellings as canonical — do-not-adopt. Add the missing label.
 
 ---
+
+### Item #83: Owner can hard-DELETE the workspaces row via PostgREST, bypassing the deleted_workspaces forensic record
+
+**Symptom:** The baseline permissive policy "Owners can delete their workspaces" lets an owner DELETE their `workspaces` row directly (PostgREST), cascading away the entire repository WITHOUT the forensic `deleted_workspaces` row that the `delete-workspace` edge function writes — unattributable bulk destruction. Pre-existing; reachable in any workspace state including grace/Vault (the Vault V1 restrictive layer deliberately leaves `workspaces` open for owner rename and must not block this path silently either way — it needs an explicit decision).
+
+**Severity:** High (unattributable destruction of the audit-defensible repository). Filed by lease-repository-integrity-reviewer reviewing 69fdc2e (2026-06-13).
+
+**Stub remediation:** Drop the permissive DELETE policy in favor of the `delete-workspace` edge function (which writes the forensic row), or add a restrictive DELETE policy on `workspaces` denying client deletes outright. Security migration — reviewer routing BEFORE push. Verify the delete-account flow doesn't depend on the client-side DELETE first.
+
+---
