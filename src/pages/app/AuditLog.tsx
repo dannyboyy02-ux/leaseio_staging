@@ -88,6 +88,19 @@ const ACTIVITY_LABELS: Record<string, string> = {
   change_canceled: 'Changes discarded',
   document_deleted: 'Document deleted',
   amendment_archived: 'Amendment deleted',
+  // #76 remediation (2026-06-12) — orphaned writer values restored to the
+  // CHECK; label them so restored rows render readably.
+  counter_signature_overdue: 'Counter-signature overdue',
+  counter_signature_received: 'Counter-signature received',
+  deactivated_approver_reassigned: 'Deactivated approver reassigned',
+  delegate_activated: 'Delegate activated',
+  document_iteration_uploaded: 'Document iteration uploaded',
+  negotiation_escalated_to_concept: 'Escalated to concept approver',
+  ooo_revoked: 'Out of office revoked',
+  ooo_routed_step: 'Step routed to out-of-office delegate',
+  policy_assignee_validation_failed: 'Approver validation failed',
+  voluntary_delegation_created: 'Delegation created',
+  final_review_returned_to_negotiation: 'Final review returned to negotiation',
 };
 
 export default function AuditLog() {
