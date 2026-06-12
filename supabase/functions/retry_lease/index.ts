@@ -539,14 +539,30 @@ serve(async (req) => {
     if (lease.workspace_id) {
       const { data: wsLifecycle } = await supabaseAdmin
         .from('workspaces')
-        .select('canceled_at')
+        .select('canceled_at, soft_deleted_at, plan')
         .eq('id', lease.workspace_id)
         .maybeSingle();
-      if ((wsLifecycle as { canceled_at?: string | null } | null)?.canceled_at) {
+      const wsLiveRow = wsLifecycle as {
+        canceled_at?: string | null;
+        soft_deleted_at?: string | null;
+        plan?: string | null;
+      } | null;
+      if (wsLiveRow?.canceled_at) {
         return new Response(
           JSON.stringify({
             error: 'This workspace\'s subscription has ended and it is in read-only mode. Renew the subscription to process documents again.',
             reason: 'subscription_canceled',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      // Vault V1 (2026-06-12): soft-deleted and vault-plan workspaces are
+      // equally read-only — semantics mirror _shared/workspace_live.ts.
+      if (wsLiveRow?.soft_deleted_at || wsLiveRow?.plan === 'vault') {
+        return new Response(
+          JSON.stringify({
+            error: 'This workspace\'s subscription is inactive and it is in read-only mode. Renew the subscription to process documents again.',
+            reason: 'subscription_inactive',
           }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );

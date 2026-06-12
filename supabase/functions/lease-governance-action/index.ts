@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   return baseCorsHeaders(requestOrigin, "POST, OPTIONS");
@@ -101,6 +102,22 @@ serve(async (req) => {
 
   const user = userData.user;
   const actorEmail = user.email ?? null;
+
+  // Vault V1: workspace liveness gate — no mutations on canceled /
+  // soft-deleted / vault workspaces (fail closed). Each action branch
+  // calls this exactly once, right after its target row is resolved and
+  // validated, before any mutation.
+  async function livenessGate(workspaceId: string): Promise<Response | null> {
+    const liveness = await checkWorkspaceLive(supabaseAdmin, workspaceId);
+    if (!liveness.live) {
+      return jsonResponse(
+        { ok: false, error: "subscription_inactive", reason: liveness.reason },
+        403,
+        origin,
+      );
+    }
+    return null;
+  }
 
   async function isWorkspaceAdmin(workspaceId: string): Promise<boolean> {
     const { data: workspace, error: workspaceError } = await supabaseAdmin
@@ -220,6 +237,8 @@ serve(async (req) => {
       if ((unlockRequest as any).status !== "pending") {
         return jsonResponse({ error: "Unlock request has already been resolved" }, 409, origin);
       }
+      const liveBlock = await livenessGate((unlockRequest as any).workspace_id);
+      if (liveBlock) return liveBlock;
       if (!(await isWorkspaceAdmin((unlockRequest as any).workspace_id))) {
         return jsonResponse({ error: "Forbidden" }, 403, origin);
       }
@@ -331,6 +350,8 @@ serve(async (req) => {
         .eq("id", leaseId)
         .maybeSingle();
       if (leaseError || !lease) return jsonResponse({ error: "Lease not found" }, 404, origin);
+      const liveBlock = await livenessGate((lease as any).workspace_id);
+      if (liveBlock) return liveBlock;
       if (!(await isWorkspaceAdmin((lease as any).workspace_id))) {
         return jsonResponse({ error: "Forbidden" }, 403, origin);
       }
@@ -396,6 +417,8 @@ serve(async (req) => {
       if ((changeSet as any).status !== "pending_approval") {
         return jsonResponse({ error: "Change set is not pending approval" }, 409, origin);
       }
+      const liveBlock = await livenessGate((changeSet as any).workspace_id);
+      if (liveBlock) return liveBlock;
       if (!(await canApproveChangeSet((changeSet as any).workspace_id))) {
         return jsonResponse({ error: "Forbidden" }, 403, origin);
       }
@@ -537,6 +560,8 @@ serve(async (req) => {
       if ((changeSet as any).status !== "draft") {
         return jsonResponse({ error: "Only draft change sets can be submitted" }, 409, origin);
       }
+      const liveBlock = await livenessGate((changeSet as any).workspace_id);
+      if (liveBlock) return liveBlock;
 
       const isSubmitter = (changeSet as any).submitted_by === user.id;
       const isAdminUser = await isWorkspaceAdmin((changeSet as any).workspace_id);
@@ -755,6 +780,8 @@ serve(async (req) => {
       if ((changeSet as any).status !== "draft") {
         return jsonResponse({ error: "Only draft change sets can be canceled" }, 409, origin);
       }
+      const liveBlock = await livenessGate((changeSet as any).workspace_id);
+      if (liveBlock) return liveBlock;
 
       const isSubmitter = (changeSet as any).submitted_by === user.id;
       if (!isSubmitter && !(await isWorkspaceAdmin((changeSet as any).workspace_id))) {

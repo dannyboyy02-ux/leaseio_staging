@@ -31,6 +31,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -151,6 +152,17 @@ serve(async (req) => {
 
   if (!isAuthorized) {
     return jsonResponse({ ok: false, error: "Not a member of this workspace" }, 403, origin);
+  }
+
+  // Vault V1: corrections are workspace data writes — a non-live workspace
+  // (canceled / soft-deleted / vault) is read-only.
+  const liveness = await checkWorkspaceLive(supabaseAdmin, workspaceId);
+  if (!liveness.live) {
+    return jsonResponse(
+      { ok: false, error: "subscription_inactive", reason: liveness.reason },
+      403,
+      origin,
+    );
   }
 
   // If leaseId provided, verify it belongs to the same workspace

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function isValidTokenFormat(token: string): boolean {
   return /^[a-f0-9]{64}$/i.test(token);
@@ -78,6 +79,16 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ ok: false, code: 'EXPIRED_INVITE', message: 'Invitation has expired' }),
           { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // Vault V1: a stale invite must not grow membership of a non-live
+      // workspace (canceled / soft-deleted / vault — read-only).
+      const liveness = await checkWorkspaceLive(supabaseAdmin, invite.workspace_id);
+      if (!liveness.live) {
+        return new Response(
+          JSON.stringify({ ok: false, error: 'subscription_inactive', reason: liveness.reason }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
 
@@ -226,6 +237,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ ok: false, code: 'EXPIRED_INVITE', message: 'Invitation has expired' }),
         { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // Vault V1: a stale invite must not grow membership of a non-live
+    // workspace (canceled / soft-deleted / vault — read-only).
+    const liveness = await checkWorkspaceLive(supabaseAdmin, invite.workspace_id);
+    if (!liveness.live) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'subscription_inactive', reason: liveness.reason }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 

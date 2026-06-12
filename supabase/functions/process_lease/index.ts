@@ -1094,7 +1094,7 @@ async function checkProcessingQuota(
 
   const { data: ws } = await supabaseAdmin
     .from('workspaces')
-    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at')
+    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at')
     .eq('id', workspaceId)
     .maybeSingle();
   const wsRow = ws as {
@@ -1103,6 +1103,7 @@ async function checkProcessingQuota(
     addon_document_capacity?: number;
     purchased_lease_credits?: number;
     canceled_at?: string | null;
+    soft_deleted_at?: string | null;
   } | null;
   const plan = (wsRow?.plan === 'business') ? 'business' : 'starter';
 
@@ -1118,6 +1119,23 @@ async function checkProcessingQuota(
           error:
             'This workspace\'s subscription has ended and it is in read-only mode. You can view and export your data; renew the subscription to process documents again.',
           reason: 'subscription_canceled',
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      ),
+    };
+  }
+
+  // Vault V1 (2026-06-12): soft-deleted and vault-plan workspaces are equally
+  // read-only — same backstop; semantics mirror _shared/workspace_live.ts.
+  if (wsRow?.soft_deleted_at || wsRow?.plan === 'vault') {
+    return {
+      kind: 'block',
+      response: new Response(
+        JSON.stringify({
+          ok: false,
+          error:
+            'This workspace\'s subscription is inactive and it is in read-only mode. You can view and export your data; renew the subscription to process documents again.',
+          reason: 'subscription_inactive',
         }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       ),

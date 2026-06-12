@@ -286,9 +286,10 @@ describe('process_lease pack-aware quota math', () => {
     const fn = quotaHead(read(FN));
     expect(fn.length).toBeGreaterThan(0);
     // Base limit now comes from document_limit (webhook-managed plan entitlement);
-    // the select also pulls purchased_lease_credits for the needs_credit decision.
+    // the select also pulls purchased_lease_credits for the needs_credit decision
+    // and canceled_at/soft_deleted_at for the Vault V1 liveness backstop.
     expect(fn).toContain(
-      ".select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at')",
+      ".select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at')",
     );
   });
 

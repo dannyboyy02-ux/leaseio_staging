@@ -20,6 +20,7 @@ import {
   type AssigneeContext,
   resolveEffectiveAssignee,
 } from "../_shared/approval_chain.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -90,6 +91,17 @@ serve(async (req) => {
     return jsonResponse(
       { ok: false, error: `Step has already been acted on (status: ${step.status}); revoke is too late.`, reason: "wrong_state" },
       409,
+      origin,
+    );
+  }
+
+  // Vault V1: workspace liveness gate — no mutations on canceled /
+  // soft-deleted / vault workspaces (fail closed).
+  const liveness = await checkWorkspaceLive(supabaseAdmin, step.workspace_id);
+  if (!liveness.live) {
+    return jsonResponse(
+      { ok: false, error: "subscription_inactive", reason: liveness.reason },
+      403,
       origin,
     );
   }

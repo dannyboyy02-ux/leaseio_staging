@@ -211,6 +211,27 @@ serve(async (req) => {
       return jsonResponse({ processed: 0 }, 200, origin);
     }
 
+    // Vault V1: this cron runs service-role across all workspaces — skip
+    // non-live workspaces (canceled / soft-deleted / vault) instead of
+    // failing the run. One batched lookup; semantics mirror
+    // _shared/workspace_live.ts (missing workspace rows fail closed).
+    const typedRules = rules as unknown as AlertRule[];
+    const ruleWorkspaceIds = [...new Set(typedRules.map((r) => r.workspace_id))];
+    const { data: wsRows, error: wsErr } = await supabase
+      .from("workspaces")
+      .select("id, canceled_at, soft_deleted_at, plan")
+      .in("id", ruleWorkspaceIds);
+    if (wsErr) throw wsErr;
+    const liveWorkspaceIds = new Set(
+      ((wsRows ?? []) as Array<{ id: string; canceled_at: string | null; soft_deleted_at: string | null; plan: string | null }>)
+        .filter((w) => !w.canceled_at && !w.soft_deleted_at && w.plan !== "vault")
+        .map((w) => w.id),
+    );
+    const liveRules = typedRules.filter((r) => liveWorkspaceIds.has(r.workspace_id));
+    if (!liveRules.length) {
+      return jsonResponse({ processed: 0 }, 200, origin);
+    }
+
     const { data: leases, error: leasesErr } = await supabase
       .from("leases")
       .select(
@@ -222,7 +243,7 @@ serve(async (req) => {
 
     const notifications = await evaluate(
       supabase,
-      rules as unknown as AlertRule[],
+      liveRules,
       (leases ?? []) as unknown as Lease[],
     );
 

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 import {
   displayLabel,
   type LifecycleStatus,
@@ -212,6 +213,16 @@ serve(async (req) => {
           await writer.close();
           return;
         }
+      }
+
+      // Vault V1: block Anthropic spend for non-live workspaces (canceled /
+      // soft-deleted / vault) BEFORE any AI call. SSE idiom — the HTTP status
+      // is fixed by the stream, so the gate is an error event, not a 403.
+      const liveness = await checkWorkspaceLive(supabaseAdmin, workspaceId);
+      if (!liveness.live) {
+        await write({ ok: false, error: 'subscription_inactive', reason: liveness.reason });
+        await writer.close();
+        return;
       }
 
       // Plan gate — Business only

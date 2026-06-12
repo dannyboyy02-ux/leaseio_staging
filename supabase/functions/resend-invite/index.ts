@@ -160,7 +160,7 @@ serve(async (req) => {
     // --- Authorize: owner OR admin (workspace_id derived from invite row) ---
     const { data: workspace, error: wsError } = await supabaseAdmin
       .from('workspaces')
-      .select('owner_id, name')
+      .select('owner_id, name, canceled_at, soft_deleted_at, plan')
       .eq('id', invite.workspace_id)
       .single();
 
@@ -179,6 +179,23 @@ serve(async (req) => {
       if (membership?.role !== 'admin') {
         return errRes(corsHeaders, 'UNAUTHORIZED', 'Only workspace owners or admins may resend invitations', 403);
       }
+    }
+
+    // Vault V1 liveness gate — inlined mirror of _shared/workspace_live.ts
+    // (this function cannot resolve ../_shared/ imports; keep semantics in
+    // sync). A canceled, soft-deleted, or vault-plan workspace is read-only
+    // and must not extend invites or send invite emails.
+    const livenessReason = workspace.soft_deleted_at
+      ? 'soft_deleted'
+      : workspace.canceled_at
+        ? 'canceled'
+        : workspace.plan === 'vault'
+          ? 'vault'
+          : null;
+    if (livenessReason) {
+      return new Response(JSON.stringify({ ok: false, error: 'subscription_inactive', reason: livenessReason }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // --- Build invite URL using existing token — no new token generated ---
