@@ -13,6 +13,8 @@ import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Link } from 'react-router-dom';
 import { RentRollExport } from '@/components/reports/RentRollExport';
+import { ReportSettingsCard } from '@/components/workspace/ReportSettingsCard';
+import { DiscountRateCard } from '@/components/workspace/DiscountRateCard';
 import { supabase } from '@/integrations/supabase/client';
 import {
   canAccessReportsAuditLog,
@@ -142,10 +144,24 @@ export default function Reports() {
               <h3 className="text-lg font-semibold mb-2">{t('reports.unlock_advanced')}</h3>
               <p className="text-sm text-muted-foreground max-w-md mb-6">{t('reports.unlock_desc')}</p>
               <Button variant="accent" size="lg" asChild>
-                <Link to="/app/upgrade?feature=reports">{t('integrations.upgrade_business')}</Link>
+                <Link to="/app/settings/account?tab=billing">{t('integrations.upgrade_business')}</Link>
               </Button>
             </CardContent>
           </Card>
+
+          {/* Report settings — moved here from Workspace Settings (settings
+              live where reports are generated). Admin/editor visible,
+              admin-editable; same gates the old tab used. */}
+          {(isAdmin || isEditor) && workspace?.id && (
+            <div className="space-y-6 pt-2">
+              <div>
+                <h2 className="text-lg font-semibold">{t('reports.settings_title')}</h2>
+                <p className="text-sm text-muted-foreground">{t('reports.settings_desc')}</p>
+              </div>
+              <ReportSettingsCard workspaceId={workspace.id} canEdit={isAdmin} />
+              <DiscountRateCard workspaceId={workspace.id} canEdit={isAdmin} />
+            </div>
+          )}
         </div>
       </AppLayout>
     );
@@ -320,6 +336,20 @@ export default function Reports() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Report settings — moved here from Workspace Settings (settings
+            live where reports are generated). Admin/editor visible,
+            admin-editable; same gates the old tab used. */}
+        {(isAdmin || isEditor) && workspace?.id && (
+          <div className="mt-8 space-y-6">
+            <div>
+              <h2 className="text-lg font-semibold">{t('reports.settings_title')}</h2>
+              <p className="text-sm text-muted-foreground">{t('reports.settings_desc')}</p>
+            </div>
+            <ReportSettingsCard workspaceId={workspace.id} canEdit={isAdmin} />
+            <DiscountRateCard workspaceId={workspace.id} canEdit={isAdmin} />
+          </div>
         )}
       </div>
     </AppLayout>

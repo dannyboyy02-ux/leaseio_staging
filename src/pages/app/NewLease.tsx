@@ -117,7 +117,7 @@ export default function NewLease() {
           <p className="text-muted-foreground max-w-md mb-6">
             Lease workflow is available on the Business plan.
           </p>
-          <Button onClick={() => navigate('/app/upgrade')}>Upgrade to Business</Button>
+          <Button onClick={() => navigate('/app/settings/account?tab=billing')}>Upgrade to Business</Button>
         </div>
       </AppLayout>
     );

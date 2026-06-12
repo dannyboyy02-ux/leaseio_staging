@@ -458,7 +458,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                 This request will be auto-approved. Ask your admin to assign approval roles in{' '}
                 <Link
-                  to="/app/settings/workspace"
+                  to="/app/settings/workspaces/profile"
                   className="underline"
                   onClick={() => onOpenChange(false)}
                 >

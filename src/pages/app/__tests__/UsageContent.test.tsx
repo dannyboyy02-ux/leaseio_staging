@@ -135,7 +135,7 @@ describe("UsageContent — workspaces card on a single-workspace plan (Starter)"
     // The hint links to the upgrade page.
     const upgradeLinks = screen
       .getAllByRole("link")
-      .filter((a) => a.getAttribute("href") === "/app/upgrade");
+      .filter((a) => a.getAttribute("href") === "/app/settings/account?tab=billing");
     expect(upgradeLinks.length).toBeGreaterThan(0);
   });
 });

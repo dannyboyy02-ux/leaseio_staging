@@ -34,7 +34,7 @@ const stepDefinitions: OnboardingStep[] = [
     titleKey: 'onboarding.step2_title',
     descriptionKey: 'onboarding.step2_desc',
     icon: Users,
-    href: '/app/settings/workspace',
+    href: '/app/settings/workspaces/profile',
   },
   {
     id: 'approvers',
@@ -43,7 +43,7 @@ const stepDefinitions: OnboardingStep[] = [
     descriptionKey: 'onboarding.step3_approvers_desc',
     description: 'Assign manager and financial approvers in Team & Roles',
     icon: ShieldCheck,
-    href: '/app/settings/workspace',
+    href: '/app/settings/workspaces/profile',
   },
   {
     id: 'notifications',

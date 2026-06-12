@@ -53,7 +53,10 @@
     "portfolio": "Portfolio",
     "reports_analytics": "Reports & Analytics",
     "tools": "Tools",
-    "language": "Language"
+    "language": "Language",
+    "get_help": "Get help",
+    "upgrade_plan": "Upgrade plan",
+    "plan_label": "{{plan}} plan"
   },
   "usage": {
     "title": "Usage",
@@ -514,7 +517,7 @@
     "appearance": "Appearance",
     "appearance_desc": "Choose how LeaseIO looks on this device. System matches your operating system theme.",
     "account_tab": "Account",
-    "privacy": "Privacy",
+    "privacy": "Privacy & Legal",
     "privacy_ai_title": "AI processing consent",
     "privacy_ai_desc": "Uploaded lease documents are processed by Anthropic Claude to extract terms. We never use your data to train AI models.",
     "privacy_consent_recorded": "Consent recorded",
@@ -652,7 +655,17 @@
     "update_payment_method": "Update Payment Method",
     "recovery_callout_title": "You picked Business during signup",
     "recovery_callout_desc": "Your workspace is on Starter until checkout completes. Pick up where you left off below.",
-    "recovery_callout_cta": "Complete Business checkout"
+    "recovery_callout_cta": "Complete Business checkout",
+    "billing": "Billing",
+    "workspaces_link": "Workspaces",
+    "upgrade_card_title": "Upgrade to Business",
+    "upgrade_card_cta": "Upgrade to Business",
+    "downgrade_hint": "Need to move down to Starter?",
+    "downgrade_link": "Downgrade plan",
+    "credits_title": "Lease credits",
+    "credits_desc": "One-time credits purchased at your overage rate. Each credit lets one lease through while you are over your monthly allowance.",
+    "credits_balance_one": "{{count}} credit available",
+    "credits_balance_other": "{{count}} credits available"
   },
   "packs": {
     "pack_10": "10-lease pack",
@@ -871,7 +884,19 @@
       "resume_button": "Authenticate & finish setup",
       "resume_unavailable_title": "We couldn't resume this workspace",
       "resume_unavailable_body": "The payment session for this workspace has expired. Remove it and try again from the sidebar."
-    }
+    },
+    "workspaces_title": "Workspaces",
+    "workspaces_subtitle": "Manage every workspace you own or belong to, and configure the current one",
+    "back_to_settings": "Settings",
+    "my_workspaces": "My Workspaces",
+    "current_workspace": "Current workspace",
+    "section_profile": "Company Profile",
+    "section_members": "Members",
+    "section_notifications": "Notifications",
+    "section_lease_config": "Lease Configuration",
+    "section_risk_watchlist": "Risk Watchlist",
+    "section_approval_rules": "Approval Rules",
+    "section_onboarding": "Onboarding"
   },
   "integrations": {
     "title": "Integrations",
@@ -924,7 +949,9 @@
     "monthly_overview_desc": "Total committed rent across all active leases",
     "charts_appear": "Charts will appear once you have finalized leases",
     "unlock_advanced": "Unlock Advanced Reports",
-    "unlock_desc": "Upgrade to the Business plan to access portfolio analytics, renewal pipelines, escalation calendars, and rent projections."
+    "unlock_desc": "Upgrade to the Business plan to access portfolio analytics, renewal pipelines, escalation calendars, and rent projections.",
+    "settings_title": "Report settings",
+    "settings_desc": "Workspace-wide defaults applied when reports are generated. Each report snapshots these values, so past reports never change."
   },
   "empty": {
     "no_leases": "No leases yet",

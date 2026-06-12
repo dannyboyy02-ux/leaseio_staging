@@ -135,7 +135,7 @@ export default function Portfolio() {
                 concentration, and the index-lease disclosure view.
               </p>
               <Button variant="accent" size="lg" asChild>
-                <Link to="/app/upgrade?feature=portfolio">Upgrade to Business</Link>
+                <Link to="/app/settings/account?tab=billing">Upgrade to Business</Link>
               </Button>
             </CardContent>
           </Card>

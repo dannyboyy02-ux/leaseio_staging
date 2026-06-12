@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut, Palette, Shield, Info, Settings2, Sun, Moon, Monitor, Mail, BarChart3, CalendarOff } from 'lucide-react';
-import { OutOfOfficeSettings } from '@/components/workflow/OutOfOfficeSettings';
+import { User, Lock, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { UsageContent } from '@/pages/app/UsageContent';
-import WorkspaceSettings from '@/pages/settings/WorkspaceSettings';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -40,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ANNUAL_DISCOUNT_PERCENT, PLANS, PLAN_ORDER, isUpgrade, normalizePlanId } from '@/config/pricing';
+import { ANNUAL_DISCOUNT_PERCENT, PLANS, isUpgrade, normalizePlanId } from '@/config/pricing';
 import { trialDaysRemaining } from '@/lib/trialStatus';
 import { DocumentPackDialog } from '@/components/workspace/DocumentPackDialog';
 import type { SubscriptionPlan } from '@/types';
@@ -163,10 +161,18 @@ export default function AccountSettings() {
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
   const [autoCheckoutFired, setAutoCheckoutFired] = useState(false);
 
-  // Handle URL params for tab switching
+  // Handle URL params for tab switching. Tabs removed/renamed in the 2026-06
+  // Claude-alignment pass map to their new homes so old links never strand:
+  //   subscription → billing (rename), notifications → profile (folded in),
+  //   other → privacy (merged), workspace/out-of-office → no longer tabs.
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab) setActiveTab(tab);
+    const TAB_ALIASES: Record<string, string> = {
+      subscription: 'billing',
+      notifications: 'profile',
+      other: 'privacy',
+    };
+    if (tab) setActiveTab(TAB_ALIASES[tab] ?? tab);
 
     const checkout = searchParams.get('checkout');
     if (checkout === 'success' || checkout === 'canceled') {
@@ -509,6 +515,14 @@ export default function AccountSettings() {
   const railTriggerClass =
     'w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
 
+  // Write the tab to the URL on change so refresh/back/share keep position.
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    navigate({ search: `?${next.toString()}` }, { replace: true });
+  };
+
   return (
     <AppLayout>
       <AppHeader title={t('account.title')} subtitle={t('account.subtitle')} />
@@ -516,7 +530,7 @@ export default function AccountSettings() {
       <div className="p-6">
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={handleTabChange}
           orientation="vertical"
           className="flex flex-col md:flex-row gap-6 md:items-start"
         >
@@ -540,39 +554,31 @@ export default function AccountSettings() {
               <Shield className="h-4 w-4" />
               {t('account.privacy')}
             </TabsTrigger>
-            <TabsTrigger value="notifications" className={railTriggerClass}>
-              <Bell className="h-4 w-4" />
-              {t('account.notifications')}
-            </TabsTrigger>
-            <TabsTrigger value="subscription" className={railTriggerClass}>
+            <TabsTrigger value="billing" className={railTriggerClass}>
               <CreditCard className="h-4 w-4" />
-              {t('account.subscription')}
+              {t('account.billing')}
             </TabsTrigger>
             <TabsTrigger value="usage" className={railTriggerClass}>
               <BarChart3 className="h-4 w-4" />
               {t('account.usage')}
             </TabsTrigger>
-            {/* Phase 7 — out-of-office routing for chain approvals */}
-            <TabsTrigger value="out-of-office" className={railTriggerClass}>
-              <CalendarOff className="h-4 w-4" />
-              {t('account.out_of_office')}
-            </TabsTrigger>
 
-            {isAdminUser && (
-              <>
-                <div className="hidden md:block h-px bg-border my-2" />
-                <TabsTrigger value="workspace" className={railTriggerClass}>
-                  <Settings2 className="h-4 w-4" />
-                  {t('account.workspace_settings_link')}
-                </TabsTrigger>
-              </>
-            )}
-
+            {/* Workspaces — navigation out to the workspace-scoped settings
+                surface (own rail + back arrow), not a tab. The boundary
+                between account-level and workspace-level settings is the
+                separator above this link. */}
             <div className="hidden md:block h-px bg-border my-2" />
-            <TabsTrigger value="other" className={railTriggerClass}>
-              <Info className="h-4 w-4" />
-              {t('account.other')}
-            </TabsTrigger>
+            <Link
+              to="/app/settings/workspaces"
+              className={cn(
+                railTriggerClass,
+                'flex items-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors',
+              )}
+            >
+              <Building2 className="h-4 w-4" />
+              {t('account.workspaces_link')}
+              <ChevronRight className="h-4 w-4 ml-auto" />
+            </Link>
           </TabsList>
 
           {/* Content panel — min-h stabilizes the layout so switching tabs
@@ -655,6 +661,59 @@ export default function AccountSettings() {
                     <Save className="h-4 w-4 mr-2" />
                   )}
                   {isSaving ? t('account.saving') : t('account.save_changes')}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Personal notification preferences — folded in from the former
+                Notifications tab. These are per-user (profiles table), so they
+                live with the rest of the user's own settings; the workspace's
+                reminder defaults live in Workspaces → Notifications. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('account.notification_prefs')}</CardTitle>
+                <CardDescription>{t('account.choose_alerts')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{t('account.email_notifications')}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t('account.email_notifications_desc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={emailNotifications}
+                    onCheckedChange={setEmailNotifications}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{t('account.sms_notifications')}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t('account.sms_notifications_desc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={smsNotifications}
+                    onCheckedChange={setSmsNotifications}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">{t('account.notify_abstraction_complete')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('account.notify_abstraction_complete_desc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={notifyAbstractionComplete}
+                    onCheckedChange={setNotifyAbstractionComplete}
+                  />
+                </div>
+                <Button variant="accent" onClick={handleSaveNotificationPrefs}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {t('account.save_changes')}
                 </Button>
               </CardContent>
             </Card>
@@ -844,59 +903,8 @@ export default function AccountSettings() {
           </TabsContent>
 
           {/* Notifications */}
-          <TabsContent value="notifications" className="space-y-6 mt-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('account.notification_prefs')}</CardTitle>
-                <CardDescription>{t('account.choose_alerts')}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{t('account.email_notifications')}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t('account.email_notifications_desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={emailNotifications}
-                    onCheckedChange={setEmailNotifications}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{t('account.sms_notifications')}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t('account.sms_notifications_desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={smsNotifications}
-                    onCheckedChange={setSmsNotifications}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-medium">{t('account.notify_abstraction_complete')}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t('account.notify_abstraction_complete_desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifyAbstractionComplete}
-                    onCheckedChange={setNotifyAbstractionComplete}
-                  />
-                </div>
-                <Button variant="accent" onClick={handleSaveNotificationPrefs}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {t('account.save_changes')}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Subscription */}
-          <TabsContent value="subscription" className="space-y-6 mt-0">
+          {/* Billing (renamed from Subscription; 'subscription' stays a URL alias) */}
+          <TabsContent value="billing" className="space-y-6 mt-0">
             {/* Skeleton while the workspace fetch is in flight. */}
             {isLoading && !workspace ? (
               <div className="space-y-6">
@@ -1135,120 +1143,103 @@ export default function AccountSettings() {
               </CardContent>
             </Card>
 
-            {/* Plans */}
-            <div>
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <h2 className="text-lg font-semibold">{t('account.available_plans')}</h2>
-                <div className="flex items-center gap-3 text-sm">
-                  <span className={cn('font-medium', billingInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground')}>
-                    {t('landing.pricing.monthly')}
-                  </span>
-                  <Switch
-                    checked={billingInterval === 'annual'}
-                    onCheckedChange={(v) => setBillingInterval(v ? 'annual' : 'monthly')}
-                  />
-                  <span className={cn('font-medium', billingInterval === 'annual' ? 'text-foreground' : 'text-muted-foreground')}>
-                    {t('landing.pricing.annual')}
-                  </span>
-                  <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                    {t('landing.pricing.save')} {ANNUAL_DISCOUNT_PERCENT}%
-                  </span>
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {PLAN_ORDER.map((planId, index) => {
-                  const plan = PLANS[planId];
-                  const isCurrent = currentPlan === planId;
-                  const isUpgradeOption = isUpgrade(currentPlan, planId);
+            {/* Single-lease credits — only renders while a balance exists.
+                Credits are granted by the Stripe webhook on a one-time
+                purchase from the limit wall and consumed by process_lease. */}
+            {(workspace.purchasedLeaseCredits ?? 0) > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t('account.credits_title')}</CardTitle>
+                  <CardDescription>{t('account.credits_desc')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm font-medium">
+                    {t('account.credits_balance', { count: workspace.purchasedLeaseCredits })}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-                  return (
-                    <Card
-                      key={plan.id}
-                      variant={plan.popular ? 'feature' : 'default'}
-                      className={cn(
-                        'relative animate-fade-up flex flex-col',
-                        isCurrent && 'ring-2 ring-accent'
-                      )}
-                      style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                      {isCurrent && (
-                        <div className="absolute -top-3 right-3">
-                          <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
-                        </div>
-                      )}
-                      {plan.popular && !isCurrent && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                          <Badge variant="pro">{t('account.popular')}</Badge>
-                        </div>
-                      )}
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">{t(plan.nameKey)}</CardTitle>
-                        <div className="flex items-baseline gap-1 mt-1">
-                          <span className="text-2xl font-bold">
-                            ${billingInterval === 'annual' ? Math.round(plan.price.annual / 12) : plan.price.monthly}
-                          </span>
-                          <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
-                        </div>
-                        {billingInterval === 'annual' && (
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {t('account.billed_annually', { total: plan.price.annual.toLocaleString() })}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {t('account.abstractions_included', { count: plan.abstractionsIncluded })}
-                        </p>
-                      </CardHeader>
-                      <CardContent className="flex-1 flex flex-col">
-                        <ul className="space-y-1.5 mb-4 flex-1">
-                          {plan.featureKeys.slice(0, 4).map((featureKey) => (
-                            <li key={featureKey} className="flex items-start gap-2 text-xs">
-                              <Check className="h-3 w-3 text-success shrink-0 mt-0.5" />
-                              <span className="text-muted-foreground">{t(featureKey)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        {isCurrent ? (
-                          <Button variant="secondary" size="sm" className="w-full" disabled>
-                            <Check className="h-4 w-4 mr-1" />
-                            {t('account.current')}
-                          </Button>
-                        ) : !isAdminUser ? null : isUpgradeOption ? (
-                          <Button
-                            variant="accent"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => handleUpgrade(planId)}
-                            disabled={isUpgrading === planId}
-                          >
-                            {isUpgrading === planId ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : null}
-                            {t('common.upgrade')}
-                          </Button>
-                        ) : (
-                          /* Any non-current, non-upgrade plan is a downgrade
-                             target. Confirmation dialog spells out the feature
-                             loss before opening the billing portal. */
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => setConfirmDowngradePlan(planId)}
-                          >
-                            {t('account.downgrade')}
-                          </Button>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-              {!isAdminUser && (
-                <p className="text-xs text-muted-foreground mt-3">
-                  {t('account.plan_changes_admin_only')}
-                </p>
-              )}
-            </div>
+            {/* Plan change — one focused card, not a plan-comparison grid
+                (the grid duplicated the landing page and buried the action).
+                Starter admins upgrade in place; Business admins downgrade
+                via the confirmation dialog that spells out feature loss. */}
+            {isAdminUser && currentPlan === 'starter' && (
+              <Card variant="feature">
+                <CardHeader>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <CardTitle>{t('account.upgrade_card_title')}</CardTitle>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className={cn('font-medium', billingInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground')}>
+                        {t('landing.pricing.monthly')}
+                      </span>
+                      <Switch
+                        checked={billingInterval === 'annual'}
+                        onCheckedChange={(v) => setBillingInterval(v ? 'annual' : 'monthly')}
+                      />
+                      <span className={cn('font-medium', billingInterval === 'annual' ? 'text-foreground' : 'text-muted-foreground')}>
+                        {t('landing.pricing.annual')}
+                      </span>
+                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                        {t('landing.pricing.save')} {ANNUAL_DISCOUNT_PERCENT}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-2xl font-bold">
+                      ${billingInterval === 'annual' ? Math.round(PLANS.business.price.annual / 12) : PLANS.business.price.monthly}
+                    </span>
+                    <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
+                  </div>
+                  {billingInterval === 'annual' && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {t('account.billed_annually', { total: PLANS.business.price.annual.toLocaleString() })}
+                    </p>
+                  )}
+                  <CardDescription className="mt-1">
+                    {t('account.abstractions_included', { count: PLANS.business.abstractionsIncluded })}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <ul className="space-y-1.5">
+                    {PLANS.business.featureKeys.slice(0, 4).map((featureKey) => (
+                      <li key={featureKey} className="flex items-start gap-2 text-xs">
+                        <Check className="h-3 w-3 text-success shrink-0 mt-0.5" />
+                        <span className="text-muted-foreground">{t(featureKey)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    variant="accent"
+                    className="w-full sm:w-auto"
+                    onClick={() => handleUpgrade('business')}
+                    disabled={isUpgrading === 'business'}
+                  >
+                    {isUpgrading === 'business' ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : null}
+                    {t('account.upgrade_card_cta')}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            {isAdminUser && currentPlan === 'business' && (
+              <p className="text-xs text-muted-foreground">
+                {t('account.downgrade_hint')}{' '}
+                <button
+                  type="button"
+                  className="underline hover:text-foreground"
+                  onClick={() => setConfirmDowngradePlan('starter')}
+                >
+                  {t('account.downgrade_link')}
+                </button>
+              </p>
+            )}
+            {!isAdminUser && (
+              <p className="text-xs text-muted-foreground">
+                {t('account.plan_changes_admin_only')}
+              </p>
+            )}
 
             {/* Cancel Subscription — shown for any active/paid subscription
                 (paid Starter included; plan tier is not a proxy for "has a
@@ -1286,19 +1277,7 @@ export default function AccountSettings() {
             <UsageContent />
           </TabsContent>
 
-          {/* Workspace — admin only, embedded inside Settings (Claude pattern) */}
-          {isAdminUser && (
-            <TabsContent value="workspace" className="mt-0">
-              <WorkspaceSettings embedded />
-            </TabsContent>
-          )}
-
           {/* Appearance — theme toggle */}
-          {/* Phase 7 — Out of Office */}
-          <TabsContent value="out-of-office" className="space-y-6 mt-0">
-            <OutOfOfficeSettings />
-          </TabsContent>
-
           <TabsContent value="appearance" className="space-y-6 mt-0">
             <Card>
               <CardHeader>
@@ -1381,6 +1360,9 @@ export default function AccountSettings() {
               </CardContent>
             </Card>
 
+            {/* Legal links — absorbed the former "Other" tab (its terms/
+                privacy links were duplicates of these; the support link
+                lives in the user menu as "Get help"). */}
             <Card>
               <CardHeader>
                 <CardTitle>{t('account.privacy_policies')}</CardTitle>
@@ -1391,26 +1373,6 @@ export default function AccountSettings() {
                 </div>
                 <div>
                   <Link to="/terms" className="text-primary hover:underline">{t('account.terms_link')}</Link>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Other — legal links + version */}
-          <TabsContent value="other" className="space-y-6 mt-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('account.other')}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div>
-                  <Link to="/terms" className="text-primary hover:underline">{t('account.terms_link')}</Link>
-                </div>
-                <div>
-                  <Link to="/privacy" className="text-primary hover:underline">{t('account.privacy_policy_link')}</Link>
-                </div>
-                <div>
-                  <Link to="/app/support" className="text-primary hover:underline">{t('account.support_link')}</Link>
                 </div>
                 <div className="text-xs text-muted-foreground pt-2 border-t border-border">
                   LeaseIO &middot; {new Date().getFullYear()}

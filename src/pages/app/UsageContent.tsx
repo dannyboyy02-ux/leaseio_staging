@@ -100,7 +100,7 @@ export function UsageContent({ showHeader = false }: Props) {
           {/* "Manage subscription" must land on subscription management,
               not the Business sales pitch — /app/upgrade pre-arms checkout. */}
           <Button variant="outline" size="sm" asChild>
-            <Link to="/app/settings/account?tab=subscription">
+            <Link to="/app/settings/account?tab=billing">
               <Sparkles className="h-3.5 w-3.5 mr-1.5" />
               {t('usage.manage_subscription')}
             </Link>
@@ -126,8 +126,8 @@ export function UsageContent({ showHeader = false }: Props) {
               <Link
                 to={
                   workspace.plan === 'business'
-                    ? '/app/settings/account?tab=subscription'
-                    : '/app/upgrade'
+                    ? '/app/settings/account?tab=billing'
+                    : '/app/settings/account?tab=billing'
                 }
                 className="flex items-center gap-1.5"
               >
@@ -215,7 +215,7 @@ export function UsageContent({ showHeader = false }: Props) {
             ) : (
               <p className="text-xs text-muted-foreground">
                 {t('usage.workspaces_upgrade_hint')}{' '}
-                <Link to="/app/upgrade" className="text-accent underline underline-offset-2">
+                <Link to="/app/settings/account?tab=billing" className="text-accent underline underline-offset-2">
                   {t('usage.workspaces_upgrade_link')}
                 </Link>
               </p>

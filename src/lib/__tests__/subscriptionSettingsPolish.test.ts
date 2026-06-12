@@ -218,8 +218,10 @@ describe('AccountSettings subscription tab', () => {
   });
 
   it('downgrade button opens a confirmation dialog that spells out feature loss before the portal', () => {
-    // Plan grid: downgrade sets state instead of opening the portal.
-    expect(source).toContain('onClick={() => setConfirmDowngradePlan(planId)}');
+    // Billing tab: the downgrade link sets state instead of opening the
+    // portal directly (the plan grid was replaced by a single upgrade card
+    // + downgrade link in the 2026-06 Claude-alignment pass).
+    expect(source).toContain("onClick={() => setConfirmDowngradePlan('starter')}");
 
     const dialog = sliceBetween(source, 'open={!!confirmDowngradePlan}', '</AlertDialog>');
     expect(dialog).toContain("t('account.downgrade_confirm_desc')");
@@ -261,8 +263,11 @@ describe('AccountSettings subscription tab', () => {
     const fallbacks = source.match(/t\('account\.billing_admin_only'\)/g) ?? [];
     expect(fallbacks.length).toBeGreaterThanOrEqual(3);
 
-    // The plan grid renders no upgrade/downgrade buttons for non-admins.
-    expect(source).toContain('!isAdminUser ? null :');
+    // Plan-change actions render only for admins; non-admins get the
+    // explanatory note instead of hidden/disabled buttons.
+    expect(source).toContain("isAdminUser && currentPlan === 'starter'");
+    expect(source).toContain("isAdminUser && currentPlan === 'business'");
+    expect(source).toContain("t('account.plan_changes_admin_only')");
   });
 });
 
@@ -284,7 +289,7 @@ describe('AppSidebar trial countdown pill', () => {
 
   it('renders the pill only when a count exists and deep-links to the subscription tab', () => {
     const pill = sliceBetween(source, '{trialDaysLeft !== null && (', '</Link>');
-    expect(pill).toContain('to="/app/settings/account?tab=subscription"');
+    expect(pill).toContain('to="/app/settings/account?tab=billing"');
     expect(pill).toContain("t('account.trial_pill', { count: trialDaysLeft })");
     // Day-of-charge collapses to a dedicated "ends today" string.
     expect(pill).toContain("t('account.trial_pill_today')");

@@ -51,8 +51,6 @@ const Portfolio = lazy(() => import("./pages/app/Portfolio"));
 const ApprovalQueue = lazy(() => import("./pages/app/ApprovalQueue"));
 const FinancialReview = lazy(() => import("./pages/app/FinancialReview"));
 const ImportHistory = lazy(() => import("./pages/app/ImportHistory"));
-const Upgrade = lazy(() => import("./pages/app/Upgrade"));
-const Usage = lazy(() => import("./pages/app/Usage"));
 const NewLease = lazy(() => import("./pages/app/NewLease"));
 const ExtractionAnalytics = lazy(() => import("./pages/app/ExtractionAnalytics"));
 const AuditLog = lazy(() => import("./pages/app/AuditLog"));
@@ -61,9 +59,8 @@ const NeedsActionPage = lazy(() => import("./pages/app/NeedsActionPage"));
 const NotificationDetail = lazy(() => import("./pages/app/NotificationDetail"));
 
 // Settings + account
-const WorkspaceSettings = lazy(() => import("./pages/settings/WorkspaceSettings"));
 const AccountSettings = lazy(() => import("./pages/settings/AccountSettings"));
-const WorkspaceManagement = lazy(() => import("./pages/account/WorkspaceManagement"));
+const WorkspacesSection = lazy(() => import("./pages/settings/WorkspacesSection"));
 const ApprovalPoliciesListPage = lazy(() => import("./pages/settings/ApprovalPoliciesListPage"));
 const ApprovalPolicyEditPage = lazy(() => import("./pages/settings/ApprovalPolicyEditPage"));
 
@@ -71,7 +68,6 @@ import { RequireRole } from "@/components/auth/RequireRole";
 import {
   canAccessReportsAuditLog,
   canAccessReportsDataQuality,
-  canAccessWorkspaceSettings,
   canEditWorkspaceSettings,
 } from "@/lib/authorization";
 
@@ -313,13 +309,22 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                {/* Workspaces drill-down — second-level settings rail with
+                    back arrow. Role gating happens per-section inside the
+                    page (every member can at least see My Workspaces). */}
                 <Route
-                  path="/app/settings/workspace"
+                  path="/app/settings/workspaces"
                   element={
                     <ProtectedRoute>
-                      <RequireRole allow={canAccessWorkspaceSettings}>
-                        <WorkspaceSettings />
-                      </RequireRole>
+                      <WorkspacesSection />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/app/settings/workspaces/:section"
+                  element={
+                    <ProtectedRoute>
+                      <WorkspacesSection />
                     </ProtectedRoute>
                   }
                 />
@@ -348,30 +353,6 @@ const App = () => (
                   element={
                     <ProtectedRoute>
                       <AccountSettings />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/app/account/workspaces"
-                  element={
-                    <ProtectedRoute>
-                      <WorkspaceManagement />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/app/upgrade"
-                  element={
-                    <ProtectedRoute>
-                      <Upgrade />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/app/usage"
-                  element={
-                    <ProtectedRoute>
-                      <Usage />
                     </ProtectedRoute>
                   }
                 />
@@ -419,7 +400,13 @@ const App = () => (
 
                 {/* Legacy route redirects */}
                 <Route path="/auth" element={<Navigate to="/login" replace />} />
-                <Route path="/app/settings/billing" element={<Navigate to="/app/settings/account" replace />} />
+                <Route path="/app/settings/billing" element={<Navigate to="/app/settings/account?tab=billing" replace />} />
+                {/* 2026-06 Claude-alignment pass — old settings satellites
+                    fold into the two-surface settings architecture. */}
+                <Route path="/app/settings/workspace" element={<Navigate to="/app/settings/workspaces/profile" replace />} />
+                <Route path="/app/account/workspaces" element={<Navigate to="/app/settings/workspaces" replace />} />
+                <Route path="/app/upgrade" element={<Navigate to="/app/settings/account?tab=billing" replace />} />
+                <Route path="/app/usage" element={<Navigate to="/app/settings/account?tab=usage" replace />} />
 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />

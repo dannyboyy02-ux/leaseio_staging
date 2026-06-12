@@ -580,7 +580,7 @@ describe("NewWorkspaceDialog — price-awareness gate (before name)", () => {
     await screen.findByText(/workspace.create.error_cap_reached_title/);
     const manageBtn = screen.getByRole("button", { name: /workspace.create.manage_link/ });
     fireEvent.click(manageBtn);
-    expect(navigateMock).toHaveBeenCalledWith("/app/account/workspaces");
+    expect(navigateMock).toHaveBeenCalledWith("/app/settings/workspaces");
   });
 
   it("the suppress checkbox writes the localStorage flag on Continue", async () => {
@@ -614,7 +614,7 @@ describe("NewWorkspaceDialog — price-awareness gate (before name)", () => {
     // No name input — they never reach it.
     expect(screen.queryByLabelText(/dialog_name_label/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /error_not_eligible_cta/ }));
-    expect(navigateMock).toHaveBeenCalledWith("/app/upgrade");
+    expect(navigateMock).toHaveBeenCalledWith("/app/settings/account?tab=billing");
   });
 
   it("no card on file shows the billing variant and routes to the subscription tab", async () => {
@@ -624,7 +624,7 @@ describe("NewWorkspaceDialog — price-awareness gate (before name)", () => {
     });
     expect(await screen.findByText("workspace.create.error_no_card_title")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /error_no_card_cta/ }));
-    expect(navigateMock).toHaveBeenCalledWith("/app/settings/account?tab=subscription");
+    expect(navigateMock).toHaveBeenCalledWith("/app/settings/account?tab=billing");
   });
 
   it("at the workspace cap shows the cap variant with count + cap params", async () => {
@@ -935,7 +935,7 @@ describe("NewWorkspaceDialog — gate edge cases", () => {
     });
     expect(await screen.findByText("workspace.create.error_no_card_title")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /error_no_card_cta/ }));
-    expect(navigateMock).toHaveBeenCalledWith("/app/settings/account?tab=subscription");
+    expect(navigateMock).toHaveBeenCalledWith("/app/settings/account?tab=billing");
   });
 
   // An unrecognized not-eligible reason falls through the gate switch's default

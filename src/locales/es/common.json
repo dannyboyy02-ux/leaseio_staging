@@ -53,7 +53,10 @@
     "portfolio": "Portafolio",
     "reports_analytics": "Informes y Análisis",
     "tools": "Herramientas",
-    "language": "Idioma"
+    "language": "Idioma",
+    "get_help": "Obtener ayuda",
+    "upgrade_plan": "Mejorar plan",
+    "plan_label": "Plan {{plan}}"
   },
   "usage": {
     "title": "Uso",
@@ -514,7 +517,7 @@
     "appearance": "Apariencia",
     "appearance_desc": "Elija cómo se ve LeaseIO en este dispositivo. Sistema usa el tema del sistema operativo.",
     "account_tab": "Cuenta",
-    "privacy": "Privacidad",
+    "privacy": "Privacidad y legal",
     "privacy_ai_title": "Consentimiento de procesamiento por IA",
     "privacy_ai_desc": "Los documentos cargados son procesados por Anthropic Claude para extraer términos. Nunca usamos sus datos para entrenar modelos de IA.",
     "privacy_consent_recorded": "Consentimiento registrado",
@@ -652,7 +655,17 @@
     "update_payment_method": "Actualizar Método de Pago",
     "recovery_callout_title": "Eligió Business durante el registro",
     "recovery_callout_desc": "Su espacio de trabajo está en Starter hasta que se complete el pago. Continúe donde lo dejó.",
-    "recovery_callout_cta": "Completar pago de Business"
+    "recovery_callout_cta": "Completar pago de Business",
+    "billing": "Facturación",
+    "workspaces_link": "Espacios de trabajo",
+    "upgrade_card_title": "Mejorar a Business",
+    "upgrade_card_cta": "Mejorar a Business",
+    "downgrade_hint": "¿Necesita bajar a Starter?",
+    "downgrade_link": "Bajar de plan",
+    "credits_title": "Créditos de arrendamiento",
+    "credits_desc": "Créditos únicos comprados a su tarifa de excedente. Cada crédito permite procesar un arrendamiento mientras supera su límite mensual.",
+    "credits_balance_one": "{{count}} crédito disponible",
+    "credits_balance_other": "{{count}} créditos disponibles"
   },
   "packs": {
     "pack_10": "Paquete de 10 arrendamientos",
@@ -871,7 +884,19 @@
       "resume_button": "Autenticar y terminar configuración",
       "resume_unavailable_title": "No pudimos reanudar este espacio de trabajo",
       "resume_unavailable_body": "La sesión de pago de este espacio de trabajo ha expirado. Elimínelo e intente de nuevo desde la barra lateral."
-    }
+    },
+    "workspaces_title": "Espacios de trabajo",
+    "workspaces_subtitle": "Administre cada espacio de trabajo que posee o al que pertenece, y configure el actual",
+    "back_to_settings": "Configuración",
+    "my_workspaces": "Mis espacios de trabajo",
+    "current_workspace": "Espacio de trabajo actual",
+    "section_profile": "Perfil de la empresa",
+    "section_members": "Miembros",
+    "section_notifications": "Notificaciones",
+    "section_lease_config": "Configuración de arrendamientos",
+    "section_risk_watchlist": "Lista de riesgos",
+    "section_approval_rules": "Reglas de aprobación",
+    "section_onboarding": "Incorporación"
   },
   "integrations": {
     "title": "Integraciones",
@@ -924,7 +949,9 @@
     "monthly_overview_desc": "Renta comprometida total en todos los arrendamientos activos",
     "charts_appear": "Los gráficos aparecerán una vez que tenga arrendamientos finalizados",
     "unlock_advanced": "Desbloquear Informes Avanzados",
-    "unlock_desc": "Actualice al plan Business para acceder a análisis de portafolio, pipelines de renovación, calendarios de escalación y proyecciones de renta."
+    "unlock_desc": "Actualice al plan Business para acceder a análisis de portafolio, pipelines de renovación, calendarios de escalación y proyecciones de renta.",
+    "settings_title": "Configuración de informes",
+    "settings_desc": "Valores predeterminados del espacio de trabajo aplicados al generar informes. Cada informe captura estos valores, por lo que los informes anteriores nunca cambian."
   },
   "empty": {
     "no_leases": "Sin arrendamientos aún",

@@ -327,7 +327,7 @@ export function LimitReachedDialog({
                   type="button"
                   onClick={() => {
                     requestClose(false);
-                    navigate("/app/settings/account?tab=subscription");
+                    navigate("/app/settings/account?tab=billing");
                   }}
                   className="group flex w-full items-start gap-3 rounded-md border border-border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
                 >

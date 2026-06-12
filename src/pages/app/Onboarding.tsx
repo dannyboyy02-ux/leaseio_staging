@@ -130,7 +130,7 @@ export default function Onboarding() {
       // user's choice from the landing page.
       navigate(
         selectedPlan === 'business'
-          ? `/app/settings/account?tab=subscription&billing=${selectedBilling}&autoCheckout=1`
+          ? `/app/settings/account?tab=billing&billing=${selectedBilling}&autoCheckout=1`
           : '/app/leases',
       );
     } catch (error: any) {
