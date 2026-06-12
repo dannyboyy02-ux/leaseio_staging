@@ -86,6 +86,8 @@ const ACTIVITY_LABELS: Record<string, string> = {
   change_approved: 'Changes approved',
   change_rejected: 'Changes rejected',
   change_canceled: 'Changes discarded',
+  document_deleted: 'Document deleted',
+  amendment_archived: 'Amendment deleted',
 };
 
 export default function AuditLog() {

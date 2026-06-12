@@ -1,11 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileEdit, ExternalLink, Loader2 } from 'lucide-react';
+import { FileEdit, ExternalLink, Loader2, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useApp } from '@/contexts/AppContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 
 interface Amendment {
@@ -22,26 +35,69 @@ interface AmendmentsListProps {
 }
 
 export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsListProps) {
+  const { userRole, refreshProfile } = useApp();
+  const { user } = useAuth();
   const [amendments, setAmendments] = useState<Amendment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<Amendment | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const isAdmin = userRole === 'admin' || userRole === 'owner';
+
+  const fetchAmendments = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('leases')
+      .select('id, filename, status, lifecycle_status, uploaded_at')
+      .eq('parent_lease_id', parentLeaseId)
+      .eq('archived', false)
+      .order('uploaded_at', { ascending: false });
+
+    if (!error && data) {
+      setAmendments(data);
+    }
+    setLoading(false);
+  }, [parentLeaseId]);
 
   useEffect(() => {
-    const fetchAmendments = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('leases')
-        .select('id, filename, status, lifecycle_status, uploaded_at')
-        .eq('parent_lease_id', parentLeaseId)
-        .order('uploaded_at', { ascending: false });
-
-      if (!error && data) {
-        setAmendments(data);
-      }
-      setLoading(false);
-    };
-
     fetchAmendments();
-  }, [parentLeaseId, refreshTrigger]);
+  }, [fetchAmendments, refreshTrigger]);
+
+  // "Delete" uses the same archive semantics as lease delete everywhere
+  // else in the app: the child lease leaves the active set (and frees a
+  // slot) without destroying data, and the action is attributable via
+  // archived_by plus an amendment_archived row on the parent lease.
+  const handleConfirmedDelete = useCallback(async () => {
+    if (!pendingDelete || !user?.id) return;
+    setDeleting(true);
+    try {
+      const { error } = await (supabase as any)
+        .from('leases')
+        .update({
+          archived: true,
+          archived_at: new Date().toISOString(),
+          archived_by: user.id,
+        })
+        .eq('id', pendingDelete.id);
+      if (error) throw error;
+
+      await supabase.from('lease_activity_log').insert({
+        lease_id: parentLeaseId,
+        user_id: user.id,
+        activity_type: 'amendment_archived',
+        details: { amendment_lease_id: pendingDelete.id, filename: pendingDelete.filename },
+      } as any);
+
+      toast.success('Amendment deleted');
+      setPendingDelete(null);
+      refreshProfile?.();
+      await fetchAmendments();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to delete amendment');
+    } finally {
+      setDeleting(false);
+    }
+  }, [pendingDelete, user?.id, parentLeaseId, refreshProfile, fetchAmendments]);
 
   const getStatusBadge = (status: string, lifecycleStatus: string | null) => {
     const displayStatus = lifecycleStatus || status;
@@ -114,15 +170,56 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
                 <div className="flex items-center gap-2 ml-3">
                   {getStatusBadge(amendment.status, amendment.lifecycle_status)}
                   <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/app/leases/${amendment.id}`}>
+                    <Link to={`/app/leases/${amendment.id}`} aria-label={`Open ${amendment.filename}`}>
                       <ExternalLink size={14} />
                     </Link>
                   </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Delete ${amendment.filename}`}
+                      onClick={() => setPendingDelete(amendment)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
+
+        <AlertDialog
+          open={pendingDelete !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingDelete(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this amendment?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {`"${pendingDelete?.filename}" will be removed from this lease's amendments. The action is recorded in the audit trail; an admin can restore it from the archived leases view.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleConfirmedDelete();
+                }}
+                disabled={deleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

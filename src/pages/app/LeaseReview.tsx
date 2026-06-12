@@ -3375,6 +3375,7 @@ export default function LeaseReview() {
                           executedFilename={lease.executed_filename}
                           executedStoragePath={lease.executed_storage_path}
                           isLocked={!!lease.model_locked}
+                          onDocumentDeleted={refetchLease}
                         />
                         {isMasterLease && (
                           <AmendmentsList
