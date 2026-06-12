@@ -603,8 +603,8 @@
     "cancel_subscription_desc": "Cancele su suscripción al final del período de facturación actual",
     "cancel_warning": "Su suscripción permanecerá activa hasta el final de su período de facturación actual. Puede reactivarla en cualquier momento antes.",
     "cancel_confirm": "¿Cancelar su suscripción?",
-    "cancel_confirm_desc": "Su suscripción permanece activa hasta el final del período de facturación actual. La cancelación se completa en el portal de facturación de Stripe — el siguiente paso lo abre.",
-    "cancel_confirm_desc_date": "Su suscripción permanece activa hasta el {{date}}. La cancelación se completa en el portal de facturación de Stripe — el siguiente paso lo abre.",
+    "cancel_confirm_desc": "Su suscripción permanece activa hasta el final del período de facturación actual. Después tendrá 30 días para ver y exportar sus datos; luego el acceso termina y el espacio de trabajo y todos sus datos se eliminan permanentemente. La cancelación se completa en el portal de facturación de Stripe — el siguiente paso lo abre.",
+    "cancel_confirm_desc_date": "Su suscripción permanece activa hasta el {{date}}. Después tendrá 30 días para ver y exportar sus datos; luego el acceso termina y el espacio de trabajo y todos sus datos se eliminan permanentemente. La cancelación se completa en el portal de facturación de Stripe — el siguiente paso lo abre.",
     "keep_subscription": "Mantener Suscripción",
     "free": "Gratis",
     "per_month": "/mes",
@@ -1569,6 +1569,10 @@
       "title": "7. Contáctenos",
       "paragraph1": "Si tiene preguntas sobre esta Política de Privacidad o sobre cómo manejamos sus datos, contáctenos en",
       "email": "privacy@theleaseio.com"
+    },
+    "section8": {
+      "title": "Retención de datos tras la cancelación",
+      "paragraph1": "Cuando su suscripción termina, su espacio de trabajo entra en un período de solo lectura de 30 días durante el cual puede iniciar sesión para ver y exportar todos sus datos. Enviamos recordatorios por correo electrónico durante esta ventana. Después de 30 días, el acceso termina y su espacio de trabajo y sus datos quedan programados para eliminación permanente, completada en aproximadamente 10 días adicionales (las copias de seguridad expiran según el calendario estándar de nuestro proveedor de infraestructura). Renovar su suscripción en cualquier momento antes de la eliminación restaura su espacio de trabajo por completo. Se conserva un registro forense mínimo de la eliminación (nombre del espacio, propietario, recuentos) con fines de auditoría. Cuando la ley nos exija conservar registros específicos por más tiempo, esa obligación prevalece."
     }
   },
   "terms": {
@@ -1617,5 +1621,15 @@
     "save_error": "Error al guardar cambios",
     "delete_confirm": "¿Está seguro que desea eliminar esto?",
     "changes_unsaved": "Tiene cambios sin guardar"
+  },
+  "cancellation": {
+    "banner_text_one": "Su suscripción ha terminado. Puede ver y exportar sus datos hasta el {{date}} (queda {{count}} día); después, este espacio de trabajo y todos sus datos se eliminarán permanentemente.",
+    "banner_text_other": "Su suscripción ha terminado. Puede ver y exportar sus datos hasta el {{date}} (quedan {{count}} días); después, este espacio de trabajo y todos sus datos se eliminarán permanentemente.",
+    "export_cta": "Exportar datos",
+    "renew_cta": "Renovar suscripción",
+    "wall_title": "El acceso a este espacio de trabajo ha terminado",
+    "wall_desc": "La ventana de 30 días para ver y exportar \"{{name}}\" ha terminado y el espacio de trabajo está programado para eliminación permanente. Renovar antes de la eliminación lo restaura todo por completo.",
+    "wall_ask_admin": "Pida a un administrador del espacio de trabajo que renueve la suscripción.",
+    "contact_support": "Contactar soporte"
   }
 }

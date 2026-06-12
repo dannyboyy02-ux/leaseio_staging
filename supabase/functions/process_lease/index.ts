@@ -1094,7 +1094,7 @@ async function checkProcessingQuota(
 
   const { data: ws } = await supabaseAdmin
     .from('workspaces')
-    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits')
+    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at')
     .eq('id', workspaceId)
     .maybeSingle();
   const wsRow = ws as {
@@ -1102,8 +1102,27 @@ async function checkProcessingQuota(
     document_limit?: number;
     addon_document_capacity?: number;
     purchased_lease_credits?: number;
+    canceled_at?: string | null;
   } | null;
   const plan = (wsRow?.plan === 'business') ? 'business' : 'starter';
+
+  // Cancellation lifecycle (2026-06-12): a canceled workspace is read-only
+  // (view + export). All processing — new uploads AND re-extractions — is
+  // blocked server-side; renewal clears canceled_at and restores instantly.
+  if (wsRow?.canceled_at) {
+    return {
+      kind: 'block',
+      response: new Response(
+        JSON.stringify({
+          ok: false,
+          error:
+            'This workspace\'s subscription has ended and it is in read-only mode. You can view and export your data; renew the subscription to process documents again.',
+          reason: 'subscription_canceled',
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      ),
+    };
+  }
 
   // Base cap = the workspace's document_limit (webhook-managed plan entitlement,
   // the same source the client meter reads), with PLAN_QUOTAS as a fallback.

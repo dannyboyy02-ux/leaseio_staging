@@ -63,6 +63,13 @@ export interface Workspace {
   // checkout — AccountSettings surfaces a callout when intendedPlan
   // diverges from plan.
   intendedPlan: SubscriptionPlan | null;
+  // Cancellation lifecycle (2026-06-12, billing-system-owned): canceledAt
+  // set = subscription fully ended, workspace is in the 30-day read-only
+  // grace window ending at graceExpiresAt; softDeletedAt set = access
+  // revoked, purge scheduled ~10 days out. All null = normal.
+  canceledAt: string | null;
+  graceExpiresAt: string | null;
+  softDeletedAt: string | null;
 }
 
 export interface WorkspaceMember {

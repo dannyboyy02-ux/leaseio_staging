@@ -184,6 +184,12 @@ verify_jwt = true
 [functions.sweep-pending-workspaces]
 verify_jwt = false
 
+# Cancellation lifecycle (2026-06-12) — daily cron: grace reminders,
+# soft-delete at day 30, buffered purge ~10 days later. Cron-only; auth
+# via x-cron-secret (CANCELLATION_LIFECYCLE_CRON_SECRET).
+[functions.process-cancellation-lifecycle]
+verify_jwt = false
+
 # Phase 3 — owner-only, service-role inside (workspaces UPDATE policy
 # blocks authenticated owner_id reassignment).
 [functions.transfer-workspace-ownership]

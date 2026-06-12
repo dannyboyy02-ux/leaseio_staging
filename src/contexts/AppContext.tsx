@@ -101,7 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end";
+        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end, canceled_at, grace_expires_at, soft_deleted_at";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -250,6 +250,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           (resolvedWorkspace as any).subscription_period_end ?? null,
         intendedPlan:
           (resolvedWorkspace as any).intended_plan ?? null,
+        // Cancellation lifecycle (2026-06-12): grace = read-only window;
+        // soft-deleted = access wall. Written only by billing system.
+        canceledAt: (resolvedWorkspace as any).canceled_at ?? null,
+        graceExpiresAt: (resolvedWorkspace as any).grace_expires_at ?? null,
+        softDeletedAt: (resolvedWorkspace as any).soft_deleted_at ?? null,
       });
 
       try {

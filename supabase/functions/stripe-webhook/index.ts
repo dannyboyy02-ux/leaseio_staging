@@ -7,6 +7,7 @@ import {
   ADDON_TYPE_SINGLE_LEASE,
   SINGLE_LEASE_PRICE_CENTS,
 } from "../_shared/document_packs.ts";
+import { GRACE_DAYS } from "../_shared/cancellation_lifecycle.ts";
 
 const PRICE_IDS: Record<string, string> = {
   starter: "price_1SntpyH03PByDjY31dGmC0E2",
@@ -114,6 +115,31 @@ serve(async (req) => {
     const entitled = subscription.status === "active" || subscription.status === "trialing";
     const effectivePlan = entitled ? requestedPlan : "starter";
 
+    // Cancellation lifecycle (ratified 2026-06-12): when the plan
+    // subscription FULLY ends (status 'canceled' — the paid-through period
+    // is over), start the 30-day read-only grace window. Renewal (any
+    // entitled status) clears the whole lifecycle, restoring full access —
+    // the customer can renew any time before the purge. Dunning states
+    // (past_due/unpaid/incomplete) deliberately do NOT start the deletion
+    // clock. canceled_at uses Stripe's ended_at when present so grace runs
+    // from the true period end even if the webhook delivers late.
+    const lifecycle: Record<string, string | null> = {};
+    if (entitled) {
+      lifecycle.canceled_at = null;
+      lifecycle.grace_expires_at = null;
+      lifecycle.soft_deleted_at = null;
+      lifecycle.purge_after = null;
+    } else if (subscription.status === "canceled") {
+      const endedAtSec = (subscription as any).ended_at;
+      const canceledAt = typeof endedAtSec === "number"
+        ? new Date(endedAtSec * 1000)
+        : new Date();
+      lifecycle.canceled_at = canceledAt.toISOString();
+      lifecycle.grace_expires_at = new Date(
+        canceledAt.getTime() + GRACE_DAYS * 86_400_000,
+      ).toISOString();
+    }
+
     const { error } = await supabaseAdmin
       .from("workspaces")
       .update({
@@ -124,6 +150,7 @@ serve(async (req) => {
         stripe_subscription_id: subscription.id,
         subscription_status: subscription.status,
         subscription_period_end: resolvePeriodEnd(subscription),
+        ...lifecycle,
       })
       .eq("id", workspaceId);
 

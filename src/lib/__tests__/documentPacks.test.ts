@@ -288,7 +288,7 @@ describe('process_lease pack-aware quota math', () => {
     // Base limit now comes from document_limit (webhook-managed plan entitlement);
     // the select also pulls purchased_lease_credits for the needs_credit decision.
     expect(fn).toContain(
-      ".select('plan, document_limit, addon_document_capacity, purchased_lease_credits')",
+      ".select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at')",
     );
   });
 

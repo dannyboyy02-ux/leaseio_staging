@@ -603,8 +603,8 @@
     "cancel_subscription_desc": "Cancel your subscription at the end of the current billing period",
     "cancel_warning": "Your subscription will remain active until the end of your current billing period. You can reactivate anytime before then.",
     "cancel_confirm": "Cancel your subscription?",
-    "cancel_confirm_desc": "Your subscription stays active until the end of your current billing period. Cancellation is completed in the Stripe billing portal — the next step opens it.",
-    "cancel_confirm_desc_date": "Your subscription stays active until {{date}}. Cancellation is completed in the Stripe billing portal — the next step opens it.",
+    "cancel_confirm_desc": "Your subscription stays active until the end of your current billing period. After that you'll have 30 days to view and export your data; then access ends and the workspace and all of its data are permanently deleted. Cancellation is completed in the Stripe billing portal — the next step opens it.",
+    "cancel_confirm_desc_date": "Your subscription stays active until {{date}}. After that you'll have 30 days to view and export your data; then access ends and the workspace and all of its data are permanently deleted. Cancellation is completed in the Stripe billing portal — the next step opens it.",
     "keep_subscription": "Keep Subscription",
     "free": "Free",
     "per_month": "/mo",
@@ -1569,6 +1569,10 @@
       "title": "7. Contact Us",
       "paragraph1": "If you have any questions about this Privacy Policy or how we handle your data, please contact us at",
       "email": "privacy@theleaseio.com"
+    },
+    "section8": {
+      "title": "Data retention after cancellation",
+      "paragraph1": "When your subscription ends, your workspace enters a 30-day read-only period during which you can sign in to view and export all of your data. We send email reminders throughout this window. After 30 days, access ends and your workspace and its data are scheduled for permanent deletion, completed within approximately 10 further days (backup copies expire on our infrastructure provider's standard schedule). Renewing your subscription at any time before deletion restores your workspace in full. A minimal forensic record of the deletion (workspace name, owner, counts) is retained for audit purposes. Where law requires us to retain specific records longer, that obligation prevails."
     }
   },
   "terms": {
@@ -1617,5 +1621,15 @@
     "save_error": "Failed to save changes",
     "delete_confirm": "Are you sure you want to delete this?",
     "changes_unsaved": "You have unsaved changes"
+  },
+  "cancellation": {
+    "banner_text_one": "Your subscription has ended. You can view and export your data until {{date}} ({{count}} day left) — after that, this workspace and all of its data are permanently deleted.",
+    "banner_text_other": "Your subscription has ended. You can view and export your data until {{date}} ({{count}} days left) — after that, this workspace and all of its data are permanently deleted.",
+    "export_cta": "Export data",
+    "renew_cta": "Renew subscription",
+    "wall_title": "Access to this workspace has ended",
+    "wall_desc": "The 30-day view-and-export window for \"{{name}}\" is over and the workspace is scheduled for permanent deletion. Renewing before deletion restores everything in full.",
+    "wall_ask_admin": "Ask a workspace admin to renew the subscription.",
+    "contact_support": "Contact support"
   }
 }
