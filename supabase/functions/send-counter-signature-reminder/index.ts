@@ -231,7 +231,7 @@ serve(async (req) => {
     }
 
     // ── Send the reminder via comment activity log ────────────────────
-    await supabaseAdmin.from("lease_activity_log").insert({
+    const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
       lease_id: lease.id,
       user_id: null,
       activity_type: "comment",
@@ -242,9 +242,10 @@ serve(async (req) => {
         message: tierMessage(tier, lease.counter_signature_due_date),
       },
     });
+    if (auditErr) console.error("lease_activity_log insert failed (comment/counter_signature_reminder notification):", auditErr.message);
 
     // Audit row capturing the reminder send (Phase 5 spec)
-    await supabaseAdmin.from("lease_activity_log").insert({
+    const { error: auditErr2 } = await supabaseAdmin.from("lease_activity_log").insert({
       lease_id: lease.id,
       user_id: null,
       activity_type: "counter_signature_reminder_sent",
@@ -256,13 +257,14 @@ serve(async (req) => {
         recipient_count: recipientIds.size,
       },
     });
+    if (auditErr2) console.error("lease_activity_log insert failed (counter_signature_reminder_sent):", auditErr2.message);
 
     // Tier 3+: also write the counter_signature_overdue audit row.
     // We only write it ONCE per lease (when the tier first crosses 3),
     // not every subsequent overdue tier — the audit shouldn't have
     // three separate "overdue" rows for the same lease.
     if (tier === 3 && sentTier < 3) {
-      await supabaseAdmin.from("lease_activity_log").insert({
+      const { error: auditErr3 } = await supabaseAdmin.from("lease_activity_log").insert({
         lease_id: lease.id,
         user_id: null,
         activity_type: "counter_signature_overdue",
@@ -271,6 +273,7 @@ serve(async (req) => {
           first_overdue_at: today.toISOString(),
         },
       });
+      if (auditErr3) console.error("lease_activity_log insert failed (counter_signature_overdue):", auditErr3.message);
     }
 
     // Bump the reminder count to the current tier (NOT just +1 — handles

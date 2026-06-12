@@ -298,7 +298,7 @@ serve(async (req) => {
     triggering_document_id: triggeringDoc.id,
   });
 
-  await supabaseAdmin
+  const { error: auditErr } = await supabaseAdmin
     .from("lease_activity_log")
     .insert({
       lease_id: lease.id,
@@ -312,8 +312,9 @@ serve(async (req) => {
         version_number: triggeringDoc.version_number,
       },
     });
+  if (auditErr) console.error("lease_activity_log insert failed (counter_signature_received):", auditErr.message);
 
-  await supabaseAdmin
+  const { error: auditErr2 } = await supabaseAdmin
     .from("lease_activity_log")
     .insert({
       lease_id: lease.id,
@@ -323,6 +324,7 @@ serve(async (req) => {
         triggering_document_id: triggeringDoc.id,
       },
     });
+  if (auditErr2) console.error("lease_activity_log insert failed (fully_executed_recorded):", auditErr2.message);
 
   // ── Notify submitter, signator (chain rows), and workspace admins ──
   const recipientIds = new Set<string>();
@@ -365,7 +367,7 @@ serve(async (req) => {
   }
 
   if (recipientIds.size > 0) {
-    await supabaseAdmin.from("lease_activity_log").insert({
+    const { error: auditErr3 } = await supabaseAdmin.from("lease_activity_log").insert({
       lease_id: lease.id,
       user_id: null,
       activity_type: "comment",
@@ -376,6 +378,7 @@ serve(async (req) => {
           "Counter-signed document received. Lease is now fully executed.",
       },
     });
+    if (auditErr3) console.error("lease_activity_log insert failed (comment/counter_signature_received notification):", auditErr3.message);
   }
 
   return jsonResponse(

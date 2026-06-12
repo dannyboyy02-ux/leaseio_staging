@@ -150,7 +150,7 @@ serve(async (req) => {
         })
         .eq("id", s.id);
 
-      await supabaseAdmin.from("lease_activity_log").insert({
+      const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
         lease_id: s.lease_id,
         user_id: caller.id,
         activity_type: "deactivated_approver_reassigned",
@@ -162,9 +162,10 @@ serve(async (req) => {
           stage: s.stage,
         },
       });
+      if (auditErr) console.error("lease_activity_log insert failed (deactivated_approver_reassigned):", auditErr.message);
 
       // Notify the delegate
-      await supabaseAdmin.from("lease_activity_log").insert({
+      const { error: auditErr2 } = await supabaseAdmin.from("lease_activity_log").insert({
         lease_id: s.lease_id,
         user_id: null,
         activity_type: "comment",
@@ -175,11 +176,12 @@ serve(async (req) => {
             "An approval step has been routed to you because the original assignee was deactivated.",
         },
       });
+      if (auditErr2) console.error("lease_activity_log insert failed (comment/deactivated_approver_reassigned notification):", auditErr2.message);
 
       reassignedToDelegate++;
     } else {
       // No clean automatic path — surface to admins
-      await supabaseAdmin.from("lease_activity_log").insert({
+      const { error: auditErr3 } = await supabaseAdmin.from("lease_activity_log").insert({
         lease_id: s.lease_id,
         user_id: caller.id,
         activity_type: "policy_assignee_validation_failed",
@@ -192,6 +194,7 @@ serve(async (req) => {
           stage: s.stage,
         },
       });
+      if (auditErr3) console.error("lease_activity_log insert failed (policy_assignee_validation_failed):", auditErr3.message);
 
       // Notify workspace admins for manual reassignment
       const { data: adminMembers } = await supabaseAdmin
@@ -203,7 +206,7 @@ serve(async (req) => {
       for (const m of (adminMembers ?? []) as Array<{ user_id: string }>) recipientIds.add(m.user_id);
       if ((ws as any)?.owner_id) recipientIds.add((ws as any).owner_id);
       if (recipientIds.size > 0) {
-        await supabaseAdmin.from("lease_activity_log").insert({
+        const { error: auditErr4 } = await supabaseAdmin.from("lease_activity_log").insert({
           lease_id: s.lease_id,
           user_id: null,
           activity_type: "comment",
@@ -214,6 +217,7 @@ serve(async (req) => {
               "A pending approval step has lost its assignee due to deactivation and requires manual reassignment via admin override.",
           },
         });
+        if (auditErr4) console.error("lease_activity_log insert failed (comment/policy_assignee_validation_failed notification):", auditErr4.message);
       }
 
       surfacedToAdmins++;
