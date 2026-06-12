@@ -80,6 +80,12 @@ export function LockedHeader({
                   <Lock className="h-3 w-3" />
                   {t('locked_lease.locked_badge')}
                 </span>
+                {isArchived && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+                    <Archive className="h-3 w-3" />
+                    {t('archive.deleted_badge')}
+                  </span>
+                )}
                 {subtitle ? <span className="truncate">· {subtitle}</span> : null}
               </div>
             </div>
@@ -154,6 +160,30 @@ export function LockedHeader({
             )}
           </div>
         </div>
+
+        {/* Archived ("deleted") state must be unmissable — without this
+            banner the page renders identically after a delete and users
+            conclude the action failed. */}
+        {isArchived && (
+          <Card className="mt-3 shadow-none border border-destructive/40 bg-destructive/5">
+            <CardContent className="py-3 px-4 flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-sm text-destructive min-w-0">
+                {t('archive.deleted_banner')}
+              </p>
+              {isAdmin && leaseId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setArchiveDialogOpen(true)}
+                >
+                  <ArchiveRestore className="h-3.5 w-3.5 mr-1.5" />
+                  {t('archive.unarchive')}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {isAdmin && pendingUnlockRequest && (
           <Card className="mt-3 shadow-none border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">

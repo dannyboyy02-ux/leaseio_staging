@@ -13,6 +13,7 @@ import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 type Policy = {
   id: string;
@@ -58,6 +59,7 @@ const matchSummary = (p: Policy): { label: string; value: string }[] => {
 export default function ApprovalPoliciesListPage() {
   const { workspace } = useApp();
   const navigate = useNavigate();
+  const { t } = useAppTranslation();
   const queryClient = useQueryClient();
   const [testOpen, setTestOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -199,7 +201,7 @@ export default function ApprovalPoliciesListPage() {
           onClick={() => navigate('/app/settings/workspaces/approval_policies')}
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
-          Back to Settings
+          {t('workspace.back_to_workspace_settings')}
         </Button>
         {/* Workspace default for distinct approvers */}
         <Card>

@@ -75,6 +75,7 @@ export default function AccountSettings() {
   const [notifyAbstractionComplete, setNotifyAbstractionComplete] = useState(true);
   const [aiConsentAt, setAiConsentAt] = useState<string | null>(null);
   const [isRevokingConsent, setIsRevokingConsent] = useState(false);
+  const [consentRevokeDialogOpen, setConsentRevokeDialogOpen] = useState(false);
 
   // Login activity — per-user sign-in history (login_events, RLS-scoped to
   // the signed-in user). Replaces the old lease-activity feed, which only
@@ -212,9 +213,10 @@ export default function AccountSettings() {
     loadPrefs();
   }, [authUser?.id]);
 
+  // Revoke goes through a localized AlertDialog (not window.confirm) — the
+  // Switch opens the dialog; this runs only after explicit confirmation.
   const handleRevokeAiConsent = async () => {
     if (!authUser?.id) return;
-    if (!confirm('Revoke AI processing consent? You can re-grant it later, but lease uploads may be blocked while revoked.')) return;
     setIsRevokingConsent(true);
     try {
       const { error } = await (supabase as any)
@@ -337,7 +339,8 @@ export default function AccountSettings() {
         .eq('id', authUser.id);
 
       if (error) throw error;
-      toast.success(t('account.preference_saved'));
+      // Shared id collapses rapid flips into one toast instead of a stack.
+      toast.success(t('account.preference_saved'), { id: 'pref-saved' });
     } catch (error) {
       console.error('Error saving notification prefs:', error);
       toast.error('Failed to save preferences');
@@ -685,9 +688,9 @@ export default function AccountSettings() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-medium">{t('account.notify_abstraction_complete')}</p>
-                    <p className="text-xs text-muted-foreground">
+                  <div>
+                    <p className="font-medium">{t('account.notify_abstraction_complete')}</p>
+                    <p className="text-sm text-muted-foreground">
                       {t('account.notify_abstraction_complete_desc')}
                     </p>
                   </div>
@@ -1269,10 +1272,34 @@ export default function AccountSettings() {
                     aria-label={t('account.privacy_ai_title')}
                     onCheckedChange={(v) => {
                       if (v) void handleGrantAiConsent();
-                      else void handleRevokeAiConsent();
+                      else setConsentRevokeDialogOpen(true);
                     }}
                   />
                 </div>
+                <AlertDialog
+                  open={consentRevokeDialogOpen}
+                  onOpenChange={setConsentRevokeDialogOpen}
+                >
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t('account.consent_revoke_title')}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t('account.consent_revoke_desc')}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => {
+                          setConsentRevokeDialogOpen(false);
+                          void handleRevokeAiConsent();
+                        }}
+                      >
+                        {t('account.consent_revoke_cta')}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </CardContent>
             </Card>
 

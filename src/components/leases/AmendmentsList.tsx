@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 
 interface Amendment {
@@ -37,6 +38,7 @@ interface AmendmentsListProps {
 export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsListProps) {
   const { userRole, refreshProfile } = useApp();
   const { user } = useAuth();
+  const { t } = useAppTranslation();
   const [amendments, setAmendments] = useState<Amendment[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<Amendment | null>(null);
@@ -65,8 +67,11 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
 
   // "Delete" uses the same archive semantics as lease delete everywhere
   // else in the app: the child lease leaves the active set (and frees a
-  // slot) without destroying data, and the action is attributable via
-  // archived_by plus an amendment_archived row on the parent lease.
+  // slot) without destroying data. Attribution lands on BOTH leases —
+  // amendment_archived on the parent (where the action happened) and
+  // lease_archived on the child (so its own history is complete) — and
+  // both inserts are error-checked: an archive that can't be recorded is
+  // surfaced, not silently swallowed.
   const handleConfirmedDelete = useCallback(async () => {
     if (!pendingDelete || !user?.id) return;
     setDeleting(true);
@@ -81,23 +86,36 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
         .eq('id', pendingDelete.id);
       if (error) throw error;
 
-      await supabase.from('lease_activity_log').insert({
-        lease_id: parentLeaseId,
-        user_id: user.id,
-        activity_type: 'amendment_archived',
-        details: { amendment_lease_id: pendingDelete.id, filename: pendingDelete.filename },
-      } as any);
+      const { error: auditError } = await supabase.from('lease_activity_log').insert([
+        {
+          lease_id: parentLeaseId,
+          user_id: user.id,
+          activity_type: 'amendment_archived',
+          details: { amendment_lease_id: pendingDelete.id, filename: pendingDelete.filename },
+        },
+        {
+          lease_id: pendingDelete.id,
+          user_id: user.id,
+          activity_type: 'lease_archived',
+          details: { parent_lease_id: parentLeaseId, filename: pendingDelete.filename },
+        },
+      ] as any);
+      if (auditError) {
+        console.error('Amendment archive audit insert failed:', auditError.message);
+        toast.warning(t('amendments.delete_audit_warning'));
+      } else {
+        toast.success(t('amendments.delete_success'));
+      }
 
-      toast.success('Amendment deleted');
       setPendingDelete(null);
       refreshProfile?.();
       await fetchAmendments();
     } catch (err: any) {
-      toast.error(err?.message ?? 'Failed to delete amendment');
+      toast.error(err?.message ?? t('amendments.delete_failed'));
     } finally {
       setDeleting(false);
     }
-  }, [pendingDelete, user?.id, parentLeaseId, refreshProfile, fetchAmendments]);
+  }, [pendingDelete, user?.id, parentLeaseId, refreshProfile, fetchAmendments, t]);
 
   const getStatusBadge = (status: string, lifecycleStatus: string | null) => {
     const displayStatus = lifecycleStatus || status;
@@ -199,13 +217,13 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete this amendment?</AlertDialogTitle>
+              <AlertDialogTitle>{t('amendments.delete_title')}</AlertDialogTitle>
               <AlertDialogDescription>
-                {`"${pendingDelete?.filename}" will be removed from this lease's amendments. The action is recorded in the audit trail; an admin can restore it from the archived leases view.`}
+                {t('amendments.delete_desc', { name: pendingDelete?.filename })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={deleting}>{t('common.cancel')}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={(e) => {
                   e.preventDefault();
@@ -215,7 +233,7 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
-                Delete
+                {t('common.delete')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

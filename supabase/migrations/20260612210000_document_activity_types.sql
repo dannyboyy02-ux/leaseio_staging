@@ -1,12 +1,20 @@
 -- Document management activity types (2026-06-12 polish pass).
 --
--- Adds two values to the lease_activity_log.activity_type CHECK:
+-- Adds five values to the lease_activity_log.activity_type CHECK:
 --   document_deleted    — an uploaded document (original or executed copy)
 --                         was deleted from an unlocked lease via the
---                         Documents tab. details: { filename, document_kind }.
+--                         Documents tab. details: { filename, document_kind,
+--                         storage_path, bucket }.
 --   amendment_archived  — an amendment (child lease) was archived from the
 --                         parent's Amendments list. Logged on the PARENT
 --                         lease. details: { amendment_lease_id, filename }.
+--   lease_archived      — a lease was archived ("deleted") via ArchiveButton
+--                         or the amendments list (logged on the lease itself).
+--   lease_restored      — a lease was unarchived. Restore nulls
+--                         archived_at/archived_by, so this row is the durable
+--                         attribution for the restore (integrity review).
+--   amendment_restored  — reserved for a parent-side restore log if a
+--                         restore-from-parent surface ships later.
 --
 -- Pattern: snapshot the live list + append (same as the Phase 8 extension).
 -- The list below was captured from the live constraint on 2026-06-12.
@@ -53,5 +61,6 @@ ALTER TABLE public.lease_activity_log
     'tier2_classification_overridden', 'tier2_correction_recorded',
     'lease_insights_generated',
     -- 2026-06-12 additions:
-    'document_deleted', 'amendment_archived'
+    'document_deleted', 'amendment_archived', 'amendment_restored',
+    'lease_archived', 'lease_restored'
   ));

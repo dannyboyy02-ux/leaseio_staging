@@ -12,20 +12,16 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders as baseCorsHeaders, jsonResponse } from "../_shared/cors.ts";
 
 const KEEP_ROWS = 25;
 const MAX_UA_LENGTH = 512;
+// Loose IP-literal shape check (IPv4 or IPv6) — display-layer hygiene, not
+// security validation.
+const IP_PATTERN = /^(\d{1,3}(\.\d{1,3}){3}|[0-9a-fA-F:]+)$/;
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
-}
-
-function jsonResponse(payload: unknown, status: number, origin: string | null) {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { ...corsHeaders(origin), "Content-Type": "application/json" },
-  });
 }
 
 serve(async (req) => {
@@ -52,9 +48,16 @@ serve(async (req) => {
   }
   const userId = userData.user.id;
 
-  // x-forwarded-for is set by the platform; the first hop is the client.
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded ? forwarded.split(",")[0].trim() : null;
+  // The platform APPENDS the real client IP to any client-supplied
+  // X-Forwarded-For, so the FIRST entry is client-forgeable — take the LAST
+  // (platform-set) entry, preferring the dedicated real-IP headers when
+  // present, and only store something that actually parses as an IP.
+  const candidate =
+    req.headers.get("cf-connecting-ip") ??
+    req.headers.get("x-real-ip") ??
+    req.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ??
+    null;
+  const ip = candidate && IP_PATTERN.test(candidate) && candidate.length <= 45 ? candidate : null;
   const userAgent = (req.headers.get("user-agent") ?? "").slice(0, MAX_UA_LENGTH) || null;
 
   const { error: insertError } = await supabaseAdmin.from("login_events").insert({

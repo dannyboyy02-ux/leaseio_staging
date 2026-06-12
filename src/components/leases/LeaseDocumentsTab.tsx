@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { LeaseAnalysisDocument } from '@/components/leases/LeaseAnalysisExport';
 import { type ReportLease } from '@/lib/reportGeneration';
 import { buildLeaseAnalysisProse } from '@/lib/leaseAnalysisProse';
@@ -59,6 +60,7 @@ export function LeaseDocumentsTab({
 }: LeaseDocumentsTabProps) {
   const { user } = useAuth();
   const { userRole } = useApp();
+  const { t } = useAppTranslation();
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [analyses, setAnalyses] = useState<AnalysisVersion[]>([]);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -100,6 +102,14 @@ export function LeaseDocumentsTab({
     a.click();
   }, []);
 
+  // Deletion order matters (integrity review 2026-06-12):
+  //   1. Governed leases UPDATE first — prevent_locked_lease_edits fail-fasts
+  //      on a locked lease BEFORE anything is destroyed (a stale isLocked in
+  //      this component can't bypass it).
+  //   2. Audit row second, error-CHECKED — a delete that isn't recorded must
+  //      not proceed; on failure the column pointers are restored.
+  //   3. Storage removal LAST — if it fails, the object is orphaned but
+  //      invisible (recoverable), never a dangling DB reference.
   const handleConfirmedDelete = useCallback(async () => {
     if (!pendingDelete || !user?.id) return;
 
@@ -113,38 +123,55 @@ export function LeaseDocumentsTab({
     setDeleting(true);
     try {
       const bucket = pendingDelete.kind === 'original' ? 'leases' : 'executed-leases';
-      const { error: storageError } = await supabase.storage
-        .from(bucket)
-        .remove([pendingDelete.path]);
-      if (storageError) throw storageError;
-
       const columns =
         pendingDelete.kind === 'original'
           ? { filename: null, storage_path: null }
           : { executed_filename: null, executed_storage_path: null };
+      const restoreColumns =
+        pendingDelete.kind === 'original'
+          ? { filename: pendingDelete.name, storage_path: pendingDelete.path }
+          : { executed_filename: pendingDelete.name, executed_storage_path: pendingDelete.path };
+
       const { error: updateError } = await (supabase as any)
         .from('leases')
         .update(columns)
         .eq('id', leaseId);
       if (updateError) throw updateError;
 
-      await supabase.from('lease_activity_log').insert({
+      const { error: auditError } = await supabase.from('lease_activity_log').insert({
         lease_id: leaseId,
         user_id: user.id,
         activity_type: 'document_deleted',
-        details: { filename: pendingDelete.name, document_kind: pendingDelete.kind },
+        details: {
+          filename: pendingDelete.name,
+          document_kind: pendingDelete.kind,
+          storage_path: pendingDelete.path,
+          bucket,
+        },
       } as any);
+      if (auditError) {
+        await (supabase as any).from('leases').update(restoreColumns).eq('id', leaseId);
+        throw new Error(t('documents.delete_audit_failed'));
+      }
 
-      toast.success('Document deleted');
+      const { data: removed, error: storageError } = await supabase.storage
+        .from(bucket)
+        .remove([pendingDelete.path]);
+      if (storageError || !removed || removed.length === 0) {
+        console.error('Storage removal incomplete:', storageError?.message ?? 'object not returned');
+        toast.warning(t('documents.delete_file_pending'));
+      } else {
+        toast.success(t('documents.delete_success'));
+      }
       setPendingDelete(null);
       onDocumentDeleted?.();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to delete document';
+      const message = err instanceof Error ? err.message : t('documents.delete_failed');
       toast.error(message);
     } finally {
       setDeleting(false);
     }
-  }, [pendingDelete, user?.id, leaseId, onDocumentDeleted]);
+  }, [pendingDelete, user?.id, leaseId, onDocumentDeleted, t]);
 
   const handleGenerateAnalysis = useCallback(async () => {
     setGeneratingPdf(true);
@@ -344,7 +371,7 @@ export function LeaseDocumentsTab({
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{report.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  Generated {report.generatedAt} · available until you leave this page
+                  {t('documents.summary_session_note', { date: report.generatedAt })}
                 </p>
               </div>
             </div>
@@ -374,6 +401,14 @@ export function LeaseDocumentsTab({
         {!hasDocuments && (
           <p className="text-xs text-muted-foreground py-2">
             No documents uploaded for this lease yet.
+          </p>
+        )}
+
+        {/* Post-lock, the delete buttons are gone by design — say so once
+            instead of letting users hunt for a "missing" control. */}
+        {isLocked && (storagePath || executedStoragePath) && (
+          <p className="text-xs text-muted-foreground border-t border-border pt-2">
+            {t('documents.locked_note')}
           </p>
         )}
 
@@ -435,16 +470,20 @@ export function LeaseDocumentsTab({
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>
-                {pendingDelete?.kind === 'summary' ? 'Remove this summary?' : 'Delete this document?'}
+                {pendingDelete?.kind === 'summary'
+                  ? t('documents.remove_summary_title')
+                  : t('documents.delete_doc_title')}
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {pendingDelete?.kind === 'summary'
-                  ? `"${pendingDelete.name}" will be removed from the list. You can generate a new summary at any time.`
-                  : `"${pendingDelete?.name}" will be permanently deleted from this lease. This action is recorded in the audit trail and cannot be undone.`}
+                  ? t('documents.remove_summary_desc', { name: pendingDelete.name })
+                  : pendingDelete?.kind === 'original'
+                    ? t('documents.delete_original_desc', { name: pendingDelete.name })
+                    : t('documents.delete_executed_desc', { name: pendingDelete?.name })}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel disabled={deleting}>{t('common.cancel')}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={(e) => {
                   e.preventDefault();
@@ -454,7 +493,7 @@ export function LeaseDocumentsTab({
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
-                {pendingDelete?.kind === 'summary' ? 'Remove' : 'Delete'}
+                {pendingDelete?.kind === 'summary' ? t('documents.remove_cta') : t('common.delete')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

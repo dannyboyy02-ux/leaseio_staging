@@ -2902,6 +2902,26 @@ export default function LeaseReview() {
                       Show source document
                     </Button>
                   )}
+                  {/* Archived ("deleted") state banner — without it the page
+                      renders identically after a delete and users conclude
+                      the action failed. Restore reuses the archive dialog. */}
+                  {lease.archived && (
+                    <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 flex items-center justify-between gap-4 flex-wrap">
+                      <p className="text-sm text-destructive min-w-0">
+                        {t('archive.deleted_banner')}
+                      </p>
+                      {(userRole === 'admin' || userRole === 'owner') && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => setShowArchiveDialog(true)}
+                        >
+                          {t('archive.unarchive')}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   {isFailedStatus(lease?.status) && (
                     <FailedLeaseBanner
                       leaseId={lease.id}

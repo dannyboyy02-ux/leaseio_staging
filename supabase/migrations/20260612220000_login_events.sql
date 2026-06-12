@@ -24,7 +24,10 @@ CREATE INDEX IF NOT EXISTS login_events_user_created_idx
 
 ALTER TABLE public.login_events ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON public.login_events FROM PUBLIC, anon;
+-- Supabase's default privileges grant ALL on new public tables to
+-- authenticated; revoke first so the grant layer matches policy intent
+-- (RLS deny-by-default must not be the only barrier to client writes).
+REVOKE ALL ON public.login_events FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.login_events TO authenticated;
 
 DO $$
