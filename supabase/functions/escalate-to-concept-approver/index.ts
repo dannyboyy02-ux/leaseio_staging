@@ -367,7 +367,7 @@ serve(async (req) => {
     // or chain was previously cleared). Note this in the audit log but
     // proceed — the lifecycle is still rolled back to concept_under_review,
     // which is the spec's primary effect.
-    await supabaseAdmin.from("lease_activity_log").insert({
+    const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
       lease_id: lease.id,
       user_id: user.id,
       activity_type: "comment",
@@ -377,6 +377,7 @@ serve(async (req) => {
           "Escalation requested but no prior concept-stage chain rows existed to reactivate.",
       },
     });
+    if (auditErr) console.error("lease_activity_log insert failed (comment/escalation_no_prior_chain):", auditErr.message);
   }
 
   // ── Notify the manager_approver workspace_roles cohort ─────────────
@@ -392,7 +393,7 @@ serve(async (req) => {
     .map((r) => r.user_id);
 
   if (recipientIds.length > 0) {
-    await supabaseAdmin.from("lease_activity_log").insert({
+    const { error: auditErr2 } = await supabaseAdmin.from("lease_activity_log").insert({
       lease_id: lease.id,
       user_id: null,
       activity_type: "comment",
@@ -402,6 +403,7 @@ serve(async (req) => {
         message: `Lease re-escalated to concept stage by submitter. Reason: ${reason}`,
       },
     });
+    if (auditErr2) console.error("lease_activity_log insert failed (comment/concept_re_review_required notification):", auditErr2.message);
   }
 
   return jsonResponse(

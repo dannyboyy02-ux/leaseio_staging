@@ -1,0 +1,68 @@
+# Vault Tier — Build Spec (retention / data-only)
+
+Ratified 2026-06-12 (PRODUCT_STRATEGY.md Decision 5 — read that first; it holds
+the rationale and the eight ratified decisions). Status: **scoped, not started.**
+
+## One paragraph
+
+Vault is a $249/year, owner-only, read-only repository state for workspaces
+that would otherwise cancel and purge. Offered only as an offramp (cancel
+dialog, grace banner, grace reminder emails) — never on the public pricing
+page. Flatten entitlements: view + export everything the workspace has.
+Lapsed Vault feeds the existing cancellation lifecycle unchanged.
+
+## Build outline (sequenced)
+
+### V1 — Server-side read-only enforcement (KNOWN_ISSUES #75 — BLOCKER)
+The foundation, and it hardens the existing grace window for free.
+- `is_workspace_live(workspace_id)` SQL helper: false when `plan = 'vault'`
+  OR `canceled_at IS NOT NULL` OR `soft_deleted_at IS NOT NULL`.
+- Fold into write-side RLS policies / mutating edge functions (leases,
+  rent_schedules, risks, approval chain actions, invites, uploads).
+  **Security migration — reviewer routing BEFORE db push, expect 3+ rounds.**
+- Read + export paths stay open; `transfer-workspace-ownership` stays open.
+
+### V2 — Plan plumbing
+- `SubscriptionPlan` → `'starter' | 'business' | 'vault'`; `normalizePlanId`;
+  `PLANS` config (yearly interval, $249, ownerOnly + readOnly flags).
+- #29 entitlement guard: no derivation change needed (plan column already
+  guarded); verify INSERT default stays 'starter'.
+- Stripe: new Product + yearly Price; ID via `STRIPE_PRICE_VAULT_ANNUAL` env
+  (fail closed if unset, same as annual plan prices).
+- `stripe-webhook`: recognize the Vault price → `plan='vault'`,
+  `document_limit` untouched (intake is frozen anyway; backstops gate on plan),
+  clear cancellation-lifecycle columns on conversion (it's an active sub).
+
+### V3 — Conversion flows
+- **Cancel dialog** (Billing): "Switch to Vault instead" path → checkout for
+  the yearly price; copy warns: owner-only (members lose access), read-only,
+  no AI, packs end at period close.
+- **Grace banner** (`CancellationBanner`): third CTA "Keep your data — Vault
+  $249/yr" (admins → owner-only nuance: only the OWNER can convert).
+- **Grace reminder emails** (`process-cancellation-lifecycle`): add the Vault
+  CTA line + link.
+- Pack auto-cancel at period end during conversion (Stripe API, webhook-safe).
+
+### V4 — In-product Vault experience
+- Non-owner members: wall (reuse `SoftDeletedWall` shape) — "in Vault,
+  contact the owner."
+- Owner: read-only UI state (banner: "Vault — read-only repository. Renews
+  {date} at $249/yr. [Reactivate]"); intake entry points hidden; AI assistant
+  unmounted; exports all available (flatten rule).
+- Billing tab: Vault plan card, Reactivate CTA (→ Starter/Business checkout;
+  no Vault-fee refund), renewal date.
+- Renewal reminder email ~14 days ahead (no-surprise-billing rule);
+  failed renewal → normal Stripe dunning → `canceled` → existing lifecycle.
+
+### Deferred (fast-follow, do not build now)
+- 3.5% yearly escalator (billing subsystem: `invoice.upcoming` → computed
+  price swap → escalated amount quoted in the reminder email).
+- Any firm-layer / parent-child data-only construct (Phase 9 territory).
+
+## Invariants
+- Vault has ZERO AI spend. Anything that calls a paid API is off.
+- Every conversion/reactivation is an explicit consented purchase; no
+  proration, no refunds on early reactivation.
+- Vault never appears on `/` pricing or in signup; offramp surfaces only.
+- A Vault workspace is exportable in full at all times — export gating in
+  Vault is a bug by definition.

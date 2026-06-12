@@ -753,7 +753,7 @@ serve(async (req) => {
       // Notify the execution owner that they're now responsible for
       // chasing the counter-signature.
       if (executionOwnerId) {
-        await supabaseAdmin.from("lease_activity_log").insert({
+        const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
           lease_id: step.lease_id,
           user_id: null,
           activity_type: "comment",
@@ -764,6 +764,7 @@ serve(async (req) => {
               `You are responsible for chasing the counter-signed document. Due ${dueDateStr}.`,
           },
         });
+        if (auditErr) console.error("lease_activity_log insert failed (comment/execution_owner_assigned notification):", auditErr.message);
       }
 
       // No nextAssignees for Phase 5 — counter-signature is not a

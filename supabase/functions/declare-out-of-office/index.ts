@@ -192,7 +192,7 @@ serve(async (req) => {
           assignee_resolution_source: "ooo_delegate",
         })
         .eq("id", s.id);
-      await supabaseAdmin.from("lease_activity_log").insert({
+      const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
         lease_id: s.lease_id,
         user_id: user.id,
         activity_type: "ooo_routed_step",
@@ -203,10 +203,11 @@ serve(async (req) => {
           delegate_user_id: body.delegateUserId,
         },
       });
+      if (auditErr) console.error("lease_activity_log insert failed (ooo_routed_step):", auditErr.message);
       routedCount++;
     }
     if (routedCount > 0) {
-      await supabaseAdmin.from("lease_activity_log").insert({
+      const { error: auditErr2 } = await supabaseAdmin.from("lease_activity_log").insert({
         lease_id: steps[0].lease_id,
         user_id: null,
         activity_type: "comment",
@@ -216,6 +217,7 @@ serve(async (req) => {
           message: `${routedCount} approval step(s) have been routed to you while ${user.id} is out of office.`,
         },
       });
+      if (auditErr2) console.error("lease_activity_log insert failed (comment/ooo_delegated_steps notification):", auditErr2.message);
     }
   }
 

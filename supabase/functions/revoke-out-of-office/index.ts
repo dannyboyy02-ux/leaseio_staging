@@ -152,7 +152,7 @@ serve(async (req) => {
   // Activity log: ooo_revoked. Attach to the first reverted lease,
   // or if none was reverted, skip the per-lease entry.
   if (steps.length > 0) {
-    await supabaseAdmin.from("lease_activity_log").insert({
+    const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
       lease_id: steps[0].lease_id,
       user_id: user.id,
       activity_type: "ooo_revoked",
@@ -162,6 +162,7 @@ serve(async (req) => {
         steps_reverted_count: revertedCount,
       },
     });
+    if (auditErr) console.error("lease_activity_log insert failed (ooo_revoked):", auditErr.message);
   }
 
   return jsonResponse(

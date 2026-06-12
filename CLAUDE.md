@@ -138,6 +138,7 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 - **Free lease audit mode** — 5 docs, portfolio summary, upgrade CTA. Marketing-funnel surface, not a subscription tier.
 - **Amendment comparison intelligence in `process_lease`** — fetch parent lease terms, generate `_amendment_changes` array.
 - **AI operator** — GitHub Actions diff review, Vercel deploy webhook, nightly health check script.
+- **Vault retention tier** — $249/yr read-only owner-only offramp (ratified 2026-06-12; PRODUCT_STRATEGY.md Decision 5 + `docs/VAULT_TIER_SPEC.md`). V1 = server-side read-only enforcement (KNOWN_ISSUES #75 is now a BLOCKER for this, not a deferral). NOT the Phase 9 parent/child data-only construct.
 - **Phase 9 (firm layer foundation)** / **Phase 10 (firm UX)** — specs filed dormant; open only when explicitly invoked.
 
 ### Active parallel workstreams (pointers, not full status)

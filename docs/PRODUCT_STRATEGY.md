@@ -1,6 +1,6 @@
 # LeaseIO Product Strategy — Tiers, Firm Layer, and Architecture Decisions
 
-**Status:** Strategic decision document. Ratified 2026-05-04 (last updated 2026-06-11).
+**Status:** Strategic decision document. Ratified 2026-05-04 (last updated 2026-06-12).
 **Owner:** Daniel
 **Audience:** Claude Code, future contributors, anyone making decisions that span phases.
 
@@ -124,6 +124,28 @@ The build order is:
 **Quota window stays rolling-30-day** (NOT billing-period-aligned). The alignment rewrite was scoped then **descoped (2026-06-11)**: the proven rolling window self-resets and is the same window the usage meter shows; the only motivation for alignment (copy contradicting a rolling window) was already solved with honest copy. Rewriting the margin-protecting enforcement path was judged not worth the risk.
 
 **At-cap behavior** (limit wall, shipped 2026-06-11): hard-block stays the default. The wall (`LimitReachedDialog`) gates the Leases "Add Lease" and Dashboard "New Request" entry points (plus a server backstop in the upload modal) and offers plan-aware doors: upgrade (Starter only), a capacity pack, or a **one-time single lease at the overage rate** ($12/$10 → one `purchased_lease_credits` credit, granted via an idempotent payment ledger and consumed atomically by `process_lease` when over cap). There is NO auto-charged overage — every over-cap dollar is an explicit, consented purchase. Non-admins are told to contact their admin.
+
+---
+
+## Decision 5 — Vault retention tier (data-only, yearly)  *(2026-06-12)*
+
+**Decided:** A third subscription state, **Vault** — a read-only, owner-only repository tier at **$249/year flat**, offered ONLY as an offramp (cancel flow, grace window, win-back emails), never on the public pricing page. Spec: `docs/VAULT_TIER_SPEC.md`.
+
+**What it is for:** customers migrating off LeaseIO or done processing who would otherwise cancel and lose their repository at purge. Vault keeps them in the system as warm win-backs — reactivation is frictionless because the data never left. It converts the cancellation lifecycle's countdown into a retention sale: the grace reminder emails gain a positive CTA ("keep your repository for $249/year") instead of only a deletion clock.
+
+**Decisions ratified (Daniel, 2026-06-12):**
+1. **Name: Vault.** "Archive" was rejected — it already means per-lease soft-delete in this codebase (`ArchiveButton`, `lease_archived`/`lease_restored`, KNOWN_ISSUES #79); reusing it for a tier would put two unrelated concepts behind one word.
+2. **Flat $249/year, auto-renew, advance reminder email.** A ~3.5% yearly escalator was considered and **deferred as a fast-follow**: Stripe prices are immutable so an escalator is a small billing subsystem (`invoice.upcoming` → compute → swap price), and its honest function is margin protection, not upgrades — a $8.72 bump never closes the 12× gap to Starter ($2,988/yr). The upgrade driver is the product limitation (no intake in Vault), not price.
+3. **Entitlements flatten (Option A):** Vault = view + export EVERYTHING the workspace has, regardless of prior tier (a Starter-origin Vault can pull Business-grade exports of its own data). A retention/exit tier that gates exports is hostile; the promise is "your repository, exportable."
+4. **Owner-only access.** All other members hit a wall (reuse `SoftDeletedWall` pattern): "this workspace is in Vault — contact the owner." The conversion dialog MUST warn the owner that all other members lose access. `transfer-workspace-ownership` must keep working in Vault (departing owner must not strand the data).
+5. **AI Assistant OFF** (the one read-only feature with marginal AI cost; Vault's margin model assumes zero AI spend). `process_lease`/`retry_lease` reject Vault workspaces (same backstop pattern as canceled).
+6. **Document packs auto-cancel** (at period end) on conversion; no processing capacity is meaningful in Vault.
+7. **Lapsed Vault feeds the existing cancellation lifecycle** (grace → soft-delete → purge) — no new deletion machinery; Vault is a plan the webhook already understands.
+8. **No proration in either direction**; reactivating a full plan mid-Vault-year does not refund the Vault fee (anti-gaming, consistent with pack precedent).
+
+**Explicitly decoupled from Phase 9:** Vault is a per-workspace subscription state, NOT the parent/child "data-only children" construct from the original observation. That construct stays with the firm layer (Phase 9, dormant). Do not build any firm-shaped scaffolding for Vault.
+
+**Hard dependency:** KNOWN_ISSUES #75 (read-only enforcement depth) becomes a **blocker**, not a deferral — a paid read-only tier cannot have UI-only enforcement. Building Vault means server-side write-gating (e.g. an `is_workspace_live()`-style check folded into write paths), which retroactively hardens the grace window.
 
 ---
 

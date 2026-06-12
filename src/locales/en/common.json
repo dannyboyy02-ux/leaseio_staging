@@ -1427,6 +1427,7 @@
   "audit": {
     "title": "Audit Log",
     "subtitle": "Track all lease state transitions and changes",
+    "gap_notice": "Known gap: due to a logging defect, events of the following types were not recorded between May 8 and June 12, 2026 — counter-signature received/overdue, out-of-office routing and revocation, delegation activation/creation, deactivated-approver reassignment, document iteration uploads, final-review returns, and unlock denials. The defect is fixed; the missing records are not recoverable.",
     "export_csv": "Export CSV",
     "filters": "Filters",
     "lease_id": "Lease ID",

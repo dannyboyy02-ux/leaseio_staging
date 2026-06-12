@@ -1427,6 +1427,7 @@
   "audit": {
     "title": "Registro de Auditoría",
     "subtitle": "Rastree todas las transiciones de estado de arrendamientos y cambios",
+    "gap_notice": "Brecha conocida: debido a un defecto de registro, los eventos de los siguientes tipos no se registraron entre el 8 de mayo y el 12 de junio de 2026 — contrafirma recibida/vencida, enrutamiento y revocación de fuera de oficina, activación/creación de delegación, reasignación de aprobador desactivado, cargas de iteraciones de documentos, devoluciones de revisión final y denegaciones de desbloqueo. El defecto está corregido; los registros faltantes no son recuperables.",
     "export_csv": "Exportar CSV",
     "filters": "Filtros",
     "lease_id": "ID de Arrendamiento",

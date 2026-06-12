@@ -112,7 +112,7 @@ serve(async (req) => {
       })
       .eq("id", r.id);
 
-    await supabaseAdmin.from("lease_activity_log").insert({
+    const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
       lease_id: r.lease_id,
       user_id: null,
       activity_type: "delegate_activated",
@@ -124,10 +124,11 @@ serve(async (req) => {
         activated_at: nowIso,
       },
     });
+    if (auditErr) console.error("lease_activity_log insert failed (delegate_activated):", auditErr.message);
 
     // Notify the delegate
     if (r.delegate_user_id) {
-      await supabaseAdmin.from("lease_activity_log").insert({
+      const { error: auditErr2 } = await supabaseAdmin.from("lease_activity_log").insert({
         lease_id: r.lease_id,
         user_id: null,
         activity_type: "comment",
@@ -138,6 +139,7 @@ serve(async (req) => {
             `An approval step's original assignee did not respond within ${r.delegate_after_days} days. As the policy delegate, you can act on it now.`,
         },
       });
+      if (auditErr2) console.error("lease_activity_log insert failed (comment/policy_delegate_activated notification):", auditErr2.message);
     }
 
     activated++;

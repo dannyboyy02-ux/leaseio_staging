@@ -179,7 +179,7 @@ serve(async (req) => {
     .eq("id", step.id);
 
   // Activity log: voluntary_delegation_created
-  await supabaseAdmin.from("lease_activity_log").insert({
+  const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
     lease_id: step.lease_id,
     user_id: user.id,
     activity_type: "voluntary_delegation_created",
@@ -193,9 +193,10 @@ serve(async (req) => {
       stage: step.stage,
     },
   });
+  if (auditErr) console.error("lease_activity_log insert failed (voluntary_delegation_created):", auditErr.message);
 
   // Notify the new delegate + the original assignee.
-  await supabaseAdmin.from("lease_activity_log").insert([
+  const { error: auditErr2 } = await supabaseAdmin.from("lease_activity_log").insert([
     {
       lease_id: step.lease_id,
       user_id: null,
@@ -219,6 +220,7 @@ serve(async (req) => {
         }]
       : []),
   ]);
+  if (auditErr2) console.error("lease_activity_log insert failed (comment/voluntary_delegation notifications):", auditErr2.message);
 
   return jsonResponse(
     {
