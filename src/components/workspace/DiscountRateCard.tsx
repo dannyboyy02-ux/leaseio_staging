@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateLease } from '@/lib/leaseCalculations';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 async function recomputeWorkspaceLeaseFinancials(workspaceId: string, discountRate: number) {
   const { data: leases, error } = await supabase
@@ -87,6 +88,7 @@ interface Props {
 }
 
 export function DiscountRateCard({ workspaceId, canEdit }: Props) {
+  const { t } = useLanguage();
   const [discountRate, setDiscountRate] = useState('5.5');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -111,9 +113,17 @@ export function DiscountRateCard({ workspaceId, canEdit }: Props) {
   }, [workspaceId]);
 
   const handleSave = async () => {
+    // Handler-level gate, not just the disabled button — every other
+    // settings save handler guards this way (security review 2026-06-12:
+    // the leases-recompute below is editor-writable under RLS, so the
+    // button state alone must never be the only gate).
+    if (!canEdit) {
+      toast.error(t('reports.discount_rate_readonly'));
+      return;
+    }
     const parsed = parseFloat(discountRate);
     if (!(parsed > 0 && parsed <= 50)) {
-      toast.error('Discount rate must be greater than 0 and no more than 50.');
+      toast.error(t('reports.discount_rate_invalid'));
       return;
     }
     setSaving(true);
@@ -124,10 +134,10 @@ export function DiscountRateCard({ workspaceId, canEdit }: Props) {
         .eq('id', workspaceId);
       if (error) throw error;
       await recomputeWorkspaceLeaseFinancials(workspaceId, parsed);
-      toast.success('Discount rate saved — lease financials recalculated.');
+      toast.success(t('reports.discount_rate_saved'));
     } catch (error) {
       console.error('Error saving discount rate:', error);
-      toast.error('Failed to save discount rate');
+      toast.error(t('reports.discount_rate_save_failed'));
     } finally {
       setSaving(false);
     }
@@ -139,11 +149,8 @@ export function DiscountRateCard({ workspaceId, canEdit }: Props) {
         <div className="flex items-center gap-2">
           <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <div>
-            <CardTitle>Discount Rate</CardTitle>
-            <CardDescription>
-              Incremental borrowing rate used for present-value liability and
-              straight-line calculations across the Dashboard, Portfolio, and reports.
-            </CardDescription>
+            <CardTitle>{t('reports.discount_rate_title')}</CardTitle>
+            <CardDescription>{t('reports.discount_rate_desc')}</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -153,7 +160,7 @@ export function DiscountRateCard({ workspaceId, canEdit }: Props) {
         ) : (
           <>
             <div className="space-y-2">
-              <Label htmlFor="discount-rate">Incremental Borrowing Rate (%)</Label>
+              <Label htmlFor="discount-rate">{t('reports.discount_rate_label')}</Label>
               <div className="relative max-w-xs">
                 <Input
                   id="discount-rate"
@@ -167,9 +174,7 @@ export function DiscountRateCard({ workspaceId, canEdit }: Props) {
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Default: 5.5%. Saving recalculates stored financials for every lease in this workspace.
-              </p>
+              <p className="text-xs text-muted-foreground">{t('reports.discount_rate_help')}</p>
             </div>
             <Button variant="accent" onClick={handleSave} disabled={!canEdit || saving}>
               {saving ? (
@@ -177,12 +182,10 @@ export function DiscountRateCard({ workspaceId, canEdit }: Props) {
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              {saving ? 'Saving…' : 'Save Discount Rate'}
+              {saving ? t('reports.discount_rate_saving') : t('reports.discount_rate_save')}
             </Button>
             {!canEdit && (
-              <p className="text-xs text-muted-foreground">
-                Read-only — only workspace admins or the owner can edit.
-              </p>
+              <p className="text-xs text-muted-foreground">{t('reports.discount_rate_readonly')}</p>
             )}
           </>
         )}

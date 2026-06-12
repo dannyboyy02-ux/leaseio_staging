@@ -152,8 +152,8 @@ serve(async (req) => {
         },
       ],
       mode: "subscription",
-      success_url: `${origin}/app/settings/account?tab=subscription&checkout=success`,
-      cancel_url: `${origin}/app/settings/account?tab=subscription&checkout=canceled`,
+      success_url: `${origin}/app/settings/account?tab=billing&checkout=success`,
+      cancel_url: `${origin}/app/settings/account?tab=billing&checkout=canceled`,
       metadata: {
         plan_id: planId,
         billing_interval: billingInterval,

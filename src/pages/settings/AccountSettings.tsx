@@ -156,7 +156,7 @@ export default function AccountSettings() {
   const [packDialogOpen, setPackDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   // Billing interval selection for the in-app upgrade flow. Defaults
-  // monthly; can be set to 'annual' via the toggle on the plan grid OR
+  // monthly; can be set to 'annual' via the toggle on the upgrade card OR
   // pre-armed via ?billing= when arriving from onboarding.
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
   const [autoCheckoutFired, setAutoCheckoutFired] = useState(false);
@@ -164,15 +164,28 @@ export default function AccountSettings() {
   // Handle URL params for tab switching. Tabs removed/renamed in the 2026-06
   // Claude-alignment pass map to their new homes so old links never strand:
   //   subscription → billing (rename), notifications → profile (folded in),
-  //   other → privacy (merged), workspace/out-of-office → no longer tabs.
+  //   other → privacy (merged), out-of-office → profile (feature removed),
+  //   workspace → navigates to the Workspaces drill-down. Anything unknown
+  //   falls back to profile instead of selecting a tab that doesn't exist.
   useEffect(() => {
     const tab = searchParams.get('tab');
+    if (tab === 'workspace') {
+      navigate('/app/settings/workspaces', { replace: true });
+      return;
+    }
     const TAB_ALIASES: Record<string, string> = {
       subscription: 'billing',
       notifications: 'profile',
+      'out-of-office': 'profile',
       other: 'privacy',
     };
-    if (tab) setActiveTab(TAB_ALIASES[tab] ?? tab);
+    const VALID_TABS = ['profile', 'appearance', 'account', 'privacy', 'billing', 'usage'];
+    if (tab) {
+      const resolved = Object.prototype.hasOwnProperty.call(TAB_ALIASES, tab)
+        ? TAB_ALIASES[tab]
+        : tab;
+      setActiveTab(VALID_TABS.includes(resolved) ? resolved : 'profile');
+    }
 
     const checkout = searchParams.get('checkout');
     if (checkout === 'success' || checkout === 'canceled') {
@@ -513,7 +526,7 @@ export default function AccountSettings() {
   const usageRatio =
     workspace && effectiveLimit > 0 ? workspace.documentsUsed / effectiveLimit : 0;
   const railTriggerClass =
-    'w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
+    'md:w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
 
   // Write the tab to the URL on change so refresh/back/share keep position.
   const handleTabChange = (tab: string) => {
@@ -902,7 +915,7 @@ export default function AccountSettings() {
             </Card>
           </TabsContent>
 
-          {/* Notifications */}
+
           {/* Billing (renamed from Subscription; 'subscription' stays a URL alias) */}
           <TabsContent value="billing" className="space-y-6 mt-0">
             {/* Skeleton while the workspace fetch is in flight. */}
@@ -1454,6 +1467,9 @@ export default function AccountSettings() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
+            {/* CTA names the actual action — clicking opens the Stripe
+                portal; it does NOT itself cancel (mirrors the downgrade
+                dialog's honesty; H3 2026-06-12). */}
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
@@ -1461,7 +1477,7 @@ export default function AccountSettings() {
                 handleManagePayment();
               }}
             >
-              {t('account.cancel_subscription')}
+              {t('account.cancel_confirm_cta')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1327,7 +1327,7 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 ---
 
-### Item #56: Lease-meter "approaching limit" CTA on Usage sends Business users to a page selling them Business
+### Item #56: Lease-meter "approaching limit" CTA on Usage sends Business users to a page selling them Business — RESOLVED 2026-06-12
 
 **Symptom:** `UsageContent.tsx`'s approaching-limit banner fires for lease/archive saturation on any plan; for Business users the CTA routed to `/app/upgrade`, which unconditionally pitches the Business plan with an `autoCheckout=1` handoff. The 2026-06-09 fix retargeted the banner CTA to subscription management when `plan === 'business'`, but `Upgrade.tsx` itself remains plan-unaware: any Business user who reaches `/app/upgrade` by other paths (sidebar, deep link) is still sold their current plan.
 
@@ -1336,6 +1336,8 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 **Where to look:** `src/pages/app/Upgrade.tsx` (plan-unaware pitch + autoCheckout link); `src/pages/settings/AccountSettings.tsx:414` (autoCheckout reader); `supabase/functions/create-checkout/index.ts` (verify behavior for an already-Business customer).
 
 **Stub remediation:** Make `Upgrade.tsx` plan-aware: for Business users render "You're on Business" + a Manage subscription link instead of the checkout CTA; verify `create-checkout` rejects/no-ops for an already-active Business subscription.
+
+**RESOLVED 2026-06-12:** `Upgrade.tsx` was deleted in the settings Claude-alignment pass; `/app/upgrade` now redirects to `/app/settings/account?tab=billing`, which is plan-aware (upgrade card renders only for Starter admins).
 
 ---
 
@@ -1509,3 +1511,57 @@ and the 2026-06-09 transfer-RPC pre-push security review (item 59).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
+
+### Item #69: Profile tab Phone field is never loaded or saved
+
+**Symptom:** `AccountSettings.tsx` Profile tab renders a Phone input, but the user-hydration effect never calls `setPhone` from stored data and `handleSaveProfile` omits `phone` from the `profiles` update — the user types a number, gets "Profile updated successfully!", and the value evaporates on reload.
+
+**Severity:** High (lying control on the primary settings tab). Pre-existing; surfaced by lease-product-polish during the 2026-06-12 settings-alignment sweep.
+
+**Where to look:** `src/pages/settings/AccountSettings.tsx` (phone state, hydration effect, `handleSaveProfile`); confirm whether `profiles` has a phone column at all.
+
+**Stub remediation:** Either persist phone end-to-end (add/verify column, load + save) or remove the field. Root-cause hypothesis: field added with the form scaffold, persistence never wired.
+
+---
+
+### Item #70: Workspace-settings saves silently no-op for non-owner admins (owner-only RLS vs admin UI gates)
+
+**Symptom:** The only UPDATE policy on `workspaces` is owner-only, but settings UIs gate on `canEditWorkspaceSettings` (admin ∥ owner). A non-owner admin's save (thresholds, discount rate, lease config, backdoor toggle, report settings) matches 0 rows, PostgREST returns no error, and a success toast fires. Worst case is the discount-rate card: the lease-financials recompute then runs with the UNSAVED rate (the `leases` UPDATE policy does allow admins/editors), rewriting every lease's `calc_*` figures from a rate the workspace row does not hold.
+
+**Severity:** High (silent data inconsistency + figures untraceable to stored rate). Pre-existing class — same family as the `workspace_members` owner-vs-admin mismatch already filed; surfaced by lease-security-scanner + lease-repository-integrity-reviewer on 2026-06-12.
+
+**Where to look:** `src/components/workspace/DiscountRateCard.tsx` (update → recompute without verifying the write landed); `src/pages/settings/WorkspaceSettings.tsx` save handlers; `supabase/migrations/20260522000000_restore_workspace_entitlement_guard.sql` (owner-only policy).
+
+**Stub remediation:** Class-shape fix, one pass: (a) decide owner-only vs admin-writable for the non-entitlement settings columns and align RLS accordingly; (b) until then, chain `.select('id')` on these updates and treat 0 rows as failure before any follow-on work (especially before the recompute) or success toast. Related: the recompute and threshold saves write no audit/activity rows, and the recompute's `Promise.all` ignores per-lease errors (partial recompute still toasts success).
+
+---
+
+### Item #71: Three WorkspaceSettings handlers missing the canEdit guard; dead upgrade-confirm dialog; unused imports
+
+**Symptom:** (a) `handleSaveBackdoor`, `handleSaveAssetTypes`, and `makeOptionListHandlers.handleSave` lack the `if (!canEdit) return` guard their sibling handlers all have (unreachable via UI for non-admins; RLS blocks non-owners — consistency/defense-in-depth only). (b) `AccountSettings.tsx`'s confirm-upgrade AlertDialog + `confirmUpgradePlan` state is unreachable (with the two-plan type, `currentPlan !== 'starter' && isUpgrade(...)` can never be true). (c) `WorkspaceSettings.tsx` carries unused `cn`, `useQuery`, `WorkspaceRole` imports and an unused `getRoleLabel`.
+
+**Severity:** Low (hygiene). All pre-existing; surfaced by lease-security-scanner + lease-code-auditor on 2026-06-12.
+
+**Stub remediation:** One hygiene pass: add the guard to all three handlers (class shape, not piecemeal), delete the dead dialog + state + branch, drop the unused imports/function.
+
+---
+
+### Item #72: discount_rate has no DB CHECK constraint
+
+**Symptom:** The 0 < rate ≤ 50 validation is client-only; a workspace owner can PATCH `workspaces.discount_rate` to a negative/absurd value via PostgREST, producing nonsense PV figures (own workspace only). Sibling columns (`counter_signature_default_due_days`, `report_*`) have CHECK constraints.
+
+**Severity:** Low. Pre-existing; surfaced by lease-security-scanner 2026-06-12.
+
+**Stub remediation:** Migration adding `CHECK (discount_rate > 0 AND discount_rate <= 50)` (security-adjacent: route through reviewers BEFORE db push per CLAUDE.md).
+
+---
+
+### Item #73: Out of Office has no UI entry point (intentional) — restore a revoke path before any reactivation
+
+**Symptom:** The 2026-06-12 settings pass removed the Out of Office tab by product decision (delegation covers absence). The Phase 7 backend (table, `declare-out-of-office`/`revoke-out-of-office` functions, cron reroutes, ExceptionsDashboard read-only card) remains dormant. Verified `user_out_of_office` had ZERO rows at removal time, so nobody is stranded. However: there is no expiry cron and `act-on-chain-step` doesn't check windows — only the revoke function reverts delegated steps. If OOO is ever reactivated (or a row is created out-of-band), a user could hold an active window with no way to end it.
+
+**Severity:** Low while dormant. Filed by lease-repository-integrity-reviewer 2026-06-12.
+
+**Stub remediation:** If reactivating OOO: restore the settings tab AND add an admin revoke control to the ExceptionsDashboard OOO card. Until then, treat any `user_out_of_office` row as an anomaly.
+
+---

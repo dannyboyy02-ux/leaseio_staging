@@ -75,7 +75,8 @@ const ASSET_TYPE_OPTIONS = [
 ] as const;
 
 export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequestFormProps) {
-  const { user, workspace } = useApp();
+  const { user, workspace, userRole } = useApp();
+  const isAdminRole = userRole === 'admin' || userRole === 'owner';
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -455,16 +456,27 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No approvers configured</p>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                This request will be auto-approved. Ask your admin to assign approval roles in{' '}
-                <Link
-                  to="/app/settings/workspaces/profile"
-                  className="underline"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Workspace Settings
-                </Link>.
-              </p>
+              {/* The reader is typically a non-admin submitter — the Members
+                  section is admin-only, so a link would silently bounce them
+                  to My Workspaces. Admins get the direct link; everyone else
+                  gets plain "ask your admin" text. */}
+              {isAdminRole ? (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  This request will be auto-approved. Assign approval roles in{' '}
+                  <Link
+                    to="/app/settings/workspaces/users"
+                    className="underline"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Workspaces → Members
+                  </Link>.
+                </p>
+              ) : (
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  This request will be auto-approved. Ask your admin to assign
+                  approval roles under Workspaces → Members.
+                </p>
+              )}
             </div>
           </div>
         )}

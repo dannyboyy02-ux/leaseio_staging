@@ -69,13 +69,16 @@ export default function WorkspacesSection() {
   );
 
   // Unknown or role-invisible section falls back to the inventory panel —
-  // a stale deep link should never strand the user on an empty pane.
-  const active =
-    section && sections.some((s) => s.id === section) ? section : MY_WORKSPACES;
+  // a stale deep link should never strand the user on an empty pane. When a
+  // section WAS requested but isn't visible for this role, say so instead of
+  // silently substituting different content (the recipient of a shared admin
+  // link should learn permission was the reason).
+  const requestedDenied = !!section && !sections.some((s) => s.id === section);
+  const active = requestedDenied || !section ? MY_WORKSPACES : section;
 
   const railItemClass = (isActive: boolean) =>
     cn(
-      'w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors',
+      'md:w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors',
       isActive
         ? 'bg-muted text-foreground'
         : 'text-muted-foreground hover:text-foreground hover:bg-muted/60',
@@ -92,7 +95,7 @@ export default function WorkspacesSection() {
             {/* Back to account-level Settings */}
             <Link
               to="/app/settings/account"
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              className="md:w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
               {t('workspace.back_to_settings')}
@@ -133,10 +136,15 @@ export default function WorkspacesSection() {
 
           {/* Content panel */}
           <div className="flex-1 min-w-0 md:min-h-[640px]">
+            {requestedDenied && (
+              <p className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/20 dark:border-amber-700 dark:text-amber-300">
+                {t('workspace.section_no_access')}
+              </p>
+            )}
             {active === MY_WORKSPACES ? (
               <WorkspaceManagementContent />
             ) : (
-              <WorkspaceSettings embedded activeSection={active} />
+              <WorkspaceSettings activeSection={active} />
             )}
           </div>
         </div>

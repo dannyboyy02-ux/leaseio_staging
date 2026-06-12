@@ -1,12 +1,10 @@
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
-import { Building2, Users, Bell, Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { AppHeader } from '@/components/layout/AppHeader';
+import { Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { RiskWatchlistManager } from '@/components/workspace/RiskWatchlistManager';
 import {
   Select,
@@ -45,16 +43,15 @@ const timezones = [
 ];
 
 interface WorkspaceSettingsProps {
-  /** When true, skip the outer AppLayout/AppHeader so this can render inside
-   *  another page (e.g. the /app/settings/workspaces drill-down). */
-  embedded?: boolean;
-  /** When set, the internal tab strip is hidden and the visible section is
-   *  controlled by the parent — the Workspaces drill-down rail owns
-   *  navigation and passes the active section id down. */
-  activeSection?: string;
+  /** The visible section id — controlled by the parent. The sole consumer
+   *  is the /app/settings/workspaces drill-down (WorkspacesSection), whose
+   *  rail owns navigation; this component renders only the section panels.
+   *  (The old standalone page mode + internal tab strip were removed when
+   *  the route became a redirect — 2026-06 Claude-alignment pass.) */
+  activeSection: string;
 }
 
-export default function WorkspaceSettings({ embedded = false, activeSection }: WorkspaceSettingsProps = {}) {
+export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsProps) {
   const { workspace, refreshProfile, userRole } = useApp();
   const { t } = useLanguage();
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
@@ -113,23 +110,6 @@ export default function WorkspaceSettings({ embedded = false, activeSection }: W
   // string check here. canEditWorkspaceSettings normalizes 'owner' to
   // 'admin', so use it for the gate.
   const isAdmin = canEditWorkspaceSettings(userRole);
-
-  // Financial and Reports were dissolved in the 2026-06 Claude-alignment
-  // pass: the approval/covenant thresholds moved into Approval Rules (they
-  // govern when financial review triggers — that's where admins look), and
-  // the disclosure-report defaults + discount rate moved to /app/reports
-  // (settings live where reports are generated).
-  const tabs = [
-    { id: 'profile',           label: 'Company Profile',     icon: Building2,     visible: canAccessProfile },
-    { id: 'users',             label: 'Members',              icon: Users,         visible: canManageMembers },
-    { id: 'notifications',     label: 'Notifications',        icon: Bell,          visible: canAccessDefaults },
-    { id: 'lease_config',      label: 'Lease Configuration',  icon: Settings2,     visible: isAdmin },
-    { id: 'risk_watchlist',    label: 'Risk Watchlist',       icon: AlertTriangle, visible: canEdit },
-    { id: 'approval_policies', label: 'Approval Rules',       icon: GitBranch,     visible: isAdmin },
-    { id: 'onboarding',        label: 'Onboarding',           icon: Package,       visible: isAdmin },
-  ].filter((tab) => tab.visible);
-
-  const defaultTab = tabs[0]?.id ?? 'profile';
 
   useEffect(() => {
     if (workspace) {
@@ -474,21 +454,9 @@ export default function WorkspaceSettings({ embedded = false, activeSection }: W
     }
   };
 
-  const body = (
-    <div className={embedded ? '' : 'p-6'}>
-      <Tabs value={activeSection} defaultValue={activeSection ? undefined : defaultTab}>
-          {/* Tab strip hidden when the parent drill-down rail controls the
-              active section. */}
-          {!activeSection && (
-            <TabsList className="mb-6">
-              {tabs.map((tab) => (
-                <TabsTrigger key={tab.id} value={tab.id} className="gap-2">
-                  <tab.icon className="h-4 w-4" />
-                  {tab.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          )}
+  return (
+    <div>
+      <Tabs value={activeSection}>
 
           {/* General Settings */}
           <TabsContent value="profile" className="space-y-6">
@@ -537,7 +505,7 @@ export default function WorkspaceSettings({ embedded = false, activeSection }: W
             <TabsContent value="users" className="space-y-6">
               {/* Member management extracted to MembersPanel during OWM
                   Checkpoint 2 — same component is reused on
-                  /app/account/workspaces for non-active workspaces. */}
+                  the My Workspaces panel for non-active workspaces. */}
               <MembersPanel
                 workspaceId={workspace.id}
                 ownerId={workspace.ownerId}
@@ -1047,6 +1015,17 @@ export default function WorkspaceSettings({ embedded = false, activeSection }: W
                     {isSavingFinancial ? t('workspace.saving') : 'Save Thresholds'}
                   </Button>
                   {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+
+                  {/* Signpost for the dissolved Financial tab's third field —
+                      "where did the discount rate go?" is the predictable
+                      first question after this IA change. */}
+                  <p className="text-xs text-muted-foreground border-t border-border pt-3">
+                    Looking for the discount rate? It now lives in{' '}
+                    <Link to="/app/reports" className="text-primary hover:underline">
+                      Report settings
+                    </Link>{' '}
+                    on the Reports page.
+                  </p>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1089,20 +1068,5 @@ export default function WorkspaceSettings({ embedded = false, activeSection }: W
           )}
         </Tabs>
       </div>
-  );
-
-  return (
-    <>
-      {embedded ? (
-        body
-      ) : (
-        <AppLayout>
-          <AppHeader title={t('workspace.title')} subtitle={t('workspace.subtitle')} />
-          {body}
-        </AppLayout>
-      )}
-      {/* InviteMemberDialog mount moved into MembersPanel during OWM
-          Checkpoint 2. The panel owns its own dialog state. */}
-    </>
   );
 }

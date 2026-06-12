@@ -46,7 +46,6 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import {
-  canAccessWorkspaceSettings,
   canAccessApprovals,
   isSubmitterOnly,
 } from '@/lib/authorization';

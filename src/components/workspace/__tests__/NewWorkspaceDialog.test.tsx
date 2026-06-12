@@ -605,7 +605,7 @@ describe("NewWorkspaceDialog — price-awareness gate (before name)", () => {
     expect(localStorage.getItem(ACK_SUPPRESS_KEY)).toBe("1");
   });
 
-  it("a Starter owner sees the upgrade variant and routes to /app/upgrade", async () => {
+  it("a Starter owner sees the upgrade variant and routes to the Billing tab", async () => {
     mockEligibility({ ok: true, eligible: false, reason: "not_eligible" });
     await act(async () => {
       render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);

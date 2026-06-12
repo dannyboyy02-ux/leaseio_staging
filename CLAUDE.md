@@ -64,7 +64,7 @@ Claude IS LeaseIO's intelligence layer. **Model selection is never user-facing.*
 
 The lease approval workflow is built around admin-configurable **approval policies** (per-workspace matching criteria + per-stage chain steps), replacing the legacy fixed `manager_approver` / `financial_approver` parallel-notify model. **Read `docs/APPROVAL_ROUTING_ARCHITECTURE.md` first on any approval ticket.**
 
-Phases 1–8 are all CLOSED (schema/RPCs/admin UI → resolution engine + chain table → lifecycle expansion → negotiation docs → signator/counter-signature → rerouting on material changes → delegation/override/OOO/exceptions → ASC 842 disclosure reports). Each has a `docs/PHASE_N_BUILD_SPEC.md`; closed-phase as-built detail is in `docs/CLAUDE_md_archive.md`. Owner Workspace Management (`/app/account/workspaces`) also shipped.
+Phases 1–8 are all CLOSED (schema/RPCs/admin UI → resolution engine + chain table → lifecycle expansion → negotiation docs → signator/counter-signature → rerouting on material changes → delegation/override/OOO/exceptions → ASC 842 disclosure reports). Each has a `docs/PHASE_N_BUILD_SPEC.md`; closed-phase as-built detail is in `docs/CLAUDE_md_archive.md`. Owner Workspace Management also shipped (now the My Workspaces panel at `/app/settings/workspaces`; the old `/app/account/workspaces` route redirects).
 
 **Active deferred item (Phase 7):** `resolve-approval-chain` redeploy is permanently deferred — newly-created chains have NULL Phase 7 columns (graceful degradation; cron functions skip them). Remediation SQL in `PHASE_7_BUILD_SPEC.md` A4.
 
