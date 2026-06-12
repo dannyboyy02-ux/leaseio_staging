@@ -1585,3 +1585,53 @@ green.
 **Stub remediation:** An `is_workspace_live()` SQL helper folded into write-side RLS policies (security migration — reviewer routing BEFORE push), or `canceled_at`/`soft_deleted_at` gates in the remaining mutating edge functions. Decide enforcement depth before customer #1 cancels.
 
 ---
+
+### Item #76: Nine deployed edge functions write activity types the CHECK constraint rejects — audit rows silently dropped since 2026-05-08
+
+**Symptom:** The 2026-05-08 `lease_insights` constraint re-snapshot (archive `20260508000000`) RENAMED several activity-type values (e.g. `counter_signature_received` → `counter_signature_recorded`, `ooo_revoked` → `out_of_office_revoked`, `delegate_activated` → `delegate_timer_activated`) without renaming the writers. Nine functions still write the OLD names — `record-counter-signature` (:306), `declare-out-of-office` (:198), `revoke-out-of-office` (:158), `process-delegate-timers` (:118), `voluntary-delegate-step` (:185), `handle-deactivated-approver` (:156, :185), `upload-lease-document` (:270), `escalate-to-concept-approver` (:295), `send-counter-signature-reminder` (:268) — and every one of those inserts is awaited WITHOUT an error check, so the constraint violation is invisible. Entire categories of approval-workflow audit evidence (counter-signatures, OOO, delegation, document iterations) have not been recorded since the re-snapshot.
+
+**Severity:** CRITICAL for audit completeness (no data corruption; rows are missing, not wrong). Root cause: re-snapshot treated the archive as specification and nobody diffed writers against the constraint. Filed by lease-repository-integrity-reviewer reviewing 5fe9e06 (2026-06-12).
+
+**Stub remediation:** Dedicated session: (1) migration appending the nine legacy writer values to the CHECK (fastest path to stop the bleeding) OR coordinated writer rename + redeploy of all nine functions; (2) add error checks to those inserts; (3) static test that greps `activity_type:` literals across `supabase/functions/` and diffs them against the migration's CHECK list so this class can't recur.
+
+---
+
+### Item #77: Storage DELETE policies on leases/executed-leases are lock-unaware — locked leases' source files deletable via raw storage API
+
+**Symptom:** `prevent_locked_lease_edits` guards the DB row, but the storage policies ("Users can delete own lease files", `executed_leases_delete`) check only path ownership. The uploader of a model-locked lease can delete its source PDF via a direct storage API call, destroying the audit-defensible source while the lease row still points at it. The Documents-tab UI (2026-06-12) gates correctly; the API path does not.
+
+**Severity:** High. Pre-existing; surfaced by lease-security-scanner reviewing 5fe9e06.
+
+**Stub remediation:** Security migration (reviewer routing BEFORE push): add a `NOT EXISTS (SELECT 1 FROM leases WHERE ... AND model_locked)` condition to both DELETE policies — or route deletion through an edge function that re-checks `model_locked` server-side.
+
+---
+
+### Item #78: Lease archive ("Delete") admin gate is UI-only; archived_by/archived_at are client-supplied
+
+**Symptom:** `leases_update_own_or_workspace_editor` lets any workspace editor set `archived = true` on any lease (including locked ones — archive columns are in the lock trigger's ignored_keys) via direct PostgREST, with arbitrary `archived_by` attribution and a client-clock `archived_at`. The UI (ArchiveButton, AmendmentsList) gates to admin/owner and now logs both directions (2026-06-12), but the log writes are also client-side and skippable.
+
+**Severity:** High (audit-relevant records hideable by non-admins with forged attribution). Pre-existing; surfaced by lease-security-scanner reviewing 5fe9e06.
+
+**Stub remediation:** BEFORE UPDATE trigger on archive-column transitions: require admin/owner, stamp `archived_by = auth.uid()` and `archived_at = now()` server-side (disjoint-columns pattern; inventory existing triggers first per CLAUDE.md). Same family: "Users can create activity entries" INSERT policy allows any member to forge ANY activity_type with `user_id` self-or-NULL — constrain client-insertable types to an allowlist in the same pass.
+
+---
+
+### Item #79: "Delete" means hard-delete on the Leases list but restorable-archive everywhere else
+
+**Symptom:** `Leases.tsx` + `DeleteLeaseDialog` perform a true `DELETE` ("permanently removed… cannot be undone") while LockedHeader, LeaseReview's overflow, and AmendmentsList all use archive semantics under the same "Delete" label and trash iconography. A user who learns "Delete is restorable" on the detail page will hard-delete from the list expecting restorability.
+
+**Severity:** High (misled-into-destructive-action class). Pre-existing; surfaced by lease-product-polish reviewing 5fe9e06.
+
+**Stub remediation:** Pick the vocabulary once: either make the list delete archive-semantics (preferred — hard delete then only via a deeper governance path), or relabel it "Delete permanently" with distinct iconography.
+
+---
+
+### Item #80: Profile Phone field is a dead control
+
+**Symptom:** `AccountSettings.tsx` renders a Phone input that is never loaded from and never saved to `profiles` — Save Changes toasts success while silently discarding the value.
+
+**Severity:** Medium-High (silent data loss + lying success toast on the first Settings tab). Pre-existing; surfaced by lease-product-polish reviewing 5cac271.
+
+**Stub remediation:** Wire `phone` into the profile load + `handleSaveProfile` payload (column exists check first), or remove the field.
+
+---

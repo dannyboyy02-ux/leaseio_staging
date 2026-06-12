@@ -73,7 +73,23 @@ export function ArchiveButton({
         )
         .eq('id', leaseId);
       if (error) throw error;
-      toast.success(isArchived ? t('archive.unarchived_toast') : t('archive.archived_toast'));
+
+      // Restore nulls archived_at/archived_by (the only column-level
+      // attribution), so the activity log is the durable record of BOTH
+      // directions — and the insert is error-checked, not fire-and-forget.
+      const { error: auditError } = await supabase.from('lease_activity_log').insert({
+        lease_id: leaseId,
+        user_id: user.id,
+        activity_type: isArchived ? 'lease_restored' : 'lease_archived',
+        details: {},
+      } as any);
+      if (auditError) {
+        console.error('Archive audit insert failed:', auditError.message);
+        toast.warning(t('archive.audit_warning'));
+      } else {
+        toast.success(isArchived ? t('archive.unarchived_toast') : t('archive.archived_toast'));
+      }
+
       setOpen(false);
       // refresh both the lease record and the workspace counters
       onChange?.();

@@ -179,6 +179,41 @@ export type Database = {
           },
         ]
       }
+      cancellation_notices: {
+        Row: {
+          cycle_started_at: string
+          id: string
+          notice_type: string
+          recipients: Json
+          sent_at: string
+          workspace_id: string
+        }
+        Insert: {
+          cycle_started_at: string
+          id?: string
+          notice_type: string
+          recipients?: Json
+          sent_at?: string
+          workspace_id: string
+        }
+        Update: {
+          cycle_started_at?: string
+          id?: string
+          notice_type?: string
+          recipients?: Json
+          sent_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cancellation_notices_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chain_step_overrides: {
         Row: {
           chain_step_id: string
@@ -407,6 +442,7 @@ export type Database = {
         Row: {
           deleted_at: string
           deleted_by: string | null
+          details: Json | null
           id: string
           lease_count_at_deletion: number | null
           member_count_at_deletion: number | null
@@ -419,6 +455,7 @@ export type Database = {
         Insert: {
           deleted_at?: string
           deleted_by?: string | null
+          details?: Json | null
           id?: string
           lease_count_at_deletion?: number | null
           member_count_at_deletion?: number | null
@@ -431,6 +468,7 @@ export type Database = {
         Update: {
           deleted_at?: string
           deleted_by?: string | null
+          details?: Json | null
           id?: string
           lease_count_at_deletion?: number | null
           member_count_at_deletion?: number | null
@@ -1296,6 +1334,73 @@ export type Database = {
           },
           {
             foreignKeyName: "lease_change_sets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_credit_consumptions: {
+        Row: {
+          consumed_at: string
+          id: string
+          lease_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          consumed_at?: string
+          id?: string
+          lease_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          consumed_at?: string
+          id?: string
+          lease_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_credit_consumptions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lease_credit_purchases: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          id: string
+          payment_intent_id: string
+          purchased_by: string | null
+          quantity: number
+          workspace_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          id?: string
+          payment_intent_id: string
+          purchased_by?: string | null
+          quantity: number
+          workspace_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          id?: string
+          payment_intent_id?: string
+          purchased_by?: string | null
+          quantity?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lease_credit_purchases_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -2536,6 +2641,30 @@ export type Database = {
           },
         ]
       }
+      login_events: {
+        Row: {
+          created_at: string
+          id: string
+          ip: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           alert_type: string
@@ -2600,6 +2729,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ops_admins: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          note?: string | null
+          user_id: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       processing_rate_limits: {
         Row: {
@@ -3165,6 +3315,41 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_activity_log: {
+        Row: {
+          created_at: string
+          details: Json
+          event_type: string
+          id: string
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: Json
+          event_type: string
+          id?: string
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: Json
+          event_type?: string
+          id?: string
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_activity_log_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_approvers: {
         Row: {
           created_at: string
@@ -3193,6 +3378,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "workspace_approvers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_creation_requests: {
+        Row: {
+          created_at: string
+          idempotency_key: string
+          owner_id: string
+          status: string
+          updated_at: string
+          workspace_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          idempotency_key: string
+          owner_id: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          idempotency_key?: string
+          owner_id?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_creation_requests_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -3322,11 +3542,13 @@ export type Database = {
       }
       workspaces: {
         Row: {
+          addon_document_capacity: number
           approval_threshold: number | null
           asset_type_config: Json | null
           backdoor_enabled: boolean
           billing_interval: string
           building_options: Json
+          canceled_at: string | null
           counter_signature_default_due_days: number
           covenant_threshold: number | null
           created_at: string
@@ -3335,12 +3557,16 @@ export type Database = {
           discount_rate: number | null
           document_limit: number
           documents_used: number
+          grace_expires_at: string | null
           id: string
+          intended_plan: string | null
           location_options: Json
           max_archived_leases: number | null
           name: string
           owner_id: string
           plan: string
+          purchased_lease_credits: number
+          purge_after: string | null
           region_options: Json
           report_artifact_retention_days: number
           report_default_discount_method: string | null
@@ -3348,6 +3574,7 @@ export type Database = {
           report_organization_name: string | null
           report_rounding_precision: number
           separation_of_duties_default: boolean
+          soft_deleted_at: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_period_end: string | null
@@ -3356,11 +3583,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          addon_document_capacity?: number
           approval_threshold?: number | null
           asset_type_config?: Json | null
           backdoor_enabled?: boolean
           billing_interval?: string
           building_options?: Json
+          canceled_at?: string | null
           counter_signature_default_due_days?: number
           covenant_threshold?: number | null
           created_at?: string
@@ -3369,12 +3598,16 @@ export type Database = {
           discount_rate?: number | null
           document_limit?: number
           documents_used?: number
+          grace_expires_at?: string | null
           id?: string
+          intended_plan?: string | null
           location_options?: Json
           max_archived_leases?: number | null
           name: string
           owner_id: string
           plan?: string
+          purchased_lease_credits?: number
+          purge_after?: string | null
           region_options?: Json
           report_artifact_retention_days?: number
           report_default_discount_method?: string | null
@@ -3382,6 +3615,7 @@ export type Database = {
           report_organization_name?: string | null
           report_rounding_precision?: number
           separation_of_duties_default?: boolean
+          soft_deleted_at?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_period_end?: string | null
@@ -3390,11 +3624,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          addon_document_capacity?: number
           approval_threshold?: number | null
           asset_type_config?: Json | null
           backdoor_enabled?: boolean
           billing_interval?: string
           building_options?: Json
+          canceled_at?: string | null
           counter_signature_default_due_days?: number
           covenant_threshold?: number | null
           created_at?: string
@@ -3403,12 +3639,16 @@ export type Database = {
           discount_rate?: number | null
           document_limit?: number
           documents_used?: number
+          grace_expires_at?: string | null
           id?: string
+          intended_plan?: string | null
           location_options?: Json
           max_archived_leases?: number | null
           name?: string
           owner_id?: string
           plan?: string
+          purchased_lease_credits?: number
+          purge_after?: string | null
           region_options?: Json
           report_artifact_retention_days?: number
           report_default_discount_method?: string | null
@@ -3416,6 +3656,7 @@ export type Database = {
           report_organization_name?: string | null
           report_rounding_precision?: number
           separation_of_duties_default?: boolean
+          soft_deleted_at?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_period_end?: string | null
@@ -3592,6 +3833,7 @@ export type Database = {
       }
     }
     Functions: {
+      am_i_ops_admin: { Args: never; Returns: boolean }
       apply_policy_steps: {
         Args: { p_policy_id: string; p_steps: Json }
         Returns: undefined
@@ -3599,6 +3841,15 @@ export type Database = {
       approve_field: {
         Args: { p_field_name: string; p_lease_id: string }
         Returns: boolean
+      }
+      audit_rls_smoke_check: { Args: never; Returns: Json }
+      consume_lease_credit: {
+        Args: { p_lease_id?: string; p_workspace_id: string }
+        Returns: boolean
+      }
+      create_workspace_locked: {
+        Args: { p_idempotency_key: string; p_name: string; p_owner_id: string }
+        Returns: Json
       }
       finalize_lease_approval: {
         Args: { p_lease_id: string }
@@ -3608,6 +3859,13 @@ export type Database = {
       get_workspace_role: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: Database["public"]["Enums"]["workspace_role"]
+      }
+      get_workspace_rolling_extraction_usage: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          extraction_count: number
+          window_oldest_at: string
+        }[]
       }
       has_workspace_permission: {
         Args: {
@@ -3650,6 +3908,14 @@ export type Database = {
         Returns: string
       }
       storage_total_bytes: { Args: never; Returns: number }
+      transfer_workspace_ownership_locked: {
+        Args: {
+          p_caller_id: string
+          p_target_user_id: string
+          p_workspace_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       subscription_plan: "free" | "starter" | "pro" | "business"

@@ -1,10 +1,23 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { pdf } from '@react-pdf/renderer';
-import { Download, FileText, Loader2 } from 'lucide-react';
+import { Download, FileText, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { LeaseAnalysisDocument } from '@/components/leases/LeaseAnalysisExport';
 import { type ReportLease } from '@/lib/reportGeneration';
 import { buildLeaseAnalysisProse } from '@/lib/leaseAnalysisProse';
@@ -16,9 +29,17 @@ interface LeaseDocumentsTabProps {
   executedFilename?: string | null;
   executedStoragePath?: string | null;
   isLocked: boolean;
+  /** Called after an uploaded document is deleted so the parent refetches
+   * the lease row (filename/storage_path columns change underneath us). */
+  onDocumentDeleted?: () => void;
 }
 
 type AnalysisVersion = { url: string; name: string; generatedAt: string };
+
+type PendingDelete =
+  | { kind: 'original'; path: string; name: string }
+  | { kind: 'executed'; path: string; name: string }
+  | { kind: 'summary'; url: string; name: string };
 
 function formatNow(): string {
   return new Date().toLocaleDateString('en-US', {
@@ -35,15 +56,38 @@ export function LeaseDocumentsTab({
   executedFilename,
   executedStoragePath,
   isLocked,
+  onDocumentDeleted,
 }: LeaseDocumentsTabProps) {
+  const { user } = useAuth();
+  const { userRole } = useApp();
+  const { t } = useAppTranslation();
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [analyses, setAnalyses] = useState<AnalysisVersion[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
+  // Revoke blob URLs on unmount ONLY. The previous [analyses]-dependent
+  // cleanup revoked still-listed URLs every time the array changed, which
+  // is why generated summaries "disappeared" after a second generation.
+  const analysesRef = useRef<AnalysisVersion[]>([]);
+  analysesRef.current = analyses;
   useEffect(() => {
     return () => {
-      analyses.forEach(r => URL.revokeObjectURL(r.url));
+      analysesRef.current.forEach(r => URL.revokeObjectURL(r.url));
     };
-  }, [analyses]);
+  }, []);
+
+  const isAdminRole = userRole === 'admin' || userRole === 'owner';
+  // Deletion must mirror what storage RLS will actually allow, and the
+  // locked-lease governance trigger blocks column changes post-lock:
+  // source documents on a locked lease are part of the audit record.
+  const canDeleteOriginal =
+    !isLocked && !!user?.id && !!storagePath && storagePath.startsWith(`${user.id}/`);
+  const canDeleteExecuted =
+    !isLocked &&
+    !!user?.id &&
+    !!executedStoragePath &&
+    (isAdminRole || executedStoragePath.startsWith(`${user.id}/`));
 
   const handleDownload = useCallback(async (path: string, displayName: string, bucket: string) => {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 120);
@@ -57,6 +101,77 @@ export function LeaseDocumentsTab({
     a.target = '_blank';
     a.click();
   }, []);
+
+  // Deletion order matters (integrity review 2026-06-12):
+  //   1. Governed leases UPDATE first — prevent_locked_lease_edits fail-fasts
+  //      on a locked lease BEFORE anything is destroyed (a stale isLocked in
+  //      this component can't bypass it).
+  //   2. Audit row second, error-CHECKED — a delete that isn't recorded must
+  //      not proceed; on failure the column pointers are restored.
+  //   3. Storage removal LAST — if it fails, the object is orphaned but
+  //      invisible (recoverable), never a dangling DB reference.
+  const handleConfirmedDelete = useCallback(async () => {
+    if (!pendingDelete || !user?.id) return;
+
+    if (pendingDelete.kind === 'summary') {
+      URL.revokeObjectURL(pendingDelete.url);
+      setAnalyses(prev => prev.filter(a => a.url !== pendingDelete.url));
+      setPendingDelete(null);
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const bucket = pendingDelete.kind === 'original' ? 'leases' : 'executed-leases';
+      const columns =
+        pendingDelete.kind === 'original'
+          ? { filename: null, storage_path: null }
+          : { executed_filename: null, executed_storage_path: null };
+      const restoreColumns =
+        pendingDelete.kind === 'original'
+          ? { filename: pendingDelete.name, storage_path: pendingDelete.path }
+          : { executed_filename: pendingDelete.name, executed_storage_path: pendingDelete.path };
+
+      const { error: updateError } = await (supabase as any)
+        .from('leases')
+        .update(columns)
+        .eq('id', leaseId);
+      if (updateError) throw updateError;
+
+      const { error: auditError } = await supabase.from('lease_activity_log').insert({
+        lease_id: leaseId,
+        user_id: user.id,
+        activity_type: 'document_deleted',
+        details: {
+          filename: pendingDelete.name,
+          document_kind: pendingDelete.kind,
+          storage_path: pendingDelete.path,
+          bucket,
+        },
+      } as any);
+      if (auditError) {
+        await (supabase as any).from('leases').update(restoreColumns).eq('id', leaseId);
+        throw new Error(t('documents.delete_audit_failed'));
+      }
+
+      const { data: removed, error: storageError } = await supabase.storage
+        .from(bucket)
+        .remove([pendingDelete.path]);
+      if (storageError || !removed || removed.length === 0) {
+        console.error('Storage removal incomplete:', storageError?.message ?? 'object not returned');
+        toast.warning(t('documents.delete_file_pending'));
+      } else {
+        toast.success(t('documents.delete_success'));
+      }
+      setPendingDelete(null);
+      onDocumentDeleted?.();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('documents.delete_failed');
+      toast.error(message);
+    } finally {
+      setDeleting(false);
+    }
+  }, [pendingDelete, user?.id, leaseId, onDocumentDeleted, t]);
 
   const handleGenerateAnalysis = useCallback(async () => {
     setGeneratingPdf(true);
@@ -178,15 +293,29 @@ export function LeaseDocumentsTab({
                 <p className="text-xs text-muted-foreground">Original lease</p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="shrink-0"
-              onClick={() => handleDownload(storagePath, filename, 'leases')}
-            >
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Download
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleDownload(storagePath, filename, 'leases')}
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Download
+              </Button>
+              {canDeleteOriginal && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Delete ${filename}`}
+                  onClick={() =>
+                    setPendingDelete({ kind: 'original', path: storagePath, name: filename })
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
@@ -200,38 +329,70 @@ export function LeaseDocumentsTab({
                 <p className="text-xs text-muted-foreground">Executed copy</p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="shrink-0"
-              onClick={() => handleDownload(executedStoragePath, executedFilename, 'executed-leases')}
-            >
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Download
-            </Button>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleDownload(executedStoragePath, executedFilename, 'executed-leases')}
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Download
+              </Button>
+              {canDeleteExecuted && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label={`Delete ${executedFilename}`}
+                  onClick={() =>
+                    setPendingDelete({
+                      kind: 'executed',
+                      path: executedStoragePath,
+                      name: executedFilename,
+                    })
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Generated summary versions */}
+        {/* Generated summary versions — list only, no inline preview.
+            Download is the way to view; the row persists for the visit. */}
         {analyses.map((report) => (
-          <div key={report.url}>
-            <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <FileText className="h-4 w-4 text-blue-600 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{report.name}</p>
-                  <p className="text-xs text-muted-foreground">Generated {report.generatedAt}</p>
-                </div>
+          <div
+            key={report.url}
+            className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{report.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t('documents.summary_session_note', { date: report.generatedAt })}
+                </p>
               </div>
-              <Button size="sm" variant="ghost" className="shrink-0" asChild>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button size="sm" variant="ghost" asChild>
                 <a href={report.url} download={report.name}>
                   <Download className="h-3.5 w-3.5 mr-1.5" />
                   Download
                 </a>
               </Button>
-            </div>
-            <div className="rounded-lg border overflow-hidden mt-2 mb-2">
-              <iframe src={report.url} className="w-full h-[600px]" title={report.name} />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive"
+                aria-label={`Remove ${report.name}`}
+                onClick={() =>
+                  setPendingDelete({ kind: 'summary', url: report.url, name: report.name })
+                }
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
         ))}
@@ -243,9 +404,19 @@ export function LeaseDocumentsTab({
           </p>
         )}
 
-        {/* Generate Lease Summary — available once the lease is locked (finalized).
-            Deterministic template, no AI call, no plan gate. */}
-        {isLocked ? (
+        {/* Post-lock, the delete buttons are gone by design — say so once
+            instead of letting users hunt for a "missing" control. */}
+        {isLocked && (storagePath || executedStoragePath) && (
+          <p className="text-xs text-muted-foreground border-t border-border pt-2">
+            {t('documents.locked_note')}
+          </p>
+        )}
+
+        {/* Generate Lease Summary — available once the lease is locked
+            (finalized). Deterministic template, no AI call, no plan gate.
+            Hidden while a generated summary is listed; removing the summary
+            brings it back. */}
+        {isLocked && analyses.length === 0 ? (
           <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <FileText className="h-4 w-4 text-blue-600 shrink-0" />
@@ -276,7 +447,7 @@ export function LeaseDocumentsTab({
               )}
             </Button>
           </div>
-        ) : (
+        ) : !isLocked ? (
           <div className="flex items-center justify-between rounded-md border px-3 py-2.5 gap-3 opacity-60">
             <div className="flex items-center gap-2 min-w-0">
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -288,7 +459,45 @@ export function LeaseDocumentsTab({
               </div>
             </div>
           </div>
-        )}
+        ) : null}
+
+        <AlertDialog
+          open={pendingDelete !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingDelete(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {pendingDelete?.kind === 'summary'
+                  ? t('documents.remove_summary_title')
+                  : t('documents.delete_doc_title')}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingDelete?.kind === 'summary'
+                  ? t('documents.remove_summary_desc', { name: pendingDelete.name })
+                  : pendingDelete?.kind === 'original'
+                    ? t('documents.delete_original_desc', { name: pendingDelete.name })
+                    : t('documents.delete_executed_desc', { name: pendingDelete?.name })}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>{t('common.cancel')}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleConfirmedDelete();
+                }}
+                disabled={deleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+                {pendingDelete?.kind === 'summary' ? t('documents.remove_cta') : t('common.delete')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

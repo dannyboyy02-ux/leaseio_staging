@@ -136,6 +136,18 @@ export default function Leases() {
       // Workspace scoping is mandatory: a user who is a member of multiple
       // workspaces would otherwise see every workspace's leases mixed
       // together (RLS allows them all; UI must scope to the active one).
+      const visibleLifecycleStatuses = [
+        // Legacy
+        'submitted', 'under_review', 'approved', 'executed', 'active', 'expired',
+        // Chain
+        'concept_submitted', 'concept_under_review', 'in_negotiation',
+        'final_review', 'pending_counter_signature', 'fully_executed',
+        // Phase 6: leases in chain_violation must remain visible in the
+        // listing — the violation banner on the detail page is the
+        // resolution surface, but the user has to reach the lease first.
+        'chain_violation',
+      ];
+
       let query = (supabase as any)
         .from('leases')
         .select(
@@ -145,21 +157,18 @@ export default function Leases() {
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace.id)
-        .in('lifecycle_status', [
-          // Legacy
-          'submitted', 'under_review', 'approved', 'executed', 'active', 'expired',
-          // Chain
-          'concept_submitted', 'concept_under_review', 'in_negotiation',
-          'final_review', 'pending_counter_signature', 'fully_executed',
-          // Phase 6: leases in chain_violation must remain visible in the
-          // listing — the violation banner on the detail page is the
-          // resolution surface, but the user has to reach the lease first.
-          'chain_violation',
-        ])
         .order('lease_end', { ascending: true });
 
-      if (!showArchived) {
-        query = query.eq('archived', false);
+      if (showArchived) {
+        // Archived view must ALSO show leases with NULL lifecycle_status
+        // (failed/still-processing uploads and amendments never get one) —
+        // otherwise an archived failed amendment is unreachable anywhere
+        // and the "restore it later" promise in the delete dialog is false.
+        query = query.or(
+          `lifecycle_status.in.(${visibleLifecycleStatuses.join(',')}),lifecycle_status.is.null`,
+        );
+      } else {
+        query = query.in('lifecycle_status', visibleLifecycleStatuses).eq('archived', false);
       }
 
       const { data, error } = await query;

@@ -728,51 +728,6 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                 </CardContent>
               </Card>
 
-              {/* Phase 5 — counter-signature window default. */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Counter-Signature Window</CardTitle>
-                  <CardDescription>
-                    Default number of days from signator approval until the
-                    counter-signed document is expected. Reminders fire 7 days
-                    before, on the due date, and at 7 / 14 / 28 days overdue.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="counter-signature-days">
-                      Default counter-signature window (days)
-                    </Label>
-                    <Input
-                      id="counter-signature-days"
-                      type="number"
-                      value={counterSignatureDueDays}
-                      onChange={(e) => setCounterSignatureDueDays(e.target.value)}
-                      min={1}
-                      max={365}
-                      disabled={!canEdit}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Must be between 1 and 365 days. Default: 21.
-                    </p>
-                  </div>
-                  <Button
-                    variant="accent"
-                    onClick={handleSaveCounterSignature}
-                    disabled={!canEdit || isSavingCounterSignature}
-                  >
-                    {isSavingCounterSignature ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    {isSavingCounterSignature ? t('workspace.saving') : t('workspace.save_changes')}
-                  </Button>
-                  {!canEdit && (
-                    <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>
-                  )}
-                </CardContent>
-              </Card>
             </TabsContent>
           )}
 
@@ -1026,6 +981,54 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     </Link>{' '}
                     on the Reports page.
                   </p>
+                </CardContent>
+              </Card>
+
+              {/* Phase 5 — counter-signature window default. Lives with the
+                  approval rules (it's chain configuration, not a personal
+                  notification preference). */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Counter-Signature Window</CardTitle>
+                  <CardDescription>
+                    Default number of days from signator approval until the
+                    counter-signed document is expected. Reminders fire 7 days
+                    before, on the due date, and at 7 / 14 / 28 days overdue.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="counter-signature-days">
+                      Default counter-signature window (days)
+                    </Label>
+                    <Input
+                      id="counter-signature-days"
+                      type="number"
+                      value={counterSignatureDueDays}
+                      onChange={(e) => setCounterSignatureDueDays(e.target.value)}
+                      min={1}
+                      max={365}
+                      disabled={!canEdit}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Must be between 1 and 365 days. Default: 21.
+                    </p>
+                  </div>
+                  <Button
+                    variant="accent"
+                    onClick={handleSaveCounterSignature}
+                    disabled={!canEdit || isSavingCounterSignature}
+                  >
+                    {isSavingCounterSignature ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {isSavingCounterSignature ? t('workspace.saving') : t('workspace.save_changes')}
+                  </Button>
+                  {!canEdit && (
+                    <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

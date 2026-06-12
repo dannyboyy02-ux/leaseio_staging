@@ -164,6 +164,12 @@ export default function AcceptInvite() {
         return;
       }
 
+      // Feed the Settings → Account login-activity card (same as the
+      // AuthContext.signIn path); never block invite acceptance on it.
+      void supabase.functions.invoke('record-login-event').catch(() => {
+        /* non-fatal */
+      });
+
       setStatus("success");
       setMessage(t('accept_invite.accepted_redirecting'));
       setTimeout(() => navigate("/app/dashboard", { replace: true }), 600);

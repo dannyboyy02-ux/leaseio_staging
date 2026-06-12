@@ -1,7 +1,15 @@
-import { ChevronLeft, Lock, RotateCcw, Loader2, History } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronLeft, Lock, RotateCcw, Loader2, History, MoreHorizontal, Archive, ArchiveRestore } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { LifecycleStatusBadge } from '@/components/lifecycle/LifecycleStatusBadge';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { ArchiveButton } from '@/components/leases/ArchiveButton';
@@ -47,6 +55,7 @@ export function LockedHeader({
 }: Props) {
   const navigate = useNavigate();
   const { t } = useAppTranslation();
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
 
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border">
@@ -71,6 +80,12 @@ export function LockedHeader({
                   <Lock className="h-3 w-3" />
                   {t('locked_lease.locked_badge')}
                 </span>
+                {isArchived && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+                    <Archive className="h-3 w-3" />
+                    {t('archive.deleted_badge')}
+                  </span>
+                )}
                 {subtitle ? <span className="truncate">· {subtitle}</span> : null}
               </div>
             </div>
@@ -101,23 +116,74 @@ export function LockedHeader({
                 {pendingUnlockRequest ? t('locked_lease.approve_and_unlock') : t('locked_lease.admin_unlock')}
               </Button>
             )}
+            {/* Unlock is the only standalone action; everything else
+                (audit-trail deep link, delete/restore) lives in the
+                overflow so the header reads as one decision, not three. */}
             {leaseId && (
-              <Button variant="ghost" size="sm" asChild>
-                <Link to={`/app/reports/audit-log?leaseId=${leaseId}`}>
-                  <History className="h-3.5 w-3.5 mr-1.5" />
-                  {t('locked_lease.view_audit_trail')}
-                </Link>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" aria-label={t('common.more_actions')}>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link to={`/app/reports/audit-log?leaseId=${leaseId}`}>
+                      <History className="h-4 w-4 mr-2" />
+                      {t('locked_lease.view_audit_trail')}
+                    </Link>
+                  </DropdownMenuItem>
+                  {isAdmin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setArchiveDialogOpen(true)}>
+                        {isArchived ? (
+                          <ArchiveRestore className="h-4 w-4 mr-2" />
+                        ) : (
+                          <Archive className="h-4 w-4 mr-2" />
+                        )}
+                        {isArchived ? t('archive.unarchive') : t('archive.archive')}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            {leaseId && (
+            {leaseId && isAdmin && (
               <ArchiveButton
                 leaseId={leaseId}
                 isArchived={!!isArchived}
                 onChange={onArchiveChange}
+                open={archiveDialogOpen}
+                onOpenChange={setArchiveDialogOpen}
               />
             )}
           </div>
         </div>
+
+        {/* Archived ("deleted") state must be unmissable — without this
+            banner the page renders identically after a delete and users
+            conclude the action failed. */}
+        {isArchived && (
+          <Card className="mt-3 shadow-none border border-destructive/40 bg-destructive/5">
+            <CardContent className="py-3 px-4 flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-sm text-destructive min-w-0">
+                {t('archive.deleted_banner')}
+              </p>
+              {isAdmin && leaseId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setArchiveDialogOpen(true)}
+                >
+                  <ArchiveRestore className="h-3.5 w-3.5 mr-1.5" />
+                  {t('archive.unarchive')}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {isAdmin && pendingUnlockRequest && (
           <Card className="mt-3 shadow-none border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">

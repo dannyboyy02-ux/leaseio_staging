@@ -96,6 +96,9 @@ function setApp({
       maxActiveLeases: activeMax,
       archivedLeasesUsed: archivedUsed,
       maxArchivedLeases: archivedMax,
+      documentsUsed: 4,
+      documentLimit: 15,
+      addonDocumentCapacity: 0,
     },
     availableWorkspaces: Array.from({ length: ownedWorkspaces }, (_, i) => ({
       id: `ws-${i + 1}`,
@@ -124,9 +127,9 @@ describe("UsageContent — workspaces card on a single-workspace plan (Starter)"
       expect(screen.getByText(/usage\.workspaces_upgrade_hint/)).toBeTruthy(),
     );
 
-    // Only the active + archived meters render — NOT a third one for
-    // workspaces (1/1 on Starter is normal, not an approaching limit).
-    expect(screen.getAllByRole("progressbar")).toHaveLength(2);
+    // The abstraction + active + archived meters render — NOT a fourth one
+    // for workspaces (1/1 on Starter is normal, not an approaching limit).
+    expect(screen.getAllByRole("progressbar")).toHaveLength(3);
 
     // And the 1/1 workspace ratio alone must not trip the upgrade banner
     // (active/archived usage here is well below 75%).
@@ -145,7 +148,7 @@ describe("UsageContent — workspaces card on a multi-workspace plan (Business)"
     setApp({ plan: "business", ownedWorkspaces: 3 });
     render(<UsageContent />);
     await waitFor(() =>
-      expect(screen.getAllByRole("progressbar")).toHaveLength(3),
+      expect(screen.getAllByRole("progressbar")).toHaveLength(4),
     );
     expect(screen.queryByText(/usage\.workspaces_upgrade_hint/)).toBeNull();
     // 3/10 owned — well under 75%, no banner.
