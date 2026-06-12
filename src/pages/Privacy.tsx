@@ -117,6 +117,15 @@ export default function Privacy() {
                 </a>
               </p>
             </section>
+
+            {/* Data retention after cancellation — must match the in-app
+                cancellation lifecycle copy and the reminder emails. */}
+            <section className="space-y-4">
+              <h2 className="text-2xl font-semibold text-foreground">
+                {t('privacy.section8.title')}
+              </h2>
+              <p>{t('privacy.section8.paragraph1')}</p>
+            </section>
           </div>
         </div>
       </main>

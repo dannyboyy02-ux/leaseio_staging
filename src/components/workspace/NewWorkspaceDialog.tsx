@@ -695,7 +695,7 @@ export function NewWorkspaceDialog({
                   <Button
                     onClick={() => {
                       onOpenChange(false);
-                      navigate("/app/upgrade");
+                      navigate("/app/settings/account?tab=billing");
                     }}
                   >
                     {t("workspace.create.error_not_eligible_cta")}
@@ -704,7 +704,7 @@ export function NewWorkspaceDialog({
                   <Button
                     onClick={() => {
                       onOpenChange(false);
-                      navigate("/app/settings/account?tab=subscription");
+                      navigate("/app/settings/account?tab=billing");
                     }}
                   >
                     {t("workspace.create.error_no_card_cta")}
@@ -715,7 +715,7 @@ export function NewWorkspaceDialog({
                   <Button
                     onClick={() => {
                       onOpenChange(false);
-                      navigate("/app/account/workspaces");
+                      navigate("/app/settings/workspaces");
                     }}
                   >
                     {t("workspace.create.manage_link")}
@@ -928,7 +928,7 @@ function ErrorPane({
       // Always-render pattern: a Starter / non-Business user clicking the
       // "+ New workspace" entry lands here. Route to the upgrade page (parity
       // with the acknowledge-gate "starter" variant — same outcome, one door).
-      primaryHref = "/app/upgrade";
+      primaryHref = "/app/settings/account?tab=billing";
       primaryLabelKey = "workspace.create.error_not_eligible_cta";
       break;
     case "cap_reached":
@@ -938,13 +938,13 @@ function ErrorPane({
     case "no_card_on_file":
       titleKey = "workspace.create.error_no_card_title";
       bodyKey = "workspace.create.error_no_card_body";
-      primaryHref = "/app/settings/account?tab=subscription";
+      primaryHref = "/app/settings/account?tab=billing";
       primaryLabelKey = "workspace.create.error_no_card_cta";
       break;
     case "no_customer":
       titleKey = "workspace.create.error_no_customer_title";
       bodyKey = "workspace.create.error_no_customer_body";
-      primaryHref = "/app/settings/account?tab=subscription";
+      primaryHref = "/app/settings/account?tab=billing";
       primaryLabelKey = "workspace.create.error_no_card_cta";
       break;
     case "stripe_unverified":
@@ -956,7 +956,7 @@ function ErrorPane({
       titleKey = "workspace.create.error_payment_failed_title";
       bodyKey = "workspace.create.error_payment_failed_safe_line";
       extraSafeLine = error.message ?? null;
-      primaryHref = "/app/settings/account?tab=subscription";
+      primaryHref = "/app/settings/account?tab=billing";
       primaryLabelKey = "workspace.create.error_payment_failed_cta";
       break;
     case "three_ds_canceled":

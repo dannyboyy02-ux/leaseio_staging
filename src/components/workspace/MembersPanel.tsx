@@ -6,14 +6,14 @@
 // component takes `workspaceId` and `ownerId` as props so it can render
 // for ANY workspace the caller is allowed to see — used by:
 //   - WorkspaceSettings.tsx (active workspace context)
-//   - the new /app/account/workspaces page (in-context member management
+//   - the My Workspaces panel at /app/settings/workspaces (in-context member management
 //     for any workspace the current user owns, without switching active)
 //
 // Behavior contract: the rendered output is byte-equivalent to the
 // previous inline implementation in WorkspaceSettings.tsx for the
 // active-workspace case. The only behavioral expansion is that the
 // panel now works for non-active workspaces too. Tested by visiting
-// /app/settings/workspace and confirming the Users tab is unchanged.
+// /app/settings/workspaces/users and confirming the Members section is unchanged.
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';

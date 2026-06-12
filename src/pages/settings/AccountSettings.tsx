@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Bell, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, Star, LogOut, Palette, Shield, Info, Settings2, Sun, Moon, Monitor, Mail, BarChart3, CalendarOff } from 'lucide-react';
-import { OutOfOfficeSettings } from '@/components/workflow/OutOfOfficeSettings';
+import { User, Lock, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { UsageContent } from '@/pages/app/UsageContent';
-import WorkspaceSettings from '@/pages/settings/WorkspaceSettings';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -34,12 +32,15 @@ import {
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ANNUAL_DISCOUNT_PERCENT, PLANS, PLAN_ORDER, isUpgrade, normalizePlanId } from '@/config/pricing';
+import { ANNUAL_DISCOUNT_PERCENT, PLANS, isUpgrade, normalizePlanId } from '@/config/pricing';
+import { trialDaysRemaining } from '@/lib/trialStatus';
+import { DocumentPackDialog } from '@/components/workspace/DocumentPackDialog';
 import type { SubscriptionPlan } from '@/types';
 
 const timezones = [
@@ -50,7 +51,7 @@ const timezones = [
 ];
 
 export default function AccountSettings() {
-  const { user, workspace, userRole, refreshProfile } = useApp();
+  const { user, workspace, userRole, refreshProfile, isLoading } = useApp();
   const { user: authUser, signOut } = useAuth();
   const { t, language } = useLanguage();
   const navigate = useNavigate();
@@ -150,24 +151,64 @@ export default function AccountSettings() {
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null);
   const [isManagingPayment, setIsManagingPayment] = useState(false);
   const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<string | null>(null);
+  const [confirmDowngradePlan, setConfirmDowngradePlan] = useState<string | null>(null);
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [packDialogOpen, setPackDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
   // Billing interval selection for the in-app upgrade flow. Defaults
-  // monthly; can be set to 'annual' via the toggle on the plan grid OR
+  // monthly; can be set to 'annual' via the toggle on the upgrade card OR
   // pre-armed via ?billing= when arriving from onboarding.
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
   const [autoCheckoutFired, setAutoCheckoutFired] = useState(false);
 
-  // Handle URL params for tab switching
+  // Handle URL params for tab switching. Tabs removed/renamed in the 2026-06
+  // Claude-alignment pass map to their new homes so old links never strand:
+  //   subscription → billing (rename), notifications → profile (folded in),
+  //   other → privacy (merged), out-of-office → profile (feature removed),
+  //   workspace → navigates to the Workspaces drill-down. Anything unknown
+  //   falls back to profile instead of selecting a tab that doesn't exist.
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab) setActiveTab(tab);
+    if (tab === 'workspace') {
+      navigate('/app/settings/workspaces', { replace: true });
+      return;
+    }
+    const TAB_ALIASES: Record<string, string> = {
+      subscription: 'billing',
+      notifications: 'profile',
+      'out-of-office': 'profile',
+      other: 'privacy',
+    };
+    const VALID_TABS = ['profile', 'appearance', 'account', 'privacy', 'billing', 'usage'];
+    if (tab) {
+      const resolved = Object.prototype.hasOwnProperty.call(TAB_ALIASES, tab)
+        ? TAB_ALIASES[tab]
+        : tab;
+      setActiveTab(VALID_TABS.includes(resolved) ? resolved : 'profile');
+    }
 
     const checkout = searchParams.get('checkout');
-    if (checkout === 'success') {
-      toast.success('Subscription activated successfully!');
-      refreshProfile();
-    } else if (checkout === 'canceled') {
-      toast.info('Checkout was canceled');
+    if (checkout === 'success' || checkout === 'canceled') {
+      if (checkout === 'success') {
+        toast.success(t('account.checkout_success'));
+        refreshProfile();
+      } else {
+        toast.info(t('account.checkout_canceled'));
+      }
+      // Strip the param immediately so the toast/refresh fires exactly once —
+      // never on refresh, back-nav, or a re-render (mirrors the autoCheckout
+      // cleanup below). Without this the success branch re-fired in a loop.
+      const next = new URLSearchParams(searchParams);
+      next.delete('checkout');
+      navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
+    }
+
+    // Deep-link from the quota banner's "Add capacity" CTA opens the pack dialog.
+    if (searchParams.get('packs') === '1') {
+      setPackDialogOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('packs');
+      navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
     }
 
     // Pre-arm billing interval from onboarding handoff. Stays in state
@@ -177,6 +218,7 @@ export default function AccountSettings() {
     if (billing === 'annual' || billing === 'monthly') {
       setBillingInterval(billing);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, refreshProfile]);
 
   useEffect(() => {
@@ -380,7 +422,7 @@ export default function AccountSettings() {
 
   const proceedWithCheckout = async (planId: string) => {
     if (!workspace?.id) {
-      toast.error('Create or select a workspace before starting checkout.');
+      toast.error(t('account.checkout_no_workspace'));
       return;
     }
 
@@ -395,11 +437,15 @@ export default function AccountSettings() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
-        window.open(data.url, '_blank');
+        // Same-tab redirect — Stripe round-trips back via the success/cancel
+        // URLs. window.open('_blank') after an await is outside the click
+        // gesture and gets popup-blocked in Safari/Firefox, silently no-op'ing
+        // every billing CTA (H1, 2026-06-11).
+        window.location.href = data.url;
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to start checkout. Please try again.';
+      const msg = error instanceof Error ? error.message : t('account.checkout_failed');
       toast.error(msg);
     } finally {
       setIsUpgrading(null);
@@ -428,7 +474,7 @@ export default function AccountSettings() {
 
   const handleManagePayment = async () => {
     if (!workspace?.id) {
-      toast.error('Select a workspace before opening the billing portal.');
+      toast.error(t('account.portal_no_workspace'));
       return;
     }
     setIsManagingPayment(true);
@@ -444,11 +490,12 @@ export default function AccountSettings() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
-        window.open(data.url, '_blank');
+        // Same-tab redirect (see proceedWithCheckout) — avoids popup blockers.
+        window.location.href = data.url;
       }
     } catch (error) {
       console.error('Error opening customer portal:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to open billing portal. You may need an active subscription first.';
+      const msg = error instanceof Error ? error.message : t('account.portal_failed');
       toast.error(msg);
     } finally {
       setIsManagingPayment(false);
@@ -458,8 +505,36 @@ export default function AccountSettings() {
   const currentPlan = normalizePlanId(workspace?.plan);
 
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
+
+  // Real billing dates come from subscription_period_end (mirrored from
+  // Stripe by the webhook). Null until first checkout; guard every render
+  // on validity so the UI never shows "Invalid Date".
+  const periodEndMs = workspace?.subscriptionPeriodEnd
+    ? new Date(workspace.subscriptionPeriodEnd).getTime()
+    : NaN;
+  const formattedPeriodEnd = Number.isFinite(periodEndMs)
+    ? new Date(periodEndMs).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null;
+  const trialDaysLeft = trialDaysRemaining(workspace?.subscriptionPeriodEnd);
+  // Effective allowance = base plan limit + active document-pack capacity.
+  const addonCapacity = workspace?.addonDocumentCapacity ?? 0;
+  const effectiveLimit = (workspace?.documentLimit ?? 0) + addonCapacity;
+  const usageRatio =
+    workspace && effectiveLimit > 0 ? workspace.documentsUsed / effectiveLimit : 0;
   const railTriggerClass =
-    'w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
+    'md:w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
+
+  // Write the tab to the URL on change so refresh/back/share keep position.
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    navigate({ search: `?${next.toString()}` }, { replace: true });
+  };
 
   return (
     <AppLayout>
@@ -468,7 +543,7 @@ export default function AccountSettings() {
       <div className="p-6">
         <Tabs
           value={activeTab}
-          onValueChange={setActiveTab}
+          onValueChange={handleTabChange}
           orientation="vertical"
           className="flex flex-col md:flex-row gap-6 md:items-start"
         >
@@ -492,39 +567,31 @@ export default function AccountSettings() {
               <Shield className="h-4 w-4" />
               {t('account.privacy')}
             </TabsTrigger>
-            <TabsTrigger value="notifications" className={railTriggerClass}>
-              <Bell className="h-4 w-4" />
-              {t('account.notifications')}
-            </TabsTrigger>
-            <TabsTrigger value="subscription" className={railTriggerClass}>
+            <TabsTrigger value="billing" className={railTriggerClass}>
               <CreditCard className="h-4 w-4" />
-              {t('account.subscription')}
+              {t('account.billing')}
             </TabsTrigger>
             <TabsTrigger value="usage" className={railTriggerClass}>
               <BarChart3 className="h-4 w-4" />
               {t('account.usage')}
             </TabsTrigger>
-            {/* Phase 7 — out-of-office routing for chain approvals */}
-            <TabsTrigger value="out-of-office" className={railTriggerClass}>
-              <CalendarOff className="h-4 w-4" />
-              Out of Office
-            </TabsTrigger>
 
-            {isAdminUser && (
-              <>
-                <div className="hidden md:block h-px bg-border my-2" />
-                <TabsTrigger value="workspace" className={railTriggerClass}>
-                  <Settings2 className="h-4 w-4" />
-                  {t('account.workspace_settings_link')}
-                </TabsTrigger>
-              </>
-            )}
-
+            {/* Workspaces — navigation out to the workspace-scoped settings
+                surface (own rail + back arrow), not a tab. The boundary
+                between account-level and workspace-level settings is the
+                separator above this link. */}
             <div className="hidden md:block h-px bg-border my-2" />
-            <TabsTrigger value="other" className={railTriggerClass}>
-              <Info className="h-4 w-4" />
-              {t('account.other')}
-            </TabsTrigger>
+            <Link
+              to="/app/settings/workspaces"
+              className={cn(
+                railTriggerClass,
+                'flex items-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors',
+              )}
+            >
+              <Building2 className="h-4 w-4" />
+              {t('account.workspaces_link')}
+              <ChevronRight className="h-4 w-4 ml-auto" />
+            </Link>
           </TabsList>
 
           {/* Content panel — min-h stabilizes the layout so switching tabs
@@ -607,6 +674,59 @@ export default function AccountSettings() {
                     <Save className="h-4 w-4 mr-2" />
                   )}
                   {isSaving ? t('account.saving') : t('account.save_changes')}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Personal notification preferences — folded in from the former
+                Notifications tab. These are per-user (profiles table), so they
+                live with the rest of the user's own settings; the workspace's
+                reminder defaults live in Workspaces → Notifications. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('account.notification_prefs')}</CardTitle>
+                <CardDescription>{t('account.choose_alerts')}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{t('account.email_notifications')}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t('account.email_notifications_desc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={emailNotifications}
+                    onCheckedChange={setEmailNotifications}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{t('account.sms_notifications')}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {t('account.sms_notifications_desc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={smsNotifications}
+                    onCheckedChange={setSmsNotifications}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">{t('account.notify_abstraction_complete')}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('account.notify_abstraction_complete_desc')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={notifyAbstractionComplete}
+                    onCheckedChange={setNotifyAbstractionComplete}
+                  />
+                </div>
+                <Button variant="accent" onClick={handleSaveNotificationPrefs}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {t('account.save_changes')}
                 </Button>
               </CardContent>
             </Card>
@@ -795,74 +915,64 @@ export default function AccountSettings() {
             </Card>
           </TabsContent>
 
-          {/* Notifications */}
-          <TabsContent value="notifications" className="space-y-6 mt-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('account.notification_prefs')}</CardTitle>
-                <CardDescription>{t('account.choose_alerts')}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{t('account.email_notifications')}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t('account.email_notifications_desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={emailNotifications}
-                    onCheckedChange={setEmailNotifications}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{t('account.sms_notifications')}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {t('account.sms_notifications_desc')}
-                    </p>
-                  </div>
-                  <Switch
-                    checked={smsNotifications}
-                    onCheckedChange={setSmsNotifications}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-sm font-medium">Abstraction complete</p>
-                    <p className="text-xs text-muted-foreground">
-                      Email me when AI finishes extracting a lease
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifyAbstractionComplete}
-                    onCheckedChange={setNotifyAbstractionComplete}
-                  />
-                </div>
-                <Button variant="accent" onClick={handleSaveNotificationPrefs}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {t('account.save_changes')}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
-          {/* Subscription */}
-          <TabsContent value="subscription" className="space-y-6 mt-0">
+          {/* Billing (renamed from Subscription; 'subscription' stays a URL alias) */}
+          <TabsContent value="billing" className="space-y-6 mt-0">
+            {/* Skeleton while the workspace fetch is in flight. */}
+            {isLoading && !workspace ? (
+              <div className="space-y-6">
+                <Skeleton className="h-44 w-full" />
+                <Skeleton className="h-72 w-full" />
+              </div>
+            ) : !workspace ? (
+              /* Fetch finished but no workspace resolved (error / none selected)
+                 — never strand the user on skeletons forever. */
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">{t('account.billing_unavailable_title')}</CardTitle>
+                  <CardDescription>{t('account.billing_unavailable_desc')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" size="sm" onClick={() => refreshProfile()}>
+                    {t('account.retry')}
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+            <>
             {/* Trial banner — visible while subscription is in Stripe's trial window. */}
-            {workspace?.subscriptionStatus === 'trialing' && workspace?.subscriptionPeriodEnd && (
+            {workspace.subscriptionStatus === 'trialing' && formattedPeriodEnd && (
               <Card className="border-accent/50 bg-accent/5">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{t('account.trial_banner_title')}</CardTitle>
                   <CardDescription>
-                    {t('account.trial_banner_desc', {
-                      date: new Date(workspace.subscriptionPeriodEnd).toLocaleDateString(
-                        language === 'es' ? 'es-419' : 'en-US',
-                        { month: 'long', day: 'numeric', year: 'numeric' },
-                      ),
-                    })}
+                    {trialDaysLeft === 0
+                      ? t('account.trial_banner_desc_today')
+                      : t('account.trial_banner_desc', {
+                          days: t('account.trial_days_left', { count: trialDaysLeft ?? 0 }),
+                          date: formattedPeriodEnd,
+                        })}
                   </CardDescription>
                 </CardHeader>
+                <CardContent>
+                  {isAdminUser ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleManagePayment}
+                      disabled={isManagingPayment}
+                    >
+                      {isManagingPayment ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CreditCard className="h-4 w-4 mr-2" />
+                      )}
+                      {t('account.add_payment_method')}
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                  )}
+                </CardContent>
               </Card>
             )}
 
@@ -879,15 +989,19 @@ export default function AccountSettings() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleManagePayment}
-                      disabled={isManagingPayment}
-                    >
-                      {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      {t('account.update_payment_method')}
-                    </Button>
+                    {isAdminUser ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleManagePayment}
+                        disabled={isManagingPayment}
+                      >
+                        {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                        {t('account.update_payment_method')}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -908,16 +1022,20 @@ export default function AccountSettings() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button
-                      size="sm"
-                      onClick={() => proceedWithCheckout('business')}
-                      disabled={isUpgrading === 'business'}
-                    >
-                      {isUpgrading === 'business' ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : null}
-                      {t('account.recovery_callout_cta')}
-                    </Button>
+                    {isAdminUser ? (
+                      <Button
+                        size="sm"
+                        onClick={() => proceedWithCheckout('business')}
+                        disabled={isUpgrading === 'business'}
+                      >
+                        {isUpgrading === 'business' ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : null}
+                        {t('account.recovery_callout_cta')}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -929,17 +1047,15 @@ export default function AccountSettings() {
                   <CardTitle className="flex items-center gap-2">
                     {t('account.current_plan')}
                     <Badge variant={currentPlan === 'business' ? 'business' : 'secondary'}>
-                      {PLANS[currentPlan]?.name || currentPlan}
+                      {t(PLANS[currentPlan].nameKey)}
                     </Badge>
                   </CardTitle>
-                  {currentPlan !== 'starter' && (
+                  {/* Renewal date is shown for ANY active paid subscription —
+                      paid Starter renews too. Guarded on subscription state +
+                      a valid period end, never on plan tier. */}
+                  {workspace.subscriptionStatus === 'active' && formattedPeriodEnd && (
                     <CardDescription>
-                      {t('account.renews_on')}{' '}
-                      {new Date(workspace?.renewalDate || '').toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
-                        month: 'long',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
+                      {t('account.renews_on')} {formattedPeriodEnd}
                     </CardDescription>
                   )}
                 </CardHeader>
@@ -949,34 +1065,44 @@ export default function AccountSettings() {
                       <div className="flex items-baseline justify-between mb-2">
                         <span className="text-sm font-medium">{t('account.document_usage')}</span>
                         <span className="text-sm text-muted-foreground">
-                          {workspace?.documentsUsed} / {workspace?.documentLimit}
+                          {workspace.documentsUsed} / {effectiveLimit}
+                          {addonCapacity > 0 && (
+                            <span className="text-xs"> {t('account.usage_includes_pack', { base: workspace.documentLimit, count: addonCapacity })}</span>
+                          )}
                         </span>
                       </div>
                       <Progress
-                        value={workspace ? Math.min((workspace.documentsUsed / workspace.documentLimit) * 100, 100) : 0}
+                        value={Math.min(usageRatio * 100, 100)}
                         variant={
-                          workspace && (workspace.documentsUsed / workspace.documentLimit) >= 0.9
+                          usageRatio >= 0.9
                             ? 'destructive'
-                            : workspace && (workspace.documentsUsed / workspace.documentLimit) >= 0.75
+                            : usageRatio >= 0.75
                             ? 'warning'
                             : 'accent'
                         }
                         className="h-2"
                       />
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        {t('account.usage_window_note')}
+                      </p>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      className="w-full"
-                      onClick={handleManagePayment}
-                      disabled={isManagingPayment}
-                    >
-                      {isManagingPayment ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <CreditCard className="h-4 w-4 mr-2" />
-                      )}
-                      {t('account.manage_payment')}
-                    </Button>
+                    {isAdminUser ? (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={handleManagePayment}
+                        disabled={isManagingPayment}
+                      >
+                        {isManagingPayment ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <CreditCard className="h-4 w-4 mr-2" />
+                        )}
+                        {t('account.manage_payment')}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -989,130 +1115,150 @@ export default function AccountSettings() {
                 <CardContent>
                   <div className="space-y-3">
                     <div>
-                      <p className="text-sm font-medium">{workspace?.name}</p>
+                      <p className="text-sm font-medium">{workspace.name}</p>
                       <p className="text-sm text-muted-foreground">{user?.email || ''}</p>
                     </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={handleManagePayment}
-                      disabled={isManagingPayment}
-                    >
-                      {t('account.update_billing')}
-                    </Button>
+                    {/* Intentionally no second button — payment methods,
+                        invoices, and billing contact all live behind the one
+                        "Open billing portal" CTA on the Current Plan card. */}
+                    <p className="text-xs text-muted-foreground">
+                      {t('account.billing_portal_note')}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Plans */}
-            <div>
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-                <h2 className="text-lg font-semibold">{t('account.available_plans')}</h2>
-                <div className="flex items-center gap-3 text-sm">
-                  <span className={cn('font-medium', billingInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground')}>
-                    {t('landing.pricing.monthly')}
-                  </span>
-                  <Switch
-                    checked={billingInterval === 'annual'}
-                    onCheckedChange={(v) => setBillingInterval(v ? 'annual' : 'monthly')}
-                  />
-                  <span className={cn('font-medium', billingInterval === 'annual' ? 'text-foreground' : 'text-muted-foreground')}>
-                    {t('landing.pricing.annual')}
-                  </span>
-                  <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                    {t('landing.pricing.save')} {ANNUAL_DISCOUNT_PERCENT}%
-                  </span>
+            {/* Lease capacity packs */}
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('packs.card_title')}</CardTitle>
+                <CardDescription>{t('packs.card_desc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      {addonCapacity > 0
+                        ? t('packs.card_current', { count: addonCapacity })
+                        : t('packs.card_none')}
+                    </p>
+                    {isAdminUser && (
+                      <Button variant="outline" size="sm" onClick={() => setPackDialogOpen(true)}>
+                        {t('packs.card_cta')}
+                      </Button>
+                    )}
+                  </div>
+                  {!isAdminUser && (
+                    <p className="text-xs text-muted-foreground">{t('packs.admin_only')}</p>
+                  )}
                 </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {PLAN_ORDER.map((planId, index) => {
-                  const plan = PLANS[planId];
-                  const isCurrent = currentPlan === planId;
-                  const isUpgradeOption = isUpgrade(currentPlan, planId);
+              </CardContent>
+            </Card>
 
-                  return (
-                    <Card
-                      key={plan.id}
-                      variant={plan.popular ? 'feature' : 'default'}
-                      className={cn(
-                        'relative animate-fade-up flex flex-col',
-                        isCurrent && 'ring-2 ring-accent'
-                      )}
-                      style={{ animationDelay: `${index * 50}ms` }}
-                    >
-                      {isCurrent && (
-                        <div className="absolute -top-3 right-3">
-                          <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
-                        </div>
-                      )}
-                      {plan.popular && !isCurrent && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                          <Badge variant="pro">{t('account.popular')}</Badge>
-                        </div>
-                      )}
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">{t(plan.nameKey)}</CardTitle>
-                        <div className="flex items-baseline gap-1 mt-1">
-                          <span className="text-2xl font-bold">
-                            ${billingInterval === 'annual' ? Math.round(plan.price.annual / 12) : plan.price.monthly}
-                          </span>
-                          <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {plan.maxActiveLeases === -1 ? 'Unlimited' : plan.maxActiveLeases} {plan.maxActiveLeases === 1 ? t('account.lease') : t('account.leases')}
-                        </p>
-                      </CardHeader>
-                      <CardContent className="flex-1 flex flex-col">
-                        <ul className="space-y-1.5 mb-4 flex-1">
-                          {plan.featureKeys.slice(0, 4).map((featureKey) => (
-                            <li key={featureKey} className="flex items-start gap-2 text-xs">
-                              <Check className="h-3 w-3 text-success shrink-0 mt-0.5" />
-                              <span className="text-muted-foreground">{t(featureKey)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        {isCurrent ? (
-                          <Button variant="secondary" size="sm" className="w-full" disabled>
-                            <Check className="h-4 w-4 mr-1" />
-                            {t('account.current')}
-                          </Button>
-                        ) : isUpgradeOption ? (
-                          <Button 
-                            variant="accent" 
-                            size="sm" 
-                            className="w-full"
-                            onClick={() => handleUpgrade(planId)}
-                            disabled={isUpgrading === planId}
-                          >
-                            {isUpgrading === planId ? (
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            ) : null}
-                            {t('common.upgrade')}
-                          </Button>
-                        ) : planId !== 'starter' ? (
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="w-full"
-                            onClick={handleManagePayment}
-                          >
-                            {t('account.downgrade')}
-                          </Button>
-                        ) : (
-                          <Button variant="ghost" size="sm" className="w-full" disabled>
-                            {t('account.free_tier')}
-                          </Button>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Single-lease credits — only renders while a balance exists.
+                Credits are granted by the Stripe webhook on a one-time
+                purchase from the limit wall and consumed by process_lease. */}
+            {(workspace.purchasedLeaseCredits ?? 0) > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t('account.credits_title')}</CardTitle>
+                  <CardDescription>{t('account.credits_desc')}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm font-medium">
+                    {t('account.credits_balance', { count: workspace.purchasedLeaseCredits })}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Cancel Subscription - only show if subscribed */}
-            {currentPlan !== 'starter' && (
+            {/* Plan change — one focused card, not a plan-comparison grid
+                (the grid duplicated the landing page and buried the action).
+                Starter admins upgrade in place; Business admins downgrade
+                via the confirmation dialog that spells out feature loss. */}
+            {isAdminUser && currentPlan === 'starter' && (
+              <Card variant="feature">
+                <CardHeader>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <CardTitle>{t('account.upgrade_card_title')}</CardTitle>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className={cn('font-medium', billingInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground')}>
+                        {t('landing.pricing.monthly')}
+                      </span>
+                      <Switch
+                        checked={billingInterval === 'annual'}
+                        onCheckedChange={(v) => setBillingInterval(v ? 'annual' : 'monthly')}
+                      />
+                      <span className={cn('font-medium', billingInterval === 'annual' ? 'text-foreground' : 'text-muted-foreground')}>
+                        {t('landing.pricing.annual')}
+                      </span>
+                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                        {t('landing.pricing.save')} {ANNUAL_DISCOUNT_PERCENT}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-2xl font-bold">
+                      ${billingInterval === 'annual' ? Math.round(PLANS.business.price.annual / 12) : PLANS.business.price.monthly}
+                    </span>
+                    <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
+                  </div>
+                  {billingInterval === 'annual' && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {t('account.billed_annually', { total: PLANS.business.price.annual.toLocaleString() })}
+                    </p>
+                  )}
+                  <CardDescription className="mt-1">
+                    {t('account.abstractions_included', { count: PLANS.business.abstractionsIncluded })}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <ul className="space-y-1.5">
+                    {PLANS.business.featureKeys.slice(0, 4).map((featureKey) => (
+                      <li key={featureKey} className="flex items-start gap-2 text-xs">
+                        <Check className="h-3 w-3 text-success shrink-0 mt-0.5" />
+                        <span className="text-muted-foreground">{t(featureKey)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    variant="accent"
+                    className="w-full sm:w-auto"
+                    onClick={() => handleUpgrade('business')}
+                    disabled={isUpgrading === 'business'}
+                  >
+                    {isUpgrading === 'business' ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : null}
+                    {t('account.upgrade_card_cta')}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            {isAdminUser && currentPlan === 'business' && (
+              <p className="text-xs text-muted-foreground">
+                {t('account.downgrade_hint')}{' '}
+                <button
+                  type="button"
+                  className="underline hover:text-foreground"
+                  onClick={() => setConfirmDowngradePlan('starter')}
+                >
+                  {t('account.downgrade_link')}
+                </button>
+              </p>
+            )}
+            {!isAdminUser && (
+              <p className="text-xs text-muted-foreground">
+                {t('account.plan_changes_admin_only')}
+              </p>
+            )}
+
+            {/* Cancel Subscription — shown for any active/paid subscription
+                (paid Starter included; plan tier is not a proxy for "has a
+                subscription"), admin-only. */}
+            {['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&
+              isAdminUser && (
               <Card className="border-destructive/50">
                 <CardHeader>
                   <CardTitle className="text-destructive">{t('account.cancel_subscription')}</CardTitle>
@@ -1124,14 +1270,18 @@ export default function AccountSettings() {
                   <p className="text-sm text-muted-foreground mb-4">
                     {t('account.cancel_warning')}
                   </p>
-                  <Button 
+                  {/* Confirmation dialog first — destructive action must never
+                      jump straight to the Stripe portal (C2, 2026-06-11). */}
+                  <Button
                     variant="destructive"
-                    onClick={handleManagePayment}
+                    onClick={() => setConfirmCancelOpen(true)}
                   >
                     {t('account.cancel_subscription')}
                   </Button>
                 </CardContent>
               </Card>
+            )}
+            </>
             )}
           </TabsContent>
 
@@ -1140,19 +1290,7 @@ export default function AccountSettings() {
             <UsageContent />
           </TabsContent>
 
-          {/* Workspace — admin only, embedded inside Settings (Claude pattern) */}
-          {isAdminUser && (
-            <TabsContent value="workspace" className="mt-0">
-              <WorkspaceSettings embedded />
-            </TabsContent>
-          )}
-
           {/* Appearance — theme toggle */}
-          {/* Phase 7 — Out of Office */}
-          <TabsContent value="out-of-office" className="space-y-6 mt-0">
-            <OutOfOfficeSettings />
-          </TabsContent>
-
           <TabsContent value="appearance" className="space-y-6 mt-0">
             <Card>
               <CardHeader>
@@ -1235,6 +1373,9 @@ export default function AccountSettings() {
               </CardContent>
             </Card>
 
+            {/* Legal links — absorbed the former "Other" tab (its terms/
+                privacy links were duplicates of these; the support link
+                lives in the user menu as "Get help"). */}
             <Card>
               <CardHeader>
                 <CardTitle>{t('account.privacy_policies')}</CardTitle>
@@ -1246,26 +1387,6 @@ export default function AccountSettings() {
                 <div>
                   <Link to="/terms" className="text-primary hover:underline">{t('account.terms_link')}</Link>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Other — legal links + version */}
-          <TabsContent value="other" className="space-y-6 mt-0">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('account.other')}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div>
-                  <Link to="/terms" className="text-primary hover:underline">{t('account.terms_link')}</Link>
-                </div>
-                <div>
-                  <Link to="/privacy" className="text-primary hover:underline">{t('account.privacy_policy_link')}</Link>
-                </div>
-                <div>
-                  <Link to="/app/support" className="text-primary hover:underline">{t('account.support_link')}</Link>
-                </div>
                 <div className="text-xs text-muted-foreground pt-2 border-t border-border">
                   LeaseIO &middot; {new Date().getFullYear()}
                 </div>
@@ -1276,20 +1397,87 @@ export default function AccountSettings() {
         </Tabs>
       </div>
 
+      {/* Document capacity pack purchase/manage dialog */}
+      <DocumentPackDialog open={packDialogOpen} onOpenChange={setPackDialogOpen} />
+
       {/* Upgrade Confirmation Dialog */}
       <AlertDialog open={!!confirmUpgradePlan} onOpenChange={() => setConfirmUpgradePlan(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Plan Change</AlertDialogTitle>
+            <AlertDialogTitle>{t('account.upgrade_confirm_title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              You are upgrading from {PLANS[currentPlan]?.name} to {confirmUpgradePlan ? PLANS[confirmUpgradePlan as SubscriptionPlan]?.name : ''}. 
-              You'll be charged the difference prorated for your current billing period.
+              {t('account.upgrade_confirm_desc', {
+                from: t(PLANS[currentPlan].nameKey),
+                to: confirmUpgradePlan
+                  ? t(PLANS[normalizePlanId(confirmUpgradePlan)].nameKey)
+                  : '',
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={() => confirmUpgradePlan && proceedWithCheckout(confirmUpgradePlan)}>
-              Continue to Checkout
+              {t('account.upgrade_confirm_cta')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Downgrade Confirmation Dialog — spells out Business feature loss
+          before handing off to the billing portal. */}
+      <AlertDialog open={!!confirmDowngradePlan} onOpenChange={() => setConfirmDowngradePlan(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('account.downgrade_confirm_title', {
+                plan: confirmDowngradePlan
+                  ? t(PLANS[normalizePlanId(confirmDowngradePlan)].nameKey)
+                  : '',
+              })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('account.downgrade_confirm_desc')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmDowngradePlan(null);
+                handleManagePayment();
+              }}
+            >
+              {t('account.downgrade_confirm_cta')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Subscription Confirmation Dialog — shows the concrete
+          end-of-access date when the period end is known. */}
+      <AlertDialog open={confirmCancelOpen} onOpenChange={setConfirmCancelOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('account.cancel_confirm')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {formattedPeriodEnd
+                ? t('account.cancel_confirm_desc_date', { date: formattedPeriodEnd })
+                : t('account.cancel_confirm_desc')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
+            {/* CTA names the actual action — clicking opens the Stripe
+                portal; it does NOT itself cancel (mirrors the downgrade
+                dialog's honesty; H3 2026-06-12). */}
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setConfirmCancelOpen(false);
+                handleManagePayment();
+              }}
+            >
+              {t('account.cancel_confirm_cta')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

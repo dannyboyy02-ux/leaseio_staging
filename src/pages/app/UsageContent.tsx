@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Sparkles, ArrowRight, Archive, Activity, Building2 } from 'lucide-react';
+import { ArrowRight, Archive, Activity, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -26,14 +25,7 @@ const usageTone = (pct: number): 'destructive' | 'warning' | 'accent' => {
   return 'accent';
 };
 
-interface Props {
-  /** When true, show the "Manage subscription" action header — used on the
-   *  standalone /app/usage page. Inside Settings the page header already
-   *  handles that, so we hide it. */
-  showHeader?: boolean;
-}
-
-export function UsageContent({ showHeader = false }: Props) {
+export function UsageContent() {
   const { t } = useAppTranslation();
   const { workspace, availableWorkspaces } = useApp();
   const [recent, setRecent] = useState<RecentArchive[]>([]);
@@ -92,22 +84,6 @@ export function UsageContent({ showHeader = false }: Props) {
 
   return (
     <div className="space-y-6">
-      {showHeader && (
-        <div className="flex items-center justify-between gap-2">
-          <Badge variant={workspace.plan === 'business' ? 'business' : 'secondary'}>
-            {t(`plan.${workspace.plan}`)}
-          </Badge>
-          {/* "Manage subscription" must land on subscription management,
-              not the Business sales pitch — /app/upgrade pre-arms checkout. */}
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/app/settings/account?tab=subscription">
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-              {t('usage.manage_subscription')}
-            </Link>
-          </Button>
-        </div>
-      )}
-
       {showUpgrade && (
         <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 dark:border-amber-800">
           <CardContent className="py-4 px-5 flex items-center justify-between gap-4 flex-wrap">
@@ -119,16 +95,12 @@ export function UsageContent({ showHeader = false }: Props) {
                 {t('usage.approaching_limit_desc')}
               </p>
             </div>
-            {/* A Business user already owns the top plan — "upgrade" would
-                loop them into buying what they have. Send them to subscription
-                management instead. */}
+            {/* Both plans land on Billing; only the label differs — a
+                Business user already owns the top plan, so "upgrade" copy
+                would loop them into buying what they have. */}
             <Button variant="accent" size="sm" asChild>
               <Link
-                to={
-                  workspace.plan === 'business'
-                    ? '/app/settings/account?tab=subscription'
-                    : '/app/upgrade'
-                }
+                to="/app/settings/account?tab=billing"
                 className="flex items-center gap-1.5"
               >
                 {workspace.plan === 'business'
@@ -215,7 +187,7 @@ export function UsageContent({ showHeader = false }: Props) {
             ) : (
               <p className="text-xs text-muted-foreground">
                 {t('usage.workspaces_upgrade_hint')}{' '}
-                <Link to="/app/upgrade" className="text-accent underline underline-offset-2">
+                <Link to="/app/settings/account?tab=billing" className="text-accent underline underline-offset-2">
                   {t('usage.workspaces_upgrade_link')}
                 </Link>
               </p>

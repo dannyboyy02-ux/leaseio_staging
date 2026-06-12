@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react";
 import { User, Workspace, WorkspaceRole, SubscriptionPlan } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./AuthContext";
@@ -44,7 +44,6 @@ type WorkspaceRow = {
   owner_id: string;
   plan: string | null;
   document_limit: number | null;
-  documents_used: number | null;
   timezone: string | null;
   default_notification_days: number | null;
   created_at: string;
@@ -102,7 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, documents_used, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end";
+        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end, canceled_at, grace_expires_at, soft_deleted_at";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -193,7 +192,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Active leases now exclude archived rows so an admin archive frees a
       // slot even if lifecycle_status is still 'active'.
-      const [activeRes, archivedRes] = await Promise.all([
+      // Monthly extractions mirror process_lease's assertProcessingQuota
+      // (uploaded in the trailing 30 days with a completed extraction) —
+      // the workspaces.documents_used column is dead and always 0
+      // (KNOWN_ISSUES #31), so the usage meter must count live rows.
+      const since30dIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const [activeRes, archivedRes, monthlyRes] = await Promise.all([
         (supabase as any)
           .from("leases")
           .select("id", { count: "exact", head: true })
@@ -205,6 +209,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .select("id", { count: "exact", head: true })
           .eq("workspace_id", resolvedWorkspace.id)
           .eq("archived", true),
+        (supabase as any)
+          .from("leases")
+          .select("id", { count: "exact", head: true })
+          .eq("workspace_id", resolvedWorkspace.id)
+          .gte("uploaded_at", since30dIso)
+          .not("extracted_json", "is", null),
       ]);
 
       setUserRole(resolvedRole);
@@ -218,11 +228,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         maxArchivedLeases: archiveLimit,
         archivedLeasesUsed: archivedRes.count || 0,
         documentLimit,
-        documentsUsed: resolvedWorkspace.documents_used ?? 0,
+        addonDocumentCapacity: Math.max(
+          0,
+          Number((resolvedWorkspace as any).addon_document_capacity ?? 0),
+        ),
+        purchasedLeaseCredits: Math.max(
+          0,
+          Number((resolvedWorkspace as any).purchased_lease_credits ?? 0),
+        ),
+        documentsUsed: monthlyRes.count || 0,
         timezone: resolvedWorkspace.timezone || profile.timezone || "America/New_York",
         defaultNotificationDays: resolvedWorkspace.default_notification_days ?? 90,
         createdAt: resolvedWorkspace.created_at || profile.created_at,
-        renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         updatedAt:
           resolvedWorkspace.updated_at || resolvedWorkspace.created_at || profile.created_at,
         subscriptionStatus:
@@ -233,6 +250,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           (resolvedWorkspace as any).subscription_period_end ?? null,
         intendedPlan:
           (resolvedWorkspace as any).intended_plan ?? null,
+        // Cancellation lifecycle (2026-06-12): grace = read-only window;
+        // soft-deleted = access wall. Written only by billing system.
+        canceledAt: (resolvedWorkspace as any).canceled_at ?? null,
+        graceExpiresAt: (resolvedWorkspace as any).grace_expires_at ?? null,
+        softDeletedAt: (resolvedWorkspace as any).soft_deleted_at ?? null,
       });
 
       try {
@@ -295,6 +317,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await fetchProfile();
   };
 
+  // Stable identity for refreshProfile — fetchProfile is recreated on every
+  // render, so exposing it directly would change the context value's identity
+  // each render and refire any consumer effect that depends on it (caused the
+  // ?checkout=success toast/fetch loop, 2026-06-11). A ref keeps the latest
+  // closure while the callback identity stays constant.
+  const fetchProfileRef = useRef(fetchProfile);
+  fetchProfileRef.current = fetchProfile;
+  const stableRefreshProfile = useCallback(() => fetchProfileRef.current(), []);
+
   const switchWorkspace = async (workspaceId: string) => {
     if (!authUser) return;
     await (supabase as any)
@@ -349,7 +380,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         setIsLoading,
-        refreshProfile,
+        refreshProfile: stableRefreshProfile,
         canAccessFeature,
         hasPermission,
         hasFunctionalRole,

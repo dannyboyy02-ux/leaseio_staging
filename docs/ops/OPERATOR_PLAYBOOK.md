@@ -122,11 +122,12 @@
 
    **c. Subscribed event types**
    - The endpoint's detail page shows which Stripe events your webhook listens to.
-   - **It should include exactly these four:**
+   - **It should include exactly these five:**
      - `checkout.session.completed`
      - `customer.subscription.created`
      - `customer.subscription.updated`
      - `customer.subscription.deleted`
+     - `payment_intent.succeeded`  ← **required for single-lease credits** (Workstream C). Without it, a customer who buys "1 lease" at the wall is charged but never granted the credit — silently. Add this when enabling the document-pack / limit-wall feature.
    - Extra events = wasted webhook calls (Stripe still delivers them, you ignore them — cosmetic issue, not a bug). Missing events = your codebase expects something the dashboard isn't sending; that IS a bug. Fix by clicking "Add events" and adding the missing one.
 
 ### Verification (capture this back to the repo)

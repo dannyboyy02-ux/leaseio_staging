@@ -1,13 +1,10 @@
 import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
-import { Building2, Users, Bell, Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink, FileText } from 'lucide-react';
-import { ReportSettingsCard } from '@/components/workspace/ReportSettingsCard';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { AppHeader } from '@/components/layout/AppHeader';
+import { Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { RiskWatchlistManager } from '@/components/workspace/RiskWatchlistManager';
 import {
   Select,
@@ -31,7 +28,6 @@ import type { FunctionalRole } from '@/types/lifecycle';
 import { Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { calculateLease } from '@/lib/leaseCalculations';
 import {
   canAccessWorkspaceDefaults,
   canAccessWorkspaceProfile,
@@ -46,68 +42,16 @@ const timezones = [
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
 ];
 
-async function recomputeWorkspaceLeaseFinancials(workspaceId: string, discountRate: number) {
-  const { data: leases, error } = await supabase
-    .from('leases')
-    .select(
-      'id, executed_monthly_payment, current_monthly_rent, monthly_payment, lease_start, term_months, escalation_rate'
-    )
-    .eq('workspace_id', workspaceId);
-
-  if (error) throw error;
-
-  const updates = (leases || []).map((lease) => {
-    const monthlyPayment =
-      Number((lease as any).executed_monthly_payment) ||
-      Number((lease as any).current_monthly_rent) ||
-      Number((lease as any).monthly_payment) ||
-      0;
-
-    const termMonths = Number((lease as any).term_months) || 0;
-    const startDate = (lease as any).lease_start;
-    const escalationRate = Number((lease as any).escalation_rate) || 0;
-
-    if (!monthlyPayment || !termMonths || !startDate) {
-      return supabase
-        .from('leases')
-        .update({
-          calc_total_commitment: null,
-          calc_pv_liability: null,
-          calc_straight_line_exp: null,
-          calc_cash_pl_delta: null,
-        } as any)
-        .eq('id', lease.id);
-    }
-
-    const calcs = calculateLease({
-      monthlyPayment,
-      termMonths,
-      startDate,
-      escalationRate,
-      discountRate,
-    });
-
-    return supabase
-      .from('leases')
-      .update({
-        calc_total_commitment: calcs.totalCashCommitment,
-        calc_pv_liability: calcs.pvLiability,
-        calc_straight_line_exp: calcs.straightLineExpense,
-        calc_cash_pl_delta: calcs.cashPLDelta,
-      } as any)
-      .eq('id', lease.id);
-  });
-
-  await Promise.all(updates);
-}
-
 interface WorkspaceSettingsProps {
-  /** When true, skip the outer AppLayout/AppHeader so this can render inside
-   *  another page (e.g. as a TabsContent in /app/settings/account). */
-  embedded?: boolean;
+  /** The visible section id — controlled by the parent. The sole consumer
+   *  is the /app/settings/workspaces drill-down (WorkspacesSection), whose
+   *  rail owns navigation; this component renders only the section panels.
+   *  (The old standalone page mode + internal tab strip were removed when
+   *  the route became a redirect — 2026-06 Claude-alignment pass.) */
+  activeSection: string;
 }
 
-export default function WorkspaceSettings({ embedded = false }: WorkspaceSettingsProps = {}) {
+export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsProps) {
   const { workspace, refreshProfile, userRole } = useApp();
   const { t } = useLanguage();
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
@@ -131,8 +75,8 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
   const [memberRoles, setMemberRoles] = useState<Record<string, Set<FunctionalRole>>>({});
   const [rolesLoaded, setRolesLoaded] = useState(false);
 
-  // Financial configuration state
-  const [discountRate, setDiscountRate] = useState('5.5');
+  // Review-threshold state (housed under Approval Rules since the
+  // Financial tab was dissolved; discount rate lives on /app/reports).
   const [covenantThreshold, setCovenantThreshold] = useState('');
   const [approvalThreshold, setApprovalThreshold] = useState('0');
 
@@ -167,20 +111,6 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
   // 'admin', so use it for the gate.
   const isAdmin = canEditWorkspaceSettings(userRole);
 
-  const tabs = [
-    { id: 'profile',           label: 'Company Profile',     icon: Building2,     visible: canAccessProfile },
-    { id: 'users',             label: 'Users',                icon: Users,         visible: canManageMembers },
-    { id: 'notifications',     label: 'Notifications',        icon: Bell,          visible: canAccessDefaults },
-    { id: 'financial',         label: 'Financial',            icon: TrendingUp,    visible: canAccessDefaults },
-    { id: 'lease_config',      label: 'Lease Configuration',  icon: Settings2,     visible: isAdmin },
-    { id: 'risk_watchlist',    label: 'Risk Watchlist',       icon: AlertTriangle, visible: canEdit },
-    { id: 'approval_policies', label: 'Approval Rules',       icon: GitBranch,     visible: isAdmin },
-    { id: 'reports',           label: 'Reports',              icon: FileText,      visible: canAccessDefaults },
-    { id: 'onboarding',        label: 'Onboarding',           icon: Package,       visible: isAdmin },
-  ].filter((tab) => tab.visible);
-
-  const defaultTab = tabs[0]?.id ?? 'profile';
-
   useEffect(() => {
     if (workspace) {
       setWorkspaceName(workspace.name || '');
@@ -214,12 +144,11 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
     if (!workspace?.id) return;
     supabase
       .from('workspaces')
-      .select('discount_rate, covenant_threshold, approval_threshold, backdoor_enabled, asset_type_config, department_options, region_options, location_options, building_options')
+      .select('covenant_threshold, approval_threshold, backdoor_enabled, asset_type_config, department_options, region_options, location_options, building_options')
       .eq('id', workspace.id)
       .single()
       .then(({ data }) => {
         if (data) {
-          setDiscountRate(String((data as any).discount_rate ?? 5.5));
           setCovenantThreshold(
             (data as any).covenant_threshold != null
               ? String((data as any).covenant_threshold)
@@ -410,31 +339,26 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
     }
   };
 
-  const handleSaveFinancial = async () => {
+  // Saves the two review thresholds (now housed under Approval Rules).
+  // The discount rate is saved separately by DiscountRateCard on
+  // /app/reports, which also owns the lease-financials recompute.
+  const handleSaveThresholds = async () => {
     if (!canEdit) { toast.error(t('workspace.read_only')); return; }
     if (!workspace?.id) { toast.error('No workspace found'); return; }
     setIsSavingFinancial(true);
     try {
-      const parsedDiscountRate = parseFloat(discountRate);
-      if (!(parsedDiscountRate > 0 && parsedDiscountRate <= 50)) {
-        toast.error('Discount rate must be greater than 0 and no more than 50.');
-        return;
-      }
-
       const { error } = await supabase
         .from('workspaces')
         .update({
-          discount_rate: parsedDiscountRate,
           covenant_threshold: covenantThreshold ? parseFloat(covenantThreshold) : null,
           approval_threshold: parseFloat(approvalThreshold) || 0,
         } as any)
         .eq('id', workspace.id);
       if (error) throw error;
-      await recomputeWorkspaceLeaseFinancials(workspace.id, parsedDiscountRate);
-      toast.success('Financial configuration saved!');
+      toast.success('Review thresholds saved!');
     } catch (error) {
-      console.error('Error saving financial config:', error);
-      toast.error('Failed to save financial configuration');
+      console.error('Error saving review thresholds:', error);
+      toast.error('Failed to save review thresholds');
     } finally {
       setIsSavingFinancial(false);
     }
@@ -530,17 +454,9 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
     }
   };
 
-  const body = (
-    <div className={embedded ? '' : 'p-6'}>
-      <Tabs defaultValue={defaultTab}>
-          <TabsList className="mb-6">
-            {tabs.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id} className="gap-2">
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+  return (
+    <div>
+      <Tabs value={activeSection}>
 
           {/* General Settings */}
           <TabsContent value="profile" className="space-y-6">
@@ -589,7 +505,7 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
             <TabsContent value="users" className="space-y-6">
               {/* Member management extracted to MembersPanel during OWM
                   Checkpoint 2 — same component is reused on
-                  /app/account/workspaces for non-active workspaces. */}
+                  the My Workspaces panel for non-active workspaces. */}
               <MembersPanel
                 workspaceId={workspace.id}
                 ownerId={workspace.ownerId}
@@ -860,101 +776,6 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
             </TabsContent>
           )}
 
-          {/* Financial */}
-          {canAccessDefaults && (
-            <TabsContent value="financial" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <CardTitle>Financial Configuration</CardTitle>
-                      <CardDescription>
-                        These values feed into lease liability calculations and approval routing.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="discount-rate">Incremental Borrowing Rate (%)</Label>
-                    <div className="relative">
-                      <Input
-                        id="discount-rate"
-                        type="number"
-                        min={0}
-                        step="0.1"
-                        value={discountRate}
-                        onChange={(e) => setDiscountRate(e.target.value)}
-                        disabled={!canEdit}
-                        className="pr-8"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Incremental borrowing rate used for lease liability calculations. Default: 5.5%.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="covenant-threshold">Lease Liability Alert ($)</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                      <Input
-                        id="covenant-threshold"
-                        type="number"
-                        min={0}
-                        step="1000"
-                        value={covenantThreshold}
-                        onChange={(e) => setCovenantThreshold(e.target.value)}
-                        disabled={!canEdit}
-                        placeholder="Optional"
-                        className="pl-7"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Total portfolio lease liability limit. Commitments that exceed this threshold trigger a portfolio risk alert.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="approval-threshold">Approval Threshold ($)</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                      <Input
-                        id="approval-threshold"
-                        type="number"
-                        min={0}
-                        step="1000"
-                        value={approvalThreshold}
-                        onChange={(e) => setApprovalThreshold(e.target.value)}
-                        disabled={!canEdit}
-                        placeholder="0"
-                        className="pl-7"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Commitments with total cash commitment above this amount require Financial Approver review. Set to 0 to require review for all.
-                    </p>
-                  </div>
-
-                  <Button
-                    variant="accent"
-                    onClick={handleSaveFinancial}
-                    disabled={!canEdit || isSavingFinancial}
-                  >
-                    {isSavingFinancial ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    {isSavingFinancial ? t('workspace.saving') : 'Save Financial Config'}
-                  </Button>
-                  {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          )}
           {/* Lease Configuration — admin only */}
           {isAdmin && (
             <TabsContent value="lease_config" className="space-y-6">
@@ -1121,13 +942,92 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
                   </Button>
                 </CardContent>
               </Card>
-            </TabsContent>
-          )}
 
-          {/* Phase 8 — Reports tab (admin/editor) */}
-          {canAccessDefaults && workspace?.id && (
-            <TabsContent value="reports" className="space-y-6">
-              <ReportSettingsCard workspaceId={workspace.id} canEdit={canEdit} />
+              {/* Review thresholds — moved here from the dissolved Financial
+                  tab. Both values decide WHEN a lease request requires
+                  financial review, so they belong with the approval rules.
+                  (The discount rate moved to Report Settings on /app/reports.) */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <CardTitle>Review Thresholds</CardTitle>
+                      <CardDescription>
+                        Dollar limits that trigger financial review for new lease requests.
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="approval-threshold">Approval Threshold ($)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input
+                        id="approval-threshold"
+                        type="number"
+                        min={0}
+                        step="1000"
+                        value={approvalThreshold}
+                        onChange={(e) => setApprovalThreshold(e.target.value)}
+                        disabled={!canEdit}
+                        placeholder="0"
+                        className="pl-7"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Commitments with total cash commitment above this amount require Financial Approver review. Set to 0 to require review for all.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="covenant-threshold">Lease Liability Alert ($)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input
+                        id="covenant-threshold"
+                        type="number"
+                        min={0}
+                        step="1000"
+                        value={covenantThreshold}
+                        onChange={(e) => setCovenantThreshold(e.target.value)}
+                        disabled={!canEdit}
+                        placeholder="Optional"
+                        className="pl-7"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Total portfolio lease liability limit. Commitments that exceed this threshold trigger a portfolio risk alert.
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="accent"
+                    onClick={handleSaveThresholds}
+                    disabled={!canEdit || isSavingFinancial}
+                  >
+                    {isSavingFinancial ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {isSavingFinancial ? t('workspace.saving') : 'Save Thresholds'}
+                  </Button>
+                  {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+
+                  {/* Signpost for the dissolved Financial tab's third field —
+                      "where did the discount rate go?" is the predictable
+                      first question after this IA change. */}
+                  <p className="text-xs text-muted-foreground border-t border-border pt-3">
+                    Looking for the discount rate? It now lives in{' '}
+                    <Link to="/app/reports" className="text-primary hover:underline">
+                      Report settings
+                    </Link>{' '}
+                    on the Reports page.
+                  </p>
+                </CardContent>
+              </Card>
             </TabsContent>
           )}
 
@@ -1168,20 +1068,5 @@ export default function WorkspaceSettings({ embedded = false }: WorkspaceSetting
           )}
         </Tabs>
       </div>
-  );
-
-  return (
-    <>
-      {embedded ? (
-        body
-      ) : (
-        <AppLayout>
-          <AppHeader title={t('workspace.title')} subtitle={t('workspace.subtitle')} />
-          {body}
-        </AppLayout>
-      )}
-      {/* InviteMemberDialog mount moved into MembersPanel during OWM
-          Checkpoint 2. The panel owns its own dialog state. */}
-    </>
   );
 }

@@ -16,15 +16,30 @@ import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
 import { EscalationReviewPanel } from '@/components/dashboard/EscalationReviewPanel';
 import { PendingCounterSignatureCard } from '@/components/dashboard/PendingCounterSignatureCard';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
+import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 
 export default function Dashboard() {
   const { user, workspace } = useApp();
   const { t } = useAppTranslation();
   const navigate = useNavigate();
+  const quota = useWorkspaceQuota();
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
+  const [limitWallOpen, setLimitWallOpen] = useState(false);
+
+  // Limit wall gate — don't let a user build a request the workspace can't
+  // fulfill. The server re-checks at extraction time; this is UX, not
+  // enforcement.
+  const handleNewRequest = () => {
+    if (quota.blocked) {
+      setLimitWallOpen(true);
+    } else {
+      setCreateDrawerOpen(true);
+    }
+  };
 
   const safeText = (v: unknown) =>
     getExtractedFieldValue(v) ??
@@ -41,7 +56,7 @@ export default function Dashboard() {
         subtitle={safeText(workspace?.name) || safeText(user?.companyName)}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="accent" onClick={() => setCreateDrawerOpen(true)}>
+            <Button variant="accent" onClick={handleNewRequest}>
               <Plus className="h-4 w-4 mr-2" />
               New Request
             </Button>
@@ -89,6 +104,8 @@ export default function Dashboard() {
         onOpenChange={setCreateDrawerOpen}
         onSuccess={handleLeaseCreated}
       />
+
+      <LimitReachedDialog open={limitWallOpen} onOpenChange={setLimitWallOpen} />
     </AppLayout>
   );
 }

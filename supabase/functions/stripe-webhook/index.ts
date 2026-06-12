@@ -2,10 +2,25 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
+import {
+  ADDON_TYPE_DOCUMENT_PACK,
+  ADDON_TYPE_SINGLE_LEASE,
+  SINGLE_LEASE_PRICE_CENTS,
+} from "../_shared/document_packs.ts";
+import { GRACE_DAYS } from "../_shared/cancellation_lifecycle.ts";
+
 const PRICE_IDS: Record<string, string> = {
   starter: "price_1SntpyH03PByDjY31dGmC0E2",
   business: "price_1SntqQH03PByDjY3MrvOjOsu",
 };
+
+// A document-pack subscription is tagged with this metadata; it must NEVER be
+// run through the plan path (applySubscription), which would clobber the
+// workspace's real plan/document_limit/stripe_subscription_id. Packs only
+// affect workspaces.addon_document_capacity.
+function isDocumentPack(subscription: Stripe.Subscription): boolean {
+  return subscription.metadata?.addon_type === ADDON_TYPE_DOCUMENT_PACK;
+}
 
 const DOCUMENT_LIMITS: Record<string, number> = {
   starter: 15,
@@ -100,6 +115,63 @@ serve(async (req) => {
     const entitled = subscription.status === "active" || subscription.status === "trialing";
     const effectivePlan = entitled ? requestedPlan : "starter";
 
+    // C1 guard (security + integrity review 2026-06-12): Stripe does not
+    // guarantee event ordering and redelivers for days. A NON-entitled
+    // event must only apply when it belongs to the workspace's CURRENT
+    // subscription — otherwise a late 'canceled' event for an OLD
+    // subscription, arriving after the customer renewed on a NEW one,
+    // would downgrade the plan and restart the deletion clock on a paying
+    // customer (annual subs fire no healing event for months). Entitled
+    // events always apply: a real renewal must never be skipped.
+    if (!entitled) {
+      const { data: wsRow } = await supabaseAdmin
+        .from("workspaces")
+        .select("stripe_subscription_id")
+        .eq("id", workspaceId)
+        .maybeSingle();
+      const storedSubId = (wsRow as { stripe_subscription_id?: string | null } | null)
+        ?.stripe_subscription_id;
+      if (storedSubId && storedSubId !== subscription.id) {
+        console.warn(
+          "[stripe-webhook] ignoring non-entitled event for stale subscription",
+          subscription.id,
+          "current:",
+          storedSubId,
+        );
+        return;
+      }
+    }
+
+    // Cancellation lifecycle (ratified 2026-06-12): when the plan
+    // subscription FULLY ends (status 'canceled' — the paid-through period
+    // is over), start the 30-day read-only grace window. Renewal (any
+    // entitled status) clears the whole lifecycle, restoring full access —
+    // the customer can renew any time before the purge. Dunning states
+    // (past_due/unpaid/incomplete) deliberately do NOT start the deletion
+    // clock. canceled_at anchors to Stripe's ended_at (true period end,
+    // fallback current_period_end then now), and grace_expires_at is
+    // floored at now + 7 days so a webhook delivered very late can never
+    // soft-delete without forward notice (integrity review 2026-06-12).
+    const lifecycle: Record<string, string | null> = {};
+    if (entitled) {
+      lifecycle.canceled_at = null;
+      lifecycle.grace_expires_at = null;
+      lifecycle.soft_deleted_at = null;
+      lifecycle.purge_after = null;
+    } else if (subscription.status === "canceled") {
+      const endedAtSec = (subscription as any).ended_at ??
+        (subscription as any).current_period_end;
+      const canceledAt = typeof endedAtSec === "number"
+        ? new Date(endedAtSec * 1000)
+        : new Date();
+      lifecycle.canceled_at = canceledAt.toISOString();
+      const MIN_FORWARD_NOTICE_MS = 7 * 86_400_000;
+      lifecycle.grace_expires_at = new Date(Math.max(
+        canceledAt.getTime() + GRACE_DAYS * 86_400_000,
+        Date.now() + MIN_FORWARD_NOTICE_MS,
+      )).toISOString();
+    }
+
     const { error } = await supabaseAdmin
       .from("workspaces")
       .update({
@@ -110,6 +182,7 @@ serve(async (req) => {
         stripe_subscription_id: subscription.id,
         subscription_status: subscription.status,
         subscription_period_end: resolvePeriodEnd(subscription),
+        ...lifecycle,
       })
       .eq("id", workspaceId);
 
@@ -168,8 +241,135 @@ serve(async (req) => {
     }
   }
 
+  // Recompute a workspace's total document-pack capacity from Stripe and mirror
+  // it onto workspaces.addon_document_capacity. Capacity is the SUM of the
+  // sizes of the workspace's active/trialing pack subscriptions, so this is
+  // idempotent and self-healing — any pack event (create/update/cancel) just
+  // re-derives the total. NEVER touches plan/document_limit.
+  //
+  // Uses subscriptions.list (strongly consistent) rather than subscriptions.search
+  // (eventually consistent — would lag the just-fired event). cancel_at_period_end
+  // packs stay status='active' until the period ends, so their capacity correctly
+  // persists until Stripe flips them to 'canceled' and fires another event.
+  async function applyDocumentPack(subscription: Stripe.Subscription) {
+    const workspaceId = subscription.metadata?.workspace_id;
+    if (!workspaceId) {
+      console.warn("[stripe-webhook] document-pack event missing workspace_id", subscription.id);
+      return;
+    }
+    const customerId = resolveCustomerId(subscription);
+    if (!customerId) {
+      console.warn("[stripe-webhook] document-pack event missing customer", subscription.id);
+      return;
+    }
+
+    let total = 0;
+    // Page through the customer's subscriptions (strongly consistent).
+    let startingAfter: string | undefined = undefined;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const page: Stripe.ApiList<Stripe.Subscription> = await stripe.subscriptions.list({
+        customer: customerId,
+        status: "all",
+        limit: 100,
+        starting_after: startingAfter,
+      });
+      for (const s of page.data) {
+        if (
+          s.metadata?.addon_type === ADDON_TYPE_DOCUMENT_PACK &&
+          s.metadata?.workspace_id === workspaceId &&
+          (s.status === "active" || s.status === "trialing")
+        ) {
+          total += Number.parseInt(s.metadata?.pack_size ?? "0", 10) || 0;
+        }
+      }
+      if (!page.has_more || page.data.length === 0) break;
+      startingAfter = page.data[page.data.length - 1].id;
+    }
+
+    const { error } = await supabaseAdmin
+      .from("workspaces")
+      .update({ addon_document_capacity: total })
+      .eq("id", workspaceId);
+    if (error) {
+      throw new Error(`Failed to update addon_document_capacity: ${error.message}`);
+    }
+  }
+
+  // Grant a single-lease credit for a succeeded one-time PaymentIntent. The
+  // ledger's UNIQUE(payment_intent_id) makes webhook retries idempotent — the
+  // duplicate insert no-ops and the grant trigger never fires twice. The
+  // workspace counter is incremented by the lease_credit_purchases AFTER
+  // INSERT trigger, not here, so grant accounting has exactly one writer.
+  async function applySingleLeaseCredit(pi: Stripe.PaymentIntent) {
+    const workspaceId = pi.metadata?.workspace_id;
+    if (!workspaceId) {
+      console.warn("[stripe-webhook] single-lease PI missing workspace_id", pi.id);
+      return;
+    }
+
+    // Trust the money, not the metadata. The only legitimate writer
+    // (manage-document-pack) stamps quantity="1" and charges
+    // SINGLE_LEASE_PRICE_CENTS[plan] to the workspace's own customer — so
+    // validate the grant against the workspace's billing state, not against
+    // self-asserted metadata. Defends the ledger if the single_lease tag is
+    // ever reused with different semantics (refund flow, dashboard PI, etc.).
+    const { data: ws } = await supabaseAdmin
+      .from("workspaces")
+      .select("plan, stripe_customer_id")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    const wsRow = ws as { plan?: string; stripe_customer_id?: string | null } | null;
+    if (!wsRow) {
+      console.warn("[stripe-webhook] single-lease PI references unknown workspace", workspaceId, pi.id);
+      return;
+    }
+    const plan: "starter" | "business" = wsRow.plan === "business" ? "business" : "starter";
+    const expectedCents = SINGLE_LEASE_PRICE_CENTS[plan];
+    const paidCents = pi.amount_received ?? pi.amount ?? 0;
+    const piCustomer = typeof pi.customer === "string" ? pi.customer : pi.customer?.id ?? null;
+
+    // Clamp quantity to exactly 1 (the only supported single-lease purchase),
+    // and require the charge to cover the price and belong to this workspace's
+    // customer. Reject rather than over-grant on any mismatch.
+    if (paidCents < expectedCents) {
+      console.error(`[stripe-webhook] single-lease PI underpaid: ${paidCents} < ${expectedCents}`, pi.id);
+      return;
+    }
+    if (wsRow.stripe_customer_id && piCustomer && piCustomer !== wsRow.stripe_customer_id) {
+      console.error("[stripe-webhook] single-lease PI customer mismatch", pi.id);
+      return;
+    }
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const purchasedBy = uuidRe.test(pi.metadata?.purchased_by ?? "") ? pi.metadata?.purchased_by : null;
+
+    const { error } = await supabaseAdmin
+      .from("lease_credit_purchases")
+      .upsert(
+        {
+          workspace_id: workspaceId,
+          payment_intent_id: pi.id,
+          quantity: 1,
+          amount_cents: paidCents,
+          purchased_by: purchasedBy,
+        },
+        { onConflict: "payment_intent_id", ignoreDuplicates: true },
+      );
+    if (error) {
+      throw new Error(`Failed to record lease credit purchase: ${error.message}`);
+    }
+  }
+
   try {
     switch (event.type) {
+      case "payment_intent.succeeded": {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        if (pi.metadata?.addon_type === ADDON_TYPE_SINGLE_LEASE) {
+          await applySingleLeaseCredit(pi);
+        }
+        break;
+      }
+
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const workspaceId = session.metadata?.workspace_id ?? null;
@@ -178,14 +378,25 @@ serve(async (req) => {
           : session.subscription?.id;
         if (!subscriptionId) break;
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        await applySubscription(subscription, workspaceId);
+        // Packs are created via subscriptions.create (no checkout session), but
+        // guard anyway so a pack can never take the plan path.
+        if (isDocumentPack(subscription)) {
+          await applyDocumentPack(subscription);
+        } else {
+          await applySubscription(subscription, workspaceId);
+        }
         break;
       }
 
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        await applySubscription(event.data.object as Stripe.Subscription);
+        const subscription = event.data.object as Stripe.Subscription;
+        if (isDocumentPack(subscription)) {
+          await applyDocumentPack(subscription);
+        } else {
+          await applySubscription(subscription);
+        }
         break;
       }
 

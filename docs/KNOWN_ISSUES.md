@@ -942,7 +942,7 @@ CREATE POLICY "workspace access can view change sets"
 
 So caps ARE enforced. The audit nonetheless surfaced two real, narrower residuals:
 
-**Finding A — dead column drives a broken, always-zero usage meter (customer-facing, Medium).** `AppContext.tsx:215` reads `documents_used` → `documentsUsed`; `AccountSettings.tsx:952-960` renders it as a usage meter (`{documentsUsed} / {documentLimit}` + progress bar + 0.75/0.9 color thresholds). Because nothing writes the column, the meter always shows `0 / <limit>` — a customer at 14/15 abstractions sees "0 / 15". It is also the exact page the banner's "View plans / Upgrade" CTA deep-links to (`?tab=subscription`). Fix: repoint the meter at the live snapshot data the banner already consumes (`workspace_quota_snapshots`, metric `monthly_extractions`), or remove the meter. Routes through reviewers per CLAUDE.md (user-facing surface).
+**Finding A — dead column drove a broken, always-zero usage meter (customer-facing, Medium). RESOLVED 2026-06-11.** `AppContext.tsx` read `documents_used` → `documentsUsed`; `AccountSettings.tsx` rendered it as a usage meter (`{documentsUsed} / {documentLimit}` + progress bar + 0.75/0.9 color thresholds). Because nothing writes the column, the meter always showed `0 / <limit>` — a customer at 14/15 abstractions saw "0 / 15". **As-built fix (deviation from the originally-suggested approach):** rather than repointing at `workspace_quota_snapshots`, `AppContext` now computes `documentsUsed` as a **live trailing-30-day count** (leases with `uploaded_at >= now-30d AND extracted_json NOT NULL`), exactly mirroring `process_lease`'s `assertProcessingQuota` window — so the customer meter and the server's hard gate can never disagree (no snapshot-staleness window). The dead `documents_used` was also removed from the AppContext select string + `WorkspaceRow` type (the DB column still exists, guarded by the #29 entitlement trigger; only the unused frontend fetch was dropped). Meter relabeled "AI Abstractions" with a rolling-window note. Reviewer-cleared (auditor/security/polish/test-author), 570 tests. The dead-column note above and Finding B below remain open.
 
 **Finding B — overage *billing* is unimplemented (product/revenue gap, needs a product call).** `overagePerDoc` ($12/$10) exists only as display config in `pricing.ts:40,67`. No code reports metered usage to Stripe; the gate **hard-blocks at the included cap** with `reason: 'quota_exceeded'` → upgrade prompt, rather than metering-and-charging per-doc above the cap. Possibly intentional — block-at-cap protects the 75% margin floor — so this is a revenue-opportunity decision, not a bug. Scope as its own downstream beat if meter-and-charge is desired.
 
@@ -1327,7 +1327,7 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 ---
 
-### Item #56: Lease-meter "approaching limit" CTA on Usage sends Business users to a page selling them Business
+### Item #56: Lease-meter "approaching limit" CTA on Usage sends Business users to a page selling them Business — RESOLVED 2026-06-12
 
 **Symptom:** `UsageContent.tsx`'s approaching-limit banner fires for lease/archive saturation on any plan; for Business users the CTA routed to `/app/upgrade`, which unconditionally pitches the Business plan with an `autoCheckout=1` handoff. The 2026-06-09 fix retargeted the banner CTA to subscription management when `plan === 'business'`, but `Upgrade.tsx` itself remains plan-unaware: any Business user who reaches `/app/upgrade` by other paths (sidebar, deep link) is still sold their current plan.
 
@@ -1336,6 +1336,8 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 **Where to look:** `src/pages/app/Upgrade.tsx` (plan-unaware pitch + autoCheckout link); `src/pages/settings/AccountSettings.tsx:414` (autoCheckout reader); `supabase/functions/create-checkout/index.ts` (verify behavior for an already-Business customer).
 
 **Stub remediation:** Make `Upgrade.tsx` plan-aware: for Business users render "You're on Business" + a Manage subscription link instead of the checkout CTA; verify `create-checkout` rejects/no-ops for an already-active Business subscription.
+
+**RESOLVED 2026-06-12:** `Upgrade.tsx` was deleted in the settings Claude-alignment pass; `/app/upgrade` now redirects to `/app/settings/account?tab=billing`, which is plan-aware (upgrade card renders only for Starter admins).
 
 ---
 
@@ -1389,6 +1391,106 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 ---
 
+### Item #61: `create-checkout` resolves the Stripe customer by caller email (the P2-07 class, re-surfacing)
+
+**Severity:** Medium. **Pre-existing** — surfaced 2026-06-11 by the security scanner during the subscription-tab polish pass; NOT introduced by that change.
+
+**Symptom:** `create-checkout/index.ts:137-141` resolves/creates the Stripe customer with `stripe.customers.list({ email })` — the exact pattern P2-07 already fixed in `customer-portal` (which resolves from `workspaces.stripe_customer_id`). An account holder who is admin of two workspaces shares one email-keyed Stripe customer across both. Combined with the per-workspace-subscription architecture (#60) and the recovery-checkout button on the subscription tab (`proceedWithCheckout('business')`), a checkout can bind to a customer record already carrying another workspace's billing state.
+
+**Fix (its own beat, not bundled):** mirror P2-07 — prefer `workspaces.stripe_customer_id` when present, fall back to email lookup only for a workspace's first-ever checkout, and stamp the resolved customer id back onto the workspace. Two adjacent pre-existing LOWs in the same function to sweep in the same pass: (a) `workspaceId` is presence-checked but not type-checked (`customer-portal:41` does `typeof === "string"`) → a non-string body produces a raw 500; (b) `Invalid plan: ${planId}` reflects raw user input into the JSON error body (`index.ts:69,178`) — return a static message + `reason: 'invalid_plan'` instead.
+
+**Where to look:** `supabase/functions/create-checkout/index.ts:69,71-73,137-141,178`; reference fix in `supabase/functions/customer-portal/index.ts`.
+
+---
+
+### Item #62: "Your subscription renews on {{date}}" still shows after a cancel-at-period-end (no Stripe flag mirror)
+
+**Severity:** Low/Medium (copy correctness). **Surfaced 2026-06-11** (polish pass); deferred because the proper fix needs webhook work.
+
+**Symptom:** When a user cancels via the billing portal, Stripe keeps `status='active'` with `cancel_at_period_end=true`. Nothing in the repo mirrors that flag (grep: zero hits for `cancel_at_period_end`). The subscription tab's Current Plan card therefore shows "Your subscription renews on {{date}}" for a subscription that is actually ending on that date — copy that contradicts the user's own cancel action; they may think the cancel failed and try again or email support.
+
+**Fix:** mirror `cancel_at_period_end` (and ideally `cancel_at`) onto `workspaces` via `stripe-webhook` (`customer.subscription.updated`), then branch the Current Plan copy: "Ends on {{date}} (canceled)" vs "Renews on {{date}}". Frontend half is trivial once the column exists; the webhook half is the work. Repository-integrity lane (touches the Stripe→DB mirror).
+
+**Where to look:** `supabase/functions/stripe-webhook/index.ts` (subscription.updated handler); `src/pages/settings/AccountSettings.tsx` (Current Plan `renews_on` block); `src/contexts/AppContext.tsx` (`WorkspaceRow` + mapping).
+
+---
+
+### Item #63: No sidebar billing signal for `past_due` (only `trialing` gets a pill)
+
+**Severity:** Low (UX gap). **Surfaced 2026-06-11** (polish pass).
+
+**Symptom:** The new sidebar trial pill (`AppSidebar.tsx`) shows for `subscriptionStatus === 'trialing'`, but `past_due` — a strictly more urgent billing state (a payment has already failed) — has no global signal. The user only sees it if they navigate to the subscription tab, where the past-due banner lives.
+
+**Fix:** add a red "Payment failed" pill in the same sidebar slot for `['past_due','unpaid','incomplete'].includes(subscriptionStatus)`, deep-linking to `?tab=subscription`. Reuses the trial-pill pattern exactly. Small, self-contained follow-up.
+
+**Where to look:** `src/components/layout/AppSidebar.tsx` (trial pill block, just above the user menu).
+
+---
+
+### Item #64: Document-pack purchase idempotency key is per-attempt, not per-intent
+
+**Severity:** Low. **Surfaced 2026-06-11** (Workstream B integrity review). Pre-existing-by-design.
+
+**Symptom:** `DocumentPackDialog.handleBuy` generates a fresh `crypto.randomUUID()` per call; the server namespaces it `pack_<workspaceId>_<key>`. Stripe idempotency therefore only dedupes a literal retry of one call — it does NOT stop a user from buying the same pack twice (close dialog → reopen → buy again). Because capacity is intentionally additive (stacking is a feature), an accidental duplicate is silently honored as 2× capacity AND 2× recurring charge.
+
+**Why deferred not fixed:** intentional stacking and accidental duplicate are indistinguishable without a product rule. Today the consent→processing transition unmounts the buy button, so a fast double-click is already unlikely; the residual risk is a deliberate-looking re-purchase.
+
+**Fix (when scoped):** derive the idempotency key from a stable intent (e.g. `pack_<workspaceId>_<packId>_<preview-nonce>`) so a same-session re-confirm of the same pack collapses while genuine stacking (new dialog session) still creates a new sub; or add a soft "you already have an active N-pack — add another?" confirm. Defer to product.
+
+**Where to look:** `src/components/workspace/DocumentPackDialog.tsx` (`handleBuy`); `supabase/functions/manage-document-pack/index.ts` (confirm idempotencyKey).
+
+---
+
+### Item #65: Document-pack webhook silently drops a paid grant if `workspace_id` metadata is missing
+
+**Severity:** Low. **Surfaced 2026-06-11** (Workstream B integrity review).
+
+**Symptom:** `stripe-webhook`'s `applyDocumentPack` returns early with only a `console.warn` if a pack subscription event lacks `metadata.workspace_id` (or customer). In normal flow this never happens — `manage-document-pack` always stamps `workspace_id` — but a pack sub created out-of-band in the Stripe dashboard, or a future code path that forgets the tag, would leave the customer's paid capacity un-mirrored with no durable trail. Unlike a mis-attributed plan sub (loud — no Business features), a dropped pack grant is quiet (the customer just never sees the slots they paid for). Brushes the "no silent vendor failures" hard rule.
+
+**Fix (when scoped):** on the missing-`workspace_id` branch, write an append-only audit / dead-letter row (or emit a monitored alert per OPERATIONAL_MONITORING_SPEC) so a dropped paid grant is attributable and recoverable, not just logged.
+
+**Extension (2026-06-11, Workstream C):** the same silent-drop shape now exists on `applySingleLeaseCredit` (missing `workspace_id` on a `payment_intent.succeeded` event → `console.warn` + 200 ack, paid one-time charge never granted). And one broader gap in the same lane: there is no reconciliation sweep comparing succeeded single-lease PaymentIntents against the `lease_credit_purchases` ledger, so a missed/undelivered webhook event (see the five-event subscription requirement in `OPERATOR_PLAYBOOK.md`) is permanently silent. Scoped remediation should cover both functions' drop branches plus a periodic reconcile (e.g. in `manage-document-pack` preview or the nightly health check).
+
+**Where to look:** `supabase/functions/stripe-webhook/index.ts` (`applyDocumentPack` + `applySingleLeaseCredit` early-return guards).
+
+---
+
+### Item #66: `src/integrations/supabase/types.ts` not regenerated for `addon_document_capacity`
+
+**Severity:** Low (cosmetic / type-safety). **Surfaced 2026-06-11** (Workstream B audit).
+
+**Symptom:** The new `workspaces.addon_document_capacity` column is read in `AppContext.tsx` via an `as any` cast because the auto-generated `types.ts` predates the column. Consistent with the file's established cast pattern, but the column should be reflected in the generated types after the migration applies.
+
+**Fix:** run the Supabase type generation (`supabase gen types` / MCP `generate_typescript_types`) after the migration is applied to staging, commit the regenerated `types.ts`, and drop the `as any` at the `addon_document_capacity` read site.
+
+**Where to look:** `src/integrations/supabase/types.ts`; `src/contexts/AppContext.tsx` (mapping).
+
+**Extension (2026-06-11, Workstream C):** the regen must also pick up `workspaces.purchased_lease_credits`, the `lease_credit_purchases` table, and the `consume_lease_credit` RPC (currently bridged with `as any` casts in `AppContext.tsx` and a manual row cast in `LimitReachedDialog.tsx`).
+
+---
+
+### Item #67: `retry_lease` has no processing-quota gate
+
+**Severity:** Low/Medium (cost exposure, not tenant isolation). **Pre-existing** — surfaced 2026-06-11 by the Workstream C security review; NOT introduced by that change.
+
+**Symptom:** `supabase/functions/retry_lease/index.ts` enforces AI consent and rate limiting but never calls `assertProcessingQuota`. An over-cap workspace can keep triggering paid Opus extractions by retrying failed leases. The window is bounded (retries only apply to existing failed leases + the per-workspace rate limit), and the same bypass is what makes the single-lease credit's "Opus failure after consume" loss path recoverable for free — so any fix must preserve free retries of an *already-quota-passed* upload while blocking retry-as-quota-evasion. Needs a deliberate design, not a blanket gate.
+
+**Where to look:** `supabase/functions/retry_lease/index.ts`; `assertProcessingQuota` in `process_lease/index.ts`.
+
+---
+
+### Item #68: Intake entry buttons and LeaseUploadModal are hardcoded English
+
+**Severity:** Medium (i18n completeness). **Pre-existing** — surfaced 2026-06-11 by the Workstream C polish review; NOT introduced by that change.
+
+**Symptom:** The gated entry points — Dashboard "New Request" (`Dashboard.tsx`), Leases "Add Lease" (`Leases.tsx`), the `AddLeaseDialog` chooser, and the entire `LeaseUploadModal` (titles, steps, errors) — are raw English strings. A Spanish-language user clicks an English button and lands on the fully-translated, usted-toned limit wall: mixed-language whiplash at the billing moment. Same class as the resolved Owner Workspace Management item (#57).
+
+**Fix (when scoped):** move all four surfaces' copy into `common.json` (en + es) in one sweep; polish-review the Spanish for usted consistency with the billing surfaces.
+
+**Where to look:** `src/pages/Dashboard.tsx`, `src/pages/Leases.tsx`, `src/components/leases/{AddLeaseDialog,LeaseUploadModal}.tsx`.
+
+---
+
 ## Tracking
 
 Surfaced 2026-05-03 during Phase 2 Path A smoke (items 1-4), Phase 2 Path A
@@ -1409,3 +1511,77 @@ and the 2026-06-09 transfer-RPC pre-push security review (item 59).
 Filed by Claude per user direction. Each item should get its own commit
 when fixed; reference this file in the message and remove the entry once
 green.
+
+### Item #69: Profile tab Phone field is never loaded or saved
+
+**Symptom:** `AccountSettings.tsx` Profile tab renders a Phone input, but the user-hydration effect never calls `setPhone` from stored data and `handleSaveProfile` omits `phone` from the `profiles` update — the user types a number, gets "Profile updated successfully!", and the value evaporates on reload.
+
+**Severity:** High (lying control on the primary settings tab). Pre-existing; surfaced by lease-product-polish during the 2026-06-12 settings-alignment sweep.
+
+**Where to look:** `src/pages/settings/AccountSettings.tsx` (phone state, hydration effect, `handleSaveProfile`); confirm whether `profiles` has a phone column at all.
+
+**Stub remediation:** Either persist phone end-to-end (add/verify column, load + save) or remove the field. Root-cause hypothesis: field added with the form scaffold, persistence never wired.
+
+---
+
+### Item #70: Workspace-settings saves silently no-op for non-owner admins (owner-only RLS vs admin UI gates)
+
+**Symptom:** The only UPDATE policy on `workspaces` is owner-only, but settings UIs gate on `canEditWorkspaceSettings` (admin ∥ owner). A non-owner admin's save (thresholds, discount rate, lease config, backdoor toggle, report settings) matches 0 rows, PostgREST returns no error, and a success toast fires. Worst case is the discount-rate card: the lease-financials recompute then runs with the UNSAVED rate (the `leases` UPDATE policy does allow admins/editors), rewriting every lease's `calc_*` figures from a rate the workspace row does not hold.
+
+**Severity:** High (silent data inconsistency + figures untraceable to stored rate). Pre-existing class — same family as the `workspace_members` owner-vs-admin mismatch already filed; surfaced by lease-security-scanner + lease-repository-integrity-reviewer on 2026-06-12.
+
+**Where to look:** `src/components/workspace/DiscountRateCard.tsx` (update → recompute without verifying the write landed); `src/pages/settings/WorkspaceSettings.tsx` save handlers; `supabase/migrations/20260522000000_restore_workspace_entitlement_guard.sql` (owner-only policy).
+
+**Stub remediation:** Class-shape fix, one pass: (a) decide owner-only vs admin-writable for the non-entitlement settings columns and align RLS accordingly; (b) until then, chain `.select('id')` on these updates and treat 0 rows as failure before any follow-on work (especially before the recompute) or success toast. Related: the recompute and threshold saves write no audit/activity rows, and the recompute's `Promise.all` ignores per-lease errors (partial recompute still toasts success).
+
+---
+
+### Item #71: Three WorkspaceSettings handlers missing the canEdit guard; dead upgrade-confirm dialog; unused imports
+
+**Symptom:** (a) `handleSaveBackdoor`, `handleSaveAssetTypes`, and `makeOptionListHandlers.handleSave` lack the `if (!canEdit) return` guard their sibling handlers all have (unreachable via UI for non-admins; RLS blocks non-owners — consistency/defense-in-depth only). (b) `AccountSettings.tsx`'s confirm-upgrade AlertDialog + `confirmUpgradePlan` state is unreachable (with the two-plan type, `currentPlan !== 'starter' && isUpgrade(...)` can never be true). (c) `WorkspaceSettings.tsx` carries unused `cn`, `useQuery`, `WorkspaceRole` imports and an unused `getRoleLabel`.
+
+**Severity:** Low (hygiene). All pre-existing; surfaced by lease-security-scanner + lease-code-auditor on 2026-06-12.
+
+**Stub remediation:** One hygiene pass: add the guard to all three handlers (class shape, not piecemeal), delete the dead dialog + state + branch, drop the unused imports/function.
+
+---
+
+### Item #72: discount_rate has no DB CHECK constraint
+
+**Symptom:** The 0 < rate ≤ 50 validation is client-only; a workspace owner can PATCH `workspaces.discount_rate` to a negative/absurd value via PostgREST, producing nonsense PV figures (own workspace only). Sibling columns (`counter_signature_default_due_days`, `report_*`) have CHECK constraints.
+
+**Severity:** Low. Pre-existing; surfaced by lease-security-scanner 2026-06-12.
+
+**Stub remediation:** Migration adding `CHECK (discount_rate > 0 AND discount_rate <= 50)` (security-adjacent: route through reviewers BEFORE db push per CLAUDE.md).
+
+---
+
+### Item #73: Out of Office has no UI entry point (intentional) — restore a revoke path before any reactivation
+
+**Symptom:** The 2026-06-12 settings pass removed the Out of Office tab by product decision (delegation covers absence). The Phase 7 backend (table, `declare-out-of-office`/`revoke-out-of-office` functions, cron reroutes, ExceptionsDashboard read-only card) remains dormant. Verified `user_out_of_office` had ZERO rows at removal time, so nobody is stranded. However: there is no expiry cron and `act-on-chain-step` doesn't check windows — only the revoke function reverts delegated steps. If OOO is ever reactivated (or a row is created out-of-band), a user could hold an active window with no way to end it.
+
+**Severity:** Low while dormant. Filed by lease-repository-integrity-reviewer 2026-06-12.
+
+**Stub remediation:** If reactivating OOO: restore the settings tab AND add an admin revoke control to the ExceptionsDashboard OOO card. Until then, treat any `user_out_of_office` row as an anomaly.
+
+---
+
+### Item #74: delete-workspace (owner-initiated) doesn't cancel Stripe subscriptions or purge lease-documents/lease-reports buckets
+
+**Symptom:** The owner-initiated `delete-workspace` edge function purges only the `leases` + `executed-leases` buckets (uploader-prefix convention) and never cancels the workspace's Stripe subscriptions — pack subscriptions keep billing after deletion, and `lease-documents`/`lease-reports` objects (`{workspace_id}/...` convention) survive (KNOWN_ISSUES #11 family). The cancellation-lifecycle cron fixed both for system purges (2026-06-12); the owner path still has the gaps.
+
+**Severity:** High (recurring charges post-deletion; "deleted" documents persisting). Pre-existing; surfaced by lease-security-scanner + lease-repository-integrity-reviewer reviewing cda30d1.
+
+**Stub remediation:** Extract the cron's Stripe-cleanup + four-bucket purge into a shared helper and use it from `delete-workspace` — one implementation so the two paths can't drift.
+
+---
+
+### Item #75: Grace "read-only" is enforced only for document processing; soft-delete access wall is UI-only
+
+**Symptom:** During the 30-day grace window, server-side enforcement covers `process_lease`, `retry_lease`, and pack purchases. Other mutating surfaces (lease edits via PostgREST under RLS, approval-chain functions, `upload-lease-document`, invites, report generation) remain open to members of canceled — and even soft-deleted — workspaces. Workspace-scoped only (no cross-tenant risk); a policy-vs-enforcement gap, not a breach path.
+
+**Severity:** Medium. Filed by lease-security-scanner reviewing cda30d1; remediation deliberately scoped out of the lifecycle commit.
+
+**Stub remediation:** An `is_workspace_live()` SQL helper folded into write-side RLS policies (security migration — reviewer routing BEFORE push), or `canceled_at`/`soft_deleted_at` gates in the remaining mutating edge functions. Decide enforcement depth before customer #1 cancels.
+
+---

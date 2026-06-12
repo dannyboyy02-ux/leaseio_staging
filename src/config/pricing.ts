@@ -101,6 +101,53 @@ export const PLAN_ORDER: SubscriptionPlan[] = ['starter', 'business'];
 export const PER_DOCUMENT_ABSTRACTION_PRICE = 12;
 export const ANNUAL_DISCOUNT_PERCENT = 20;
 
+// ── Document capacity packs (monthly add-on subscriptions) ──────────────────
+//
+// A workspace at/near its monthly abstraction limit can buy a recurring pack
+// that raises BOTH its monthly-abstraction allowance AND its active-lease cap
+// by `size`, while the pack is active. Each pack is its own Stripe subscription
+// (full price charged on purchase, no proration, cancel-at-period-end), tagged
+// metadata.addon_type='document_pack' so the webhook never confuses it with a
+// plan subscription. Capacity is additive — multiple/larger packs stack.
+//
+// Pricing rationale (ratified 2026-06-11, see PRODUCT_STRATEGY.md):
+//   - Every pack's per-lease price beats BOTH overage rates ($12 starter /
+//     $10 business), so a pack is always the cheaper relief valve vs overage.
+//   - Worst case $7/lease clears the 75% margin floor (~$4.80/lease at 2x AI
+//     cost) with wide headroom.
+//   - Per-lease price falls with size (9 → 8 → 7) to reward larger commitment
+//     without cannibalizing the Starter→Business upgrade path.
+//
+// Stripe Price IDs are NOT hardcoded — they come from env vars at deploy time
+// (operator creates the recurring Prices first), mirroring the annual-price
+// pattern. The purchase path fails closed if a pack's price id is unset.
+export interface DocumentPackConfig {
+  id: 'pack_10' | 'pack_20' | 'pack_50';
+  /** Additional leases/abstractions per month this pack grants. */
+  size: number;
+  /** Monthly price in USD (whole dollars). */
+  priceMonthly: number;
+  /** i18n key for the pack's display name (used as the catalog/consent title). */
+  nameKey: string;
+  /**
+   * Env var holding the Stripe recurring Price ID. Server-side only — the
+   * browser never resolves it; this field exists so the client/Deno catalogs
+   * can be parity-checked (documentPacks.test.ts) on the same env-var name.
+   */
+  stripePriceEnvVar: string;
+}
+
+export const DOCUMENT_PACKS: DocumentPackConfig[] = [
+  { id: 'pack_10', size: 10, priceMonthly: 90,  nameKey: 'packs.pack_10', stripePriceEnvVar: 'STRIPE_PRICE_PACK_10' },
+  { id: 'pack_20', size: 20, priceMonthly: 160, nameKey: 'packs.pack_20', stripePriceEnvVar: 'STRIPE_PRICE_PACK_20' },
+  { id: 'pack_50', size: 50, priceMonthly: 350, nameKey: 'packs.pack_50', stripePriceEnvVar: 'STRIPE_PRICE_PACK_50' },
+];
+
+/** Per-lease price of a pack, rounded to the nearest cent. */
+export function packPerLeasePrice(pack: DocumentPackConfig): number {
+  return Math.round((pack.priceMonthly / pack.size) * 100) / 100;
+}
+
 export function getPlanByIndex(index: number): PlanConfig {
   return PLANS[PLAN_ORDER[index]];
 }

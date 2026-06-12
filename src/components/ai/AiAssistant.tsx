@@ -210,7 +210,7 @@ export function AiAssistant() {
                 Upgrade to Business to ask questions about your lease portfolio.
               </p>
               <Button size="sm" variant="default" className="mt-1" asChild>
-                <a href="/app/settings/account?tab=subscription">Upgrade to Business</a>
+                <a href="/app/settings/account?tab=billing">Upgrade to Business</a>
               </Button>
             </div>
           ) : (

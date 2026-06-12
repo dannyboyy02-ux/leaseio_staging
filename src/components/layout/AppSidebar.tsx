@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   FileText,
   BarChart3,
-  User,
   LogOut,
   HelpCircle,
   Lock,
@@ -15,13 +14,9 @@ import {
   Building2,
   ChevronsUpDown,
   Check,
-  Sun,
-  Moon,
-  Monitor,
   Languages,
   Plus,
 } from 'lucide-react';
-import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -51,11 +46,11 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import {
-  canAccessWorkspaceSettings,
   canAccessApprovals,
   isSubmitterOnly,
 } from '@/lib/authorization';
 import { supabase } from '@/integrations/supabase/client';
+import { trialDaysRemaining } from '@/lib/trialStatus';
 
 // Top nav items — rendered before Approvals
 const topNavItems = [
@@ -167,8 +162,6 @@ export function AppSidebar() {
     };
   }, [workspace?.id, userFunctionalRoles]);
 
-  const { theme, setTheme } = useTheme();
-
   const handleLogout = async () => {
     await signOut();
     navigate('/');
@@ -185,16 +178,16 @@ export function AppSidebar() {
   const currentPlan = workspace?.plan || 'starter';
   const planLabel = t(`plan.${currentPlan}`);
 
-  const getPlanBadgeVariant = () => {
-    switch (currentPlan) {
-      case 'business':
-        return 'business';
-      case 'starter':
-        return 'secondary';
-      default:
-        return 'outline';
-    }
-  };
+  // Trial countdown pill — rendered above the user menu while the
+  // workspace subscription is in Stripe's trial window. Clicking it
+  // deep-links to the subscription tab.
+  const trialDaysLeft = useMemo(
+    () =>
+      workspace?.subscriptionStatus === 'trialing'
+        ? trialDaysRemaining(workspace.subscriptionPeriodEnd)
+        : null,
+    [workspace?.subscriptionStatus, workspace?.subscriptionPeriodEnd],
+  );
 
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const showApprovals = canAccessApprovals(userFunctionalRoles) || isAdmin;
@@ -339,7 +332,7 @@ export function AppSidebar() {
               {t('workspace.create.cta')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate('/app/account/workspaces')}>
+            <DropdownMenuItem onClick={() => navigate('/app/settings/workspaces')}>
               {t('workspace.create.manage_link')}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -403,6 +396,20 @@ export function AppSidebar() {
 
       {/* User Menu — single bottom-left entry, Claude.ai-style. */}
       <div className="p-3 border-t border-sidebar-border">
+        {trialDaysLeft !== null && (
+          /* The sidebar is dark navy in BOTH themes (--sidebar-background),
+             so the pill uses a single translucent-amber treatment — a light
+             bg-amber-50 would render as a glaring near-white block. */
+          <Link
+            to="/app/settings/account?tab=billing"
+            className="mb-2 flex items-center justify-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-400/20"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            {trialDaysLeft === 0
+              ? t('account.trial_pill_today')
+              : t('account.trial_pill', { count: trialDaysLeft })}
+          </Link>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -418,46 +425,25 @@ export function AppSidebar() {
                 <p className="text-sm font-medium truncate">
                   {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
                 </p>
+                {/* Plan label, not workspace name — the switcher above already
+                    shows the workspace (Claude shows "Pro plan" here). */}
                 <p className="text-xs text-sidebar-foreground/60 truncate">
-                  {safeText(workspace?.name) || safeText(displayUser.email)}
+                  {t('nav.plan_label', { plan: planLabel })}
                 </p>
               </div>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" side="top" className="w-72">
-            {/* Header card — larger avatar, name + email stacked, plan + workspace beneath */}
-            <DropdownMenuLabel className="font-normal py-3">
-              <div className="flex items-start gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-sm">
-                    {safeText(displayUser.firstName)?.[0]}{safeText(displayUser.lastName)?.[0]}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                  <span className="text-sm font-medium text-foreground truncate">
-                    {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
-                  </span>
-                  <span className="text-xs text-muted-foreground truncate">
-                    {safeText(displayUser.email)}
-                  </span>
-                  <div className="mt-1.5 flex flex-col gap-0.5">
-                    <Badge variant={getPlanBadgeVariant()} className="text-[10px] px-1.5 self-start">
-                      {planLabel}
-                    </Badge>
-                    {workspace?.name && (
-                      <span className="text-[10px] text-muted-foreground truncate">
-                        {safeText(workspace.name)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+          <DropdownMenuContent align="start" side="top" className="w-64">
+            {/* Claude pattern: the menu header is just the email — identity
+                detail lives in Settings, workspace identity in the switcher. */}
+            <DropdownMenuLabel className="font-normal text-xs text-muted-foreground truncate">
+              {safeText(displayUser.email)}
             </DropdownMenuLabel>
 
             <DropdownMenuSeparator />
 
-            {/* Settings — single entry. Usage, Workspace, Subscription, etc.
-                all live inside the Settings page now (Claude pattern). */}
+            {/* Settings — single doorway. Billing, Usage, Workspaces, etc.
+                all live inside the Settings surface (Claude pattern). */}
             <DropdownMenuItem asChild>
               <Link to="/app/settings/account" className="flex items-center gap-2 cursor-pointer font-medium">
                 <Settings className="h-4 w-4" />
@@ -465,48 +451,8 @@ export function AppSidebar() {
               </Link>
             </DropdownMenuItem>
 
-            {/* Workspaces — account-level management of every workspace
-                the user owns or belongs to (Owner Workspace Management) */}
-            <DropdownMenuItem asChild>
-              <Link to="/app/account/workspaces" className="flex items-center gap-2 cursor-pointer font-medium">
-                <Building2 className="h-4 w-4" />
-                Workspaces
-              </Link>
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            {/* Theme + help */}
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="flex items-center gap-2 font-medium">
-                {theme === 'dark' ? (
-                  <Moon className="h-4 w-4" />
-                ) : theme === 'system' ? (
-                  <Monitor className="h-4 w-4" />
-                ) : (
-                  <Sun className="h-4 w-4" />
-                )}
-                {t('nav.theme')}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup value={theme ?? 'system'} onValueChange={setTheme}>
-                  <DropdownMenuRadioItem value="light">
-                    <Sun className="h-4 w-4 mr-2" />
-                    {t('nav.theme_light')}
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="dark">
-                    <Moon className="h-4 w-4 mr-2" />
-                    {t('nav.theme_dark')}
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="system">
-                    <Monitor className="h-4 w-4 mr-2" />
-                    {t('nav.theme_system')}
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-
-            {/* Languages submenu — Claude pattern */}
+            {/* Languages submenu — stays in the menu (Claude pattern);
+                theme moved to Settings → Appearance only. */}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex items-center gap-2 font-medium">
                 <Languages className="h-4 w-4" />
@@ -523,13 +469,27 @@ export function AppSidebar() {
             <DropdownMenuItem asChild>
               <Link to="/app/support" className="flex items-center gap-2 cursor-pointer font-medium">
                 <HelpCircle className="h-4 w-4" />
-                {t('nav.help_support')}
+                {t('nav.get_help')}
               </Link>
             </DropdownMenuItem>
 
+            {/* Upgrade plan — Starter admins/owners only (Claude shows this
+                slot only when an upgrade exists). Deep-links to Billing. */}
+            {currentPlan === 'starter' && isAdmin && (
+              <DropdownMenuItem asChild>
+                <Link
+                  to="/app/settings/account?tab=billing"
+                  className="flex items-center gap-2 cursor-pointer font-medium"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {t('nav.upgrade_plan')}
+                </Link>
+              </DropdownMenuItem>
+            )}
+
             <DropdownMenuSeparator />
 
-            {/* Group 4 — log out (neutral, not destructive — Claude pattern) */}
+            {/* Log out (neutral, not destructive — Claude pattern) */}
             <DropdownMenuItem
               className="cursor-pointer font-medium text-muted-foreground focus:text-foreground"
               onClick={handleLogout}

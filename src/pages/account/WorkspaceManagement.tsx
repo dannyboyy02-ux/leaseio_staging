@@ -1,5 +1,7 @@
-// WorkspaceManagement — /app/account/workspaces
-// Owner Workspace Management Checkpoint 3.
+// WorkspaceManagementContent — the "My Workspaces" panel of the
+// /app/settings/workspaces drill-down (Owner Workspace Management
+// Checkpoint 3; re-homed from the standalone /app/account/workspaces
+// page in the 2026-06 Claude-alignment pass — that route now redirects).
 //
 // Two sections:
 //   1. Workspaces I OWN — full management (rename, manage members,
@@ -34,8 +36,6 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { AppLayout } from '@/components/layout/AppLayout';
-import { AppHeader } from '@/components/layout/AppHeader';
 import {
   Card,
   CardContent,
@@ -87,7 +87,7 @@ interface WorkspaceMeta {
   lease_count: number;
 }
 
-export default function WorkspaceManagement() {
+export function WorkspaceManagementContent() {
   const { user, workspace: activeWorkspace, availableWorkspaces, refreshProfile, switchWorkspace } = useApp();
   const { t } = useAppTranslation();
   const queryClient = useQueryClient();
@@ -230,13 +230,8 @@ export default function WorkspaceManagement() {
   // ── Render ───────────────────────────────────────────────────────────
 
   return (
-    <AppLayout>
-      <AppHeader
-        title="Workspaces"
-        subtitle="Manage every workspace you own or belong to from one place"
-      />
-
-      <div className="p-6 max-w-5xl mx-auto space-y-8">
+    <>
+      <div className="max-w-5xl space-y-8">
         {/* Owned workspaces */}
         <section>
           <div className="flex items-start justify-between gap-4 mb-4">
@@ -335,7 +330,7 @@ export default function WorkspaceManagement() {
                       )}
                       {isActive && (
                         <Button size="sm" variant="ghost" asChild>
-                          <Link to="/app/settings/workspace">
+                          <Link to="/app/settings/workspaces/profile">
                             <Settings className="h-3.5 w-3.5 mr-1.5" />
                             Settings
                           </Link>
@@ -547,6 +542,6 @@ export default function WorkspaceManagement() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AppLayout>
+    </>
   );
 }

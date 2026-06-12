@@ -34,6 +34,13 @@ interface LeaseUploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: (leaseId: string) => void;
+  /**
+   * Server backstop for the limit wall: called when process_lease rejects the
+   * upload with reason 'quota_exceeded' (the entry-point gate uses client
+   * state, which can race the real count — the server is the authority).
+   * The parent should close this modal and open LimitReachedDialog.
+   */
+  onQuotaExceeded?: () => void;
 }
 
 // Parent lease interface for amendments
@@ -47,7 +54,7 @@ interface ParentLease {
 
 type Step = 'upload' | 'classify' | 'error' | 'tier2_rejected';
 
-export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadModalProps) {
+export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceeded }: LeaseUploadModalProps) {
   const { startProcessing } = useProcessing();
   const { workspace } = useApp();
   const [step, setStep] = useState<Step>('upload');
@@ -175,6 +182,14 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess }: LeaseUploadM
         const detail = (result as any)?.detail || result.error || "This document doesn't appear to be a lease.";
         setTier2RejectDetail(detail);
         setStep('tier2_rejected');
+        return;
+      }
+
+      // Quota wall backstop — the server blocked at the cap. Hand off to the
+      // limit wall (upgrade / pack / single-lease) instead of a generic error.
+      if (result?.reason === 'quota_exceeded' && onQuotaExceeded) {
+        handleClose();
+        onQuotaExceeded();
         return;
       }
 

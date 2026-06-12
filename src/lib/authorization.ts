@@ -11,7 +11,6 @@ const normalizeRole = (role: AppRole): WorkspaceRole | null => {
 const isAdmin = (role: AppRole) => normalizeRole(role) === 'admin';
 const isEditor = (role: AppRole) => normalizeRole(role) === 'editor';
 
-export const canAccessWorkspaceSettings = (role: AppRole) => isAdmin(role) || isEditor(role);
 export const canEditWorkspaceSettings = (role: AppRole) => isAdmin(role);
 export const canManageWorkspaceMembers = (role: AppRole) => isAdmin(role);
 export const canAccessWorkspaceBilling = (role: AppRole) => isAdmin(role);

@@ -36,12 +36,22 @@ export interface Workspace {
   maxArchivedLeases: number;
   archivedLeasesUsed: number;
   documentLimit: number;
+  // Extra monthly-abstraction + active-lease capacity from active document
+  // packs (sum of pack sizes, mirrored from Stripe by the webhook). 0 when no
+  // pack. Effective allowance = documentLimit + addonDocumentCapacity.
+  addonDocumentCapacity: number;
+  // Spendable single-lease credits ("buy 1 lease" at the overage rate).
+  // Granted by the lease_credit_purchases ledger trigger; consumed atomically
+  // by process_lease when the workspace is over its caps.
+  purchasedLeaseCredits: number;
+  // AI abstractions in the trailing 30 days — a live count mirroring
+  // process_lease's assertProcessingQuota window. NOT the dead
+  // workspaces.documents_used DB column (KNOWN_ISSUES #31).
   documentsUsed: number;
   timezone: string;
   defaultNotificationDays: number;
   createdAt: string;
   updatedAt: string;
-  renewalDate: string;
   // Subscription state mirrored from Stripe via stripe-webhook. Null
   // for workspaces that haven't checked out yet (the workspace `plan`
   // column may be set optimistically in onboarding before payment).
@@ -53,6 +63,13 @@ export interface Workspace {
   // checkout — AccountSettings surfaces a callout when intendedPlan
   // diverges from plan.
   intendedPlan: SubscriptionPlan | null;
+  // Cancellation lifecycle (2026-06-12, billing-system-owned): canceledAt
+  // set = subscription fully ended, workspace is in the 30-day read-only
+  // grace window ending at graceExpiresAt; softDeletedAt set = access
+  // revoked, purge scheduled ~10 days out. All null = normal.
+  canceledAt: string | null;
+  graceExpiresAt: string | null;
+  softDeletedAt: string | null;
 }
 
 export interface WorkspaceMember {
