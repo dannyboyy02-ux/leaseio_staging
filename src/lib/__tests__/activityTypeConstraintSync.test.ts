@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -10,68 +10,96 @@ import { describe, expect, it } from 'vitest';
 // reintroduce quietly: every activity_type a writer can emit must be present
 // in the latest constraint migration.
 //
-// Honest limits: literals are collected via three writer-shaped regexes
-// (inline `activity_type:`, switch-assigned `activityType =`, and
-// helper-funneled `logActivity(..., 'x'`). A writer using a novel dynamic
-// pattern would evade the sweep — if you add one, extend the regex list.
+// Hardened 2026-06-12 after its own review (auditor + integrity): regexes
+// are digit-inclusive ([a-z0-9_], tier2_*/asc842_* were invisible before),
+// ternary writers and the ACTION_TO_ACTIVITY map-funnel are swept, the
+// funneled values are ALSO pinned explicitly, and each extraction pattern
+// has its own sanity probe so a single regex can't regress unnoticed.
+//
+// Honest limits: a writer using a novel dynamic pattern (computed key,
+// imported constant) would still evade the sweep — if you add one, extend
+// the pattern list AND the pinned set.
 
 const ROOT = join(__dirname, '../../..');
+const TOKEN = /['"]([a-z0-9_]+)['"]/g;
 
 function latestConstraintMigration(): { file: string; values: Set<string> } {
   const dir = join(ROOT, 'supabase/migrations');
   const candidates = readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
     .filter((f) =>
-      readFileSync(join(dir, f), 'utf8').includes('lease_activity_log_activity_type_check'),
+      readFileSync(join(dir, f), 'utf8').includes(
+        'ADD CONSTRAINT lease_activity_log_activity_type_check',
+      ),
     )
     .sort();
   expect(candidates.length, 'no migration defines the activity_type CHECK').toBeGreaterThan(0);
   const file = candidates[candidates.length - 1];
   const sql = readFileSync(join(dir, file), 'utf8');
-  // Narrow to the ADD CONSTRAINT block before extracting quoted values, so
-  // commentary can't satisfy the assertion (full-file matching is the
-  // false-positive trap the test conventions warn about).
-  const block = sql.slice(sql.indexOf('ADD CONSTRAINT'));
-  const values = new Set([...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]));
+  // Bound the slice to the ADD CONSTRAINT statement itself — harvesting to
+  // end-of-file would let quoted strings from unrelated trailing SQL count
+  // as allowed values and quietly defeat the orphan check.
+  const start = sql.indexOf('ADD CONSTRAINT lease_activity_log_activity_type_check');
+  expect(start, `${file} lacks the ADD CONSTRAINT statement`).toBeGreaterThanOrEqual(0);
+  const end = sql.indexOf('));', start);
+  expect(end, `${file}: ADD CONSTRAINT statement is unterminated`).toBeGreaterThan(start);
+  const block = sql.slice(start, end);
+  const values = new Set([...block.matchAll(TOKEN)].map((m) => m[1]));
   return { file, values };
 }
 
-function collectWriterValues(): Map<string, string[]> {
-  const found = new Map<string, string[]>(); // value -> files
-  const patterns = [
-    /activity_type:\s*['"]([a-z_]+)['"]/g,
-    /activityType\s*=\s*['"]([a-z_]+)['"]/g,
-    /logActivity\(\s*[^,\n]*,\s*['"]([a-z_]+)['"]/g,
+type Sweep = { byPattern: Map<string, Set<string>>; all: Map<string, string[]> };
+
+function collectWriterValues(): Sweep {
+  // Each pattern captures a SPAN that may contain one or more quoted values
+  // (ternaries put two literals on one expression).
+  const patterns: Array<{ name: string; re: RegExp }> = [
+    { name: 'inline', re: /activity_type:\s*([^,\n]+)/g },
+    { name: 'assignment', re: /activityType\s*=\s*([^;\n]+)/g },
+    { name: 'helper', re: /logActivity\(\s*[^,\n]*,\s*(['"][a-z0-9_]+['"])/g },
+    { name: 'action_map', re: /ACTION_TO_ACTIVITY[^}]*\}/g },
   ];
-  const roots = [join(ROOT, 'supabase/functions'), join(ROOT, 'src')];
+  const byPattern = new Map<string, Set<string>>(patterns.map((p) => [p.name, new Set()]));
+  const all = new Map<string, string[]>(); // value -> files
+
   const walk = (dir: string): string[] => {
     const out: string[] = [];
     for (const entry of readdirSync(dir)) {
       if (entry === 'node_modules' || entry === '__tests__' || entry.startsWith('.')) continue;
       const p = join(dir, entry);
-      if (statSync(p).isDirectory()) out.push(...walk(p));
+      const st = lstatSync(p); // lstat: never follow symlinks (cycle/escape safety)
+      if (st.isSymbolicLink()) continue;
+      if (st.isDirectory()) out.push(...walk(p));
       else if (/\.(ts|tsx)$/.test(entry)) out.push(p);
     }
     return out;
   };
-  for (const root of roots) {
+
+  for (const root of [join(ROOT, 'supabase/functions'), join(ROOT, 'src')]) {
     for (const file of walk(root)) {
       const src = readFileSync(file, 'utf8');
-      for (const re of patterns) {
+      for (const { name, re } of patterns) {
         for (const m of src.matchAll(re)) {
-          const prev = found.get(m[1]) ?? [];
-          prev.push(file.slice(ROOT.length + 1));
-          found.set(m[1], prev);
+          // Strip comparison clauses (`action === 'approve' ?`) before
+          // harvesting tokens — ternary CONDITIONS name actions, not
+          // activity types, and counting them would false-fail the guard.
+          const span = (m[1] ?? m[0]).replace(/[!=]==?\s*['"][a-z0-9_]+['"]/g, '');
+          for (const tok of span.matchAll(TOKEN)) {
+            byPattern.get(name)!.add(tok[1]);
+            const prev = all.get(tok[1]) ?? [];
+            prev.push(file.slice(ROOT.length + 1));
+            all.set(tok[1], prev);
+          }
         }
       }
     }
   }
-  return found;
+  return { byPattern, all };
 }
 
 describe('activity_type writers stay in sync with the CHECK constraint (#76)', () => {
   const { file, values } = latestConstraintMigration();
-  const writers = collectWriterValues();
+  const { byPattern, all: writers } = collectWriterValues();
 
   it('every writer-emitted activity_type is accepted by the latest constraint migration', () => {
     const orphans = [...writers.keys()].filter((v) => !values.has(v));
@@ -103,9 +131,50 @@ describe('activity_type writers stay in sync with the CHECK constraint (#76)', (
     }
   });
 
-  it('sanity: the sweep actually finds writers (regexes not silently broken)', () => {
+  it('pins the funneled/conditional writer values the sweep is most likely to lose', () => {
+    // Sole emission paths via map-funnel, ternary, or multi-line conditional
+    // assignment — pinned regardless of sweep coverage so a constraint
+    // re-snapshot can never drop them while the guard stays green.
+    for (const v of [
+      'chain_step_approved', // act-on-chain-step ACTION_TO_ACTIVITY
+      'chain_step_rejected',
+      'chain_step_sent_back',
+      'manual_reroute_approved', // admin-trigger-manual-reroute ternary
+      'manual_reroute_rejected',
+      'approval', // useLifecycleWorkflow conditional assignment
+      'rejection',
+      'send_back',
+      'pause',
+      'status_change',
+      'tier2_classification_passed', // digit-bearing (pre-hardening blind spot)
+      'tier2_classification_rejected',
+      'tier2_classification_overridden',
+      'tier2_correction_recorded',
+      'asc842_inputs_updated',
+    ]) {
+      expect(values, `funneled writer value ${v} missing from ${file}`).toContain(v);
+    }
+  });
+
+  it('sanity: each extraction pattern individually finds a known value', () => {
+    // One probe per pattern so a single regex regressing cannot hide behind
+    // the others still clearing an aggregate threshold.
+    expect(byPattern.get('inline'), 'inline pattern broke').toContain('document_deleted');
+    expect(byPattern.get('inline'), 'inline ternary handling broke').toContain(
+      'manual_reroute_approved',
+    );
+    expect(byPattern.get('assignment'), 'assignment pattern broke').toContain(
+      'final_review_returned_to_negotiation',
+    );
+    expect(byPattern.get('helper'), 'helper pattern broke').toContain('unlock_rejected');
+    expect(byPattern.get('action_map'), 'ACTION_TO_ACTIVITY pattern broke').toContain(
+      'chain_step_approved',
+    );
     expect(writers.size).toBeGreaterThan(20);
-    expect(writers.has('status_change')).toBe(true);
-    expect(writers.has('document_deleted')).toBe(true);
+  });
+
+  it('sanity: digit-bearing types are visible to the sweep (the pre-hardening blind spot)', () => {
+    expect(writers.has('tier2_classification_passed')).toBe(true);
+    expect(writers.has('asc842_inputs_updated')).toBe(true);
   });
 });

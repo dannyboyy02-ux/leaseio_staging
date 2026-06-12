@@ -198,6 +198,10 @@ export default function AuditLog() {
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+      // Evidence-gap disclosure (#76) — the export is what leaves the
+      // building during an audit, so the gap must travel with it.
+      '',
+      `"${t('audit.gap_notice').replace(/"/g, '""')}"`,
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -233,6 +237,16 @@ export default function AuditLog() {
       />
 
       <div className="p-6 space-y-6">
+        {/* Known evidence gap (#76, resolved 2026-06-12): a constraint
+            defect silently rejected several event types for ~5 weeks. The
+            data is unrecoverable; disclosing the hole is the only honest
+            representation — absence of evidence in that window must not
+            read as evidence of absence. Mirrored as a footnote in the CSV
+            export. */}
+        <p className="text-xs text-muted-foreground border rounded-md px-3 py-2 bg-muted/30">
+          {t('audit.gap_notice')}
+        </p>
+
         {/* Filters */}
         <Card>
           <CardHeader>

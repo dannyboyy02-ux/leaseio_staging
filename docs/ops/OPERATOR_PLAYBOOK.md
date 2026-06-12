@@ -451,3 +451,25 @@ Stops 6, 7, 8, 9 are independent and can be done whenever they become relevant.
 **If you have ~75 minutes:** Add Stop 5.
 
 That's the whole list.
+
+---
+
+## 📋 Incident record — audit-evidence gap, 2026-05-08 → 2026-06-12 (#76)
+
+**What happened:** the 2026-05-08 activity-type constraint re-snapshot renamed
+values without renaming the deployed writers; twelve event types were silently
+rejected by the CHECK constraint for ~5 weeks. Affected types: counter-signature
+received/overdue, OOO step routing + revocation, delegation activation/creation,
+deactivated-approver reassignment, policy-assignee validation failures, document
+iteration uploads, final-review returns to negotiation, and ALL unlock denials.
+
+**Resolution (2026-06-12, same day discovered):** migration
+`20260612230000_restore_orphaned_activity_types.sql` restored the twelve values
+(applied live — rows started landing immediately); writer inserts error-checked;
+static guard `activityTypeConstraintSync.test.ts` prevents recurrence.
+
+**The missing rows are NOT recoverable.** Disclosure shipped with the fix: the
+Audit Log page shows a standing gap notice and the CSV export carries it as a
+footnote — absence of evidence in that window must never be presented as
+evidence of absence. No paying customers existed during the gap (staging), but
+the disclosure stays until/unless the affected window ages out of relevance.

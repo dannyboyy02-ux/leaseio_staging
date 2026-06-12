@@ -1616,6 +1616,8 @@ green.
 
 **Stub remediation:** BEFORE UPDATE trigger on archive-column transitions: require admin/owner, stamp `archived_by = auth.uid()` and `archived_at = now()` server-side (disjoint-columns pattern; inventory existing triggers first per CLAUDE.md). Same family: "Users can create activity entries" INSERT policy allows any member to forge ANY activity_type with `user_id` self-or-NULL — constrain client-insertable types to an allowlist in the same pass.
 
+**Addendum (2026-06-12, lease-security-scanner reviewing 3b9ec87):** the #76 remediation widened the CHECK with 12 writer values, all of which are written EXCLUSIVELY by edge functions (service role) — the allowlist remediation above must exclude every one of them from client-insertable types. Priority subset: dashboard-consumed types, where a forged row drives admin action — `policy_assignee_validation_failed` and `stuck_chain_detected` both render as exception alerts in `ExceptionsDashboard.tsx` (:97, :104); a member-forged "validation failed" row (user_id NULL = system-attributed) can induce an admin to reassign/override a healthy chain step.
+
 ---
 
 ### Item #79: "Delete" means hard-delete on the Leases list but restorable-archive everywhere else
@@ -1635,5 +1637,25 @@ green.
 **Severity:** Medium-High (silent data loss + lying success toast on the first Settings tab). Pre-existing; surfaced by lease-product-polish reviewing 5cac271.
 
 **Stub remediation:** Wire `phone` into the profile load + `handleSaveProfile` payload (column exists check first), or remove the field.
+
+---
+
+### Item #81: Audit-insert failures have no observer; two residual silent paths
+
+**Symptom:** The #76 error-check pass converts rejected `lease_activity_log` inserts from silent to `console.error` — but nothing watches edge-function logs (no Sentry capture in functions; retention is short; cron writers have no user in the loop), so a future rejection from a new cause could again run for weeks. Residuals: (a) `request-lease-unlock/index.ts:130` uses `.catch()` on the insert — supabase-js RESOLVES with `{error}` on Postgres rejection, so the catch only fires on network failures (an error check that looks present but isn't); (b) ~18 unchecked audit inserts in 8 functions outside the #76 writer set (values all in-constraint per the sync test — nothing currently dropped); (c) repo-file ↔ live-constraint parity is statically unverifiable after the out-of-band apply.
+
+**Severity:** Medium. Filed by lease-repository-integrity-reviewer + lease-security-scanner reviewing 3b9ec87/6110442 (2026-06-12).
+
+**Stub remediation:** (1) wire audit-insert failure counts into the ops-monitoring surface at `/app/admin/operations` or the AI-operator nightly health check ("daily chain-step actions vs. audit rows"); consider failing the request when approval-evidence inserts (`status_change`, `chain_step_*`) fail — an approval without its row is not defensible; (2) convert request-lease-unlock to the destructure pattern next touch; (3) add a live constraint-vs-migration diff to `scripts/smoke-audit-hardening.mjs`.
+
+---
+
+### Item #82: Twelve dead renamed activity types in the constraint; one pre-existing label gap
+
+**Symptom:** The 2026-05-08 re-snapshot's renamed values (`counter_signature_recorded`, `out_of_office_revoked`, `delegate_timer_activated`, `voluntary_delegation_set`, `deactivated_approver_handled`, `document_iteration_started`, `counter_signature_overdue_recorded`, etc.) have had ZERO writers ever — no rows exist or can exist under those spellings. They sit in the constraint advertising a vocabulary that was never real; a future writer "adopting" one would fork event vocabulary (two names for one event class — unreconstructable for an auditor). The writer spellings restored by #76 are canonical. Separately: `counter_signature_reminder_sent` is actively written but has no ACTIVITY_LABELS entry in AuditLog.tsx (renders raw).
+
+**Severity:** Low. Filed by lease-repository-integrity-reviewer + lease-code-auditor (2026-06-12).
+
+**Stub remediation:** Next constraint snapshot: after a live `SELECT activity_type, count(*)` confirms zero rows, drop the twelve dead values and comment the writer spellings as canonical — do-not-adopt. Add the missing label.
 
 ---
