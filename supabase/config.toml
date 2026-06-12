@@ -194,3 +194,8 @@ verify_jwt = false
 # blocks authenticated owner_id reassignment).
 [functions.transfer-workspace-ownership]
 verify_jwt = true
+
+# Login-activity feed (2026-06-12) — Bearer JWT; writes a login_events row
+# for the authenticated user only.
+[functions.record-login-event]
+verify_jwt = true

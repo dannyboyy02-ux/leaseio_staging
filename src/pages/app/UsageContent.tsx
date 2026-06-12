@@ -64,6 +64,10 @@ export function UsageContent() {
     return <p className="text-sm text-muted-foreground">{t('common.loading')}</p>;
   }
 
+  const addonCapacity = workspace?.addonDocumentCapacity ?? 0;
+  const effectiveLimit = (workspace?.documentLimit ?? 0) + addonCapacity;
+  const usageRatio =
+    workspace && effectiveLimit > 0 ? workspace.documentsUsed / effectiveLimit : 0;
   const activeUsed = workspace.activeLeasesUsed ?? 0;
   const activeMax = workspace.maxActiveLeases ?? 0;
   const archivedUsed = workspace.archivedLeasesUsed ?? 0;
@@ -112,6 +116,41 @@ export function UsageContent() {
           </CardContent>
         </Card>
       )}
+
+      {/* AI abstraction quota — moved here from the Billing tab (2026-06-12)
+          so usage has exactly one home. Effective allowance = base plan
+          limit + active document-pack capacity; the ratio guards on the
+          effective limit so a 0 limit can't divide-by-zero. */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="h-4 w-4 text-muted-foreground" />
+            {t('usage.abstractions_title')}
+          </CardTitle>
+          <CardDescription className="text-xs">
+            {t('usage.abstractions_window_note')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-3xl font-bold text-foreground">{workspace.documentsUsed}</span>
+            <span className="text-sm text-muted-foreground">
+              / {effectiveLimit}
+              {addonCapacity > 0 && (
+                <span className="text-xs">
+                  {' '}
+                  {t('usage.includes_pack', { base: workspace.documentLimit, count: addonCapacity })}
+                </span>
+              )}
+            </span>
+          </div>
+          <Progress
+            value={Math.min(usageRatio * 100, 100)}
+            variant={usageTone(usageRatio * 100)}
+            className="h-2"
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

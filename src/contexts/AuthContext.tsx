@@ -50,6 +50,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error) {
+      // Fire-and-forget: feeds the Settings → Account login-activity card.
+      // A failure here must never block or delay the sign-in itself.
+      void supabase.functions.invoke('record-login-event').catch(() => {
+        /* non-fatal */
+      });
+    }
     return { error: error as Error | null };
   };
 

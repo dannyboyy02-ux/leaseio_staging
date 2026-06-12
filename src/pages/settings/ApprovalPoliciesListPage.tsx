@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, FlaskConical, Edit3, Copy, Archive, Loader2, Star } from 'lucide-react';
+import { Plus, FlaskConical, Edit3, Copy, Archive, Loader2, Star, ChevronLeft } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -188,6 +188,19 @@ export default function ApprovalPoliciesListPage() {
     <AppLayout>
       <AppHeader title="Approval Rules" />
       <div className="container mx-auto p-6 space-y-6">
+        {/* This page sits outside the Settings shell, so without an explicit
+            back link the user who arrived from Settings → Approval Rules has
+            no way back but the browser button. Mirrors the WorkspacesSection
+            back-link pattern. */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2 text-muted-foreground"
+          onClick={() => navigate('/app/settings/workspaces/approval_policies')}
+        >
+          <ChevronLeft className="h-4 w-4 mr-1" />
+          Back to Settings
+        </Button>
         {/* Workspace default for distinct approvers */}
         <Card>
           <CardContent className="pt-6">

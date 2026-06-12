@@ -117,7 +117,8 @@ describe('locale parity (en/es)', () => {
       'downgrade_confirm_desc',
       'downgrade_confirm_cta',
       'upgrade_confirm_title',
-      'usage_window_note',
+      'usage_lives_in_usage_tab',
+      'view_usage_link',
       'billing_admin_only',
       'billing_portal_note',
       'trial_pill',
@@ -246,15 +247,22 @@ describe('AccountSettings subscription tab', () => {
     expect(derivation).toContain(': null');
   });
 
-  it('usage meter guards against division by zero and counts pack capacity', () => {
+  it('usage meter guards against division by zero and counts pack capacity (moved to UsageContent 2026-06-12)', () => {
+    // The abstraction meter moved from the Billing tab to the Usage tab so
+    // usage has exactly one home; the math contract moves with it.
     // Effective allowance = base documentLimit + active document-pack capacity;
     // the ratio guards on the effective limit so a 0 limit can't divide-by-zero.
-    const derivation = sliceBetween(source, 'const addonCapacity', 'const usageRatio');
+    const usageSource = readRepoFile('src/pages/app/UsageContent.tsx');
+    const derivation = sliceBetween(usageSource, 'const addonCapacity', 'const usageRatio');
     expect(derivation).toContain('workspace?.addonDocumentCapacity ?? 0');
     expect(derivation).toContain('(workspace?.documentLimit ?? 0) + addonCapacity');
-    const ratio = sliceBetween(source, 'const usageRatio', ';');
+    const ratio = sliceBetween(usageSource, 'const usageRatio', ';');
     expect(ratio).toContain('effectiveLimit > 0');
     expect(ratio).toContain(': 0');
+
+    // And Billing must NOT regrow its own copy of the meter.
+    expect(source).not.toContain('usageRatio');
+    expect(source).toContain("handleTabChange('usage')");
   });
 
   it('billing portal actions are admin-gated with a visible non-admin explanation', () => {

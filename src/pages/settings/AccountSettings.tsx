@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, Lock, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { UsageContent } from '@/pages/app/UsageContent';
+import { describeLoginEvent, type LoginEventRow } from '@/lib/loginActivity';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -31,7 +32,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -76,63 +76,25 @@ export default function AccountSettings() {
   const [aiConsentAt, setAiConsentAt] = useState<string | null>(null);
   const [isRevokingConsent, setIsRevokingConsent] = useState(false);
 
-  // Recent activity — pulls from lease_activity_log scoped to current user.
-  // 4 shown by default, "View more" expands to 20.
-  interface ActivityRow {
-    id: string;
-    activity_type: string;
-    from_status: string | null;
-    to_status: string | null;
-    created_at: string;
-    lease_title: string | null;
-  }
-  const [activity, setActivity] = useState<ActivityRow[]>([]);
-  const [activityExpanded, setActivityExpanded] = useState(false);
+  // Login activity — per-user sign-in history (login_events, RLS-scoped to
+  // the signed-in user). Replaces the old lease-activity feed, which only
+  // repeated what the Dashboard already shows. 5 most recent.
+  const [loginEvents, setLoginEvents] = useState<LoginEventRow[]>([]);
 
   useEffect(() => {
     if (!authUser?.id) return;
     let cancelled = false;
     (async () => {
       const { data } = await (supabase as any)
-        .from('lease_activity_log')
-        .select('id, activity_type, from_status, to_status, created_at, lease:lease_id (request_title, filename)')
-        .eq('user_id', authUser.id)
+        .from('login_events')
+        .select('id, created_at, ip, user_agent')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(5);
       if (cancelled) return;
-      setActivity(
-        ((data ?? []) as any[]).map((r) => ({
-          id: r.id,
-          activity_type: r.activity_type,
-          from_status: r.from_status,
-          to_status: r.to_status,
-          created_at: r.created_at,
-          lease_title: r.lease?.request_title ?? r.lease?.filename ?? null,
-        }))
-      );
+      setLoginEvents((data ?? []) as LoginEventRow[]);
     })();
     return () => { cancelled = true; };
   }, [authUser?.id]);
-
-  const formatActivityLabel = (row: ActivityRow): string => {
-    const friendly: Record<string, string> = {
-      lease_uploaded: 'Uploaded lease',
-      lease_extracted: 'AI extraction completed',
-      field_edited: 'Edited a field',
-      field_verified: 'Verified a field',
-      change_submitted: 'Submitted changes for approval',
-      change_approved: 'Approved changes',
-      change_rejected: 'Rejected changes',
-      lease_locked: 'Locked lease',
-      lease_unlocked: 'Unlocked lease',
-      lease_archived: 'Archived lease',
-      lease_unarchived: 'Unarchived lease',
-      status_changed: row.from_status && row.to_status
-        ? `Status: ${row.from_status} → ${row.to_status}`
-        : 'Status changed',
-    };
-    return friendly[row.activity_type] ?? row.activity_type.replace(/_/g, ' ');
-  };
 
   const relativeTime = (iso: string): string => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -354,21 +316,28 @@ export default function AccountSettings() {
     }
   };
 
-  const handleSaveNotificationPrefs = async () => {
+  // Toggles autosave on flip (Claude pattern) — no Save button. The handler
+  // takes the just-flipped values as overrides because React state hasn't
+  // committed yet when onCheckedChange fires.
+  const persistNotificationPrefs = async (overrides: {
+    email?: boolean;
+    sms?: boolean;
+    abstraction?: boolean;
+  }) => {
     if (!authUser?.id) return;
-    
+
     try {
       const { error } = await supabase
         .from('profiles')
         .update({
-          email_notifications_enabled: emailNotifications,
-          sms_notifications_enabled: smsNotifications,
-          notify_abstraction_complete: notifyAbstractionComplete,
+          email_notifications_enabled: overrides.email ?? emailNotifications,
+          sms_notifications_enabled: overrides.sms ?? smsNotifications,
+          notify_abstraction_complete: overrides.abstraction ?? notifyAbstractionComplete,
         } as any)
         .eq('id', authUser.id);
 
       if (error) throw error;
-      toast.success('Notification preferences saved!');
+      toast.success(t('account.preference_saved'));
     } catch (error) {
       console.error('Error saving notification prefs:', error);
       toast.error('Failed to save preferences');
@@ -522,9 +491,6 @@ export default function AccountSettings() {
   const trialDaysLeft = trialDaysRemaining(workspace?.subscriptionPeriodEnd);
   // Effective allowance = base plan limit + active document-pack capacity.
   const addonCapacity = workspace?.addonDocumentCapacity ?? 0;
-  const effectiveLimit = (workspace?.documentLimit ?? 0) + addonCapacity;
-  const usageRatio =
-    workspace && effectiveLimit > 0 ? workspace.documentsUsed / effectiveLimit : 0;
   const railTriggerClass =
     'md:w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
 
@@ -697,7 +663,10 @@ export default function AccountSettings() {
                   </div>
                   <Switch
                     checked={emailNotifications}
-                    onCheckedChange={setEmailNotifications}
+                    onCheckedChange={(v) => {
+                      setEmailNotifications(v);
+                      void persistNotificationPrefs({ email: v });
+                    }}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -709,7 +678,10 @@ export default function AccountSettings() {
                   </div>
                   <Switch
                     checked={smsNotifications}
-                    onCheckedChange={setSmsNotifications}
+                    onCheckedChange={(v) => {
+                      setSmsNotifications(v);
+                      void persistNotificationPrefs({ sms: v });
+                    }}
                   />
                 </div>
                 <div className="flex items-center justify-between">
@@ -721,13 +693,12 @@ export default function AccountSettings() {
                   </div>
                   <Switch
                     checked={notifyAbstractionComplete}
-                    onCheckedChange={setNotifyAbstractionComplete}
+                    onCheckedChange={(v) => {
+                      setNotifyAbstractionComplete(v);
+                      void persistNotificationPrefs({ abstraction: v });
+                    }}
                   />
                 </div>
-                <Button variant="accent" onClick={handleSaveNotificationPrefs}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {t('account.save_changes')}
-                </Button>
               </CardContent>
             </Card>
           </TabsContent>
@@ -816,49 +787,30 @@ export default function AccountSettings() {
 
             <Card>
               <CardHeader>
-                <CardTitle>{t('account.recent_activity')}</CardTitle>
-                <CardDescription>{t('account.recent_activity_desc')}</CardDescription>
+                <CardTitle>{t('account.login_activity')}</CardTitle>
+                <CardDescription>{t('account.login_activity_desc')}</CardDescription>
               </CardHeader>
               <CardContent>
-                {activity.length === 0 ? (
+                {loginEvents.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic py-2">
-                    {t('account.recent_activity_empty')}
+                    {t('account.login_activity_empty')}
                   </p>
                 ) : (
                   <ul className="divide-y divide-border">
-                    {(activityExpanded ? activity : activity.slice(0, 4)).map((row) => (
+                    {loginEvents.map((row) => (
                       <li
                         key={row.id}
                         className="flex items-center justify-between gap-3 py-2.5"
                       >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">
-                            {formatActivityLabel(row)}
-                          </p>
-                          {row.lease_title && (
-                            <p className="text-xs text-muted-foreground truncate">
-                              {row.lease_title}
-                            </p>
-                          )}
-                        </div>
+                        <p className="text-sm font-medium text-foreground truncate min-w-0">
+                          {describeLoginEvent(row, t('account.login_unknown_device'))}
+                        </p>
                         <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
                           {relativeTime(row.created_at)}
                         </span>
                       </li>
                     ))}
                   </ul>
-                )}
-                {activity.length > 4 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full mt-2 text-xs"
-                    onClick={() => setActivityExpanded((v) => !v)}
-                  >
-                    {activityExpanded
-                      ? t('account.recent_activity_view_less')
-                      : t('account.recent_activity_view_more', { count: activity.length - 4 })}
-                  </Button>
                 )}
                 <Button
                   variant="outline"
@@ -1061,31 +1013,19 @@ export default function AccountSettings() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div>
-                      <div className="flex items-baseline justify-between mb-2">
-                        <span className="text-sm font-medium">{t('account.document_usage')}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {workspace.documentsUsed} / {effectiveLimit}
-                          {addonCapacity > 0 && (
-                            <span className="text-xs"> {t('account.usage_includes_pack', { base: workspace.documentLimit, count: addonCapacity })}</span>
-                          )}
-                        </span>
-                      </div>
-                      <Progress
-                        value={Math.min(usageRatio * 100, 100)}
-                        variant={
-                          usageRatio >= 0.9
-                            ? 'destructive'
-                            : usageRatio >= 0.75
-                            ? 'warning'
-                            : 'accent'
-                        }
-                        className="h-2"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        {t('account.usage_window_note')}
-                      </p>
-                    </div>
+                    {/* The usage meter lives on the Usage tab — Billing keeps
+                        only billing actions so the two tabs don't repeat
+                        each other. */}
+                    <p className="text-sm text-muted-foreground">
+                      {t('account.usage_lives_in_usage_tab')}{' '}
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        onClick={() => handleTabChange('usage')}
+                      >
+                        {t('account.view_usage_link')}
+                      </button>
+                    </p>
                     {isAdminUser ? (
                       <Button
                         variant="outline"
@@ -1305,43 +1245,53 @@ export default function AccountSettings() {
 
           {/* Privacy — AI consent (moved here from Profile) + data export + policy links */}
           <TabsContent value="privacy" className="space-y-6 mt-0">
+            {/* Claude-pattern rows: label + description on the left, the
+                control (toggle or action button) on the right. AI consent is
+                the one stored boolean here, so it renders as a Switch; the
+                rest are inherently actions. */}
             <Card>
               <CardHeader>
                 <CardTitle>{t('account.privacy_ai_title')}</CardTitle>
-                <CardDescription>{t('account.privacy_ai_desc')}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  {aiConsentAt
-                    ? `${t('account.privacy_consent_recorded')} ${new Date(aiConsentAt).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.`
-                    : t('account.privacy_consent_revoked')}
-                </p>
-                {aiConsentAt ? (
-                  <Button variant="outline" onClick={handleRevokeAiConsent} disabled={isRevokingConsent}>
-                    {isRevokingConsent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    {t('account.privacy_revoke')}
-                  </Button>
-                ) : (
-                  <Button variant="accent" onClick={handleGrantAiConsent} disabled={isRevokingConsent}>
-                    {isRevokingConsent ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    {t('account.privacy_grant')}
-                  </Button>
-                )}
+              <CardContent>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm text-muted-foreground">{t('account.privacy_ai_desc')}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {aiConsentAt
+                        ? `${t('account.privacy_consent_recorded')} ${new Date(aiConsentAt).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.`
+                        : t('account.privacy_consent_revoked')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={!!aiConsentAt}
+                    disabled={isRevokingConsent}
+                    aria-label={t('account.privacy_ai_title')}
+                    onCheckedChange={(v) => {
+                      if (v) void handleGrantAiConsent();
+                      else void handleRevokeAiConsent();
+                    }}
+                  />
+                </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle>{t('account.privacy_data_export')}</CardTitle>
-                <CardDescription>{t('account.privacy_data_export_desc')}</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button variant="outline" asChild>
-                  <a href="mailto:privacy@theleaseio.com?subject=Data%20Export%20Request">
-                    <Mail className="h-4 w-4 mr-2" />
-                    {t('account.privacy_request_export')}
-                  </a>
-                </Button>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-sm text-muted-foreground min-w-0">
+                    {t('account.privacy_data_export_desc')}
+                  </p>
+                  <Button variant="outline" className="shrink-0" asChild>
+                    <a href="mailto:privacy@theleaseio.com?subject=Data%20Export%20Request">
+                      <Mail className="h-4 w-4 mr-2" />
+                      {t('account.privacy_request_export')}
+                    </a>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
@@ -1354,19 +1304,21 @@ export default function AccountSettings() {
                 <CardDescription>{t('account.privacy_rights_desc')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <ul className="text-sm text-muted-foreground space-y-1 ml-5 list-disc">
-                  <li>{t('account.privacy_right_access')}</li>
-                  <li>{t('account.privacy_right_correct')}</li>
-                  <li>{t('account.privacy_right_delete')}</li>
-                  <li>{t('account.privacy_right_portability')}</li>
-                  <li>{t('account.privacy_right_object')}</li>
-                </ul>
-                <Button variant="outline" asChild>
-                  <a href="mailto:privacy@theleaseio.com?subject=Privacy%20Rights%20Request&body=Please%20describe%20your%20request%20(access%2C%20correction%2C%20deletion%2C%20portability%2C%20or%20objection)%20and%20we'll%20respond%20within%2030%20days.">
-                    <Mail className="h-4 w-4 mr-2" />
-                    {t('account.privacy_rights_contact_btn')}
-                  </a>
-                </Button>
+                <div className="flex items-start justify-between gap-4">
+                  <ul className="text-sm text-muted-foreground space-y-1 ml-5 list-disc min-w-0">
+                    <li>{t('account.privacy_right_access')}</li>
+                    <li>{t('account.privacy_right_correct')}</li>
+                    <li>{t('account.privacy_right_delete')}</li>
+                    <li>{t('account.privacy_right_portability')}</li>
+                    <li>{t('account.privacy_right_object')}</li>
+                  </ul>
+                  <Button variant="outline" className="shrink-0" asChild>
+                    <a href="mailto:privacy@theleaseio.com?subject=Privacy%20Rights%20Request&body=Please%20describe%20your%20request%20(access%2C%20correction%2C%20deletion%2C%20portability%2C%20or%20objection)%20and%20we'll%20respond%20within%2030%20days.">
+                      <Mail className="h-4 w-4 mr-2" />
+                      {t('account.privacy_rights_contact_btn')}
+                    </a>
+                  </Button>
+                </div>
                 <p className="text-[11px] text-muted-foreground">
                   {t('account.privacy_rights_response_window')}
                 </p>
