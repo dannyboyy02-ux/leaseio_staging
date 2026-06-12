@@ -54,6 +54,26 @@ ALTER TABLE public.cancellation_notices ENABLE ROW LEVEL SECURITY;
 -- No member policies: internal operational ledger, service_role only.
 REVOKE ALL ON public.cancellation_notices FROM PUBLIC, anon, authenticated;
 
+-- ── 2b. Forensic survivability (integrity review 2026-06-12) ─────────────
+-- The notice ledger and activity log CASCADE away when the workspace row is
+-- purged. The deleted_workspaces forensic row must therefore carry the proof
+-- that the customer got their 30 days of notice: details holds the lifecycle
+-- timestamps, the full notice history (type/sent_at/recipients), and the
+-- Stripe subscriptions canceled at purge. One forensic row per workspace —
+-- a retried partial purge RESUMES against the existing row instead of
+-- inserting a contradictory duplicate.
+ALTER TABLE public.deleted_workspaces
+  ADD COLUMN IF NOT EXISTS details jsonb;
+
+COMMENT ON COLUMN public.deleted_workspaces.details IS
+  'System-purge snapshot: lifecycle timestamps, cancellation_notices history, Stripe subscriptions canceled. NULL for owner-initiated deletions predating 2026-06-12.';
+
+CREATE UNIQUE INDEX IF NOT EXISTS deleted_workspaces_original_workspace_id_key
+  ON public.deleted_workspaces (original_workspace_id);
+
+COMMENT ON TABLE public.deleted_workspaces IS
+  'Forensic audit trail of workspace deletions. Written by the delete-workspace edge function (owner-initiated) and the process-cancellation-lifecycle cron (system purge); immutable thereafter. Survives the original workspaces row.';
+
 -- ── 3. Guard re-derivation (4th) — lifecycle columns are billing-managed ─
 CREATE OR REPLACE FUNCTION public.prevent_workspace_entitlement_edits()
 RETURNS trigger
@@ -177,3 +197,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+COMMENT ON FUNCTION public.prevent_workspace_entitlement_edits() IS
+  '#29 entitlement guard, 4th derivation (2026-06-12). Guards 15 billing-managed columns on workspaces: plan, document_limit, documents_used, addon_document_capacity, purchased_lease_credits, billing_interval, stripe_customer_id, stripe_subscription_id, subscription_status, subscription_period_end, max_archived_leases, canceled_at, grace_expires_at, soft_deleted_at, purge_after. Service-role writes only. This comment IS the column inventory for the next re-derivation.';

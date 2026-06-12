@@ -45,3 +45,25 @@ Ratified 2026-06-12 (researched against Visual Lease DPA + GDPR Art. 28 norms).
   `cycle_started_at = canceled_at` resets the set on cancel→renew→cancel.
 - Purge writes the forensic row FIRST and aborts if that insert fails.
 - Every cron step re-checks entitlement and self-heals renewed workspaces.
+
+## Review-hardening notes (2026-06-12, post security/integrity review)
+
+- **Stale-event guard:** the webhook ignores non-entitled events whose
+  subscription id differs from the workspace's stored one (C1 — late
+  redelivery of an old sub's `canceled` event can never restart the clock
+  on a renewed workspace).
+- **Forward-notice floor:** `grace_expires_at = max(ended_at + 30d, now + 7d)`
+  — a webhook delivered very late can never soft-delete without notice.
+- **Purge order:** fresh re-verify → Stripe subscription cleanup (packs etc.;
+  purge DEFERRED if cleanup fails) → forensic row with lifecycle + notice
+  snapshot in `deleted_workspaces.details` → conditional row deletes →
+  storage purge last (buckets: `leases`/`executed-leases` by uploader prefix,
+  `lease-documents`/`lease-reports` by workspace prefix, recursive).
+- **Ledger trade-off:** notices claim the ledger row before sending
+  (double-send-proof); a crash between claim and send swallows that notice.
+  Per-recipient delivery outcomes are recorded back onto the row.
+- **Retroactivity:** workspaces already `canceled` before this deployed are
+  NOT enrolled (no webhook event will re-fire) — deliberate; enroll manually
+  via a service-role backfill if ever needed.
+- **Enforcement depth:** grace read-only currently covers processing + pack
+  purchases only; broader write-gating is KNOWN_ISSUES #75.

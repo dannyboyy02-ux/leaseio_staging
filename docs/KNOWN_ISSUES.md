@@ -1565,3 +1565,23 @@ green.
 **Stub remediation:** If reactivating OOO: restore the settings tab AND add an admin revoke control to the ExceptionsDashboard OOO card. Until then, treat any `user_out_of_office` row as an anomaly.
 
 ---
+
+### Item #74: delete-workspace (owner-initiated) doesn't cancel Stripe subscriptions or purge lease-documents/lease-reports buckets
+
+**Symptom:** The owner-initiated `delete-workspace` edge function purges only the `leases` + `executed-leases` buckets (uploader-prefix convention) and never cancels the workspace's Stripe subscriptions — pack subscriptions keep billing after deletion, and `lease-documents`/`lease-reports` objects (`{workspace_id}/...` convention) survive (KNOWN_ISSUES #11 family). The cancellation-lifecycle cron fixed both for system purges (2026-06-12); the owner path still has the gaps.
+
+**Severity:** High (recurring charges post-deletion; "deleted" documents persisting). Pre-existing; surfaced by lease-security-scanner + lease-repository-integrity-reviewer reviewing cda30d1.
+
+**Stub remediation:** Extract the cron's Stripe-cleanup + four-bucket purge into a shared helper and use it from `delete-workspace` — one implementation so the two paths can't drift.
+
+---
+
+### Item #75: Grace "read-only" is enforced only for document processing; soft-delete access wall is UI-only
+
+**Symptom:** During the 30-day grace window, server-side enforcement covers `process_lease`, `retry_lease`, and pack purchases. Other mutating surfaces (lease edits via PostgREST under RLS, approval-chain functions, `upload-lease-document`, invites, report generation) remain open to members of canceled — and even soft-deleted — workspaces. Workspace-scoped only (no cross-tenant risk); a policy-vs-enforcement gap, not a breach path.
+
+**Severity:** Medium. Filed by lease-security-scanner reviewing cda30d1; remediation deliberately scoped out of the lifecycle commit.
+
+**Stub remediation:** An `is_workspace_live()` SQL helper folded into write-side RLS policies (security migration — reviewer routing BEFORE push), or `canceled_at`/`soft_deleted_at` gates in the remaining mutating edge functions. Decide enforcement depth before customer #1 cancels.
+
+---

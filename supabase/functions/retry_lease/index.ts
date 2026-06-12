@@ -533,6 +533,26 @@ serve(async (req) => {
       });
     }
 
+    // Cancellation lifecycle (2026-06-12): a canceled workspace is
+    // read-only — retries burn paid Opus tokens just like first-pass
+    // extraction, so they get the same backstop process_lease has.
+    if (lease.workspace_id) {
+      const { data: wsLifecycle } = await supabaseAdmin
+        .from('workspaces')
+        .select('canceled_at')
+        .eq('id', lease.workspace_id)
+        .maybeSingle();
+      if ((wsLifecycle as { canceled_at?: string | null } | null)?.canceled_at) {
+        return new Response(
+          JSON.stringify({
+            error: 'This workspace\'s subscription has ended and it is in read-only mode. Renew the subscription to process documents again.',
+            reason: 'subscription_canceled',
+          }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
     if (!lease.storage_path) {
       return new Response(JSON.stringify({ error: 'No file found for this lease' }), {
         status: 400,

@@ -190,7 +190,7 @@ serve(async (req) => {
   // Load + authorize the workspace.
   const { data: wsData } = await supabaseAdmin
     .from("workspaces")
-    .select("id, owner_id, plan, stripe_customer_id, addon_document_capacity, purchased_lease_credits")
+    .select("id, owner_id, plan, stripe_customer_id, addon_document_capacity, purchased_lease_credits, canceled_at")
     .eq("id", workspaceId)
     .maybeSingle();
   const ws = wsData as WorkspaceRow | null;
@@ -200,6 +200,24 @@ serve(async (req) => {
   }
 
   const mode = body.mode ?? "preview";
+
+  // Cancellation lifecycle (2026-06-12): never sell capacity to a canceled
+  // workspace — the charge would not restore entitlement and the workspace
+  // is scheduled for deletion. Renewal (plan checkout) is the only valid
+  // purchase path during grace. Cancel/preview stay allowed.
+  if ((ws as { canceled_at?: string | null }).canceled_at &&
+      (mode === "confirm" || mode === "buy_single")) {
+    return jsonResponse(
+      {
+        ok: false,
+        reason: "subscription_canceled",
+        error: "This workspace's subscription has ended. Renew the subscription before purchasing capacity.",
+      },
+      403,
+      origin,
+    );
+  }
+
   const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
   // Catalog with per-pack configured flag (Stripe price id present in env).

@@ -115,14 +115,43 @@ serve(async (req) => {
     const entitled = subscription.status === "active" || subscription.status === "trialing";
     const effectivePlan = entitled ? requestedPlan : "starter";
 
+    // C1 guard (security + integrity review 2026-06-12): Stripe does not
+    // guarantee event ordering and redelivers for days. A NON-entitled
+    // event must only apply when it belongs to the workspace's CURRENT
+    // subscription — otherwise a late 'canceled' event for an OLD
+    // subscription, arriving after the customer renewed on a NEW one,
+    // would downgrade the plan and restart the deletion clock on a paying
+    // customer (annual subs fire no healing event for months). Entitled
+    // events always apply: a real renewal must never be skipped.
+    if (!entitled) {
+      const { data: wsRow } = await supabaseAdmin
+        .from("workspaces")
+        .select("stripe_subscription_id")
+        .eq("id", workspaceId)
+        .maybeSingle();
+      const storedSubId = (wsRow as { stripe_subscription_id?: string | null } | null)
+        ?.stripe_subscription_id;
+      if (storedSubId && storedSubId !== subscription.id) {
+        console.warn(
+          "[stripe-webhook] ignoring non-entitled event for stale subscription",
+          subscription.id,
+          "current:",
+          storedSubId,
+        );
+        return;
+      }
+    }
+
     // Cancellation lifecycle (ratified 2026-06-12): when the plan
     // subscription FULLY ends (status 'canceled' — the paid-through period
     // is over), start the 30-day read-only grace window. Renewal (any
     // entitled status) clears the whole lifecycle, restoring full access —
     // the customer can renew any time before the purge. Dunning states
     // (past_due/unpaid/incomplete) deliberately do NOT start the deletion
-    // clock. canceled_at uses Stripe's ended_at when present so grace runs
-    // from the true period end even if the webhook delivers late.
+    // clock. canceled_at anchors to Stripe's ended_at (true period end,
+    // fallback current_period_end then now), and grace_expires_at is
+    // floored at now + 7 days so a webhook delivered very late can never
+    // soft-delete without forward notice (integrity review 2026-06-12).
     const lifecycle: Record<string, string | null> = {};
     if (entitled) {
       lifecycle.canceled_at = null;
@@ -130,14 +159,17 @@ serve(async (req) => {
       lifecycle.soft_deleted_at = null;
       lifecycle.purge_after = null;
     } else if (subscription.status === "canceled") {
-      const endedAtSec = (subscription as any).ended_at;
+      const endedAtSec = (subscription as any).ended_at ??
+        (subscription as any).current_period_end;
       const canceledAt = typeof endedAtSec === "number"
         ? new Date(endedAtSec * 1000)
         : new Date();
       lifecycle.canceled_at = canceledAt.toISOString();
-      lifecycle.grace_expires_at = new Date(
+      const MIN_FORWARD_NOTICE_MS = 7 * 86_400_000;
+      lifecycle.grace_expires_at = new Date(Math.max(
         canceledAt.getTime() + GRACE_DAYS * 86_400_000,
-      ).toISOString();
+        Date.now() + MIN_FORWARD_NOTICE_MS,
+      )).toISOString();
     }
 
     const { error } = await supabaseAdmin
