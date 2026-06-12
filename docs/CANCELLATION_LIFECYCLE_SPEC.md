@@ -33,8 +33,15 @@ Ratified 2026-06-12 (researched against Visual Lease DPA + GDPR Art. 28 norms).
 1. Apply the migration; deploy `stripe-webhook`, `process-cancellation-lifecycle`,
    and `process_lease` (CLI — too large for MCP).
 2. `supabase secrets set CANCELLATION_LIFECYCLE_CRON_SECRET=$(openssl rand -hex 32)`
-3. Schedule the cron DAILY (same scheduler as the other crons), POSTing with
-   header `x-cron-secret: <secret>`.
+   (keep the generated value — the cron job header needs it).
+3. Schedule the cron DAILY at **Dashboard → Integrations → Cron → Jobs →
+   Create job** (NOT under Database — the Cron module lives under
+   Integrations): type "Supabase Edge Function", POST, headers
+   `x-cron-secret: <secret>` + `Content-Type: application/json`, body `{}`,
+   schedule `0 14 * * *`. Job names are case-sensitive and immutable.
+   There is no "Run now" — verify with a manual `curl -X POST` carrying
+   the same headers (expect `{"ok":true,...}` all-zero stats on a clean
+   project), then check the job's History after the first scheduled run.
 4. Resend already monitored via vendor-health-check; email volume bounded at
    200/run (`MAX_EMAILS_PER_RUN`).
 
