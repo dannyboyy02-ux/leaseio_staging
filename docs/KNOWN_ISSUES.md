@@ -1584,6 +1584,8 @@ green.
 
 **Stub remediation:** An `is_workspace_live()` SQL helper folded into write-side RLS policies (security migration — reviewer routing BEFORE push), or `canceled_at`/`soft_deleted_at` gates in the remaining mutating edge functions. Decide enforcement depth before customer #1 cancels.
 
+**RESOLVED 2026-06-13** — Vault V1 read-only enforcement, BOTH depths shipped: migration `20260613000000_vault_v1_readonly_enforcement.sql` (78 restrictive RLS policies over 28 public tables via `is_workspace_live()`/`is_lease_live()`, 3 on `storage.objects`, applied + verified live) AND `_shared/workspace_live.ts` liveness gates in all 21 user-invokable mutators, liveness skips in all 7 workspace-touching crons, and full-liveness backstops in `process_lease`/`retry_lease`/`manage-document-pack` — all 31 changed functions redeployed and content-verified. Three review rounds (lease-security-scanner + lease-repository-integrity-reviewer), both APPROVED. Accepted residuals documented in `VAULT_TIER_SPEC.md` V1 as-built note; the one knowingly open mutator is #84 (resolve-approval-chain frozen deployment). Follow-up (non-blocking): LeaseReview secondary writers swallow PostgREST errors — see #85.
+
 ---
 
 ### Item #76: Nine deployed edge functions write activity types the CHECK constraint rejects — audit rows silently dropped since 2026-05-08
@@ -1677,5 +1679,15 @@ green.
 **Severity:** Medium (member-only exposure, chain-resolution logic only; the resulting writes are system-attributed). ACCEPTED RESIDUAL per product-owner decision 2026-06-13 — filed, not fixed, because gating requires overriding the standing Phase 7 redeploy deferral.
 
 **Stub remediation:** When Phase 7 A4 remediation is eventually executed, add the `checkWorkspaceLive` gate (pattern: any gated chain function, e.g. `act-on-chain-step`) to the repo file in the same change and redeploy. Until then this is the one knowingly open mutator in the Vault V1 read-only surface.
+
+---
+
+### Item #85: LeaseReview secondary writers swallow PostgREST errors (optimistic UI lies on rejected writes)
+
+**Symptom:** `src/pages/app/LeaseReview.tsx` — `handleConfirmTab` (~:1326), `handleConfirmSection` (~:1206), `handleConfirmAndAdvance` (~:1266), and `trackFieldCorrection` (~:1176) ignore the PostgREST `error` object. With Vault V1's restrictive `WITH CHECK` policies, a grace-workspace user unmarking an approved tab gets "Tab reopened" while the DB rejected the write (42501); section-confirm state diverges optimistically; `field_corrections` inserts drop silently. The main save handler (~:1588) does it right — destructure, throw, toast.
+
+**Severity:** Medium (UI/DB drift for non-live workspaces; live workspaces unaffected). Filed by lease-repository-integrity-reviewer round 2 of Vault V1 (2026-06-13).
+
+**Stub remediation:** Destructure and surface `error` in each of the four writers, matching the ~:1588 pattern. Frontend-only commit; route through auditor + security + polish (user-facing error copy).
 
 ---
