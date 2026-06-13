@@ -383,6 +383,13 @@ When you're ready:
 
 **Why it's not urgent:** No customer can reach a Vault conversion until you decide to surface it as an offramp, and the code fails closed without the ID. But it IS a prerequisite for the first real cancellation-save — do it before you expect customers to start churning.
 
+### Companion: schedule the Vault renewal-reminder cron (V4)
+
+The `vault-renewal-reminder` edge function emails a Vault owner ~14 days before the annual $249 renews (no-surprise-billing). It's deployed but does nothing until scheduled + given its secret:
+1. `supabase secrets set VAULT_RENEWAL_CRON_SECRET='<32+ char random>'` (same style as the other cron secrets).
+2. Schedule a DAILY invocation (same mechanism as the other crons — e.g. the pg_cron / scheduled-function setup used for `process-cancellation-lifecycle`), POSTing with header `x-cron-secret: <that secret>`. Daily is correct: the `vault_renewal_reminders` ledger makes it send exactly once per renewal period regardless of how many days it runs inside the 14-day window.
+3. Fails safe until scheduled: no scheduler → no reminders (Stripe's own dunning still drives a failed renewal into the existing cancellation lifecycle), and a missing secret → 401.
+
 ---
 
 
