@@ -335,11 +335,14 @@ describe('Leases archived visibility', () => {
   const archivedBranch = block.slice(0, elseIdx);
   const defaultBranch = block.slice(elseIdx);
 
-  it('showArchived branch ORs in lifecycle_status.is.null so archived failed/processing leases are reachable', () => {
+  it('showArchived branch shows ONLY archived leases and ORs in lifecycle_status.is.null', () => {
     expect(elseIdx).toBeGreaterThan(0);
+    // #91: the archived view filters to archived rows only...
+    expect(archivedBranch).toContain(".eq('archived', true)");
+    // ...while still ORing in NULL lifecycle_status so archived failed/
+    // processing leases and amendments remain reachable to restore.
     expect(archivedBranch).toContain('lifecycle_status.is.null');
-    expect(archivedBranch).toContain('query.or(');
-    // The archived view must NOT filter archived rows out.
+    expect(archivedBranch).toContain('.or(');
     expect(archivedBranch).not.toContain(".eq('archived', false)");
   });
 
