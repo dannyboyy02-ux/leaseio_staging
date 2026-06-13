@@ -1711,3 +1711,23 @@ green.
 **Stub remediation:** Either split the name update out of `handleSaveGeneral` when non-live, or gate the General form (and the rest of WorkspaceSettings) client-side on `isReadOnlyRetention`/grace state as part of the V4 read-only UI pass. Until then, the inline rename remains the working path.
 
 ---
+
+### Item #88: Vault dashboard still shows intake-oriented widgets with live CTAs
+
+**Symptom:** On a Vault (read-only) workspace the Dashboard top-level "New Request" CTA is hidden and the VaultBanner explains the read-only state, but the dashboard BODY widgets (NeedsAction, LeasePipeline, etc.) still render and some of their inline items link to create/approve flows that can't run on a read-only workspace. The felt experience is a half-disabled cockpit rather than a clean archive. Server backstop blocks any write; this is UX completeness, not a data risk.
+
+**Severity:** Medium (UX). Filed during Vault V4 polish review (2026-06-13); deliberately deferred from the V4 hardening round (diffuse, lower-priority than the LeaseReview/billing surfaces which were fixed).
+
+**Stub remediation:** Thread a read-only signal into the Dashboard widgets (or gate per-widget create/approve CTAs on `isReadOnlyRetention`), so NeedsAction/pipeline items render view-only for Vault. Consider a "read-only archive" empty-affordance treatment.
+
+---
+
+### Item #89: Vault renewal-reminder email is English-only
+
+**Symptom:** `supabase/functions/vault-renewal-reminder/index.ts` hard-codes English copy and `en-US` date formatting for the ~14-day renewal reminder, even though the owner may be a Spanish-locale user. Every other user-facing surface is bilingual.
+
+**Severity:** Low. Filed during Vault V4 polish review (2026-06-13).
+
+**Stub remediation:** Branch the subject/body/date-format on the owner's profile/workspace locale if available (the cancellation-lifecycle emails share the same English-only limitation — consider a shared bilingual email helper). Content itself is clear and correctly framed; this is i18n completeness only.
+
+---
