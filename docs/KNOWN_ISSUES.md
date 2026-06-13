@@ -1788,6 +1788,8 @@ green.
 
 **Stub remediation:** Move delete-workspace's forensic `deleted_workspaces` insert to BEFORE the destructive deletes (mirror the cron), aborting the delete if the forensic insert fails — so destruction is never unattributable.
 
+**RESOLVED 2026-06-13** — delete-workspace (v23 deployed) reordered to match the cron: forensic `deleted_workspaces` row inserted BEFORE the lease/workspace deletes (aborts 500 `forensic_insert_failed` on a non-duplicate error; resumes on the unique-index duplicate), storage purge moved LAST, `storage_objects_purged` backfilled. Pre-deploy integrity review: DEPLOY (no findings).
+
 ---
 
 ### Item #94: UploadExecutedDocumentDialog sets lifecycle_status='executed' client-side without status_changed_at or an activity-log row
