@@ -38,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ANNUAL_DISCOUNT_PERCENT, PLANS, isUpgrade, normalizePlanId } from '@/config/pricing';
+import { ANNUAL_DISCOUNT_PERCENT, PLANS, isUpgrade, isReadOnlyRetention, normalizePlanId } from '@/config/pricing';
 import { trialDaysRemaining } from '@/lib/trialStatus';
 import { DocumentPackDialog } from '@/components/workspace/DocumentPackDialog';
 import type { SubscriptionPlan } from '@/types';
@@ -1446,10 +1446,15 @@ export default function AccountSettings() {
           </AlertDialogHeader>
           {/* Vault offramp (VAULT_TIER_SPEC.md V3): convert-at-grace model —
               the actual $249/yr Vault checkout lives on the grace banner once
-              the plan ends, so here we only set the expectation. */}
-          <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-            {t('account.cancel_vault_note')}
-          </div>
+              the plan ends, so here we only set the expectation. Hidden when
+              the workspace is ALREADY on Vault (a Vault sub is 'active', so
+              this cancel card renders — offering Vault to someone on Vault
+              would contradict itself; polish review 2026-06-13). */}
+          {!isReadOnlyRetention(workspace?.plan) && (
+            <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+              {t('account.cancel_vault_note', { price: PLANS.vault.price.annual })}
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
             {/* CTA names the actual action — clicking opens the Stripe

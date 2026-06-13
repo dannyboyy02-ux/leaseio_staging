@@ -13,13 +13,16 @@
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Download, Sparkles, Archive } from 'lucide-react';
+import { AlertTriangle, Download, Sparkles, Archive, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { graceDaysRemaining } from '@/lib/cancellationLifecycle';
+import { PLANS } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+const VAULT_PRICE = PLANS.vault.price.annual;
 
 export function CancellationBanner() {
   const { workspace, userRole } = useApp();
@@ -40,15 +43,31 @@ export function CancellationBanner() {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: { planId: 'vault', workspaceId: workspace.id },
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        // supabase-js collapses any non-2xx into a FunctionsHttpError and
+        // nulls `data`, so the server's reason ('vault_not_configured' when
+        // the Stripe price isn't set; 'vault_owner_only') is only reachable
+        // via the response body. A config/permission failure will NEVER
+        // succeed on retry, so it must route to support, not "try again."
+        let reason: string | undefined;
+        try {
+          // deno-lint-ignore no-explicit-any
+          reason = (await (error as any)?.context?.json?.())?.reason;
+        } catch { /* body not JSON / unavailable — fall through to generic */ }
+        throw new Error(
+          reason === 'vault_not_configured' || reason === 'vault_owner_only'
+            ? t('cancellation.vault_unavailable')
+            : t('cancellation.vault_failed'),
+        );
+      }
+      if (data?.error) throw new Error(t('cancellation.vault_failed'));
       if (data?.url) {
         // Same-tab redirect — a post-await window.open is popup-blocked.
         window.location.href = data.url;
       }
     } catch (err) {
       console.error('Vault checkout failed:', err);
-      toast.error(t('cancellation.vault_failed'));
+      toast.error(err instanceof Error ? err.message : t('cancellation.vault_failed'));
     } finally {
       setVaultLoading(false);
     }
@@ -85,8 +104,14 @@ export function CancellationBanner() {
           disabled={vaultLoading}
           onClick={handleVaultCheckout}
         >
-          <Archive className="h-3.5 w-3.5 mr-1.5" />
-          {t('cancellation.vault_cta')}
+          {vaultLoading ? (
+            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <Archive className="h-3.5 w-3.5 mr-1.5" />
+          )}
+          {vaultLoading
+            ? t('cancellation.vault_redirecting')
+            : t('cancellation.vault_cta', { price: VAULT_PRICE })}
         </Button>
       )}
       {isAdmin && (
@@ -132,6 +157,14 @@ export function SoftDeletedWall() {
             </a>
           </Button>
         </div>
+        {/* Vault is a grace-window offramp (ratified 2026-06-13); once
+            soft-deleted, renewing is the only path. Stating it avoids a
+            silent "where did the Vault option go" dead-end. */}
+        {isAdmin && (
+          <p className="mt-4 text-xs text-muted-foreground">
+            {t('cancellation.wall_vault_note')}
+          </p>
+        )}
       </div>
     </div>
   );

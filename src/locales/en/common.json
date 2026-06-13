@@ -676,7 +676,7 @@
     "credits_balance_one": "{{count}} credit available",
     "credits_balance_other": "{{count}} credits available",
     "cancel_confirm_cta": "Open billing portal",
-    "cancel_vault_note": "Prefer to keep your records? When your plan ends, the workspace owner can switch to read-only Vault ($249/yr) — full export, nothing deleted — instead of losing the workspace."
+    "cancel_vault_note": "Prefer to keep your records? When your plan ends, the workspace owner can switch to read-only Vault (${{price}}/yr) — full export, nothing deleted — instead of losing the workspace."
   },
   "packs": {
     "pack_10": "10-lease pack",
@@ -1669,7 +1669,10 @@
     "wall_desc": "The 30-day view-and-export window for \"{{name}}\" is over and the workspace is scheduled for permanent deletion. Renewing before deletion restores everything in full.",
     "wall_ask_admin": "Ask a workspace admin to renew the subscription.",
     "contact_support": "Contact support",
-    "vault_cta": "Keep your data — Vault $249/yr",
-    "vault_failed": "Couldn't start Vault checkout. Please try again."
+    "vault_cta": "Keep your data — Vault ${{price}}/yr",
+    "vault_failed": "Couldn't start Vault checkout. Please try again.",
+    "vault_redirecting": "Redirecting…",
+    "vault_unavailable": "Vault isn't available right now — please contact support@theleaseio.com to keep your data.",
+    "wall_vault_note": "The Vault retention option was available during the grace window. Renewing is the only way to restore access now."
   }
 }
