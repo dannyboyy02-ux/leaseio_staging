@@ -5,6 +5,7 @@ import {
   PLANS,
   PLAN_ORDER,
   getPlanIndex,
+  isReadOnlyRetention,
   isUpgrade,
   normalizePlanId,
 } from '../../config/pricing';
@@ -66,6 +67,36 @@ describe('normalizePlanId recognizes vault without disturbing legacy coercion', 
     expect(normalizePlanId('')).toBe('starter');
     // Case-sensitive contract: the DB stores lowercase; anything else is unknown.
     expect(normalizePlanId('Vault')).toBe('starter');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. isReadOnlyRetention — the single predicate gating read-only behaviour
+//     (Vault V3). It is plan-driven via PLANS[plan].readOnly, so it stays in
+//     lockstep with the PLANS.vault.readOnly invariant above and never needs a
+//     hardcoded 'vault' literal at call sites.
+// ---------------------------------------------------------------------------
+
+describe('isReadOnlyRetention', () => {
+  it("returns true for 'vault'", () => {
+    expect(isReadOnlyRetention('vault')).toBe(true);
+  });
+
+  it("returns false for the paid plans 'starter' and 'business'", () => {
+    expect(isReadOnlyRetention('starter')).toBe(false);
+    expect(isReadOnlyRetention('business')).toBe(false);
+  });
+
+  it('returns false for null and undefined (no plan = not read-only)', () => {
+    expect(isReadOnlyRetention(null)).toBe(false);
+    expect(isReadOnlyRetention(undefined)).toBe(false);
+  });
+
+  it('is derived from PLANS[plan].readOnly, not a hardcoded literal', () => {
+    // Pins the data path: the predicate is true exactly for plans whose config
+    // marks them readOnly. A future read-only plan would be covered for free;
+    // dropping readOnly from vault would (correctly) flip this to false.
+    expect(isReadOnlyRetention('vault')).toBe(PLANS.vault.readOnly === true);
   });
 });
 
@@ -230,6 +261,195 @@ describe('Vault parity across mirrors', () => {
     for (const key of keys) {
       expect(typeof lookup(en, key), `en missing ${key}`).toBe('string');
       expect(typeof lookup(es, key), `es missing ${key}`).toBe('string');
+    }
+  });
+});
+
+// ===========================================================================
+// Vault V3 — conversion flows (commits 5d5c345 + c050052).
+// Static-source assertions on the checkout edge function, the webhook
+// pack-retirement block, the new read-only config-guard migration, and the
+// new locale keys. Same narrowed-window discipline as above.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// 6. create-checkout static-source — Vault price wiring + owner-only gate
+// ---------------------------------------------------------------------------
+
+describe('create-checkout Vault wiring (static source)', () => {
+  const CHECKOUT = 'supabase/functions/create-checkout/index.ts';
+  const src = read(CHECKOUT);
+
+  it("PRICE_IDS.vault has no monthly and sources annual from STRIPE_PRICE_VAULT_ANNUAL", () => {
+    const block = window(src, 'const PRICE_IDS', 'type PlanId');
+    // Scope to the vault entry specifically (the file also reads STARTER/BUSINESS
+    // annual env vars — match the vault block, not the file).
+    const vault = window(block, 'vault: {', '},');
+    expect(vault).toContain('monthly: null');
+    expect(vault).toContain('Deno.env.get("STRIPE_PRICE_VAULT_ANNUAL")');
+  });
+
+  it('forces billingInterval to annual when the plan is vault (yearly-only)', () => {
+    const block = window(src, 'const isVault = planId === "vault"', 'const priceId');
+    // Vault must ignore any requested interval and bill annually.
+    expect(block).toContain('isVault\n      ? "annual"');
+  });
+
+  it("missing vault price fails closed with 503 vault_not_configured", () => {
+    const block = window(src, 'if (!priceId) {', 'const authHeader');
+    expect(block).toContain('reason: isVault ? "vault_not_configured" : "annual_not_configured"');
+    expect(block).toContain('status: 503');
+  });
+
+  it('owner-only gate: non-owner vault conversion returns 403 vault_owner_only', () => {
+    // The block runs AFTER the admin-can-manage-billing check, so an admin who
+    // could otherwise manage billing is still blocked from converting to Vault.
+    const block = window(
+      src,
+      'if (isVault && workspace.owner_id !== user.id) {',
+      'const stripe = new Stripe',
+    );
+    expect(block).toContain('reason: "vault_owner_only"');
+    expect(block).toContain('status: 403');
+  });
+
+  it('no trial on the vault branch — trial_period_days only on the non-vault path', () => {
+    const block = window(src, 'subscription_data: {', 'metadata: {');
+    // The spread is empty for vault, trial only for real plans.
+    expect(block).toContain('...(isVault ? {} : { trial_period_days: TRIAL_PERIOD_DAYS })');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. stripe-webhook static-source — Vault pack-retirement block
+// ---------------------------------------------------------------------------
+
+describe('stripe-webhook Vault pack-retirement (static source)', () => {
+  const WEBHOOK = 'supabase/functions/stripe-webhook/index.ts';
+  const src = read(WEBHOOK);
+
+  // The retirement block runs from the entitled+vault guard up to the next
+  // function declaration after it.
+  function retirementBlock(): string {
+    return window(
+      src,
+      'if (entitled && effectivePlan === "vault") {',
+      'async function applyDocumentPack',
+    );
+  }
+
+  it('only fires when the workspace is entitled AND on the vault plan', () => {
+    expect(retirementBlock()).toContain('if (entitled && effectivePlan === "vault") {');
+  });
+
+  it('targets only active/trialing document packs for THIS workspace not already flagged', () => {
+    const block = retirementBlock();
+    expect(block).toContain('s.metadata?.addon_type === ADDON_TYPE_DOCUMENT_PACK');
+    expect(block).toContain('s.metadata?.workspace_id === workspaceId');
+    expect(block).toContain('s.status === "active" || s.status === "trialing"');
+    // Idempotency guard: skip packs already flagged so a redelivered event is a no-op.
+    expect(block).toContain('!s.cancel_at_period_end');
+  });
+
+  it('retires matched packs via cancel_at_period_end (period-close, not immediate)', () => {
+    const block = retirementBlock();
+    expect(block).toContain('await stripe.subscriptions.update(s.id, { cancel_at_period_end: true })');
+  });
+
+  it('is best-effort: a Stripe error is caught, not allowed to 500 the webhook', () => {
+    const block = retirementBlock();
+    expect(block).toContain('} catch (packErr) {');
+    expect(block).not.toContain('throw');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. read-only config-guard migration (static source)
+// ---------------------------------------------------------------------------
+
+describe('read-only workspace config-guard migration (static source)', () => {
+  const MIGRATION =
+    'supabase/migrations/20260613010000_readonly_workspace_config_guard.sql';
+  const src = read(MIGRATION);
+
+  // Narrow to the function body (CREATE FUNCTION ... up to the COMMENT) so the
+  // header prose / COMMENT inventory can't satisfy assertions about behaviour.
+  const fn = window(
+    src,
+    'CREATE OR REPLACE FUNCTION public.prevent_readonly_workspace_config_edits()',
+    'COMMENT ON FUNCTION',
+  );
+
+  it('bypasses wholesale for service_role (the legitimate conversion writer)', () => {
+    expect(fn).toContain("IF COALESCE(auth.role(), '') = 'service_role' THEN");
+    expect(fn).toContain('RETURN NEW;');
+  });
+
+  it('returns early (no guard) when the workspace is LIVE', () => {
+    // Live = not canceled, not soft-deleted, not vault — read from the OLD row.
+    expect(fn).toContain('IF OLD.canceled_at IS NULL');
+    expect(fn).toContain('AND OLD.soft_deleted_at IS NULL');
+    expect(fn).toContain("AND COALESCE(OLD.plan, '') <> 'vault' THEN");
+  });
+
+  it('guards both a report config column and a financial config column (spot-check)', () => {
+    // Spot-check two representatives of the frozen config set; the full
+    // inventory lives in the migration COMMENT (deliberately not re-asserted
+    // here, since it would be self-referential against the same source).
+    expect(fn).toContain('NEW.discount_rate                    IS DISTINCT FROM OLD.discount_rate');
+    expect(fn).toContain('NEW.report_organization_name         IS DISTINCT FROM OLD.report_organization_name');
+  });
+
+  it('raises check_violation on a disallowed change', () => {
+    expect(fn).toContain("USING ERRCODE = 'check_violation'");
+  });
+
+  it('installs a BEFORE UPDATE row trigger on public.workspaces', () => {
+    const trig = window(src, 'CREATE TRIGGER enforce_workspace_readonly_config_guard', '$$');
+    expect(trig.length).toBeGreaterThan(0);
+    // The trigger declaration itself (after the function body).
+    const decl = src.slice(src.indexOf('CREATE TRIGGER enforce_workspace_readonly_config_guard'));
+    expect(decl).toContain('BEFORE UPDATE ON public.workspaces');
+    expect(decl).toContain('FOR EACH ROW EXECUTE FUNCTION public.prevent_readonly_workspace_config_edits()');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. Locale parity — Vault V3 cancellation/account keys resolve in both locales
+// ---------------------------------------------------------------------------
+
+describe('Vault V3 conversion-flow locale keys', () => {
+  type LocaleTree = { [k: string]: string | LocaleTree };
+  const en = JSON.parse(read('src/locales/en/common.json')) as LocaleTree;
+  const es = JSON.parse(read('src/locales/es/common.json')) as LocaleTree;
+  const lookup = (tree: LocaleTree, key: string): unknown =>
+    key.split('.').reduce<unknown>(
+      (node, part) =>
+        node && typeof node === 'object' ? (node as LocaleTree)[part] : undefined,
+      tree,
+    );
+
+  const keys = [
+    'cancellation.vault_cta',
+    'cancellation.vault_redirecting',
+    'cancellation.vault_unavailable',
+    'cancellation.wall_vault_note',
+    'account.cancel_vault_note',
+  ];
+
+  it('every new key resolves to a string in BOTH en and es', () => {
+    for (const key of keys) {
+      expect(typeof lookup(en, key), `en missing ${key}`).toBe('string');
+      expect(typeof lookup(es, key), `es missing ${key}`).toBe('string');
+    }
+  });
+
+  it('the price-bearing keys carry the {{price}} interpolation token in both locales', () => {
+    // vault_cta and cancel_vault_note render "$249/yr" via interpolation —
+    // a hardcoded number in either locale would silently drift from pricing.ts.
+    for (const key of ['cancellation.vault_cta', 'account.cancel_vault_note']) {
+      expect(lookup(en, key) as string, `en ${key} {{price}}`).toContain('{{price}}');
+      expect(lookup(es, key) as string, `es ${key} {{price}}`).toContain('{{price}}');
     }
   });
 });
