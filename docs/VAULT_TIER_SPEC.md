@@ -47,6 +47,21 @@ cross-referenced for Vault).
   `document_limit` untouched (intake is frozen anyway; backstops gate on plan),
   clear cancellation-lifecycle columns on conversion (it's an active sub).
 
+**V2 as-built (2026-06-13):** `'vault'` in `SubscriptionPlan` (single source:
+pricing.ts, re-exported by types/index.ts), `PLANS.vault` ($249/yr,
+ownerOnly/readOnly/yearlyOnly), `PLAN_ORDER` exclusion, `normalizePlanId`;
+stripe-webhook recognizes Vault subs (metadata or `STRIPE_PRICE_VAULT_ANNUAL`),
+leaves `document_limit` untouched (path-dependent + meaningless under vault —
+consumers gate on plan), clears lifecycle on entitled, writes a `plan_changed`
+audit row, fails loudly (500) on unresolvable entitled subs, and carries the
+C2 entitled-event guard (consent via checkout.session.completed; session +
+subscription metadata both stamped). #29 guard verified value-agnostic; INSERT
+default verified 'starter'. Five review passes (auditor, security, integrity,
+test-author, then a webhook verification round that caught a CRITICAL dead
+consent channel — fixed + regression-pinned). stripe-webhook v25 +
+create-checkout v43 deployed. 720/720. OPERATOR ITEM: create the Vault Stripe
+Product + yearly Price (live + sandbox) and set `STRIPE_PRICE_VAULT_ANNUAL`.
+
 ### V3 — Conversion flows
 
 **Pre-V3 blockers recorded during V2 review (2026-06-13):**
