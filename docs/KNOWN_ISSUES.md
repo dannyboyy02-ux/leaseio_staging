@@ -1620,6 +1620,8 @@ green.
 
 **Stub remediation:** BEFORE UPDATE trigger on archive-column transitions: require admin/owner, stamp `archived_by = auth.uid()` and `archived_at = now()` server-side (disjoint-columns pattern; inventory existing triggers first per CLAUDE.md). Same family: "Users can create activity entries" INSERT policy allows any member to forge ANY activity_type with `user_id` self-or-NULL — constrain client-insertable types to an allowlist in the same pass.
 
+**PARTIALLY RESOLVED 2026-06-13** — archive half shipped: migration `20260613040000_lease_archive_attribution_guard.sql` (BEFORE UPDATE trigger requiring admin/owner to toggle `archived`, stamping `archived_by`/`archived_at` server-side; disjoint from the model-lock + workflow guards). The activity-type allowlist half is split out as **#90** (needs per-type adjudication).
+
 **Addendum (2026-06-12, lease-security-scanner reviewing 3b9ec87):** the #76 remediation widened the CHECK with 12 writer values, all of which are written EXCLUSIVELY by edge functions (service role) — the allowlist remediation above must exclude every one of them from client-insertable types. Priority subset: dashboard-consumed types, where a forged row drives admin action — `policy_assignee_validation_failed` and `stuck_chain_detected` both render as exception alerts in `ExceptionsDashboard.tsx` (:97, :104); a member-forged "validation failed" row (user_id NULL = system-attributed) can induce an admin to reassign/override a healthy chain step.
 
 ---
@@ -1733,5 +1735,15 @@ green.
 **Severity:** Low. Filed during Vault V4 polish review (2026-06-13).
 
 **Stub remediation:** Branch the subject/body/date-format on the owner's profile/workspace locale if available (the cancellation-lifecycle emails share the same English-only limitation — consider a shared bilingual email helper). Content itself is clear and correctly framed; this is i18n completeness only.
+
+---
+
+### Item #90: lease_activity_log INSERT policy allows any activity_type + forged system attribution (split from #78)
+
+**Symptom:** The "Users can create activity entries" INSERT policy on `lease_activity_log` is `WITH CHECK (((user_id = auth.uid()) OR (user_id IS NULL)) AND <member-of-lease's-workspace>)`. So any workspace member can insert a row with ANY of the ~100 constraint activity_types AND `user_id = NULL` (system attribution) via direct PostgREST. The dashboard-consumed types are the sharp edge (#78 addendum): a member-forged `policy_assignee_validation_failed` / `stuck_chain_detected` row (NULL user_id = system-attributed) renders as an exception alert in `ExceptionsDashboard.tsx` and can induce an admin to reassign/override a healthy chain step. The 12 dead renamed types (#82) and every edge-function-exclusive writer type must be excluded from any client allowlist.
+
+**Severity:** High (forgeable audit history + admin-misleading alerts in an audit-defensible product). Split from #78 (2026-06-13) — the archive half shipped as migration `20260613040000`; this half needs per-type adjudication across the ~100-value constraint and the ~10 client insert sites, so it's its own deliberate pass, not a same-migration rush.
+
+**Stub remediation:** Security migration (reviewer routing BEFORE push). Enumerate every client insert site (grep `lease_activity_log` in `src/` — currently ~10 sites writing ~18 types) and confirm which types clients legitimately write directly vs. should be moved to an edge function (e.g. `status_change`/`approval` arguably belong server-side, cf. #32). Then narrow the INSERT policy WITH CHECK to `user_id = auth.uid()` (drop the NULL option) AND `activity_type = ANY(<client allowlist>)`. Verify no legitimate client flow breaks (each currently-written type stays allowed or is rerouted) before applying. Add a static/smoke test pinning the allowlist.
 
 ---
