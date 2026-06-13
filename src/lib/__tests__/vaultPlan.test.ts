@@ -405,10 +405,11 @@ describe('read-only workspace config-guard migration (static source)', () => {
   });
 
   it('installs a BEFORE UPDATE row trigger on public.workspaces', () => {
-    const trig = window(src, 'CREATE TRIGGER enforce_workspace_readonly_config_guard', '$$');
-    expect(trig.length).toBeGreaterThan(0);
-    // The trigger declaration itself (after the function body).
-    const decl = src.slice(src.indexOf('CREATE TRIGGER enforce_workspace_readonly_config_guard'));
+    // The trigger declaration lives after the function body (and its closing
+    // $$), so slice from the CREATE TRIGGER to the end of the file.
+    const idx = src.indexOf('CREATE TRIGGER enforce_workspace_readonly_config_guard');
+    expect(idx, 'CREATE TRIGGER not found').toBeGreaterThanOrEqual(0);
+    const decl = src.slice(idx);
     expect(decl).toContain('BEFORE UPDATE ON public.workspaces');
     expect(decl).toContain('FOR EACH ROW EXECUTE FUNCTION public.prevent_readonly_workspace_config_edits()');
   });
