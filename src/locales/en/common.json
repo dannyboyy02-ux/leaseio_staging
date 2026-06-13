@@ -1139,12 +1139,14 @@
     "starter": "Starter",
     "pro": "Pro",
     "business": "Business",
+    "vault": "Vault",
     "plan": "Plan",
     "upgrade": "Upgrade",
     "description": {
       "free": "For small teams getting started with lease visibility",
       "starter": "For finance teams that need lease awareness and control",
-      "business": "For organizations that need full lease lifecycle management"
+      "business": "For organizations that need full lease lifecycle management",
+      "vault": "Read-only retention for your lease repository — view and export everything, $249/year."
     },
     "feature": {
       "1_lease": "1 lease document",
@@ -1185,7 +1187,10 @@
       "3_users": "Up to 3 users",
       "ai_assistant": "Embedded AI assistant (Ask Claude)",
       "portfolio_intelligence": "Portfolio intelligence",
-      "amendment_comparison": "Amendment comparison"
+      "amendment_comparison": "Amendment comparison",
+      "vault_read_only": "Read-only repository — view everything you stored",
+      "vault_full_export": "Full export available at all times",
+      "vault_owner_only": "Owner-only access"
     }
   },
   "auth": {

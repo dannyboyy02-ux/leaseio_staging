@@ -10,6 +10,9 @@
 export const WORKSPACE_LIMITS: Record<string, number> = {
   starter: 1,
   business: 10,
+  // Vault is a read-only retention state, not a growth plan — a Vault owner
+  // cannot create additional workspaces on it (VAULT_TIER_SPEC.md V2).
+  vault: 0,
 };
 
 // Business monthly price — must match stripe-webhook PRICE_IDS.business and the

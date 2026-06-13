@@ -29,15 +29,26 @@ const DOCUMENT_LIMITS: Record<string, number> = {
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
-function validPlan(plan: unknown): plan is "starter" | "business" {
-  return plan === "starter" || plan === "business";
+type Plan = "starter" | "business" | "vault";
+
+function validPlan(plan: unknown): plan is Plan {
+  return plan === "starter" || plan === "business" || plan === "vault";
 }
 
-function resolvePlan(subscription: Stripe.Subscription): "starter" | "business" {
+// Vault retention tier (VAULT_TIER_SPEC.md V2): yearly Price ID from env —
+// the operator creates the Stripe Product/Price first, same pattern as the
+// annual plan prices. Metadata recognition in resolvePlan works even when
+// unset (checkout-created Vault subs carry plan_id='vault'), so this is a
+// second detection path, not a single point of failure; the V3 checkout
+// path fails closed when it is unset.
+const VAULT_PRICE_ID = Deno.env.get("STRIPE_PRICE_VAULT_ANNUAL") ?? null;
+
+function resolvePlan(subscription: Stripe.Subscription): Plan {
   const metadataPlan = subscription.metadata?.plan_id;
   if (validPlan(metadataPlan)) return metadataPlan;
 
   const priceId = subscription.items.data[0]?.price?.id;
+  if (VAULT_PRICE_ID && priceId === VAULT_PRICE_ID) return "vault";
   const matchedPlan = Object.entries(PRICE_IDS).find(([, id]) => id === priceId)?.[0];
   return validPlan(matchedPlan) ? matchedPlan : "starter";
 }
@@ -172,11 +183,20 @@ serve(async (req) => {
       )).toISOString();
     }
 
+    // Vault (V2): document_limit is deliberately left untouched — intake is
+    // frozen by the Vault V1 read-only layer regardless, and preserving the
+    // prior limit keeps the workspace's shape intact for a later
+    // reactivation. (DOCUMENT_LIMITS has no vault key; writing
+    // DOCUMENT_LIMITS['vault'] would null the column.) An entitled Vault sub
+    // clears the cancellation lifecycle via the `entitled` branch above —
+    // it IS an active subscription.
     const { error } = await supabaseAdmin
       .from("workspaces")
       .update({
         plan: effectivePlan,
-        document_limit: DOCUMENT_LIMITS[effectivePlan],
+        ...(effectivePlan === "vault"
+          ? {}
+          : { document_limit: DOCUMENT_LIMITS[effectivePlan] }),
         billing_interval: resolveInterval(subscription),
         stripe_customer_id: resolveCustomerId(subscription),
         stripe_subscription_id: subscription.id,

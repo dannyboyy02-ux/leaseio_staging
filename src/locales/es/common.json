@@ -1139,12 +1139,14 @@
     "starter": "Inicial",
     "pro": "Pro",
     "business": "Business",
+    "vault": "Vault",
     "plan": "Plan",
     "upgrade": "Actualizar",
     "description": {
       "free": "Para equipos pequeños que inician con visibilidad de arrendamientos",
       "starter": "Para equipos de finanzas que necesitan visibilidad y control de arrendamientos",
-      "business": "Para organizaciones que necesitan gestión completa del ciclo de vida"
+      "business": "Para organizaciones que necesitan gestión completa del ciclo de vida",
+      "vault": "Retención de solo lectura para su repositorio de contratos: vea y exporte todo, $249/año."
     },
     "feature": {
       "1_lease": "1 documento de arrendamiento",
@@ -1185,7 +1187,10 @@
       "3_users": "Hasta 3 usuarios",
       "ai_assistant": "Asistente de IA integrado (Ask Claude)",
       "portfolio_intelligence": "Inteligencia de portafolio",
-      "amendment_comparison": "Comparación de enmiendas"
+      "amendment_comparison": "Comparación de enmiendas",
+      "vault_read_only": "Repositorio de solo lectura: vea todo lo que almacenó",
+      "vault_full_export": "Exportación completa disponible en todo momento",
+      "vault_owner_only": "Acceso solo para el propietario"
     }
   },
   "auth": {
