@@ -29,14 +29,6 @@
 --                            ("your repository, exportable") and grace keeps
 --                            view+export open. Gating exports = bug by
 --                            definition (VAULT_TIER_SPEC invariants).
---   lease_activity_log     — CARVE-OUT, same reasoning as
---                            workspace_activity_log below: append-only audit
---                            tables stay writable so the actions that remain
---                            legitimately open keep their attributable trail.
---                            (lease_attribute_snapshots, lease_reroute_events,
---                            chain_step_overrides, chain_step_voluntary_-
---                            delegations are SELECT-only to clients — nothing
---                            to restrict.)
 --   workspace_activity_log — CARVE-OUT (integrity review round 1 CRITICAL):
 --                            the actions that legitimately remain open below
 --                            (rename, member removal) write their audit rows
@@ -63,6 +55,15 @@
 --   profiles, user_preferences, user_out_of_office, dismissed_events
 --                          — personal/user scope, not workspace lease data.
 --   vendor_alert_log       — operator tooling.
+--   lease_attribute_snapshots, lease_reroute_events, chain_step_overrides,
+--   chain_step_voluntary_delegations — SELECT-only to clients (service-role
+--                            write paths); nothing to restrict.
+--
+-- NOTE lease_activity_log IS gated (in the loop below) — unlike
+-- workspace_activity_log, security review round 2 verified no surviving
+-- client flow needs its INSERT in a non-live workspace (every client writer
+-- logs after a parent mutation that is itself gated); leaving it open would
+-- only permit fabricating audit history in a frozen repository.
 --   summary_views, classification_corrections, lease_insights,
 --   lease_governance_audit, processing_rate_limits — already service-role
 --                            or token-gated write paths; nothing to restrict.
@@ -140,6 +141,7 @@ BEGIN
       ('workspace_approvers',    'workspace_id'),
       ('workspace_roles',        'workspace_id'),
       -- lease_id-keyed
+      ('lease_activity_log',      'lease_id'),
       ('rent_schedules',          'lease_id'),
       ('risks',                   'lease_id'),
       ('executed_term_edits',     'lease_id'),
@@ -323,3 +325,12 @@ BEGIN
     );
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+-- ── 5. Indexes for the storage liveness subqueries (security round 2 LOW) ──
+-- The leases/executed-leases bucket policies join on these paths; without
+-- indexes every gated storage UPDATE/DELETE seq-scans leases.
+
+CREATE INDEX IF NOT EXISTS idx_leases_storage_path
+  ON public.leases (storage_path);
+CREATE INDEX IF NOT EXISTS idx_leases_executed_storage_path
+  ON public.leases (executed_storage_path);

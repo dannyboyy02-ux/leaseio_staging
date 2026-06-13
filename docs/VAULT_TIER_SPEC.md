@@ -22,6 +22,20 @@ The foundation, and it hardens the existing grace window for free.
   **Security migration — reviewer routing BEFORE db push, expect 3+ rounds.**
 - Read + export paths stay open; `transfer-workspace-ownership` stays open.
 
+**As-built (2026-06-13):** migration `20260613000000_vault_v1_readonly_enforcement.sql`
+(restrictive RLS over 23 tables + storage.objects; `is_workspace_live` /
+`is_lease_live` helpers) + `_shared/workspace_live.ts` gates across all
+user-invokable mutators, liveness skips in the crons, and full-liveness
+backstops in `process_lease`/`retry_lease`/`manage-document-pack`. Three
+review rounds (security + integrity), both APPROVED. **Accepted residuals:**
+(a) DELETE is a silent zero-row no-op (no DELETE WITH CHECK in Postgres) —
+documented in the migration header; (b) `resolve-approval-chain`'s frozen
+pre-Phase-7 deployment is un-gateable while its redeploy stays deferred —
+KNOWN_ISSUES #84, the one knowingly open mutator; (c) unreferenced
+`leases`/`executed-leases` storage objects stay writable (storage spend
+only). Owner workspace hard-DELETE forensics gap filed as #83 (pre-existing,
+cross-referenced for Vault).
+
 ### V2 — Plan plumbing
 - `SubscriptionPlan` → `'starter' | 'business' | 'vault'`; `normalizePlanId`;
   `PLANS` config (yearly interval, $249, ownerOnly + readOnly flags).

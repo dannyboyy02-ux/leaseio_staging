@@ -1666,6 +1666,16 @@ green.
 
 **Severity:** High (unattributable destruction of the audit-defensible repository). Filed by lease-repository-integrity-reviewer reviewing 69fdc2e (2026-06-13).
 
-**Stub remediation:** Drop the permissive DELETE policy in favor of the `delete-workspace` edge function (which writes the forensic row), or add a restrictive DELETE policy on `workspaces` denying client deletes outright. Security migration — reviewer routing BEFORE push. Verify the delete-account flow doesn't depend on the client-side DELETE first.
+**Stub remediation:** Drop the permissive DELETE policy in favor of the `delete-workspace` edge function (which writes the forensic row), or add a restrictive DELETE policy on `workspaces` denying client deletes outright. Security migration — reviewer routing BEFORE push. Verify the delete-account flow doesn't depend on the client-side DELETE first. NOTE (Vault V1, 2026-06-13): the fix must also cover non-live workspaces — FK CASCADE deletes are not subject to the Vault restrictive DELETE policies on child tables, so this direct-DELETE path is also the one way a frozen repository can be destroyed client-side.
+
+---
+
+### Item #84: resolve-approval-chain deployed snapshot is un-gateable for Vault V1 (accepted residual)
+
+**Symptom:** `resolve-approval-chain` is user-invokable (JWT member) and triggers service-role writes to `leases`, `lease_approval_chain`, `lease_attribute_snapshots`, `lease_reroute_events` — but its deployed copy is the frozen pre-Phase-7 snapshot whose redeploy is permanently deferred (CLAUDE.md / PHASE_7_BUILD_SPEC A4). The Vault V1 liveness gate therefore cannot reach it: a member of a canceled/soft-deleted/vault workspace can still invoke it directly and mutate chain state.
+
+**Severity:** Medium (member-only exposure, chain-resolution logic only; the resulting writes are system-attributed). ACCEPTED RESIDUAL per product-owner decision 2026-06-13 — filed, not fixed, because gating requires overriding the standing Phase 7 redeploy deferral.
+
+**Stub remediation:** When Phase 7 A4 remediation is eventually executed, add the `checkWorkspaceLive` gate (pattern: any gated chain function, e.g. `act-on-chain-step`) to the repo file in the same change and redeploy. Until then this is the one knowingly open mutator in the Vault V1 read-only surface.
 
 ---
