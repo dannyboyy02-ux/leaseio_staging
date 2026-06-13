@@ -81,7 +81,36 @@ serve(async (req) => {
   }>;
 
   const now = new Date();
-  const stuckRows = rows.filter((r) => isStepStuck(r.pending_since, STUCK_THRESHOLD_DAYS, now));
+  let stuckRows = rows.filter((r) => isStepStuck(r.pending_since, STUCK_THRESHOLD_DAYS, now));
+
+  // Vault V1: this cron runs service-role across all workspaces — skip
+  // non-live workspaces (canceled / soft-deleted / vault) instead of
+  // failing the run. One batched lookup over the workspaces the run
+  // would touch; semantics mirror _shared/workspace_live.ts (missing
+  // workspace rows fail closed).
+  let skippedWorkspaceNotLive = 0;
+  if (stuckRows.length > 0) {
+    const workspaceIds = [...new Set(stuckRows.map((r) => r.workspace_id))];
+    const { data: wsRows, error: wsErr } = await supabaseAdmin
+      .from("workspaces")
+      .select("id, canceled_at, soft_deleted_at, plan")
+      .in("id", workspaceIds);
+    if (wsErr) {
+      console.error("[detect-stuck-chains] workspace liveness load error:", wsErr.message);
+      return jsonResponse({ ok: false, error: wsErr.message, reason: "internal" }, 500, origin);
+    }
+    const liveWorkspaceIds = new Set(
+      ((wsRows ?? []) as Array<{ id: string; canceled_at: string | null; soft_deleted_at: string | null; plan: string | null }>)
+        .filter((w) => !w.canceled_at && !w.soft_deleted_at && w.plan !== "vault")
+        .map((w) => w.id),
+    );
+    stuckRows = stuckRows.filter((r) => {
+      if (liveWorkspaceIds.has(r.workspace_id)) return true;
+      console.log(`[detect-stuck-chains] skipping step ${r.id}: workspace ${r.workspace_id} not live`);
+      skippedWorkspaceNotLive++;
+      return false;
+    });
+  }
 
   // Dedupe by lease — one notification per lease per cycle.
   const stuckByLease = new Map<string, typeof stuckRows[number]>();
@@ -162,6 +191,7 @@ serve(async (req) => {
       stuckLeases: stuckByLease.size,
       detected,
       skippedRecent,
+      skippedWorkspaceNotLive,
     },
     200,
     origin,

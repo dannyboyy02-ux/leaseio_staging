@@ -82,14 +82,42 @@ serve(async (req) => {
     pending_since: string | null; assignee_resolution_source: string | null;
   }>;
 
+  // Vault V1: this cron runs service-role across all workspaces — skip
+  // non-live workspaces (canceled / soft-deleted / vault) instead of
+  // failing the run. One batched lookup; semantics mirror
+  // _shared/workspace_live.ts (missing workspace rows fail closed).
+  let liveWorkspaceIds = new Set<string>();
+  if (rows.length > 0) {
+    const workspaceIds = [...new Set(rows.map((r) => r.workspace_id))];
+    const { data: wsRows, error: wsErr } = await supabaseAdmin
+      .from("workspaces")
+      .select("id, canceled_at, soft_deleted_at, plan")
+      .in("id", workspaceIds);
+    if (wsErr) {
+      console.error("[process-delegate-timers] workspace liveness load error:", wsErr.message);
+      return jsonResponse({ ok: false, error: wsErr.message, reason: "internal" }, 500, origin);
+    }
+    liveWorkspaceIds = new Set(
+      ((wsRows ?? []) as Array<{ id: string; canceled_at: string | null; soft_deleted_at: string | null; plan: string | null }>)
+        .filter((w) => !w.canceled_at && !w.soft_deleted_at && w.plan !== "vault")
+        .map((w) => w.id),
+    );
+  }
+
   const now = new Date();
   let scanned = 0;
   let activated = 0;
   let skippedTooEarly = 0;
   let skippedDelegationActive = 0;
+  let skippedWorkspaceNotLive = 0;
 
   for (const r of rows) {
     scanned++;
+    if (!liveWorkspaceIds.has(r.workspace_id)) {
+      console.log(`[process-delegate-timers] skipping step ${r.id}: workspace ${r.workspace_id} not live`);
+      skippedWorkspaceNotLive++;
+      continue;
+    }
     if (!shouldActivatePolicyDelegate(r.pending_since, r.delegate_after_days, r.delegate_user_id, now)) {
       skippedTooEarly++;
       continue;
@@ -153,6 +181,7 @@ serve(async (req) => {
       activated,
       skippedTooEarly,
       skippedDelegationActive,
+      skippedWorkspaceNotLive,
     },
     200,
     origin,
