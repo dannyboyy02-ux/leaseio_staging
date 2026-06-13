@@ -253,11 +253,11 @@ export default function Leases() {
         details: {},
       } as any);
       if (auditError) console.error('Restore audit insert failed:', auditError.message);
-      toast.success('Lease restored');
+      toast.success(t('archive.unarchived_toast'));
       fetchLeases();
     } catch (error) {
       console.error('Restore error:', error);
-      toast.error('Failed to restore lease');
+      toast.error(t('archive.failed'));
     }
   };
 
