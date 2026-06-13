@@ -1608,6 +1608,8 @@ green.
 
 **Stub remediation:** Security migration (reviewer routing BEFORE push): add a `NOT EXISTS (SELECT 1 FROM leases WHERE ... AND model_locked)` condition to both DELETE policies — or route deletion through an edge function that re-checks `model_locked` server-side.
 
+**RESOLVED 2026-06-13** — migration `20260613030000_destruction_guards.sql` (applied + verified live): restrictive DELETE policy `locked lease source files are not deletable` on storage.objects blocks deleting a leases/executed-leases object referenced by a `model_locked` lease (ANDs with the V1 liveness policy). Pre-apply security+integrity review: APPLY.
+
 ---
 
 ### Item #78: Lease archive ("Delete") admin gate is UI-only; archived_by/archived_at are client-supplied
@@ -1669,6 +1671,8 @@ green.
 **Severity:** High (unattributable destruction of the audit-defensible repository). Filed by lease-repository-integrity-reviewer reviewing 69fdc2e (2026-06-13).
 
 **Stub remediation:** Drop the permissive DELETE policy in favor of the `delete-workspace` edge function (which writes the forensic row), or add a restrictive DELETE policy on `workspaces` denying client deletes outright. Security migration — reviewer routing BEFORE push. Verify the delete-account flow doesn't depend on the client-side DELETE first. NOTE (Vault V1, 2026-06-13): the fix must also cover non-live workspaces — FK CASCADE deletes are not subject to the Vault restrictive DELETE policies on child tables, so this direct-DELETE path is also the one way a frozen repository can be destroyed client-side.
+
+**RESOLVED 2026-06-13** — migration `20260613030000_destruction_guards.sql` (applied + verified live): dropped the permissive `Owners can delete their workspaces` policy and added a restrictive `workspace deletes are server-only` (USING false) DELETE policy. Verified both deletion paths (delete-workspace, delete-account) use service_role (RLS-exempt) and no client-side workspace DELETE exists, so the forensic/cleanup paths are unaffected. Pre-apply review: APPLY.
 
 ---
 
