@@ -119,6 +119,30 @@ non-AI; documented as within the view+export grant). OPERATOR: STOP 10
 - Renewal reminder email ~14 days ahead (no-surprise-billing rule);
   failed renewal → normal Stripe dunning → `canceled` → existing lifecycle.
 
+**V4 as-built (2026-06-13):** shipped. Owner read-only state: `VaultBanner`
+(renewal date + "Reactivate a plan"); AI assistant unmounted on Vault
+(`{!isVault && <AiAssistant/>}`); intake entry points hidden (Dashboard/Leases
+CTAs, per-row Delete, empty-state CTA). Non-owner members: `VaultMemberWall`
+(owner-only message + "Switch workspace" escape hatch; keeps `/app/settings`).
+Lease surface fully read-only via prop-threaded `readOnly` (default false →
+non-Vault no-op): main workbench, LockedLeaseDetail (active+model_locked, the
+dominant state — initially missed, fixed), LockedHeader/VendorCard,
+FailedLeaseBanner (Retry hidden — AI spend), DocumentsPanel, intake uploads,
+and the counter-signature / chain-violation panels — each shows
+`vault.lease_readonly_note`; view + export intact. Billing: Vault card is the
+single surface (Reactivate Starter/Business, no refund; subordinate "Manage in
+Stripe" link); generic plan card + packs + credits suppressed for Vault.
+Renewal reminder: `vault-renewal-reminder` cron (deployed v1, verify_jwt=false)
++ `vault_renewal_reminders` idempotency ledger (migration 20260613020000,
+applied + verified live; RLS-on/no-policies). Reviews: security + integrity
+(APPLY/DEPLOY) + two polish rounds (caught the LockedLeaseDetail CRITICAL + the
+chain-panel HIGH, both fixed) + test (758/758). **Deferred follow-ups:**
+KNOWN_ISSUES #88 (Dashboard intake-widget CTAs — MEDIUM), #89 (renewal email
+English-only — LOW), #87 (WorkspaceSettings general-save rename-during-grace).
+**OPERATOR (STOP 10 companion):** set `VAULT_RENEWAL_CRON_SECRET` + schedule the
+daily cron (deployed-but-unscheduled until then; fails closed 401 without the
+secret).
+
 ### Deferred (fast-follow, do not build now)
 - 3.5% yearly escalator (billing subsystem: `invoice.upcoming` → computed
   price swap → escalated amount quoted in the reminder email).
