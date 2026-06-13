@@ -230,10 +230,9 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
                   void handleConfirmedDelete();
                 }}
                 disabled={deleting}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
-                {t('common.delete')}
+                {t('amendments.delete_confirm_cta')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

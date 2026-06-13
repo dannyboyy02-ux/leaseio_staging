@@ -109,7 +109,8 @@
     "delete_desc": "\"{{name}}\" will be archived (removed from this lease's active amendments). The action is recorded in the audit trail. An admin can restore it later from Leases → \"Show archived\" → open it → Restore.",
     "delete_success": "Amendment archived",
     "delete_failed": "Failed to archive amendment",
-    "delete_audit_warning": "Amendment archived, but the action could not be recorded in the audit trail."
+    "delete_audit_warning": "Amendment archived, but the action could not be recorded in the audit trail.",
+    "delete_confirm_cta": "Archive"
   },
   "landing": {
     "nav": {

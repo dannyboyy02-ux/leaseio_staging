@@ -2761,7 +2761,7 @@ export default function LeaseReview() {
                 {(userRole === 'admin' || userRole === 'owner') && (
                   <Button size="sm" variant="outline" onClick={() => setShowArchiveDialog(true)}>
                     <Archive className="h-3.5 w-3.5 mr-1.5" />
-                    {lease.archived ? 'Restore' : 'Delete'}
+                    {lease.archived ? t('archive.unarchive') : t('archive.archive')}
                   </Button>
                 )}
               </div>
@@ -2845,7 +2845,7 @@ export default function LeaseReview() {
                     {!isReadOnly && (userRole === 'admin' || userRole === 'owner') && (
                       <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
                         <Archive className="h-4 w-4 mr-2" />
-                        {lease.archived ? 'Restore' : 'Delete'}
+                        {lease.archived ? t('archive.unarchive') : t('archive.archive')}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>

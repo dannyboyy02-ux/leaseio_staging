@@ -1778,6 +1778,8 @@ green.
 
 **Stub remediation:** Vocabulary unification pass (lease-product-polish + locale parity en/es): rename the `archive.*` key VALUES from Delete→Archive wording across `ArchiveButton`, badges, and banners so "Delete" means only permanent deletion anywhere. Multi-surface user-facing copy change — review before shipping.
 
+**RESOLVED 2026-06-13** — archive vocabulary unified to Archive/Archived/Restore across archive.* + amendments.delete_* VALUES (en+es), AmendmentsList (Archive icon + aria-label, non-destructive), and the three trigger labels polish caught (LeaseReview toolbar + overflow menu, AmendmentsList confirm CTA — now localized, non-destructive). "Delete" now appears only for genuine permanent deletion (ImportHistory/DeleteLeaseDialog, LeaseDocumentsTab). Polish + auditor reviewed; locale parity holds. Minor LOW left: a couple of internal code comments still say "delete" (non-rendered).
+
 ---
 
 ### Item #93: delete-workspace writes the forensic deleted_workspaces row LAST; a failure leaves a destroyed workspace unrecorded

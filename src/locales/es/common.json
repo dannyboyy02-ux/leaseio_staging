@@ -109,7 +109,8 @@
     "delete_desc": "\"{{name}}\" se archivará (se quitará de las enmiendas activas de este arrendamiento). La acción se registra en el historial de auditoría. Un administrador puede restaurarla después desde Arrendamientos → \"Mostrar archivados\" → abrirla → Restaurar.",
     "delete_success": "Enmienda archivada",
     "delete_failed": "No se pudo archivar la enmienda",
-    "delete_audit_warning": "Enmienda archivada, pero la acción no pudo registrarse en el historial de auditoría."
+    "delete_audit_warning": "Enmienda archivada, pero la acción no pudo registrarse en el historial de auditoría.",
+    "delete_confirm_cta": "Archivar"
   },
   "landing": {
     "nav": {
