@@ -1750,6 +1750,8 @@ green.
 
 **Stub remediation:** Security migration (reviewer routing BEFORE push). Enumerate every client insert site (grep `lease_activity_log` in `src/` — currently ~10 sites writing ~18 types) and confirm which types clients legitimately write directly vs. should be moved to an edge function (e.g. `status_change`/`approval` arguably belong server-side, cf. #32). Then narrow the INSERT policy WITH CHECK to `user_id = auth.uid()` (drop the NULL option) AND `activity_type = ANY(<client allowlist>)`. Verify no legitimate client flow breaks (each currently-written type stays allowed or is rerouted) before applying. Add a static/smoke test pinning the allowlist.
 
+**RESOLVED 2026-06-13** — migration `20260613050000_activity_log_client_allowlist.sql` (applied + verified live): the INSERT policy now AND-s a 19-type client allowlist (enumerated + verified against all 37 src/ writer sites incl. the two dynamic ones), so a browser client can no longer forge the ~80 service-role-only types — the alert types (`policy_assignee_validation_failed`, `stuck_chain_detected`) are confirmed excluded. Predicate preserved verbatim; edge functions bypass RLS. `user_id` left flexible (NULL retained for legit system comments — tightening to NULL-only-for-comment is the noted follow-up). Regression test `src/lib/__tests__/clientActivityAllowlist.test.ts`. Pre-apply security + integrity: both APPLY (no Critical/High/Medium).
+
 ---
 
 ### Item #91: Leases "Show archived" shows all leases (no archived-only filter) + no in-list restore
@@ -1779,5 +1781,15 @@ green.
 **Severity:** Medium (forensic gap on the owner-initiated path). Pre-existing; surfaced by lease-repository-integrity-reviewer during the #74 review (2026-06-13).
 
 **Stub remediation:** Move delete-workspace's forensic `deleted_workspaces` insert to BEFORE the destructive deletes (mirror the cron), aborting the delete if the forensic insert fails — so destruction is never unattributable.
+
+---
+
+### Item #94: UploadExecutedDocumentDialog sets lifecycle_status='executed' client-side without status_changed_at or an activity-log row
+
+**Symptom:** `src/components/leases/UploadExecutedDocumentDialog.tsx:61` does a client-side `leases.update({ lifecycle_status: 'executed' })` with NO `status_changed_at` set and NO `lease_activity_log` row written in `src/` — it relies on `process_lease` having already written the `executed_uploaded`/`status_change` rows. This violates the Lifecycle Transition Convention (CLAUDE.md: any code transitioning `lifecycle_status` must set `status_changed_at` + write a `status_change` activity row with `from_status`/`to_status` + `routing_path`). If the process_lease path doesn't fire for this transition, the change is unattributable.
+
+**Severity:** Medium (lifecycle-convention gap; potential unattributable status transition). Surfaced by lease-repository-integrity-reviewer during the #90 review (2026-06-13).
+
+**Stub remediation:** Either route this transition through the canonical lifecycle writer (so status_changed_at + the activity row are guaranteed), or confirm + document that process_lease always writes them for this path and the client update is redundant/safe. Verify against the convention before closing.
 
 ---
