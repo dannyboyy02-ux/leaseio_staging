@@ -1574,6 +1574,8 @@ green.
 
 **Stub remediation:** Extract the cron's Stripe-cleanup + four-bucket purge into a shared helper and use it from `delete-workspace` — one implementation so the two paths can't drift.
 
+**RESOLVED 2026-06-13** — `_shared/workspace_purge.ts` (`cancelWorkspaceSubscriptions` + recursive 4-bucket `purgeWorkspaceStorage`) now used by BOTH `delete-workspace` (v22) and `process-cancellation-lifecycle` (v3). delete-workspace now cancels Stripe subs (incl. packs) + purges lease-documents/lease-reports (was leaking both); cron behavior preserved verbatim (order, race guards, defer-on-Stripe-failure). Security + integrity reviews: DEPLOY (no Critical/High/Medium). Both functions redeployed. Residual filed as #93 (forensic-row ordering on the owner path).
+
 ---
 
 ### Item #75: Grace "read-only" is enforced only for document processing; soft-delete access wall is UI-only
@@ -1633,6 +1635,8 @@ green.
 **Severity:** High (misled-into-destructive-action class). Pre-existing; surfaced by lease-product-polish reviewing 5fe9e06.
 
 **Stub remediation:** Pick the vocabulary once: either make the list delete archive-semantics (preferred — hard delete then only via a deeper governance path), or relabel it "Delete permanently" with distinct iconography.
+
+**RESOLVED 2026-06-13** — chose archive-semantics (product decision): the Leases-list row action now archives (restorable, admin/owner-only, server-enforced by the #78 trigger) via the new `ArchiveLeaseDialog`, not hard-delete. True hard-delete remains only on the deeper path (ImportHistory import-rollback, `DeleteLeaseDialog`). Frontend; integrity/auditor reviewed. Remaining copy-layer work (archive still WORDED 'Delete' on detail-page surfaces) split to #92; archived-lease findability/restore-in-list to #91.
 
 ---
 
