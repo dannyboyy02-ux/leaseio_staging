@@ -1536,6 +1536,8 @@ green.
 
 ---
 
+
+**RESOLVED 2026-06-13** — migration `20260613060000_workspaces_admin_update.sql` (applied + verified live): widened the workspaces UPDATE policy to owners + accepted admins (product decision: admins manage settings), with a new `enforce_workspace_owner_immutable` trigger blocking non-service-role owner_id reassignment (escalation). Safety verified by pre-apply security + integrity (both APPLY): #29 guard still blocks billing for all non-service-role; read-only guard still blocks config on non-live; service-role ownership-transfer path unaffected; only `intended_plan` newly admin-writable (UI-only hint, accepted LOW). FOLLOW-UP (defense-in-depth, non-blocking): the WorkspaceSettings/DiscountRateCard save handlers still don't check affected-row count — add `.select('id')` 0-row detection (esp. before DiscountRateCard's lease recompute).
 ### Item #71: Three WorkspaceSettings handlers missing the canEdit guard; dead upgrade-confirm dialog; unused imports
 
 **Symptom:** (a) `handleSaveBackdoor`, `handleSaveAssetTypes`, and `makeOptionListHandlers.handleSave` lack the `if (!canEdit) return` guard their sibling handlers all have (unreachable via UI for non-admins; RLS blocks non-owners — consistency/defense-in-depth only). (b) `AccountSettings.tsx`'s confirm-upgrade AlertDialog + `confirmUpgradePlan` state is unreachable (with the two-plan type, `currentPlan !== 'starter' && isUpgrade(...)` can never be true). (c) `WorkspaceSettings.tsx` carries unused `cn`, `useQuery`, `WorkspaceRole` imports and an unused `getRoleLabel`.

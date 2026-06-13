@@ -35,6 +35,16 @@
 -- (not in #29's set). It is the abandoned-checkout recovery hint — low-stakes
 -- — but confirm acceptable vs. adding it to a guard.
 
+-- NOTE on the dropped WITH CHECK: the prior policy (20260522000000) carried
+-- WITH CHECK (owner_id = auth.uid()). Recreating WITHOUT it is REQUIRED, not
+-- incidental: that WITH CHECK would force a non-owner admin's resulting row to
+-- have owner_id = the admin's uid (false), re-blocking the very admin edits
+-- this migration enables. owner_id immutability is instead enforced by the
+-- BEFORE UPDATE trigger below — strictly stronger (it also stops an OWNER from
+-- handing off ownership via a raw PATCH, which the old WITH CHECK permitted).
+-- USING is reused as the post-update check; the entitlement/config/owner
+-- column guards (triggers) carry per-column WITH-CHECK responsibility.
+
 -- ── 1. Widen the UPDATE policy to owners + accepted admins ─────────────────
 DROP POLICY IF EXISTS "Owners can update their workspaces" ON public.workspaces;
 
