@@ -75,18 +75,18 @@
     "workspaces_upgrade_link": "Actualice a Business para más"
   },
   "archive": {
-    "archive": "Eliminar",
+    "archive": "Archivar",
     "unarchive": "Restaurar",
-    "archived_toast": "Arrendamiento eliminado",
+    "archived_toast": "Arrendamiento archivado",
     "unarchived_toast": "Arrendamiento restaurado",
     "failed": "No se pudo actualizar el arrendamiento",
-    "confirm_archive_title": "¿Eliminar este arrendamiento?",
-    "confirm_archive_desc": "Eliminar mueve el arrendamiento fuera del conjunto activo y libera un cupo activo. El registro se conserva (auditoría, adjuntos, historial) y puede restaurarse en cualquier momento.",
+    "confirm_archive_title": "¿Archivar este arrendamiento?",
+    "confirm_archive_desc": "Archivar mueve el arrendamiento fuera del conjunto activo y libera un cupo activo. El registro se conserva (auditoría, adjuntos, historial) y puede restaurarse en cualquier momento.",
     "confirm_unarchive_title": "¿Restaurar este arrendamiento?",
     "confirm_unarchive_desc": "Restaurar devuelve el arrendamiento al conjunto activo. Volverá a contar para su cupo de arrendamientos activos.",
     "audit_warning": "Guardado, pero la acción no pudo registrarse en el historial de auditoría.",
-    "deleted_badge": "Eliminado",
-    "deleted_banner": "Este arrendamiento está eliminado. Ya no cuenta para sus arrendamientos activos y permanece oculto en la lista a menos que active \"Mostrar archivados\".",
+    "deleted_badge": "Archivado",
+    "deleted_banner": "Este arrendamiento está archivado. Ya no cuenta para sus arrendamientos activos y permanece oculto en la lista a menos que active \"Mostrar archivados\".",
     "list_archived_toast": "Contrato archivado — restáurelo desde la página de detalle del contrato",
     "list_archive_failed": "No se pudo archivar el contrato"
   },
@@ -105,11 +105,11 @@
     "summary_session_note": "Generado el {{date}} · disponible hasta que cambie de pestaña o salga de esta página"
   },
   "amendments": {
-    "delete_title": "¿Eliminar esta enmienda?",
-    "delete_desc": "\"{{name}}\" se quitará de las enmiendas de este arrendamiento. La acción se registra en el historial de auditoría. Un administrador puede restaurarla después desde Arrendamientos → \"Mostrar archivados\" → abrirla → Restaurar.",
-    "delete_success": "Enmienda eliminada",
-    "delete_failed": "No se pudo eliminar la enmienda",
-    "delete_audit_warning": "Enmienda eliminada, pero la acción no pudo registrarse en el historial de auditoría."
+    "delete_title": "¿Archivar esta enmienda?",
+    "delete_desc": "\"{{name}}\" se archivará (se quitará de las enmiendas activas de este arrendamiento). La acción se registra en el historial de auditoría. Un administrador puede restaurarla después desde Arrendamientos → \"Mostrar archivados\" → abrirla → Restaurar.",
+    "delete_success": "Enmienda archivada",
+    "delete_failed": "No se pudo archivar la enmienda",
+    "delete_audit_warning": "Enmienda archivada, pero la acción no pudo registrarse en el historial de auditoría."
   },
   "landing": {
     "nav": {

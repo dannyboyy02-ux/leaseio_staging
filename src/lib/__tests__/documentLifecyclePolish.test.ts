@@ -148,10 +148,12 @@ describe('AmendmentsList archive-delete', () => {
     expect(failureBranch).toContain("t('amendments.delete_audit_warning')");
   });
 
-  it('renders the delete button only for admins', () => {
+  it('renders the archive button only for admins', () => {
     const gated = sliceBetween(source, '{isAdmin && (', 'setPendingDelete(amendment)');
     expect(gated).toContain('<Button');
-    expect(gated).toContain('aria-label={`Delete ${amendment.filename}`}');
+    // #92: archive vocabulary — the action archives, so the label says
+    // "Archive", not "Delete".
+    expect(gated).toContain('aria-label={`Archive ${amendment.filename}`}');
   });
 });
 
