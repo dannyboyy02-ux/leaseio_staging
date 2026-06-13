@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
+import { User, Lock, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor, Archive } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { UsageContent } from '@/pages/app/UsageContent';
 import { describeLoginEvent, type LoginEventRow } from '@/lib/loginActivity';
@@ -994,6 +994,52 @@ export default function AccountSettings() {
                   </CardContent>
                 </Card>
               )}
+
+            {/* Vault retention card (V4): read-only state + reactivate to a
+                full plan. Reactivation is a normal Starter/Business checkout
+                (no Vault-fee refund); convert-at-grace does not apply here. */}
+            {currentPlan === 'vault' && (
+              <Card className="border-primary/40 bg-primary/5">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Archive className="h-4 w-4" />
+                    {t('account.vault_card_title')}
+                  </CardTitle>
+                  <CardDescription>
+                    {formattedPeriodEnd
+                      ? t('account.vault_card_desc', { date: formattedPeriodEnd, price: PLANS.vault.price.annual })
+                      : t('account.vault_card_desc_nodate', { price: PLANS.vault.price.annual })}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isAdminUser ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => proceedWithCheckout('starter')}
+                        disabled={isUpgrading !== null}
+                      >
+                        {isUpgrading === 'starter' ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : null}
+                        {t('account.vault_reactivate_starter')}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => proceedWithCheckout('business')}
+                        disabled={isUpgrading !== null}
+                      >
+                        {isUpgrading === 'business' ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : null}
+                        {t('account.vault_reactivate_business')}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Current Plan & Usage */}
             <div className="grid gap-6 lg:grid-cols-2">

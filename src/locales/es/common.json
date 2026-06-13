@@ -676,7 +676,12 @@
     "credits_balance_one": "{{count}} crédito disponible",
     "credits_balance_other": "{{count}} créditos disponibles",
     "cancel_confirm_cta": "Abrir portal de facturación",
-    "cancel_vault_note": "¿Prefiere conservar sus registros? Cuando finalice su plan, el propietario del espacio puede cambiar a Vault de solo lectura (${{price}}/año) — exportación completa, sin eliminar nada — en lugar de perder el espacio de trabajo."
+    "cancel_vault_note": "¿Prefiere conservar sus registros? Cuando finalice su plan, el propietario del espacio puede cambiar a Vault de solo lectura (${{price}}/año) — exportación completa, sin eliminar nada — en lugar de perder el espacio de trabajo.",
+    "vault_card_title": "Vault — retención de solo lectura",
+    "vault_card_desc": "Su repositorio es de solo lectura y totalmente exportable. Se renueva el {{date}} por ${{price}}/año. Reactive un plan completo en cualquier momento para volver a editar y usar las funciones de IA (sin reembolso de la tarifa de Vault).",
+    "vault_card_desc_nodate": "Su repositorio es de solo lectura y totalmente exportable. Se renueva anualmente por ${{price}}/año. Reactive un plan completo en cualquier momento para volver a editar y usar las funciones de IA (sin reembolso de la tarifa de Vault).",
+    "vault_reactivate_starter": "Reactivar — Starter",
+    "vault_reactivate_business": "Reactivar — Business"
   },
   "packs": {
     "pack_10": "Paquete de 10 arrendamientos",
@@ -1674,5 +1679,12 @@
     "vault_redirecting": "Redirigiendo…",
     "vault_unavailable": "Vault no está disponible en este momento. Escriba a support@theleaseio.com para conservar sus datos.",
     "wall_vault_note": "La opción de retención Vault estaba disponible durante el período de gracia. Renovar es ahora la única forma de restaurar el acceso."
+  },
+  "vault": {
+    "banner_text": "Vault — repositorio de solo lectura. Se renueva el {{date}} por ${{price}}/año.",
+    "banner_text_nodate": "Vault — repositorio de solo lectura. Se renueva anualmente por ${{price}}/año.",
+    "reactivate_cta": "Reactivar",
+    "member_wall_title": "Este espacio está en Vault",
+    "member_wall_desc": "{{name}} es un repositorio de retención de solo lectura. El acceso a Vault es exclusivo del propietario: comuníquese con el propietario del espacio para restaurar el acceso completo o reactivar un plan."
   }
 }

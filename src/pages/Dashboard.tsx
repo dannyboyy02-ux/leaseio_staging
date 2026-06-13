@@ -18,12 +18,15 @@ import { PendingCounterSignatureCard } from '@/components/dashboard/PendingCount
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useApp } from '@/contexts/AppContext';
+import { isReadOnlyRetention } from '@/config/pricing';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 
 export default function Dashboard() {
   const { user, workspace } = useApp();
+  // Vault (read-only retention): hide intake entry points (server also blocks).
+  const isReadOnly = isReadOnlyRetention(workspace?.plan);
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   const quota = useWorkspaceQuota();
@@ -55,12 +58,14 @@ export default function Dashboard() {
         title={`${t('dashboard.welcome_back')}${safeText(user?.firstName) ? `, ${safeText(user?.firstName)}` : ''}`}
         subtitle={safeText(workspace?.name) || safeText(user?.companyName)}
         actions={
-          <div className="flex items-center gap-2">
-            <Button variant="accent" onClick={handleNewRequest}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Request
-            </Button>
-          </div>
+          isReadOnly ? undefined : (
+            <div className="flex items-center gap-2">
+              <Button variant="accent" onClick={handleNewRequest}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Request
+              </Button>
+            </div>
+          )
         }
       />
 

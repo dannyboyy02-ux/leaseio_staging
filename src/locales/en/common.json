@@ -676,7 +676,12 @@
     "credits_balance_one": "{{count}} credit available",
     "credits_balance_other": "{{count}} credits available",
     "cancel_confirm_cta": "Open billing portal",
-    "cancel_vault_note": "Prefer to keep your records? When your plan ends, the workspace owner can switch to read-only Vault (${{price}}/yr) — full export, nothing deleted — instead of losing the workspace."
+    "cancel_vault_note": "Prefer to keep your records? When your plan ends, the workspace owner can switch to read-only Vault (${{price}}/yr) — full export, nothing deleted — instead of losing the workspace.",
+    "vault_card_title": "Vault — read-only retention",
+    "vault_card_desc": "Your repository is read-only and fully exportable. Renews {{date}} at ${{price}}/yr. Reactivate a full plan anytime to resume editing and AI features (no Vault-fee refund).",
+    "vault_card_desc_nodate": "Your repository is read-only and fully exportable. Renews annually at ${{price}}/yr. Reactivate a full plan anytime to resume editing and AI features (no Vault-fee refund).",
+    "vault_reactivate_starter": "Reactivate — Starter",
+    "vault_reactivate_business": "Reactivate — Business"
   },
   "packs": {
     "pack_10": "10-lease pack",
@@ -1674,5 +1679,12 @@
     "vault_redirecting": "Redirecting…",
     "vault_unavailable": "Vault isn't available right now — please contact support@theleaseio.com to keep your data.",
     "wall_vault_note": "The Vault retention option was available during the grace window. Renewing is the only way to restore access now."
+  },
+  "vault": {
+    "banner_text": "Vault — read-only repository. Renews {{date}} at ${{price}}/yr.",
+    "banner_text_nodate": "Vault — read-only repository. Renews annually at ${{price}}/yr.",
+    "reactivate_cta": "Reactivate",
+    "member_wall_title": "This workspace is in Vault",
+    "member_wall_desc": "{{name}} is a read-only retention repository. Vault access is owner-only — contact the workspace owner to restore full access or reactivate a plan."
   }
 }

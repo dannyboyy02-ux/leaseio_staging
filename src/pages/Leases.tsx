@@ -32,6 +32,7 @@ import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
+import { isReadOnlyRetention } from '@/config/pricing';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -91,6 +92,8 @@ export default function Leases() {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { workspace } = useApp();
+  // Vault (read-only retention): hide intake entry points (server also blocks).
+  const isReadOnly = isReadOnlyRetention(workspace?.plan);
   const [searchParams] = useSearchParams();
   const quota = useWorkspaceQuota();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -378,10 +381,12 @@ export default function Leases() {
         title={t('leases.title')}
         subtitle={headerSubtitle}
         actions={
-          <Button variant="accent" onClick={handleAddLease}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Lease
-          </Button>
+          isReadOnly ? undefined : (
+            <Button variant="accent" onClick={handleAddLease}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Lease
+            </Button>
+          )
         }
       />
 
