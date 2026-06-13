@@ -29,6 +29,14 @@
 --                            ("your repository, exportable") and grace keeps
 --                            view+export open. Gating exports = bug by
 --                            definition (VAULT_TIER_SPEC invariants).
+--   lease_activity_log     — CARVE-OUT, same reasoning as
+--                            workspace_activity_log below: append-only audit
+--                            tables stay writable so the actions that remain
+--                            legitimately open keep their attributable trail.
+--                            (lease_attribute_snapshots, lease_reroute_events,
+--                            chain_step_overrides, chain_step_voluntary_-
+--                            delegations are SELECT-only to clients — nothing
+--                            to restrict.)
 --   workspace_activity_log — CARVE-OUT (integrity review round 1 CRITICAL):
 --                            the actions that legitimately remain open below
 --                            (rename, member removal) write their audit rows
