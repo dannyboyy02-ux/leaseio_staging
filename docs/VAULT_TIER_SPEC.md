@@ -48,6 +48,21 @@ cross-referenced for Vault).
   clear cancellation-lifecycle columns on conversion (it's an active sub).
 
 ### V3 — Conversion flows
+
+**Pre-V3 blockers recorded during V2 review (2026-06-13):**
+1. ~~Entitled-event clobber~~ FIXED in V2: the webhook's C2 guard now skips
+   entitled events for a non-current subscription unless they arrive via
+   checkout.session.completed. V3's cancel-dialog flow MUST run conversions
+   through a Checkout session (not bare subscriptions.create) so the consent
+   override applies, and should still cancel the old plan sub at conversion.
+2. Reports/export wall: `canAccessFeature('business')` is false for vault, so
+   a converted Business workspace loses the Reports surface (disclosure,
+   projections, exports) until V4 — but "export gating in Vault is a bug by
+   definition" (invariants below). Before conversions ship, special-case
+   read/export surfaces for `planConfig.readOnly` (do NOT blanket-pass vault
+   through business gates — that would remount the AI assistant and break the
+   zero-AI-spend invariant). V3 and the V4 read-only UI walls must ship
+   together or in that order.
 - **Cancel dialog** (Billing): "Switch to Vault instead" path → checkout for
   the yearly price; copy warns: owner-only (members lose access), read-only,
   no AI, packs end at period close.

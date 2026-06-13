@@ -178,10 +178,13 @@ describe('stripe-webhook Vault plumbing (static source)', () => {
       "// Recompute a workspace's total document-pack capacity",
     );
     expect(fn).toContain('plan: effectivePlan');
-    // The conditional spread: vault contributes {} (prior limit preserved for
-    // reactivation); every other plan writes its DOCUMENT_LIMITS entry.
-    expect(fn).toContain('...(effectivePlan === "vault"');
-    expect(fn).toContain(': { document_limit: DOCUMENT_LIMITS[effectivePlan] })');
+    // Undefined-guarded write: vault (no DOCUMENT_LIMITS entry) contributes
+    // {}; every plan WITH an entry writes it. Guarding on undefined rather
+    // than the 'vault' literal keeps a future keyless plan from nulling the
+    // column (security review 2026-06-13).
+    expect(fn).toContain('const newDocumentLimit = DOCUMENT_LIMITS[effectivePlan];');
+    expect(fn).toContain('...(newDocumentLimit !== undefined');
+    expect(fn).toContain('? { document_limit: newDocumentLimit }');
   });
 });
 
@@ -199,13 +202,14 @@ describe('Vault parity across mirrors', () => {
     expect(Number(m![1])).toBe(PLANS.vault.maxWorkspaces);
   });
 
-  it("the duplicate SubscriptionPlan union in src/types/index.ts includes 'vault' (regression: 56db50f)", () => {
+  it('src/types/index.ts re-exports SubscriptionPlan from pricing (no duplicate union — regression: 56db50f)', () => {
     const types = read('src/types/index.ts');
-    const m = types.match(/export type SubscriptionPlan = ([^;]+);/);
-    expect(m).not.toBeNull();
-    const members = [...m![1].matchAll(/'([^']+)'/g)].map((x) => x[1]).sort();
-    // Must exactly mirror the pricing.ts union (starter | business | vault).
-    expect(members).toEqual(Object.keys(PLANS).sort());
+    // The literal-union duplicate drifted and broke the build once; the fix
+    // is a single source of truth re-exported. Pin the re-export AND the
+    // absence of a redeclared literal union.
+    expect(types).toContain("import type { SubscriptionPlan } from '@/config/pricing';");
+    expect(types).toContain('export type { SubscriptionPlan };');
+    expect(types).not.toMatch(/export type SubscriptionPlan =/);
   });
 
   it('vault nameKey/descriptionKey/featureKeys resolve in BOTH locales', () => {

@@ -121,7 +121,7 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 
 **Locales (update together):** `src/locales/{en,es}/common.json`
 
-**Pricing & Billing:** `src/config/pricing.ts`, `supabase/functions/{create-checkout,check-subscription,customer-portal}/index.ts`
+**Pricing & Billing:** `src/config/pricing.ts`, `supabase/functions/{create-checkout,stripe-webhook,customer-portal}/index.ts`
 
 **Routing:** `src/App.tsx` (all routes), `src/components/layout/{AppSidebar,AppLayout,AppHeader}.tsx`
 

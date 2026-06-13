@@ -257,7 +257,10 @@ describe('stripe-webhook document-pack classification', () => {
       src.indexOf("// Recompute a workspace's total document-pack capacity"),
     );
     expect(fn).toContain('plan: effectivePlan');
-    expect(fn).toContain('document_limit: DOCUMENT_LIMITS[effectivePlan]');
+    // Vault V2: the limit is computed once and written only when the plan
+    // has a DOCUMENT_LIMITS entry (vault deliberately has none).
+    expect(fn).toContain('const newDocumentLimit = DOCUMENT_LIMITS[effectivePlan];');
+    expect(fn).toContain('? { document_limit: newDocumentLimit }');
     // ...and the plan path never touches the pack capacity column.
     expect(fn).not.toContain('addon_document_capacity');
   });

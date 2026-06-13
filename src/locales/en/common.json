@@ -1146,7 +1146,7 @@
       "free": "For small teams getting started with lease visibility",
       "starter": "For finance teams that need lease awareness and control",
       "business": "For organizations that need full lease lifecycle management",
-      "vault": "Read-only retention for your lease repository — view and export everything, $249/year."
+      "vault": "Read-only retention for your lease repository — view and export everything."
     },
     "feature": {
       "1_lease": "1 lease document",

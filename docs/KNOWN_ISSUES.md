@@ -1691,3 +1691,13 @@ green.
 **Stub remediation:** Destructure and surface `error` in each of the four writers, matching the ~:1588 pattern. Frontend-only commit; route through auditor + security + polish (user-facing error copy).
 
 ---
+
+### Item #86: stripe-webhook trusts frozen subscription metadata plan_id over the live price
+
+**Symptom:** `resolvePlan` (`supabase/functions/stripe-webhook/index.ts`) returns `metadata.plan_id` unconditionally before consulting the subscription's actual price. Metadata is stamped at creation and frozen; if the Stripe billing-portal configuration (dashboard-side, not in repo) ever permits price switches, a Business sub moved to the Starter price keeps `plan_id='business'` → Business entitlements at Starter money. All current creation paths stamp metadata server-side from validated input, so this is configuration-contingent, not exploitable today.
+
+**Severity:** Medium. Filed by lease-security-scanner reviewing 59481c6 (2026-06-13); pre-existing class, V2 merely extended it to a third value (vault metadata can only under-privilege, so the new direction is benign).
+
+**Stub remediation:** When both metadata and price resolve, prefer the price-derived plan and log a mismatch warning ("trust the money, not the metadata" — same principle as `applySingleLeaseCredit`). Or verify + document that the portal config disallows price changes.
+
+---

@@ -69,6 +69,10 @@ export async function pollWorkspaceQuotas(
   const out: WorkspaceQuotaSnapshot[] = [];
 
   for (const w of workspaces as Array<{ id: string; plan: string | null }>) {
+    // Vault workspaces have no quotas by definition (read-only retention —
+    // zero intake); snapshotting them against starter limits manufactures
+    // false over-quota signals (integrity review 2026-06-13).
+    if (w.plan === 'vault') continue;
     const tier = (w.plan === 'business' ? 'business' : 'starter');
     const limits = TIER_LIMITS[tier];
 

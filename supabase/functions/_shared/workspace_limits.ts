@@ -10,8 +10,11 @@
 export const WORKSPACE_LIMITS: Record<string, number> = {
   starter: 1,
   business: 10,
-  // Vault is a read-only retention state, not a growth plan — a Vault owner
-  // cannot create additional workspaces on it (VAULT_TIER_SPEC.md V2).
+  // Documentation-only mirror of PLANS.vault.maxWorkspaces. The actual
+  // "no workspace creation on Vault" enforcement is create-workspace's
+  // business-workspace eligibility gate (vault owners fail it); nothing
+  // indexes this map by the caller's plan today. NOTE 0 is falsy — a future
+  // dynamic consumer must use ?? / explicit undefined checks, never `|| 1`.
   vault: 0,
 };
 

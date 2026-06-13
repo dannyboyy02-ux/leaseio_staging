@@ -43,14 +43,32 @@ function validPlan(plan: unknown): plan is Plan {
 // path fails closed when it is unset.
 const VAULT_PRICE_ID = Deno.env.get("STRIPE_PRICE_VAULT_ANNUAL") ?? null;
 
-function resolvePlan(subscription: Stripe.Subscription): Plan {
+// Annual plan Price IDs come from env, same as create-checkout (which fails
+// closed without them). Listed here so resolvePlan can recognize an annual
+// sub whose metadata went missing instead of silently misclassifying it.
+const ANNUAL_PRICE_IDS: Record<string, string | null> = {
+  starter: Deno.env.get("STRIPE_PRICE_STARTER_ANNUAL") ?? null,
+  business: Deno.env.get("STRIPE_PRICE_BUSINESS_ANNUAL") ?? null,
+};
+
+// Returns null when the subscription matches NO known identity (neither
+// metadata plan_id nor any recognized price). Callers decide the failure
+// shape: an ENTITLED unresolvable sub must fail loudly (security review
+// 2026-06-13 — defaulting it to 'starter' silently granted write access +
+// starter document_limit for unrecognized money, e.g. a hand-created Vault
+// sub with the env var unset); a non-entitled one only drives the downgrade
+// path where 'starter' is the correct floor.
+function resolvePlan(subscription: Stripe.Subscription): Plan | null {
   const metadataPlan = subscription.metadata?.plan_id;
   if (validPlan(metadataPlan)) return metadataPlan;
 
   const priceId = subscription.items.data[0]?.price?.id;
+  if (!priceId) return null;
   if (VAULT_PRICE_ID && priceId === VAULT_PRICE_ID) return "vault";
   const matchedPlan = Object.entries(PRICE_IDS).find(([, id]) => id === priceId)?.[0];
-  return validPlan(matchedPlan) ? matchedPlan : "starter";
+  if (validPlan(matchedPlan)) return matchedPlan;
+  const matchedAnnual = Object.entries(ANNUAL_PRICE_IDS).find(([, id]) => id && id === priceId)?.[0];
+  return validPlan(matchedAnnual) ? matchedAnnual : null;
 }
 
 function resolveInterval(subscription: Stripe.Subscription): "monthly" | "annual" {
@@ -122,9 +140,32 @@ serve(async (req) => {
       return;
     }
 
-    const requestedPlan = resolvePlan(subscription);
+    const resolvedPlan = resolvePlan(subscription);
     const entitled = subscription.status === "active" || subscription.status === "trialing";
-    const effectivePlan = entitled ? requestedPlan : "starter";
+
+    // An ENTITLED sub we cannot identify must fail loudly instead of
+    // falling back — a 500 makes Stripe retry and surface in monitoring,
+    // where defaulting to 'starter' would silently hand write access +
+    // starter entitlements to unrecognized money (the Vault-priced-sub-with-
+    // env-unset case; security review 2026-06-13).
+    if (entitled && !resolvedPlan) {
+      console.error(
+        "[stripe-webhook] entitled subscription matches no known plan (metadata or price) — refusing to default",
+        subscription.id,
+        subscription.items.data[0]?.price?.id,
+      );
+      throw new Error(`Unresolvable entitled subscription ${subscription.id}`);
+    }
+    const effectivePlan: Plan = entitled ? resolvedPlan! : "starter";
+
+    // One lookup serves the C1 + C2 guards and the plan-change audit row.
+    const { data: wsRow } = await supabaseAdmin
+      .from("workspaces")
+      .select("plan, stripe_subscription_id")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    const priorState = wsRow as { plan?: string | null; stripe_subscription_id?: string | null } | null;
+    const storedSubId = priorState?.stripe_subscription_id;
 
     // C1 guard (security + integrity review 2026-06-12): Stripe does not
     // guarantee event ordering and redelivers for days. A NON-entitled
@@ -132,25 +173,36 @@ serve(async (req) => {
     // subscription — otherwise a late 'canceled' event for an OLD
     // subscription, arriving after the customer renewed on a NEW one,
     // would downgrade the plan and restart the deletion clock on a paying
-    // customer (annual subs fire no healing event for months). Entitled
-    // events always apply: a real renewal must never be skipped.
-    if (!entitled) {
-      const { data: wsRow } = await supabaseAdmin
-        .from("workspaces")
-        .select("stripe_subscription_id")
-        .eq("id", workspaceId)
-        .maybeSingle();
-      const storedSubId = (wsRow as { stripe_subscription_id?: string | null } | null)
-        ?.stripe_subscription_id;
-      if (storedSubId && storedSubId !== subscription.id) {
-        console.warn(
-          "[stripe-webhook] ignoring non-entitled event for stale subscription",
-          subscription.id,
-          "current:",
-          storedSubId,
-        );
-        return;
-      }
+    // customer (annual subs fire no healing event for months).
+    if (!entitled && storedSubId && storedSubId !== subscription.id) {
+      console.warn(
+        "[stripe-webhook] ignoring non-entitled event for stale subscription",
+        subscription.id,
+        "current:",
+        storedSubId,
+      );
+      return;
+    }
+
+    // C2 guard (integrity review 2026-06-13, Vault V2): an ENTITLED event
+    // for a DIFFERENT subscription than the stored one applies only when it
+    // arrives through checkout.session.completed (workspaceIdOverride set —
+    // an explicit consented purchase switching the workspace's plan sub).
+    // Without this, the old plan sub's entitled `updated` event (fired
+    // deterministically when V3 sets cancel_at_period_end on it) clobbers a
+    // fresh Vault conversion back to the old plan AND re-stores the old sub
+    // id — so its eventual `canceled` passes C1, starts the grace clock on
+    // a paying Vault customer, and the purge cron ultimately cancels the
+    // live Vault sub and destroys paid retention data. Same-sub renewals
+    // (id matches) and first subs (no stored id) still apply.
+    if (entitled && !workspaceIdOverride && storedSubId && storedSubId !== subscription.id) {
+      console.warn(
+        "[stripe-webhook] ignoring entitled event for non-current subscription (no checkout consent)",
+        subscription.id,
+        "current:",
+        storedSubId,
+      );
+      return;
     }
 
     // Cancellation lifecycle (ratified 2026-06-12): when the plan
@@ -183,20 +235,26 @@ serve(async (req) => {
       )).toISOString();
     }
 
-    // Vault (V2): document_limit is deliberately left untouched — intake is
-    // frozen by the Vault V1 read-only layer regardless, and preserving the
-    // prior limit keeps the workspace's shape intact for a later
-    // reactivation. (DOCUMENT_LIMITS has no vault key; writing
-    // DOCUMENT_LIMITS['vault'] would null the column.) An entitled Vault sub
-    // clears the cancellation lifecycle via the `entitled` branch above —
-    // it IS an active subscription.
+    // Vault (V2): DOCUMENT_LIMITS has no vault key, so document_limit is
+    // left untouched on conversion. The honest invariant (integrity review
+    // 2026-06-13): document_limit is MEANINGLESS while plan='vault' — its
+    // value is path-dependent (50 if converted from live Business, 15 if
+    // converted from lapsed grace) and every consumer must gate on plan
+    // first. Intake is frozen by the Vault V1 layer before any limit is
+    // read, and any reactivation rewrites the column from the new plan, so
+    // nothing real depends on the stale value. The undefined-guard (not a
+    // 'vault' literal) keeps a future plan value without a DOCUMENT_LIMITS
+    // entry from nulling the column. An entitled Vault sub clears the
+    // cancellation lifecycle via the `entitled` branch above — it IS an
+    // active subscription.
+    const newDocumentLimit = DOCUMENT_LIMITS[effectivePlan];
     const { error } = await supabaseAdmin
       .from("workspaces")
       .update({
         plan: effectivePlan,
-        ...(effectivePlan === "vault"
-          ? {}
-          : { document_limit: DOCUMENT_LIMITS[effectivePlan] }),
+        ...(newDocumentLimit !== undefined
+          ? { document_limit: newDocumentLimit }
+          : {}),
         billing_interval: resolveInterval(subscription),
         stripe_customer_id: resolveCustomerId(subscription),
         stripe_subscription_id: subscription.id,
@@ -207,6 +265,34 @@ serve(async (req) => {
       .eq("id", workspaceId);
 
     if (error) throw new Error(`Failed to update workspace subscription: ${error.message}`);
+
+    // Plan transitions are audit-relevant (a Vault conversion changes access
+    // semantics; an entitled event can resurrect a soft-deleted workspace
+    // whose death the lifecycle cron DID log) — record them. Best-effort,
+    // like the activation reconciliation below: the entitlement write above
+    // already committed and must not be retried for an audit hiccup.
+    const priorPlan = priorState?.plan ?? null;
+    if (priorPlan !== effectivePlan) {
+      try {
+        await supabaseAdmin.from("workspace_activity_log").insert({
+          workspace_id: workspaceId,
+          user_id: null,
+          event_type: "plan_changed",
+          details: {
+            from_plan: priorPlan,
+            to_plan: effectivePlan,
+            subscription_id: subscription.id,
+            subscription_status: subscription.status,
+            source: "stripe_webhook",
+          },
+        });
+      } catch (auditErr) {
+        console.error(
+          "[stripe-webhook] plan_changed audit insert failed (entitlement write already committed):",
+          auditErr instanceof Error ? auditErr.message : auditErr,
+        );
+      }
+    }
 
     // Reconcile the multi-workspace creation request and log the activation
     // exactly once, on the pending -> active transition. The first/onboarding
@@ -344,8 +430,17 @@ serve(async (req) => {
       console.warn("[stripe-webhook] single-lease PI references unknown workspace", workspaceId, pi.id);
       return;
     }
-    const plan: "starter" | "business" = wsRow.plan === "business" ? "business" : "starter";
-    const expectedCents = SINGLE_LEASE_PRICE_CENTS[plan];
+    // Vault edge (audit review 2026-06-13): a credit legitimately purchased
+    // on Business ($10) whose PI webhook lands AFTER a Vault conversion must
+    // not be rejected against the Starter price ($12) — money taken, credit
+    // lost. A vault workspace can't CREATE this purchase (manage-document-
+    // pack blocks it), so the only way to get here on plan='vault' is that
+    // delivery race; accept the lower of the two real prices. The granted
+    // credit is unusable while vault (process_lease gates first) and spends
+    // normally on reactivation.
+    const expectedCents = wsRow.plan === "vault"
+      ? Math.min(SINGLE_LEASE_PRICE_CENTS.starter, SINGLE_LEASE_PRICE_CENTS.business)
+      : SINGLE_LEASE_PRICE_CENTS[wsRow.plan === "business" ? "business" : "starter"];
     const paidCents = pi.amount_received ?? pi.amount ?? 0;
     const piCustomer = typeof pi.customer === "string" ? pi.customer : pi.customer?.id ?? null;
 

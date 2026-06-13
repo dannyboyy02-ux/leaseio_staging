@@ -198,10 +198,6 @@ export function packPerLeasePrice(pack: DocumentPackConfig): number {
   return Math.round((pack.priceMonthly / pack.size) * 100) / 100;
 }
 
-export function getPlanByIndex(index: number): PlanConfig {
-  return PLANS[PLAN_ORDER[index]];
-}
-
 export function getPlanIndex(planId: SubscriptionPlan): number {
   return PLAN_ORDER.indexOf(planId);
 }

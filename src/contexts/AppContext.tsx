@@ -183,12 +183,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const plan = normalizePlanId(resolvedWorkspace.plan);
       const planConfig = PLANS[plan];
-      const documentLimit =
-        resolvedWorkspace.document_limit ?? planConfig?.maxActiveLeases ?? 15;
-      const archiveLimit =
-        (resolvedWorkspace as any).max_archived_leases
-        ?? planConfig?.maxArchivedLeases
-        ?? 50;
+      // Vault: workspaces.document_limit is a path-dependent leftover from
+      // the pre-conversion plan (the webhook deliberately doesn't touch it)
+      // and intake is frozen server-side — capacity meters must show 0, not
+      // the stale headroom (integrity review 2026-06-13).
+      const documentLimit = plan === 'vault'
+        ? 0
+        : resolvedWorkspace.document_limit ?? planConfig?.maxActiveLeases ?? 15;
+      const archiveLimit = plan === 'vault'
+        ? 0
+        : (resolvedWorkspace as any).max_archived_leases
+          ?? planConfig?.maxArchivedLeases
+          ?? 50;
 
       // Active leases now exclude archived rows so an admin archive frees a
       // slot even if lifecycle_status is still 'active'.
