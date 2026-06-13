@@ -1013,26 +1013,39 @@ export default function AccountSettings() {
                 </CardHeader>
                 <CardContent>
                   {isAdminUser ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        onClick={() => proceedWithCheckout('starter')}
-                        disabled={isUpgrading !== null}
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          onClick={() => proceedWithCheckout('starter')}
+                          disabled={isUpgrading !== null}
+                        >
+                          {isUpgrading === 'starter' ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : null}
+                          {t('account.vault_reactivate_starter')}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => proceedWithCheckout('business')}
+                          disabled={isUpgrading !== null}
+                        >
+                          {isUpgrading === 'business' ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : null}
+                          {t('account.vault_reactivate_business')}
+                        </Button>
+                      </div>
+                      {/* Subordinate: payment methods / cancel live in the Stripe
+                          portal. One billing surface — this card — so the generic
+                          current-plan card is suppressed for Vault below. */}
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
+                        onClick={handleManagePayment}
+                        disabled={isManagingPayment}
                       >
-                        {isUpgrading === 'starter' ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : null}
-                        {t('account.vault_reactivate_starter')}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => proceedWithCheckout('business')}
-                        disabled={isUpgrading !== null}
-                      >
-                        {isUpgrading === 'business' ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : null}
-                        {t('account.vault_reactivate_business')}
-                      </Button>
+                        {t('account.vault_manage_stripe')}
+                      </button>
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
@@ -1041,7 +1054,10 @@ export default function AccountSettings() {
               </Card>
             )}
 
-            {/* Current Plan & Usage */}
+            {/* Current Plan & Usage — suppressed for Vault (the Vault card above
+                is the single billing surface; this would duplicate the plan
+                badge/renewal and offer a competing "Manage payment" button). */}
+            {currentPlan !== 'vault' && (
             <div className="grid gap-6 lg:grid-cols-2">
               <Card>
                 <CardHeader>
@@ -1117,8 +1133,11 @@ export default function AccountSettings() {
                 </CardContent>
               </Card>
             </div>
+            )}
 
-            {/* Lease capacity packs */}
+            {/* Lease capacity packs — not offered on read-only Vault (no new
+                leases can be added, so extra capacity is meaningless). */}
+            {currentPlan !== 'vault' && (
             <Card>
               <CardHeader>
                 <CardTitle>{t('packs.card_title')}</CardTitle>
@@ -1144,11 +1163,13 @@ export default function AccountSettings() {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* Single-lease credits — only renders while a balance exists.
                 Credits are granted by the Stripe webhook on a one-time
-                purchase from the limit wall and consumed by process_lease. */}
-            {(workspace.purchasedLeaseCredits ?? 0) > 0 && (
+                purchase from the limit wall and consumed by process_lease.
+                Hidden on read-only Vault (credits are unusable there). */}
+            {currentPlan !== 'vault' && (workspace.purchasedLeaseCredits ?? 0) > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>{t('account.credits_title')}</CardTitle>

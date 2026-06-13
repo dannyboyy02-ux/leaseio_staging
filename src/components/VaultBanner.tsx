@@ -69,6 +69,13 @@ export function VaultMemberWall() {
         <p className="mt-2 text-sm text-muted-foreground">
           {t('vault.member_wall_desc', { name: workspace?.name ?? '' })}
         </p>
+        {/* Concrete escape hatch so the wall doesn't read as a trap — the
+            workspace switcher lives on the Workspaces settings page. */}
+        <div className="mt-6">
+          <Button asChild variant="outline">
+            <Link to="/app/settings/workspaces">{t('vault.member_wall_switch')}</Link>
+          </Button>
+        </div>
       </div>
     </div>
   );

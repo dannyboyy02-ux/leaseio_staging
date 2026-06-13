@@ -4,9 +4,11 @@ import { Card, CardContent } from '@/components/ui/card';
 
 interface EmptyLeaseStateProps {
   onAddLease: () => void;
+  /** Vault / read-only retention: suppress the intake CTA (no new leases). */
+  readOnly?: boolean;
 }
 
-export function EmptyLeaseState({ onAddLease }: EmptyLeaseStateProps) {
+export function EmptyLeaseState({ onAddLease, readOnly = false }: EmptyLeaseStateProps) {
   return (
     <Card className="border-2 border-dashed border-border">
       <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -45,11 +47,13 @@ export function EmptyLeaseState({ onAddLease }: EmptyLeaseStateProps) {
           </div>
         </div>
 
-        <Button variant="accent" size="lg" onClick={onAddLease}>
-          <Plus className="h-5 w-5 mr-2" />
-          Add Lease
-          <ArrowRight className="h-5 w-5 ml-2" />
-        </Button>
+        {!readOnly && (
+          <Button variant="accent" size="lg" onClick={onAddLease}>
+            <Plus className="h-5 w-5 mr-2" />
+            Add Lease
+            <ArrowRight className="h-5 w-5 ml-2" />
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

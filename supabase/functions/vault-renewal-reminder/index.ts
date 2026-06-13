@@ -115,7 +115,9 @@ serve(async (req) => {
       year: "numeric",
     });
     const billingUrl = `${appUrl}/app/settings/account?tab=billing`;
-    const subject = `Your LeaseIO Vault for "${escapeHtml(wsName)}" renews on ${renewDate}`;
+    // Subject is a plain-text header — escapeHtml would render entities
+    // literally (e.g. "Tom&#39;s Leases"). HTML escaping is only for the body.
+    const subject = `Your LeaseIO Vault for "${wsName}" renews on ${renewDate}`;
     const html = `<p>Your <strong>Vault</strong> retention plan for <strong>${escapeHtml(wsName)}</strong> renews on <strong>${renewDate}</strong> at <strong>$249/year</strong>.</p>
 <p>No action is needed — your read-only repository stays available and fully exportable. We're sending this so the renewal is never a surprise.</p>
 <p>Want a full plan back instead? You can <a href="${billingUrl}">reactivate Starter or Business</a> any time to resume editing and AI features. To stop the renewal, manage your subscription from the same billing page.</p>
@@ -138,15 +140,38 @@ serve(async (req) => {
       } else {
         stats.emailFailures++;
         console.error("[vault-renewal-reminder] resend error:", res.status, await res.text());
+        // The claim-first ledger row prevents double-sends, but a failed send
+        // would otherwise leave the row claimed forever → the owner never gets
+        // the no-surprise reminder. Release the claim so a later run retries.
+        // (Trade-off: a transient failure on an actually-delivered email could
+        // re-send next run — a duplicate courtesy email, far less bad than a
+        // silently-missed billing warning.)
+        await releaseLedgerClaim(supabaseAdmin, ws.id, ws.subscription_period_end);
       }
     } catch (err) {
       stats.emailFailures++;
       console.error("[vault-renewal-reminder] resend fetch error:", (err as Error)?.message);
+      await releaseLedgerClaim(supabaseAdmin, ws.id, ws.subscription_period_end);
     }
   }
 
   return new Response(JSON.stringify({ ok: true, ...stats }), { status: 200, headers: jsonHeaders });
 });
+
+// Release a claimed idempotency row after a failed send so a later run can
+// retry. Best-effort — a failure here just means the reminder waits for a
+// future run that finds the row still present.
+// deno-lint-ignore no-explicit-any
+async function releaseLedgerClaim(supabaseAdmin: any, workspaceId: string, periodEnd: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("vault_renewal_reminders")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("period_end", periodEnd);
+  if (error) {
+    console.error("[vault-renewal-reminder] ledger release failed:", workspaceId, error.message);
+  }
+}
 
 function escapeHtml(s: string): string {
   return s

@@ -396,7 +396,7 @@ export default function Leases() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : leases.length === 0 ? (
-          <EmptyLeaseState onAddLease={handleAddLease} />
+          <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -545,19 +545,23 @@ export default function Leases() {
                                 </TooltipTrigger>
                                 <TooltipContent>View details</TooltipContent>
                               </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => handleDeleteClick(lease)}
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete</TooltipContent>
-                              </Tooltip>
+                              {/* No delete on a read-only retention (Vault)
+                                  workspace — "nothing deleted" is the promise. */}
+                              {!isReadOnly && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() => handleDeleteClick(lease)}
+                                      className="text-destructive hover:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Delete</TooltipContent>
+                                </Tooltip>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>

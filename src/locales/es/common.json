@@ -681,7 +681,8 @@
     "vault_card_desc": "Su repositorio es de solo lectura y totalmente exportable. Se renueva el {{date}} por ${{price}}/año. Reactive un plan completo en cualquier momento para volver a editar y usar las funciones de IA (sin reembolso de la tarifa de Vault).",
     "vault_card_desc_nodate": "Su repositorio es de solo lectura y totalmente exportable. Se renueva anualmente por ${{price}}/año. Reactive un plan completo en cualquier momento para volver a editar y usar las funciones de IA (sin reembolso de la tarifa de Vault).",
     "vault_reactivate_starter": "Reactivar — Starter",
-    "vault_reactivate_business": "Reactivar — Business"
+    "vault_reactivate_business": "Reactivar — Business",
+    "vault_manage_stripe": "Gestionar suscripción en Stripe"
   },
   "packs": {
     "pack_10": "Paquete de 10 arrendamientos",
@@ -1683,8 +1684,10 @@
   "vault": {
     "banner_text": "Vault — repositorio de solo lectura. Se renueva el {{date}} por ${{price}}/año.",
     "banner_text_nodate": "Vault — repositorio de solo lectura. Se renueva anualmente por ${{price}}/año.",
-    "reactivate_cta": "Reactivar",
+    "reactivate_cta": "Reactivar un plan",
     "member_wall_title": "Este espacio está en Vault",
-    "member_wall_desc": "{{name}} es un repositorio de retención de solo lectura. El acceso a Vault es exclusivo del propietario: comuníquese con el propietario del espacio para restaurar el acceso completo o reactivar un plan."
+    "member_wall_desc": "{{name}} es un repositorio de retención de solo lectura. El acceso a Vault es exclusivo del propietario: comuníquese con el propietario del espacio para restaurar el acceso completo o reactivar un plan.",
+    "lease_readonly_note": "Este espacio está en Vault — solo lectura. La edición, las aprobaciones y las cargas están deshabilitadas.",
+    "member_wall_switch": "Cambiar de espacio"
   }
 }

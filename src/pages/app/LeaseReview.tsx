@@ -106,6 +106,7 @@ import {
   type ApproverProfile,
 } from '@/lib/approverCandidates';
 import { classifyRentScheduleDiff } from '@/lib/rentScheduleDiff';
+import { isReadOnlyRetention } from '@/config/pricing';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -205,6 +206,12 @@ export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
   const { user, userRole, userFunctionalRoles, workspace } = useApp();
+  // Vault (read-only retention) workspaces are view + export only. The server
+  // already blocks every write (V1 RLS + config guard); this flag suppresses
+  // the mutating UI affordances so a Vault owner sees a clean read-only
+  // repository instead of buttons that fail opaquely. Every gate is
+  // `&& !isReadOnly`, so live (non-vault) workspaces are unaffected.
+  const isReadOnly = isReadOnlyRetention(workspace?.plan);
   const [tier2CorrectionOpen, setTier2CorrectionOpen] = useState(false);
   const [showAmendmentDialog, setShowAmendmentDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
@@ -413,11 +420,12 @@ export default function LeaseReview() {
   const isPendingApproval = false;
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lifecycleStatus === 'active';
-  // Lock editing when approved, posted, or pending approval
-  const isLocked = isPosted || isPendingApproval || isApproved;
+  // Lock editing when approved, posted, or pending approval — and always for
+  // read-only retention (Vault) workspaces, so every field renders view-only.
+  const isLocked = isPosted || isPendingApproval || isApproved || isReadOnly;
 
   // Active lease unlocked for staged editing
-  const isUnlockedForEditing = isPosted && !lease?.model_locked && activeChangeSet?.status === 'draft';
+  const isUnlockedForEditing = isPosted && !lease?.model_locked && activeChangeSet?.status === 'draft' && !isReadOnly;
 
   // Show PDF panel alongside tabs when lease is still editable/in-review.
   // Hide it (full-width tabs) when the lease is active and fully locked.
@@ -433,7 +441,7 @@ export default function LeaseReview() {
     [confirmedSections],
   );
 
-  const canApprove = !isProcessing && allSectionsReviewed;
+  const canApprove = !isProcessing && allSectionsReviewed && !isReadOnly;
 
   // Phase 2 — open resubmit dialog pre-populated with current values
   const openResubmit = () => {
@@ -2019,16 +2027,16 @@ export default function LeaseReview() {
                   Approval Queue
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
-                {lifecycleStatus === 'submitted' && (
+                {!isReadOnly && lifecycleStatus === 'submitted' && (
                   <Button onClick={() => updateLifecycleStatus('under_review')}>Move to Under Review</Button>
                 )}
-                {lifecycleStatus === 'under_review' && (
+                {!isReadOnly && lifecycleStatus === 'under_review' && (
                   <Button onClick={() => updateLifecycleStatus('approved')}>Move to Approved</Button>
                 )}
-                {lifecycleStatus === 'approved' && (
+                {!isReadOnly && lifecycleStatus === 'approved' && (
                   <Button onClick={() => updateLifecycleStatus('executed')}>Mark Executed</Button>
                 )}
-                {lifecycleStatus && !['active', 'expired', 'cancelled', 'rejected'].includes(lifecycleStatus) && (
+                {!isReadOnly && lifecycleStatus && !['active', 'expired', 'cancelled', 'rejected'].includes(lifecycleStatus) && (
                   <Button
                     variant="outline"
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
@@ -2040,6 +2048,9 @@ export default function LeaseReview() {
                   >
                     Cancel Request
                   </Button>
+                )}
+                {isReadOnly && (
+                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
                 )}
               </div>
             }
@@ -2081,10 +2092,12 @@ export default function LeaseReview() {
                   Edit your financial inputs and resubmit to route through the approval chain again.
                 </p>
               </div>
-              <Button size="sm" variant="outline" className="flex-shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100" onClick={openResubmit}>
-                <RotateCcw className="h-4 w-4 mr-1.5" />
-                Edit &amp; Resubmit
-              </Button>
+              {!isReadOnly && (
+                <Button size="sm" variant="outline" className="flex-shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100" onClick={openResubmit}>
+                  <RotateCcw className="h-4 w-4 mr-1.5" />
+                  Edit &amp; Resubmit
+                </Button>
+              )}
             </div>
           )}
 
@@ -2100,7 +2113,7 @@ export default function LeaseReview() {
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div className="flex items-center gap-2">
                   <CardTitle>Report Attributes</CardTitle>
-                  {!editingRequest && !lease.requesting_department && (
+                  {!isReadOnly && !editingRequest && !lease.requesting_department && (
                     <button
                       className="text-xs text-amber-600 border border-amber-400 rounded-full px-2 py-0.5 hover:bg-amber-50 transition-colors"
                       onClick={() => {
@@ -2112,7 +2125,7 @@ export default function LeaseReview() {
                     </button>
                   )}
                 </div>
-                {!editingRequest && (
+                {!isReadOnly && !editingRequest && (
                   <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>Edit</Button>
                 )}
                 {editingRequest && (
@@ -2563,8 +2576,8 @@ export default function LeaseReview() {
   } | null;
 
   const unreviewedLowConfCount = lowConfidenceFields.length - interactedLowConfFields.size;
-  const isUnlockedDraft = !lease.model_locked && activeChangeSet?.status === 'draft';
-  const canShowLock = !lease.model_locked && (lifecycleStatus === 'executed' || lifecycleStatus === 'active');
+  const isUnlockedDraft = !lease.model_locked && activeChangeSet?.status === 'draft' && !isReadOnly;
+  const canShowLock = !lease.model_locked && (lifecycleStatus === 'executed' || lifecycleStatus === 'active') && !isReadOnly;
 
   // Payload for inline Export JSON / CSV menu items. Mirrors what was
   // previously passed to the old <LeaseExports/> button.
@@ -2583,6 +2596,7 @@ export default function LeaseReview() {
   };
 
   const primaryAction: PrimaryAction = (() => {
+    if (isReadOnly) return null; // Vault: view + export only, no mutating primary action
     if (isProcessing) return null;
     if (isUnlockedDraft) return null; // handled by Cancel + Save Changes inline
     if (unreviewedLowConfCount > 0) {
@@ -2636,7 +2650,7 @@ export default function LeaseReview() {
   // approve action lives at the top of the page header — we
   // deliberately don't duplicate it here.
   const renderTabFooter = (tabKey: string) => {
-    if (lease?.model_locked) return null;
+    if (lease?.model_locked || isReadOnly) return null;
     const confirmed = isTabConfirmed(tabKey);
     const nextTab = REVIEW_TABS.find(
       (t) => t.key !== tabKey && !t.sections.every((s) => confirmedSections.includes(s)),
@@ -2698,13 +2712,15 @@ export default function LeaseReview() {
           title={
             <div className="flex items-center gap-1.5">
               <span>{lease.request_title || lease.property_address || lease.filename || 'Untitled Lease'}</span>
-              <button
-                onClick={() => { setRenameValue(lease.request_title || ''); setRenameDialogOpen(true); }}
-                className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
-                title="Rename lease"
-              >
-                <Pencil size={13} />
-              </button>
+              {!isReadOnly && (
+                <button
+                  onClick={() => { setRenameValue(lease.request_title || ''); setRenameDialogOpen(true); }}
+                  className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                  title="Rename lease"
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
               {lease.lifecycle_status && (
                 <LifecycleStatusBadge status={lease.lifecycle_status as any} />
               )}
@@ -2802,16 +2818,16 @@ export default function LeaseReview() {
                       <Download className="h-4 w-4 mr-2" />
                       Export CSV
                     </DropdownMenuItem>
-                    {(isMasterLease && !isProcessing) || (userRole === 'admin' || userRole === 'owner') ? (
+                    {!isReadOnly && ((isMasterLease && !isProcessing) || (userRole === 'admin' || userRole === 'owner')) ? (
                       <DropdownMenuSeparator />
                     ) : null}
-                    {isMasterLease && !isProcessing && (
+                    {!isReadOnly && isMasterLease && !isProcessing && (
                       <DropdownMenuItem onClick={() => setShowAmendmentDialog(true)}>
                         <Upload className="h-4 w-4 mr-2" />
                         Upload amendment
                       </DropdownMenuItem>
                     )}
-                    {(userRole === 'admin' || userRole === 'owner') && (
+                    {!isReadOnly && (userRole === 'admin' || userRole === 'owner') && (
                       <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
                         <Archive className="h-4 w-4 mr-2" />
                         {lease.archived ? 'Restore' : 'Delete'}
@@ -2824,21 +2840,25 @@ export default function LeaseReview() {
           }
         />
 
-        <LeaseReviewStatusStrip
-          isProcessing={isProcessing}
-          modelLocked={!!lease.model_locked}
-          isApproved={isApproved}
-          isPendingApproval={isPendingApproval}
-          canApprove={canApprove}
-          lowConfidenceCount={lowConfidenceFields.length}
-          unreviewedLowConfCount={lowConfidenceFields.length - interactedLowConfFields.size}
-          onReview={handleJumpToFirstFlagged}
-          confirmedSectionCount={confirmedTabsCount}
-          totalRequiredSections={REVIEW_TABS.length}
-          remainingSectionTitles={remainingTabTitles}
-          requiredSectionTitles={REVIEW_TABS.map((t) => t.title)}
-          onConfirmAllRequired={handleConfirmAllRequired}
-        />
+        {/* The status strip drives the review-and-approve workflow. Read-only
+            (Vault) workspaces have no such decision to make, so suppress it. */}
+        {!isReadOnly && (
+          <LeaseReviewStatusStrip
+            isProcessing={isProcessing}
+            modelLocked={!!lease.model_locked}
+            isApproved={isApproved}
+            isPendingApproval={isPendingApproval}
+            canApprove={canApprove}
+            lowConfidenceCount={lowConfidenceFields.length}
+            unreviewedLowConfCount={lowConfidenceFields.length - interactedLowConfFields.size}
+            onReview={handleJumpToFirstFlagged}
+            confirmedSectionCount={confirmedTabsCount}
+            totalRequiredSections={REVIEW_TABS.length}
+            remainingSectionTitles={remainingTabTitles}
+            requiredSectionTitles={REVIEW_TABS.map((t) => t.title)}
+            onConfirmAllRequired={handleConfirmAllRequired}
+          />
+        )}
 
         <div className="flex-1 px-6 overflow-hidden">
           <ResizablePanelGroup
@@ -2910,7 +2930,7 @@ export default function LeaseReview() {
                       <p className="text-sm text-destructive min-w-0">
                         {t('archive.deleted_banner')}
                       </p>
-                      {(userRole === 'admin' || userRole === 'owner') && (
+                      {!isReadOnly && (userRole === 'admin' || userRole === 'owner') && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -2988,7 +3008,7 @@ export default function LeaseReview() {
                               </li>
                             ))}
                           </ul>
-                          {workspace?.id && (
+                          {!isReadOnly && workspace?.id && (
                             <button
                               type="button"
                               onClick={() => setTier2CorrectionOpen(true)}
@@ -3300,21 +3320,25 @@ export default function LeaseReview() {
 
                       {/* Risks */}
                       <TabsContent value="risks" className="mt-0 space-y-2">
-                        <div className="flex justify-end">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1.5"
-                            onClick={() => setAddRiskOpen(true)}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                            Add Risk
-                          </Button>
-                        </div>
+                        {!isReadOnly && (
+                          <div className="flex justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() => setAddRiskOpen(true)}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Add Risk
+                            </Button>
+                          </div>
+                        )}
+                        {/* Omit leaseId for read-only (Vault) so RisksSection
+                            hides its dismiss (write) affordance. */}
                         <RisksSection
                           risks={risks}
                           onJumpToPage={jumpToPage}
-                          leaseId={lease?.id}
+                          leaseId={isReadOnly ? undefined : lease?.id}
                           onRisksChanged={async () => {
                             const { data } = await supabase
                               .from('risks')
@@ -3335,9 +3359,11 @@ export default function LeaseReview() {
                             leaseId={lease.id}
                             workspaceId={lease.workspace_id}
                             canEdit={
-                              userRole === 'admin' ||
-                              userRole === 'owner' ||
-                              userRole === 'editor'
+                              !isReadOnly && (
+                                userRole === 'admin' ||
+                                userRole === 'owner' ||
+                                userRole === 'editor'
+                              )
                             }
                           />
                         )}
@@ -3394,7 +3420,7 @@ export default function LeaseReview() {
                           storagePath={lease.storage_path}
                           executedFilename={lease.executed_filename}
                           executedStoragePath={lease.executed_storage_path}
-                          isLocked={!!lease.model_locked}
+                          isLocked={!!lease.model_locked || isReadOnly}
                           onDocumentDeleted={refetchLease}
                         />
                         {isMasterLease && (
@@ -3415,7 +3441,7 @@ export default function LeaseReview() {
         </div>
 
         {/* Sticky Post Lease Footer */}
-        {isReviewRequired && (
+        {isReviewRequired && !isReadOnly && (
           <div className="sticky bottom-0 border-t bg-background p-4 flex justify-between items-center shadow-lg">
             <div className="flex items-center gap-4">
               {lowConfidenceFields.length > 0 ? (

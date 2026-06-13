@@ -681,7 +681,8 @@
     "vault_card_desc": "Your repository is read-only and fully exportable. Renews {{date}} at ${{price}}/yr. Reactivate a full plan anytime to resume editing and AI features (no Vault-fee refund).",
     "vault_card_desc_nodate": "Your repository is read-only and fully exportable. Renews annually at ${{price}}/yr. Reactivate a full plan anytime to resume editing and AI features (no Vault-fee refund).",
     "vault_reactivate_starter": "Reactivate — Starter",
-    "vault_reactivate_business": "Reactivate — Business"
+    "vault_reactivate_business": "Reactivate — Business",
+    "vault_manage_stripe": "Manage subscription in Stripe"
   },
   "packs": {
     "pack_10": "10-lease pack",
@@ -1683,8 +1684,10 @@
   "vault": {
     "banner_text": "Vault — read-only repository. Renews {{date}} at ${{price}}/yr.",
     "banner_text_nodate": "Vault — read-only repository. Renews annually at ${{price}}/yr.",
-    "reactivate_cta": "Reactivate",
+    "reactivate_cta": "Reactivate a plan",
     "member_wall_title": "This workspace is in Vault",
-    "member_wall_desc": "{{name}} is a read-only retention repository. Vault access is owner-only — contact the workspace owner to restore full access or reactivate a plan."
+    "member_wall_desc": "{{name}} is a read-only retention repository. Vault access is owner-only — contact the workspace owner to restore full access or reactivate a plan.",
+    "lease_readonly_note": "This workspace is in Vault — read-only. Editing, approvals, and uploads are disabled.",
+    "member_wall_switch": "Switch workspace"
   }
 }

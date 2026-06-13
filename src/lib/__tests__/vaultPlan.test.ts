@@ -454,3 +454,212 @@ describe('Vault V3 conversion-flow locale keys', () => {
     }
   });
 });
+
+// ===========================================================================
+// Vault V4 — in-product read-only experience + renewal-reminder cron
+// (commits ac5215a + 903ed12). The banner/wall, AppLayout gating, the
+// renewal-reminder edge function, its idempotency-ledger migration, and the
+// new locale keys. Same narrowed-window static-source discipline as above.
+//
+// Migration 20260613020000 + the vault-renewal-reminder function are pinned
+// here BEFORE they are applied/deployed, so the contract they will ship under
+// is locked in repo and a later edit that breaks it fails loudly.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// 10. VaultBanner / VaultMemberWall component (static source)
+// ---------------------------------------------------------------------------
+
+describe('VaultBanner component (static source)', () => {
+  const src = read('src/components/VaultBanner.tsx');
+
+  // Narrow to the VaultBanner function body (up to the VaultMemberWall export).
+  const banner = window(src, 'export function VaultBanner()', 'export function VaultMemberWall()');
+
+  it('returns null when the workspace is NOT a read-only retention plan', () => {
+    expect(banner).toContain('if (!isReadOnlyRetention(workspace?.plan)) return null;');
+  });
+
+  it('returns null for non-owner roles (owner-only banner)', () => {
+    expect(banner).toContain("if (userRole !== 'owner') return null;");
+  });
+
+  it('renders the reactivate CTA and both date / no-date banner copy', () => {
+    expect(banner).toContain("t('vault.reactivate_cta')");
+    expect(banner).toContain("t('vault.banner_text', { date: renewDate, price: VAULT_PRICE })");
+    expect(banner).toContain("t('vault.banner_text_nodate', { price: VAULT_PRICE })");
+  });
+
+  it('prices off PLANS.vault.price.annual, not a hardcoded 249', () => {
+    expect(src).toContain('const VAULT_PRICE = PLANS.vault.price.annual;');
+    // No literal price number leaked into the RENDERED output. Scope to the
+    // JSX return blocks (the leading comment intentionally mentions $249/yr as
+    // prose), so a hardcoded price in a t(...) call or span fails loudly.
+    expect(banner.slice(banner.indexOf('return ('))).not.toMatch(/\b249\b/);
+  });
+
+  it('exports VaultMemberWall for the non-owner case', () => {
+    expect(src).toContain('export function VaultMemberWall()');
+    const wall = src.slice(src.indexOf('export function VaultMemberWall()'));
+    expect(wall).toContain("t('vault.member_wall_title')");
+    expect(wall).toContain("t('vault.member_wall_desc'");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 11. AppLayout Vault gating (static source)
+// ---------------------------------------------------------------------------
+
+describe('AppLayout Vault gating (static source)', () => {
+  const src = read('src/components/layout/AppLayout.tsx');
+
+  it('AiAssistant is mounted ONLY when not a Vault workspace (zero-AI-spend)', () => {
+    expect(src).toContain('const isVault = isReadOnlyRetention(workspace?.plan);');
+    expect(src).toContain('{!isVault && <AiAssistant />}');
+  });
+
+  it('vaultWalled excludes settings so a non-owner keeps account / workspace switching', () => {
+    expect(src).toContain("const inSettings = location.pathname.startsWith('/app/settings');");
+    expect(src).toContain('const vaultWalled = isVault && !isOwner && !inSettings;');
+  });
+
+  it('renders VaultMemberWall for a walled non-owner (after the soft-deleted wall)', () => {
+    // Both walls are imported and the member wall is in the render branch.
+    expect(src).toContain("import { VaultBanner, VaultMemberWall } from '@/components/VaultBanner';");
+    expect(src).toContain('<VaultBanner />');
+    expect(src).toContain('vaultWalled ? (\n            <VaultMemberWall />');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 12. vault-renewal-reminder edge function (static source)
+// ---------------------------------------------------------------------------
+
+describe('vault-renewal-reminder cron (static source)', () => {
+  const src = read('supabase/functions/vault-renewal-reminder/index.ts');
+
+  it('fails closed with 401 when x-cron-secret is missing or wrong', () => {
+    const block = window(src, 'const cronSecret = Deno.env.get("VAULT_RENEWAL_CRON_SECRET")', 'const supabaseUrl');
+    expect(block).toContain('const provided = req.headers.get("x-cron-secret");');
+    // Unset secret OR mismatch both 401 — never the `!cronSecret` open-door bug.
+    expect(block).toContain('if (!cronSecret || provided !== cronSecret) {');
+    expect(block).toContain('status: 401');
+  });
+
+  it('queries only ACTIVE vault subscriptions whose renewal is inside the future window', () => {
+    const block = window(src, 'const { data: workspaces', 'if (wsErr)');
+    expect(block).toContain('.eq("plan", "vault")');
+    expect(block).toContain('.eq("subscription_status", "active")');
+    // Future-bounded window: >= now and <= now+14d (not a past renewal).
+    expect(block).toContain('.gte("subscription_period_end", now.toISOString())');
+    expect(block).toContain('.lte("subscription_period_end", windowEnd.toISOString())');
+  });
+
+  it('claims the idempotency ledger row BEFORE sending the email', () => {
+    const ledgerIdx = src.indexOf('.from("vault_renewal_reminders")');
+    const sendIdx = src.indexOf('fetch("https://api.resend.com/emails"');
+    expect(ledgerIdx, 'ledger insert present').toBeGreaterThanOrEqual(0);
+    expect(sendIdx, 'resend send present').toBeGreaterThan(ledgerIdx);
+    // A duplicate/unique conflict skips (already reminded this period).
+    const ledgerBlock = window(src, '.from("vault_renewal_reminders")', 'if (!resendApiKey)');
+    expect(ledgerBlock).toContain('/duplicate|unique/i');
+  });
+
+  it('escapes the workspace name in the HTML body, raw in the plain-text subject', () => {
+    // The HTML body + footer run wsName through escapeHtml (injection-safe).
+    // The subject is a plain-text email header, NOT HTML — escaping it there
+    // would render entities literally ("Tom&#39;s Leases"), so it uses raw
+    // wsName (security review 2026-06-13). No header-injection risk: Resend
+    // takes the subject from a JSON field, not a raw header line.
+    const composeBlock = window(src, 'const subject =', 'emailBudget--;');
+    expect(composeBlock).toContain('escapeHtml(wsName)');
+    const subjectLine = composeBlock.slice(0, composeBlock.indexOf('const html ='));
+    expect(subjectLine).toMatch(/\$\{wsName\}/); // raw in subject
+    const htmlBody = composeBlock.slice(composeBlock.indexOf('const html ='));
+    expect(htmlBody).not.toMatch(/\$\{wsName\}/); // never raw in the HTML body
+    expect(src).toContain('function escapeHtml(s: string)');
+  });
+
+  it('zero-AI-spend invariant: no Anthropic API/import reference', () => {
+    // Scope to the executable body (after the leading doc comment, which states
+    // the invariant in prose: "no Anthropic"). A real regression would be an
+    // import or an api.anthropic.com fetch — both live below the comment.
+    const body = src.slice(src.indexOf('import { serve }'));
+    expect(body).not.toMatch(/anthropic/i);
+    expect(body).not.toMatch(/api\.anthropic\.com/i);
+    expect(body).not.toMatch(/claude-/i);
+    // The only outbound API the body hits is Resend.
+    expect(body).toContain('https://api.resend.com/emails');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 13. vault_renewal_reminders migration (static source)
+// ---------------------------------------------------------------------------
+
+describe('vault_renewal_reminders ledger migration (static source)', () => {
+  const src = read('supabase/migrations/20260613020000_vault_renewal_reminders.sql');
+
+  // Narrow to the CREATE TABLE statement so the header prose / COMMENT can't
+  // satisfy structural assertions.
+  const table = window(src, 'CREATE TABLE IF NOT EXISTS public.vault_renewal_reminders', ');');
+
+  it('creates the ledger table with a workspace FK that cascades on delete', () => {
+    expect(table).toContain('workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE');
+  });
+
+  it('has the UNIQUE (workspace_id, period_end) idempotency constraint', () => {
+    expect(table).toContain('UNIQUE (workspace_id, period_end)');
+  });
+
+  it('enables RLS (service-role-only: no policies are declared)', () => {
+    expect(src).toContain('ALTER TABLE public.vault_renewal_reminders ENABLE ROW LEVEL SECURITY;');
+    // RLS-on with no CREATE POLICY means clients are locked out entirely.
+    expect(src).not.toMatch(/CREATE POLICY/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 14. Locale parity — Vault V4 banner / member-wall / account-card keys
+// ---------------------------------------------------------------------------
+
+describe('Vault V4 in-product locale keys', () => {
+  type LocaleTree = { [k: string]: string | LocaleTree };
+  const en = JSON.parse(read('src/locales/en/common.json')) as LocaleTree;
+  const es = JSON.parse(read('src/locales/es/common.json')) as LocaleTree;
+  const lookup = (tree: LocaleTree, key: string): unknown =>
+    key.split('.').reduce<unknown>(
+      (node, part) =>
+        node && typeof node === 'object' ? (node as LocaleTree)[part] : undefined,
+      tree,
+    );
+
+  const keys = [
+    'vault.banner_text',
+    'vault.banner_text_nodate',
+    'vault.reactivate_cta',
+    'vault.member_wall_title',
+    'vault.member_wall_desc',
+    'account.vault_card_title',
+    'account.vault_card_desc',
+    'account.vault_card_desc_nodate',
+    'account.vault_reactivate_starter',
+    'account.vault_reactivate_business',
+  ];
+
+  it('every V4 key resolves to a string in BOTH en and es', () => {
+    for (const key of keys) {
+      expect(typeof lookup(en, key), `en missing ${key}`).toBe('string');
+      expect(typeof lookup(es, key), `es missing ${key}`).toBe('string');
+    }
+  });
+
+  it('banner_text + vault_card_desc carry both {{price}} and {{date}} tokens in both locales', () => {
+    for (const key of ['vault.banner_text', 'account.vault_card_desc']) {
+      expect(lookup(en, key) as string, `en ${key} {{price}}`).toContain('{{price}}');
+      expect(lookup(en, key) as string, `en ${key} {{date}}`).toContain('{{date}}');
+      expect(lookup(es, key) as string, `es ${key} {{price}}`).toContain('{{price}}');
+      expect(lookup(es, key) as string, `es ${key} {{date}}`).toContain('{{date}}');
+    }
+  });
+});
