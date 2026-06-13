@@ -25,6 +25,8 @@ interface Props {
   initial: VendorFields;
   /** Called after a successful save so the parent can re-sync. */
   onSaved?: (next: VendorFields) => void;
+  /** Vault read-only: suppress the edit-enable affordance. Default false. */
+  readOnly?: boolean;
 }
 
 const EMPTY: VendorFields = {
@@ -37,7 +39,7 @@ const EMPTY: VendorFields = {
   vendor_zip: null,
 };
 
-export function VendorCard({ leaseId, initial, onSaved }: Props) {
+export function VendorCard({ leaseId, initial, onSaved, readOnly = false }: Props) {
   const { t } = useAppTranslation();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -90,7 +92,7 @@ export function VendorCard({ leaseId, initial, onSaved }: Props) {
         {t('common.save')}
       </Button>
     </div>
-  ) : (
+  ) : readOnly ? null : (
     <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
       <Pencil className="h-3.5 w-3.5 mr-1" />
       {t('common.edit')}

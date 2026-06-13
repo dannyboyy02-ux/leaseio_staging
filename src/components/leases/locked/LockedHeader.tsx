@@ -36,6 +36,8 @@ interface Props {
   leaseId?: string;
   isArchived?: boolean;
   onArchiveChange?: () => void;
+  /** Vault read-only: suppress unlock controls and explain the state. Default false. */
+  readOnly?: boolean;
 }
 
 export function LockedHeader({
@@ -52,6 +54,7 @@ export function LockedHeader({
   leaseId,
   isArchived,
   onArchiveChange,
+  readOnly = false,
 }: Props) {
   const navigate = useNavigate();
   const { t } = useAppTranslation();
@@ -92,7 +95,10 @@ export function LockedHeader({
           </div>
 
           <div className="shrink-0 flex items-center gap-2">
-            {!isAdmin && !pendingUnlockRequest && (
+            {readOnly && (
+              <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+            )}
+            {!readOnly && !isAdmin && !pendingUnlockRequest && (
               <Button variant="outline" size="sm" onClick={onRequestUnlock} disabled={isRequestingUnlock}>
                 {isRequestingUnlock ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -102,10 +108,10 @@ export function LockedHeader({
                 {t('locked_lease.request_unlock')}
               </Button>
             )}
-            {!isAdmin && pendingUnlockRequest && (
+            {!readOnly && !isAdmin && pendingUnlockRequest && (
               <span className="text-xs text-muted-foreground">{t('locked_lease.unlock_pending')}</span>
             )}
-            {isAdmin && (
+            {!readOnly && isAdmin && (
               <Button
                 variant="outline"
                 size="sm"
@@ -185,7 +191,7 @@ export function LockedHeader({
           </Card>
         )}
 
-        {isAdmin && pendingUnlockRequest && (
+        {!readOnly && isAdmin && pendingUnlockRequest && (
           <Card className="mt-3 shadow-none border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
             <CardContent className="py-3 px-4 flex items-center justify-between gap-4 flex-wrap">
               <div className="min-w-0">

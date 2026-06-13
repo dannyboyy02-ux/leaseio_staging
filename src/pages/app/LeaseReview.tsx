@@ -2292,30 +2292,32 @@ export default function LeaseReview() {
                   </div>
                 )}
 
-                <div
-                  className={cn(
-                    'cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition-colors',
-                    stageFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40',
-                  )}
-                  onClick={() => document.getElementById('stage-file-input')?.click()}
-                >
-                  <input
-                    id="stage-file-input"
-                    type="file"
-                    accept="application/pdf"
-                    className="hidden"
-                    onChange={(e) => {
-                      setStageFile(e.target.files?.[0] || null);
-                      if (e.target) e.target.value = '';
-                    }}
-                  />
-                  <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    {stageFile ? stageFile.name : 'Click to select a PDF or drag and drop'}
-                  </p>
-                </div>
+                {!isReadOnly && (
+                  <div
+                    className={cn(
+                      'cursor-pointer rounded-lg border-2 border-dashed p-5 text-center transition-colors',
+                      stageFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40',
+                    )}
+                    onClick={() => document.getElementById('stage-file-input')?.click()}
+                  >
+                    <input
+                      id="stage-file-input"
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        setStageFile(e.target.files?.[0] || null);
+                        if (e.target) e.target.value = '';
+                      }}
+                    />
+                    <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">
+                      {stageFile ? stageFile.name : 'Click to select a PDF or drag and drop'}
+                    </p>
+                  </div>
+                )}
 
-                {stageFile && (
+                {!isReadOnly && stageFile && (
                   <div className="flex items-center justify-between rounded-md border p-2 text-sm">
                     <span className="truncate">{stageFile.name}</span>
                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setStageFile(null)}>
@@ -2324,18 +2326,24 @@ export default function LeaseReview() {
                   </div>
                 )}
 
-                <Button onClick={handleStageDocumentUpload} disabled={uploadingStageFile || !stageFile} variant="outline" className="w-full">
-                  {uploadingStageFile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                  Upload Document
-                </Button>
+                {!isReadOnly && (
+                  <Button onClick={handleStageDocumentUpload} disabled={uploadingStageFile || !stageFile} variant="outline" className="w-full">
+                    {uploadingStageFile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                    Upload Document
+                  </Button>
+                )}
 
                 {/* Phase 4 — upload executed document when approved */}
-                {lifecycleStatus === 'approved' && (
+                {!isReadOnly && lifecycleStatus === 'approved' && (
                   <UploadExecutedDocumentDialog
                     leaseId={lease.id}
                     leaseFilename={lease.filename || ''}
                     onSuccess={refetchLease}
                   />
+                )}
+
+                {isReadOnly && (
+                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
                 )}
               </CardContent>
           </Card>
@@ -2559,7 +2567,7 @@ export default function LeaseReview() {
   // (sectioned cards, vendor stays editable). All other states fall through
   // to the existing workbench below.
   if (lease?.model_locked === true && lease?.lifecycle_status === 'active') {
-    return <LockedLeaseDetail lease={lease} refetchLease={refetchLease} />;
+    return <LockedLeaseDetail lease={lease} refetchLease={refetchLease} readOnly={isReadOnly} />;
   }
 
   // Derive a single primary action for the header. This is the
@@ -2759,6 +2767,13 @@ export default function LeaseReview() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
+                {/* Vault read-only: explain why no write affordances are present.
+                    Mirrors the intake-branch note so non-intake states
+                    (executed / active-unlocked / needs-review / archived) are
+                    not silently action-less. */}
+                {isReadOnly && (
+                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+                )}
                 {/* Primary action — state-aware, visually dominant.
                     font-semibold + shadow + slight x-padding pull the
                     eye regardless of variant. */}
@@ -2948,6 +2963,7 @@ export default function LeaseReview() {
                       errorMessage={lease.error_message}
                       storagePath={lease.storage_path}
                       onRetrySuccess={() => window.location.reload()}
+                      readOnly={isReadOnly}
                     />
                   )}
                   {needsReviewStatus(lease?.lifecycle_status) && (
@@ -3385,6 +3401,7 @@ export default function LeaseReview() {
                           onLifecycleChanged={() => {
                             queryClient.invalidateQueries({ queryKey: ['lease', leaseId] });
                           }}
+                          readOnly={isReadOnly}
                         />
                         {lease.lifecycle_status === 'pending_counter_signature' && (
                           <CounterSignaturePanel
