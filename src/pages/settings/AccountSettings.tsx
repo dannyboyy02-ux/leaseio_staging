@@ -60,7 +60,6 @@ export default function AccountSettings() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [timezone, setTimezone] = useState('America/New_York');
   const [isSaving, setIsSaving] = useState(false);
@@ -603,16 +602,10 @@ export default function AccountSettings() {
                     className="bg-muted"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">{t('account.phone')}</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
+                {/* Phone field removed (#69/#80): profiles has no phone column,
+                    so the input was a dead control — Save discarded it while
+                    toasting success. Restore only alongside a real phone column
+                    + load/save wiring. */}
                 <div className="space-y-2">
                   <Label htmlFor="company">{t('account.company')}</Label>
                   <Input

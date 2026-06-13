@@ -1648,6 +1648,8 @@ green.
 
 **Stub remediation:** Wire `phone` into the profile load + `handleSaveProfile` payload (column exists check first), or remove the field.
 
+**RESOLVED 2026-06-13** — verified `profiles` has NO `phone` column (live DB), so the field was a pure dead control (never loaded, omitted from the save payload). Removed the Phone input + state from AccountSettings; #69 is the same issue and is resolved by this. Restore only with a real column + load/save wiring.
+
 ---
 
 ### Item #81: Audit-insert failures have no observer; two residual silent paths
