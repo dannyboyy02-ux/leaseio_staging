@@ -87,6 +87,27 @@ Product + yearly Price (live + sandbox) and set `STRIPE_PRICE_VAULT_ANNUAL`.
   CTA line + link.
 - Pack auto-cancel at period end during conversion (Stripe API, webhook-safe).
 
+**V3 as-built (2026-06-13):** convert-at-grace model shipped. create-checkout
+gained owner-only, no-trial, yearly-only Vault support (503 vault_not_configured
+/ 403 vault_owner_only, fail-closed). stripe-webhook retires document-pack subs
+at period end on Vault activation. Grace banner has an owner-only 'Keep your data
+— Vault' CTA (price-interpolated, loading state, support-routed error copy);
+cancel dialog shows a convert-at-grace note (hidden when already Vault);
+cancellation reminder emails carry a Vault CTA line. Read/export pre-blocker
+closed via isReadOnlyRetention() — Reports + Portfolio stay open for Vault WITHOUT
+touching the AI gate. Report/financial CONFIG is now read-only for non-live
+workspaces at BOTH layers: UI (cards hidden) and server (migration
+20260613010000, a BEFORE UPDATE trigger on workspaces guarding the config column
+set — applied + verified live; also closes the pre-existing grace/soft-deleted
+config-write hole). Vault is GRACE-ONLY (ratified): the soft-deleted wall states
+so rather than offering conversion. Five reviews (auditor/security/integrity/
+polish/test) + a pre-apply security review of the migration (APPLY). create-checkout
++ stripe-webhook redeployed. **Deferred to V4:** full client-side read-only gating
+of WorkspaceSettings (KNOWN_ISSUES #87); report-generation artifact write on a
+read-only workspace is an accepted export action (security LOW — deterministic,
+non-AI; documented as within the view+export grant). OPERATOR: STOP 10
+(STRIPE_PRICE_VAULT_ANNUAL) gates real conversions.
+
 ### V4 — In-product Vault experience
 - Non-owner members: wall (reuse `SoftDeletedWall` shape) — "in Vault,
   contact the owner."

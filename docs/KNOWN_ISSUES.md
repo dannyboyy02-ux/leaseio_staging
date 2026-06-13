@@ -1701,3 +1701,13 @@ green.
 **Stub remediation:** When both metadata and price resolve, prefer the price-derived plan and log a mismatch warning ("trust the money, not the metadata" — same principle as `applySingleLeaseCredit`). Or verify + document that the portal config disallows price changes.
 
 ---
+
+### Item #87: WorkspaceSettings "General" save bundles name+timezone — rename fails as collateral during grace/Vault
+
+**Symptom:** `src/pages/settings/WorkspaceSettings.tsx` `handleSaveGeneral` updates `name` AND `timezone` in one `workspaces` UPDATE. The read-only config guard (migration `20260613010000`) rejects the statement on a non-live workspace because `timezone` is a guarded column — so an owner on a canceled-in-grace / soft-deleted / Vault workspace who only wanted to rename gets a hard failure with no indication timezone is the cause. The dedicated rename path (`RenameWorkspaceInline.tsx`, name-only) still works, so rename is not globally lost.
+
+**Severity:** Medium (UX wrinkle on a read-only workspace; no data risk — the guard is working as intended). Filed by lease-security-scanner pre-apply review of the Vault V3 read-only guard (2026-06-13). Root cause is broader: WorkspaceSettings' client `canEdit` is role-only and doesn't reflect non-live state — full client-side read-only gating of WorkspaceSettings is V4 (read-only UI walls) territory.
+
+**Stub remediation:** Either split the name update out of `handleSaveGeneral` when non-live, or gate the General form (and the rest of WorkspaceSettings) client-side on `isReadOnlyRetention`/grace state as part of the V4 read-only UI pass. Until then, the inline rename remains the working path.
+
+---
