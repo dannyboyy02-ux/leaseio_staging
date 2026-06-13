@@ -246,11 +246,41 @@ serve(async (req) => {
     console.error("[delete-workspace] STRIPE_SECRET_KEY not set — subscriptions NOT canceled:", workspaceId);
   }
 
-  // ── Purge storage across all four buckets (recursive) ───────────────
-  const storageObjectsPurged = await purgeWorkspaceStorage(supabaseAdmin, {
-    workspaceId,
-    uploaderPrefixes: Array.from(storageTargets),
-  });
+  // ── Forensic row FIRST — before any destruction (#93) ───────────────
+  // Mirrors the cancellation cron: write deleted_workspaces BEFORE deleting
+  // anything, and ABORT if it fails, so a destroyed workspace can never lack
+  // its forensic record. storage_objects_purged is backfilled after the
+  // storage purge (which runs LAST). UNIQUE(original_workspace_id): a
+  // duplicate means a prior partial delete — resume destruction against the
+  // existing row rather than re-recording.
+  const { error: forensicError } = await supabaseAdmin
+    .from("deleted_workspaces")
+    .insert({
+      original_workspace_id: workspaceId,
+      owner_id: ws.owner_id,
+      workspace_name: ws.name,
+      workspace_plan: ws.plan,
+      lease_count_at_deletion: leaseCount ?? 0,
+      member_count_at_deletion: memberCount ?? 0,
+      storage_objects_purged: 0,
+      deleted_by: user.id,
+      details: {
+        purge_source: "owner_delete_workspace",
+        stripe_subscriptions_canceled: stripeCanceled,
+      },
+    });
+  if (forensicError && !/duplicate|unique/i.test(forensicError.message)) {
+    console.error("[delete-workspace] forensic insert failed — delete ABORTED:", forensicError.message);
+    return jsonResponse(
+      {
+        ok: false,
+        error: `Failed to record deletion: ${forensicError.message}`,
+        reason: "forensic_insert_failed",
+      },
+      500,
+      origin,
+    );
+  }
 
   // ── Delete leases first (avoids workspace_id SET NULL orphaning) ────
   // Cascades to: lease_activity_log, lease_approval_chain (via lease_id),
@@ -301,26 +331,19 @@ serve(async (req) => {
     );
   }
 
-  // ── Audit row (post-delete; survives the deletion) ──────────────────
-  const { error: auditError } = await supabaseAdmin
+  // ── Storage purge LAST — files are unreachable once the rows are gone;
+  // an abort before this point left the workspace fully recoverable. The
+  // forensic row was already written (#93); backfill its purged count. ──
+  const storageObjectsPurged = await purgeWorkspaceStorage(supabaseAdmin, {
+    workspaceId,
+    uploaderPrefixes: Array.from(storageTargets),
+  });
+  const { error: countUpdateError } = await supabaseAdmin
     .from("deleted_workspaces")
-    .insert({
-      original_workspace_id: workspaceId,
-      owner_id: ws.owner_id,
-      workspace_name: ws.name,
-      workspace_plan: ws.plan,
-      lease_count_at_deletion: leaseCount ?? 0,
-      member_count_at_deletion: memberCount ?? 0,
-      storage_objects_purged: storageObjectsPurged,
-      deleted_by: user.id,
-      details: {
-        purge_source: "owner_delete_workspace",
-        stripe_subscriptions_canceled: stripeCanceled,
-      },
-    });
-  if (auditError) {
-    // Don't fail the request — the destructive work is done. Log loudly.
-    console.error("[delete-workspace] audit insert error:", auditError.message);
+    .update({ storage_objects_purged: storageObjectsPurged })
+    .eq("original_workspace_id", workspaceId);
+  if (countUpdateError) {
+    console.error("[delete-workspace] forensic count backfill failed:", countUpdateError.message);
   }
 
   return jsonResponse(
