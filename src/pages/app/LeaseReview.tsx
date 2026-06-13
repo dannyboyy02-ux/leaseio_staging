@@ -3403,7 +3403,19 @@ export default function LeaseReview() {
                           }}
                           readOnly={isReadOnly}
                         />
-                        {lease.lifecycle_status === 'pending_counter_signature' && (
+                        {/* Chain-negotiation action panels are write surfaces;
+                            on a read-only (Vault) workspace a lease that was
+                            mid-chain at conversion shows the read-only note
+                            instead, never live counter-signature / violation-
+                            override actions that would fail at the server. */}
+                        {isReadOnly &&
+                          (lease.lifecycle_status === 'pending_counter_signature' ||
+                            lease.lifecycle_status === 'chain_violation') && (
+                            <p className="text-sm text-muted-foreground">
+                              {t('vault.lease_readonly_note')}
+                            </p>
+                          )}
+                        {!isReadOnly && lease.lifecycle_status === 'pending_counter_signature' && (
                           <CounterSignaturePanel
                             leaseId={lease.id}
                             workspaceId={lease.workspace_id}
@@ -3418,7 +3430,7 @@ export default function LeaseReview() {
                             }}
                           />
                         )}
-                        {lease.lifecycle_status === 'chain_violation' && (
+                        {!isReadOnly && lease.lifecycle_status === 'chain_violation' && (
                           <ChainViolationBanner
                             leaseId={lease.id}
                             workspaceId={lease.workspace_id}
