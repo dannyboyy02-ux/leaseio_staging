@@ -1747,3 +1747,33 @@ green.
 **Stub remediation:** Security migration (reviewer routing BEFORE push). Enumerate every client insert site (grep `lease_activity_log` in `src/` — currently ~10 sites writing ~18 types) and confirm which types clients legitimately write directly vs. should be moved to an edge function (e.g. `status_change`/`approval` arguably belong server-side, cf. #32). Then narrow the INSERT policy WITH CHECK to `user_id = auth.uid()` (drop the NULL option) AND `activity_type = ANY(<client allowlist>)`. Verify no legitimate client flow breaks (each currently-written type stays allowed or is rerouted) before applying. Add a static/smoke test pinning the allowlist.
 
 ---
+
+### Item #91: Leases "Show archived" shows all leases (no archived-only filter) + no in-list restore
+
+**Symptom:** `Leases.tsx` "Show archived" toggle widens the query but doesn't `.eq('archived', true)`, so it shows active + archived together with no badge distinguishing them; and archived rows have no in-list Restore action (restore lives only on the lease detail page via `ArchiveButton`). After #79 the archive dialog points users to "Show archived" + the detail page, so findability matters more.
+
+**Severity:** Low-Medium (UX). Pre-existing filter gap surfaced by lease-repository-integrity-reviewer during the #79 review (2026-06-13); the #79 fix pointed restore at the detail page to avoid a false promise, leaving this as the polish follow-up.
+
+**Stub remediation:** In the showArchived branch, filter `.eq('archived', true)` (or add an "Archived" badge on archived rows), and add an in-list Restore action on archived rows mirroring `ArchiveButton`'s restore (archived=false, null attribution, log `lease_restored`). Route through lease-product-polish.
+
+---
+
+### Item #92: Archive vocabulary is labeled "Delete"/"deleted" across ArchiveButton, badges, banners, and archive.* locale keys
+
+**Symptom:** The restorable-archive action is worded as "Delete" throughout the detail-page surfaces: `archive.archive` = "Delete", `archive.archived_toast` = "Lease deleted", `archive.deleted_badge` = "Deleted", `archive.deleted_banner`, `archive.confirm_archive_title` = "Delete this lease?". So "Delete" still means archive (restorable) on the detail page while meaning permanent deletion in ImportHistory — the same dual-meaning #79 set out to remove, at the copy layer. #79 fixed the Leases-LIST semantics + used clear "Archive" wording in the new list dialog, but did not rename the detail-page archive vocabulary.
+
+**Severity:** Medium (the core #79 confusion persists in detail-page copy). Surfaced during the #79 review (2026-06-13).
+
+**Stub remediation:** Vocabulary unification pass (lease-product-polish + locale parity en/es): rename the `archive.*` key VALUES from Delete→Archive wording across `ArchiveButton`, badges, and banners so "Delete" means only permanent deletion anywhere. Multi-surface user-facing copy change — review before shipping.
+
+---
+
+### Item #93: delete-workspace writes the forensic deleted_workspaces row LAST; a failure leaves a destroyed workspace unrecorded
+
+**Symptom:** `delete-workspace/index.ts` writes the `deleted_workspaces` forensic row near the END (after Stripe cancel + storage purge), and a forensic-insert failure is only logged — so a workspace can be destroyed with no forensic record. The cancellation cron does the opposite (forensic row BEFORE destruction, abort on failure). The two destruction paths use opposite forensic ordering by design; delete-workspace's is the weaker one.
+
+**Severity:** Medium (forensic gap on the owner-initiated path). Pre-existing; surfaced by lease-repository-integrity-reviewer during the #74 review (2026-06-13).
+
+**Stub remediation:** Move delete-workspace's forensic `deleted_workspaces` insert to BEFORE the destructive deletes (mirror the cron), aborting the delete if the forensic insert fails — so destruction is never unattributable.
+
+---

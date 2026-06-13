@@ -86,7 +86,9 @@
     "confirm_unarchive_desc": "Restaurar devuelve el arrendamiento al conjunto activo. Volverá a contar para su cupo de arrendamientos activos.",
     "audit_warning": "Guardado, pero la acción no pudo registrarse en el historial de auditoría.",
     "deleted_badge": "Eliminado",
-    "deleted_banner": "Este arrendamiento está eliminado. Ya no cuenta para sus arrendamientos activos y permanece oculto en la lista a menos que active \"Mostrar archivados\"."
+    "deleted_banner": "Este arrendamiento está eliminado. Ya no cuenta para sus arrendamientos activos y permanece oculto en la lista a menos que active \"Mostrar archivados\".",
+    "list_archived_toast": "Contrato archivado — restáurelo desde la página de detalle del contrato",
+    "list_archive_failed": "No se pudo archivar el contrato"
   },
   "documents": {
     "delete_doc_title": "¿Eliminar este documento?",

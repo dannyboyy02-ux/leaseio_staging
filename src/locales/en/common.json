@@ -86,7 +86,9 @@
     "confirm_unarchive_desc": "Restoring puts the lease back in the active set. It will count toward your active-lease cap again.",
     "audit_warning": "Saved, but the action could not be recorded in the audit trail.",
     "deleted_badge": "Deleted",
-    "deleted_banner": "This lease is deleted. It no longer counts toward your active leases and is hidden from the Leases list unless \"Show archived\" is on."
+    "deleted_banner": "This lease is deleted. It no longer counts toward your active leases and is hidden from the Leases list unless \"Show archived\" is on.",
+    "list_archived_toast": "Lease archived — restore it from the lease's detail page",
+    "list_archive_failed": "Failed to archive lease"
   },
   "documents": {
     "delete_doc_title": "Delete this document?",

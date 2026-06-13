@@ -83,7 +83,11 @@ export async function purgeWorkspaceStorage(
       if (files.length > 0) {
         const paths = files.map((f: { name: string }) => `${prefix}/${f.name}`);
         const { error: rmErr } = await supabaseAdmin.storage.from(bucket).remove(paths);
-        if (!rmErr) storagePurged += paths.length;
+        if (rmErr) {
+          console.error(`[workspace-purge] storage remove error in ${bucket}/${prefix}: ${rmErr.message}`);
+        } else {
+          storagePurged += paths.length;
+        }
       }
       for (const folder of folders) {
         await removePrefix(bucket, `${prefix}/${folder.name}`);

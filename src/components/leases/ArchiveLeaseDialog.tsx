@@ -38,8 +38,9 @@ export function ArchiveLeaseDialog({
           </div>
           <AlertDialogDescription className="pt-2">
             Archive <span className="font-medium text-foreground">"{leaseName}"</span>? It will be
-            moved out of the active list but kept in full — you can view or restore it any time from
-            <span className="font-medium text-foreground"> "Show archived"</span>. Nothing is deleted.
+            moved out of the active list but kept in full — find it under
+            <span className="font-medium text-foreground"> "Show archived"</span> and restore it any
+            time from the lease's detail page. Nothing is deleted.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

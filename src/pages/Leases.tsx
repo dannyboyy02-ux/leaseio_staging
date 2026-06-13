@@ -54,6 +54,7 @@ interface LeaseRow {
   current_monthly_rent: number | null;
   monthly_payment: number | null;
   extracted_json: Record<string, unknown> | null;
+  archived?: boolean | null;
   rent_schedules: {
     period_start: string;
     period_end: string | null;
@@ -222,13 +223,13 @@ export default function Leases() {
         details: {},
       } as any);
       if (auditError) console.error('Archive audit insert failed:', auditError.message);
-      toast.success('Lease archived — view it under "Show archived"');
+      toast.success(t('archive.list_archived_toast'));
       setDeleteDialogOpen(false);
       setSelectedLease(null);
       fetchLeases();
     } catch (error) {
       console.error('Archive error:', error);
-      toast.error('Failed to archive lease');
+      toast.error(t('archive.list_archive_failed'));
     }
   };
 
@@ -565,7 +566,7 @@ export default function Leases() {
                               {/* Restorable archive (#79), admin/owner-only
                                   (#78 trigger enforces server-side). Hidden on
                                   read-only Vault workspaces. */}
-                              {!isReadOnly && isAdmin && (
+                              {!isReadOnly && isAdmin && !lease.archived && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
