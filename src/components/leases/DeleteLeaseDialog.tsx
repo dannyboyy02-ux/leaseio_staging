@@ -10,6 +10,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { AlertTriangle } from 'lucide-react';
 
+// Hard, permanent delete. As of #79 this is NOT used from the Leases list
+// (which uses ArchiveLeaseDialog — restorable archive). It remains the
+// deliberate hard-delete path for import rollback in ImportHistory, where
+// removing a mis-imported lease entirely is the intended action.
 interface DeleteLeaseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -34,7 +38,7 @@ export function DeleteLeaseDialog({
             <AlertDialogTitle>Delete Lease</AlertDialogTitle>
           </div>
           <AlertDialogDescription className="pt-2">
-            Are you sure you want to delete <span className="font-medium text-foreground">"{leaseName}"</span>? 
+            Are you sure you want to delete <span className="font-medium text-foreground">"{leaseName}"</span>?
             This action cannot be undone. All associated data including identified risks will be permanently removed.
           </AlertDialogDescription>
         </AlertDialogHeader>

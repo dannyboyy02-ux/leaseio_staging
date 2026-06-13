@@ -8,7 +8,7 @@ import {
   ArrowUp,
   ArrowDown,
   Eye,
-  Trash2,
+  Archive,
   Calendar,
   Building2,
   Ruler,
@@ -21,7 +21,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
+import { ArchiveLeaseDialog } from '@/components/leases/ArchiveLeaseDialog';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
@@ -91,9 +91,13 @@ function formatCurrency(amount: number): string {
 export default function Leases() {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { workspace } = useApp();
+  const { workspace, user, userRole } = useApp();
   // Vault (read-only retention): hide intake entry points (server also blocks).
   const isReadOnly = isReadOnlyRetention(workspace?.plan);
+  // Archive is admin/owner-only (server-enforced by the #78 trigger); the
+  // list "Delete" action uses restorable-archive semantics, matching the
+  // detail page (#79) — true hard-delete is not offered from the list.
+  const isAdmin = userRole === 'admin' || userRole === 'owner';
   const [searchParams] = useSearchParams();
   const quota = useWorkspaceQuota();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -194,24 +198,37 @@ export default function Leases() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showArchived, workspace?.id]);
 
-  const handleDeleteClick = (lease: LeaseRow) => {
+  const handleArchiveClick = (lease: LeaseRow) => {
     setSelectedLease(lease);
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = async () => {
+  // #79: the list action is restorable ARCHIVE, not hard-delete — the same
+  // semantics as the detail page, so "Delete" never means two things. Sets
+  // archived=true; the #78 trigger stamps archived_by/archived_at server-side
+  // (the client values here are overridden) and enforces admin/owner.
+  const handleArchiveConfirm = async () => {
     if (!selectedLease) return;
     try {
-      await supabase.from('risks').delete().eq('lease_id', selectedLease.id);
-      const { error } = await supabase.from('leases').delete().eq('id', selectedLease.id);
+      const { error } = await supabase
+        .from('leases')
+        .update({ archived: true, archived_at: new Date().toISOString(), archived_by: user?.id ?? null })
+        .eq('id', selectedLease.id);
       if (error) throw error;
-      toast.success('Lease deleted successfully');
+      const { error: auditError } = await supabase.from('lease_activity_log').insert({
+        lease_id: selectedLease.id,
+        user_id: user?.id ?? null,
+        activity_type: 'lease_archived',
+        details: {},
+      } as any);
+      if (auditError) console.error('Archive audit insert failed:', auditError.message);
+      toast.success('Lease archived — view it under "Show archived"');
       setDeleteDialogOpen(false);
       setSelectedLease(null);
       fetchLeases();
     } catch (error) {
-      console.error('Delete error:', error);
-      toast.error('Failed to delete lease');
+      console.error('Archive error:', error);
+      toast.error('Failed to archive lease');
     }
   };
 
@@ -545,21 +562,21 @@ export default function Leases() {
                                 </TooltipTrigger>
                                 <TooltipContent>View details</TooltipContent>
                               </Tooltip>
-                              {/* No delete on a read-only retention (Vault)
-                                  workspace — "nothing deleted" is the promise. */}
-                              {!isReadOnly && (
+                              {/* Restorable archive (#79), admin/owner-only
+                                  (#78 trigger enforces server-side). Hidden on
+                                  read-only Vault workspaces. */}
+                              {!isReadOnly && isAdmin && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
                                       variant="ghost"
                                       size="icon-sm"
-                                      onClick={() => handleDeleteClick(lease)}
-                                      className="text-destructive hover:text-destructive"
+                                      onClick={() => handleArchiveClick(lease)}
                                     >
-                                      <Trash2 className="h-4 w-4" />
+                                      <Archive className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Delete</TooltipContent>
+                                  <TooltipContent>Archive</TooltipContent>
                                 </Tooltip>
                               )}
                             </div>
@@ -588,10 +605,10 @@ export default function Leases() {
         onSuccess={() => fetchLeases()}
       />
 
-      <DeleteLeaseDialog
+      <ArchiveLeaseDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={handleArchiveConfirm}
         leaseName={selectedLease?.filename || ''}
       />
 
