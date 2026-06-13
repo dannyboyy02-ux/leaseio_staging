@@ -2,6 +2,8 @@
 
 Read this file first on every session. It contains the product identity, architecture, file map, active priorities, hard rules, and gotchas. Do NOT re-read the full repo — use this file plus the specific files referenced in each task. Closed phase specs are pointers; read the underlying `docs/PHASE_*_BUILD_SPEC.md` only when a task touches that phase's surface. Historical detail trimmed from this file lives in `docs/CLAUDE_md_archive.md`.
 
+> **▶ RESUMING WORK ON BRANCH `claude/dazzling-franklin-klts6u`?** Read **`docs/SESSION_HANDOFF_2026-06-13.md`** first — it's the durable handoff from the Vault-tier + security-cluster session (what shipped, the 7 migrations applied, what's left: #94 + #90-NULL + the operator Stripe STOP 10/3/7 items, and the verify-don't-recall / security-migration-review discipline that session ran on). Delete this banner once that work is merged/closed.
+
 ---
 
 ## What LeaseIO Is
