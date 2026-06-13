@@ -61,6 +61,9 @@ const ANNUAL_PRICE_IDS: Record<string, string | null> = {
 function resolvePlan(subscription: Stripe.Subscription): Plan | null {
   const metadataPlan = subscription.metadata?.plan_id;
   if (validPlan(metadataPlan)) return metadataPlan;
+  // Legacy metadata from pre-2026-05-07 subs: coerce like normalizePlanId
+  // does DB-side, so an old sub's event resolves instead of 500ing forever.
+  if (metadataPlan === "pro" || metadataPlan === "free") return "starter";
 
   const priceId = subscription.items.data[0]?.price?.id;
   if (!priceId) return null;
@@ -274,7 +277,7 @@ serve(async (req) => {
     const priorPlan = priorState?.plan ?? null;
     if (priorPlan !== effectivePlan) {
       try {
-        await supabaseAdmin.from("workspace_activity_log").insert({
+        const { error: auditDbErr } = await supabaseAdmin.from("workspace_activity_log").insert({
           workspace_id: workspaceId,
           user_id: null,
           event_type: "plan_changed",
@@ -286,6 +289,9 @@ serve(async (req) => {
             source: "stripe_webhook",
           },
         });
+        if (auditDbErr) {
+          console.error("[stripe-webhook] plan_changed audit insert rejected:", auditDbErr.message);
+        }
       } catch (auditErr) {
         console.error(
           "[stripe-webhook] plan_changed audit insert failed (entitlement write already committed):",
@@ -487,12 +493,22 @@ serve(async (req) => {
 
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const workspaceId = session.metadata?.workspace_id ?? null;
         const subscriptionId = typeof session.subscription === "string"
           ? session.subscription
           : session.subscription?.id;
         if (!subscriptionId) break;
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        // The C2 consent signal is this event TYPE — a completed Checkout is
+        // an explicit purchase, and the freshly-retrieved sub is the one the
+        // customer just paid for. Session-level metadata historically carried
+        // only plan_id/billing_interval (workspace_id lived in
+        // subscription_data.metadata), so the fallback is REQUIRED — without
+        // it the override is always null, C2 skips every checkout-driven plan
+        // switch on an already-subscribed/lapsed workspace, and a grace
+        // renewal freezes until the purge cron destroys paid data
+        // (verification round, 2026-06-13).
+        const workspaceId = session.metadata?.workspace_id ??
+          subscription.metadata?.workspace_id ?? null;
         // Packs are created via subscriptions.create (no checkout session), but
         // guard anyway so a pack can never take the plan path.
         if (isDocumentPack(subscription)) {

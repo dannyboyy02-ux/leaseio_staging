@@ -155,6 +155,10 @@ serve(async (req) => {
       success_url: `${origin}/app/settings/account?tab=billing&checkout=success`,
       cancel_url: `${origin}/app/settings/account?tab=billing&checkout=canceled`,
       metadata: {
+        // workspace_id at session level too: the webhook's C2 consent
+        // override reads it here first (subscription metadata is the
+        // fallback for sessions created before this stamping existed).
+        workspace_id: workspaceId,
         plan_id: planId,
         billing_interval: billingInterval,
       },
