@@ -1724,6 +1724,8 @@ green.
 
 **Stub remediation:** Either split the name update out of `handleSaveGeneral` when non-live, or gate the General form (and the rest of WorkspaceSettings) client-side on `isReadOnlyRetention`/grace state as part of the V4 read-only UI pass. Until then, the inline rename remains the working path.
 
+**RESOLVED 2026-06-13** — `handleSaveGeneral` now attempts the bundled name+timezone update, and on rejection retries the rename ALONE (so a non-live config-guard rejection of timezone no longer blocks the rename), with a `.select('id')` 0-row check (#70 defense-in-depth) surfacing RLS no-ops as honest errors instead of false success. Full client-side read-only gating of WorkspaceSettings remains V4 read-only-UI territory.
+
 ---
 
 ### Item #88: Vault dashboard still shows intake-oriented widgets with live CTAs

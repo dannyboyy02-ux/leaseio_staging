@@ -269,16 +269,38 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     if (!workspace?.id) { toast.error('No workspace found'); return; }
     setIsSaving(true);
     try {
-      const { error } = await supabase
+      // #70 defense-in-depth: .select() so an RLS-blocked 0-row update surfaces
+      // as an error rather than a false "saved". #87: timezone is a config
+      // column frozen by the read-only guard on a non-live (grace/Vault)
+      // workspace; if the bundled update is rejected, retry the rename alone so
+      // it isn't blocked as collateral (name stays editable — owner-rename
+      // carve-out).
+      const { data, error } = await supabase
         .from('workspaces')
         .update({ name: workspaceName.trim(), timezone })
-        .eq('id', workspace.id);
-      if (error) throw error;
+        .eq('id', workspace.id)
+        .select('id');
+      if (error) {
+        const retry = await supabase
+          .from('workspaces')
+          .update({ name: workspaceName.trim() })
+          .eq('id', workspace.id)
+          .select('id');
+        if (retry.error || !retry.data?.length) throw error;
+        if (refreshProfile) await refreshProfile();
+        toast.warning('Name saved — other settings are read-only on this workspace.');
+        return;
+      }
+      if (!data?.length) throw new Error('no_rows');
       if (refreshProfile) await refreshProfile();
       toast.success('Workspace settings saved!');
     } catch (error) {
       console.error('Error saving workspace:', error);
-      toast.error('Failed to save workspace settings');
+      toast.error(
+        error instanceof Error && error.message === 'no_rows'
+          ? 'You do not have permission to change these settings.'
+          : 'Failed to save workspace settings',
+      );
     } finally {
       setIsSaving(false);
     }
