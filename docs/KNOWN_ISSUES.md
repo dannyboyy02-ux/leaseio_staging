@@ -1768,6 +1768,8 @@ green.
 
 **Stub remediation:** In the showArchived branch, filter `.eq('archived', true)` (or add an "Archived" badge on archived rows), and add an in-list Restore action on archived rows mirroring `ArchiveButton`'s restore (archived=false, null attribution, log `lease_restored`). Route through lease-product-polish.
 
+**RESOLVED 2026-06-13** — 'Show archived' now filters to archived-only; archived rows get an 'Archived' badge + an in-list Restore action (mirrors ArchiveButton: non-destructive, admin-only via the #78 trigger, logs lease_restored, .select check). Polish-reviewed; follow-up fixes applied: archive-specific empty state with a 'Back to active leases' way-out (was the misleading 'No executed leases' dead-end), refreshProfile() after archive+restore so quota counters resync, and i18n'd restore toasts + tooltip labels. Accepted residual: in-list restore has no pre-action cap-warning dialog (non-destructive + reversible; counters resync + QuotaWarningBanner gives post-hoc feedback) — the dialog-gated ArchiveButton restore remains for the warned path.
+
 ---
 
 ### Item #92: Archive vocabulary is labeled "Delete"/"deleted" across ArchiveButton, badges, banners, and archive.* locale keys

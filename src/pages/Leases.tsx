@@ -93,7 +93,7 @@ function formatCurrency(amount: number): string {
 export default function Leases() {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { workspace, user, userRole } = useApp();
+  const { workspace, user, userRole, refreshProfile } = useApp();
   // Vault (read-only retention): hide intake entry points (server also blocks).
   const isReadOnly = isReadOnlyRetention(workspace?.plan);
   // Archive is admin/owner-only (server-enforced by the #78 trigger); the
@@ -229,6 +229,7 @@ export default function Leases() {
       toast.success(t('archive.list_archived_toast'));
       setDeleteDialogOpen(false);
       setSelectedLease(null);
+      await refreshProfile?.();
       fetchLeases();
     } catch (error) {
       console.error('Archive error:', error);
@@ -254,6 +255,7 @@ export default function Leases() {
       } as any);
       if (auditError) console.error('Restore audit insert failed:', auditError.message);
       toast.success(t('archive.unarchived_toast'));
+      await refreshProfile?.();
       fetchLeases();
     } catch (error) {
       console.error('Restore error:', error);
@@ -442,7 +444,17 @@ export default function Leases() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : leases.length === 0 ? (
-          <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
+          showArchived ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <Archive className="h-10 w-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">No archived leases.</p>
+              <Button variant="outline" onClick={() => setShowArchived(false)}>
+                Back to active leases
+              </Button>
+            </div>
+          ) : (
+            <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
+          )
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -612,7 +624,7 @@ export default function Leases() {
                                       <ArchiveRestore className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Restore</TooltipContent>
+                                  <TooltipContent>{t('archive.unarchive')}</TooltipContent>
                                 </Tooltip>
                               ) : (
                                 <Tooltip>
@@ -625,7 +637,7 @@ export default function Leases() {
                                       <Archive className="h-4 w-4" />
                                     </Button>
                                   </TooltipTrigger>
-                                  <TooltipContent>Archive</TooltipContent>
+                                  <TooltipContent>{t('archive.archive')}</TooltipContent>
                                 </Tooltip>
                               ))}
                             </div>
