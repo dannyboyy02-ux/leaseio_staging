@@ -1444,6 +1444,12 @@ export default function AccountSettings() {
                 : t('account.cancel_confirm_desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {/* Vault offramp (VAULT_TIER_SPEC.md V3): convert-at-grace model —
+              the actual $249/yr Vault checkout lives on the grace banner once
+              the plan ends, so here we only set the expectation. */}
+          <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+            {t('account.cancel_vault_note')}
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
             {/* CTA names the actual action — clicking opens the Stripe

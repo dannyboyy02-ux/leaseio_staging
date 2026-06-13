@@ -63,6 +63,7 @@ function noticeCopy(kind: NoticeKind, rawWorkspaceName: string, daysLeft: number
       <a href="${renewUrl}" style="background:#1a56db;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Renew subscription</a>
       &nbsp;&nbsp;<a href="${exportUrl}">Export your data</a>
     </p>
+    <p style="margin-top:8px;color:#374151">Don't need an active plan but want to keep the records? The workspace owner can switch to <strong>Vault</strong> — read-only retention with full export, $249/year — from the <a href="${renewUrl}">billing page</a>. Your data stays; deletion is canceled.</p>
     <p style="color:#6b7280;font-size:12px">You're receiving this because you're an owner or admin of the LeaseIO workspace "${workspaceName}".</p>`;
 
   if (kind === "day0") {

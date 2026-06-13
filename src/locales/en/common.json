@@ -675,7 +675,8 @@
     "credits_desc": "One-time credits purchased at your overage rate. Each credit lets one lease through while you are over your monthly allowance.",
     "credits_balance_one": "{{count}} credit available",
     "credits_balance_other": "{{count}} credits available",
-    "cancel_confirm_cta": "Open billing portal"
+    "cancel_confirm_cta": "Open billing portal",
+    "cancel_vault_note": "Prefer to keep your records? When your plan ends, the workspace owner can switch to read-only Vault ($249/yr) — full export, nothing deleted — instead of losing the workspace."
   },
   "packs": {
     "pack_10": "10-lease pack",
@@ -1667,6 +1668,8 @@
     "wall_title": "Access to this workspace has ended",
     "wall_desc": "The 30-day view-and-export window for \"{{name}}\" is over and the workspace is scheduled for permanent deletion. Renewing before deletion restores everything in full.",
     "wall_ask_admin": "Ask a workspace admin to renew the subscription.",
-    "contact_support": "Contact support"
+    "contact_support": "Contact support",
+    "vault_cta": "Keep your data — Vault $249/yr",
+    "vault_failed": "Couldn't start Vault checkout. Please try again."
   }
 }

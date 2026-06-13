@@ -300,6 +300,51 @@ serve(async (req) => {
       }
     }
 
+    // Vault conversion (V3): when a workspace becomes entitled-Vault, retire
+    // its document-pack subscriptions — capacity packs are meaningless on a
+    // read-only retention workspace, and "packs end at period close" is the
+    // ratified rule (VAULT_TIER_SPEC.md V3). cancel_at_period_end is
+    // idempotent (a redelivered event re-finds already-flagged packs and
+    // skips them) and webhook-safe. Best-effort: a Stripe hiccup here must
+    // not 500 the webhook and undo the committed entitlement write. The plan
+    // sub itself needs no action — under the convert-at-grace model the prior
+    // plan sub has already ended by the time Vault activates.
+    if (entitled && effectivePlan === "vault") {
+      try {
+        const customerId = resolveCustomerId(subscription);
+        if (customerId) {
+          let startingAfter: string | undefined = undefined;
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const page: Stripe.ApiList<Stripe.Subscription> = await stripe.subscriptions.list({
+              customer: customerId,
+              status: "all",
+              limit: 100,
+              starting_after: startingAfter,
+            });
+            for (const s of page.data) {
+              if (
+                s.metadata?.addon_type === ADDON_TYPE_DOCUMENT_PACK &&
+                s.metadata?.workspace_id === workspaceId &&
+                (s.status === "active" || s.status === "trialing") &&
+                !s.cancel_at_period_end
+              ) {
+                await stripe.subscriptions.update(s.id, { cancel_at_period_end: true });
+                console.log("[stripe-webhook] vault conversion: retiring pack sub at period end", s.id);
+              }
+            }
+            if (!page.has_more || page.data.length === 0) break;
+            startingAfter = page.data[page.data.length - 1].id;
+          }
+        }
+      } catch (packErr) {
+        console.error(
+          "[stripe-webhook] vault pack-retirement failed (entitlement write already committed):",
+          packErr instanceof Error ? packErr.message : packErr,
+        );
+      }
+    }
+
     // Reconcile the multi-workspace creation request and log the activation
     // exactly once, on the pending -> active transition. The first/onboarding
     // workspace has no workspace_creation_requests row, so this is naturally

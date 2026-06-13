@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
+import { isReadOnlyRetention } from '@/config/pricing';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Link } from 'react-router-dom';
 import { RentRollExport } from '@/components/reports/RentRollExport';
@@ -64,7 +65,9 @@ const reports: Array<{
 export default function Reports() {
   const { canAccessFeature, userRole, workspace } = useApp();
   const { t } = useLanguage();
-  const hasAccess = canAccessFeature('business');
+  // Vault (read-only retention) keeps full view + export of Reports under the
+  // flatten rule — gating exports in Vault is a bug by definition.
+  const hasAccess = canAccessFeature('business') || isReadOnlyRetention(workspace?.plan);
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const isEditor = userRole === 'editor';
   const canExport = canExportReports(userRole);

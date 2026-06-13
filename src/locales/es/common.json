@@ -675,7 +675,8 @@
     "credits_desc": "Créditos únicos comprados a su tarifa de excedente. Cada crédito permite procesar un arrendamiento mientras supera su límite mensual.",
     "credits_balance_one": "{{count}} crédito disponible",
     "credits_balance_other": "{{count}} créditos disponibles",
-    "cancel_confirm_cta": "Abrir portal de facturación"
+    "cancel_confirm_cta": "Abrir portal de facturación",
+    "cancel_vault_note": "¿Prefiere conservar sus registros? Cuando finalice su plan, el propietario del espacio puede cambiar a Vault de solo lectura ($249/año) — exportación completa, sin eliminar nada — en lugar de perder el espacio de trabajo."
   },
   "packs": {
     "pack_10": "Paquete de 10 arrendamientos",
@@ -1667,6 +1668,8 @@
     "wall_title": "El acceso a este espacio de trabajo ha terminado",
     "wall_desc": "La ventana de 30 días para ver y exportar \"{{name}}\" ha terminado y el espacio de trabajo está programado para eliminación permanente. Renovar antes de la eliminación lo restaura todo por completo.",
     "wall_ask_admin": "Pida a un administrador del espacio de trabajo que renueve la suscripción.",
-    "contact_support": "Contactar soporte"
+    "contact_support": "Contactar soporte",
+    "vault_cta": "Conserve sus datos — Vault $249/año",
+    "vault_failed": "No se pudo iniciar el pago de Vault. Inténtelo de nuevo."
   }
 }

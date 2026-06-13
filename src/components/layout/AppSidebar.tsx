@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
+import { isReadOnlyRetention } from '@/config/pricing';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { shouldOpenCommandPalette } from '@/lib/cmdKHandler';
@@ -195,7 +196,7 @@ export function AppSidebar() {
 
   const renderNavItem = (item: { title: string; href: string; icon: React.ComponentType<{ className?: string }>; requiresBusiness?: boolean }) => {
     const isActive = location.pathname === item.href;
-    const isLocked = item.requiresBusiness && !canAccessFeature('business');
+    const isLocked = item.requiresBusiness && !canAccessFeature('business') && !isReadOnlyRetention(workspace?.plan);
     return (
       <Link
         key={item.href}

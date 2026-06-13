@@ -11,20 +11,48 @@
 // The server backstop lives in process_lease (uploads/AI blocked when
 // canceled); these surfaces are the honest UX layer over it.
 
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Download, Sparkles } from 'lucide-react';
+import { AlertTriangle, Download, Sparkles, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { graceDaysRemaining } from '@/lib/cancellationLifecycle';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export function CancellationBanner() {
   const { workspace, userRole } = useApp();
   const { t, language } = useLanguage();
+  const [vaultLoading, setVaultLoading] = useState(false);
 
   if (!workspace?.canceledAt || workspace.softDeletedAt) return null;
 
   const isAdmin = userRole === 'admin' || userRole === 'owner';
+  // Vault conversion is OWNER-ONLY (members lose access in Vault) — the server
+  // enforces this too (create-checkout rejects non-owners with vault_owner_only).
+  const isOwner = userRole === 'owner';
+
+  const handleVaultCheckout = async () => {
+    if (!workspace?.id) return;
+    setVaultLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-checkout', {
+        body: { planId: 'vault', workspaceId: workspace.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (data?.url) {
+        // Same-tab redirect — a post-await window.open is popup-blocked.
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Vault checkout failed:', err);
+      toast.error(t('cancellation.vault_failed'));
+    } finally {
+      setVaultLoading(false);
+    }
+  };
   const daysLeft = workspace.graceExpiresAt
     ? graceDaysRemaining(workspace.graceExpiresAt)
     : 0;
@@ -50,6 +78,17 @@ export function CancellationBanner() {
           {t('cancellation.export_cta')}
         </Link>
       </Button>
+      {isOwner && (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={vaultLoading}
+          onClick={handleVaultCheckout}
+        >
+          <Archive className="h-3.5 w-3.5 mr-1.5" />
+          {t('cancellation.vault_cta')}
+        </Button>
+      )}
       {isAdmin && (
         <Button asChild size="sm">
           <Link to="/app/settings/account?tab=billing">

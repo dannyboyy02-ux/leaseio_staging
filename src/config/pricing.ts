@@ -206,6 +206,18 @@ export function isUpgrade(currentPlan: SubscriptionPlan, targetPlan: Subscriptio
   return getPlanIndex(targetPlan) > getPlanIndex(currentPlan);
 }
 
+/**
+ * True for read-only retention plans (Vault). Such plans get view + export
+ * access to otherwise Business-gated READ surfaces (Reports, Portfolio) under
+ * the flatten rule — "view + export everything the workspace has." This must
+ * NEVER be used to open write or AI surfaces (the AI assistant stays gated on
+ * canAccessFeature('business') alone): doing so would remount paid-API
+ * features and break the zero-AI-spend invariant (VAULT_TIER_SPEC.md).
+ */
+export function isReadOnlyRetention(plan: SubscriptionPlan | null | undefined): boolean {
+  return !!plan && PLANS[plan]?.readOnly === true;
+}
+
 /** Normalise legacy plan IDs from DB to the canonical SubscriptionPlan type. */
 export function normalizePlanId(raw: string | null | undefined): SubscriptionPlan {
   if (raw === 'business') return 'business';
