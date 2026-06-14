@@ -199,6 +199,17 @@ The repo is the source of truth for all config expressible as code:
 
 If a change can't be expressed in the repo, document why near where its absence would confuse.
 
+### Documentation & Completion Discipline — DO NOT VIOLATE (added 2026-06-14 after a doc-drift incident)
+
+Two failures must not recur: (a) shipping work while leaving the source-of-truth docs stale, and (b) claiming "done / committed / pushed / clean / handed off" from memory without actually verifying. This is the "verify, don't recall" rule applied to documentation — stale source-of-truth docs silently mislead the next session.
+
+1. **Docs are part of the change, not an afterthought.** A change is NOT complete until the source-of-truth docs match reality. In the SAME change that ships it, reconcile every doc whose statements it affects:
+   - `CLAUDE.md` — Active Priorities (move shipped items out of "open/unstarted"; never leave a built feature listed as unbuilt), Known Schema Realities (types, columns, RLS, enums, env vars), the file-to-feature map, and any other claim the change invalidates.
+   - `docs/KNOWN_ISSUES.md` — stamp `RESOLVED <date>` on what you fixed; file what you discovered.
+   - The relevant `docs/*_SPEC.md` As-built note when implementation diverges from spec.
+2. **Completion claims are verified, never asserted.** Before saying "done", "everything's committed/pushed/clean", or writing any handoff: actually RUN the checks (`git status --porcelain` for uncommitted/untracked; local `HEAD` vs `@{u}` SHA + `git rev-list --left-right --count @{u}...HEAD` for sync) AND re-READ the docs you're vouching for. Never state git state or doc accuracy from memory.
+3. **Session handoff = full CLAUDE.md reconciliation.** Before declaring a session done or writing a handoff doc, re-read CLAUDE.md top-to-bottom and reconcile it against everything the session changed. A handoff that points at a stale CLAUDE.md is not done.
+
 ---
 
 ## Gotchas & Constraints
