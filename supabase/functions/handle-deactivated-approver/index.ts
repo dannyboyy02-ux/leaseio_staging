@@ -28,6 +28,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -97,6 +98,31 @@ serve(async (req) => {
     return jsonResponse(
       { ok: false, error: "Forbidden — only workspace owners or admins can run.", reason: "not_authorized" },
       403,
+      origin,
+    );
+  }
+
+  // Vault V1: skip non-live workspaces (canceled / soft-deleted /
+  // vault) instead of failing the run — there is nothing to reroute in
+  // a read-only workspace. Single-workspace invocation, so one
+  // fail-closed helper check stands in for the batched cron filter.
+  const liveness = await checkWorkspaceLive(supabaseAdmin, body.workspaceId);
+  if (!liveness.live) {
+    console.log(
+      `[handle-deactivated-approver] skipping workspace ${body.workspaceId}: not live (${liveness.reason})`,
+    );
+    return jsonResponse(
+      {
+        ok: true,
+        deactivatedUserId: body.userId,
+        workspaceId: body.workspaceId,
+        affectedSteps: 0,
+        reassignedToDelegate: 0,
+        surfacedToAdmins: 0,
+        skipped: true,
+        skipReason: liveness.reason,
+      },
+      200,
       origin,
     );
   }

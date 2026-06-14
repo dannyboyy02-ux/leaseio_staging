@@ -28,6 +28,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { enforceWorkspaceRateLimit } from "../_shared/audit.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -136,6 +137,17 @@ serve(async (req) => {
     );
   }
   const workspaceId = (lease as any).workspace_id as string;
+
+  // Vault V1: workspace liveness gate — no mutations on canceled /
+  // soft-deleted / vault workspaces (fail closed).
+  const liveness = await checkWorkspaceLive(supabaseAdmin, workspaceId);
+  if (!liveness.live) {
+    return jsonResponse(
+      { ok: false, error: "subscription_inactive", reason: liveness.reason },
+      403,
+      origin,
+    );
+  }
 
   let isAuthorized = false;
   const { data: ws } = await supabaseAdmin

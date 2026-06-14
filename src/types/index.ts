@@ -1,6 +1,10 @@
 // Core Types for LeaseIO
 
-export type SubscriptionPlan = 'starter' | 'business';
+// Single source of truth lives in src/config/pricing.ts — re-exported here
+// so existing `@/types` imports keep working. (A duplicated literal union
+// here drifted and broke the build when 'vault' landed — audit 2026-06-13.)
+import type { SubscriptionPlan } from '@/config/pricing';
+export type { SubscriptionPlan };
 
 export type BillingInterval = 'monthly' | 'annual';
 

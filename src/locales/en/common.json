@@ -75,18 +75,20 @@
     "workspaces_upgrade_link": "Upgrade to Business for more"
   },
   "archive": {
-    "archive": "Delete",
+    "archive": "Archive",
     "unarchive": "Restore",
-    "archived_toast": "Lease deleted",
+    "archived_toast": "Lease archived",
     "unarchived_toast": "Lease restored",
     "failed": "Failed to update lease",
-    "confirm_archive_title": "Delete this lease?",
-    "confirm_archive_desc": "Deleting moves the lease out of your active set and frees an active slot. The record is preserved (audit trail, attachments, history) and can be restored at any time.",
+    "confirm_archive_title": "Archive this lease?",
+    "confirm_archive_desc": "Archiving moves the lease out of your active set and frees an active slot. The record is preserved (audit trail, attachments, history) and can be restored at any time.",
     "confirm_unarchive_title": "Restore this lease?",
     "confirm_unarchive_desc": "Restoring puts the lease back in the active set. It will count toward your active-lease cap again.",
     "audit_warning": "Saved, but the action could not be recorded in the audit trail.",
-    "deleted_badge": "Deleted",
-    "deleted_banner": "This lease is deleted. It no longer counts toward your active leases and is hidden from the Leases list unless \"Show archived\" is on."
+    "deleted_badge": "Archived",
+    "deleted_banner": "This lease is archived. It no longer counts toward your active leases and is hidden from the Leases list unless \"Show archived\" is on.",
+    "list_archived_toast": "Lease archived — restore it from the lease's detail page",
+    "list_archive_failed": "Failed to archive lease"
   },
   "documents": {
     "delete_doc_title": "Delete this document?",
@@ -103,11 +105,12 @@
     "summary_session_note": "Generated {{date}} · available until you switch tabs or leave this page"
   },
   "amendments": {
-    "delete_title": "Delete this amendment?",
-    "delete_desc": "\"{{name}}\" will be removed from this lease's amendments. The action is recorded in the audit trail. An admin can restore it later from Leases → \"Show archived\" → open it → Restore.",
-    "delete_success": "Amendment deleted",
-    "delete_failed": "Failed to delete amendment",
-    "delete_audit_warning": "Amendment deleted, but the action could not be recorded in the audit trail."
+    "delete_title": "Archive this amendment?",
+    "delete_desc": "\"{{name}}\" will be archived (removed from this lease's active amendments). The action is recorded in the audit trail. An admin can restore it later from Leases → \"Show archived\" → open it → Restore.",
+    "delete_success": "Amendment archived",
+    "delete_failed": "Failed to archive amendment",
+    "delete_audit_warning": "Amendment archived, but the action could not be recorded in the audit trail.",
+    "delete_confirm_cta": "Archive"
   },
   "landing": {
     "nav": {
@@ -675,7 +678,14 @@
     "credits_desc": "One-time credits purchased at your overage rate. Each credit lets one lease through while you are over your monthly allowance.",
     "credits_balance_one": "{{count}} credit available",
     "credits_balance_other": "{{count}} credits available",
-    "cancel_confirm_cta": "Open billing portal"
+    "cancel_confirm_cta": "Open billing portal",
+    "cancel_vault_note": "Prefer to keep your records? When your plan ends, the workspace owner can switch to read-only Vault (${{price}}/yr) — full export, nothing deleted — instead of losing the workspace.",
+    "vault_card_title": "Vault — read-only retention",
+    "vault_card_desc": "Your repository is read-only and fully exportable. Renews {{date}} at ${{price}}/yr. Reactivate a full plan anytime to resume editing and AI features (no Vault-fee refund).",
+    "vault_card_desc_nodate": "Your repository is read-only and fully exportable. Renews annually at ${{price}}/yr. Reactivate a full plan anytime to resume editing and AI features (no Vault-fee refund).",
+    "vault_reactivate_starter": "Reactivate — Starter",
+    "vault_reactivate_business": "Reactivate — Business",
+    "vault_manage_stripe": "Manage subscription in Stripe"
   },
   "packs": {
     "pack_10": "10-lease pack",
@@ -1139,12 +1149,14 @@
     "starter": "Starter",
     "pro": "Pro",
     "business": "Business",
+    "vault": "Vault",
     "plan": "Plan",
     "upgrade": "Upgrade",
     "description": {
       "free": "For small teams getting started with lease visibility",
       "starter": "For finance teams that need lease awareness and control",
-      "business": "For organizations that need full lease lifecycle management"
+      "business": "For organizations that need full lease lifecycle management",
+      "vault": "Read-only retention for your lease repository — view and export everything."
     },
     "feature": {
       "1_lease": "1 lease document",
@@ -1185,7 +1197,10 @@
       "3_users": "Up to 3 users",
       "ai_assistant": "Embedded AI assistant (Ask Claude)",
       "portfolio_intelligence": "Portfolio intelligence",
-      "amendment_comparison": "Amendment comparison"
+      "amendment_comparison": "Amendment comparison",
+      "vault_read_only": "Read-only repository — view everything you stored",
+      "vault_full_export": "Full export available at all times",
+      "vault_owner_only": "Owner-only access"
     }
   },
   "auth": {
@@ -1662,6 +1677,20 @@
     "wall_title": "Access to this workspace has ended",
     "wall_desc": "The 30-day view-and-export window for \"{{name}}\" is over and the workspace is scheduled for permanent deletion. Renewing before deletion restores everything in full.",
     "wall_ask_admin": "Ask a workspace admin to renew the subscription.",
-    "contact_support": "Contact support"
+    "contact_support": "Contact support",
+    "vault_cta": "Keep your data — Vault ${{price}}/yr",
+    "vault_failed": "Couldn't start Vault checkout. Please try again.",
+    "vault_redirecting": "Redirecting…",
+    "vault_unavailable": "Vault isn't available right now — please contact support@theleaseio.com to keep your data.",
+    "wall_vault_note": "The Vault retention option was available during the grace window. Renewing is the only way to restore access now."
+  },
+  "vault": {
+    "banner_text": "Vault — read-only repository. Renews {{date}} at ${{price}}/yr.",
+    "banner_text_nodate": "Vault — read-only repository. Renews annually at ${{price}}/yr.",
+    "reactivate_cta": "Reactivate a plan",
+    "member_wall_title": "This workspace is in Vault",
+    "member_wall_desc": "{{name}} is a read-only retention repository. Vault access is owner-only — contact the workspace owner to restore full access or reactivate a plan.",
+    "lease_readonly_note": "This workspace is in Vault — read-only. Editing, approvals, and uploads are disabled.",
+    "member_wall_switch": "Switch workspace"
   }
 }

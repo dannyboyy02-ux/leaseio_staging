@@ -72,7 +72,7 @@ function emptyLeasesBuilder() {
 }
 
 interface SetAppArgs {
-  plan: "starter" | "business";
+  plan: import("@/config/pricing").SubscriptionPlan;
   ownedWorkspaces: number;
   activeUsed?: number;
   activeMax?: number;

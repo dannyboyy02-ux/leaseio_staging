@@ -13,6 +13,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { type AssigneeContext, resolveEffectiveAssignee } from "../_shared/approval_chain.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -82,6 +83,22 @@ serve(async (req) => {
     return jsonResponse(
       { ok: false, error: "OOO record is already inactive.", reason: "wrong_state" },
       409,
+      origin,
+    );
+  }
+
+  // Vault V1: workspace liveness gate — no mutations on canceled /
+  // soft-deleted / vault workspaces (fail closed). Gates the WHOLE
+  // mutation path, including the personal user_out_of_office flip:
+  // deactivating the row and reverting the OOO-routed chain steps are
+  // one logical operation — flipping the row then 403ing on the revert
+  // half would strand steps still routed to the delegate with no active
+  // OOO record explaining why.
+  const liveness = await checkWorkspaceLive(supabaseAdmin, ooo.workspace_id);
+  if (!liveness.live) {
+    return jsonResponse(
+      { ok: false, error: "subscription_inactive", reason: liveness.reason },
+      403,
       origin,
     );
   }

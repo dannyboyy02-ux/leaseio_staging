@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
+import { isReadOnlyRetention } from '@/config/pricing';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Link } from 'react-router-dom';
 import { RentRollExport } from '@/components/reports/RentRollExport';
@@ -64,7 +65,9 @@ const reports: Array<{
 export default function Reports() {
   const { canAccessFeature, userRole, workspace } = useApp();
   const { t } = useLanguage();
-  const hasAccess = canAccessFeature('business');
+  // Vault (read-only retention) keeps full view + export of Reports under the
+  // flatten rule — gating exports in Vault is a bug by definition.
+  const hasAccess = canAccessFeature('business') || isReadOnlyRetention(workspace?.plan);
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const isEditor = userRole === 'editor';
   const canExport = canExportReports(userRole);
@@ -341,7 +344,12 @@ export default function Reports() {
         {/* Report settings — moved here from Workspace Settings (settings
             live where reports are generated). Admin/editor visible,
             admin-editable; same gates the old tab used. */}
-        {(isAdmin || isEditor) && workspace?.id && (
+        {/* Report/financial CONFIG is hidden on a read-only retention (Vault)
+            workspace — those cards write to workspaces.discount_rate/report_*,
+            which the server now also rejects for non-live workspaces
+            (20260613010000). Vault keeps view + export of the reports above;
+            it just can't reconfigure them. */}
+        {(isAdmin || isEditor) && workspace?.id && !isReadOnlyRetention(workspace?.plan) && (
           <div className="mt-8 space-y-6">
             <div>
               <h2 className="text-lg font-semibold">{t('reports.settings_title')}</h2>

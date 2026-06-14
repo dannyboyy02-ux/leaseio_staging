@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function getCorsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -119,6 +120,18 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ revoked: true }),
         { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+      );
+    }
+
+    // Vault V1: never mint (or hand back) an anonymous share link for a
+    // non-live workspace (canceled / soft-deleted / vault). Revoke above is
+    // intentionally NOT gated — shutting down an existing link reduces
+    // exposure and must stay possible in read-only mode.
+    const liveness = await checkWorkspaceLive(supabase, lease.workspace_id);
+    if (!liveness.live) {
+      return new Response(
+        JSON.stringify({ ok: false, error: 'subscription_inactive', reason: liveness.reason }),
+        { status: 403, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
 

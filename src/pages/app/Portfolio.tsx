@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApp } from '@/contexts/AppContext';
+import { isReadOnlyRetention } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 import { computePortfolioMetrics } from '@/lib/portfolioAnalytics';
@@ -28,7 +29,8 @@ export default function Portfolio() {
   // pricing model. Gate the page (matching the Reports / AI Assistant pattern)
   // and skip the data fetch entirely for Starter workspaces. The AppSidebar nav
   // item carries requiresBusiness:true so the route shows a lock for Starter.
-  const hasBusinessAccess = canAccessFeature('business');
+  // Vault retention views Portfolio read-only under the flatten rule.
+  const hasBusinessAccess = canAccessFeature('business') || isReadOnlyRetention(workspace?.plan);
 
   const { data, isLoading } = useQuery({
     queryKey: ['portfolio-page', workspace?.id],

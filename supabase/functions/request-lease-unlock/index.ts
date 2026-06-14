@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   return baseCorsHeaders(requestOrigin, "POST, OPTIONS");
@@ -53,6 +54,15 @@ serve(async (req) => {
     if (leaseError || !lease) {
       return new Response(JSON.stringify({ error: 'Lease not found' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Vault V1: workspace liveness gate — no mutations on canceled /
+    // soft-deleted / vault workspaces (fail closed).
+    const liveness = await checkWorkspaceLive(supabaseAdmin, (lease as any).workspace_id);
+    if (!liveness.live) {
+      return new Response(JSON.stringify({ ok: false, error: 'subscription_inactive', reason: liveness.reason }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 

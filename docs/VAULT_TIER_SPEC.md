@@ -22,6 +22,20 @@ The foundation, and it hardens the existing grace window for free.
   **Security migration — reviewer routing BEFORE db push, expect 3+ rounds.**
 - Read + export paths stay open; `transfer-workspace-ownership` stays open.
 
+**As-built (2026-06-13):** migration `20260613000000_vault_v1_readonly_enforcement.sql`
+(restrictive RLS over 23 tables + storage.objects; `is_workspace_live` /
+`is_lease_live` helpers) + `_shared/workspace_live.ts` gates across all
+user-invokable mutators, liveness skips in the crons, and full-liveness
+backstops in `process_lease`/`retry_lease`/`manage-document-pack`. Three
+review rounds (security + integrity), both APPROVED. **Accepted residuals:**
+(a) DELETE is a silent zero-row no-op (no DELETE WITH CHECK in Postgres) —
+documented in the migration header; (b) `resolve-approval-chain`'s frozen
+pre-Phase-7 deployment is un-gateable while its redeploy stays deferred —
+KNOWN_ISSUES #84, the one knowingly open mutator; (c) unreferenced
+`leases`/`executed-leases` storage objects stay writable (storage spend
+only). Owner workspace hard-DELETE forensics gap filed as #83 (pre-existing,
+cross-referenced for Vault).
+
 ### V2 — Plan plumbing
 - `SubscriptionPlan` → `'starter' | 'business' | 'vault'`; `normalizePlanId`;
   `PLANS` config (yearly interval, $249, ownerOnly + readOnly flags).
@@ -33,7 +47,37 @@ The foundation, and it hardens the existing grace window for free.
   `document_limit` untouched (intake is frozen anyway; backstops gate on plan),
   clear cancellation-lifecycle columns on conversion (it's an active sub).
 
+**V2 as-built (2026-06-13):** `'vault'` in `SubscriptionPlan` (single source:
+pricing.ts, re-exported by types/index.ts), `PLANS.vault` ($249/yr,
+ownerOnly/readOnly/yearlyOnly), `PLAN_ORDER` exclusion, `normalizePlanId`;
+stripe-webhook recognizes Vault subs (metadata or `STRIPE_PRICE_VAULT_ANNUAL`),
+leaves `document_limit` untouched (path-dependent + meaningless under vault —
+consumers gate on plan), clears lifecycle on entitled, writes a `plan_changed`
+audit row, fails loudly (500) on unresolvable entitled subs, and carries the
+C2 entitled-event guard (consent via checkout.session.completed; session +
+subscription metadata both stamped). #29 guard verified value-agnostic; INSERT
+default verified 'starter'. Five review passes (auditor, security, integrity,
+test-author, then a webhook verification round that caught a CRITICAL dead
+consent channel — fixed + regression-pinned). stripe-webhook v25 +
+create-checkout v43 deployed. 720/720. OPERATOR ITEM: create the Vault Stripe
+Product + yearly Price (live + sandbox) and set `STRIPE_PRICE_VAULT_ANNUAL`.
+
 ### V3 — Conversion flows
+
+**Pre-V3 blockers recorded during V2 review (2026-06-13):**
+1. ~~Entitled-event clobber~~ FIXED in V2: the webhook's C2 guard now skips
+   entitled events for a non-current subscription unless they arrive via
+   checkout.session.completed. V3's cancel-dialog flow MUST run conversions
+   through a Checkout session (not bare subscriptions.create) so the consent
+   override applies, and should still cancel the old plan sub at conversion.
+2. Reports/export wall: `canAccessFeature('business')` is false for vault, so
+   a converted Business workspace loses the Reports surface (disclosure,
+   projections, exports) until V4 — but "export gating in Vault is a bug by
+   definition" (invariants below). Before conversions ship, special-case
+   read/export surfaces for `planConfig.readOnly` (do NOT blanket-pass vault
+   through business gates — that would remount the AI assistant and break the
+   zero-AI-spend invariant). V3 and the V4 read-only UI walls must ship
+   together or in that order.
 - **Cancel dialog** (Billing): "Switch to Vault instead" path → checkout for
   the yearly price; copy warns: owner-only (members lose access), read-only,
   no AI, packs end at period close.
@@ -42,6 +86,27 @@ The foundation, and it hardens the existing grace window for free.
 - **Grace reminder emails** (`process-cancellation-lifecycle`): add the Vault
   CTA line + link.
 - Pack auto-cancel at period end during conversion (Stripe API, webhook-safe).
+
+**V3 as-built (2026-06-13):** convert-at-grace model shipped. create-checkout
+gained owner-only, no-trial, yearly-only Vault support (503 vault_not_configured
+/ 403 vault_owner_only, fail-closed). stripe-webhook retires document-pack subs
+at period end on Vault activation. Grace banner has an owner-only 'Keep your data
+— Vault' CTA (price-interpolated, loading state, support-routed error copy);
+cancel dialog shows a convert-at-grace note (hidden when already Vault);
+cancellation reminder emails carry a Vault CTA line. Read/export pre-blocker
+closed via isReadOnlyRetention() — Reports + Portfolio stay open for Vault WITHOUT
+touching the AI gate. Report/financial CONFIG is now read-only for non-live
+workspaces at BOTH layers: UI (cards hidden) and server (migration
+20260613010000, a BEFORE UPDATE trigger on workspaces guarding the config column
+set — applied + verified live; also closes the pre-existing grace/soft-deleted
+config-write hole). Vault is GRACE-ONLY (ratified): the soft-deleted wall states
+so rather than offering conversion. Five reviews (auditor/security/integrity/
+polish/test) + a pre-apply security review of the migration (APPLY). create-checkout
++ stripe-webhook redeployed. **Deferred to V4:** full client-side read-only gating
+of WorkspaceSettings (KNOWN_ISSUES #87); report-generation artifact write on a
+read-only workspace is an accepted export action (security LOW — deterministic,
+non-AI; documented as within the view+export grant). OPERATOR: STOP 10
+(STRIPE_PRICE_VAULT_ANNUAL) gates real conversions.
 
 ### V4 — In-product Vault experience
 - Non-owner members: wall (reuse `SoftDeletedWall` shape) — "in Vault,
@@ -53,6 +118,30 @@ The foundation, and it hardens the existing grace window for free.
   no Vault-fee refund), renewal date.
 - Renewal reminder email ~14 days ahead (no-surprise-billing rule);
   failed renewal → normal Stripe dunning → `canceled` → existing lifecycle.
+
+**V4 as-built (2026-06-13):** shipped. Owner read-only state: `VaultBanner`
+(renewal date + "Reactivate a plan"); AI assistant unmounted on Vault
+(`{!isVault && <AiAssistant/>}`); intake entry points hidden (Dashboard/Leases
+CTAs, per-row Delete, empty-state CTA). Non-owner members: `VaultMemberWall`
+(owner-only message + "Switch workspace" escape hatch; keeps `/app/settings`).
+Lease surface fully read-only via prop-threaded `readOnly` (default false →
+non-Vault no-op): main workbench, LockedLeaseDetail (active+model_locked, the
+dominant state — initially missed, fixed), LockedHeader/VendorCard,
+FailedLeaseBanner (Retry hidden — AI spend), DocumentsPanel, intake uploads,
+and the counter-signature / chain-violation panels — each shows
+`vault.lease_readonly_note`; view + export intact. Billing: Vault card is the
+single surface (Reactivate Starter/Business, no refund; subordinate "Manage in
+Stripe" link); generic plan card + packs + credits suppressed for Vault.
+Renewal reminder: `vault-renewal-reminder` cron (deployed v1, verify_jwt=false)
++ `vault_renewal_reminders` idempotency ledger (migration 20260613020000,
+applied + verified live; RLS-on/no-policies). Reviews: security + integrity
+(APPLY/DEPLOY) + two polish rounds (caught the LockedLeaseDetail CRITICAL + the
+chain-panel HIGH, both fixed) + test (758/758). **Deferred follow-ups:**
+KNOWN_ISSUES #88 (Dashboard intake-widget CTAs — MEDIUM), #89 (renewal email
+English-only — LOW), #87 (WorkspaceSettings general-save rename-during-grace).
+**OPERATOR (STOP 10 companion):** set `VAULT_RENEWAL_CRON_SECRET` + schedule the
+daily cron (deployed-but-unscheduled until then; fails closed 401 without the
+secret).
 
 ### Deferred (fast-follow, do not build now)
 - 3.5% yearly escalator (billing subsystem: `invoice.upcoming` → computed

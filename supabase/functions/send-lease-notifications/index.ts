@@ -5,6 +5,7 @@ import { Resend } from "https://esm.sh/resend@2.0.0";
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive, type WorkspaceLiveness } from "../_shared/workspace_live.ts";
 
 // Adds x-cron-secret to allowed request headers; otherwise identical to shared helper.
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
@@ -31,6 +32,7 @@ interface LeaseWithProfile {
   filename: string;
   extracted_json: { property_address?: string } | null;
   user_id: string;
+  workspace_id: string | null;
   profiles: { email: string } | null;
 }
 
@@ -100,6 +102,11 @@ serve(async (req) => {
       daysUntilEvent: number;
     }> = [];
 
+    // Vault V1: this cron runs service-role across all workspaces; non-live
+    // workspaces (canceled / soft-deleted / vault) are skipped per item, with
+    // each workspace checked at most once per run.
+    const livenessCache = new Map<string, WorkspaceLiveness>();
+
     // Check each notification to see if it matches a notification window
     for (const notification of (notifications || []) as LeaseNotificationRecord[]) {
       const eventDate = new Date(notification.event_date);
@@ -135,6 +142,7 @@ serve(async (req) => {
             filename,
             extracted_json,
             user_id,
+            workspace_id,
             profiles!leases_user_id_fkey (
               email
             )
@@ -150,6 +158,17 @@ serve(async (req) => {
         const typedLease = lease as unknown as LeaseWithProfile;
         if (!typedLease.profiles?.email) {
           console.log(`Skipping ${notification.id}: no user email found`);
+          continue;
+        }
+
+        const wsKey = typedLease.workspace_id ?? '';
+        let liveness = livenessCache.get(wsKey);
+        if (!liveness) {
+          liveness = await checkWorkspaceLive(supabase, typedLease.workspace_id);
+          livenessCache.set(wsKey, liveness);
+        }
+        if (!liveness.live) {
+          console.log(`Skipping ${notification.id}: workspace not live (${liveness.reason})`);
           continue;
         }
 

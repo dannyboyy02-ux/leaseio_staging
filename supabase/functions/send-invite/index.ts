@@ -143,7 +143,7 @@ serve(async (req) => {
 
     // Authorize: owner OR admin
     const { data: workspace, error: wsError } = await supabaseAdmin
-      .from('workspaces').select('owner_id, name').eq('id', workspaceId).single();
+      .from('workspaces').select('owner_id, name, canceled_at, soft_deleted_at, plan').eq('id', workspaceId).single();
     if (wsError || !workspace) return errRes(corsHeaders, 'NOT_FOUND', 'Workspace not found', 404);
 
     const isOwner = workspace.owner_id === user.id;
@@ -152,6 +152,23 @@ serve(async (req) => {
         .from('workspace_members').select('role').eq('workspace_id', workspaceId).eq('user_id', user.id).maybeSingle();
       if (membership?.role !== 'admin')
         return errRes(corsHeaders, 'UNAUTHORIZED', 'Only workspace owners or admins may send invitations', 403);
+    }
+
+    // Vault V1 liveness gate — inlined mirror of _shared/workspace_live.ts
+    // (this function cannot resolve ../_shared/ imports; keep semantics in
+    // sync). A canceled, soft-deleted, or vault-plan workspace is read-only
+    // and must not grow its membership or send invite emails.
+    const livenessReason = workspace.soft_deleted_at
+      ? 'soft_deleted'
+      : workspace.canceled_at
+        ? 'canceled'
+        : workspace.plan === 'vault'
+          ? 'vault'
+          : null;
+    if (livenessReason) {
+      return new Response(JSON.stringify({ ok: false, error: 'subscription_inactive', reason: livenessReason }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const wsName = workspaceName ?? workspace.name ?? 'Workspace';

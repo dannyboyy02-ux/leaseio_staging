@@ -22,6 +22,7 @@ import {
   isStageComplete,
 } from "../_shared/approval_chain.ts";
 import { getLifecycleMode, type LifecycleMode } from "../_shared/lifecycle_mode.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -229,6 +230,17 @@ serve(async (req) => {
     return jsonResponse(
       { ok: false, error: `Step is not pending (current status: ${step.status})` },
       409,
+      origin,
+    );
+  }
+
+  // Vault V1: workspace liveness gate — no mutations on canceled /
+  // soft-deleted / vault workspaces (fail closed).
+  const liveness = await checkWorkspaceLive(supabaseAdmin, step.workspace_id);
+  if (!liveness.live) {
+    return jsonResponse(
+      { ok: false, error: "subscription_inactive", reason: liveness.reason },
+      403,
       origin,
     );
   }

@@ -20,6 +20,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -121,6 +122,22 @@ serve(async (req) => {
   }
   if (!isMember) {
     return jsonResponse({ ok: false, error: "Not a workspace member.", reason: "not_a_member" }, 403, origin);
+  }
+
+  // Vault V1: workspace liveness gate — no mutations on canceled /
+  // soft-deleted / vault workspaces (fail closed). This gates the WHOLE
+  // mutation path, including the personal user_out_of_office insert:
+  // the OOO row and the chain routing are one request flow, and
+  // persisting the row before a 403 on the routing half would leave a
+  // side effect behind an error response (and seed future OOO-based
+  // routing in a read-only workspace).
+  const liveness = await checkWorkspaceLive(supabaseAdmin, body.workspaceId);
+  if (!liveness.live) {
+    return jsonResponse(
+      { ok: false, error: "subscription_inactive", reason: liveness.reason },
+      403,
+      origin,
+    );
   }
 
   // Verify delegate is a workspace member or owner

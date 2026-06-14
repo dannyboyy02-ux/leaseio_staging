@@ -75,18 +75,20 @@
     "workspaces_upgrade_link": "Actualice a Business para más"
   },
   "archive": {
-    "archive": "Eliminar",
+    "archive": "Archivar",
     "unarchive": "Restaurar",
-    "archived_toast": "Arrendamiento eliminado",
+    "archived_toast": "Arrendamiento archivado",
     "unarchived_toast": "Arrendamiento restaurado",
     "failed": "No se pudo actualizar el arrendamiento",
-    "confirm_archive_title": "¿Eliminar este arrendamiento?",
-    "confirm_archive_desc": "Eliminar mueve el arrendamiento fuera del conjunto activo y libera un cupo activo. El registro se conserva (auditoría, adjuntos, historial) y puede restaurarse en cualquier momento.",
+    "confirm_archive_title": "¿Archivar este arrendamiento?",
+    "confirm_archive_desc": "Archivar mueve el arrendamiento fuera del conjunto activo y libera un cupo activo. El registro se conserva (auditoría, adjuntos, historial) y puede restaurarse en cualquier momento.",
     "confirm_unarchive_title": "¿Restaurar este arrendamiento?",
     "confirm_unarchive_desc": "Restaurar devuelve el arrendamiento al conjunto activo. Volverá a contar para su cupo de arrendamientos activos.",
     "audit_warning": "Guardado, pero la acción no pudo registrarse en el historial de auditoría.",
-    "deleted_badge": "Eliminado",
-    "deleted_banner": "Este arrendamiento está eliminado. Ya no cuenta para sus arrendamientos activos y permanece oculto en la lista a menos que active \"Mostrar archivados\"."
+    "deleted_badge": "Archivado",
+    "deleted_banner": "Este arrendamiento está archivado. Ya no cuenta para sus arrendamientos activos y permanece oculto en la lista a menos que active \"Mostrar archivados\".",
+    "list_archived_toast": "Contrato archivado — restáurelo desde la página de detalle del contrato",
+    "list_archive_failed": "No se pudo archivar el contrato"
   },
   "documents": {
     "delete_doc_title": "¿Eliminar este documento?",
@@ -103,11 +105,12 @@
     "summary_session_note": "Generado el {{date}} · disponible hasta que cambie de pestaña o salga de esta página"
   },
   "amendments": {
-    "delete_title": "¿Eliminar esta enmienda?",
-    "delete_desc": "\"{{name}}\" se quitará de las enmiendas de este arrendamiento. La acción se registra en el historial de auditoría. Un administrador puede restaurarla después desde Arrendamientos → \"Mostrar archivados\" → abrirla → Restaurar.",
-    "delete_success": "Enmienda eliminada",
-    "delete_failed": "No se pudo eliminar la enmienda",
-    "delete_audit_warning": "Enmienda eliminada, pero la acción no pudo registrarse en el historial de auditoría."
+    "delete_title": "¿Archivar esta enmienda?",
+    "delete_desc": "\"{{name}}\" se archivará (se quitará de las enmiendas activas de este arrendamiento). La acción se registra en el historial de auditoría. Un administrador puede restaurarla después desde Arrendamientos → \"Mostrar archivados\" → abrirla → Restaurar.",
+    "delete_success": "Enmienda archivada",
+    "delete_failed": "No se pudo archivar la enmienda",
+    "delete_audit_warning": "Enmienda archivada, pero la acción no pudo registrarse en el historial de auditoría.",
+    "delete_confirm_cta": "Archivar"
   },
   "landing": {
     "nav": {
@@ -675,7 +678,14 @@
     "credits_desc": "Créditos únicos comprados a su tarifa de excedente. Cada crédito permite procesar un arrendamiento mientras supera su límite mensual.",
     "credits_balance_one": "{{count}} crédito disponible",
     "credits_balance_other": "{{count}} créditos disponibles",
-    "cancel_confirm_cta": "Abrir portal de facturación"
+    "cancel_confirm_cta": "Abrir portal de facturación",
+    "cancel_vault_note": "¿Prefiere conservar sus registros? Cuando finalice su plan, el propietario del espacio puede cambiar a Vault de solo lectura (${{price}}/año) — exportación completa, sin eliminar nada — en lugar de perder el espacio de trabajo.",
+    "vault_card_title": "Vault — retención de solo lectura",
+    "vault_card_desc": "Su repositorio es de solo lectura y totalmente exportable. Se renueva el {{date}} por ${{price}}/año. Reactive un plan completo en cualquier momento para volver a editar y usar las funciones de IA (sin reembolso de la tarifa de Vault).",
+    "vault_card_desc_nodate": "Su repositorio es de solo lectura y totalmente exportable. Se renueva anualmente por ${{price}}/año. Reactive un plan completo en cualquier momento para volver a editar y usar las funciones de IA (sin reembolso de la tarifa de Vault).",
+    "vault_reactivate_starter": "Reactivar — Starter",
+    "vault_reactivate_business": "Reactivar — Business",
+    "vault_manage_stripe": "Gestionar suscripción en Stripe"
   },
   "packs": {
     "pack_10": "Paquete de 10 arrendamientos",
@@ -1139,12 +1149,14 @@
     "starter": "Inicial",
     "pro": "Pro",
     "business": "Business",
+    "vault": "Vault",
     "plan": "Plan",
     "upgrade": "Actualizar",
     "description": {
       "free": "Para equipos pequeños que inician con visibilidad de arrendamientos",
       "starter": "Para equipos de finanzas que necesitan visibilidad y control de arrendamientos",
-      "business": "Para organizaciones que necesitan gestión completa del ciclo de vida"
+      "business": "Para organizaciones que necesitan gestión completa del ciclo de vida",
+      "vault": "Retención de solo lectura para su repositorio de contratos: vea y exporte todo."
     },
     "feature": {
       "1_lease": "1 documento de arrendamiento",
@@ -1185,7 +1197,10 @@
       "3_users": "Hasta 3 usuarios",
       "ai_assistant": "Asistente de IA integrado (Ask Claude)",
       "portfolio_intelligence": "Inteligencia de portafolio",
-      "amendment_comparison": "Comparación de enmiendas"
+      "amendment_comparison": "Comparación de enmiendas",
+      "vault_read_only": "Repositorio de solo lectura: vea todo lo que almacenó",
+      "vault_full_export": "Exportación completa disponible en todo momento",
+      "vault_owner_only": "Acceso solo para el propietario"
     }
   },
   "auth": {
@@ -1662,6 +1677,20 @@
     "wall_title": "El acceso a este espacio de trabajo ha terminado",
     "wall_desc": "La ventana de 30 días para ver y exportar \"{{name}}\" ha terminado y el espacio de trabajo está programado para eliminación permanente. Renovar antes de la eliminación lo restaura todo por completo.",
     "wall_ask_admin": "Pida a un administrador del espacio de trabajo que renueve la suscripción.",
-    "contact_support": "Contactar soporte"
+    "contact_support": "Contactar soporte",
+    "vault_cta": "Conserve sus datos — Vault ${{price}}/año",
+    "vault_failed": "No se pudo iniciar el pago de Vault. Inténtelo de nuevo.",
+    "vault_redirecting": "Redirigiendo…",
+    "vault_unavailable": "Vault no está disponible en este momento. Escriba a support@theleaseio.com para conservar sus datos.",
+    "wall_vault_note": "La opción de retención Vault estaba disponible durante el período de gracia. Renovar es ahora la única forma de restaurar el acceso."
+  },
+  "vault": {
+    "banner_text": "Vault — repositorio de solo lectura. Se renueva el {{date}} por ${{price}}/año.",
+    "banner_text_nodate": "Vault — repositorio de solo lectura. Se renueva anualmente por ${{price}}/año.",
+    "reactivate_cta": "Reactivar un plan",
+    "member_wall_title": "Este espacio está en Vault",
+    "member_wall_desc": "{{name}} es un repositorio de retención de solo lectura. El acceso a Vault es exclusivo del propietario: comuníquese con el propietario del espacio para restaurar el acceso completo o reactivar un plan.",
+    "lease_readonly_note": "Este espacio está en Vault — solo lectura. La edición, las aprobaciones y las cargas están deshabilitadas.",
+    "member_wall_switch": "Cambiar de espacio"
   }
 }

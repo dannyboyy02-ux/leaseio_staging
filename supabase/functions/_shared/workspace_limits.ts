@@ -10,6 +10,12 @@
 export const WORKSPACE_LIMITS: Record<string, number> = {
   starter: 1,
   business: 10,
+  // Documentation-only mirror of PLANS.vault.maxWorkspaces. The actual
+  // "no workspace creation on Vault" enforcement is create-workspace's
+  // business-workspace eligibility gate (vault owners fail it); nothing
+  // indexes this map by the caller's plan today. NOTE 0 is falsy — a future
+  // dynamic consumer must use ?? / explicit undefined checks, never `|| 1`.
+  vault: 0,
 };
 
 // Business monthly price — must match stripe-webhook PRICE_IDS.business and the

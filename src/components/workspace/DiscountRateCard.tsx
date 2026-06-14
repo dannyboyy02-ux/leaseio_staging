@@ -128,11 +128,16 @@ export function DiscountRateCard({ workspaceId, canEdit }: Props) {
     }
     setSaving(true);
     try {
-      const { error } = await supabase
+      // #70 defense-in-depth: confirm the rate actually persisted (.select +
+      // 0-row check) BEFORE recomputing every lease's financials — otherwise
+      // an RLS-blocked no-op would rewrite calc_* from an unsaved rate.
+      const { data, error } = await supabase
         .from('workspaces')
         .update({ discount_rate: parsed } as any)
-        .eq('id', workspaceId);
+        .eq('id', workspaceId)
+        .select('id');
       if (error) throw error;
+      if (!data?.length) throw new Error('not_saved');
       await recomputeWorkspaceLeaseFinancials(workspaceId, parsed);
       toast.success(t('reports.discount_rate_saved'));
     } catch (error) {

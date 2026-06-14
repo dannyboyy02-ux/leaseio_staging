@@ -188,6 +188,11 @@ describe('stripe-webhook document-pack classification', () => {
     expect(block).toContain('if (isDocumentPack(subscription)) {');
     expect(block).toContain('await applyDocumentPack(subscription);');
     expect(block).toContain('await applySubscription(subscription, workspaceId);');
+    // The C2 consent override must derive from session metadata WITH the
+    // subscription-metadata fallback — without it the override is always
+    // null and checkout-driven plan switches freeze (CRITICAL, 2026-06-13).
+    expect(block).toContain('session.metadata?.workspace_id ??');
+    expect(block).toContain('subscription.metadata?.workspace_id ?? null');
   });
 
   it('customer.subscription.* routes packs to applyDocumentPack and non-packs to applySubscription', () => {
@@ -257,7 +262,10 @@ describe('stripe-webhook document-pack classification', () => {
       src.indexOf("// Recompute a workspace's total document-pack capacity"),
     );
     expect(fn).toContain('plan: effectivePlan');
-    expect(fn).toContain('document_limit: DOCUMENT_LIMITS[effectivePlan]');
+    // Vault V2: the limit is computed once and written only when the plan
+    // has a DOCUMENT_LIMITS entry (vault deliberately has none).
+    expect(fn).toContain('const newDocumentLimit = DOCUMENT_LIMITS[effectivePlan];');
+    expect(fn).toContain('? { document_limit: newDocumentLimit }');
     // ...and the plan path never touches the pack capacity column.
     expect(fn).not.toContain('addon_document_capacity');
   });
@@ -286,9 +294,10 @@ describe('process_lease pack-aware quota math', () => {
     const fn = quotaHead(read(FN));
     expect(fn.length).toBeGreaterThan(0);
     // Base limit now comes from document_limit (webhook-managed plan entitlement);
-    // the select also pulls purchased_lease_credits for the needs_credit decision.
+    // the select also pulls purchased_lease_credits for the needs_credit decision
+    // and canceled_at/soft_deleted_at for the Vault V1 liveness backstop.
     expect(fn).toContain(
-      ".select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at')",
+      ".select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at')",
     );
   });
 

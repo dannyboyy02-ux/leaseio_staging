@@ -1,4 +1,4 @@
-export type SubscriptionPlan = 'starter' | 'business';
+export type SubscriptionPlan = 'starter' | 'business' | 'vault';
 export type BillingInterval = 'monthly' | 'annual';
 
 export interface PlanConfig {
@@ -33,6 +33,17 @@ export interface PlanConfig {
   hasPrioritySupport: boolean;
   hasAiAssistant: boolean;
   popular?: boolean;
+  /**
+   * Vault retention tier flags (VAULT_TIER_SPEC.md). ownerOnly: only the
+   * workspace owner retains access (members hit a wall — V4). readOnly: the
+   * workspace is view + export only; server-side enforcement is the Vault V1
+   * restrictive-RLS layer + edge-function liveness gates, these flags are for
+   * UI state. yearlyOnly: the plan has no monthly interval — price.annual is
+   * the per-year amount and price.monthly is 0 and must never be rendered.
+   */
+  ownerOnly?: boolean;
+  readOnly?: boolean;
+  yearlyOnly?: boolean;
 }
 
 export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
@@ -94,8 +105,47 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
     hasAiAssistant: true,
     popular: true,
   },
+  // Vault retention tier (VAULT_TIER_SPEC.md; PRODUCT_STRATEGY.md Decision 5).
+  // $249/year, owner-only, read-only offramp for workspaces that would
+  // otherwise cancel and purge. Deliberately ABSENT from PLAN_ORDER: Vault
+  // never appears on the public pricing page, signup, or any plan-selection
+  // surface — it is offered only via offramp surfaces (cancel dialog, grace
+  // banner, grace reminder emails — V3). Zero AI spend; zero intake; all
+  // existing data viewable + exportable (the flatten rule).
+  vault: {
+    id: 'vault',
+    name: 'Vault',
+    nameKey: 'plan.vault',
+    descriptionKey: 'plan.description.vault',
+    price: { monthly: 0, annual: 249 },
+    maxUsers: 1,
+    maxActiveLeases: 0,
+    maxArchivedLeases: 0,
+    maxWorkspaces: 0,
+    abstractionsIncluded: 0,
+    overagePerDoc: 0,
+    featureKeys: [
+      'plan.feature.vault_read_only',
+      'plan.feature.vault_full_export',
+      'plan.feature.vault_owner_only',
+    ],
+    hasTeamAccess: false,
+    hasAdvancedReports: false,
+    hasRoleBasedAccess: false,
+    hasBulkUpload: false,
+    hasExportIntegrations: false,
+    hasPrioritySupport: false,
+    hasAiAssistant: false,
+    ownerOnly: true,
+    readOnly: true,
+    yearlyOnly: true,
+  },
 };
 
+/**
+ * Plans shown on pricing/upgrade surfaces, in display order. Vault is
+ * intentionally excluded (offramp-only — see the vault entry above).
+ */
 export const PLAN_ORDER: SubscriptionPlan[] = ['starter', 'business'];
 
 export const PER_DOCUMENT_ABSTRACTION_PRICE = 12;
@@ -148,10 +198,6 @@ export function packPerLeasePrice(pack: DocumentPackConfig): number {
   return Math.round((pack.priceMonthly / pack.size) * 100) / 100;
 }
 
-export function getPlanByIndex(index: number): PlanConfig {
-  return PLANS[PLAN_ORDER[index]];
-}
-
 export function getPlanIndex(planId: SubscriptionPlan): number {
   return PLAN_ORDER.indexOf(planId);
 }
@@ -160,8 +206,21 @@ export function isUpgrade(currentPlan: SubscriptionPlan, targetPlan: Subscriptio
   return getPlanIndex(targetPlan) > getPlanIndex(currentPlan);
 }
 
+/**
+ * True for read-only retention plans (Vault). Such plans get view + export
+ * access to otherwise Business-gated READ surfaces (Reports, Portfolio) under
+ * the flatten rule — "view + export everything the workspace has." This must
+ * NEVER be used to open write or AI surfaces (the AI assistant stays gated on
+ * canAccessFeature('business') alone): doing so would remount paid-API
+ * features and break the zero-AI-spend invariant (VAULT_TIER_SPEC.md).
+ */
+export function isReadOnlyRetention(plan: SubscriptionPlan | null | undefined): boolean {
+  return !!plan && PLANS[plan]?.readOnly === true;
+}
+
 /** Normalise legacy plan IDs from DB to the canonical SubscriptionPlan type. */
 export function normalizePlanId(raw: string | null | undefined): SubscriptionPlan {
   if (raw === 'business') return 'business';
+  if (raw === 'vault') return 'vault';
   return 'starter'; // treats 'free', 'pro', null, or unknown as starter
 }

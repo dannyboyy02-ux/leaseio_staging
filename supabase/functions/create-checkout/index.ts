@@ -25,6 +25,14 @@ const PRICE_IDS = {
     monthly: "price_1SntqQH03PByDjY3MrvOjOsu",
     annual: Deno.env.get("STRIPE_PRICE_BUSINESS_ANNUAL") ?? null,
   },
+  // Vault retention tier (VAULT_TIER_SPEC.md V3 conversion). Yearly-only,
+  // sourced from env like the annual plan prices — fails closed with reason
+  // 'vault_not_configured' until the operator creates the Stripe Product/Price
+  // and sets STRIPE_PRICE_VAULT_ANNUAL (OPERATOR_PLAYBOOK STOP 10). No monthly.
+  vault: {
+    monthly: null,
+    annual: Deno.env.get("STRIPE_PRICE_VAULT_ANNUAL") ?? null,
+  },
 } as const;
 
 type PlanId = keyof typeof PRICE_IDS;
@@ -72,20 +80,24 @@ serve(async (req) => {
       throw new Error("workspaceId is required");
     }
 
-    const billingInterval: BillingInterval =
-      rawInterval && VALID_INTERVALS.has(rawInterval)
+    const isVault = planId === "vault";
+    // Vault is yearly-only — ignore any requested interval and bill annually.
+    const billingInterval: BillingInterval = isVault
+      ? "annual"
+      : rawInterval && VALID_INTERVALS.has(rawInterval)
         ? (rawInterval as BillingInterval)
         : "monthly";
 
     const priceId = PRICE_IDS[planId as PlanId][billingInterval];
     if (!priceId) {
-      // Fail closed if annual isn't configured. Better than charging
-      // monthly silently when the user clicked annual.
+      // Fail closed. Vault and annual both source their price from env; a
+      // missing price must never silently fall through to a wrong charge.
       return new Response(
         JSON.stringify({
-          error:
-            "Annual billing isn't yet configured for this plan. Please contact support or choose monthly.",
-          reason: "annual_not_configured",
+          error: isVault
+            ? "Vault isn't configured yet. Please contact support."
+            : "Annual billing isn't yet configured for this plan. Please contact support or choose monthly.",
+          reason: isVault ? "vault_not_configured" : "annual_not_configured",
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -126,6 +138,22 @@ serve(async (req) => {
       throw new Error("You do not have permission to manage billing for this workspace");
     }
 
+    // Vault conversion is OWNER-ONLY (VAULT_TIER_SPEC.md — members lose access
+    // in Vault, so only the owner may take the workspace there). Admins can
+    // manage other billing but cannot convert to the retention tier.
+    if (isVault && workspace.owner_id !== user.id) {
+      return new Response(
+        JSON.stringify({
+          error: "Only the workspace owner can switch to Vault.",
+          reason: "vault_owner_only",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403,
+        },
+      );
+    }
+
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
     });
@@ -155,11 +183,17 @@ serve(async (req) => {
       success_url: `${origin}/app/settings/account?tab=billing&checkout=success`,
       cancel_url: `${origin}/app/settings/account?tab=billing&checkout=canceled`,
       metadata: {
+        // workspace_id at session level too: the webhook's C2 consent
+        // override reads it here first (subscription metadata is the
+        // fallback for sessions created before this stamping existed).
+        workspace_id: workspaceId,
         plan_id: planId,
         billing_interval: billingInterval,
       },
       subscription_data: {
-        trial_period_days: TRIAL_PERIOD_DAYS,
+        // No trial on a Vault conversion — it's a paid retention purchase
+        // that takes effect immediately, not a new-customer trial.
+        ...(isVault ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
         metadata: {
           workspace_id: workspaceId,
           plan_id: planId,

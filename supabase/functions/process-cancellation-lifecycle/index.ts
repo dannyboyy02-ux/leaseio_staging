@@ -29,6 +29,10 @@ import {
   dueNotices,
   graceDaysRemaining,
 } from "../_shared/cancellation_lifecycle.ts";
+import {
+  cancelWorkspaceSubscriptions,
+  purgeWorkspaceStorage,
+} from "../_shared/workspace_purge.ts";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const MAX_EMAILS_PER_RUN = 200;
@@ -63,6 +67,7 @@ function noticeCopy(kind: NoticeKind, rawWorkspaceName: string, daysLeft: number
       <a href="${renewUrl}" style="background:#1a56db;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Renew subscription</a>
       &nbsp;&nbsp;<a href="${exportUrl}">Export your data</a>
     </p>
+    <p style="margin-top:8px;color:#374151">Don't need an active plan but want to keep the records? The workspace owner can switch to <strong>Vault</strong> — read-only retention with full export, $249/year — from the <a href="${renewUrl}">billing page</a>. Your data stays; deletion is canceled.</p>
     <p style="color:#6b7280;font-size:12px">You're receiving this because you're an owner or admin of the LeaseIO workspace "${workspaceName}".</p>`;
 
   if (kind === "day0") {
@@ -342,24 +347,10 @@ serve(async (req) => {
       // Cancel every surviving Stripe subscription tagged to this workspace
       // (document packs are independent subscriptions — without this they
       // bill forever against a deleted workspace; security review HIGH).
-      const stripeCanceled: string[] = [];
+      let stripeCanceled: string[] = [];
       if (stripe && ws.stripe_customer_id) {
         try {
-          const subs = await stripe.subscriptions.list({
-            customer: ws.stripe_customer_id,
-            status: "all",
-            limit: 100,
-          });
-          for (const sub of subs.data) {
-            if (
-              sub.metadata?.workspace_id === ws.id &&
-              sub.status !== "canceled" &&
-              sub.status !== "incomplete_expired"
-            ) {
-              await stripe.subscriptions.cancel(sub.id);
-              stripeCanceled.push(sub.id);
-            }
-          }
+          stripeCanceled = await cancelWorkspaceSubscriptions(stripe, ws.stripe_customer_id, ws.id);
         } catch (err) {
           console.error("[cancellation-lifecycle] stripe cleanup failed — purge deferred:", ws.id, (err as Error)?.message);
           continue; // never purge while billing cleanup is unconfirmed
@@ -436,31 +427,10 @@ serve(async (req) => {
       }
 
       // Storage purge LAST — all four buckets, correct conventions.
-      let storagePurged = 0;
-      async function removePrefix(bucket: string, prefix: string) {
-        try {
-          const { data: entries } = await supabaseAdmin.storage.from(bucket).list(prefix);
-          if (!entries || entries.length === 0) return;
-          const files = entries.filter((e) => (e as { id?: string | null }).id !== null);
-          const folders = entries.filter((e) => (e as { id?: string | null }).id === null);
-          if (files.length > 0) {
-            const paths = files.map((f) => `${prefix}/${f.name}`);
-            const { error: rmErr } = await supabaseAdmin.storage.from(bucket).remove(paths);
-            if (!rmErr) storagePurged += paths.length;
-          }
-          for (const folder of folders) {
-            await removePrefix(bucket, `${prefix}/${folder.name}`);
-          }
-        } catch (err) {
-          console.error("[cancellation-lifecycle] storage purge error:", bucket, prefix, (err as Error)?.message);
-        }
-      }
-      for (const prefix of uploaderPrefixes) {
-        await removePrefix("leases", prefix);
-        await removePrefix("executed-leases", prefix);
-      }
-      await removePrefix("lease-documents", ws.id);
-      await removePrefix("lease-reports", ws.id);
+      const storagePurged = await purgeWorkspaceStorage(supabaseAdmin, {
+        workspaceId: ws.id,
+        uploaderPrefixes: Array.from(uploaderPrefixes),
+      });
 
       await supabaseAdmin
         .from("deleted_workspaces")

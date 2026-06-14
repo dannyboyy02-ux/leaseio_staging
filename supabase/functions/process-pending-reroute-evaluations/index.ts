@@ -88,7 +88,42 @@ serve(async (req) => {
     );
   }
 
-  const pending = (leases ?? []) as PendingLease[];
+  const allPending = (leases ?? []) as PendingLease[];
+
+  // Vault V1: this cron runs service-role across all workspaces — skip
+  // non-live workspaces (canceled / soft-deleted / vault) instead of
+  // failing the run. One batched lookup; semantics mirror
+  // _shared/workspace_live.ts (missing workspace rows fail closed).
+  let liveWorkspaceIds = new Set<string>();
+  if (allPending.length > 0) {
+    const workspaceIds = [...new Set(allPending.map((l) => l.workspace_id))];
+    const { data: wsRows, error: wsErr } = await supabaseAdmin
+      .from("workspaces")
+      .select("id, canceled_at, soft_deleted_at, plan")
+      .in("id", workspaceIds);
+    if (wsErr) {
+      console.error("[process-pending-reroute-evaluations] workspace liveness load error:", wsErr.message);
+      return jsonResponse(
+        { ok: false, error: wsErr.message, reason: "internal" },
+        500,
+        origin,
+      );
+    }
+    liveWorkspaceIds = new Set(
+      ((wsRows ?? []) as Array<{ id: string; canceled_at: string | null; soft_deleted_at: string | null; plan: string | null }>)
+        .filter((w) => !w.canceled_at && !w.soft_deleted_at && w.plan !== "vault")
+        .map((w) => w.id),
+    );
+  }
+
+  let skippedWorkspaceNotLive = 0;
+  const pending = allPending.filter((l) => {
+    if (liveWorkspaceIds.has(l.workspace_id)) return true;
+    console.log(`[process-pending-reroute-evaluations] skipping lease ${l.id}: workspace ${l.workspace_id} not live`);
+    skippedWorkspaceNotLive++;
+    return false;
+  });
+
   let processed = 0;
   let succeeded = 0;
   let failed = 0;
@@ -133,6 +168,7 @@ serve(async (req) => {
       processed,
       succeeded,
       failed,
+      skippedWorkspaceNotLive,
       // Cap the failure detail list so the response payload stays bounded
       failuresSample: failures.slice(0, 20),
     },

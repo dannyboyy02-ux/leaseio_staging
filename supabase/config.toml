@@ -190,6 +190,13 @@ verify_jwt = false
 [functions.process-cancellation-lifecycle]
 verify_jwt = false
 
+# Vault renewal reminder (2026-06-13) — daily cron: emails the Vault owner
+# ~14 days before the annual $249 renews. Cron-only; auth via x-cron-secret
+# (VAULT_RENEWAL_CRON_SECRET). verify_jwt=false because the caller sends only
+# the cron-secret header, no JWT; the function does its own fail-closed check.
+[functions.vault-renewal-reminder]
+verify_jwt = false
+
 # Phase 3 — owner-only, service-role inside (workspaces UPDATE policy
 # blocks authenticated owner_id reassignment).
 [functions.transfer-workspace-ownership]

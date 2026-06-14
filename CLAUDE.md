@@ -2,6 +2,8 @@
 
 Read this file first on every session. It contains the product identity, architecture, file map, active priorities, hard rules, and gotchas. Do NOT re-read the full repo — use this file plus the specific files referenced in each task. Closed phase specs are pointers; read the underlying `docs/PHASE_*_BUILD_SPEC.md` only when a task touches that phase's surface. Historical detail trimmed from this file lives in `docs/CLAUDE_md_archive.md`.
 
+> **▶ RESUMING WORK ON BRANCH `claude/dazzling-franklin-klts6u`?** Read **`docs/SESSION_HANDOFF_2026-06-13.md`** first — it's the durable handoff from the Vault-tier + security-cluster session (what shipped, the 7 migrations applied, what's left: #94 + #90-NULL + the operator Stripe STOP 10/3/7 items, and the verify-don't-recall / security-migration-review discipline that session ran on). Delete this banner once that work is merged/closed.
+
 ---
 
 ## What LeaseIO Is
@@ -42,7 +44,7 @@ When a phase spec or implementation diverges from PRODUCT_STRATEGY.md, update th
 
 **Backdoor — Historical Portfolio Loader:** Toggleable admin-controlled onboarding form for existing leases. **NOT YET BUILT** (toggle exists in WorkspaceSettings).
 
-**Amendment Sub-Workflow:** Existing lease → Add Amendment → upload → AI abstracts & compares → side-by-side → confirm → version history preserved. UI shell exists (`AmendmentChanges.tsx`); AI comparison logic does NOT yet exist in the extraction pipeline.
+**Amendment Sub-Workflow:** Existing lease → Add Amendment → upload → AI abstracts & compares → side-by-side → confirm → version history preserved. UI shell exists (`AmendmentChanges.tsx`); `process_lease/index.ts` populates a `_amendment_changes` array on the executed/amendment path (verify completeness before treating the comparison pipeline as fully done).
 
 Only two ongoing intake paths exist (Path 1, Path 2). The backdoor is temporary onboarding; amendments are a sub-workflow. No third ongoing path.
 
@@ -109,9 +111,11 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 
 **Dashboard:** `src/pages/Dashboard.tsx` + `src/components/dashboard/{OnboardingChecklist,SummaryStrip,NeedsAction,LeasePipeline,UpcomingRisks,RecentActivity,PipelineByDepartment,IntakeTrend,UpcomingEvents,EscalationReviewPanel,PendingCounterSignatureCard}.tsx`
 
-**Portfolio:** `src/pages/app/Portfolio.tsx` + `src/lib/portfolioAnalytics.ts` (PV liability, asset/escalation mix, lease register, index-lease disclosure). **NOTE:** the page is built but NOT yet Business-tier gated despite the pricing model — see KNOWN_ISSUES #46.
+**Portfolio:** `src/pages/app/Portfolio.tsx` + `src/lib/portfolioAnalytics.ts` (PV liability, asset/escalation mix, lease register, index-lease disclosure). Business-tier gated (#46 RESOLVED 2026-06-02); also opened read-only for Vault via `isReadOnlyRetention()` (V3).
 
-**Leases List:** `src/pages/Leases.tsx`, `src/components/leases/{EmptyLeaseState,DeleteLeaseDialog,LeaseExports}.tsx`
+**Leases List:** `src/pages/Leases.tsx`, `src/components/leases/{EmptyLeaseState,ArchiveLeaseDialog,LeaseExports}.tsx` (list "Delete" is restorable ARCHIVE via `ArchiveLeaseDialog` since #79/#92; `DeleteLeaseDialog` is now only ImportHistory's hard-delete/import-rollback).
+
+**Vault tier:** `src/components/VaultBanner.tsx` (owner banner + member wall), `src/config/pricing.ts` (`isReadOnlyRetention`), `supabase/functions/vault-renewal-reminder/index.ts`; read-only gating threaded via a `readOnly` prop through LeaseReview + locked-lease components. See `docs/VAULT_TIER_SPEC.md`.
 
 **Reports & Audit:** `src/pages/Reports.tsx`, `src/pages/app/{AuditLog,ExtractionAnalytics}.tsx` (ExtractionAnalytics is dev-only), `src/components/reports/RentRollExport.tsx`
 
@@ -121,7 +125,7 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 
 **Locales (update together):** `src/locales/{en,es}/common.json`
 
-**Pricing & Billing:** `src/config/pricing.ts`, `supabase/functions/{create-checkout,check-subscription,customer-portal}/index.ts`
+**Pricing & Billing:** `src/config/pricing.ts`, `supabase/functions/{create-checkout,stripe-webhook,customer-portal}/index.ts`
 
 **Routing:** `src/App.tsx` (all routes), `src/components/layout/{AppSidebar,AppLayout,AppHeader}.tsx`
 
@@ -135,15 +139,18 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 
 - **Email intake inbox (Path 2)** — Resend Inbound; domain allowlist + pending-sender queue at v1; all tiers with per-tier daily caps. Plan: `docs/EMAIL_INTAKE_PLAN.md` + `docs/EMAIL_INTAKE_DECISIONS.md` (ratified 2026-05-09, not yet built).
 - **Backdoor historical portfolio loader form** — toggle already exists in WorkspaceSettings.
-- **Free lease audit mode** — 5 docs, portfolio summary, upgrade CTA. Marketing-funnel surface, not a subscription tier.
-- **Amendment comparison intelligence in `process_lease`** — fetch parent lease terms, generate `_amendment_changes` array.
 - **AI operator** — GitHub Actions diff review, Vercel deploy webhook, nightly health check script.
-- **Vault retention tier** — $249/yr read-only owner-only offramp (ratified 2026-06-12; PRODUCT_STRATEGY.md Decision 5 + `docs/VAULT_TIER_SPEC.md`). V1 = server-side read-only enforcement (KNOWN_ISSUES #75 is now a BLOCKER for this, not a deferral). NOT the Phase 9 parent/child data-only construct.
 - **Phase 9 (firm layer foundation)** / **Phase 10 (firm UX)** — specs filed dormant; open only when explicitly invoked.
+
+> NOTE (drift corrected 2026-06-13, verify before trusting): **Free lease audit** is NOT unstarted — `src/pages/LeaseAudit.tsx` is built and routed at `/lease-audit` (+ `audit-session` edge function). **Amendment comparison** is NOT absent — `process_lease/index.ts` populates `_amendment_changes` (the executed/amendment path); confirm completeness before treating it as done. Re-verify against the repo, don't trust this doc's older "unstarted" framing.
+
+### Shipped 2026-06-13 (Vault-tier + security session — see `docs/SESSION_HANDOFF_2026-06-13.md`)
+
+- **Vault retention tier V1–V4 — SHIPPED** ($249/yr read-only owner-only offramp; PRODUCT_STRATEGY.md Decision 5 + `docs/VAULT_TIER_SPEC.md` as-built notes). V1 server-side read-only enforcement (KNOWN_ISSUES #75 RESOLVED), V2 plan plumbing (`'vault'` in `SubscriptionPlan`), V3 convert-at-grace conversion flows, V4 in-product read-only experience. **Operator-gated:** no customer can reach a Vault conversion until OPERATOR_PLAYBOOK STOP 10 (create the Vault Stripe Product/Price + `STRIPE_PRICE_VAULT_ANNUAL` + `VAULT_RENEWAL_CRON_SECRET` + schedule the `vault-renewal-reminder` cron). Open follow-ups: #94 (executed-upload lifecycle convention) + #90-NULL (activity-log NULL-attribution tightening).
 
 ### Active parallel workstreams (pointers, not full status)
 
-- **Operational Monitoring** — `docs/OPERATIONAL_MONITORING_SPEC.md`. Phases 1–3 shipped; admin dashboard at `/app/admin/operations`; `QuotaWarningBanner` in AppLayout (80% dismissible / 95% persistent). Phase 4 (firm-layer aggregation) blocked until Phase 9. Operator-side setup tracked in `docs/ops/OPERATOR_PLAYBOOK.md`; **one item still owed before customer #1: create the live-mode Stripe webhook destination** (sandbox is verified; live mode is a separate endpoint + signing secret).
+- **Operational Monitoring** — `docs/OPERATIONAL_MONITORING_SPEC.md`. Phases 1–3 shipped; admin dashboard at `/app/admin/operations`; `QuotaWarningBanner` in AppLayout (80% dismissible / 95% persistent). Phase 4 (firm-layer aggregation) blocked until Phase 9. Operator-side setup tracked in `docs/ops/OPERATOR_PLAYBOOK.md`; **owed before customer #1 / Vault launch:** STOP 3 (live-mode Stripe webhook destination + signing secret — live mode is a separate endpoint from the verified sandbox), STOP 10 (Vault Stripe Product/Price + `STRIPE_PRICE_VAULT_ANNUAL` + `VAULT_RENEWAL_CRON_SECRET` + schedule the `vault-renewal-reminder` cron), STOP 7 (annual Price IDs). All fail closed until done.
 - **Market Data & IBR** — `docs/MARKET_DATA_IBR_MODULE.md`. Spec only, not started. Independent workstream, NOT a numbered phase; files/branches/flags/migrations use the `module_market_data` prefix; migration SQL stays inline in the spec until the module opens. Binding standing rules (autonomous-but-constrained ingestion, immutable/append-only IBR packets, no LeaseIO methodology certification, Pro/Business gating, HITL CPI escalations, free public data sources only) are archived in `docs/CLAUDE_md_archive.md` — **restore them to active context when the module opens.**
 
 ---
@@ -192,6 +199,17 @@ The repo is the source of truth for all config expressible as code:
 
 If a change can't be expressed in the repo, document why near where its absence would confuse.
 
+### Documentation & Completion Discipline — DO NOT VIOLATE (added 2026-06-14 after a doc-drift incident)
+
+Two failures must not recur: (a) shipping work while leaving the source-of-truth docs stale, and (b) claiming "done / committed / pushed / clean / handed off" from memory without actually verifying. This is the "verify, don't recall" rule applied to documentation — stale source-of-truth docs silently mislead the next session.
+
+1. **Docs are part of the change, not an afterthought.** A change is NOT complete until the source-of-truth docs match reality. In the SAME change that ships it, reconcile every doc whose statements it affects:
+   - `CLAUDE.md` — Active Priorities (move shipped items out of "open/unstarted"; never leave a built feature listed as unbuilt), Known Schema Realities (types, columns, RLS, enums, env vars), the file-to-feature map, and any other claim the change invalidates.
+   - `docs/KNOWN_ISSUES.md` — stamp `RESOLVED <date>` on what you fixed; file what you discovered.
+   - The relevant `docs/*_SPEC.md` As-built note when implementation diverges from spec.
+2. **Completion claims are verified, never asserted.** Before saying "done", "everything's committed/pushed/clean", or writing any handoff: actually RUN the checks (`git status --porcelain` for uncommitted/untracked; local `HEAD` vs `@{u}` SHA + `git rev-list --left-right --count @{u}...HEAD` for sync) AND re-READ the docs you're vouching for. Never state git state or doc accuracy from memory.
+3. **Session handoff = full CLAUDE.md reconciliation.** Before declaring a session done or writing a handoff doc, re-read CLAUDE.md top-to-bottom and reconcile it against everything the session changed. A handoff that points at a stale CLAUDE.md is not done.
+
 ---
 
 ## Gotchas & Constraints
@@ -199,7 +217,8 @@ If a change can't be expressed in the repo, document why near where its absence 
 ### Known Schema Realities
 
 - Lease-limit DB column is `document_limit` on `workspaces`; frontend config uses `maxActiveLeases`. Same concept — write `document_limit` to DB, read `maxActiveLeases` from frontend config.
-- `SubscriptionPlan` type in `src/config/pricing.ts` is `'starter' | 'business'` (reconciled 2026-05-07). `normalizePlanId` coerces legacy `'free'`/`'pro'` from DB to `'starter'`. Stripe Products: `prod_TlQhMebFLbmsbR` (starter), `prod_TlQhRntCDhkxfK` (business). Monthly Price IDs hardcoded in `create-checkout`/`stripe-webhook`; annual Price IDs from `STRIPE_PRICE_STARTER_ANNUAL`/`STRIPE_PRICE_BUSINESS_ANNUAL` env vars, fail closed with 503 (`reason: 'annual_not_configured'`) if unset.
+- `SubscriptionPlan` type is `'starter' | 'business' | 'vault'` (vault added 2026-06-13), declared in **both** `src/config/pricing.ts` and `src/types/index.ts` (keep the two in sync — drift broke the build once). `PLAN_ORDER` deliberately EXCLUDES `vault` (offramp-only, never a pricing surface). `normalizePlanId` coerces legacy `'free'`/`'pro'` → `'starter'` and recognizes `'vault'`. Stripe Products: `prod_TlQhMebFLbmsbR` (starter), `prod_TlQhRntCDhkxfK` (business); Vault Product is an OPERATOR item (STOP 10, not yet created). Monthly Price IDs hardcoded in `create-checkout`/`stripe-webhook`; annual + vault Price IDs from `STRIPE_PRICE_STARTER_ANNUAL`/`STRIPE_PRICE_BUSINESS_ANNUAL`/`STRIPE_PRICE_VAULT_ANNUAL` env, fail closed (503 `annual_not_configured` / `vault_not_configured`) if unset.
+- **Workspace RLS (changed 2026-06-13):** `workspaces` UPDATE is owner + accepted-admin (was owner-only; #70); owner_id reassignment blocked by the `enforce_workspace_owner_immutable` trigger. Client DELETE of `workspaces` is blocked (#83) — deletion only via the service-role `delete-workspace`/`delete-account` functions. Read-only-state writes (grace/soft-deleted/vault) are blocked by the V1 restrictive-RLS layer + the config/entitlement guard triggers.
 - Direct-upload lease creation happens in `process_lease/index.ts`, NOT `LeaseUploadModal.tsx` — the modal triggers upload; the edge function creates/updates the lease record.
 - `workspace_approvers` table exists but has no read/write path in the frontend. Known gap.
 

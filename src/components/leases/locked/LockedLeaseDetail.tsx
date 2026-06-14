@@ -51,6 +51,9 @@ interface Props {
   lease: any;
   /** Callback to ask the parent to re-fetch the lease (after unlock or vendor save). */
   refetchLease: () => void;
+  /** Vault (read-only retention) workspaces: suppress every write affordance.
+   *  Default false → non-Vault behavior is unchanged. */
+  readOnly?: boolean;
 }
 
 const fmtDate = (d: string | null | undefined) =>
@@ -212,7 +215,7 @@ const remainingMonths = (leaseEnd: string | null | undefined): number | null => 
   return Math.max(0, months);
 };
 
-export function LockedLeaseDetail({ lease, refetchLease }: Props) {
+export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Props) {
   const { t } = useAppTranslation();
   const { userRole } = useApp();
   const isAdmin = userRole === 'admin' || userRole === 'owner';
@@ -280,7 +283,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
     }
   }, [dismissTarget, dismissReason, lease?.id, refetchRisks]);
   const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'obligations' | 'risks' | 'asc842' | 'documents'>('general');
-  const canEditAsc842 = userRole === 'admin' || userRole === 'owner' || userRole === 'editor';
+  const canEditAsc842 = !readOnly && (userRole === 'admin' || userRole === 'owner' || userRole === 'editor');
 
   // Fetch unlock-request status, rent schedule, and risks
   useEffect(() => {
@@ -462,6 +465,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
           subtitle={lease.requesting_department}
           lifecycleStatus={lease.lifecycle_status ?? null}
           isAdmin={isAdmin}
+          readOnly={readOnly}
           pendingUnlockRequest={pendingUnlockRequest}
           isRequestingUnlock={isRequestingUnlock}
           onRequestUnlock={handleRequestUnlock}
@@ -516,6 +520,7 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                   vendor_zip: lease.vendor_zip ?? null,
                 }}
                 onSaved={refetchLease}
+                readOnly={readOnly}
               />
             </TabsContent>
 
@@ -553,17 +558,19 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
             </TabsContent>
 
             <TabsContent value="risks" className="space-y-4 mt-0">
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={() => setAddRiskOpen(true)}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add Risk
-                </Button>
-              </div>
+              {!readOnly && (
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={() => setAddRiskOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Risk
+                  </Button>
+                </div>
+              )}
               <SectionCard title={t('locked_lease.risks.section_title')} collapsible={false}>
                 {risks.length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">{t('locked_lease.risks.empty_hint')}</p>
@@ -609,19 +616,21 @@ export function LockedLeaseDetail({ lease, refetchLease }: Props) {
                                   />
                                 )}
                               </CollapsibleTrigger>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                                title="Dismiss this risk — it will be removed from this lease and excluded from all reports"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDismissTarget(r);
-                                  setDismissReason('');
-                                }}
-                              >
-                                <X size={14} />
-                              </Button>
+                              {!readOnly && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                                  title="Dismiss this risk — it will be removed from this lease and excluded from all reports"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDismissTarget(r);
+                                    setDismissReason('');
+                                  }}
+                                >
+                                  <X size={14} />
+                                </Button>
+                              )}
                             </div>
                             {hasBody && (
                               <CollapsibleContent className="pb-3">

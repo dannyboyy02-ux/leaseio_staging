@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor } from 'lucide-react';
+import { User, Lock, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor, Archive } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { UsageContent } from '@/pages/app/UsageContent';
 import { describeLoginEvent, type LoginEventRow } from '@/lib/loginActivity';
@@ -38,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ANNUAL_DISCOUNT_PERCENT, PLANS, isUpgrade, normalizePlanId } from '@/config/pricing';
+import { ANNUAL_DISCOUNT_PERCENT, PLANS, isUpgrade, isReadOnlyRetention, normalizePlanId } from '@/config/pricing';
 import { trialDaysRemaining } from '@/lib/trialStatus';
 import { DocumentPackDialog } from '@/components/workspace/DocumentPackDialog';
 import type { SubscriptionPlan } from '@/types';
@@ -60,7 +60,6 @@ export default function AccountSettings() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [timezone, setTimezone] = useState('America/New_York');
   const [isSaving, setIsSaving] = useState(false);
@@ -603,16 +602,10 @@ export default function AccountSettings() {
                     className="bg-muted"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">{t('account.phone')}</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
+                {/* Phone field removed (#69/#80): profiles has no phone column,
+                    so the input was a dead control — Save discarded it while
+                    toasting success. Restore only alongside a real phone column
+                    + load/save wiring. */}
                 <div className="space-y-2">
                   <Label htmlFor="company">{t('account.company')}</Label>
                   <Input
@@ -995,7 +988,69 @@ export default function AccountSettings() {
                 </Card>
               )}
 
-            {/* Current Plan & Usage */}
+            {/* Vault retention card (V4): read-only state + reactivate to a
+                full plan. Reactivation is a normal Starter/Business checkout
+                (no Vault-fee refund); convert-at-grace does not apply here. */}
+            {currentPlan === 'vault' && (
+              <Card className="border-primary/40 bg-primary/5">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Archive className="h-4 w-4" />
+                    {t('account.vault_card_title')}
+                  </CardTitle>
+                  <CardDescription>
+                    {formattedPeriodEnd
+                      ? t('account.vault_card_desc', { date: formattedPeriodEnd, price: PLANS.vault.price.annual })
+                      : t('account.vault_card_desc_nodate', { price: PLANS.vault.price.annual })}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isAdminUser ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          onClick={() => proceedWithCheckout('starter')}
+                          disabled={isUpgrading !== null}
+                        >
+                          {isUpgrading === 'starter' ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : null}
+                          {t('account.vault_reactivate_starter')}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => proceedWithCheckout('business')}
+                          disabled={isUpgrading !== null}
+                        >
+                          {isUpgrading === 'business' ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : null}
+                          {t('account.vault_reactivate_business')}
+                        </Button>
+                      </div>
+                      {/* Subordinate: payment methods / cancel live in the Stripe
+                          portal. One billing surface — this card — so the generic
+                          current-plan card is suppressed for Vault below. */}
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
+                        onClick={handleManagePayment}
+                        disabled={isManagingPayment}
+                      >
+                        {t('account.vault_manage_stripe')}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Current Plan & Usage — suppressed for Vault (the Vault card above
+                is the single billing surface; this would duplicate the plan
+                badge/renewal and offer a competing "Manage payment" button). */}
+            {currentPlan !== 'vault' && (
             <div className="grid gap-6 lg:grid-cols-2">
               <Card>
                 <CardHeader>
@@ -1071,8 +1126,11 @@ export default function AccountSettings() {
                 </CardContent>
               </Card>
             </div>
+            )}
 
-            {/* Lease capacity packs */}
+            {/* Lease capacity packs — not offered on read-only Vault (no new
+                leases can be added, so extra capacity is meaningless). */}
+            {currentPlan !== 'vault' && (
             <Card>
               <CardHeader>
                 <CardTitle>{t('packs.card_title')}</CardTitle>
@@ -1098,11 +1156,13 @@ export default function AccountSettings() {
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* Single-lease credits — only renders while a balance exists.
                 Credits are granted by the Stripe webhook on a one-time
-                purchase from the limit wall and consumed by process_lease. */}
-            {(workspace.purchasedLeaseCredits ?? 0) > 0 && (
+                purchase from the limit wall and consumed by process_lease.
+                Hidden on read-only Vault (credits are unusable there). */}
+            {currentPlan !== 'vault' && (workspace.purchasedLeaseCredits ?? 0) > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>{t('account.credits_title')}</CardTitle>
@@ -1444,6 +1504,17 @@ export default function AccountSettings() {
                 : t('account.cancel_confirm_desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {/* Vault offramp (VAULT_TIER_SPEC.md V3): convert-at-grace model —
+              the actual $249/yr Vault checkout lives on the grace banner once
+              the plan ends, so here we only set the expectation. Hidden when
+              the workspace is ALREADY on Vault (a Vault sub is 'active', so
+              this cancel card renders — offering Vault to someone on Vault
+              would contradict itself; polish review 2026-06-13). */}
+          {!isReadOnlyRetention(workspace?.plan) && (
+            <div className="rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+              {t('account.cancel_vault_note', { price: PLANS.vault.price.annual })}
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
             {/* CTA names the actual action — clicking opens the Stripe

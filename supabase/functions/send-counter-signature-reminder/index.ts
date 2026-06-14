@@ -155,6 +155,33 @@ serve(async (req) => {
   }
 
   const pendingLeases = (leases ?? []) as PendingLease[];
+
+  // Vault V1: this cron runs service-role across all workspaces — skip
+  // non-live workspaces (canceled / soft-deleted / vault) instead of
+  // failing the run. One batched lookup; semantics mirror
+  // _shared/workspace_live.ts (missing workspace rows fail closed).
+  let liveWorkspaceIds = new Set<string>();
+  if (pendingLeases.length > 0) {
+    const workspaceIds = [...new Set(pendingLeases.map((l) => l.workspace_id))];
+    const { data: wsRows, error: wsErr } = await supabaseAdmin
+      .from("workspaces")
+      .select("id, canceled_at, soft_deleted_at, plan")
+      .in("id", workspaceIds);
+    if (wsErr) {
+      console.error("[send-counter-signature-reminder] workspace liveness load error:", wsErr.message);
+      return jsonResponse(
+        { ok: false, error: wsErr.message, reason: "internal" },
+        500,
+        origin,
+      );
+    }
+    liveWorkspaceIds = new Set(
+      ((wsRows ?? []) as Array<{ id: string; canceled_at: string | null; soft_deleted_at: string | null; plan: string | null }>)
+        .filter((w) => !w.canceled_at && !w.soft_deleted_at && w.plan !== "vault")
+        .map((w) => w.id),
+    );
+  }
+
   const today = new Date();
   let processedCount = 0;
   let remindersSent = 0;
@@ -162,6 +189,14 @@ serve(async (req) => {
 
   for (const lease of pendingLeases) {
     processedCount++;
+
+    if (!liveWorkspaceIds.has(lease.workspace_id)) {
+      console.log(
+        `[send-counter-signature-reminder] skipping lease ${lease.id}: workspace ${lease.workspace_id} not live`,
+      );
+      skippedDetails.push({ leaseId: lease.id, reason: "workspace_not_live" });
+      continue;
+    }
 
     if (!lease.counter_signature_due_date) {
       skippedDetails.push({ leaseId: lease.id, reason: "no_due_date" });

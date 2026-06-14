@@ -359,7 +359,40 @@ After the first run, add an annual reminder to your Google Calendar (Stop 4) so 
 
 ---
 
-## 🔍 Cron deployment verification (run any time)
+## ⏸️ STOP 10 — Can defer: Vault retention tier — Stripe Product + Price ID
+
+**Defer unless:** You're ready to offer the Vault retention offramp ($249/yr read-only data retention) to customers who are canceling. The Vault *plan plumbing* (V2) and *conversion surfaces* (V3) are built and deployed, but a real Vault conversion cannot complete until this Stripe object exists and its ID is set.
+
+Until then, everything fails safe: the conversion checkout returns a clear "Vault isn't configured yet" error (503), the webhook still recognizes a Vault sub via metadata if one is hand-created, and no customer is charged at the wrong price.
+
+When you're ready:
+1. Stripe Dashboard → **Products** → **Add product**. Name it `Vault` (description optional, e.g. "Read-only lease repository retention"). It is a NEW product, separate from Starter/Business.
+2. Add a **recurring price**: `$249 / year` (yearly interval). Copy the resulting `price_...` ID.
+3. Terminal:
+   ```
+   supabase secrets set STRIPE_PRICE_VAULT_ANNUAL='<vault yearly price id>'
+   ```
+4. Redeploy the two functions that read it:
+   ```
+   npx supabase functions deploy create-checkout
+   npx supabase functions deploy stripe-webhook
+   ```
+5. **Live + sandbox are separate** (same caveat as STOP 3 / the live-webhook setup): create the Vault Product/Price in BOTH Stripe modes and set the matching secret in each environment. The price ID differs between modes.
+
+**Verify:** With the secret set, trigger the cancel-dialog or grace-banner "Switch to Vault" path on a test workspace; confirm the checkout opens at $249/yr and that on completion the workspace shows `plan='vault'`, read-only, with all data still viewable + exportable.
+
+**Why it's not urgent:** No customer can reach a Vault conversion until you decide to surface it as an offramp, and the code fails closed without the ID. But it IS a prerequisite for the first real cancellation-save — do it before you expect customers to start churning.
+
+### Companion: schedule the Vault renewal-reminder cron (V4)
+
+The `vault-renewal-reminder` edge function emails a Vault owner ~14 days before the annual $249 renews (no-surprise-billing). It's deployed but does nothing until scheduled + given its secret:
+1. `supabase secrets set VAULT_RENEWAL_CRON_SECRET='<32+ char random>'` (same style as the other cron secrets).
+2. Schedule a DAILY invocation (same mechanism as the other crons — e.g. the pg_cron / scheduled-function setup used for `process-cancellation-lifecycle`), POSTing with header `x-cron-secret: <that secret>`. Daily is correct: the `vault_renewal_reminders` ledger makes it send exactly once per renewal period regardless of how many days it runs inside the 14-day window.
+3. Fails safe until scheduled: no scheduler → no reminders (Stripe's own dunning still drives a failed renewal into the existing cancellation lifecycle), and a missing secret → 401.
+
+---
+
+
 
 **Why this matters:** Background jobs are part of the product surface — cleanup, monitoring, and approval-timer alerts all run on cron. Audit P2-01 (2026-05-13) flagged the absence of a routine check. This snippet is the routine check.
 

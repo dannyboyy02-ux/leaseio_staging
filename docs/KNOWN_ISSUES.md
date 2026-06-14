@@ -1536,6 +1536,8 @@ green.
 
 ---
 
+
+**RESOLVED 2026-06-13** — migration `20260613060000_workspaces_admin_update.sql` (applied + verified live): widened the workspaces UPDATE policy to owners + accepted admins (product decision: admins manage settings), with a new `enforce_workspace_owner_immutable` trigger blocking non-service-role owner_id reassignment (escalation). Safety verified by pre-apply security + integrity (both APPLY): #29 guard still blocks billing for all non-service-role; read-only guard still blocks config on non-live; service-role ownership-transfer path unaffected; only `intended_plan` newly admin-writable (UI-only hint, accepted LOW). FOLLOW-UP (defense-in-depth, non-blocking): the WorkspaceSettings/DiscountRateCard save handlers still don't check affected-row count — add `.select('id')` 0-row detection (esp. before DiscountRateCard's lease recompute).
 ### Item #71: Three WorkspaceSettings handlers missing the canEdit guard; dead upgrade-confirm dialog; unused imports
 
 **Symptom:** (a) `handleSaveBackdoor`, `handleSaveAssetTypes`, and `makeOptionListHandlers.handleSave` lack the `if (!canEdit) return` guard their sibling handlers all have (unreachable via UI for non-admins; RLS blocks non-owners — consistency/defense-in-depth only). (b) `AccountSettings.tsx`'s confirm-upgrade AlertDialog + `confirmUpgradePlan` state is unreachable (with the two-plan type, `currentPlan !== 'starter' && isUpgrade(...)` can never be true). (c) `WorkspaceSettings.tsx` carries unused `cn`, `useQuery`, `WorkspaceRole` imports and an unused `getRoleLabel`.
@@ -1574,6 +1576,8 @@ green.
 
 **Stub remediation:** Extract the cron's Stripe-cleanup + four-bucket purge into a shared helper and use it from `delete-workspace` — one implementation so the two paths can't drift.
 
+**RESOLVED 2026-06-13** — `_shared/workspace_purge.ts` (`cancelWorkspaceSubscriptions` + recursive 4-bucket `purgeWorkspaceStorage`) now used by BOTH `delete-workspace` (v22) and `process-cancellation-lifecycle` (v3). delete-workspace now cancels Stripe subs (incl. packs) + purges lease-documents/lease-reports (was leaking both); cron behavior preserved verbatim (order, race guards, defer-on-Stripe-failure). Security + integrity reviews: DEPLOY (no Critical/High/Medium). Both functions redeployed. Residual filed as #93 (forensic-row ordering on the owner path).
+
 ---
 
 ### Item #75: Grace "read-only" is enforced only for document processing; soft-delete access wall is UI-only
@@ -1583,6 +1587,8 @@ green.
 **Severity:** Medium. Filed by lease-security-scanner reviewing cda30d1; remediation deliberately scoped out of the lifecycle commit.
 
 **Stub remediation:** An `is_workspace_live()` SQL helper folded into write-side RLS policies (security migration — reviewer routing BEFORE push), or `canceled_at`/`soft_deleted_at` gates in the remaining mutating edge functions. Decide enforcement depth before customer #1 cancels.
+
+**RESOLVED 2026-06-13** — Vault V1 read-only enforcement, BOTH depths shipped: migration `20260613000000_vault_v1_readonly_enforcement.sql` (78 restrictive RLS policies over 28 public tables via `is_workspace_live()`/`is_lease_live()`, 3 on `storage.objects`, applied + verified live) AND `_shared/workspace_live.ts` liveness gates in all 21 user-invokable mutators, liveness skips in all 7 workspace-touching crons, and full-liveness backstops in `process_lease`/`retry_lease`/`manage-document-pack` — all 31 changed functions redeployed and content-verified. Three review rounds (lease-security-scanner + lease-repository-integrity-reviewer), both APPROVED. Accepted residuals documented in `VAULT_TIER_SPEC.md` V1 as-built note; the one knowingly open mutator is #84 (resolve-approval-chain frozen deployment). Follow-up (non-blocking): LeaseReview secondary writers swallow PostgREST errors — see #85.
 
 ---
 
@@ -1606,6 +1612,8 @@ green.
 
 **Stub remediation:** Security migration (reviewer routing BEFORE push): add a `NOT EXISTS (SELECT 1 FROM leases WHERE ... AND model_locked)` condition to both DELETE policies — or route deletion through an edge function that re-checks `model_locked` server-side.
 
+**RESOLVED 2026-06-13** — migration `20260613030000_destruction_guards.sql` (applied + verified live): restrictive DELETE policy `locked lease source files are not deletable` on storage.objects blocks deleting a leases/executed-leases object referenced by a `model_locked` lease (ANDs with the V1 liveness policy). Pre-apply security+integrity review: APPLY.
+
 ---
 
 ### Item #78: Lease archive ("Delete") admin gate is UI-only; archived_by/archived_at are client-supplied
@@ -1615,6 +1623,8 @@ green.
 **Severity:** High (audit-relevant records hideable by non-admins with forged attribution). Pre-existing; surfaced by lease-security-scanner reviewing 5fe9e06.
 
 **Stub remediation:** BEFORE UPDATE trigger on archive-column transitions: require admin/owner, stamp `archived_by = auth.uid()` and `archived_at = now()` server-side (disjoint-columns pattern; inventory existing triggers first per CLAUDE.md). Same family: "Users can create activity entries" INSERT policy allows any member to forge ANY activity_type with `user_id` self-or-NULL — constrain client-insertable types to an allowlist in the same pass.
+
+**PARTIALLY RESOLVED 2026-06-13** — archive half APPLIED + verified live: migration `20260613040000_lease_archive_attribution_guard.sql` (BEFORE UPDATE trigger requiring admin/owner to toggle `archived`, stamping `archived_by`/`archived_at` server-side; firing order `enforce_lease_archive_attribution < enforce_model_lock` confirmed). Pre-apply integrity + security reviews both APPLY (no Critical/High/Medium). The activity-type allowlist half is split out as **#90** (still OPEN — needs per-type adjudication).
 
 **Addendum (2026-06-12, lease-security-scanner reviewing 3b9ec87):** the #76 remediation widened the CHECK with 12 writer values, all of which are written EXCLUSIVELY by edge functions (service role) — the allowlist remediation above must exclude every one of them from client-insertable types. Priority subset: dashboard-consumed types, where a forged row drives admin action — `policy_assignee_validation_failed` and `stuck_chain_detected` both render as exception alerts in `ExceptionsDashboard.tsx` (:97, :104); a member-forged "validation failed" row (user_id NULL = system-attributed) can induce an admin to reassign/override a healthy chain step.
 
@@ -1628,6 +1638,8 @@ green.
 
 **Stub remediation:** Pick the vocabulary once: either make the list delete archive-semantics (preferred — hard delete then only via a deeper governance path), or relabel it "Delete permanently" with distinct iconography.
 
+**RESOLVED 2026-06-13** — chose archive-semantics (product decision): the Leases-list row action now archives (restorable, admin/owner-only, server-enforced by the #78 trigger) via the new `ArchiveLeaseDialog`, not hard-delete. True hard-delete remains only on the deeper path (ImportHistory import-rollback, `DeleteLeaseDialog`). Frontend; integrity/auditor reviewed. Remaining copy-layer work (archive still WORDED 'Delete' on detail-page surfaces) split to #92; archived-lease findability/restore-in-list to #91.
+
 ---
 
 ### Item #80: Profile Phone field is a dead control
@@ -1637,6 +1649,8 @@ green.
 **Severity:** Medium-High (silent data loss + lying success toast on the first Settings tab). Pre-existing; surfaced by lease-product-polish reviewing 5cac271.
 
 **Stub remediation:** Wire `phone` into the profile load + `handleSaveProfile` payload (column exists check first), or remove the field.
+
+**RESOLVED 2026-06-13** — verified `profiles` has NO `phone` column (live DB), so the field was a pure dead control (never loaded, omitted from the save payload). Removed the Phone input + state from AccountSettings; #69 is the same issue and is resolved by this. Restore only with a real column + load/save wiring.
 
 ---
 
@@ -1657,5 +1671,137 @@ green.
 **Severity:** Low. Filed by lease-repository-integrity-reviewer + lease-code-auditor (2026-06-12).
 
 **Stub remediation:** Next constraint snapshot: after a live `SELECT activity_type, count(*)` confirms zero rows, drop the twelve dead values and comment the writer spellings as canonical — do-not-adopt. Add the missing label.
+
+---
+
+### Item #83: Owner can hard-DELETE the workspaces row via PostgREST, bypassing the deleted_workspaces forensic record
+
+**Symptom:** The baseline permissive policy "Owners can delete their workspaces" lets an owner DELETE their `workspaces` row directly (PostgREST), cascading away the entire repository WITHOUT the forensic `deleted_workspaces` row that the `delete-workspace` edge function writes — unattributable bulk destruction. Pre-existing; reachable in any workspace state including grace/Vault (the Vault V1 restrictive layer deliberately leaves `workspaces` open for owner rename and must not block this path silently either way — it needs an explicit decision).
+
+**Severity:** High (unattributable destruction of the audit-defensible repository). Filed by lease-repository-integrity-reviewer reviewing 69fdc2e (2026-06-13).
+
+**Stub remediation:** Drop the permissive DELETE policy in favor of the `delete-workspace` edge function (which writes the forensic row), or add a restrictive DELETE policy on `workspaces` denying client deletes outright. Security migration — reviewer routing BEFORE push. Verify the delete-account flow doesn't depend on the client-side DELETE first. NOTE (Vault V1, 2026-06-13): the fix must also cover non-live workspaces — FK CASCADE deletes are not subject to the Vault restrictive DELETE policies on child tables, so this direct-DELETE path is also the one way a frozen repository can be destroyed client-side.
+
+**RESOLVED 2026-06-13** — migration `20260613030000_destruction_guards.sql` (applied + verified live): dropped the permissive `Owners can delete their workspaces` policy and added a restrictive `workspace deletes are server-only` (USING false) DELETE policy. Verified both deletion paths (delete-workspace, delete-account) use service_role (RLS-exempt) and no client-side workspace DELETE exists, so the forensic/cleanup paths are unaffected. Pre-apply review: APPLY.
+
+---
+
+### Item #84: resolve-approval-chain deployed snapshot is un-gateable for Vault V1 (accepted residual)
+
+**Symptom:** `resolve-approval-chain` is user-invokable (JWT member) and triggers service-role writes to `leases`, `lease_approval_chain`, `lease_attribute_snapshots`, `lease_reroute_events` — but its deployed copy is the frozen pre-Phase-7 snapshot whose redeploy is permanently deferred (CLAUDE.md / PHASE_7_BUILD_SPEC A4). The Vault V1 liveness gate therefore cannot reach it: a member of a canceled/soft-deleted/vault workspace can still invoke it directly and mutate chain state.
+
+**Severity:** Medium (member-only exposure, chain-resolution logic only; the resulting writes are system-attributed). ACCEPTED RESIDUAL per product-owner decision 2026-06-13 — filed, not fixed, because gating requires overriding the standing Phase 7 redeploy deferral.
+
+**Stub remediation:** When Phase 7 A4 remediation is eventually executed, add the `checkWorkspaceLive` gate (pattern: any gated chain function, e.g. `act-on-chain-step`) to the repo file in the same change and redeploy. Until then this is the one knowingly open mutator in the Vault V1 read-only surface.
+
+---
+
+### Item #85: LeaseReview secondary writers swallow PostgREST errors (optimistic UI lies on rejected writes)
+
+**Symptom:** `src/pages/app/LeaseReview.tsx` — `handleConfirmTab` (~:1326), `handleConfirmSection` (~:1206), `handleConfirmAndAdvance` (~:1266), and `trackFieldCorrection` (~:1176) ignore the PostgREST `error` object. With Vault V1's restrictive `WITH CHECK` policies, a grace-workspace user unmarking an approved tab gets "Tab reopened" while the DB rejected the write (42501); section-confirm state diverges optimistically; `field_corrections` inserts drop silently. The main save handler (~:1588) does it right — destructure, throw, toast.
+
+**Severity:** Medium (UI/DB drift for non-live workspaces; live workspaces unaffected). Filed by lease-repository-integrity-reviewer round 2 of Vault V1 (2026-06-13).
+
+**Stub remediation:** Destructure and surface `error` in each of the four writers, matching the ~:1588 pattern. Frontend-only commit; route through auditor + security + polish (user-facing error copy).
+
+---
+
+### Item #86: stripe-webhook trusts frozen subscription metadata plan_id over the live price
+
+**Symptom:** `resolvePlan` (`supabase/functions/stripe-webhook/index.ts`) returns `metadata.plan_id` unconditionally before consulting the subscription's actual price. Metadata is stamped at creation and frozen; if the Stripe billing-portal configuration (dashboard-side, not in repo) ever permits price switches, a Business sub moved to the Starter price keeps `plan_id='business'` → Business entitlements at Starter money. All current creation paths stamp metadata server-side from validated input, so this is configuration-contingent, not exploitable today.
+
+**Severity:** Medium. Filed by lease-security-scanner reviewing 59481c6 (2026-06-13); pre-existing class, V2 merely extended it to a third value (vault metadata can only under-privilege, so the new direction is benign).
+
+**Stub remediation:** When both metadata and price resolve, prefer the price-derived plan and log a mismatch warning ("trust the money, not the metadata" — same principle as `applySingleLeaseCredit`). Or verify + document that the portal config disallows price changes.
+
+---
+
+### Item #87: WorkspaceSettings "General" save bundles name+timezone — rename fails as collateral during grace/Vault
+
+**Symptom:** `src/pages/settings/WorkspaceSettings.tsx` `handleSaveGeneral` updates `name` AND `timezone` in one `workspaces` UPDATE. The read-only config guard (migration `20260613010000`) rejects the statement on a non-live workspace because `timezone` is a guarded column — so an owner on a canceled-in-grace / soft-deleted / Vault workspace who only wanted to rename gets a hard failure with no indication timezone is the cause. The dedicated rename path (`RenameWorkspaceInline.tsx`, name-only) still works, so rename is not globally lost.
+
+**Severity:** Medium (UX wrinkle on a read-only workspace; no data risk — the guard is working as intended). Filed by lease-security-scanner pre-apply review of the Vault V3 read-only guard (2026-06-13). Root cause is broader: WorkspaceSettings' client `canEdit` is role-only and doesn't reflect non-live state — full client-side read-only gating of WorkspaceSettings is V4 (read-only UI walls) territory.
+
+**Stub remediation:** Either split the name update out of `handleSaveGeneral` when non-live, or gate the General form (and the rest of WorkspaceSettings) client-side on `isReadOnlyRetention`/grace state as part of the V4 read-only UI pass. Until then, the inline rename remains the working path.
+
+**RESOLVED 2026-06-13** — `handleSaveGeneral` now attempts the bundled name+timezone update, and on rejection retries the rename ALONE (so a non-live config-guard rejection of timezone no longer blocks the rename), with a `.select('id')` 0-row check (#70 defense-in-depth) surfacing RLS no-ops as honest errors instead of false success. Full client-side read-only gating of WorkspaceSettings remains V4 read-only-UI territory.
+
+---
+
+### Item #88: Vault dashboard still shows intake-oriented widgets with live CTAs
+
+**Symptom:** On a Vault (read-only) workspace the Dashboard top-level "New Request" CTA is hidden and the VaultBanner explains the read-only state, but the dashboard BODY widgets (NeedsAction, LeasePipeline, etc.) still render and some of their inline items link to create/approve flows that can't run on a read-only workspace. The felt experience is a half-disabled cockpit rather than a clean archive. Server backstop blocks any write; this is UX completeness, not a data risk.
+
+**Severity:** Medium (UX). Filed during Vault V4 polish review (2026-06-13); deliberately deferred from the V4 hardening round (diffuse, lower-priority than the LeaseReview/billing surfaces which were fixed).
+
+**Stub remediation:** Thread a read-only signal into the Dashboard widgets (or gate per-widget create/approve CTAs on `isReadOnlyRetention`), so NeedsAction/pipeline items render view-only for Vault. Consider a "read-only archive" empty-affordance treatment.
+
+---
+
+### Item #89: Vault renewal-reminder email is English-only
+
+**Symptom:** `supabase/functions/vault-renewal-reminder/index.ts` hard-codes English copy and `en-US` date formatting for the ~14-day renewal reminder, even though the owner may be a Spanish-locale user. Every other user-facing surface is bilingual.
+
+**Severity:** Low. Filed during Vault V4 polish review (2026-06-13).
+
+**Stub remediation:** Branch the subject/body/date-format on the owner's profile/workspace locale if available (the cancellation-lifecycle emails share the same English-only limitation — consider a shared bilingual email helper). Content itself is clear and correctly framed; this is i18n completeness only.
+
+---
+
+### Item #90: lease_activity_log INSERT policy allows any activity_type + forged system attribution (split from #78)
+
+**Symptom:** The "Users can create activity entries" INSERT policy on `lease_activity_log` is `WITH CHECK (((user_id = auth.uid()) OR (user_id IS NULL)) AND <member-of-lease's-workspace>)`. So any workspace member can insert a row with ANY of the ~100 constraint activity_types AND `user_id = NULL` (system attribution) via direct PostgREST. The dashboard-consumed types are the sharp edge (#78 addendum): a member-forged `policy_assignee_validation_failed` / `stuck_chain_detected` row (NULL user_id = system-attributed) renders as an exception alert in `ExceptionsDashboard.tsx` and can induce an admin to reassign/override a healthy chain step. The 12 dead renamed types (#82) and every edge-function-exclusive writer type must be excluded from any client allowlist.
+
+**Severity:** High (forgeable audit history + admin-misleading alerts in an audit-defensible product). Split from #78 (2026-06-13) — the archive half shipped as migration `20260613040000`; this half needs per-type adjudication across the ~100-value constraint and the ~10 client insert sites, so it's its own deliberate pass, not a same-migration rush.
+
+**Stub remediation:** Security migration (reviewer routing BEFORE push). Enumerate every client insert site (grep `lease_activity_log` in `src/` — currently ~10 sites writing ~18 types) and confirm which types clients legitimately write directly vs. should be moved to an edge function (e.g. `status_change`/`approval` arguably belong server-side, cf. #32). Then narrow the INSERT policy WITH CHECK to `user_id = auth.uid()` (drop the NULL option) AND `activity_type = ANY(<client allowlist>)`. Verify no legitimate client flow breaks (each currently-written type stays allowed or is rerouted) before applying. Add a static/smoke test pinning the allowlist.
+
+**RESOLVED 2026-06-13** — migration `20260613050000_activity_log_client_allowlist.sql` (applied + verified live): the INSERT policy now AND-s a 19-type client allowlist (enumerated + verified against all 37 src/ writer sites incl. the two dynamic ones), so a browser client can no longer forge the ~80 service-role-only types — the alert types (`policy_assignee_validation_failed`, `stuck_chain_detected`) are confirmed excluded. Predicate preserved verbatim; edge functions bypass RLS. `user_id` left flexible (NULL retained for legit system comments — tightening to NULL-only-for-comment is the noted follow-up). Regression test `src/lib/__tests__/clientActivityAllowlist.test.ts`. Pre-apply security + integrity: both APPLY (no Critical/High/Medium).
+
+---
+
+### Item #91: Leases "Show archived" shows all leases (no archived-only filter) + no in-list restore
+
+**Symptom:** `Leases.tsx` "Show archived" toggle widens the query but doesn't `.eq('archived', true)`, so it shows active + archived together with no badge distinguishing them; and archived rows have no in-list Restore action (restore lives only on the lease detail page via `ArchiveButton`). After #79 the archive dialog points users to "Show archived" + the detail page, so findability matters more.
+
+**Severity:** Low-Medium (UX). Pre-existing filter gap surfaced by lease-repository-integrity-reviewer during the #79 review (2026-06-13); the #79 fix pointed restore at the detail page to avoid a false promise, leaving this as the polish follow-up.
+
+**Stub remediation:** In the showArchived branch, filter `.eq('archived', true)` (or add an "Archived" badge on archived rows), and add an in-list Restore action on archived rows mirroring `ArchiveButton`'s restore (archived=false, null attribution, log `lease_restored`). Route through lease-product-polish.
+
+**RESOLVED 2026-06-13** — 'Show archived' now filters to archived-only; archived rows get an 'Archived' badge + an in-list Restore action (mirrors ArchiveButton: non-destructive, admin-only via the #78 trigger, logs lease_restored, .select check). Polish-reviewed; follow-up fixes applied: archive-specific empty state with a 'Back to active leases' way-out (was the misleading 'No executed leases' dead-end), refreshProfile() after archive+restore so quota counters resync, and i18n'd restore toasts + tooltip labels. Accepted residual: in-list restore has no pre-action cap-warning dialog (non-destructive + reversible; counters resync + QuotaWarningBanner gives post-hoc feedback) — the dialog-gated ArchiveButton restore remains for the warned path.
+
+---
+
+### Item #92: Archive vocabulary is labeled "Delete"/"deleted" across ArchiveButton, badges, banners, and archive.* locale keys
+
+**Symptom:** The restorable-archive action is worded as "Delete" throughout the detail-page surfaces: `archive.archive` = "Delete", `archive.archived_toast` = "Lease deleted", `archive.deleted_badge` = "Deleted", `archive.deleted_banner`, `archive.confirm_archive_title` = "Delete this lease?". So "Delete" still means archive (restorable) on the detail page while meaning permanent deletion in ImportHistory — the same dual-meaning #79 set out to remove, at the copy layer. #79 fixed the Leases-LIST semantics + used clear "Archive" wording in the new list dialog, but did not rename the detail-page archive vocabulary.
+
+**Severity:** Medium (the core #79 confusion persists in detail-page copy). Surfaced during the #79 review (2026-06-13).
+
+**Stub remediation:** Vocabulary unification pass (lease-product-polish + locale parity en/es): rename the `archive.*` key VALUES from Delete→Archive wording across `ArchiveButton`, badges, and banners so "Delete" means only permanent deletion anywhere. Multi-surface user-facing copy change — review before shipping.
+
+**RESOLVED 2026-06-13** — archive vocabulary unified to Archive/Archived/Restore across archive.* + amendments.delete_* VALUES (en+es), AmendmentsList (Archive icon + aria-label, non-destructive), and the three trigger labels polish caught (LeaseReview toolbar + overflow menu, AmendmentsList confirm CTA — now localized, non-destructive). "Delete" now appears only for genuine permanent deletion (ImportHistory/DeleteLeaseDialog, LeaseDocumentsTab). Polish + auditor reviewed; locale parity holds. Minor LOW left: a couple of internal code comments still say "delete" (non-rendered).
+
+---
+
+### Item #93: delete-workspace writes the forensic deleted_workspaces row LAST; a failure leaves a destroyed workspace unrecorded
+
+**Symptom:** `delete-workspace/index.ts` writes the `deleted_workspaces` forensic row near the END (after Stripe cancel + storage purge), and a forensic-insert failure is only logged — so a workspace can be destroyed with no forensic record. The cancellation cron does the opposite (forensic row BEFORE destruction, abort on failure). The two destruction paths use opposite forensic ordering by design; delete-workspace's is the weaker one.
+
+**Severity:** Medium (forensic gap on the owner-initiated path). Pre-existing; surfaced by lease-repository-integrity-reviewer during the #74 review (2026-06-13).
+
+**Stub remediation:** Move delete-workspace's forensic `deleted_workspaces` insert to BEFORE the destructive deletes (mirror the cron), aborting the delete if the forensic insert fails — so destruction is never unattributable.
+
+**RESOLVED 2026-06-13** — delete-workspace (v23 deployed) reordered to match the cron: forensic `deleted_workspaces` row inserted BEFORE the lease/workspace deletes (aborts 500 `forensic_insert_failed` on a non-duplicate error; resumes on the unique-index duplicate), storage purge moved LAST, `storage_objects_purged` backfilled. Pre-deploy integrity review: DEPLOY (no findings).
+
+---
+
+### Item #94: UploadExecutedDocumentDialog sets lifecycle_status='executed' client-side without status_changed_at or an activity-log row
+
+**Symptom:** `src/components/leases/UploadExecutedDocumentDialog.tsx:61` does a client-side `leases.update({ lifecycle_status: 'executed' })` with NO `status_changed_at` set and NO `lease_activity_log` row written in `src/` — it relies on `process_lease` having already written the `executed_uploaded`/`status_change` rows. This violates the Lifecycle Transition Convention (CLAUDE.md: any code transitioning `lifecycle_status` must set `status_changed_at` + write a `status_change` activity row with `from_status`/`to_status` + `routing_path`). If the process_lease path doesn't fire for this transition, the change is unattributable.
+
+**Severity:** Medium (lifecycle-convention gap; potential unattributable status transition). Surfaced by lease-repository-integrity-reviewer during the #90 review (2026-06-13).
+
+**Stub remediation:** Either route this transition through the canonical lifecycle writer (so status_changed_at + the activity row are guaranteed), or confirm + document that process_lease always writes them for this path and the client update is redundant/safe. Verify against the convention before closing.
 
 ---

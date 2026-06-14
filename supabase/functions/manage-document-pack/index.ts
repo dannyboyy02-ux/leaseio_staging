@@ -190,7 +190,7 @@ serve(async (req) => {
   // Load + authorize the workspace.
   const { data: wsData } = await supabaseAdmin
     .from("workspaces")
-    .select("id, owner_id, plan, stripe_customer_id, addon_document_capacity, purchased_lease_credits, canceled_at")
+    .select("id, owner_id, plan, stripe_customer_id, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at")
     .eq("id", workspaceId)
     .maybeSingle();
   const ws = wsData as WorkspaceRow | null;
@@ -205,17 +205,32 @@ serve(async (req) => {
   // workspace — the charge would not restore entitlement and the workspace
   // is scheduled for deletion. Renewal (plan checkout) is the only valid
   // purchase path during grace. Cancel/preview stay allowed.
-  if ((ws as { canceled_at?: string | null }).canceled_at &&
-      (mode === "confirm" || mode === "buy_single")) {
-    return jsonResponse(
-      {
-        ok: false,
-        reason: "subscription_canceled",
-        error: "This workspace's subscription has ended. Renew the subscription before purchasing capacity.",
-      },
-      403,
-      origin,
-    );
+  // Vault V1: soft-deleted and vault-plan workspaces get the same backstop
+  // (full liveness semantics — mirror of _shared/workspace_live.ts).
+  if (mode === "confirm" || mode === "buy_single") {
+    const wsLiveRow = ws as { canceled_at?: string | null; soft_deleted_at?: string | null };
+    if (wsLiveRow.canceled_at) {
+      return jsonResponse(
+        {
+          ok: false,
+          reason: "subscription_canceled",
+          error: "This workspace's subscription has ended. Renew the subscription before purchasing capacity.",
+        },
+        403,
+        origin,
+      );
+    }
+    if (wsLiveRow.soft_deleted_at || ws.plan === "vault") {
+      return jsonResponse(
+        {
+          ok: false,
+          reason: "subscription_inactive",
+          error: "This workspace's subscription is inactive. Renew the subscription before purchasing capacity.",
+        },
+        403,
+        origin,
+      );
+    }
   }
 
   const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });

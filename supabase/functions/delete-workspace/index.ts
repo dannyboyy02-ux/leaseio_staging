@@ -5,8 +5,15 @@
 //     risks, rent_schedules, and every other ON DELETE CASCADE child)
 //   - The workspace itself (cascades to workspace_members, workspace_roles,
 //     approval_policies, invite_tokens, etc.)
-//   - All storage objects under the workspace's leases (in both 'leases'
-//     and 'executed-leases' buckets)
+//   - All storage objects across all four buckets ('leases',
+//     'executed-leases', 'lease-documents', 'lease-reports'), recursively,
+//     via the shared purgeWorkspaceStorage helper
+//   - Every Stripe subscription tagged to this workspace (plan + document
+//     packs), via the shared cancelWorkspaceSubscriptions helper
+//
+// The Stripe cancel + four-bucket purge are shared verbatim with the
+// cancellation-lifecycle cron (supabase/functions/_shared/workspace_purge.ts,
+// KNOWN_ISSUES #74) so the two destruction paths can't drift.
 //
 // Captures forensic counts to public.deleted_workspaces BEFORE the delete
 // so the audit row survives the deletion of the workspaces row itself.
@@ -27,9 +34,14 @@
 //   the rest (members, policies, invites, etc.) via their CASCADE FKs.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { enforceWorkspaceRateLimit } from "../_shared/audit.ts";
+import {
+  cancelWorkspaceSubscriptions,
+  purgeWorkspaceStorage,
+} from "../_shared/workspace_purge.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -117,7 +129,7 @@ serve(async (req) => {
   // ── Authorization: load workspace, verify owner ─────────────────────
   const { data: workspace, error: wsError } = await supabaseAdmin
     .from("workspaces")
-    .select("id, owner_id, name, plan")
+    .select("id, owner_id, name, plan, stripe_customer_id")
     .eq("id", workspaceId)
     .maybeSingle();
   if (wsError) {
@@ -140,6 +152,7 @@ serve(async (req) => {
     owner_id: string;
     name: string | null;
     plan: string | null;
+    stripe_customer_id: string | null;
   };
   if (ws.owner_id !== user.id) {
     // Don't leak whether the workspace exists vs. user lacks access; both
@@ -190,11 +203,10 @@ serve(async (req) => {
       .eq("workspace_id", workspaceId),
   ]);
 
-  // ── Capture storage paths for every lease in the workspace ──────────
-  // Storage path convention is `${uploader_user_id}/${lease.id}/...` per
-  // LeaseRequestForm. We list each (user_id, lease.id) combo in both
-  // buckets so we cover every uploaded file (multiple files per lease
-  // are possible — original + executed + amendments, etc.).
+  // ── Capture storage prefixes for every lease in the workspace ───────
+  // Captured BEFORE the lease rows are deleted (the prefixes are derived
+  // from lease ids). Same convention the cancellation cron uses:
+  //   leases / executed-leases: {uploader_user_id}/{lease_id}.
   const { data: leasesForStorage } = await supabaseAdmin
     .from("leases")
     .select("id, user_id, requestor_id")
@@ -212,41 +224,62 @@ serve(async (req) => {
     }
   }
 
-  let storageObjectsPurged = 0;
-  for (const prefix of storageTargets) {
-    for (const bucket of ["leases", "executed-leases"]) {
-      try {
-        const { data: files, error: listErr } = await supabaseAdmin.storage
-          .from(bucket)
-          .list(prefix);
-        if (listErr) {
-          console.warn(
-            `[delete-workspace] storage list error in ${bucket}/${prefix}: ${listErr.message}`,
-          );
-          continue;
-        }
-        if (files && files.length > 0) {
-          const paths = files.map((f: { name: string }) => `${prefix}/${f.name}`);
-          const { error: rmErr } = await supabaseAdmin.storage
-            .from(bucket)
-            .remove(paths);
-          if (rmErr) {
-            console.warn(
-              `[delete-workspace] storage remove error in ${bucket}: ${rmErr.message}`,
-            );
-            continue;
-          }
-          storageObjectsPurged += paths.length;
-        }
-      } catch (err) {
-        // Don't fail the whole delete on a single bucket hiccup. Audit
-        // captures the count we DID purge; orphaned storage objects can
-        // be cleaned up later if needed.
-        console.warn(
-          `[delete-workspace] unexpected storage error: ${(err as Error)?.message}`,
-        );
-      }
+  // ── Cancel Stripe subscriptions tagged to this workspace ────────────
+  // Document packs are independent subscriptions — without this they bill
+  // forever against a deleted workspace. Mirrors the cancellation cron.
+  // Unlike the cron (which DEFERS the purge on any Stripe trouble), an
+  // owner-initiated delete is a one-shot human action with no retry loop,
+  // so a missing key is logged-and-continued rather than failing the whole
+  // delete; the forensic row records exactly what we canceled.
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+  const stripe = stripeKey ? new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" }) : null;
+  let stripeCanceled: string[] = [];
+  if (stripe && ws.stripe_customer_id) {
+    try {
+      stripeCanceled = await cancelWorkspaceSubscriptions(stripe, ws.stripe_customer_id, ws.id);
+    } catch (err) {
+      console.error(
+        `[delete-workspace] stripe cleanup failed for ${workspaceId}: ${(err as Error)?.message}`,
+      );
     }
+  } else if (!stripe) {
+    console.error("[delete-workspace] STRIPE_SECRET_KEY not set — subscriptions NOT canceled:", workspaceId);
+  }
+
+  // ── Forensic row FIRST — before any destruction (#93) ───────────────
+  // Mirrors the cancellation cron: write deleted_workspaces BEFORE deleting
+  // anything, and ABORT if it fails, so a destroyed workspace can never lack
+  // its forensic record. storage_objects_purged is backfilled after the
+  // storage purge (which runs LAST). UNIQUE(original_workspace_id): a
+  // duplicate means a prior partial delete — resume destruction against the
+  // existing row rather than re-recording.
+  const { error: forensicError } = await supabaseAdmin
+    .from("deleted_workspaces")
+    .insert({
+      original_workspace_id: workspaceId,
+      owner_id: ws.owner_id,
+      workspace_name: ws.name,
+      workspace_plan: ws.plan,
+      lease_count_at_deletion: leaseCount ?? 0,
+      member_count_at_deletion: memberCount ?? 0,
+      storage_objects_purged: 0,
+      deleted_by: user.id,
+      details: {
+        purge_source: "owner_delete_workspace",
+        stripe_subscriptions_canceled: stripeCanceled,
+      },
+    });
+  if (forensicError && !/duplicate|unique/i.test(forensicError.message)) {
+    console.error("[delete-workspace] forensic insert failed — delete ABORTED:", forensicError.message);
+    return jsonResponse(
+      {
+        ok: false,
+        error: `Failed to record deletion: ${forensicError.message}`,
+        reason: "forensic_insert_failed",
+      },
+      500,
+      origin,
+    );
   }
 
   // ── Delete leases first (avoids workspace_id SET NULL orphaning) ────
@@ -298,22 +331,19 @@ serve(async (req) => {
     );
   }
 
-  // ── Audit row (post-delete; survives the deletion) ──────────────────
-  const { error: auditError } = await supabaseAdmin
+  // ── Storage purge LAST — files are unreachable once the rows are gone;
+  // an abort before this point left the workspace fully recoverable. The
+  // forensic row was already written (#93); backfill its purged count. ──
+  const storageObjectsPurged = await purgeWorkspaceStorage(supabaseAdmin, {
+    workspaceId,
+    uploaderPrefixes: Array.from(storageTargets),
+  });
+  const { error: countUpdateError } = await supabaseAdmin
     .from("deleted_workspaces")
-    .insert({
-      original_workspace_id: workspaceId,
-      owner_id: ws.owner_id,
-      workspace_name: ws.name,
-      workspace_plan: ws.plan,
-      lease_count_at_deletion: leaseCount ?? 0,
-      member_count_at_deletion: memberCount ?? 0,
-      storage_objects_purged: storageObjectsPurged,
-      deleted_by: user.id,
-    });
-  if (auditError) {
-    // Don't fail the request — the destructive work is done. Log loudly.
-    console.error("[delete-workspace] audit insert error:", auditError.message);
+    .update({ storage_objects_purged: storageObjectsPurged })
+    .eq("original_workspace_id", workspaceId);
+  if (countUpdateError) {
+    console.error("[delete-workspace] forensic count backfill failed:", countUpdateError.message);
   }
 
   return jsonResponse(
@@ -323,6 +353,7 @@ serve(async (req) => {
       leaseCount: leaseCount ?? 0,
       memberCount: memberCount ?? 0,
       storageObjectsPurged,
+      stripeSubscriptionsCanceled: stripeCanceled.length,
     },
     200,
     origin,

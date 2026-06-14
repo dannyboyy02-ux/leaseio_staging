@@ -43,6 +43,9 @@ interface DocumentsPanelProps {
   /** Called when the lease's lifecycle changes (escalate / advance) so
    *  the parent page can refetch the lease record. */
   onLifecycleChanged: () => void;
+  /** Vault read-only: suppress upload + lifecycle write affordances.
+   *  Timeline stays visible. Default false → non-Vault unchanged. */
+  readOnly?: boolean;
 }
 
 export function DocumentsPanel({
@@ -52,6 +55,7 @@ export function DocumentsPanel({
   requestorId,
   userId,
   onLifecycleChanged,
+  readOnly = false,
 }: DocumentsPanelProps) {
   const { user, userRole } = useApp();
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -108,10 +112,10 @@ export function DocumentsPanel({
 
   // ── Visibility gates ───────────────────────────────────────────────
   const isAdminOrOwner = userRole === 'admin' || userRole === 'owner';
-  const canUpload = isAdminOrOwner || userRole === 'editor';
+  const canUpload = !readOnly && (isAdminOrOwner || userRole === 'editor');
   const isSubmitter =
     !!user && (user.id === requestorId || user.id === (userId ?? null));
-  const canTransition = isSubmitter || isAdminOrOwner;
+  const canTransition = !readOnly && (isSubmitter || isAdminOrOwner);
   const isNegotiating = lifecycleStatus === 'in_negotiation';
 
   const hasFinalNegotiated = useMemo(

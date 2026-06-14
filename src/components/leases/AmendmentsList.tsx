@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileEdit, ExternalLink, Loader2, Trash2 } from 'lucide-react';
+import { FileEdit, ExternalLink, Loader2, Archive } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -196,11 +196,11 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-muted-foreground hover:text-destructive"
-                      aria-label={`Delete ${amendment.filename}`}
+                      className="text-muted-foreground"
+                      aria-label={`Archive ${amendment.filename}`}
                       onClick={() => setPendingDelete(amendment)}
                     >
-                      <Trash2 size={14} />
+                      <Archive size={14} />
                     </Button>
                   )}
                 </div>
@@ -230,10 +230,9 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
                   void handleConfirmedDelete();
                 }}
                 disabled={deleting}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 {deleting ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
-                {t('common.delete')}
+                {t('amendments.delete_confirm_cta')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface FailedLeaseBannerProps {
   leaseId: string;
@@ -12,6 +13,9 @@ interface FailedLeaseBannerProps {
   storagePath: string | null;
   onRetrySuccess?: () => void;
   className?: string;
+  /** Vault read-only: hide the retry control (re-invokes process_lease = AI spend).
+   *  Default false → non-Vault behavior is unchanged. */
+  readOnly?: boolean;
 }
 
 export function FailedLeaseBanner({
@@ -20,7 +24,9 @@ export function FailedLeaseBanner({
   storagePath,
   onRetrySuccess,
   className,
+  readOnly = false,
 }: FailedLeaseBannerProps) {
+  const { t } = useAppTranslation();
   const [isRetrying, setIsRetrying] = useState(false);
 
   const handleRetry = async () => {
@@ -66,30 +72,36 @@ export function FailedLeaseBanner({
         <p className="text-sm mb-3">
           {errorMessage || 'An error occurred while processing this lease document.'}
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRetry}
-          disabled={isRetrying || !canRetry}
-          className="border-destructive/50 hover:bg-destructive/10"
-        >
-          {isRetrying ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Retrying...
-            </>
-          ) : (
-            <>
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Retry Processing
-            </>
-          )}
-        </Button>
-        {!canRetry && (
-          <p className="text-xs mt-2 text-muted-foreground">
-            {/* TODO: Allow re-upload when storage_path is missing */}
-            Original file not available for retry. Please upload a new document.
-          </p>
+        {readOnly ? (
+          <p className="text-xs text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetry}
+              disabled={isRetrying || !canRetry}
+              className="border-destructive/50 hover:bg-destructive/10"
+            >
+              {isRetrying ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Retrying...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Retry Processing
+                </>
+              )}
+            </Button>
+            {!canRetry && (
+              <p className="text-xs mt-2 text-muted-foreground">
+                {/* TODO: Allow re-upload when storage_path is missing */}
+                Original file not available for retry. Please upload a new document.
+              </p>
+            )}
+          </>
         )}
       </AlertDescription>
     </Alert>

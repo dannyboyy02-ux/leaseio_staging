@@ -8,7 +8,8 @@ import {
   ArrowUp,
   ArrowDown,
   Eye,
-  Trash2,
+  Archive,
+  ArchiveRestore,
   Calendar,
   Building2,
   Ruler,
@@ -21,7 +22,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
+import { ArchiveLeaseDialog } from '@/components/leases/ArchiveLeaseDialog';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
@@ -32,6 +33,7 @@ import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
+import { isReadOnlyRetention } from '@/config/pricing';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -53,6 +55,7 @@ interface LeaseRow {
   current_monthly_rent: number | null;
   monthly_payment: number | null;
   extracted_json: Record<string, unknown> | null;
+  archived?: boolean | null;
   rent_schedules: {
     period_start: string;
     period_end: string | null;
@@ -90,7 +93,13 @@ function formatCurrency(amount: number): string {
 export default function Leases() {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { workspace } = useApp();
+  const { workspace, user, userRole, refreshProfile } = useApp();
+  // Vault (read-only retention): hide intake entry points (server also blocks).
+  const isReadOnly = isReadOnlyRetention(workspace?.plan);
+  // Archive is admin/owner-only (server-enforced by the #78 trigger); the
+  // list "Delete" action uses restorable-archive semantics, matching the
+  // detail page (#79) — true hard-delete is not offered from the list.
+  const isAdmin = userRole === 'admin' || userRole === 'owner';
   const [searchParams] = useSearchParams();
   const quota = useWorkspaceQuota();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -160,13 +169,15 @@ export default function Leases() {
         .order('lease_end', { ascending: true });
 
       if (showArchived) {
-        // Archived view must ALSO show leases with NULL lifecycle_status
-        // (failed/still-processing uploads and amendments never get one) —
-        // otherwise an archived failed amendment is unreachable anywhere
-        // and the "restore it later" promise in the delete dialog is false.
-        query = query.or(
-          `lifecycle_status.in.(${visibleLifecycleStatuses.join(',')}),lifecycle_status.is.null`,
-        );
+        // Archived view shows ONLY archived leases (#91 — was showing all),
+        // including those with NULL lifecycle_status (failed/processing
+        // uploads and amendments never get one) so an archived failed
+        // amendment is still reachable here to restore.
+        query = query
+          .eq('archived', true)
+          .or(
+            `lifecycle_status.in.(${visibleLifecycleStatuses.join(',')}),lifecycle_status.is.null`,
+          );
       } else {
         query = query.in('lifecycle_status', visibleLifecycleStatuses).eq('archived', false);
       }
@@ -191,24 +202,64 @@ export default function Leases() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showArchived, workspace?.id]);
 
-  const handleDeleteClick = (lease: LeaseRow) => {
+  const handleArchiveClick = (lease: LeaseRow) => {
     setSelectedLease(lease);
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = async () => {
+  // #79: the list action is restorable ARCHIVE, not hard-delete — the same
+  // semantics as the detail page, so "Delete" never means two things. Sets
+  // archived=true; the #78 trigger stamps archived_by/archived_at server-side
+  // (the client values here are overridden) and enforces admin/owner.
+  const handleArchiveConfirm = async () => {
     if (!selectedLease) return;
     try {
-      await supabase.from('risks').delete().eq('lease_id', selectedLease.id);
-      const { error } = await supabase.from('leases').delete().eq('id', selectedLease.id);
+      const { error } = await supabase
+        .from('leases')
+        .update({ archived: true, archived_at: new Date().toISOString(), archived_by: user?.id ?? null })
+        .eq('id', selectedLease.id);
       if (error) throw error;
-      toast.success('Lease deleted successfully');
+      const { error: auditError } = await supabase.from('lease_activity_log').insert({
+        lease_id: selectedLease.id,
+        user_id: user?.id ?? null,
+        activity_type: 'lease_archived',
+        details: {},
+      } as any);
+      if (auditError) console.error('Archive audit insert failed:', auditError.message);
+      toast.success(t('archive.list_archived_toast'));
       setDeleteDialogOpen(false);
       setSelectedLease(null);
+      await refreshProfile?.();
       fetchLeases();
     } catch (error) {
-      console.error('Delete error:', error);
-      toast.error('Failed to delete lease');
+      console.error('Archive error:', error);
+      toast.error(t('archive.list_archive_failed'));
+    }
+  };
+
+  // In-list restore (#91): mirrors ArchiveButton — non-destructive, admin-only
+  // (the #78 trigger enforces server-side), logs lease_restored.
+  const handleRestore = async (lease: LeaseRow) => {
+    try {
+      const { error } = await supabase
+        .from('leases')
+        .update({ archived: false, archived_at: null, archived_by: null })
+        .eq('id', lease.id)
+        .select('id');
+      if (error) throw error;
+      const { error: auditError } = await supabase.from('lease_activity_log').insert({
+        lease_id: lease.id,
+        user_id: user?.id ?? null,
+        activity_type: 'lease_restored',
+        details: {},
+      } as any);
+      if (auditError) console.error('Restore audit insert failed:', auditError.message);
+      toast.success(t('archive.unarchived_toast'));
+      await refreshProfile?.();
+      fetchLeases();
+    } catch (error) {
+      console.error('Restore error:', error);
+      toast.error(t('archive.failed'));
     }
   };
 
@@ -378,10 +429,12 @@ export default function Leases() {
         title={t('leases.title')}
         subtitle={headerSubtitle}
         actions={
-          <Button variant="accent" onClick={handleAddLease}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Lease
-          </Button>
+          isReadOnly ? undefined : (
+            <Button variant="accent" onClick={handleAddLease}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Lease
+            </Button>
+          )
         }
       />
 
@@ -391,7 +444,17 @@ export default function Leases() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : leases.length === 0 ? (
-          <EmptyLeaseState onAddLease={handleAddLease} />
+          showArchived ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <Archive className="h-10 w-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">No archived leases.</p>
+              <Button variant="outline" onClick={() => setShowArchived(false)}>
+                Back to active leases
+              </Button>
+            </div>
+          ) : (
+            <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
+          )
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -521,7 +584,14 @@ export default function Leases() {
                             {formatSqFt(lease.square_footage)}
                           </TableCell>
                           <TableCell>
-                            <LeaseStatusBadge status={lease.lifecycle_status || lease.status} />
+                            <div className="flex items-center gap-1.5">
+                              <LeaseStatusBadge status={lease.lifecycle_status || lease.status} />
+                              {lease.archived && (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                  {t('archive.deleted_badge')}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div
@@ -540,19 +610,36 @@ export default function Leases() {
                                 </TooltipTrigger>
                                 <TooltipContent>View details</TooltipContent>
                               </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => handleDeleteClick(lease)}
-                                    className="text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Delete</TooltipContent>
-                              </Tooltip>
+                              {/* Restorable archive (#79), admin/owner-only
+                                  (#78 trigger enforces server-side). Hidden on
+                                  read-only Vault workspaces. */}
+                              {!isReadOnly && isAdmin && (lease.archived ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() => handleRestore(lease)}
+                                    >
+                                      <ArchiveRestore className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{t('archive.unarchive')}</TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon-sm"
+                                      onClick={() => handleArchiveClick(lease)}
+                                    >
+                                      <Archive className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{t('archive.archive')}</TooltipContent>
+                                </Tooltip>
+                              ))}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -579,10 +666,10 @@ export default function Leases() {
         onSuccess={() => fetchLeases()}
       />
 
-      <DeleteLeaseDialog
+      <ArchiveLeaseDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        onConfirm={handleDeleteConfirm}
+        onConfirm={handleArchiveConfirm}
         leaseName={selectedLease?.filename || ''}
       />
 
