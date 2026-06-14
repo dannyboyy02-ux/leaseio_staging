@@ -239,21 +239,23 @@ describe('lease_activity_log NULL-attribution carve-out (#90-NULL)', () => {
     ).not.toContain('OR (user_id IS NULL)) AND');
   });
 
-  it('no client writer hardcodes user_id: null for a NON-comment type', () => {
-    // The unambiguous breakage #90-NULL would introduce: a writer passing a
-    // LITERAL `user_id: null` for a non-comment type inserts a definitely-null
-    // actor, which the tightened policy RLS-rejects (42501). Today every literal
-    // `user_id: null` site is a 'comment' (leaseNotifications, FinancialReview,
-    // ApprovalQueue, LeaseReview) — this fails if a future writer adds a literal
-    // null for any other type.
-    //
-    // Deliberately EXCLUDED: defensive `user?.id ?? null` / `|| null` on the
-    // four non-comment sites (LeaseReview status_change/approval, Leases
-    // archived/restored). Those execute only inside authenticated, member-gated
-    // flows where the policy's EXISTS check already requires a non-null
-    // auth.uid(), so user_id resolves to the real UID at runtime, never null —
-    // verified 2026-06-13. Flagging them would be a false positive.
+  // Shared sweep for the user_id/activity_type pairing across client writers.
+  // Returns BOTH the offender list (literal `user_id: null` on a non-comment
+  // type) AND every matched (user_id, type) pair, so a sibling sanity probe can
+  // confirm the regex actually saw the known literal-null comment sites. Without
+  // that probe, a future regex break would make the offender check go FALSELY
+  // green (zero matches => zero offenders => pass), hiding the regression class
+  // this guard exists to catch.
+  type NullSweep = {
+    offenders: string[];
+    literalNullSites: Array<{ file: string; type: string }>;
+    matchedFiles: Set<string>;
+  };
+
+  function sweepUserIdAttribution(): NullSweep {
     const offenders: string[] = [];
+    const literalNullSites: Array<{ file: string; type: string }> = [];
+    const matchedFiles = new Set<string>();
     const walk = (dir: string): string[] => {
       const files: string[] = [];
       for (const entry of readdirSync(dir)) {
@@ -270,28 +272,85 @@ describe('lease_activity_log NULL-attribution carve-out (#90-NULL)', () => {
     for (const file of walk(join(ROOT, 'src'))) {
       const src = readFileSync(file, 'utf8');
       if (!src.includes('lease_activity_log') || !src.includes('.insert(')) continue;
+      const rel = file.slice(ROOT.length + 1);
       // Match each insert object's user_id + the nearest following activity_type.
       // CAVEAT: assumes user_id precedes activity_type within ~200 chars in the
       // insert object — true for every current writer. A future writer that
       // orders activity_type FIRST, or separates the two keys by more, would
       // escape this sweep; widen the window / add a reverse-order pass if so.
+      // The sanity probe below trips if this regex stops matching the known
+      // literal-null sites, so a silent break surfaces instead of false-greening.
       for (const m of src.matchAll(
         /user_id:\s*([^,\n]+),[\s\S]{0,200}?activity_type:\s*([^,\n]+)/g,
       )) {
         const userIdExpr = m[1].trim();
-        const typeExpr = m[2];
+        const typeExpr = m[2].trim();
         const isLiteralNull = userIdExpr === 'null'; // exactly `user_id: null`, not `x ?? null`
         const isComment = /['"]comment['"]/.test(typeExpr);
-        if (isLiteralNull && !isComment) {
-          offenders.push(`${file.slice(ROOT.length + 1)}: user_id=${userIdExpr} type=${typeExpr.trim()}`);
+        if (isLiteralNull) {
+          literalNullSites.push({ file: rel, type: typeExpr });
+          matchedFiles.add(rel);
+          if (!isComment) {
+            offenders.push(`${rel}: user_id=${userIdExpr} type=${typeExpr}`);
+          }
         }
       }
     }
+    return { offenders, literalNullSites, matchedFiles };
+  }
 
+  it('no client writer hardcodes user_id: null for a NON-comment type', () => {
+    // The unambiguous breakage #90-NULL would introduce: a writer passing a
+    // LITERAL `user_id: null` for a non-comment type inserts a definitely-null
+    // actor, which the tightened policy RLS-rejects (42501). Today every literal
+    // `user_id: null` site is a 'comment' (leaseNotifications, FinancialReview,
+    // ApprovalQueue, LeaseReview) — this fails if a future writer adds a literal
+    // null for any other type.
+    //
+    // Deliberately EXCLUDED: defensive `user?.id ?? null` / `|| null` on the
+    // four non-comment sites (LeaseReview status_change/approval, Leases
+    // archived/restored). Those execute only inside authenticated, member-gated
+    // flows where the policy's EXISTS check already requires a non-null
+    // auth.uid(), so user_id resolves to the real UID at runtime, never null —
+    // verified 2026-06-13. Flagging them would be a false positive.
+    const { offenders } = sweepUserIdAttribution();
     expect(
       offenders,
       'client writers hardcode user_id: null for a NON-comment type — these ' +
         'rows would be RLS-rejected (42501) after #90-NULL: ' + offenders.join('; '),
     ).toEqual([]);
+  });
+
+  it('sanity: the null-attribution sweep actually saw the known literal-null comment sites', () => {
+    // Guards against the offender check going FALSELY green if the user_id ->
+    // activity_type regex breaks (key-order change, window too narrow, syntax
+    // drift). The known literal `user_id: null` sites are ALL 'comment' today;
+    // if the sweep stops finding them, the regression guard above is blind and
+    // this probe fails instead. Pins the four files carrying literal-null
+    // comment inserts (leaseNotifications, FinancialReview, ApprovalQueue).
+    const { literalNullSites, matchedFiles } = sweepUserIdAttribution();
+    expect(
+      literalNullSites.length,
+      'sweep found NO literal `user_id: null` insert sites — the regex likely broke',
+    ).toBeGreaterThan(0);
+    // Every literal-null site the sweep DID see must be a comment (the invariant
+    // #90-NULL was verified against); a non-comment would already be an offender,
+    // but pinning it here makes the contract explicit.
+    for (const site of literalNullSites) {
+      expect(
+        /['"]comment['"]/.test(site.type),
+        `literal user_id: null at ${site.file} is type ${site.type}, expected 'comment'`,
+      ).toBe(true);
+    }
+    for (const expected of [
+      'src/lib/leaseNotifications.ts',
+      'src/pages/app/FinancialReview.tsx',
+      'src/pages/app/ApprovalQueue.tsx',
+    ]) {
+      expect(
+        matchedFiles.has(expected),
+        `sweep lost the literal-null comment writer in ${expected}`,
+      ).toBe(true);
+    }
   });
 });
