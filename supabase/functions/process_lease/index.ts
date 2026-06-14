@@ -2066,6 +2066,19 @@ serve(async (req) => {
         ? execLandlordName.toLowerCase().trim() === (existingLease.landlord_name as string).toLowerCase().trim()
         : null;
 
+      // Lifecycle Transition Convention (CLAUDE.md): an executed-document upload
+      // advances the lease to 'executed'. Do the flip HERE (server-side) so
+      // status_changed_at + a status_change audit row are guaranteed and
+      // attributable. Previously UploadExecutedDocumentDialog flipped
+      // lifecycle_status client-side with NO status_changed_at and NO activity
+      // row, leaving the transition unattributable (#94). from_status comes from
+      // the existingLease row already fetched above (no extra query). Idempotent:
+      // only flip + log when not already 'executed', so a re-upload of an
+      // already-executed lease does not write a no-op transition.
+      const previousLifecycleStatus = (existingLease.lifecycle_status as string | null) ?? null;
+      const willFlipToExecuted = previousLifecycleStatus !== 'executed';
+      const lifecycleChangedAt = new Date().toISOString();
+
       const { error: updateError } = await supabaseAdmin
         .from('leases')
         .update({
@@ -2087,6 +2100,11 @@ serve(async (req) => {
           variance_expiry_days:           varianceExpiryDays,
           variance_tenant_name_match:     varianceTenantMatch,
           variance_landlord_name_match:   varianceLandlordMatch,
+          // Convention: set lifecycle_status + status_changed_at in the SAME
+          // UPDATE (single trigger fire). Only included when actually flipping.
+          ...(willFlipToExecuted
+            ? { lifecycle_status: 'executed', status_changed_at: lifecycleChangedAt }
+            : {}),
         })
         .eq('id', targetLeaseId);
 
@@ -2105,6 +2123,29 @@ serve(async (req) => {
           landlord_match:             varianceLandlordMatch,
         },
       });
+
+      // Convention status_change row for the executed flip (#94). Mirrors the
+      // new-lease pipeline flip (routing_path 'extraction'): both top-level
+      // from_status/to_status AND the same fields inside details. Best-effort,
+      // matching the sibling — the UPDATE above already threw on failure.
+      if (willFlipToExecuted) {
+        const { error: statusLogError } = await supabaseAdmin.from('lease_activity_log').insert({
+          lease_id: targetLeaseId,
+          user_id: user.id,
+          activity_type: 'status_change',
+          from_status: previousLifecycleStatus,
+          to_status: 'executed',
+          details: {
+            from: previousLifecycleStatus,
+            to: 'executed',
+            routing_path: 'extraction',
+            triggered_by: 'process_lease_executed_upload',
+          },
+        });
+        if (statusLogError) {
+          console.error('[process_lease] executed-flip status_change log error:', statusLogError.message);
+        }
+      }
 
       console.log('[process_lease] Executed mode complete');
 
