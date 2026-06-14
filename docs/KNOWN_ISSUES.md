@@ -1806,6 +1806,8 @@ green.
 
 **Stub remediation:** Either route this transition through the canonical lifecycle writer (so status_changed_at + the activity row are guaranteed), or confirm + document that process_lease always writes them for this path and the client update is redundant/safe. Verify against the convention before closing.
 
+**RESOLVED 2026-06-14** — the flip was moved server-side into `process_lease`'s executed branch (deployed v101, `verify_jwt` preserved false; deployed bundle confirmed to contain the change). It now captures `from_status` from the already-fetched `existingLease.lifecycle_status`, sets `lifecycle_status`+`status_changed_at` in the SAME existing UPDATE (single trigger fire), and writes a convention `status_change` row carrying the real `user.id` (top-level `from_status`/`to_status` AND `details.{from,to,routing_path:'extraction',triggered_by:'process_lease_executed_upload'}`). Idempotent: only flips+logs when prior status != 'executed' (`executed_uploaded`/`executed_terms_extracted` still log every upload). The client flip in `UploadExecutedDocumentDialog.tsx` was removed. Reviewers: auditor CLEAN, security APPLY, integrity APPLY (no Critical/High/Medium on the change). Test: `src/lib/__tests__/executedLifecycleFlip.test.ts`. Spawned follow-up #96 (pre-existing `transitioned_by` NULL gap). Verification ceiling: deployed-code == committed + convention-compliant by review; a live executed-upload was not exercised end-to-end (needs an approved lease + PDF). PR #41.
+
 ---
 
 ### Item #95: live smoke layer (`audit_rls_smoke_check`) has no key for the `lease_activity_log` INSERT policy
