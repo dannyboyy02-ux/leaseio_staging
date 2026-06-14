@@ -1807,3 +1807,13 @@ green.
 **Stub remediation:** Either route this transition through the canonical lifecycle writer (so status_changed_at + the activity row are guaranteed), or confirm + document that process_lease always writes them for this path and the client update is redundant/safe. Verify against the convention before closing.
 
 ---
+
+### Item #95: live smoke layer (`audit_rls_smoke_check`) has no key for the `lease_activity_log` INSERT policy
+
+**Symptom:** The `audit_rls_smoke_check` SECURITY DEFINER function (`supabase/migrations/20260517000000_governance_hardening_followup.sql:~549`, run via `npm run smoke:security` / `scripts/smoke-audit-hardening.mjs`) content-checks 25+ policies against the live DB but has **no key for the `lease_activity_log` "Users can create activity entries" INSERT policy** — neither #90's 19-type client allowlist nor #90-NULL's `user_id IS NULL AND activity_type='comment'` carve-out. So the live net that catches Studio/MCP policy drift is blind to this policy. The static tests (`clientActivityAllowlist.test.ts`) catch in-repo drift only; the live layer is what would catch a hand-edit reverting the allowlist/carve-out in the DB. **The original #90 residual came from exactly this class of live policy state**, so the absence of a smoke key here is the meaningful gap.
+
+**Severity:** Medium (live-drift blind spot on an audit-defensibility policy). Pre-existing — #90/#90-NULL added static guards but never a smoke key; surfaced by lease-test-author during the #90-NULL post-work sweep (2026-06-13).
+
+**Stub remediation:** Add a boolean key (e.g. `lease_activity_log_insert_comment_null_only`) to `audit_rls_smoke_check` that introspects the policy's `with_check` (via `pg_policies` / `pg_get_expr`) and asserts BOTH the 19-type allowlist presence AND the comment-only NULL carve-out (`user_id IS NULL AND activity_type = 'comment'`), plus the absence of the loose unqualified `user_id IS NULL` clause. The runner is key-agnostic (any new boolean key is auto-asserted), so this is a superset addition. **Requires a new migration to a SECURITY DEFINER governance function → routes through lease-security-scanner review BEFORE `db push` (expect 3+ rounds per CLAUDE.md security-migration rule).** Add a static test pinning the new smoke key alongside.
+
+---
