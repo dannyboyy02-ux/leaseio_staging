@@ -187,3 +187,111 @@ describe('lease_activity_log client INSERT allowlist (#90)', () => {
     }
   });
 });
+
+// KNOWN_ISSUES #90-NULL regression guard.
+//
+// Migration 20260613070000_activity_log_null_attribution_comment_only.sql
+// tightens the same INSERT policy's user_id clause so a NULL (system-attributed)
+// user_id is permitted ONLY for activity_type='comment'. Every other allowlisted
+// client type must carry user_id = auth.uid(), closing the residual where a
+// member could forge a system-attributed 'status_change'/'approval'/'lease_archived'.
+//
+// We assert against the SAME "latest policy migration" the allowlist test reads,
+// so the two guards can never drift onto different files: whichever migration is
+// the current definition of the policy MUST carry both the allowlist AND the
+// NULL-comment carve-out.
+describe('lease_activity_log NULL-attribution carve-out (#90-NULL)', () => {
+  function latestPolicyMigrationSql(): { file: string; sql: string } {
+    const dir = join(ROOT, 'supabase/migrations');
+    const candidates = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .filter((f) =>
+        readFileSync(join(dir, f), 'utf8').includes(
+          'CREATE POLICY "Users can create activity entries"',
+        ),
+      )
+      .sort();
+    expect(candidates.length, 'no migration defines the activity-log INSERT policy').toBeGreaterThan(
+      0,
+    );
+    const file = candidates[candidates.length - 1];
+    return { file, sql: readFileSync(join(dir, file), 'utf8') };
+  }
+
+  it('permits NULL user_id ONLY for comment, and requires auth.uid() otherwise', () => {
+    const { file, sql } = latestPolicyMigrationSql();
+    // Normalize whitespace so formatting differences don't break the match.
+    const normalized = sql.replace(/\s+/g, ' ');
+    expect(
+      normalized,
+      `${file}: user_id clause must carve NULL to comment-only (#90-NULL)`,
+    ).toContain("(user_id = auth.uid()) OR (user_id IS NULL AND activity_type = 'comment')");
+  });
+
+  it('no longer carries the loose "user_id IS NULL" allow-any clause', () => {
+    const { file, sql } = latestPolicyMigrationSql();
+    const normalized = sql.replace(/\s+/g, ' ');
+    // The pre-#90-NULL shape allowed NULL for ANY type: `(user_id IS NULL))`
+    // immediately closing the user_id group with no activity_type qualifier.
+    expect(
+      normalized,
+      `${file}: the loose unqualified NULL clause must be gone (#90-NULL)`,
+    ).not.toContain('OR (user_id IS NULL)) AND');
+  });
+
+  it('no client writer hardcodes user_id: null for a NON-comment type', () => {
+    // The unambiguous breakage #90-NULL would introduce: a writer passing a
+    // LITERAL `user_id: null` for a non-comment type inserts a definitely-null
+    // actor, which the tightened policy RLS-rejects (42501). Today every literal
+    // `user_id: null` site is a 'comment' (leaseNotifications, FinancialReview,
+    // ApprovalQueue, LeaseReview) — this fails if a future writer adds a literal
+    // null for any other type.
+    //
+    // Deliberately EXCLUDED: defensive `user?.id ?? null` / `|| null` on the
+    // four non-comment sites (LeaseReview status_change/approval, Leases
+    // archived/restored). Those execute only inside authenticated, member-gated
+    // flows where the policy's EXISTS check already requires a non-null
+    // auth.uid(), so user_id resolves to the real UID at runtime, never null —
+    // verified 2026-06-13. Flagging them would be a false positive.
+    const offenders: string[] = [];
+    const walk = (dir: string): string[] => {
+      const files: string[] = [];
+      for (const entry of readdirSync(dir)) {
+        if (entry === 'node_modules' || entry === '__tests__' || entry.startsWith('.')) continue;
+        const p = join(dir, entry);
+        const st = lstatSync(p);
+        if (st.isSymbolicLink()) continue;
+        if (st.isDirectory()) files.push(...walk(p));
+        else if (/\.(ts|tsx)$/.test(entry)) files.push(p);
+      }
+      return files;
+    };
+
+    for (const file of walk(join(ROOT, 'src'))) {
+      const src = readFileSync(file, 'utf8');
+      if (!src.includes('lease_activity_log') || !src.includes('.insert(')) continue;
+      // Match each insert object's user_id + the nearest following activity_type.
+      // CAVEAT: assumes user_id precedes activity_type within ~200 chars in the
+      // insert object — true for every current writer. A future writer that
+      // orders activity_type FIRST, or separates the two keys by more, would
+      // escape this sweep; widen the window / add a reverse-order pass if so.
+      for (const m of src.matchAll(
+        /user_id:\s*([^,\n]+),[\s\S]{0,200}?activity_type:\s*([^,\n]+)/g,
+      )) {
+        const userIdExpr = m[1].trim();
+        const typeExpr = m[2];
+        const isLiteralNull = userIdExpr === 'null'; // exactly `user_id: null`, not `x ?? null`
+        const isComment = /['"]comment['"]/.test(typeExpr);
+        if (isLiteralNull && !isComment) {
+          offenders.push(`${file.slice(ROOT.length + 1)}: user_id=${userIdExpr} type=${typeExpr.trim()}`);
+        }
+      }
+    }
+
+    expect(
+      offenders,
+      'client writers hardcode user_id: null for a NON-comment type — these ' +
+        'rows would be RLS-rejected (42501) after #90-NULL: ' + offenders.join('; '),
+    ).toEqual([]);
+  });
+});
