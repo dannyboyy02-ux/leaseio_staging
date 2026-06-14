@@ -57,9 +57,11 @@ export function UploadExecutedDocumentDialog({
       if (invokeError) throw new Error(`Upload failed: ${invokeError.message}`);
       if (result?.error) throw new Error(result.error);
 
-      const { error: statusError } = await supabase
-        .from('leases').update({ lifecycle_status: 'executed' }).eq('id', leaseId);
-      if (statusError) console.error('[UploadExecutedDocumentDialog] status update error:', statusError);
+      // process_lease flips lifecycle_status -> 'executed' server-side (with
+      // status_changed_at + a convention status_change audit row); see #94. The
+      // client no longer writes the lifecycle change (it set no status_changed_at
+      // and no activity row, leaving the transition unattributable). onSuccess
+      // -> refetchLease pulls the server-flipped status.
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
 
       setStage('done');
