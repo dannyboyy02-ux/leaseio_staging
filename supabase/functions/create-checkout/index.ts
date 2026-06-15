@@ -114,12 +114,26 @@ serve(async (req) => {
 
     const { data: workspace, error: workspaceError } = await supabaseAdmin
       .from("workspaces")
-      .select("id, owner_id")
+      .select("id, owner_id, firm_id")
       .eq("id", workspaceId)
       .maybeSingle();
 
     if (workspaceError || !workspace) {
       throw new Error("Workspace not found");
+    }
+
+    // #103: a firm-bound workspace's plan is governed by the firm-level
+    // subscription. Reject independent checkout fail-closed (else this would
+    // mint a second Stripe sub and the webhook would clobber the child's
+    // billing columns / double-charge). Plan changes go through firm billing.
+    if ((workspace as { firm_id: string | null }).firm_id) {
+      return new Response(
+        JSON.stringify({
+          error: "Billing for this workspace is managed at the firm level.",
+          reason: "firm_managed",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 },
+      );
     }
 
     let canManageBilling = workspace.owner_id === user.id;
