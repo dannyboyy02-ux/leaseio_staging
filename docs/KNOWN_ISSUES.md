@@ -1918,3 +1918,19 @@ green.
 **Cleared as false positives in the same sweep (no action):** the blanket `where firm_id is not null` selector query is RLS-correct (`is_workspace_member` firm EXISTS with `restrict_firm_access=false`); the firm-name `in("id", firmIds)` resolution is row-filtered by `firms` RLS (`is_firm_member`) — no IDOR; the banner/label show only members-visible firm names through auto-escaped JSX — no info-disclosure or XSS. One LOW defense-in-depth note: the selector query trusts RLS entirely with no secondary client scoping (acceptable per LeaseIO's RLS-first model).
 
 **Where to look:** `src/pages/settings/AccountSettings.tsx`, `src/pages/app/UsageContent.tsx`, `src/components/layout/AppSidebar.tsx`, `src/components/workspace/WorkspaceCommandPalette.tsx`; `supabase/functions/{create-checkout,customer-portal,manage-document-pack,stripe-webhook}/index.ts`. Related: #60 (firm billing model), #61 (create-checkout customer resolution).
+
+---
+
+### Item #104: delete-firm deferred to Phase 11 — firm_activity_log ON DELETE RESTRICT blocks a hard delete
+
+**Severity:** N/A — deferred-feature note. **Surfaced 2026-06-15** during Phase 10 CP3. **Decision (Daniel, 2026-06-15): defer delete-firm to Phase 11.** It is a rare destructive operation not needed for "Business tier sellable" (a firm operates fine without ever being deleted), so FirmSettings (CP4b) omits the danger-zone delete or shows it as "coming soon."
+
+**The schema constraint:** `firm_activity_log.firm_id` is `ON DELETE RESTRICT` (migration `20260615172439_phase9_firm_layer_foundation.sql` — Phase 9's deliberate "an audit log must never be silently erased" choice). Every firm has at least a `firm_created` audit row, so a hard `DELETE FROM firms` is **permanently blocked** while any audit history exists. Combined with `workspaces.firm_id` (NO ACTION, blocks delete while children are bound), a firm hard-delete is doubly blocked by design.
+
+**The decision delete-firm needs (when Phase 11 builds it):** pick one —
+- **Soft-delete (recommended):** add `firms.deleted_at`; delete-firm releases all children, captures the `deleted_firms` forensic row, sets `deleted_at`. Firm + audit preserved; hidden from all UI. Satisfies RESTRICT.
+- **Hard-delete + audit archival:** copy `firm_activity_log` rows into `deleted_firms.details` (or an archive table), delete the audit rows, then hard-delete the firm. Truly removes the row but destroys the live audit FK — conflicts with the Phase 9 "never destroy the audit" intent.
+
+The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phase 9 / Phase 10 CP1) ready for whichever path is chosen.
+
+**Where to look:** `supabase/migrations/20260615172439_phase9_firm_layer_foundation.sql` (the firm_activity_log FK + deleted_firms); a future `supabase/functions/delete-firm/index.ts`; `firms` RLS already has a "firm owner deletes firm" policy (the client DELETE attempt fails at the FK, as intended).

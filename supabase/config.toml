@@ -213,6 +213,11 @@ verify_jwt = true
 [functions.cancel-firm-workspace-join-request]
 verify_jwt = true
 
+# Phase 10: toggle a firm-bound workspace's restrict_firm_access — WORKSPACE
+# OWNER ONLY (the child controls its own opt-out; a firm admin cannot override).
+[functions.set-firm-access]
+verify_jwt = true
+
 # Document capacity packs — Bearer JWT + workspace owner/admin check.
 [functions.manage-document-pack]
 verify_jwt = true

@@ -128,3 +128,18 @@ describe('cancel join request — initiator only', () => {
     expect(src).toContain("status: \"cancelled\"");
   });
 });
+
+describe('set-firm-access — WORKSPACE OWNER only (not firm admin)', () => {
+  const src = fn('set-firm-access');
+  it('requires the workspace owner; a firm admin cannot override the child opt-out', () => {
+    expect(src).toContain('ws as { owner_id: string }).owner_id !== user.id');
+    expect(src).toContain('reason: "not_authorized"');
+    // No firm_members admin escalation path — owner check is the only gate.
+    expect(src).not.toContain('"firm_admin"');
+  });
+  it('only toggles firm-bound workspaces and audits the change', () => {
+    expect(src).toContain('not_firm_bound');
+    expect(src).toContain('workspace_firm_access_restricted');
+    expect(src).toContain('workspace_firm_access_unrestricted');
+  });
+});
