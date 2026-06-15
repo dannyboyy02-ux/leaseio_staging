@@ -150,7 +150,15 @@ describe('stripe-webhook single-lease credit grant (static-source)', () => {
     const src = read(WEBHOOK);
     const start = src.indexOf('async function applySingleLeaseCredit');
     expect(start).toBeGreaterThan(-1);
-    const end = src.indexOf('try {', start);
+    // Bound the window at applySingleLeaseCredit's own end — the next helper
+    // declaration OR the main handler try, whichever comes first. The firm
+    // branch added applyFirmSubscription (which DOES write the workspaces row to
+    // propagate plan='business' to children); it sits between this function and
+    // the main try, so anchoring solely on `try {` would bleed its write into
+    // this window and falsely fail the "never writes workspaces" assertion.
+    const nextFn = src.indexOf('async function ', start + 1);
+    const nextTry = src.indexOf('try {', start);
+    const end = Math.min(...[nextFn, nextTry].filter((i) => i > start));
     expect(end).toBeGreaterThan(start);
     return src.slice(start, end);
   }

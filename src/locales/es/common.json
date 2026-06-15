@@ -913,6 +913,7 @@
       "current_heading": "Actual",
       "recent_heading": "Recientes",
       "all_heading": "Todos los espacios de trabajo",
+      "firm_fallback_heading": "Firma",
       "resume_dialog_intro": "El pago de este espacio de trabajo no se completó. Autentíquese para completar la configuración; no se le cobrará dos veces.",
       "resume_button": "Autenticar y terminar configuración",
       "resume_unavailable_title": "No pudimos reanudar este espacio de trabajo",

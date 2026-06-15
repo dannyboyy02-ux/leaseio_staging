@@ -913,6 +913,7 @@
       "current_heading": "Current",
       "recent_heading": "Recent",
       "all_heading": "All workspaces",
+      "firm_fallback_heading": "Firm",
       "resume_dialog_intro": "Payment for this workspace wasn't finished. Authenticate to complete setup; you won't be charged twice.",
       "resume_button": "Authenticate & finish setup",
       "resume_unavailable_title": "We couldn't resume this workspace",
