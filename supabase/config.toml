@@ -165,6 +165,11 @@ verify_jwt = true
 [functions.customer-portal]
 verify_jwt = true
 
+# Read-only billing summary (saved card + recent invoices) — Bearer JWT +
+# workspace owner/admin check. In-code auth mirrors customer-portal.
+[functions.get-billing-summary]
+verify_jwt = true
+
 # Document capacity packs — Bearer JWT + workspace owner/admin check.
 [functions.manage-document-pack]
 verify_jwt = true

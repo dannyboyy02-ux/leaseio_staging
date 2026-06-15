@@ -1861,3 +1861,13 @@ green.
 **Severity:** Low. NOT a defect — surfaced by lease-product-polish during the 2026-06-13 Usage row-redesign review and dismissed by the product owner as benign pre-existing code. Pre-existing: the original 4-card layout had the identical `activeMax === -1` handling; the redesign preserved it verbatim. No customer-facing wrongness today.
 
 **Stub remediation:** Optional cleanup — either delete the `-1` branch (and the `activeUnlimited` plumbing) if no future plan will ever be unlimited, or keep it as forward-compat scaffolding with a one-line comment that no current plan config triggers it. Do NOT add an unlimited active-lease tier without a pricing decision (violates the 75%-margin / no-unlimited rule). A guard test pinning the branch already exists in `UsageContent.test.tsx` (added during the same review).
+
+---
+
+### Item #100: Billing tab — recovery banner and plan header offer two competing CTAs to the same Business checkout — Low
+
+**Symptom:** On the Billing tab (`src/pages/settings/AccountSettings.tsx`) when a workspace abandoned a Business checkout (`intendedPlan === 'business' && plan !== 'business'` and not active/trialing), the recovery banner ("You picked Business during signup… complete Business checkout") renders, and directly below it the plan header shows the Starter plan with an "Adjust plan" button that also routes to a Business upgrade. Two stacked CTAs lead to the same checkout — extra decision friction on a conversion-critical surface (violates one-gesture-per-state).
+
+**Severity:** Low. **Pre-existing** — the old design had the same double-up (recovery banner Card + inline upgrade Card); surfaced by lease-product-polish during the 2026-06-15 Billing Claude-redesign review and dismissed by the product owner as not blocking. Not a dead-end (both paths work); purely a friction/clarity nit.
+
+**Stub remediation:** When the recovery banner is visible, suppress the plan header's "Adjust plan" button (or vice-versa) so there's one obvious next gesture. Both gate on the same `workspace.intendedPlan`/`subscriptionStatus` state already, so the condition is cheap to add.

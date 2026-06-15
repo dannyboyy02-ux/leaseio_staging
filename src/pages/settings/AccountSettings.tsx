@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { User, Lock, CreditCard, Check, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor, Archive } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { User, Lock, CreditCard, Trash2, Save, Eye, EyeOff, Loader2, LogOut, Palette, Shield, Mail, BarChart3, Building2, ChevronRight, Sun, Moon, Monitor, Archive } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { UsageContent } from '@/pages/app/UsageContent';
 import { describeLoginEvent, type LoginEventRow } from '@/lib/loginActivity';
@@ -38,10 +38,12 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ANNUAL_DISCOUNT_PERCENT, PLANS, isUpgrade, isReadOnlyRetention, normalizePlanId } from '@/config/pricing';
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table';
+import { PLANS, isUpgrade, isReadOnlyRetention, normalizePlanId } from '@/config/pricing';
 import { trialDaysRemaining } from '@/lib/trialStatus';
 import { DocumentPackDialog } from '@/components/workspace/DocumentPackDialog';
-import type { SubscriptionPlan } from '@/types';
+import { PlanPickerDialog } from '@/components/billing/PlanPickerDialog';
+import type { SubscriptionPlan, BillingSummary } from '@/types';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -116,6 +118,15 @@ export default function AccountSettings() {
   const [confirmDowngradePlan, setConfirmDowngradePlan] = useState<string | null>(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [packDialogOpen, setPackDialogOpen] = useState(false);
+  const [planPickerOpen, setPlanPickerOpen] = useState(false);
+  // Read-only billing summary (saved card + recent invoices) for the Payment
+  // and Invoices sections. Fetched once when the Billing tab opens (admin-only)
+  // — never on a render path; see the effect below.
+  const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
+  const [billingSummaryLoading, setBillingSummaryLoading] = useState(false);
+  const [billingSummaryError, setBillingSummaryError] = useState(false);
+  const [billingRetry, setBillingRetry] = useState(0);
+  const billingSummaryFetchedFor = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState('profile');
   // Billing interval selection for the in-app upgrade flow. Defaults
   // monthly; can be set to 'annual' via the toggle on the upgrade card OR
@@ -493,6 +504,30 @@ export default function AccountSettings() {
   const trialDaysLeft = trialDaysRemaining(workspace?.subscriptionPeriodEnd);
   // Effective allowance = base plan limit + active document-pack capacity.
   const addonCapacity = workspace?.addonDocumentCapacity ?? 0;
+
+  // Invoice formatting for the Billing tab's Invoices table.
+  const localeTag = language === 'es' ? 'es-419' : 'en-US';
+  const formatInvoiceDate = (unixSeconds: number) =>
+    new Date(unixSeconds * 1000).toLocaleDateString(localeTag, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  const formatInvoiceAmount = (minorUnits: number, currency: string) =>
+    new Intl.NumberFormat(localeTag, {
+      style: 'currency',
+      currency: (currency || 'usd').toUpperCase(),
+    }).format((minorUnits ?? 0) / 100);
+  const invoiceStatusVariant = (
+    status: string | null,
+  ): 'success' | 'warning' | 'secondary' | 'outline' =>
+    status === 'paid'
+      ? 'success'
+      : status === 'open'
+        ? 'warning'
+        : status === 'draft'
+          ? 'outline'
+          : 'secondary';
   const railTriggerClass =
     'md:w-full justify-start gap-2 px-3 py-2 text-sm font-medium data-[state=active]:bg-muted data-[state=active]:text-foreground rounded-md';
 
@@ -502,6 +537,59 @@ export default function AccountSettings() {
     const next = new URLSearchParams(searchParams);
     next.set('tab', tab);
     navigate({ search: `?${next.toString()}` }, { replace: true });
+  };
+
+  // Fetch the card + invoices once when the Billing tab opens. Admin-only
+  // (members can't manage billing and the edge function 403s them), guarded by
+  // a per-workspace ref so re-renders / tab toggles never re-hit Stripe.
+  // `billingRetry` is the only dep that re-runs it after the first load.
+  useEffect(() => {
+    if (activeTab !== 'billing') return;
+    if (!workspace?.id || !isAdminUser) return;
+    if (billingSummaryFetchedFor.current === workspace.id) return;
+    billingSummaryFetchedFor.current = workspace.id;
+    let cancelled = false;
+    setBillingSummaryLoading(true);
+    setBillingSummaryError(false);
+    supabase.functions
+      .invoke('get-billing-summary', { body: { workspaceId: workspace.id } })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || (data && (data as { error?: string }).error)) {
+          setBillingSummaryError(true);
+          return;
+        }
+        setBillingSummary(data as BillingSummary);
+      })
+      .catch(() => {
+        if (!cancelled) setBillingSummaryError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setBillingSummaryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, workspace?.id, isAdminUser, billingRetry]);
+
+  const retryBillingSummary = () => {
+    billingSummaryFetchedFor.current = null;
+    setBillingSummary(null);
+    setBillingRetry((n) => n + 1);
+  };
+
+  // "Adjust plan" routing: upgrades go through the existing checkout handler
+  // (handleUpgrade → proceedWithCheckout), downgrades through the existing
+  // feature-loss confirm dialog + portal (setConfirmDowngradePlan). The picker
+  // itself owns no billing logic.
+  const handleAdjustPlanSelect = (planId: SubscriptionPlan) => {
+    setPlanPickerOpen(false);
+    if (isUpgrade(currentPlan as SubscriptionPlan, planId)) {
+      handleUpgrade(planId);
+    } else {
+      setConfirmDowngradePlan(planId);
+    }
   };
 
   return (
@@ -865,7 +953,7 @@ export default function AccountSettings() {
 
 
           {/* Billing (renamed from Subscription; 'subscription' stays a URL alias) */}
-          <TabsContent value="billing" className="space-y-6 mt-0">
+          <TabsContent value="billing" className="space-y-8 mt-0">
             {/* Skeleton while the workspace fetch is in flight. */}
             {isLoading && !workspace ? (
               <div className="space-y-6">
@@ -890,68 +978,50 @@ export default function AccountSettings() {
             <>
             {/* Trial banner — visible while subscription is in Stripe's trial window. */}
             {workspace.subscriptionStatus === 'trialing' && formattedPeriodEnd && (
-              <Card className="border-accent/50 bg-accent/5">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{t('account.trial_banner_title')}</CardTitle>
-                  <CardDescription>
+              <div className="rounded-lg border border-accent/40 bg-accent/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm font-medium text-foreground">{t('account.trial_banner_title')}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {trialDaysLeft === 0
                       ? t('account.trial_banner_desc_today')
                       : t('account.trial_banner_desc', {
                           days: t('account.trial_days_left', { count: trialDaysLeft ?? 0 }),
                           date: formattedPeriodEnd,
                         })}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {isAdminUser ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleManagePayment}
-                      disabled={isManagingPayment}
-                    >
-                      {isManagingPayment ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <CreditCard className="h-4 w-4 mr-2" />
-                      )}
-                      {t('account.add_payment_method')}
-                    </Button>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
-                  )}
-                </CardContent>
-              </Card>
+                  </p>
+                </div>
+                {isAdminUser ? (
+                  <Button size="sm" variant="outline" onClick={handleManagePayment} disabled={isManagingPayment}>
+                    {isManagingPayment ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4 mr-2" />
+                    )}
+                    {t('account.add_payment_method')}
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                )}
+              </div>
             )}
 
             {/* Past-due / unpaid / incomplete states — payment failed; user must update method. */}
             {workspace?.subscriptionStatus &&
               ['past_due', 'unpaid', 'incomplete'].includes(workspace.subscriptionStatus) && (
-                <Card className="border-destructive/60 bg-destructive/5">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base text-destructive">
-                      {t('account.past_due_banner_title')}
-                    </CardTitle>
-                    <CardDescription>
-                      {t('account.past_due_banner_desc')}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {isAdminUser ? (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={handleManagePayment}
-                        disabled={isManagingPayment}
-                      >
-                        {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                        {t('account.update_payment_method')}
-                      </Button>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
-                    )}
-                  </CardContent>
-                </Card>
+                <div className="rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+                  <div>
+                    <p className="text-sm font-medium text-destructive">{t('account.past_due_banner_title')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('account.past_due_banner_desc')}</p>
+                  </div>
+                  {isAdminUser ? (
+                    <Button variant="destructive" size="sm" onClick={handleManagePayment} disabled={isManagingPayment}>
+                      {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      {t('account.update_payment_method')}
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
+                  )}
+                </div>
               )}
 
             {/* Abandoned-checkout recovery — user selected Business during signup
@@ -960,202 +1030,205 @@ export default function AccountSettings() {
               workspace.plan !== 'business' &&
               workspace.subscriptionStatus !== 'active' &&
               workspace.subscriptionStatus !== 'trialing' && (
-                <Card className="border-primary/50 bg-primary/5">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">
-                      {t('account.recovery_callout_title')}
-                    </CardTitle>
-                    <CardDescription>
-                      {t('account.recovery_callout_desc')}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {isAdminUser ? (
-                      <Button
-                        size="sm"
-                        onClick={() => proceedWithCheckout('business')}
-                        disabled={isUpgrading === 'business'}
-                      >
-                        {isUpgrading === 'business' ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : null}
-                        {t('account.recovery_callout_cta')}
-                      </Button>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-            {/* Vault retention card (V4): read-only state + reactivate to a
-                full plan. Reactivation is a normal Starter/Business checkout
-                (no Vault-fee refund); convert-at-grace does not apply here. */}
-            {currentPlan === 'vault' && (
-              <Card className="border-primary/40 bg-primary/5">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Archive className="h-4 w-4" />
-                    {t('account.vault_card_title')}
-                  </CardTitle>
-                  <CardDescription>
-                    {formattedPeriodEnd
-                      ? t('account.vault_card_desc', { date: formattedPeriodEnd, price: PLANS.vault.price.annual })
-                      : t('account.vault_card_desc_nodate', { price: PLANS.vault.price.annual })}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{t('account.recovery_callout_title')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('account.recovery_callout_desc')}</p>
+                  </div>
                   {isAdminUser ? (
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          onClick={() => proceedWithCheckout('starter')}
-                          disabled={isUpgrading !== null}
-                        >
-                          {isUpgrading === 'starter' ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : null}
-                          {t('account.vault_reactivate_starter')}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => proceedWithCheckout('business')}
-                          disabled={isUpgrading !== null}
-                        >
-                          {isUpgrading === 'business' ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : null}
-                          {t('account.vault_reactivate_business')}
-                        </Button>
-                      </div>
-                      {/* Subordinate: payment methods / cancel live in the Stripe
-                          portal. One billing surface — this card — so the generic
-                          current-plan card is suppressed for Vault below. */}
-                      <button
-                        type="button"
-                        className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
-                        onClick={handleManagePayment}
-                        disabled={isManagingPayment}
-                      >
-                        {t('account.vault_manage_stripe')}
-                      </button>
-                    </div>
+                    <Button size="sm" onClick={() => proceedWithCheckout('business')} disabled={isUpgrading === 'business'}>
+                      {isUpgrading === 'business' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      {t('account.recovery_callout_cta')}
+                    </Button>
                   ) : (
                     <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
                   )}
-                </CardContent>
-              </Card>
-            )}
+                </div>
+              )}
 
-            {/* Current Plan & Usage — suppressed for Vault (the Vault card above
-                is the single billing surface; this would duplicate the plan
-                badge/renewal and offer a competing "Manage payment" button). */}
-            {currentPlan !== 'vault' && (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    {t('account.current_plan')}
-                    <Badge variant={currentPlan === 'business' ? 'business' : 'secondary'}>
-                      {t(PLANS[currentPlan].nameKey)}
-                    </Badge>
-                  </CardTitle>
-                  {/* Renewal date is shown for ANY active paid subscription —
-                      paid Starter renews too. Guarded on subscription state +
-                      a valid period end, never on plan tier. */}
-                  {workspace.subscriptionStatus === 'active' && formattedPeriodEnd && (
-                    <CardDescription>
-                      {t('account.renews_on')} {formattedPeriodEnd}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* The usage meter lives on the Usage tab — Billing keeps
-                        only billing actions so the two tabs don't repeat
-                        each other. */}
-                    <p className="text-sm text-muted-foreground">
-                      {t('account.usage_lives_in_usage_tab')}{' '}
+            {/* Plan header — calm Claude-style summary. Vault swaps in its own
+                reactivation surface in place of the generic header. */}
+            {currentPlan === 'vault' ? (
+              <section>
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                    <Archive className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-base font-semibold text-foreground">{t('account.vault_card_title')}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5 max-w-prose">
+                      {formattedPeriodEnd
+                        ? t('account.vault_card_desc', { date: formattedPeriodEnd, price: PLANS.vault.price.annual })
+                        : t('account.vault_card_desc_nodate', { price: PLANS.vault.price.annual })}
+                    </p>
+                  </div>
+                </div>
+                {isAdminUser ? (
+                  <div className="flex flex-wrap items-center gap-2 mt-4">
+                    <Button onClick={() => proceedWithCheckout('starter')} disabled={isUpgrading !== null}>
+                      {isUpgrading === 'starter' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      {t('account.vault_reactivate_starter')}
+                    </Button>
+                    <Button variant="outline" onClick={() => proceedWithCheckout('business')} disabled={isUpgrading !== null}>
+                      {isUpgrading === 'business' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      {t('account.vault_reactivate_business')}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-3">{t('account.billing_admin_only')}</p>
+                )}
+              </section>
+            ) : (
+              <section>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                      <CreditCard className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-base font-semibold text-foreground">{t(PLANS[currentPlan].nameKey)}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5">{t(`account.plan_benefit_${currentPlan}`)}</p>
+                      {/* Renewal shown for ANY active paid subscription (paid
+                          Starter renews too); guarded on state + a valid date. */}
+                      {workspace.subscriptionStatus === 'active' && formattedPeriodEnd && (
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          {t('account.auto_renews_on', { date: formattedPeriodEnd })}
+                        </p>
+                      )}
                       <button
                         type="button"
-                        className="text-primary hover:underline"
+                        className="text-xs text-primary hover:underline mt-1"
                         onClick={() => handleTabChange('usage')}
                       >
                         {t('account.view_usage_link')}
                       </button>
-                    </p>
-                    {isAdminUser ? (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={handleManagePayment}
-                        disabled={isManagingPayment}
-                      >
-                        {isManagingPayment ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <CreditCard className="h-4 w-4 mr-2" />
-                        )}
-                        {t('account.manage_payment')}
-                      </Button>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t('account.billing_contact')}</CardTitle>
-                  <CardDescription>{t('account.invoices_sent')}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm font-medium">{workspace.name}</p>
-                      <p className="text-sm text-muted-foreground">{user?.email || ''}</p>
                     </div>
-                    {/* Intentionally no second button — payment methods,
-                        invoices, and billing contact all live behind the one
-                        "Open billing portal" CTA on the Current Plan card. */}
-                    <p className="text-xs text-muted-foreground">
-                      {t('account.billing_portal_note')}
-                    </p>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                  {isAdminUser ? (
+                    <Button variant="outline" size="sm" onClick={() => setPlanPickerOpen(true)}>
+                      {t('account.adjust_plan')}
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground shrink-0">{t('account.plan_changes_admin_only')}</p>
+                  )}
+                </div>
+              </section>
             )}
+
+            {/* Payment — saved card from get-billing-summary; "Update" opens the
+                Stripe portal. Card data is admin-only (privileged); members see
+                an explanatory note rather than an empty section. */}
+            <section>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className="text-sm font-semibold text-foreground">{t('account.payment')}</h3>
+                {isAdminUser && billingSummary?.card?.last4 && (
+                  <Button variant="outline" size="sm" onClick={handleManagePayment} disabled={isManagingPayment}>
+                    {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    {t('account.payment_update')}
+                  </Button>
+                )}
+              </div>
+              {!isAdminUser ? (
+                <p className="text-sm text-muted-foreground">{t('account.billing_admin_only')}</p>
+              ) : billingSummaryLoading ? (
+                <Skeleton className="h-8 w-44" />
+              ) : billingSummaryError ? (
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-muted-foreground">{t('account.billing_summary_error')}</p>
+                  <Button variant="ghost" size="sm" onClick={retryBillingSummary}>{t('account.retry')}</Button>
+                </div>
+              ) : billingSummary?.card?.last4 ? (
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-12 rounded border border-border bg-muted flex items-center justify-center">
+                    <CreditCard className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <span className="text-sm text-foreground capitalize">
+                    {billingSummary.card.brand} •••• {billingSummary.card.last4}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('account.payment_none')}</p>
+              )}
+            </section>
+
+            {/* Invoices — recent history from get-billing-summary; admin-only
+                data, members see an explanatory note. */}
+            <section>
+              <h3 className="text-sm font-semibold text-foreground mb-3">{t('account.invoices')}</h3>
+              {!isAdminUser ? (
+                <p className="text-sm text-muted-foreground">{t('account.billing_admin_only')}</p>
+              ) : billingSummaryLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : billingSummaryError ? (
+                <p className="text-sm text-muted-foreground">{t('account.billing_summary_error')}</p>
+              ) : (billingSummary?.invoices?.length ?? 0) === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('account.invoices_empty')}</p>
+              ) : (
+                <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t('account.invoice_col_date')}</TableHead>
+                        <TableHead>{t('account.invoice_col_total')}</TableHead>
+                        <TableHead>{t('account.invoice_col_status')}</TableHead>
+                        <TableHead className="text-right">{t('account.invoice_col_actions')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(billingSummary?.invoices ?? []).map((inv) => (
+                        <TableRow key={inv.id}>
+                          <TableCell className="whitespace-nowrap">{formatInvoiceDate(inv.created)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{formatInvoiceAmount(inv.total, inv.currency)}</TableCell>
+                          <TableCell>
+                            <Badge variant={invoiceStatusVariant(inv.status)}>
+                              {inv.status ? t(`account.invoice_status_${inv.status}`) : '—'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {inv.hostedInvoiceUrl || inv.invoicePdf ? (
+                              <a
+                                href={inv.hostedInvoiceUrl ?? inv.invoicePdf ?? '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline text-sm"
+                              >
+                                {t('account.invoice_view')}
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </section>
 
             {/* Lease capacity packs — not offered on read-only Vault (no new
                 leases can be added, so extra capacity is meaningless). */}
             {currentPlan !== 'vault' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('packs.card_title')}</CardTitle>
-                <CardDescription>{t('packs.card_desc')}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-muted-foreground">
-                      {addonCapacity > 0
-                        ? t('packs.card_current', { count: addonCapacity })
-                        : t('packs.card_none')}
-                    </p>
-                    {isAdminUser && (
-                      <Button variant="outline" size="sm" onClick={() => setPackDialogOpen(true)}>
-                        {t('packs.card_cta')}
-                      </Button>
-                    )}
-                  </div>
-                  {!isAdminUser && (
-                    <p className="text-xs text-muted-foreground">{t('packs.admin_only')}</p>
+              <section>
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <h3 className="text-sm font-semibold text-foreground">{t('packs.card_title')}</h3>
+                  {isAdminUser && (
+                    <Button variant="outline" size="sm" onClick={() => setPackDialogOpen(true)}>
+                      {t('packs.card_cta')}
+                    </Button>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+                <p className="text-sm text-muted-foreground">
+                  {addonCapacity > 0
+                    ? t('packs.card_current', { count: addonCapacity })
+                    : t('packs.card_none')}
+                </p>
+                {!isAdminUser && (
+                  <p className="text-xs text-muted-foreground mt-1">{t('packs.admin_only')}</p>
+                )}
+              </section>
             )}
 
             {/* Single-lease credits — only renders while a balance exists.
@@ -1163,127 +1236,36 @@ export default function AccountSettings() {
                 purchase from the limit wall and consumed by process_lease.
                 Hidden on read-only Vault (credits are unusable there). */}
             {currentPlan !== 'vault' && (workspace.purchasedLeaseCredits ?? 0) > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{t('account.credits_title')}</CardTitle>
-                  <CardDescription>{t('account.credits_desc')}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm font-medium">
-                    {t('account.credits_balance', { count: workspace.purchasedLeaseCredits })}
-                  </p>
-                </CardContent>
-              </Card>
+              <section>
+                <h3 className="text-sm font-semibold text-foreground mb-1">{t('account.credits_title')}</h3>
+                <p className="text-sm text-muted-foreground">{t('account.credits_desc')}</p>
+                <p className="text-sm font-medium text-foreground mt-1">
+                  {t('account.credits_balance', { count: workspace.purchasedLeaseCredits })}
+                </p>
+              </section>
             )}
 
-            {/* Plan change — one focused card, not a plan-comparison grid
-                (the grid duplicated the landing page and buried the action).
-                Starter admins upgrade in place; Business admins downgrade
-                via the confirmation dialog that spells out feature loss. */}
-            {isAdminUser && currentPlan === 'starter' && (
-              <Card variant="feature">
-                <CardHeader>
-                  <div className="flex items-center justify-between flex-wrap gap-3">
-                    <CardTitle>{t('account.upgrade_card_title')}</CardTitle>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className={cn('font-medium', billingInterval === 'monthly' ? 'text-foreground' : 'text-muted-foreground')}>
-                        {t('landing.pricing.monthly')}
-                      </span>
-                      <Switch
-                        checked={billingInterval === 'annual'}
-                        onCheckedChange={(v) => setBillingInterval(v ? 'annual' : 'monthly')}
-                      />
-                      <span className={cn('font-medium', billingInterval === 'annual' ? 'text-foreground' : 'text-muted-foreground')}>
-                        {t('landing.pricing.annual')}
-                      </span>
-                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
-                        {t('landing.pricing.save')} {ANNUAL_DISCOUNT_PERCENT}%
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-2xl font-bold">
-                      ${billingInterval === 'annual' ? Math.round(PLANS.business.price.annual / 12) : PLANS.business.price.monthly}
-                    </span>
-                    <span className="text-muted-foreground text-sm">{t('account.per_month')}</span>
-                  </div>
-                  {billingInterval === 'annual' && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {t('account.billed_annually', { total: PLANS.business.price.annual.toLocaleString() })}
-                    </p>
-                  )}
-                  <CardDescription className="mt-1">
-                    {t('account.abstractions_included', { count: PLANS.business.abstractionsIncluded })}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <ul className="space-y-1.5">
-                    {PLANS.business.featureKeys.slice(0, 4).map((featureKey) => (
-                      <li key={featureKey} className="flex items-start gap-2 text-xs">
-                        <Check className="h-3 w-3 text-success shrink-0 mt-0.5" />
-                        <span className="text-muted-foreground">{t(featureKey)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    variant="accent"
-                    className="w-full sm:w-auto"
-                    onClick={() => handleUpgrade('business')}
-                    disabled={isUpgrading === 'business'}
-                  >
-                    {isUpgrading === 'business' ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : null}
-                    {t('account.upgrade_card_cta')}
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-            {isAdminUser && currentPlan === 'business' && (
-              <p className="text-xs text-muted-foreground">
-                {t('account.downgrade_hint')}{' '}
-                <button
-                  type="button"
-                  className="underline hover:text-foreground"
-                  onClick={() => setConfirmDowngradePlan('starter')}
-                >
-                  {t('account.downgrade_link')}
-                </button>
-              </p>
-            )}
-            {!isAdminUser && (
-              <p className="text-xs text-muted-foreground">
-                {t('account.plan_changes_admin_only')}
-              </p>
-            )}
-
-            {/* Cancel Subscription — shown for any active/paid subscription
-                (paid Starter included; plan tier is not a proxy for "has a
-                subscription"), admin-only. */}
-            {['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&
+            {/* Cancel subscription — any active/paid subscription (paid Starter
+                included), admin-only. Excluded on Vault: it's a read-only
+                retention offramp ("nothing is deleted"), so a delete-everything
+                cancel CTA under the Reactivate header would contradict the tier;
+                Vault renewal/cancellation lives in the Stripe portal. */}
+            {currentPlan !== 'vault' &&
+              ['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&
               isAdminUser && (
-              <Card className="border-destructive/50">
-                <CardHeader>
-                  <CardTitle className="text-destructive">{t('account.cancel_subscription')}</CardTitle>
-                  <CardDescription>
-                    {t('account.cancel_subscription_desc')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {t('account.cancel_warning')}
-                  </p>
-                  {/* Confirmation dialog first — destructive action must never
-                      jump straight to the Stripe portal (C2, 2026-06-11). */}
+                <section>
+                  <h3 className="text-sm font-semibold text-foreground mb-1">{t('account.cancel_subscription')}</h3>
+                  <p className="text-sm text-muted-foreground mb-3 max-w-prose">{t('account.cancel_warning')}</p>
                   <Button
-                    variant="destructive"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => setConfirmCancelOpen(true)}
                   >
                     {t('account.cancel_subscription')}
                   </Button>
-                </CardContent>
-              </Card>
-            )}
+                </section>
+              )}
             </>
             )}
           </TabsContent>
@@ -1438,6 +1420,19 @@ export default function AccountSettings() {
 
       {/* Document capacity pack purchase/manage dialog */}
       <DocumentPackDialog open={packDialogOpen} onOpenChange={setPackDialogOpen} />
+
+      {/* "Adjust plan" picker — replaces the inline upgrade card + downgrade
+          hint. Delegates to handleAdjustPlanSelect, which routes through the
+          existing upgrade/downgrade handlers + confirm dialogs below. */}
+      <PlanPickerDialog
+        open={planPickerOpen}
+        onOpenChange={setPlanPickerOpen}
+        currentPlan={currentPlan as SubscriptionPlan}
+        billingInterval={billingInterval}
+        onBillingIntervalChange={setBillingInterval}
+        onSelectPlan={handleAdjustPlanSelect}
+        isBusy={isUpgrading}
+      />
 
       {/* Upgrade Confirmation Dialog */}
       <AlertDialog open={!!confirmUpgradePlan} onOpenChange={() => setConfirmUpgradePlan(null)}>

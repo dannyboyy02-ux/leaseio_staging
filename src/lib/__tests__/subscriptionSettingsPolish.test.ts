@@ -117,10 +117,12 @@ describe('locale parity (en/es)', () => {
       'downgrade_confirm_desc',
       'downgrade_confirm_cta',
       'upgrade_confirm_title',
-      'usage_lives_in_usage_tab',
       'view_usage_link',
       'billing_admin_only',
-      'billing_portal_note',
+      'payment',
+      'invoices',
+      'adjust_plan',
+      'auto_renews_on',
       'trial_pill',
       'add_payment_method',
       'checkout_success',
@@ -197,16 +199,17 @@ describe('AccountSettings subscription tab', () => {
   const source = readRepoFile('src/pages/settings/AccountSettings.tsx');
 
   it('cancel button opens the confirmation dialog instead of calling the billing portal directly', () => {
-    // Narrow to the cancel card. Gated on subscription state (so paid Starter
-    // is included — plan tier is not a proxy for "has a subscription") + admin.
-    const cancelCard = sliceBetween(
+    // Narrow to the cancel section (a borderless section since the 2026-06
+    // Claude-alignment pass). Gated on subscription state (so paid Starter is
+    // included — plan tier is not a proxy for "has a subscription") + admin.
+    const cancelSection = sliceBetween(
       source,
       "['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&",
-      '</Card>',
+      '</section>',
     );
-    expect(cancelCard).toContain('onClick={() => setConfirmCancelOpen(true)}');
+    expect(cancelSection).toContain('onClick={() => setConfirmCancelOpen(true)}');
     // The destructive button must NOT jump straight to the Stripe portal.
-    expect(cancelCard).not.toContain('handleManagePayment');
+    expect(cancelSection).not.toContain('handleManagePayment');
   });
 
   it('cancel confirmation dialog shows the period-end date when known and routes to the portal only on confirm', () => {
@@ -218,11 +221,14 @@ describe('AccountSettings subscription tab', () => {
     expect(dialog).toContain('handleManagePayment();');
   });
 
-  it('downgrade button opens a confirmation dialog that spells out feature loss before the portal', () => {
-    // Billing tab: the downgrade link sets state instead of opening the
-    // portal directly (the plan grid was replaced by a single upgrade card
-    // + downgrade link in the 2026-06 Claude-alignment pass).
-    expect(source).toContain("onClick={() => setConfirmDowngradePlan('starter')}");
+  it('downgrade routes through the adjust-plan picker to a confirmation dialog that spells out feature loss before the portal', () => {
+    // The inline upgrade card + downgrade link were replaced by the "Adjust
+    // plan" picker (2026-06 Claude-alignment pass). Selecting a downgrade
+    // routes through handleAdjustPlanSelect → setConfirmDowngradePlan; an
+    // upgrade goes through handleUpgrade. Neither jumps straight to the portal.
+    const router = sliceBetween(source, 'const handleAdjustPlanSelect', '};');
+    expect(router).toContain('setConfirmDowngradePlan(planId)');
+    expect(router).toContain('handleUpgrade(planId)');
 
     const dialog = sliceBetween(source, 'open={!!confirmDowngradePlan}', '</AlertDialog>');
     expect(dialog).toContain("t('account.downgrade_confirm_desc')");
@@ -236,9 +242,9 @@ describe('AccountSettings subscription tab', () => {
     const renewal = sliceBetween(
       source,
       "workspace.subscriptionStatus === 'active' && formattedPeriodEnd &&",
-      '</CardDescription>',
+      '</p>',
     );
-    expect(renewal).toContain("t('account.renews_on')} {formattedPeriodEnd}");
+    expect(renewal).toContain("t('account.auto_renews_on', { date: formattedPeriodEnd })");
 
     // formattedPeriodEnd is derived through a NaN guard so "Invalid Date"
     // can never render.
@@ -266,15 +272,14 @@ describe('AccountSettings subscription tab', () => {
   });
 
   it('billing portal actions are admin-gated with a visible non-admin explanation', () => {
-    // Three gated portal surfaces (past-due card, recovery callout, current
-    // plan card) each show the admin-only note to non-admins.
+    // Gated billing surfaces (trial/past-due/recovery banners + the Vault
+    // section) each show the admin-only note to non-admins.
     const fallbacks = source.match(/t\('account\.billing_admin_only'\)/g) ?? [];
     expect(fallbacks.length).toBeGreaterThanOrEqual(3);
 
-    // Plan-change actions render only for admins; non-admins get the
-    // explanatory note instead of hidden/disabled buttons.
-    expect(source).toContain("isAdminUser && currentPlan === 'starter'");
-    expect(source).toContain("isAdminUser && currentPlan === 'business'");
+    // Plan changes are the admin-only "Adjust plan" button (opens the picker);
+    // non-admins get the explanatory note instead of a hidden/disabled control.
+    expect(source).toContain('onClick={() => setPlanPickerOpen(true)}');
     expect(source).toContain("t('account.plan_changes_admin_only')");
   });
 });
