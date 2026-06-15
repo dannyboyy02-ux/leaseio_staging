@@ -8,6 +8,33 @@ export type { SubscriptionPlan };
 
 export type BillingInterval = 'monthly' | 'annual';
 
+// Read-only billing summary returned by the `get-billing-summary` edge function
+// (saved card + recent invoices for the in-app Billing tab). Card carries brand
+// + last4 only — never a full PAN or PaymentMethod secret.
+export interface BillingCard {
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+}
+
+export interface BillingInvoice {
+  id: string;
+  created: number; // unix seconds
+  total: number; // minor units (cents)
+  currency: string; // e.g. 'usd'
+  status: string | null; // paid | open | void | uncollectible | draft
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+}
+
+export interface BillingSummary {
+  ok: true;
+  card: BillingCard | null;
+  invoices: BillingInvoice[];
+  reason?: 'no_customer';
+}
+
 export type WorkspaceRole = 'admin' | 'editor' | 'viewer';
 
 export type LeaseType = 'master' | 'amendment';

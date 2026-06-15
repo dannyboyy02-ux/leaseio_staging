@@ -125,7 +125,7 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 
 **Locales (update together):** `src/locales/{en,es}/common.json`
 
-**Pricing & Billing:** `src/config/pricing.ts`, `supabase/functions/{create-checkout,stripe-webhook,customer-portal}/index.ts`
+**Pricing & Billing:** `src/config/pricing.ts`, `src/components/billing/PlanPickerDialog.tsx` (the Billing-tab "Adjust plan" picker), `supabase/functions/{create-checkout,stripe-webhook,customer-portal,get-billing-summary}/index.ts` (`get-billing-summary` is a read-only owner/admin-gated fn returning the saved card brand+last4 + recent invoices for the in-app Billing tab; `verify_jwt = true`)
 
 **Routing:** `src/App.tsx` (all routes), `src/components/layout/{AppSidebar,AppLayout,AppHeader}.tsx`
 
