@@ -101,6 +101,11 @@ export interface Workspace {
   canceledAt: string | null;
   graceExpiresAt: string | null;
   softDeletedAt: string | null;
+  // Firm layer (Phase 9): when set, the workspace belongs to a firm; plan and
+  // billing are governed at the firm level (the DB locks the plan), so the
+  // Billing tab shows a read-only "managed by {firmName}" banner. null = standalone.
+  firmId: string | null;
+  firmName: string | null;
 }
 
 export interface WorkspaceMember {

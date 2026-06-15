@@ -48,6 +48,7 @@ type WorkspaceRow = {
   default_notification_days: number | null;
   created_at: string;
   updated_at: string | null;
+  firm_id: string | null;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -101,7 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end, canceled_at, grace_expires_at, soft_deleted_at";
+        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end, canceled_at, grace_expires_at, soft_deleted_at, firm_id";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -223,6 +224,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .not("extracted_json", "is", null),
       ]);
 
+      // Firm layer (Phase 9): resolve the parent firm's name for the
+      // "managed at the firm level" Billing banner when the workspace is bound.
+      const firmId = (resolvedWorkspace as any).firm_id ?? null;
+      let firmName: string | null = null;
+      if (firmId) {
+        const { data: firmRow } = await (supabase as any)
+          .from("firms").select("name").eq("id", firmId).maybeSingle();
+        firmName = (firmRow as { name?: string } | null)?.name ?? null;
+      }
+
       setUserRole(resolvedRole);
       setWorkspace({
         id: resolvedWorkspace.id,
@@ -261,6 +272,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         canceledAt: (resolvedWorkspace as any).canceled_at ?? null,
         graceExpiresAt: (resolvedWorkspace as any).grace_expires_at ?? null,
         softDeletedAt: (resolvedWorkspace as any).soft_deleted_at ?? null,
+        firmId,
+        firmName,
       });
 
       try {
