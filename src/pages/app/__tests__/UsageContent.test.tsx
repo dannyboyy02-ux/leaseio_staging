@@ -2,7 +2,7 @@
 import "../../../components/workspace/__tests__/_jsdomPolyfills";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 
 // Phase 4 fix pass — Starter usage card. A single-workspace plan always sits
 // at 1/1 owned workspaces; that's the plan's NORMAL state, not an approaching
@@ -47,44 +47,9 @@ vi.mock("react-router-dom", () => ({
   ),
 }));
 
-// Recent-archives query — return an empty list; not under test here.
-const fromMock = vi.fn();
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
-}));
-
 import { UsageContent } from "../UsageContent";
 
 // --- Helpers --------------------------------------------------------------
-
-function emptyLeasesBuilder() {
-  const builder: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "order", "limit"]) {
-    builder[m] = vi.fn(() => builder);
-  }
-  (builder as { then: unknown }).then = (
-    res: (v: unknown) => unknown,
-    rej?: (e: unknown) => unknown,
-  ) => Promise.resolve({ data: [], error: null }).then(res, rej);
-  return builder;
-}
-
-// Same thenable shape as emptyLeasesBuilder, but resolves the rows shape the
-// component's archived-leases query returns (note the joined `profiles` object
-// the component flattens into archived_by_name).
-function leasesBuilder(rows: unknown[]) {
-  const builder: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "order", "limit"]) {
-    builder[m] = vi.fn(() => builder);
-  }
-  (builder as { then: unknown }).then = (
-    res: (v: unknown) => unknown,
-    rej?: (e: unknown) => unknown,
-  ) => Promise.resolve({ data: rows, error: null }).then(res, rej);
-  return builder;
-}
 
 interface SetAppArgs {
   plan: import("@/config/pricing").SubscriptionPlan;
@@ -133,8 +98,6 @@ function setApp({
 
 beforeEach(() => {
   useAppMock.mockReset();
-  fromMock.mockReset();
-  fromMock.mockImplementation(() => emptyLeasesBuilder());
 });
 
 afterEach(() => {
@@ -333,41 +296,29 @@ describe("UsageContent — abstraction descriptor with an add-on document pack",
   });
 });
 
-describe("UsageContent — populated recent-archives list", () => {
-  it("renders an archive row with title, formatted date, and the joined archiver name", async () => {
-    fromMock.mockImplementation(() =>
-      leasesBuilder([
-        {
-          id: "lease-1",
-          request_title: "Downtown HQ Lease",
-          property_address: "100 Main St",
-          archived_at: "2026-05-20T12:00:00.000Z",
-          archived_by: "user-1",
-          profiles: { first_name: "Ada", last_name: "Lovelace" },
-        },
-      ]),
-    );
-    setApp({ plan: "business", ownedWorkspaces: 3 });
+describe("UsageContent — Active leases 'Add capacity' action", () => {
+  // Capacity packs moved off Billing to the Active leases row (2026-06-15). The
+  // dialog is owned by the parent (AccountSettings); the row just fires the
+  // onAddCapacity opener. Admin-gated; absent when no opener is wired in.
+  it("shows the Add capacity button for admins and fires onAddCapacity on click", () => {
+    const onAddCapacity = vi.fn();
+    setApp({ plan: "business", ownedWorkspaces: 1, userRole: "owner" });
+    render(<UsageContent onAddCapacity={onAddCapacity} />);
+    const btn = screen.getByText(/packs\.card_cta/);
+    fireEvent.click(btn);
+    expect(onAddCapacity).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the Add capacity button for non-admin members", () => {
+    const onAddCapacity = vi.fn();
+    setApp({ plan: "business", ownedWorkspaces: 1, userRole: "viewer" });
+    render(<UsageContent onAddCapacity={onAddCapacity} />);
+    expect(screen.queryByText(/packs\.card_cta/)).toBeNull();
+  });
+
+  it("renders no Add capacity button when no opener is provided", () => {
+    setApp({ plan: "business", ownedWorkspaces: 1, userRole: "owner" });
     render(<UsageContent />);
-
-    // The row uses request_title as its label and links to the lease detail.
-    await waitFor(() =>
-      expect(screen.getByText("Downtown HQ Lease")).toBeTruthy(),
-    );
-    const leaseLink = screen
-      .getAllByRole("link")
-      .find((a) => a.getAttribute("href") === "/app/leases/lease-1");
-    expect(leaseLink).toBeTruthy();
-
-    // archived_by_name is composed from the joined profiles row.
-    expect(
-      screen.getByText(/usage\.archived_by\(name=Ada Lovelace\)/),
-    ).toBeTruthy();
-
-    // archived_at is rendered through date-fns 'MMM d, yyyy'.
-    expect(screen.getByText("May 20, 2026")).toBeTruthy();
-
-    // The empty-state copy must NOT show when the list is populated.
-    expect(screen.queryByText("usage.recent_archives_empty")).toBeNull();
+    expect(screen.queryByText(/packs\.card_cta/)).toBeNull();
   });
 });

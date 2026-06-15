@@ -502,8 +502,6 @@ export default function AccountSettings() {
       })
     : null;
   const trialDaysLeft = trialDaysRemaining(workspace?.subscriptionPeriodEnd);
-  // Effective allowance = base plan limit + active document-pack capacity.
-  const addonCapacity = workspace?.addonDocumentCapacity ?? 0;
 
   // Invoice formatting for the Billing tab's Invoices table.
   const localeTag = language === 'es' ? 'es-419' : 'en-US';
@@ -1121,10 +1119,15 @@ export default function AccountSettings() {
             <section>
               <div className="flex items-center justify-between gap-3 mb-3">
                 <h3 className="text-sm font-semibold text-foreground">{t('account.payment')}</h3>
-                {isAdminUser && billingSummary?.card?.last4 && (
+                {/* Always available to admins (opens the Stripe portal) — a
+                    subscriber always has a customer to manage, even before a
+                    card detail loads. */}
+                {isAdminUser && !billingSummaryLoading && (
                   <Button variant="outline" size="sm" onClick={handleManagePayment} disabled={isManagingPayment}>
                     {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    {t('account.payment_update')}
+                    {billingSummary?.card?.last4
+                      ? t('account.payment_update')
+                      : t('account.payment_add')}
                   </Button>
                 )}
               </div>
@@ -1208,28 +1211,11 @@ export default function AccountSettings() {
                 )}
               </section>
 
-            {/* Lease capacity packs — not offered on read-only Vault (no new
-                leases can be added, so extra capacity is meaningless). */}
-            {currentPlan !== 'vault' && (
-              <section>
-                <div className="flex items-center justify-between gap-3 mb-1">
-                  <h3 className="text-sm font-semibold text-foreground">{t('packs.card_title')}</h3>
-                  {isAdminUser && (
-                    <Button variant="outline" size="sm" onClick={() => setPackDialogOpen(true)}>
-                      {t('packs.card_cta')}
-                    </Button>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {addonCapacity > 0
-                    ? t('packs.card_current', { count: addonCapacity })
-                    : t('packs.card_none')}
-                </p>
-                {!isAdminUser && (
-                  <p className="text-xs text-muted-foreground mt-1">{t('packs.admin_only')}</p>
-                )}
-              </section>
-            )}
+            {/* Capacity packs moved to the Usage tab's Active leases row
+                (2026-06-15) to keep Billing focused on plan + payment + invoices.
+                The pack dialog is still mounted below and is opened from there
+                via the onAddCapacity prop, plus the quota-banner ?packs=1
+                deep-link. */}
 
             {/* Single-lease credits — only renders while a balance exists.
                 Credits are granted by the Stripe webhook on a one-time
@@ -1254,16 +1240,18 @@ export default function AccountSettings() {
               ['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&
               isAdminUser && (
                 <section>
-                  <h3 className="text-sm font-semibold text-foreground mb-1">{t('account.cancel_subscription')}</h3>
-                  <p className="text-sm text-muted-foreground mb-3 max-w-prose">{t('account.cancel_warning')}</p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => setConfirmCancelOpen(true)}
-                  >
-                    {t('account.cancel_subscription')}
-                  </Button>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-foreground">{t('account.cancel_subscription')}</h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive/40 hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setConfirmCancelOpen(true)}
+                    >
+                      {t('common.cancel')}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1 max-w-prose">{t('account.cancel_warning')}</p>
                 </section>
               )}
             </>
@@ -1272,7 +1260,7 @@ export default function AccountSettings() {
 
           {/* Usage — embedded inside Settings (Claude pattern) */}
           <TabsContent value="usage" className="space-y-6 mt-0">
-            <UsageContent />
+            <UsageContent onAddCapacity={() => setPackDialogOpen(true)} />
           </TabsContent>
 
           {/* Appearance — theme toggle */}

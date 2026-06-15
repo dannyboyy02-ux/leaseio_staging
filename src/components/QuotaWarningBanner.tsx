@@ -140,7 +140,9 @@ export function QuotaWarningBanner() {
             the purchase (non-admins are told to contact their admin instead). */}
         {isAdminUser && (banner.metric === 'monthly_extractions' || banner.metric === 'active_leases') && (
           <Button asChild size="sm" variant="outline">
-            <Link to="/app/settings/account?tab=billing&packs=1">{t('quota_banner.add_capacity')}</Link>
+            {/* Capacity packs live on the Usage tab now (2026-06-15); land there
+                and open the pack dialog via ?packs=1. */}
+            <Link to="/app/settings/account?tab=usage&packs=1">{t('quota_banner.add_capacity')}</Link>
           </Button>
         )}
         <Button asChild size="sm" variant={isCritical ? 'destructive' : 'outline'}>

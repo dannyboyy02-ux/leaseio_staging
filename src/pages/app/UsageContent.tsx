@@ -1,23 +1,13 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
 import { ArrowRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
-import { supabase } from '@/integrations/supabase/client';
 import { PLANS, isReadOnlyRetention } from '@/config/pricing';
 import type { SubscriptionPlan } from '@/config/pricing';
-
-interface RecentArchive {
-  id: string;
-  request_title: string | null;
-  property_address: string | null;
-  archived_at: string | null;
-  archived_by_name: string | null;
-}
 
 const usageTone = (pct: number): 'destructive' | 'warning' | 'accent' => {
   if (pct >= 90) return 'destructive';
@@ -39,12 +29,16 @@ function UsageRow({
   pct,
   variant,
   descriptor,
+  action,
 }: {
   label: string;
   rightText: string | null;
   pct: number | null;
   variant?: 'destructive' | 'warning' | 'accent';
   descriptor: ReactNode;
+  /** Optional right-aligned action, rendered under the bar level with the
+   *  descriptor (e.g. the Active-leases "Add capacity" button). */
+  action?: ReactNode;
 }) {
   const showRight = rightText && !(pct !== null && pct >= 100);
   return (
@@ -58,51 +52,28 @@ function UsageRow({
       {pct !== null && (
         <Progress value={pct} variant={variant} className="h-1.5 mt-2" />
       )}
-      {descriptor && (
-        <div className="text-xs text-muted-foreground mt-1.5 space-y-0.5">{descriptor}</div>
+      {(descriptor || action) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 mt-1.5">
+          {descriptor && (
+            <div className="text-xs text-muted-foreground space-y-0.5">{descriptor}</div>
+          )}
+          {action && <div className="shrink-0">{action}</div>}
+        </div>
       )}
     </div>
   );
 }
 
-export function UsageContent() {
+/**
+ * @param onAddCapacity Opens the capacity-pack purchase dialog. Capacity packs
+ *   raise the active-lease cap, so the "Add capacity" affordance lives on the
+ *   Active leases row (moved off the Billing tab 2026-06-15 to keep Billing
+ *   clean — act where you feel the limit). The dialog itself is owned by the
+ *   parent (AccountSettings) so the quota-banner `?packs=1` deep-link reuses it.
+ */
+export function UsageContent({ onAddCapacity }: { onAddCapacity?: () => void } = {}) {
   const { t } = useAppTranslation();
   const { workspace, availableWorkspaces, userRole } = useApp();
-  // `null` = still loading the first fetch; `[]` = loaded and genuinely empty.
-  // Distinguishing the two avoids a false "nothing archived yet" flash on the
-  // first paint of a workspace that does have archives.
-  const [recent, setRecent] = useState<RecentArchive[] | null>(null);
-
-  useEffect(() => {
-    if (!workspace?.id) return;
-    let cancelled = false;
-    setRecent(null);
-    (async () => {
-      const { data } = await (supabase as any)
-        .from('leases')
-        .select(
-          'id, request_title, property_address, archived_at, archived_by, profiles:archived_by(first_name, last_name)'
-        )
-        .eq('workspace_id', workspace.id)
-        .eq('archived', true)
-        .order('archived_at', { ascending: false })
-        .limit(10);
-      if (cancelled) return;
-      const rows: RecentArchive[] = (data ?? []).map((r: any) => ({
-        id: r.id,
-        request_title: r.request_title,
-        property_address: r.property_address,
-        archived_at: r.archived_at,
-        archived_by_name: r.profiles
-          ? [r.profiles.first_name, r.profiles.last_name].filter(Boolean).join(' ') || null
-          : null,
-      }));
-      setRecent(rows);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [workspace?.id]);
 
   if (!workspace) {
     return <p className="text-sm text-muted-foreground">{t('common.loading')}</p>;
@@ -256,6 +227,13 @@ export function UsageContent() {
                     <p>{t('usage.active_leases_desc')}</p>
                   </>
                 }
+                action={
+                  isAdminUser && onAddCapacity ? (
+                    <Button variant="outline" size="sm" onClick={onAddCapacity}>
+                      {t('packs.card_cta')}
+                    </Button>
+                  ) : undefined
+                }
               />
 
               <UsageRow
@@ -303,47 +281,6 @@ export function UsageContent() {
           </CardContent>
         </Card>
       )}
-
-      {/* Recently archived — its own quiet section, not a boxed card. The row
-          list already matches the Claude row idiom. */}
-      <section>
-        <p className="text-sm font-semibold text-foreground">{t('usage.recent_archives')}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{t('usage.recent_archives_desc')}</p>
-        {recent === null ? (
-          <p className="text-sm text-muted-foreground mt-3">{t('common.loading')}</p>
-        ) : recent.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic mt-3">
-            {t('usage.recent_archives_empty')}
-          </p>
-        ) : (
-          <ul className="divide-y divide-border mt-2">
-            {recent.map((row) => (
-              <li key={row.id}>
-                <Link
-                  to={`/app/leases/${row.id}`}
-                  className="flex items-center justify-between gap-4 py-3 hover:bg-muted/30 -mx-3 px-3 rounded transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {row.request_title || row.property_address || t('usage.untitled_lease')}
-                    </p>
-                    {row.archived_by_name && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {t('usage.archived_by', { name: row.archived_by_name })}
-                      </p>
-                    )}
-                  </div>
-                  {row.archived_at && (
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {format(new Date(row.archived_at), 'MMM d, yyyy')}
-                    </span>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }
