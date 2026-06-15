@@ -300,6 +300,11 @@ export function AppSidebar() {
                   >
                     <WorkspaceAvatar id={ws.id} name={ws.name} size="sm" />
                     <span className="flex-1 truncate">{ws.name}</span>
+                    {ws.firmId ? (
+                      <span className="text-[10px] text-muted-foreground truncate max-w-[6rem]">
+                        {ws.firmName}
+                      </span>
+                    ) : null}
                     {isPending ? (
                       <span className="text-[10px] text-primary font-medium">
                         {t('workspace.create.pending_resume_label')}

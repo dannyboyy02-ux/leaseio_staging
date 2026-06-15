@@ -16,6 +16,15 @@ export interface WorkspaceBasic {
    */
   subscription_status: string | null;
   role: WorkspaceRole | "owner";
+  /**
+   * Firm layer (Phase 9): set when this workspace belongs to a firm. firmName
+   * is the parent firm's display name. The selector groups firm-bound children
+   * under their firm so a firm member can navigate to a child they reach only
+   * via firm membership (RLS-derived access, no direct workspace_members row).
+   * null/null = a standalone workspace the user owns or is a direct member of.
+   */
+  firmId: string | null;
+  firmName: string | null;
 }
 
 interface AppContextType {
@@ -48,6 +57,7 @@ type WorkspaceRow = {
   default_notification_days: number | null;
   created_at: string;
   updated_at: string | null;
+  firm_id: string | null;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -101,7 +111,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end, canceled_at, grace_expires_at, soft_deleted_at";
+        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end, canceled_at, grace_expires_at, soft_deleted_at, firm_id";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;
@@ -223,6 +233,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .not("extracted_json", "is", null),
       ]);
 
+      // Firm layer (Phase 9): resolve the parent firm's name for the
+      // "managed at the firm level" Billing banner when the workspace is bound.
+      const firmId = (resolvedWorkspace as any).firm_id ?? null;
+      let firmName: string | null = null;
+      if (firmId) {
+        const { data: firmRow } = await (supabase as any)
+          .from("firms").select("name").eq("id", firmId).maybeSingle();
+        firmName = (firmRow as { name?: string } | null)?.name ?? null;
+      }
+
       setUserRole(resolvedRole);
       setWorkspace({
         id: resolvedWorkspace.id,
@@ -261,6 +281,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         canceledAt: (resolvedWorkspace as any).canceled_at ?? null,
         graceExpiresAt: (resolvedWorkspace as any).grace_expires_at ?? null,
         softDeletedAt: (resolvedWorkspace as any).soft_deleted_at ?? null,
+        firmId,
+        firmName,
       });
 
       try {
@@ -278,15 +300,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const { data: ownedWs } = await (supabase as any)
           .from("workspaces")
-          .select("id, name, plan, subscription_status")
+          .select("id, name, plan, subscription_status, firm_id")
           .eq("owner_id", authUser.id);
 
         const { data: membershipWs } = await (supabase as any)
           .from("workspace_members")
-          .select("role, workspace_id, workspaces(id, name, plan)")
+          .select("role, workspace_id, workspaces(id, name, plan, firm_id)")
           .eq("user_id", authUser.id);
 
+        // Firm layer (Phase 9): firm children the user reaches only via firm
+        // membership (no owned/membership row). RLS on `workspaces` is now
+        // firm-aware (is_workspace_member's firm EXISTS), so this blanket
+        // firm-bound select returns exactly the children this user may access —
+        // restrict_firm_access children are auto-excluded by the policy.
+        const { data: firmChildWs } = await (supabase as any)
+          .from("workspaces")
+          .select("id, name, plan, firm_id")
+          .not("firm_id", "is", null);
+
         const ownedIds = new Set((ownedWs ?? []).map((w: any) => w.id));
+        const directIds = new Set([
+          ...ownedIds,
+          ...(membershipWs ?? []).map((m: any) => m.workspace_id),
+        ]);
+
+        // Resolve firm display names for every firm referenced by an accessible
+        // workspace (RLS on `firms` = is_firm_member, so unreadable firms simply
+        // fall back to a generic label).
+        const firmIds = Array.from(
+          new Set(
+            [
+              ...(ownedWs ?? []),
+              ...(membershipWs ?? []).map((m: any) => m.workspaces),
+              ...(firmChildWs ?? []),
+            ]
+              .map((w: any) => w?.firm_id)
+              .filter((id: any): id is string => Boolean(id)),
+          ),
+        );
+        const firmNameById = new Map<string, string>();
+        if (firmIds.length > 0) {
+          const { data: firmRows } = await (supabase as any)
+            .from("firms")
+            .select("id, name")
+            .in("id", firmIds);
+          for (const f of firmRows ?? []) {
+            if (f?.id) firmNameById.set(f.id, f.name || "");
+          }
+        }
+        const firmName = (id: string | null): string | null =>
+          id ? firmNameById.get(id) || null : null;
+
         const all: WorkspaceBasic[] = [
           ...(ownedWs ?? []).map((w: any) => ({
             id: w.id,
@@ -294,6 +358,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             plan: normalizePlanId(w.plan),
             subscription_status: (w.subscription_status as string | null) ?? null,
             role: "owner" as const,
+            firmId: (w.firm_id as string | null) ?? null,
+            firmName: firmName(w.firm_id ?? null),
           })),
           ...(membershipWs ?? [])
             .filter((m: any) => !ownedIds.has(m.workspace_id))
@@ -303,6 +369,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
               plan: normalizePlanId(m.workspaces?.plan),
               subscription_status: null,
               role: m.role as WorkspaceRole,
+              firmId: (m.workspaces?.firm_id as string | null) ?? null,
+              firmName: firmName(m.workspaces?.firm_id ?? null),
+            })),
+          ...(firmChildWs ?? [])
+            .filter((w: any) => !directIds.has(w.id))
+            .map((w: any) => ({
+              id: w.id,
+              name: w.name || "Unnamed",
+              plan: normalizePlanId(w.plan),
+              subscription_status: null,
+              // Firm-derived access only — firm_member maps to editor authority
+              // (resolveEffectiveAccess); the selector just needs a non-owner role.
+              role: "editor" as WorkspaceRole,
+              firmId: (w.firm_id as string | null) ?? null,
+              firmName: firmName(w.firm_id ?? null),
             })),
         ];
         setAvailableWorkspaces(all);

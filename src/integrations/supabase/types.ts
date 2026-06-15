@@ -50,6 +50,13 @@ export type Database = {
             foreignKeyName: "alert_rules_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "alert_rules_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -174,6 +181,13 @@ export type Database = {
             foreignKeyName: "approval_policies_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "approval_policies_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -205,6 +219,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "cancellation_notices_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "cancellation_notices_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -290,6 +311,13 @@ export type Database = {
             foreignKeyName: "chain_step_overrides_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "chain_step_overrides_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -365,6 +393,13 @@ export type Database = {
             foreignKeyName: "chain_step_voluntary_delegations_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "chain_step_voluntary_delegations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -433,10 +468,53 @@ export type Database = {
             foreignKeyName: "classification_corrections_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "classification_corrections_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
+      }
+      deleted_firms: {
+        Row: {
+          child_count_at_deletion: number | null
+          deleted_at: string
+          deleted_by: string | null
+          firm_name: string | null
+          firm_type: string | null
+          id: string
+          member_count_at_deletion: number | null
+          original_firm_id: string
+          owner_id: string | null
+        }
+        Insert: {
+          child_count_at_deletion?: number | null
+          deleted_at?: string
+          deleted_by?: string | null
+          firm_name?: string | null
+          firm_type?: string | null
+          id?: string
+          member_count_at_deletion?: number | null
+          original_firm_id: string
+          owner_id?: string | null
+        }
+        Update: {
+          child_count_at_deletion?: number | null
+          deleted_at?: string
+          deleted_by?: string | null
+          firm_name?: string | null
+          firm_type?: string | null
+          id?: string
+          member_count_at_deletion?: number | null
+          original_firm_id?: string
+          owner_id?: string | null
+        }
+        Relationships: []
       }
       deleted_workspaces: {
         Row: {
@@ -509,6 +587,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "dismissed_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "dismissed_events_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -634,6 +719,138 @@ export type Database = {
           },
         ]
       }
+      firm_activity_log: {
+        Row: {
+          activity_type: string
+          created_at: string
+          details: Json
+          firm_id: string
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          activity_type: string
+          created_at?: string
+          details?: Json
+          firm_id: string
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          activity_type?: string
+          created_at?: string
+          details?: Json
+          firm_id?: string
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_activity_log_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "firm_activity_log_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_billing_period_summary"
+            referencedColumns: ["firm_id"]
+          },
+        ]
+      }
+      firm_members: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          firm_id: string
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          firm_id: string
+          id?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          firm_id?: string
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_members_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "firm_members_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_billing_period_summary"
+            referencedColumns: ["firm_id"]
+          },
+        ]
+      }
+      firms: {
+        Row: {
+          billing_email: string
+          billing_summary_mode: string
+          child_workspace_limit: number
+          child_workspaces_used: number
+          created_at: string
+          firm_type: string
+          id: string
+          name: string
+          owner_id: string
+          plan: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          billing_email: string
+          billing_summary_mode?: string
+          child_workspace_limit?: number
+          child_workspaces_used?: number
+          created_at?: string
+          firm_type: string
+          id?: string
+          name: string
+          owner_id: string
+          plan?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billing_email?: string
+          billing_summary_mode?: string
+          child_workspace_limit?: number
+          child_workspaces_used?: number
+          created_at?: string
+          firm_type?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          plan?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       invite_tokens: {
         Row: {
           accepted_at: string | null
@@ -672,6 +889,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "invite_tokens_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "invite_tokens_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -911,6 +1135,13 @@ export type Database = {
             foreignKeyName: "lease_approval_chain_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "lease_approval_chain_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -1118,6 +1349,13 @@ export type Database = {
             foreignKeyName: "lease_asc842_inputs_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "lease_asc842_inputs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -1200,6 +1438,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "approval_policies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_attribute_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
           },
           {
             foreignKeyName: "lease_attribute_snapshots_workspace_id_fkey"
@@ -1336,6 +1581,13 @@ export type Database = {
             foreignKeyName: "lease_change_sets_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "lease_change_sets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -1361,6 +1613,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "lease_credit_consumptions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "lease_credit_consumptions_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -1399,6 +1658,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "lease_credit_purchases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "lease_credit_purchases_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -1494,6 +1760,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "lease_documents"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_documents_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
           },
           {
             foreignKeyName: "lease_documents_workspace_id_fkey"
@@ -1654,6 +1927,13 @@ export type Database = {
             foreignKeyName: "lease_governance_audit_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -1720,6 +2000,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_review_queue"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_insights_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
           },
           {
             foreignKeyName: "lease_insights_workspace_id_fkey"
@@ -1939,6 +2226,13 @@ export type Database = {
             foreignKeyName: "lease_reports_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "lease_reports_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -2046,6 +2340,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "approval_policies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_reroute_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
           },
           {
             foreignKeyName: "lease_reroute_events_workspace_id_fkey"
@@ -2178,6 +2479,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_review_queue"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lease_unlock_requests_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
           },
           {
             foreignKeyName: "lease_unlock_requests_workspace_id_fkey"
@@ -2636,6 +2944,13 @@ export type Database = {
             foreignKeyName: "leases_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -2725,6 +3040,13 @@ export type Database = {
             foreignKeyName: "notifications_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "notifications_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -2780,6 +3102,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "processing_rate_limits_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "processing_rate_limits_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -2951,6 +3280,13 @@ export type Database = {
           workspace_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "risk_templates_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "risk_templates_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -3128,6 +3464,13 @@ export type Database = {
             foreignKeyName: "user_out_of_office_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "user_out_of_office_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -3161,6 +3504,52 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "user_preferences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "user_preferences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vault_renewal_reminders: {
+        Row: {
+          id: string
+          period_end: string
+          recipients: string[]
+          sent_at: string
+          workspace_id: string
+        }
+        Insert: {
+          id?: string
+          period_end: string
+          recipients?: string[]
+          sent_at?: string
+          workspace_id: string
+        }
+        Update: {
+          id?: string
+          period_end?: string
+          recipients?: string[]
+          sent_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_renewal_reminders_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "vault_renewal_reminders_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -3345,6 +3734,13 @@ export type Database = {
             foreignKeyName: "workspace_activity_log_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "workspace_activity_log_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -3380,6 +3776,13 @@ export type Database = {
             foreignKeyName: "workspace_approvers_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "workspace_approvers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -3411,6 +3814,13 @@ export type Database = {
           workspace_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "workspace_creation_requests_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "workspace_creation_requests_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -3452,6 +3862,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "workspace_members_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -3503,6 +3920,13 @@ export type Database = {
             foreignKeyName: "workspace_quota_snapshots_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "workspace_quota_snapshots_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -3535,6 +3959,13 @@ export type Database = {
             foreignKeyName: "workspace_roles_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "workspace_roles_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -3557,6 +3988,9 @@ export type Database = {
           discount_rate: number | null
           document_limit: number
           documents_used: number
+          firm_child_label: string | null
+          firm_id: string | null
+          firm_joined_at: string | null
           grace_expires_at: string | null
           id: string
           intended_plan: string | null
@@ -3573,6 +4007,7 @@ export type Database = {
           report_fiscal_year_start_month: number
           report_organization_name: string | null
           report_rounding_precision: number
+          restrict_firm_access: boolean
           separation_of_duties_default: boolean
           soft_deleted_at: string | null
           stripe_customer_id: string | null
@@ -3598,6 +4033,9 @@ export type Database = {
           discount_rate?: number | null
           document_limit?: number
           documents_used?: number
+          firm_child_label?: string | null
+          firm_id?: string | null
+          firm_joined_at?: string | null
           grace_expires_at?: string | null
           id?: string
           intended_plan?: string | null
@@ -3614,6 +4052,7 @@ export type Database = {
           report_fiscal_year_start_month?: number
           report_organization_name?: string | null
           report_rounding_precision?: number
+          restrict_firm_access?: boolean
           separation_of_duties_default?: boolean
           soft_deleted_at?: string | null
           stripe_customer_id?: string | null
@@ -3639,6 +4078,9 @@ export type Database = {
           discount_rate?: number | null
           document_limit?: number
           documents_used?: number
+          firm_child_label?: string | null
+          firm_id?: string | null
+          firm_joined_at?: string | null
           grace_expires_at?: string | null
           id?: string
           intended_plan?: string | null
@@ -3655,6 +4097,7 @@ export type Database = {
           report_fiscal_year_start_month?: number
           report_organization_name?: string | null
           report_rounding_precision?: number
+          restrict_firm_access?: boolean
           separation_of_duties_default?: boolean
           soft_deleted_at?: string | null
           stripe_customer_id?: string | null
@@ -3664,7 +4107,22 @@ export type Database = {
           timezone?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workspaces_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspaces_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_billing_period_summary"
+            referencedColumns: ["firm_id"]
+          },
+        ]
       }
     }
     Views: {
@@ -3677,6 +4135,89 @@ export type Database = {
           total_corrections: number | null
         }
         Relationships: []
+      }
+      v_firm_billing_period_summary: {
+        Row: {
+          active_child_workspaces: number | null
+          aggregate_active_leases: number | null
+          aggregate_document_bytes: number | null
+          aggregate_reports_30d: number | null
+          billing_summary_mode: string | null
+          firm_id: string | null
+          firm_name: string | null
+          period_end: string | null
+          period_start: string | null
+        }
+        Relationships: []
+      }
+      v_firm_child_usage: {
+        Row: {
+          active_leases: number | null
+          direct_members: number | null
+          finalized_leases: number | null
+          firm_child_label: string | null
+          firm_id: string | null
+          firm_joined_at: string | null
+          reports_generated_last_30_days: number | null
+          reports_generated_total: number | null
+          restrict_firm_access: boolean | null
+          total_document_bytes: number | null
+          total_documents: number | null
+          total_leases: number | null
+          workspace_id: string | null
+          workspace_name: string | null
+          workspace_updated_at: string | null
+        }
+        Insert: {
+          active_leases?: never
+          direct_members?: never
+          finalized_leases?: never
+          firm_child_label?: string | null
+          firm_id?: string | null
+          firm_joined_at?: string | null
+          reports_generated_last_30_days?: never
+          reports_generated_total?: never
+          restrict_firm_access?: boolean | null
+          total_document_bytes?: never
+          total_documents?: never
+          total_leases?: never
+          workspace_id?: string | null
+          workspace_name?: string | null
+          workspace_updated_at?: string | null
+        }
+        Update: {
+          active_leases?: never
+          direct_members?: never
+          finalized_leases?: never
+          firm_child_label?: string | null
+          firm_id?: string | null
+          firm_joined_at?: string | null
+          reports_generated_last_30_days?: never
+          reports_generated_total?: never
+          restrict_firm_access?: boolean | null
+          total_document_bytes?: never
+          total_documents?: never
+          total_leases?: never
+          workspace_id?: string | null
+          workspace_name?: string | null
+          workspace_updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspaces_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspaces_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_billing_period_summary"
+            referencedColumns: ["firm_id"]
+          },
+        ]
       }
       v_governance_audit_report: {
         Row: {
@@ -3739,6 +4280,13 @@ export type Database = {
             foreignKeyName: "lease_governance_audit_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "lease_governance_audit_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -3765,6 +4313,13 @@ export type Database = {
           workspace_id: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
           {
             foreignKeyName: "leases_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -3826,6 +4381,13 @@ export type Database = {
             foreignKeyName: "leases_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "leases_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
@@ -3875,7 +4437,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_firm_admin: {
+        Args: { _firm_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_firm_member: {
+        Args: { _firm_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_lease_live: { Args: { _lease_id: string }; Returns: boolean }
       is_ops_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_workspace_live: { Args: { _workspace_id: string }; Returns: boolean }
       is_workspace_member: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean

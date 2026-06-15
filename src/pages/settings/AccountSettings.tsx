@@ -488,6 +488,11 @@ export default function AccountSettings() {
 
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
 
+  // Firm layer (Phase 9): a firm-bound workspace's plan + billing are managed at
+  // the firm level (the DB locks the plan), so the Billing tab shows a read-only
+  // banner and suppresses the plan-change + cancel controls.
+  const firmBound = Boolean(workspace?.firmId);
+
   // Real billing dates come from subscription_period_end (mirrored from
   // Stripe by the webhook). Null until first checkout; guard every render
   // on validity so the UI never shows "Invalid Date".
@@ -974,6 +979,16 @@ export default function AccountSettings() {
               </Card>
             ) : (
             <>
+            {/* Firm-bound: plan + billing are managed at the firm level. */}
+            {firmBound && (
+              <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3">
+                <p className="text-sm font-medium text-foreground">{t('account.firm_managed_title')}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t('account.firm_managed_desc', { firm: workspace.firmName ?? t('account.firm_fallback') })}
+                </p>
+              </div>
+            )}
+
             {/* Trial banner — visible while subscription is in Stripe's trial window. */}
             {workspace.subscriptionStatus === 'trialing' && formattedPeriodEnd && (
               <div className="rounded-lg border border-accent/40 bg-accent/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
@@ -1102,7 +1117,7 @@ export default function AccountSettings() {
                       </button>
                     </div>
                   </div>
-                  {isAdminUser ? (
+                  {firmBound ? null : isAdminUser ? (
                     <Button variant="outline" size="sm" onClick={() => setPlanPickerOpen(true)}>
                       {t('account.adjust_plan')}
                     </Button>
@@ -1236,7 +1251,8 @@ export default function AccountSettings() {
                 retention offramp ("nothing is deleted"), so a delete-everything
                 cancel CTA under the Reactivate header would contradict the tier;
                 Vault renewal/cancellation lives in the Stripe portal. */}
-            {currentPlan !== 'vault' &&
+            {!firmBound &&
+              currentPlan !== 'vault' &&
               ['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&
               isAdminUser && (
                 <section>

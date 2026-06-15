@@ -97,9 +97,26 @@ export function WorkspaceCommandPalette({
       : [];
   const recentIds = new Set(recentWorkspaces.map((w) => w.id));
 
-  const alphaWorkspaces = [...availableWorkspaces]
+  const remainingWorkspaces = [...availableWorkspaces]
     .filter((w) => w.id !== workspace?.id && !recentIds.has(w.id))
     .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Standalone (non-firm) workspaces stay in the flat "all" group; firm-bound
+  // children are grouped under their firm so the picker reads like a portfolio
+  // (Phase 9 firm layer). recents/current are computed above and excluded here.
+  const standaloneWorkspaces = remainingWorkspaces.filter((w) => !w.firmId);
+  const firmGroups = (() => {
+    const byFirm = new Map<string, { firmName: string; items: WorkspaceBasic[] }>();
+    for (const w of remainingWorkspaces) {
+      if (!w.firmId) continue;
+      const group =
+        byFirm.get(w.firmId) ??
+        { firmName: w.firmName || t("workspace.create.firm_fallback_heading"), items: [] };
+      group.items.push(w);
+      byFirm.set(w.firmId, group);
+    }
+    return [...byFirm.values()].sort((a, b) => a.firmName.localeCompare(b.firmName));
+  })();
 
   function handleSelect(workspaceId: string) {
     void switchWorkspace(workspaceId);
@@ -142,11 +159,11 @@ export function WorkspaceCommandPalette({
           </>
         ) : null}
 
-        {alphaWorkspaces.length > 0 ? (
+        {standaloneWorkspaces.length > 0 ? (
           <>
             <CommandSeparator />
             <CommandGroup heading={t("workspace.create.all_heading")}>
-              {alphaWorkspaces.map((w) => (
+              {standaloneWorkspaces.map((w) => (
                 <CommandItem key={w.id} value={w.name} onSelect={() => handleSelect(w.id)}>
                   <WorkspaceAvatar id={w.id} name={w.name} size="sm" className="mr-2" />
                   <span className="flex-1 truncate">{w.name}</span>
@@ -160,6 +177,25 @@ export function WorkspaceCommandPalette({
             </CommandGroup>
           </>
         ) : null}
+
+        {firmGroups.map((group) => (
+          <div key={group.firmName}>
+            <CommandSeparator />
+            <CommandGroup heading={group.firmName}>
+              {group.items.map((w) => (
+                <CommandItem key={w.id} value={w.name} onSelect={() => handleSelect(w.id)}>
+                  <WorkspaceAvatar id={w.id} name={w.name} size="sm" className="mr-2" />
+                  <span className="flex-1 truncate">{w.name}</span>
+                  {w.subscription_status === "incomplete" || w.subscription_status === "incomplete_expired" ? (
+                    <span className="text-xs text-muted-foreground">
+                      {t("workspace.create.pending_badge")}
+                    </span>
+                  ) : null}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </div>
+        ))}
 
         <CommandSeparator />
         <CommandGroup>
