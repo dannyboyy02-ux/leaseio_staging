@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   resolveEffectiveAccess,
   hasWorkspaceAuthority,
+  isFirmAdminOrOwner,
+  isFirmMemberOrOwner,
   type EffectiveAccess,
+  type FirmAuthority,
 } from '../firmAccess';
 
 // Phase 9 firm-layer access logic. The pure mirror of the SQL `is_workspace_member`
@@ -91,5 +94,29 @@ describe('hasWorkspaceAuthority', () => {
 
   it('no access satisfies nothing', () => {
     expect(hasWorkspaceAuthority(access(null), 'viewer')).toBe(false);
+  });
+});
+
+describe('firm-level authority (Phase 10)', () => {
+  const auth = (isOwner: boolean, firmRole: FirmAuthority['firmRole']): FirmAuthority => ({
+    isOwner,
+    firmRole,
+  });
+
+  it('isFirmAdminOrOwner: owner is admin even without a firm_members row', () => {
+    expect(isFirmAdminOrOwner(auth(true, null))).toBe(true);
+  });
+
+  it('isFirmAdminOrOwner: firm_admin qualifies, firm_member does not', () => {
+    expect(isFirmAdminOrOwner(auth(false, 'firm_admin'))).toBe(true);
+    expect(isFirmAdminOrOwner(auth(false, 'firm_member'))).toBe(false);
+    expect(isFirmAdminOrOwner(auth(false, null))).toBe(false);
+  });
+
+  it('isFirmMemberOrOwner: owner and any firm role qualify; a non-member does not', () => {
+    expect(isFirmMemberOrOwner(auth(true, null))).toBe(true);
+    expect(isFirmMemberOrOwner(auth(false, 'firm_admin'))).toBe(true);
+    expect(isFirmMemberOrOwner(auth(false, 'firm_member'))).toBe(true);
+    expect(isFirmMemberOrOwner(auth(false, null))).toBe(false);
   });
 });
