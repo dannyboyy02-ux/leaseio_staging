@@ -10,12 +10,28 @@
 --
 -- Idempotent: IF NOT EXISTS / OR REPLACE / DROP ... IF EXISTS throughout.
 --
--- As-built deviations from the spec:
+-- As-built deviations from the spec (security review 2026-06-15):
 --   * v_firm_child_usage / v_firm_billing_period_summary use
 --     `security_invoker = true` so the underlying (firm-aware) RLS applies to
 --     the querying user — the spec's raw view definitions would have been
 --     security-definer and leaked every firm's usage to any caller. Service-role
 --     (the Stripe webhook) bypasses RLS regardless, so billing still works.
+--   * [CRITICAL-1] enforce_firm_entitlement_guard: firms billing/ownership/quota
+--     columns are service-role-only (the bare owner UPDATE policy would otherwise
+--     re-introduce the #29/#70 billing-bypass class).
+--   * [CRITICAL-2] enforce_workspace_firm_binding_guard: workspaces firm_id /
+--     firm_joined_at / firm_child_label / restrict_firm_access are service-role-
+--     only (blocks self-binding + restrict-flag tampering via raw PATCH; also
+--     resolves the plan-lock vs entitlement-guard trigger-ordering collision).
+--   * [HIGH-3] owner-only mints firm_admin: firm_members policies split so admins
+--     manage only firm_member rows; only the firm owner grants/revokes firm_admin.
+--   * [HIGH-4/5] firm_activity_log ON DELETE RESTRICT (was CASCADE) + deleted_firms
+--     forensic table; firm hard-delete blocked while children/audit exist.
+--
+-- Deferred to later checkpoints (not this migration): the set-firm-access edge
+-- function (audited restrict_firm_access toggle), the delete-firm forensic flow
+-- (writes deleted_firms), and writing workspace_id to lease_activity_log for the
+-- workspace↔firm binding events.
 
 -- ============================================================================
 -- 1. firms
@@ -66,9 +82,14 @@ CREATE INDEX IF NOT EXISTS idx_firm_members_firm ON public.firm_members(firm_id)
 -- ============================================================================
 -- 3. firm_activity_log  (parallel to lease_activity_log for firm-only events)
 -- ============================================================================
+-- ON DELETE RESTRICT (not CASCADE): an audit log must never be silently erased
+-- by deleting its parent firm (forensic-preservation, like deleted_workspaces).
+-- Combined with workspaces.firm_id (NO ACTION), this blocks a firm hard-delete
+-- while children or audit history exist — deletion must go through a future
+-- service-role delete-firm flow that releases children + captures deleted_firms.
 CREATE TABLE IF NOT EXISTS public.firm_activity_log (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  firm_id        uuid NOT NULL REFERENCES public.firms(id) ON DELETE CASCADE,
+  firm_id        uuid NOT NULL REFERENCES public.firms(id) ON DELETE RESTRICT,
   user_id        uuid REFERENCES auth.users(id),
   activity_type  text NOT NULL,
   details        jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -77,6 +98,22 @@ CREATE TABLE IF NOT EXISTS public.firm_activity_log (
 
 CREATE INDEX IF NOT EXISTS idx_firm_activity_log_firm_chronological
   ON public.firm_activity_log(firm_id, created_at DESC);
+
+-- Forensic record of firm deletion (mirrors deleted_workspaces). Written only by
+-- the future service-role delete-firm flow; service-role-write only (RLS, no
+-- INSERT policy → authenticated cannot write or read).
+CREATE TABLE IF NOT EXISTS public.deleted_firms (
+  id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  original_firm_id          uuid NOT NULL,
+  owner_id                  uuid,
+  firm_name                 text,
+  firm_type                 text,
+  child_count_at_deletion   integer,
+  member_count_at_deletion  integer,
+  deleted_at                timestamptz NOT NULL DEFAULT now(),
+  deleted_by                uuid
+);
+ALTER TABLE public.deleted_firms ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
 -- 4. workspaces additions  (firm binding; firm_id absent before this migration)
@@ -183,6 +220,98 @@ DROP TRIGGER IF EXISTS workspaces_plan_firm_lock ON public.workspaces;
 CREATE TRIGGER workspaces_plan_firm_lock
   BEFORE UPDATE ON public.workspaces
   FOR EACH ROW EXECUTE FUNCTION public.prevent_independent_plan_change_for_firm_workspace();
+
+-- ============================================================================
+-- 6b. Write-authorization guards (service-role-only system columns).
+--     Mirrors the #29/#70 protection workspaces already has — firm billing,
+--     ownership, quota, and binding columns must not be PostgREST-PATCHable by
+--     an authenticated owner/admin. Without these, a firm owner could rewrite
+--     stripe_customer_id/owner_id, and any workspace owner could self-bind to an
+--     arbitrary firm (free 'business' + leak their leases to that firm's members)
+--     or flip restrict_firm_access. Same service_role detection as #29.
+-- ============================================================================
+
+-- CRITICAL-1: firms billing / ownership / quota columns are service-role-only.
+-- The firm owner may still edit name, firm_type, billing_email, billing_summary_mode.
+CREATE OR REPLACE FUNCTION public.prevent_firm_entitlement_edits()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'public', 'pg_catalog'
+AS $$
+BEGIN
+  IF COALESCE(auth.role(), '') = 'service_role' THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.owner_id IS DISTINCT FROM OLD.owner_id THEN
+    RAISE EXCEPTION 'firms.owner_id is immutable; ownership transfer is a service-role operation'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.plan IS DISTINCT FROM OLD.plan THEN
+    RAISE EXCEPTION 'firms.plan is managed by the billing system' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.stripe_customer_id IS DISTINCT FROM OLD.stripe_customer_id
+     OR NEW.stripe_subscription_id IS DISTINCT FROM OLD.stripe_subscription_id THEN
+    RAISE EXCEPTION 'firms stripe columns are managed by the billing system' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.child_workspace_limit IS DISTINCT FROM OLD.child_workspace_limit
+     OR NEW.child_workspaces_used IS DISTINCT FROM OLD.child_workspaces_used THEN
+    RAISE EXCEPTION 'firms child-workspace quota columns are system-managed' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_firm_entitlement_guard ON public.firms;
+CREATE TRIGGER enforce_firm_entitlement_guard
+  BEFORE UPDATE ON public.firms
+  FOR EACH ROW EXECUTE FUNCTION public.prevent_firm_entitlement_edits();
+
+-- CRITICAL-2: firm-binding columns on workspaces are service-role-only. Binding,
+-- releasing, and toggling restrict_firm_access are authorized + audited by the
+-- bind/release/set-firm-access edge functions — never a raw client PATCH. This
+-- also resolves the plan-lock vs entitlement-guard trigger-ordering collision,
+-- since non-service-role callers can no longer drive a firm_id change at all.
+CREATE OR REPLACE FUNCTION public.prevent_workspace_firm_binding_edits()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO 'public', 'pg_catalog'
+AS $$
+BEGIN
+  IF COALESCE(auth.role(), '') = 'service_role' THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.firm_id IS NOT NULL THEN
+      RAISE EXCEPTION 'workspaces.firm_id can only be set by the firm-binding system'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.firm_id IS DISTINCT FROM OLD.firm_id THEN
+    RAISE EXCEPTION 'workspaces.firm_id is managed by the firm-binding system (use bind/release-workspace-from-firm)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.firm_joined_at IS DISTINCT FROM OLD.firm_joined_at THEN
+    RAISE EXCEPTION 'workspaces.firm_joined_at is system-managed' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.firm_child_label IS DISTINCT FROM OLD.firm_child_label THEN
+    RAISE EXCEPTION 'workspaces.firm_child_label is managed at the firm level' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.restrict_firm_access IS DISTINCT FROM OLD.restrict_firm_access THEN
+    RAISE EXCEPTION 'workspaces.restrict_firm_access is managed by the firm-access system (audited via edge function)'
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS enforce_workspace_firm_binding_guard ON public.workspaces;
+CREATE TRIGGER enforce_workspace_firm_binding_guard
+  BEFORE INSERT OR UPDATE ON public.workspaces
+  FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_firm_binding_edits();
 
 -- ============================================================================
 -- 7. Firm membership helpers (owner counts as firm member / firm admin)
@@ -298,6 +427,10 @@ CREATE POLICY "firm owner updates firm"
   ON public.firms FOR UPDATE
   USING (owner_id = auth.uid());
 
+-- Owner may attempt deletion, but the DB blocks a hard-delete while child
+-- workspaces (workspaces.firm_id NO ACTION) or audit history (firm_activity_log
+-- ON DELETE RESTRICT) reference the firm. Real deletion is a future service-role
+-- delete-firm flow: release children first, capture deleted_firms, retain audit.
 DROP POLICY IF EXISTS "firm owner deletes firm" ON public.firms;
 CREATE POLICY "firm owner deletes firm"
   ON public.firms FOR DELETE
@@ -308,11 +441,22 @@ CREATE POLICY "firm members read membership"
   ON public.firm_members FOR SELECT
   USING (public.is_firm_member(firm_id, auth.uid()));
 
+-- Owner-only mints admins (HIGH-3 fix). Firm admins (incl. the owner) manage
+-- firm_member-role rows only — USING/CHECK both pin role='firm_member', so an
+-- admin cannot create, promote to, demote, or remove a firm_admin row, nor
+-- self-escalate. Only the firm OWNER can grant/revoke the firm_admin role.
 DROP POLICY IF EXISTS "firm admins manage membership" ON public.firm_members;
-CREATE POLICY "firm admins manage membership"
+DROP POLICY IF EXISTS "firm admins manage members" ON public.firm_members;
+CREATE POLICY "firm admins manage members"
   ON public.firm_members FOR ALL
-  USING (public.is_firm_admin(firm_id, auth.uid()))
-  WITH CHECK (public.is_firm_admin(firm_id, auth.uid()));
+  USING (public.is_firm_admin(firm_id, auth.uid()) AND role = 'firm_member')
+  WITH CHECK (public.is_firm_admin(firm_id, auth.uid()) AND role = 'firm_member');
+
+DROP POLICY IF EXISTS "firm owner manages all membership" ON public.firm_members;
+CREATE POLICY "firm owner manages all membership"
+  ON public.firm_members FOR ALL
+  USING (EXISTS (SELECT 1 FROM public.firms f WHERE f.id = firm_id AND f.owner_id = auth.uid()))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.firms f WHERE f.id = firm_id AND f.owner_id = auth.uid()));
 
 DROP POLICY IF EXISTS "firm members read firm activity" ON public.firm_activity_log;
 CREATE POLICY "firm members read firm activity"
