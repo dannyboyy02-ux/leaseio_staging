@@ -1871,3 +1871,13 @@ green.
 **Severity:** Low. **Pre-existing** — the old design had the same double-up (recovery banner Card + inline upgrade Card); surfaced by lease-product-polish during the 2026-06-15 Billing Claude-redesign review and dismissed by the product owner as not blocking. Not a dead-end (both paths work); purely a friction/clarity nit.
 
 **Stub remediation:** When the recovery banner is visible, suppress the plan header's "Adjust plan" button (or vice-versa) so there's one obvious next gesture. Both gate on the same `workspace.intendedPlan`/`subscriptionStatus` state already, so the condition is cheap to add.
+
+---
+
+### Item #101: Staging billing data is pre-Stripe synthetic — live card/invoice path unverified — Low (staging-only)
+
+**Symptom:** The only staging workspace (`Labs Analytix`, `c9dad4c7-d04a-4d14-b846-8e017d662341`, owner `daniel.c.priest@gmail.com`) is `plan='business'`, `subscription_status='active'`, but has `stripe_customer_id=NULL`, `stripe_subscription_id=NULL`, and `subscription_period_end=NULL` (no `lease_credit_purchases` rows either). That's an impossible *real* state — the workspace was created 2026-01-07 (before billing was wired) and grandfathered to business/active directly in the DB, never through a Stripe checkout. Consequence: the new `get-billing-summary` edge function returns its `no_customer` 200 for it, so the Billing tab's Payment shows "Add payment method" / "No payment method on file yet" and Invoices shows "No invoices yet". The live Stripe card + invoice **retrieval** path therefore could not be smoke-tested end-to-end (verified live: deploy, CORS, auth gates, clean boot, and the `no_customer` branch — but not a real card/invoice fetch).
+
+**Severity:** Low, **staging-only**. NOT a code defect — the redesign (PR #47, merged 2026-06-15) and `get-billing-summary` handle the no-customer state by design. The data inconsistency predates the billing work. Product owner chose to **leave the data as-is** (2026-06-15) rather than create test Stripe objects or reset the workspace.
+
+**Stub remediation (when verification is wanted):** the path self-heals the first time any workspace completes a real checkout — `stripe-webhook` backfills `stripe_customer_id`/`stripe_subscription_id`/`subscription_period_end` and the Payment/Invoices sections light up. To force it on staging without a browser checkout: create a Stripe **test-mode** customer + card + Business subscription for the owner and write the IDs back (a one-off backfill), or reset this workspace to a pre-checkout state and run Stripe Checkout in-app with test card `4242 4242 4242 4242`. Do NOT write a fabricated `cus_…` id — the function would call Stripe with a non-existent customer and 502 instead of returning the clean empty state.
