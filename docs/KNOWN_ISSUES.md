@@ -838,6 +838,8 @@ Pre-apply order matters: secrets wiring depends on knowing #25 + #26 are both gr
 
 **Decision:** Filed not fixed. The smoke script + CI wiring is its own workstream (the smoke-test-secrets configuration decision is also still open from the prior pre-launch checklist). Bundling here would expand this beat from "governance hardening complete" into the broader CI-integration territory.
 
+**RESOLVED 2026-06-14** — closed differently than the two stub options. Live inspection found SIX false keys, not the two predicted — and they were **stale assertions, not "expected drift" to allowlist**: 4 because the Vault V1 read-only RESTRICTIVE policies tripped the `*_only_one_*_policy` duplicate-grant tripwires, 2 from the #25 name divergence. So the correct fix was the function, not an allowlist (option a) or a CI skip (option b). Migration `20260614000000_smoke_check_vault_restrictive_and_name_alignment.sql` adds `AND permissive = 'PERMISSIVE'` to the 5 `*_only_one_*_policy` checks (a RESTRICTIVE policy can only narrow access, never grant it, so it can't be a grant-bypass; an unexpected PERMISSIVE grant incl. FOR ALL still trips) and aligns the 2 governance_*_policy assertions to the live names (#25). Applied + verified live: **26/26 keys true**. All 4 `SUPABASE_*` Actions secrets wired (2 URLs + 2 service-role keys, repo Actions scope). **Green CI run confirmed end-to-end** (run 27520431813): "Verify smoke-test secrets on main" + "Security hardening smoke test" both pass — the governance net now actively guards every main push (previously silently skipped). Reviewers: security + integrity APPLY (no Critical/High/Medium). Test: `src/lib/__tests__/smokeCheckVaultRestrictive.test.ts`. PR #43.
+
 ---
 
 ### Item #25: SELECT policy rename on `lease_unlock_requests` + `lease_change_sets` was never applied to prod
@@ -872,6 +874,8 @@ CREATE POLICY "workspace access can view change sets"
 **Pre-apply checklist:** verify the archived predicate against the live ones — if they actually differ (not just by name), this isn't a pure rename and the substance of the difference needs reviewer routing. After apply, move `governance_unlock_policy` and `governance_change_set_policy` from Category A → Category B in the smoke check function header to restore the "MUST return true" posture for those keys.
 
 **Decision:** Filed not fixed. Rename is its own scoped beat. Bundling here would have required: (a) verifying the archived predicate matches the live one byte-for-byte (or surfacing the substance of any difference), (b) routing through reviewers for the substantive change, and (c) accepting that 2 of the 3 fixes in this beat are scope-adjacent rather than direct closures of #16/#17. Cleaner to file and address.
+
+**RESOLVED 2026-06-14** — resolved by **aligning the smoke assertion to the live state rather than renaming the live policies** (lower risk; the never-applied `"workspace access can view ..."` rename is abandoned). The live `"workspace members can view ..."` SELECT policies grant identical workspace-member access via `is_workspace_member` — a name divergence, not a vulnerability — so migration `20260614000000` points `governance_unlock_policy` / `governance_change_set_policy` at the live names. Verified live: both policies present, both keys now true (part of the 26/26 in #26). Folded into the #26 fix + PR #43.
 
 ---
 
