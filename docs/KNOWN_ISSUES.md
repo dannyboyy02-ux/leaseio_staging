@@ -1391,7 +1391,9 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 **Severity:** N/A — forward-looking note. No action required until the itemized-billing surface is scheduled.
 
-**Where to look:** `supabase/functions/create-workspace/index.ts:392-403`; the future page would live alongside `src/pages/app/UsageContent.tsx` / the account subscription tab.
+**Phase 9 update (2026-06-15):** The per-workspace-subscription invariant is **preserved for standalone Plus/Business workspaces** (still one sub each, `metadata.workspace_id` stamped). Firm children are the documented **exception**: a firm bills via ONE firm-level Stripe subscription covering all its children, tagged `metadata.firm_id` (NOT `workspace_id`), mirrored onto `firms.stripe_customer_id`/`stripe_subscription_id` by the stripe-webhook firm branch (`applyFirmSubscription`), which propagates `plan='business'` to the children. So itemized billing splits into two regimes once firm billing is live: standalone = per-subscription invoices (unchanged); firm = the firm billing page (Phase 10) consuming `v_firm_billing_period_summary` (which respects `firms.billing_summary_mode` detailed|summarized). The load-bearing `workspace_id` metadata line for standalone subs is untouched.
+
+**Where to look:** `supabase/functions/create-workspace/index.ts:392-403`; the future page would live alongside `src/pages/app/UsageContent.tsx` / the account subscription tab. Firm side: `supabase/functions/stripe-webhook/index.ts` (`applyFirmSubscription`).
 
 ---
 
@@ -1402,6 +1404,8 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 **Symptom:** `create-checkout/index.ts:137-141` resolves/creates the Stripe customer with `stripe.customers.list({ email })` — the exact pattern P2-07 already fixed in `customer-portal` (which resolves from `workspaces.stripe_customer_id`). An account holder who is admin of two workspaces shares one email-keyed Stripe customer across both. Combined with the per-workspace-subscription architecture (#60) and the recovery-checkout button on the subscription tab (`proceedWithCheckout('business')`), a checkout can bind to a customer record already carrying another workspace's billing state.
 
 **Fix (its own beat, not bundled):** mirror P2-07 — prefer `workspaces.stripe_customer_id` when present, fall back to email lookup only for a workspace's first-ever checkout, and stamp the resolved customer id back onto the workspace. Two adjacent pre-existing LOWs in the same function to sweep in the same pass: (a) `workspaceId` is presence-checked but not type-checked (`customer-portal:41` does `typeof === "string"`) → a non-string body produces a raw 500; (b) `Invalid plan: ${planId}` reflects raw user input into the JSON error body (`index.ts:69,178`) — return a static message + `reason: 'invalid_plan'` instead.
+
+**Phase 9 note (2026-06-15) — NOT resolved by the firm layer.** The plan briefly hypothesized the firm work would "resolve #61's firm-customer gap"; in practice Phase 9 did NOT touch `create-checkout`, so this bug **remains open for standalone workspaces**. What Phase 9 *did* establish is the correct customer-resolution pattern on the firm path: the stripe-webhook firm branch resolves via `resolveCustomerId(subscription)` and persists onto `firms.stripe_customer_id` — the same prefer-stored-id discipline #61 asks `create-checkout` to adopt. When the #61 fix is scheduled, the firm path is the reference; the standalone `create-checkout` email lookup still needs the P2-07 mirror.
 
 **Where to look:** `supabase/functions/create-checkout/index.ts:69,71-73,137-141,178`; reference fix in `supabase/functions/customer-portal/index.ts`.
 
@@ -1881,3 +1885,15 @@ green.
 **Severity:** Low, **staging-only**. NOT a code defect — the redesign (PR #47, merged 2026-06-15) and `get-billing-summary` handle the no-customer state by design. The data inconsistency predates the billing work. Product owner chose to **leave the data as-is** (2026-06-15) rather than create test Stripe objects or reset the workspace.
 
 **Stub remediation (when verification is wanted):** the path self-heals the first time any workspace completes a real checkout — `stripe-webhook` backfills `stripe_customer_id`/`stripe_subscription_id`/`subscription_period_end` and the Payment/Invoices sections light up. To force it on staging without a browser checkout: create a Stripe **test-mode** customer + card + Business subscription for the owner and write the IDs back (a one-off backfill), or reset this workspace to a pre-checkout state and run Stripe Checkout in-app with test card `4242 4242 4242 4242`. Do NOT write a fabricated `cus_…` id — the function would call Stripe with a non-existent customer and 502 instead of returning the clean empty state.
+
+---
+
+### Item #102: Phase 9 firm edge functions return raw DB error messages (constraint-name leak) — Low
+
+**Severity:** Low. **Surfaced 2026-06-15** during the Phase 9 firm-foundation build (self-noted while writing `create-firm`/`add-firm-member`/`bind-workspace-to-firm`/`release-workspace-from-firm`); NOT yet fixed — filed as its own beat per the pre-existing-issue discipline.
+
+**Symptom:** The four service-role firm edge functions surface Postgres errors to the client by passing `error.message` straight into the JSON response body. When a guard trigger or CHECK constraint fires (e.g. `enforce_firm_entitlement_guard`, `enforce_workspace_firm_binding_guard`, the plan-lock trigger, the child-limit enforcement, or a UNIQUE violation on `firm_members`), the raw message can include the trigger/constraint name and the `ERRCODE`. That's internal schema detail leaking to an authenticated caller — low impact (these are authorization-boundary functions, the caller is already authed and owns the firm), but it's information disclosure and makes the API contract brittle (clients keying on raw strings).
+
+**Fix (its own beat):** map known constraint/trigger names to stable `{ ok: false, reason: '…' }` codes (e.g. `firm_plan_locked`, `firm_child_limit_reached`, `firm_member_exists`, `not_firm_owner`) + a static human message; log the raw error server-side only. Mirror the structured-error idiom the limit-wall functions already use (`reason: 'quota_exceeded'`). Sweep all four functions in one pass.
+
+**Where to look:** `supabase/functions/{create-firm,add-firm-member,bind-workspace-to-firm,release-workspace-from-firm}/index.ts` (the `catch` / error-response blocks); reference idiom in `supabase/functions/process_lease/index.ts` (`quotaBlockResponse`).

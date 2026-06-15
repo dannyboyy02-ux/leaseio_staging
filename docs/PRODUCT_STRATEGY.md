@@ -1,6 +1,6 @@
 # LeaseIO Product Strategy — Tiers, Firm Layer, and Architecture Decisions
 
-**Status:** Strategic decision document. Ratified 2026-05-04 (last updated 2026-06-12).
+**Status:** Strategic decision document. Ratified 2026-05-04 (last updated 2026-06-15).
 **Owner:** Daniel
 **Audience:** Claude Code, future contributors, anyone making decisions that span phases.
 
@@ -102,6 +102,8 @@ The build order is:
 2. Phase 9: Firm layer foundation (firm entity, firm members, firm-level Stripe billing, firm-aware RLS)
 3. Phase 10: Firm UX (cross-workspace inbox, firm dashboard, child workspace management)
 4. Phase 11+ (post-launch): firm-level reporting, white-labeling, advanced firm roles, client onboarding flows
+
+> **Status update (2026-06-15):** **Phase 9 foundation has landed** on branch `claude/phase9-firm-foundation` (PR #49, CI green; migration applied to staging, not yet merged to main). The firm entity, firm membership, firm-aware `is_workspace_member`, service-role firm edge functions, firm-level Stripe billing branch, and a minimal firm frontend exist. Built on the **existing `business` tier** (no Plus/Pro/Business rename was undertaken — that naming remains a separate optional effort). **Leo firm-portfolio mode** (the embedded assistant answering across a firm's own children) is a sequenced follow-on, owner-gated on `firms.owner_id` + metered + feature-flagged; a premium "Business Elite" packaging of it is deferred as a later pricing decision. See `docs/PHASE_9_BUILD_SPEC.md` As-built notes for deviations. Phase 10 opens next.
 
 ---
 
