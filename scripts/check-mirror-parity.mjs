@@ -43,6 +43,10 @@ const PAIRS = [
     node: 'src/lib/asc842Report.ts',
     deno: 'supabase/functions/_shared/asc842_report.ts',
   },
+  {
+    node: 'src/lib/firmAccess.ts',
+    deno: 'supabase/functions/_shared/firm_access.ts',
+  },
 ];
 
 /**
