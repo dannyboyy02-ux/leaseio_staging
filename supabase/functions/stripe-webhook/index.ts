@@ -22,6 +22,15 @@ function isDocumentPack(subscription: Stripe.Subscription): boolean {
   return subscription.metadata?.addon_type === ADDON_TYPE_DOCUMENT_PACK;
 }
 
+// A firm-tier subscription is tagged with metadata.firm_id (stamped by the
+// operator or the future firm-billing checkout). It routes to the firm, NOT a
+// workspace — a firm owns its children's plan via one firm-level subscription.
+// Must be checked BEFORE the workspace plan path so a firm sub never clobbers a
+// workspace row.
+function isFirmSubscription(subscription: Stripe.Subscription): boolean {
+  return Boolean(subscription.metadata?.firm_id);
+}
+
 const DOCUMENT_LIMITS: Record<string, number> = {
   starter: 15,
   business: 50,
@@ -526,6 +535,64 @@ serve(async (req) => {
     }
   }
 
+  // Firm-tier subscription (metadata.firm_id). One firm-level subscription
+  // governs all child workspaces' plan. The firm entitlement guard is
+  // service-role-bypassed (this webhook runs service_role), so the stripe_* and
+  // plan-propagation writes go through. Plan stays 'business' (firms.plan is
+  // CHECK-pinned). The detailed-vs-summarized INVOICE line-item construction
+  // (firms.billing_summary_mode, on invoice.created) is a follow-on — recorded
+  // in the audit detail here but not itemized yet.
+  async function applyFirmSubscription(subscription: Stripe.Subscription, eventType: string) {
+    const firmId = subscription.metadata?.firm_id;
+    if (!firmId) return;
+
+    const { data: firm } = await supabaseAdmin
+      .from("firms").select("id, stripe_subscription_id, billing_summary_mode").eq("id", firmId).maybeSingle();
+    if (!firm) {
+      console.error(`[stripe-webhook] firm subscription for unknown firm_id=${firmId}`);
+      return;
+    }
+    const status = subscription.status;
+
+    if (eventType === "customer.subscription.deleted") {
+      // Cancellation: record it; clear the subscription id. Children remain
+      // 'business' for a 30-day grace (P9 records; grace cleanup is P11+).
+      await supabaseAdmin.from("firms")
+        .update({ stripe_subscription_id: null, updated_at: new Date().toISOString() })
+        .eq("id", firmId);
+      await supabaseAdmin.from("firm_activity_log").insert({
+        firm_id: firmId, user_id: null,
+        activity_type: "firm_billing_subscription_canceled",
+        details: { subscription_id: subscription.id, status },
+      });
+      return;
+    }
+
+    // created / updated / checkout-completed: record sub + customer, propagate
+    // 'business' to all children (idempotent — they are already business from
+    // binding; confirms it for a freshly-subscribed firm).
+    await supabaseAdmin.from("firms")
+      .update({
+        stripe_subscription_id: subscription.id,
+        stripe_customer_id: resolveCustomerId(subscription),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", firmId);
+
+    await supabaseAdmin.from("workspaces").update({ plan: "business" }).eq("firm_id", firmId);
+
+    const isNew = !(firm as { stripe_subscription_id?: string | null }).stripe_subscription_id;
+    await supabaseAdmin.from("firm_activity_log").insert({
+      firm_id: firmId, user_id: null,
+      activity_type: isNew ? "firm_billing_subscription_started" : "firm_billing_subscription_updated",
+      details: {
+        subscription_id: subscription.id,
+        status,
+        billing_summary_mode: (firm as { billing_summary_mode?: string }).billing_summary_mode,
+      },
+    });
+  }
+
   try {
     switch (event.type) {
       case "payment_intent.succeeded": {
@@ -556,7 +623,9 @@ serve(async (req) => {
           subscription.metadata?.workspace_id ?? null;
         // Packs are created via subscriptions.create (no checkout session), but
         // guard anyway so a pack can never take the plan path.
-        if (isDocumentPack(subscription)) {
+        if (isFirmSubscription(subscription)) {
+          await applyFirmSubscription(subscription, event.type);
+        } else if (isDocumentPack(subscription)) {
           await applyDocumentPack(subscription);
         } else {
           await applySubscription(subscription, workspaceId);
@@ -568,7 +637,9 @@ serve(async (req) => {
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
-        if (isDocumentPack(subscription)) {
+        if (isFirmSubscription(subscription)) {
+          await applyFirmSubscription(subscription, event.type);
+        } else if (isDocumentPack(subscription)) {
           await applyDocumentPack(subscription);
         } else {
           await applySubscription(subscription);
