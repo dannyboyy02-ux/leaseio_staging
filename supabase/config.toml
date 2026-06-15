@@ -170,6 +170,21 @@ verify_jwt = true
 [functions.get-billing-summary]
 verify_jwt = true
 
+# Phase 9 firm-layer (service-role; per-function caller authz). Bearer JWT.
+# create-firm: ops-admin only. add-firm-member: owner-only mints admins.
+# bind/release: caller must own the workspace (+ firm for bind).
+[functions.create-firm]
+verify_jwt = true
+
+[functions.add-firm-member]
+verify_jwt = true
+
+[functions.bind-workspace-to-firm]
+verify_jwt = true
+
+[functions.release-workspace-from-firm]
+verify_jwt = true
+
 # Document capacity packs — Bearer JWT + workspace owner/admin check.
 [functions.manage-document-pack]
 verify_jwt = true
