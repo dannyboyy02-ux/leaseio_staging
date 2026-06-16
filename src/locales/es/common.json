@@ -112,7 +112,29 @@
       "mode_saved": "Detalle de la factura actualizado",
       "owner_only": "Solo el propietario de la firma puede cambiar la configuración de facturación.",
       "usage_heading": "Uso por espacio de trabajo",
-      "no_usage": "Aún no hay espacios de trabajo en esta firma."
+      "no_usage": "Aún no hay espacios de trabajo en esta firma.",
+      "start": "Iniciar facturación de la firma",
+      "start_failed": "No se pudo iniciar la facturación"
+    },
+    "onboarding": {
+      "title": "Configure su firma",
+      "subtitle": "Gestione varios espacios de trabajo bajo una organización",
+      "step_details": "Firma",
+      "step_workspace": "Espacio de trabajo",
+      "step_billing": "Facturación",
+      "name_placeholder": "Smith & Co",
+      "continue": "Continuar",
+      "workspace_hint": "Agregue su primer espacio de trabajo. Puede agregar más en cualquier momento — cada uno se factura a la tarifa por espacio.",
+      "workspace_name": "Nombre del espacio de trabajo",
+      "workspace_placeholder": "p. ej. un cliente o subsidiaria",
+      "billing_summary": "Su firma se factura por espacio de trabajo, en conjunto.",
+      "price_per_workspace": "$499 / espacio de trabajo / mes",
+      "billing_note": "Agregue o quite espacios de trabajo en cualquier momento — la facturación se ajusta automáticamente.",
+      "to_payment": "Continuar al pago",
+      "do_later": "Configurar la facturación más tarde",
+      "create_failed": "No se pudo crear la firma",
+      "workspace_failed": "No se pudo crear el espacio de trabajo",
+      "checkout_failed": "No se pudo iniciar la facturación"
     },
     "accept": {
       "invalid": "Este enlace de invitación no es válido.",
@@ -1565,6 +1587,7 @@
     "error_create_workspace": "No se pudo crear el espacio de trabajo.",
     "name_workspace_title": "Nombre su espacio de trabajo",
     "name_workspace_desc": "Aquí administrará todos sus arrendamientos.",
+    "firm_fork": "¿Gestiona varias empresas? Configure una firma en su lugar →",
     "workspace_name_label": "Nombre del espacio de trabajo",
     "workspace_name_placeholder": "Propiedades Acme",
     "continue": "Continuar",

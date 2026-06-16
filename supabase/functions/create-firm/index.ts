@@ -2,9 +2,12 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
-// Phase 9: provision a firm. OPERATOR-ONLY (ops_admins) — self-serve firm
-// creation is Phase 10. Runs service-role to write past the firm entitlement
-// guard. Stripe customer is attached later by the webhook, not here.
+// Phase 10 / #105-C: create a firm. SELF-SERVE — any authenticated user may
+// create a firm they OWN (owner_id = caller). Ops admins may additionally
+// provision a firm owned by someone ELSE (the Phase 9 manual path). A firm with
+// no subscription + no children is inert, so self-serve creation is low-risk;
+// the real gate is payment (create-firm-checkout). Runs service-role to write
+// past the firm entitlement guard. Stripe customer is attached later.
 serve(async (req) => {
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -25,18 +28,19 @@ serve(async (req) => {
     if (userError || !userData?.user?.id) return json({ error: "User not authenticated", reason: "invalid_auth" }, 401);
     const user = userData.user;
 
-    // Operator-only gate (Phase 9 manual provisioning).
+    // Ops admins may provision a firm for someone else; everyone else owns the
+    // firm they create. A self-serve caller can NEVER set a foreign owner_id.
     const { data: opsRow } = await supabaseAdmin
       .from("ops_admins").select("user_id").eq("user_id", user.id).maybeSingle();
-    if (!opsRow) return json({ error: "Only operators can provision firms in this phase", reason: "not_authorized" }, 403);
+    const isOps = Boolean(opsRow);
 
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
-    const ownerId = (body as { ownerId?: string }).ownerId;
+    const requestedOwnerId = (body as { ownerId?: string }).ownerId;
+    const ownerId = isOps && requestedOwnerId && typeof requestedOwnerId === "string" ? requestedOwnerId : user.id;
     const name = (body as { name?: string }).name;
     const firmType = (body as { firmType?: string }).firmType;
     const billingEmail = (body as { billingEmail?: string }).billingEmail;
 
-    if (!ownerId || typeof ownerId !== "string") return json({ error: "ownerId is required", reason: "bad_request" }, 400);
     if (!name || typeof name !== "string" || name.trim().length < 2)
       return json({ error: "name must be at least 2 characters", reason: "bad_request" }, 400);
     if (!firmType || !["cpa_firm", "parent_company", "other"].includes(firmType))
@@ -49,7 +53,7 @@ serve(async (req) => {
       .insert({ name: name.trim(), firm_type: firmType, owner_id: ownerId, billing_email: billingEmail })
       .select()
       .single();
-    if (insErr) return json({ error: insErr.message, reason: "insert_failed" }, 400);
+    if (insErr) { console.error("[create-firm] insert:", insErr.message); return json({ error: "Could not create the firm", reason: "insert_failed" }, 400); }
 
     await supabaseAdmin.from("firm_activity_log").insert({
       firm_id: firm.id,
@@ -62,6 +66,6 @@ serve(async (req) => {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[CREATE-FIRM] Error:", msg);
-    return json({ error: msg }, 500);
+    return json({ error: "An unexpected error occurred", reason: "server_error" }, 500);
   }
 });

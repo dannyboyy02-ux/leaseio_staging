@@ -46,6 +46,16 @@ export default function FirmBilling() {
   const hasSubscription = Boolean(firm?.stripe_subscription_id);
   const detailed = firm?.billing_summary_mode === "detailed";
 
+  const startCheckout = async () => {
+    if (!firmId) return;
+    const { data, error } = await supabase.functions.invoke("create-firm-checkout", { body: { firmId } });
+    if (error || (data as any)?.ok === false || !(data as any)?.url) {
+      toast.error(t("firm.billing.start_failed", { defaultValue: "Could not start billing" }));
+      return;
+    }
+    window.location.href = (data as any).url;
+  };
+
   const toggleMode = async (next: boolean) => {
     if (!firmId) return;
     const { error } = await (supabase as any).from("firms").update({ billing_summary_mode: next ? "detailed" : "summarized" }).eq("id", firmId);
@@ -85,7 +95,12 @@ export default function FirmBilling() {
             </Badge>
           </div>
           {!hasSubscription ? (
-            <p className="text-xs text-muted-foreground mt-3">{t("firm.billing.setup_note")}</p>
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-muted-foreground">{t("firm.billing.setup_note")}</p>
+              {isOwner ? (
+                <Button size="sm" onClick={startCheckout}>{t("firm.billing.start")}</Button>
+              ) : null}
+            </div>
           ) : null}
         </Card>
 
