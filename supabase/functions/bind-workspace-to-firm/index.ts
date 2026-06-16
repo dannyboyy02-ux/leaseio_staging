@@ -1,6 +1,23 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { syncFirmSubscriptionQuantity } from "../_shared/firm_billing.ts";
+
+// Keep the firm's per-child Stripe subscription quantity in sync after a bind/
+// release (#105). Best-effort: quantity is recomputed from the live child count,
+// so a transient failure self-heals on the next bind/release. No-op when the
+// firm has no subscription yet.
+async function syncFirmBilling(supabaseAdmin: ReturnType<typeof createClient>, firmId: string) {
+  try {
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) return;
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    await syncFirmSubscriptionQuantity(stripe, supabaseAdmin, firmId);
+  } catch (e) {
+    console.error("[firm-billing] quantity sync failed (self-heals on next op):", e instanceof Error ? e.message : String(e));
+  }
+}
 
 // Phase 9: bind a workspace into a firm. Requires the caller to own BOTH the
 // workspace and the firm (the simpler P9 model; richer two-party consent is
@@ -59,6 +76,8 @@ serve(async (req) => {
       activity_type: "workspace_joined_firm",
       details: { workspace_id: workspaceId },
     });
+
+    await syncFirmBilling(supabaseAdmin, firmId);
 
     return json({ ok: true, firm_id: firmId, workspace_id: workspaceId }, 200);
   } catch (error) {

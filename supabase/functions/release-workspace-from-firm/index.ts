@@ -1,6 +1,22 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { syncFirmSubscriptionQuantity } from "../_shared/firm_billing.ts";
+
+// #105: after a release, recompute the firm subscription quantity from the live
+// child count (best-effort; self-heals on the next bind/release; no-op without a
+// firm sub or when the last child left — offboarding cancels the sub instead).
+async function syncFirmBilling(supabaseAdmin: ReturnType<typeof createClient>, firmId: string) {
+  try {
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) return;
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    await syncFirmSubscriptionQuantity(stripe, supabaseAdmin, firmId);
+  } catch (e) {
+    console.error("[firm-billing] quantity sync failed (self-heals on next op):", e instanceof Error ? e.message : String(e));
+  }
+}
 
 // Phase 9: release a workspace from its firm. Allowed for the firm owner OR the
 // workspace owner. Per the spec's data-preservation decision the workspace KEEPS
@@ -54,6 +70,8 @@ serve(async (req) => {
       activity_type: "workspace_left_firm",
       details: { workspace_id: workspaceId, plan_retained: "business" },
     });
+
+    await syncFirmBilling(supabaseAdmin, firmId);
 
     return json({ ok: true, firm_id: firmId, workspace_id: workspaceId }, 200);
   } catch (error) {
