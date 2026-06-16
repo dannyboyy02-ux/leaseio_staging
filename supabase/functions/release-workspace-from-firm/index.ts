@@ -62,7 +62,7 @@ serve(async (req) => {
 
     const { error: updErr } = await supabaseAdmin
       .from("workspaces").update({ firm_id: null }).eq("id", workspaceId);
-    if (updErr) return json({ error: updErr.message, reason: "release_failed" }, 400);
+    if (updErr) { console.error("[release-workspace-from-firm] update:", updErr.message); return json({ error: "Could not release the workspace", reason: "release_failed" }, 400); }
 
     await supabaseAdmin.from("firm_activity_log").insert({
       firm_id: firmId,
@@ -77,6 +77,6 @@ serve(async (req) => {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[RELEASE-WORKSPACE-FROM-FIRM] Error:", msg);
-    return json({ error: msg }, 500);
+    return json({ error: "An unexpected error occurred", reason: "server_error" }, 500);
   }
 });

@@ -67,7 +67,8 @@ serve(async (req) => {
       .from("workspaces").update({ firm_id: firmId }).eq("id", workspaceId);
     if (updErr) {
       const isQuota = /child workspace limit/i.test(updErr.message);
-      return json({ error: updErr.message, reason: isQuota ? "quota_exceeded" : "bind_failed" }, isQuota ? 409 : 400);
+      console.error("[bind-workspace-to-firm] update:", updErr.message);
+      return json({ error: isQuota ? "The firm's workspace limit is reached" : "Could not bind the workspace", reason: isQuota ? "quota_exceeded" : "bind_failed" }, isQuota ? 409 : 400);
     }
 
     await supabaseAdmin.from("firm_activity_log").insert({
@@ -83,6 +84,6 @@ serve(async (req) => {
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[BIND-WORKSPACE-TO-FIRM] Error:", msg);
-    return json({ error: msg }, 500);
+    return json({ error: "An unexpected error occurred", reason: "server_error" }, 500);
   }
 });
