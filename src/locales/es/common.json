@@ -16,6 +16,7 @@
       "inbox": "Bandeja",
       "members": "Miembros",
       "workspaces": "Espacios de trabajo",
+      "billing": "Facturación",
       "settings": "Configuración"
     },
     "dashboard": {
@@ -90,6 +91,42 @@
       "unrestricted": "Espacio de trabajo visible para la firma",
       "release_failed": "No se pudo liberar el espacio de trabajo",
       "released": "Espacio de trabajo liberado de la firma"
+    },
+    "billing": {
+      "title": "Facturación de la firma",
+      "subscription": "Suscripción",
+      "active": "La suscripción de su firma está activa.",
+      "not_set_up": "La facturación de la firma aún no está configurada.",
+      "status_active": "Activa",
+      "status_pending": "Sin configurar",
+      "setup_note": "La facturación a nivel de firma se está finalizando. Mientras tanto, los espacios de trabajo conservan su acceso.",
+      "mode_label": "Detalle de la factura",
+      "mode_detailed_desc": "Su factura muestra una línea por espacio de trabajo.",
+      "mode_summarized_desc": "Su factura muestra una sola línea combinada.",
+      "detailed": "Detallada",
+      "summarized": "Resumida",
+      "mode_failed": "No se pudo actualizar el detalle de la factura",
+      "mode_saved": "Detalle de la factura actualizado",
+      "owner_only": "Solo el propietario de la firma puede cambiar la configuración de facturación.",
+      "usage_heading": "Uso por espacio de trabajo",
+      "no_usage": "Aún no hay espacios de trabajo en esta firma."
+    },
+    "accept": {
+      "invalid": "Este enlace de invitación no es válido.",
+      "not_found": "Invitación no encontrada.",
+      "revoked": "Esta invitación fue revocada.",
+      "already": "Esta invitación ya fue aceptada.",
+      "expired": "Esta invitación ha expirado.",
+      "failed": "No se pudo aceptar la invitación.",
+      "loading": "Verificando su invitación…",
+      "success": "Se ha unido a {{firm}}.",
+      "title": "Unirse a {{firm}}",
+      "need_auth": "Inicie sesión como {{email}} para aceptar esta invitación.",
+      "sign_in": "Iniciar sesión",
+      "create_account": "Crear cuenta",
+      "email_mismatch": "Esta invitación se envió a {{email}}. Inicie sesión con esa dirección para aceptar.",
+      "as_role": "Se unirá como {{role}}.",
+      "join": "Aceptar y unirse"
     }
   },
   "lease_review": {

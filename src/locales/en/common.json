@@ -16,6 +16,7 @@
       "inbox": "Inbox",
       "members": "Members",
       "workspaces": "Workspaces",
+      "billing": "Billing",
       "settings": "Settings"
     },
     "dashboard": {
@@ -90,6 +91,42 @@
       "unrestricted": "Workspace visible to firm",
       "release_failed": "Could not release workspace",
       "released": "Workspace released from firm"
+    },
+    "billing": {
+      "title": "Firm billing",
+      "subscription": "Subscription",
+      "active": "Your firm subscription is active.",
+      "not_set_up": "Firm billing isn't set up yet.",
+      "status_active": "Active",
+      "status_pending": "Not set up",
+      "setup_note": "Firm-level billing is being finalized. In the meantime, child workspaces keep their access.",
+      "mode_label": "Invoice detail",
+      "mode_detailed_desc": "Your invoice shows one line per workspace.",
+      "mode_summarized_desc": "Your invoice shows a single combined line.",
+      "detailed": "Detailed",
+      "summarized": "Summarized",
+      "mode_failed": "Could not update invoice detail",
+      "mode_saved": "Invoice detail updated",
+      "owner_only": "Only the firm owner can change billing settings.",
+      "usage_heading": "Usage by workspace",
+      "no_usage": "No workspaces in this firm yet."
+    },
+    "accept": {
+      "invalid": "This invitation link is invalid.",
+      "not_found": "Invitation not found.",
+      "revoked": "This invitation was revoked.",
+      "already": "This invitation was already accepted.",
+      "expired": "This invitation has expired.",
+      "failed": "Could not accept the invitation.",
+      "loading": "Checking your invitation…",
+      "success": "You've joined {{firm}}.",
+      "title": "Join {{firm}}",
+      "need_auth": "Sign in as {{email}} to accept this invitation.",
+      "sign_in": "Sign in",
+      "create_account": "Create account",
+      "email_mismatch": "This invitation was sent to {{email}}. Sign in with that address to accept.",
+      "as_role": "You'll join as a {{role}}.",
+      "join": "Accept & join"
     }
   },
   "lease_review": {

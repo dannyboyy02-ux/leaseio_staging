@@ -19,6 +19,7 @@ import {
   Inbox,
   Users,
   ArrowLeft,
+  CreditCard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
@@ -418,6 +419,7 @@ export function AppSidebar() {
             {renderFirmLink('/app/firm/inbox', t('firm.nav.inbox'), Inbox, firm.pendingActionsCount)}
             {renderFirmLink('/app/firm/members', t('firm.nav.members'), Users)}
             {renderFirmLink('/app/firm/workspaces', t('firm.nav.workspaces'), Layers)}
+            {renderFirmLink('/app/firm/billing', t('firm.nav.billing'), CreditCard)}
             {renderFirmLink('/app/firm/settings', t('firm.nav.settings'), Settings)}
           </div>
         ) : (

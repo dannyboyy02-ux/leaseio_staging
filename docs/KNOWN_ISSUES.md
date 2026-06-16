@@ -1934,3 +1934,22 @@ green.
 The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phase 9 / Phase 10 CP1) ready for whichever path is chosen.
 
 **Where to look:** `supabase/migrations/20260615172439_phase9_firm_layer_foundation.sql` (the firm_activity_log FK + deleted_firms); a future `supabase/functions/delete-firm/index.ts`; `firms` RLS already has a "firm owner deletes firm" policy (the client DELETE attempt fails at the FK, as intended).
+
+---
+
+### Item #105: Self-serve firm onboarding (Stripe checkout) deferred — pricing model undecided + operator Stripe setup owed
+
+**Severity:** N/A — deferred-feature note (Phase 10 scope cut, surfaced 2026-06-16 during CP4b-ii). FirmOnboarding's self-serve flow up to firm creation is buildable, but the **Stripe-checkout step that creates the firm subscription** is blocked on two things, so it (and the pieces coupled to it) are deferred:
+
+1. **The firm-subscription pricing model is unspecified.** PRODUCT_STRATEGY confirms "the firm pays a single subscription covering all child workspaces; children inherit the plan and have no independent subscription" — but NOT the price structure: per-child quantity (N × business rate, Stripe `quantity`), per-child line items, or a flat firm rate. The `billing_summary_mode` (detailed=per-child lines vs summarized=one line) strongly implies per-child items/quantity, but the exact mechanics (how a child added mid-cycle bills, proration) are a product/pricing decision not in the specs.
+2. **No firm Stripe Product/Price exists** (operator setup, like Vault's STOP 10). There's no `STRIPE_PRICE_FIRM_*` and the firm Product isn't created in Stripe.
+
+**Coupled pieces deferred with it:**
+- **`create-workspace` firm_id extension** — creating a firm child should reconcile the firm subscription quantity/cost; without the pricing model that reconciliation is undefined. (Binding existing workspaces via `bind-workspace-to-firm` / join requests already works and does NOT touch the firm sub — a pre-existing Phase 9 gap that the pricing decision should also resolve.)
+- **`billing_summary_mode` invoice line-item construction** (stripe-webhook `invoice.created`) — operates on the firm subscription's invoice; meaningless until the sub structure exists.
+
+**What IS built + works without this:** firms are created via the service-role `create-firm` (admin/ops), then fully operated through the UI — invite/manage members, manage child workspaces + `restrict_firm_access`, the cross-workspace inbox, and the FirmBilling **visibility** page (subscription status, per-child usage, `billing_summary_mode` toggle). The `applyFirmSubscription` webhook branch is deployed + ready to mirror a firm sub onto `firms` + propagate `business` to children the moment a firm sub is created.
+
+**When unblocking (the decision + setup needed):** (a) decide the firm pricing model (recommend per-child `quantity` on the existing business price — simplest, makes detailed/summarized natural); (b) operator creates the firm Stripe Product/Price + `STRIPE_PRICE_FIRM_*` env; (c) build FirmOnboarding's checkout (create-checkout firm branch or a new create-firm-subscription fn), the create-workspace firm_id reconciliation, and the invoice line-item handler. Mirrors the Vault operator-gate pattern.
+
+**Where to look:** `src/pages/app/firm/FirmBilling.tsx` (the visibility page the checkout will extend); `supabase/functions/stripe-webhook/index.ts` (`applyFirmSubscription` + the deferred `invoice.created` handler); `docs/PRODUCT_STRATEGY.md` §"Firm-level Stripe billing"; `docs/ops/OPERATOR_PLAYBOOK.md` (add a firm-pricing STOP item).

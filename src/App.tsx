@@ -65,6 +65,8 @@ const FirmInbox = lazy(() => import("./pages/app/firm/FirmInbox"));
 const FirmMembers = lazy(() => import("./pages/app/firm/FirmMembers"));
 const FirmWorkspaces = lazy(() => import("./pages/app/firm/FirmWorkspaces"));
 const FirmSettings = lazy(() => import("./pages/app/firm/FirmSettings"));
+const FirmBilling = lazy(() => import("./pages/app/firm/FirmBilling"));
+const AcceptFirmInvitation = lazy(() => import("./pages/AcceptFirmInvitation"));
 const AccountSettings = lazy(() => import("./pages/settings/AccountSettings"));
 const WorkspacesSection = lazy(() => import("./pages/settings/WorkspacesSection"));
 const ApprovalPoliciesListPage = lazy(() => import("./pages/settings/ApprovalPoliciesListPage"));
@@ -131,12 +133,14 @@ const App = () => (
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/accept-invite" element={<AcceptInvite />} />
+                <Route path="/firm/accept-invitation" element={<AcceptFirmInvitation />} />
 
                 {/* Phase 10 — firm context (firm members only; pages self-guard) */}
                 <Route path="/app/firm" element={<ProtectedRoute><FirmDashboard /></ProtectedRoute>} />
                 <Route path="/app/firm/inbox" element={<ProtectedRoute><FirmInbox /></ProtectedRoute>} />
                 <Route path="/app/firm/members" element={<ProtectedRoute><FirmMembers /></ProtectedRoute>} />
                 <Route path="/app/firm/workspaces" element={<ProtectedRoute><FirmWorkspaces /></ProtectedRoute>} />
+                <Route path="/app/firm/billing" element={<ProtectedRoute><FirmBilling /></ProtectedRoute>} />
                 <Route path="/app/firm/settings" element={<ProtectedRoute><FirmSettings /></ProtectedRoute>} />
 
                 {/* Protected app routes */}
