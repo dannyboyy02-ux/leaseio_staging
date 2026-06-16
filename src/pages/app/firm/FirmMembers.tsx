@@ -53,8 +53,8 @@ export default function FirmMembers() {
       const { data: profiles } = ids.length
         ? await (supabase as any).from("profiles").select("id, email, first_name, last_name").in("id", ids)
         : { data: [] };
-      const byId = new Map((profiles ?? []).map((p: any) => [p.id, p]));
-      return roster.map((r) => ({ user_id: r.user_id, role: r.role, ...(byId.get(r.user_id) ?? {}) })) as Member[];
+      const byId = new Map<string, any>((profiles ?? []).map((p: any) => [p.id as string, p]));
+      return roster.map((r) => ({ user_id: r.user_id, role: r.role, ...((byId.get(r.user_id) as Record<string, unknown>) ?? {}) })) as Member[];
     },
   });
 
