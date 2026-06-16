@@ -11,8 +11,12 @@
       "firm_member": "Miembro"
     },
     "nav": {
+      "firm": "Firma",
+      "dashboard": "Panel de la firma",
       "inbox": "Bandeja",
-      "members": "Miembros"
+      "members": "Miembros",
+      "workspaces": "Espacios de trabajo",
+      "settings": "Configuración"
     },
     "dashboard": {
       "subtitle": "Actividad en todos los espacios de trabajo de su firma",
@@ -58,6 +62,34 @@
       "removed": "Miembro eliminado",
       "resent": "Invitación reenviada",
       "revoked": "Invitación revocada"
+    },
+    "settings": {
+      "title": "Configuración de la firma",
+      "name": "Nombre de la firma",
+      "type": "Tipo de firma",
+      "type_cpa": "Firma de contadores (clientes)",
+      "type_parent": "Empresa matriz (subsidiarias)",
+      "type_other": "Otro",
+      "type_hint": "Determina la terminología usada en la interfaz de la firma.",
+      "billing_email": "Correo de facturación",
+      "save": "Guardar cambios",
+      "saved": "Configuración guardada",
+      "save_failed": "No se pudo guardar la configuración",
+      "owner_only": "Solo el propietario de la firma puede cambiar esta configuración."
+    },
+    "workspaces": {
+      "title": "Espacios de trabajo de la firma",
+      "subtitle": "Gestione los espacios de trabajo de esta firma",
+      "none": "Aún no hay espacios de trabajo en esta firma.",
+      "restrict_label": "Restringir acceso de la firma",
+      "restrict_hint": "Ocultar los datos de este espacio de trabajo a los miembros de la firma.",
+      "restrict_owner_only": "Solo el propietario de este espacio de trabajo puede cambiar esto.",
+      "release": "Liberar",
+      "restrict_failed": "No se pudo actualizar la visibilidad",
+      "restricted": "Espacio de trabajo restringido",
+      "unrestricted": "Espacio de trabajo visible para la firma",
+      "release_failed": "No se pudo liberar el espacio de trabajo",
+      "released": "Espacio de trabajo liberado de la firma"
     }
   },
   "lease_review": {

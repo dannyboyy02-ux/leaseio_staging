@@ -11,8 +11,12 @@
       "firm_member": "Member"
     },
     "nav": {
+      "firm": "Firm",
+      "dashboard": "Firm dashboard",
       "inbox": "Inbox",
-      "members": "Members"
+      "members": "Members",
+      "workspaces": "Workspaces",
+      "settings": "Settings"
     },
     "dashboard": {
       "subtitle": "Activity across all your firm's workspaces",
@@ -58,6 +62,34 @@
       "removed": "Member removed",
       "resent": "Invitation resent",
       "revoked": "Invitation revoked"
+    },
+    "settings": {
+      "title": "Firm settings",
+      "name": "Firm name",
+      "type": "Firm type",
+      "type_cpa": "CPA firm (clients)",
+      "type_parent": "Parent company (subsidiaries)",
+      "type_other": "Other",
+      "type_hint": "Drives the terminology used across the firm UI.",
+      "billing_email": "Billing email",
+      "save": "Save changes",
+      "saved": "Settings saved",
+      "save_failed": "Could not save settings",
+      "owner_only": "Only the firm owner can change these settings."
+    },
+    "workspaces": {
+      "title": "Firm workspaces",
+      "subtitle": "Manage the workspaces in this firm",
+      "none": "No workspaces in this firm yet.",
+      "restrict_label": "Restrict firm access",
+      "restrict_hint": "Hide this workspace's data from firm members.",
+      "restrict_owner_only": "Only this workspace's owner can change this.",
+      "release": "Release",
+      "restrict_failed": "Could not update visibility",
+      "restricted": "Workspace restricted",
+      "unrestricted": "Workspace visible to firm",
+      "release_failed": "Could not release workspace",
+      "released": "Workspace released from firm"
     }
   },
   "lease_review": {

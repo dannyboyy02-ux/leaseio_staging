@@ -16,9 +16,14 @@ import {
   Check,
   Languages,
   Plus,
+  Inbox,
+  Users,
+  ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
+import { useFirm } from '@/contexts/FirmContext';
+import { computeFirmSidebarMode } from '@/lib/firmContext';
 import { isReadOnlyRetention } from '@/config/pricing';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -71,6 +76,14 @@ export function AppSidebar() {
   const { user, workspace, canAccessFeature, userRole, userFunctionalRoles, availableWorkspaces, switchWorkspace } = useApp();
   const { signOut, user: authUser } = useAuth();
   const { t, language, setLanguage } = useLanguage();
+  const firm = useFirm();
+
+  // Phase 10 — which navigation mode the sidebar shows.
+  const firmMode = computeFirmSidebarMode({
+    hasFirmMembership: firm.isFirmUser,
+    onFirmRoute: location.pathname.startsWith('/app/firm'),
+    activeWorkspaceFirmId: workspace?.firmId ?? null,
+  });
 
   // --- Phase 2: multi-workspace switcher state ---
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
@@ -216,6 +229,29 @@ export function AppSidebar() {
         {item.requiresBusiness && !isLocked && (
           <Badge variant="business" className="text-[10px] px-1.5">Business</Badge>
         )}
+      </Link>
+    );
+  };
+
+  // Phase 10 — a firm-context nav link (optional count badge for the inbox).
+  const renderFirmLink = (href: string, label: string, Icon: React.ComponentType<{ className?: string }>, badge?: number) => {
+    const isActive = location.pathname === href;
+    return (
+      <Link
+        key={href}
+        to={href}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+          isActive
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+        )}
+      >
+        <Icon className="h-5 w-5" />
+        <span className="flex-1">{label}</span>
+        {badge && badge > 0 ? (
+          <Badge variant="destructive" className="text-[10px] h-5 min-w-[1.25rem] px-1.5 flex items-center justify-center">{badge}</Badge>
+        ) : null}
       </Link>
     );
   };
@@ -366,9 +402,33 @@ export function AppSidebar() {
 
       {/* Main Navigation — flat list, no section labels */}
       <nav className="flex-1 py-6 px-3">
+        {firmMode === 'firm' ? (
+          /* Phase 10 — firm context nav. "Back to workspace" returns to the
+             active workspace's dashboard. */
+          <div className="space-y-1">
+            <Link
+              to="/app/dashboard"
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span className="flex-1">{t('firm.back_to_workspace')}</span>
+            </Link>
+            <DropdownMenuSeparator className="my-2" />
+            {renderFirmLink('/app/firm', t('firm.nav.dashboard'), Building2)}
+            {renderFirmLink('/app/firm/inbox', t('firm.nav.inbox'), Inbox, firm.pendingActionsCount)}
+            {renderFirmLink('/app/firm/members', t('firm.nav.members'), Users)}
+            {renderFirmLink('/app/firm/workspaces', t('firm.nav.workspaces'), Layers)}
+            {renderFirmLink('/app/firm/settings', t('firm.nav.settings'), Settings)}
+          </div>
+        ) : (
         <div className="space-y-1">
           {/* Dashboard, Leases */}
           {topNavItems.map(renderNavItem)}
+
+          {/* Phase 10 — firm entry point (firm members only) */}
+          {firm.isFirmUser
+            ? renderFirmLink('/app/firm', t('firm.nav.firm'), Building2, firm.pendingActionsCount)
+            : null}
 
           {/* Approvals — hidden for submitter-only users; badge unchanged */}
           {showApprovals && !hideApprovalsForSubmitterOnly && (
@@ -398,6 +458,7 @@ export function AppSidebar() {
           {bottomNavItems.map(renderNavItem)}
 
         </div>
+        )}
       </nav>
 
       {/* User Menu — single bottom-left entry, Claude.ai-style. */}
