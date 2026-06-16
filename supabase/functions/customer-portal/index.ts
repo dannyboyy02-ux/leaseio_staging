@@ -47,13 +47,27 @@ serve(async (req) => {
 
     const { data: workspace, error: wsErr } = await supabaseAdmin
       .from("workspaces")
-      .select("id, owner_id, stripe_customer_id")
+      .select("id, owner_id, stripe_customer_id, firm_id")
       .eq("id", workspaceId)
       .maybeSingle();
     if (wsErr || !workspace) {
       return new Response(
         JSON.stringify({ error: "Workspace not found", reason: "not_found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 },
+      );
+    }
+
+    // #103: a firm-bound workspace has no own subscription (the firm sub carries
+    // metadata.firm_id, not workspace_id) — its stripe_customer_id is null and
+    // the firm governs billing. Reject fail-closed so we never open an empty /
+    // mismatched portal for a child. Billing is managed on the firm billing page.
+    if ((workspace as { firm_id: string | null }).firm_id) {
+      return new Response(
+        JSON.stringify({
+          error: "Billing for this workspace is managed at the firm level.",
+          reason: "firm_managed",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 },
       );
     }
 

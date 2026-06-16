@@ -79,3 +79,22 @@ export function hasWorkspaceAuthority(
     (ROLE_HIERARCHY[effective.effective_workspace_role] ?? 0) >= (ROLE_HIERARCHY[required] ?? 0)
   );
 }
+
+// Firm-level authority (Phase 10). Mirrors the DB helpers exactly:
+//   is_firm_admin  = firm owner OR a firm_members row with role='firm_admin'
+//   is_firm_member = firm owner OR any firm_members row
+// Gate firm-admin actions with isFirmAdminOrOwner() instead of a raw
+// `firmRole === 'firm_admin'` check (the owner has no firm_members row, so the
+// raw check wrongly excludes them) — Permissions Gating Convention.
+export type FirmAuthority = {
+  isOwner: boolean;
+  firmRole: FirmRole | null;
+};
+
+export function isFirmAdminOrOwner(authority: FirmAuthority): boolean {
+  return authority.isOwner || authority.firmRole === 'firm_admin';
+}
+
+export function isFirmMemberOrOwner(authority: FirmAuthority): boolean {
+  return authority.isOwner || authority.firmRole !== null;
+}

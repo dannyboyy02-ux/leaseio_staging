@@ -23,29 +23,37 @@ import { describe, expect, it } from 'vitest';
 const ROOT = join(__dirname, '../../..');
 const TOKEN = /['"]([a-z0-9_]+)['"]/g;
 
-function latestConstraintMigration(): { file: string; values: Set<string> } {
+// Harvest the allowed values from the latest migration defining a given
+// activity_type CHECK constraint. Bounds the slice to the ADD CONSTRAINT
+// statement so unrelated trailing SQL can't count as allowed values.
+function constraintValues(constraintName: string): { file: string; values: Set<string> } | null {
   const dir = join(ROOT, 'supabase/migrations');
+  const marker = `ADD CONSTRAINT ${constraintName}`;
   const candidates = readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
-    .filter((f) =>
-      readFileSync(join(dir, f), 'utf8').includes(
-        'ADD CONSTRAINT lease_activity_log_activity_type_check',
-      ),
-    )
+    .filter((f) => readFileSync(join(dir, f), 'utf8').includes(marker))
     .sort();
-  expect(candidates.length, 'no migration defines the activity_type CHECK').toBeGreaterThan(0);
+  if (candidates.length === 0) return null;
   const file = candidates[candidates.length - 1];
   const sql = readFileSync(join(dir, file), 'utf8');
-  // Bound the slice to the ADD CONSTRAINT statement itself — harvesting to
-  // end-of-file would let quoted strings from unrelated trailing SQL count
-  // as allowed values and quietly defeat the orphan check.
-  const start = sql.indexOf('ADD CONSTRAINT lease_activity_log_activity_type_check');
-  expect(start, `${file} lacks the ADD CONSTRAINT statement`).toBeGreaterThanOrEqual(0);
+  const start = sql.indexOf(marker);
   const end = sql.indexOf('));', start);
-  expect(end, `${file}: ADD CONSTRAINT statement is unterminated`).toBeGreaterThan(start);
+  expect(end, `${file}: ${constraintName} statement is unterminated`).toBeGreaterThan(start);
   const block = sql.slice(start, end);
-  const values = new Set([...block.matchAll(TOKEN)].map((m) => m[1]));
-  return { file, values };
+  return { file, values: new Set([...block.matchAll(TOKEN)].map((m) => m[1])) };
+}
+
+function latestConstraintMigration(): { file: string; values: Set<string> } {
+  // Firm edge functions (Phase 10) write firm-only events to firm_activity_log,
+  // which has its OWN activity_type CHECK; lease/workflow writers target
+  // lease_activity_log. A writer's value is valid if its TARGET table's
+  // constraint accepts it, so the guard checks against the UNION of both
+  // constraints' allowed values.
+  const lease = constraintValues('lease_activity_log_activity_type_check');
+  expect(lease, 'no migration defines the lease_activity_log activity_type CHECK').not.toBeNull();
+  const firm = constraintValues('firm_activity_log_activity_type_check');
+  const values = new Set<string>([...lease!.values, ...(firm?.values ?? [])]);
+  return { file: `${lease!.file}${firm ? ` + ${firm.file}` : ''}`, values };
 }
 
 type Sweep = { byPattern: Map<string, Set<string>>; all: Map<string, string[]> };

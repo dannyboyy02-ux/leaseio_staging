@@ -185,6 +185,39 @@ verify_jwt = true
 [functions.release-workspace-from-firm]
 verify_jwt = true
 
+# Phase 10 firm invitations. send/accept/get-info verify auth manually (the
+# invitee may have no account / we return structured 401s), like the workspace
+# invite functions.
+[functions.send-firm-invitation]
+verify_jwt = false
+
+[functions.accept-firm-invitation]
+verify_jwt = false
+
+[functions.get-firm-invitation-info]
+verify_jwt = false
+
+[functions.list-pending-firm-invitations]
+verify_jwt = true
+
+[functions.revoke-firm-invitation]
+verify_jwt = true
+
+[functions.resend-firm-invitation]
+verify_jwt = true
+
+# Phase 10 firm⇄workspace join requests (two-party). Authed actors only.
+[functions.act-on-firm-workspace-join-request]
+verify_jwt = true
+
+[functions.cancel-firm-workspace-join-request]
+verify_jwt = true
+
+# Phase 10: toggle a firm-bound workspace's restrict_firm_access — WORKSPACE
+# OWNER ONLY (the child controls its own opt-out; a firm admin cannot override).
+[functions.set-firm-access]
+verify_jwt = true
+
 # Document capacity packs — Bearer JWT + workspace owner/admin check.
 [functions.manage-document-pack]
 verify_jwt = true

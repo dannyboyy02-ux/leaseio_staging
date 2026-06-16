@@ -190,7 +190,7 @@ serve(async (req) => {
   // Load + authorize the workspace.
   const { data: wsData } = await supabaseAdmin
     .from("workspaces")
-    .select("id, owner_id, plan, stripe_customer_id, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at")
+    .select("id, owner_id, plan, firm_id, stripe_customer_id, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at")
     .eq("id", workspaceId)
     .maybeSingle();
   const ws = wsData as WorkspaceRow | null;
@@ -200,6 +200,17 @@ serve(async (req) => {
   }
 
   const mode = body.mode ?? "preview";
+
+  // #103: a capacity pack is its own workspace-scoped Stripe subscription, so a
+  // firm-bound child must not buy one (its billing is firm-level). Reject the
+  // charge-creating modes fail-closed; preview/cancel stay allowed.
+  if ((ws as { firm_id?: string | null }).firm_id && (mode === "confirm" || mode === "buy_single")) {
+    return jsonResponse(
+      { ok: false, reason: "firm_managed", error: "Capacity for this workspace is managed at the firm level." },
+      403,
+      origin,
+    );
+  }
 
   // Cancellation lifecycle (2026-06-12): never sell capacity to a canceled
   // workspace — the charge would not restore entitlement and the workspace

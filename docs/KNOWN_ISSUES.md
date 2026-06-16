@@ -1918,3 +1918,52 @@ green.
 **Cleared as false positives in the same sweep (no action):** the blanket `where firm_id is not null` selector query is RLS-correct (`is_workspace_member` firm EXISTS with `restrict_firm_access=false`); the firm-name `in("id", firmIds)` resolution is row-filtered by `firms` RLS (`is_firm_member`) — no IDOR; the banner/label show only members-visible firm names through auto-escaped JSX — no info-disclosure or XSS. One LOW defense-in-depth note: the selector query trusts RLS entirely with no secondary client scoping (acceptable per LeaseIO's RLS-first model).
 
 **Where to look:** `src/pages/settings/AccountSettings.tsx`, `src/pages/app/UsageContent.tsx`, `src/components/layout/AppSidebar.tsx`, `src/components/workspace/WorkspaceCommandPalette.tsx`; `supabase/functions/{create-checkout,customer-portal,manage-document-pack,stripe-webhook}/index.ts`. Related: #60 (firm billing model), #61 (create-checkout customer resolution).
+
+---
+
+### Item #104: delete-firm deferred to Phase 11 — firm_activity_log ON DELETE RESTRICT blocks a hard delete
+
+**Severity:** N/A — deferred-feature note. **Surfaced 2026-06-15** during Phase 10 CP3. **Decision (Daniel, 2026-06-15): defer delete-firm to Phase 11.** It is a rare destructive operation not needed for "Business tier sellable" (a firm operates fine without ever being deleted), so FirmSettings (CP4b) omits the danger-zone delete or shows it as "coming soon."
+
+**The schema constraint:** `firm_activity_log.firm_id` is `ON DELETE RESTRICT` (migration `20260615172439_phase9_firm_layer_foundation.sql` — Phase 9's deliberate "an audit log must never be silently erased" choice). Every firm has at least a `firm_created` audit row, so a hard `DELETE FROM firms` is **permanently blocked** while any audit history exists. Combined with `workspaces.firm_id` (NO ACTION, blocks delete while children are bound), a firm hard-delete is doubly blocked by design.
+
+**The decision delete-firm needs (when Phase 11 builds it):** pick one —
+- **Soft-delete (recommended):** add `firms.deleted_at`; delete-firm releases all children, captures the `deleted_firms` forensic row, sets `deleted_at`. Firm + audit preserved; hidden from all UI. Satisfies RESTRICT.
+- **Hard-delete + audit archival:** copy `firm_activity_log` rows into `deleted_firms.details` (or an archive table), delete the audit rows, then hard-delete the firm. Truly removes the row but destroys the live audit FK — conflicts with the Phase 9 "never destroy the audit" intent.
+
+The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phase 9 / Phase 10 CP1) ready for whichever path is chosen.
+
+**Where to look:** `supabase/migrations/20260615172439_phase9_firm_layer_foundation.sql` (the firm_activity_log FK + deleted_firms); a future `supabase/functions/delete-firm/index.ts`; `firms` RLS already has a "firm owner deletes firm" policy (the client DELETE attempt fails at the FK, as intended).
+
+---
+
+### Item #105: Self-serve firm onboarding (Stripe checkout) deferred — pricing model undecided + operator Stripe setup owed
+
+**Severity:** N/A — deferred-feature note (Phase 10 scope cut, surfaced 2026-06-16 during CP4b-ii). FirmOnboarding's self-serve flow up to firm creation is buildable, but the **Stripe-checkout step that creates the firm subscription** is blocked on two things, so it (and the pieces coupled to it) are deferred:
+
+1. **The firm-subscription pricing model is unspecified.** PRODUCT_STRATEGY confirms "the firm pays a single subscription covering all child workspaces; children inherit the plan and have no independent subscription" — but NOT the price structure: per-child quantity (N × business rate, Stripe `quantity`), per-child line items, or a flat firm rate. The `billing_summary_mode` (detailed=per-child lines vs summarized=one line) strongly implies per-child items/quantity, but the exact mechanics (how a child added mid-cycle bills, proration) are a product/pricing decision not in the specs.
+2. **No firm Stripe Product/Price exists** (operator setup, like Vault's STOP 10). There's no `STRIPE_PRICE_FIRM_*` and the firm Product isn't created in Stripe.
+
+**Coupled pieces deferred with it:**
+- **`create-workspace` firm_id extension** — creating a firm child should reconcile the firm subscription quantity/cost; without the pricing model that reconciliation is undefined. (Binding existing workspaces via `bind-workspace-to-firm` / join requests already works and does NOT touch the firm sub — a pre-existing Phase 9 gap that the pricing decision should also resolve.)
+- **`billing_summary_mode` invoice line-item construction** (stripe-webhook `invoice.created`) — operates on the firm subscription's invoice; meaningless until the sub structure exists.
+
+**What IS built + works without this:** firms are created via the service-role `create-firm` (admin/ops), then fully operated through the UI — invite/manage members, manage child workspaces + `restrict_firm_access`, the cross-workspace inbox, and the FirmBilling **visibility** page (subscription status, per-child usage, `billing_summary_mode` toggle). The `applyFirmSubscription` webhook branch is deployed + ready to mirror a firm sub onto `firms` + propagate `business` to children the moment a firm sub is created.
+
+**When unblocking (the decision + setup needed):** (a) decide the firm pricing model (recommend per-child `quantity` on the existing business price — simplest, makes detailed/summarized natural); (b) operator creates the firm Stripe Product/Price + `STRIPE_PRICE_FIRM_*` env; (c) build FirmOnboarding's checkout (create-checkout firm branch or a new create-firm-subscription fn), the create-workspace firm_id reconciliation, and the invoice line-item handler. Mirrors the Vault operator-gate pattern.
+
+**Where to look:** `src/pages/app/firm/FirmBilling.tsx` (the visibility page the checkout will extend); `supabase/functions/stripe-webhook/index.ts` (`applyFirmSubscription` + the deferred `invoice.created` handler); `docs/PRODUCT_STRATEGY.md` §"Firm-level Stripe billing"; `docs/ops/OPERATOR_PLAYBOOK.md` (add a firm-pricing STOP item).
+
+---
+
+### Item #106: Overlapping permissive `profiles` UPDATE policies — `current_firm_id`/`current_workspace_id` lack a WITH CHECK — Low (pre-existing)
+
+**Severity:** Low. **Surfaced 2026-06-16** by the lease-security-scanner during the Phase 10 firm-frontend review. **Pre-existing** (baseline `20260516120000_baseline_schema.sql`), NOT introduced by Phase 10.
+
+**Symptom:** `profiles` has two overlapping permissive UPDATE policies — `profiles_update_own` (`USING (id = auth.uid())`, **no WITH CHECK**) and `profiles_update_self` (with a WITH CHECK constraining `current_workspace_id` to a membership). Because Postgres OR's permissive policies and `profiles_update_own` has no WITH CHECK, the membership constraint is effectively bypassable, and `current_firm_id` (written by `FirmContext.tsx`) has no membership WITH CHECK at all.
+
+**Why it's Low:** it's the user's OWN row, and `current_firm_id`/`current_workspace_id` are selection POINTERS only — a forged value grants no access (every downstream read is still RLS-gated, and FirmContext re-resolves the active firm via `resolveActiveFirm` against real memberships, so a stale/forged pointer is ignored). No privilege escalation.
+
+**Fix (its own beat):** consolidate to a single `profiles` UPDATE policy with a complete WITH CHECK (id = auth.uid() AND the pointer columns reference real memberships, or simply id = auth.uid() with the membership checks dropped since pointers are harmless). Sweep both `current_workspace_id` and `current_firm_id`.
+
+**Where to look:** `supabase/migrations/20260516120000_baseline_schema.sql` (`profiles_update_own` / `profiles_update_self`); `src/contexts/FirmContext.tsx` (current_firm_id writes).

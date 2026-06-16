@@ -761,6 +761,66 @@ export type Database = {
           },
         ]
       }
+      firm_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          email: string
+          expires_at: string
+          firm_id: string
+          id: string
+          invited_at: string
+          invited_by: string
+          revoked_at: string | null
+          revoked_by: string | null
+          role: string
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          email: string
+          expires_at?: string
+          firm_id: string
+          id?: string
+          invited_at?: string
+          invited_by: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role: string
+          token: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          email?: string
+          expires_at?: string
+          firm_id?: string
+          id?: string
+          invited_at?: string
+          invited_by?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_invitations_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "firm_invitations_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_billing_period_summary"
+            referencedColumns: ["firm_id"]
+          },
+        ]
+      }
       firm_members: {
         Row: {
           created_at: string
@@ -800,6 +860,80 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_firm_billing_period_summary"
             referencedColumns: ["firm_id"]
+          },
+        ]
+      }
+      firm_workspace_join_requests: {
+        Row: {
+          acted_at: string | null
+          acted_by: string | null
+          decision_note: string | null
+          expires_at: string
+          firm_id: string
+          id: string
+          message: string | null
+          request_direction: string
+          requested_at: string
+          requested_by: string
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          acted_at?: string | null
+          acted_by?: string | null
+          decision_note?: string | null
+          expires_at?: string
+          firm_id: string
+          id?: string
+          message?: string | null
+          request_direction: string
+          requested_at?: string
+          requested_by: string
+          status?: string
+          workspace_id: string
+        }
+        Update: {
+          acted_at?: string | null
+          acted_by?: string | null
+          decision_note?: string | null
+          expires_at?: string
+          firm_id?: string
+          id?: string
+          message?: string | null
+          request_direction?: string
+          requested_at?: string
+          requested_by?: string
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_workspace_join_requests_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "firm_workspace_join_requests_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_billing_period_summary"
+            referencedColumns: ["firm_id"]
+          },
+          {
+            foreignKeyName: "firm_workspace_join_requests_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_child_usage"
+            referencedColumns: ["workspace_id"]
+          },
+          {
+            foreignKeyName: "firm_workspace_join_requests_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -3124,6 +3258,7 @@ export type Database = {
           billing_interval: string
           company_name: string | null
           created_at: string
+          current_firm_id: string | null
           current_workspace_id: string | null
           email: string | null
           email_notifications_enabled: boolean
@@ -3146,6 +3281,7 @@ export type Database = {
           billing_interval?: string
           company_name?: string | null
           created_at?: string
+          current_firm_id?: string | null
           current_workspace_id?: string | null
           email?: string | null
           email_notifications_enabled?: boolean
@@ -3168,6 +3304,7 @@ export type Database = {
           billing_interval?: string
           company_name?: string | null
           created_at?: string
+          current_firm_id?: string | null
           current_workspace_id?: string | null
           email?: string | null
           email_notifications_enabled?: boolean
@@ -3185,7 +3322,22 @@ export type Database = {
           timezone?: string | null
           trial_ends_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_current_firm_id_fkey"
+            columns: ["current_firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_current_firm_id_fkey"
+            columns: ["current_firm_id"]
+            isOneToOne: false
+            referencedRelation: "v_firm_billing_period_summary"
+            referencedColumns: ["firm_id"]
+          },
+        ]
       }
       rent_schedules: {
         Row: {
@@ -4218,6 +4370,26 @@ export type Database = {
             referencedColumns: ["firm_id"]
           },
         ]
+      }
+      v_firm_user_pending_actions: {
+        Row: {
+          action_created_at: string | null
+          action_id: string | null
+          action_type: string | null
+          display_label: string | null
+          firm_id: string | null
+          lease_id: string | null
+          lease_title: string | null
+          parallel_group: number | null
+          pending_since: string | null
+          routing_source: string | null
+          stage: string | null
+          step_order: number | null
+          user_id: string | null
+          workspace_id: string | null
+          workspace_name: string | null
+        }
+        Relationships: []
       }
       v_governance_audit_report: {
         Row: {
