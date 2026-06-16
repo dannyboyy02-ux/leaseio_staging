@@ -16,8 +16,8 @@ describe('firm_billing.ts — quantity recompute helper', () => {
     expect(src).toContain('.eq("firm_id", firmId)');
     expect(src).toContain('count: "exact"');
   });
-  it('no-ops without a subscription and skips a zero child count', () => {
-    expect(src).toContain('if (!subId) return null');
+  it('no-ops without a subscription and handles a zero child count (offboarding cancel, #107)', () => {
+    expect(src).toContain('if (!subId) return { status: "no_sub" }');
     expect(src).toContain('if (qty < 1)');
   });
   it('updates the subscription item quantity with proration', () => {

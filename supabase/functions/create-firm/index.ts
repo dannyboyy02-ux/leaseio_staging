@@ -48,6 +48,15 @@ serve(async (req) => {
     if (!billingEmail || typeof billingEmail !== "string")
       return json({ error: "billingEmail is required", reason: "bad_request" }, 400);
 
+    // #107: per-owner cap on self-serve firm creation (spam / row-pollution
+    // defense-in-depth — an empty firm is inert, but unbounded creation isn't).
+    // Ops provisioning is exempt.
+    if (!isOps) {
+      const { count } = await supabaseAdmin.from("firms").select("id", { count: "exact", head: true }).eq("owner_id", ownerId);
+      if ((count ?? 0) >= 10)
+        return json({ error: "You've reached the maximum number of firms.", reason: "firm_cap_reached" }, 409);
+    }
+
     const { data: firm, error: insErr } = await supabaseAdmin
       .from("firms")
       .insert({ name: name.trim(), firm_type: firmType, owner_id: ownerId, billing_email: billingEmail })

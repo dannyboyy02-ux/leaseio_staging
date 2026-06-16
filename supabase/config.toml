@@ -233,6 +233,11 @@ verify_jwt = true
 [functions.create-firm-checkout]
 verify_jwt = false
 
+# Phase 10 / #107: firm billing reconcile cron (x-cron-secret; recomputes the
+# firm sub quantity from the live child count, correcting any silent drift).
+[functions.firm-billing-reconcile]
+verify_jwt = false
+
 # Document capacity packs — Bearer JWT + workspace owner/admin check.
 [functions.manage-document-pack]
 verify_jwt = true
