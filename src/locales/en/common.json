@@ -1,4 +1,65 @@
 {
+  "firm": {
+    "fallback": "your firm",
+    "none_title": "No firm yet",
+    "none_desc": "You're not part of a firm. Firms let one organization manage multiple workspaces together.",
+    "back_to_workspace": "Back to workspace",
+    "restricted_badge": "Restricted",
+    "role": {
+      "owner": "Owner",
+      "firm_admin": "Admin",
+      "firm_member": "Member"
+    },
+    "nav": {
+      "inbox": "Inbox",
+      "members": "Members"
+    },
+    "dashboard": {
+      "subtitle": "Activity across all your firm's workspaces",
+      "children": "Workspaces",
+      "active_leases": "Active leases",
+      "documents": "Documents",
+      "pending_actions": "Pending actions",
+      "workspaces_heading": "Workspaces",
+      "no_children": "No workspaces in this firm yet.",
+      "leases_n": "{{count}} leases",
+      "members_n": "{{count}} members"
+    },
+    "inbox": {
+      "title": "Firm inbox",
+      "subtitle": "Everything across your firm's workspaces that needs your attention",
+      "all_workspaces": "All",
+      "empty": "Nothing needs your attention right now.",
+      "open": "Open",
+      "urgency_fresh": "New",
+      "urgency_aging": "Aging",
+      "urgency_overdue": "Overdue",
+      "action": {
+        "chain_step": "Approval step",
+        "unlock_request": "Unlock request"
+      }
+    },
+    "members": {
+      "title": "Firm members",
+      "subtitle": "Who can access this firm's workspaces",
+      "invite": "Invite",
+      "invite_title": "Invite a firm member",
+      "email_placeholder": "name@company.com",
+      "send_invite": "Send invitation",
+      "roster": "Members",
+      "none": "No members yet.",
+      "remove": "Remove member",
+      "pending": "Pending invitations",
+      "resend": "Resend",
+      "revoke": "Revoke",
+      "invite_failed": "Could not send the invitation",
+      "invite_sent": "Invitation sent",
+      "action_failed": "Action failed",
+      "removed": "Member removed",
+      "resent": "Invitation resent",
+      "revoked": "Invitation revoked"
+    }
+  },
   "lease_review": {
     "strip": {
       "extracting_label": "Extracting",

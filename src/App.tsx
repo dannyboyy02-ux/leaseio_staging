@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
+import { FirmProvider } from "@/contexts/FirmContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
@@ -59,6 +60,9 @@ const NeedsActionPage = lazy(() => import("./pages/app/NeedsActionPage"));
 const NotificationDetail = lazy(() => import("./pages/app/NotificationDetail"));
 
 // Settings + account
+const FirmDashboard = lazy(() => import("./pages/app/firm/FirmDashboard"));
+const FirmInbox = lazy(() => import("./pages/app/firm/FirmInbox"));
+const FirmMembers = lazy(() => import("./pages/app/firm/FirmMembers"));
 const AccountSettings = lazy(() => import("./pages/settings/AccountSettings"));
 const WorkspacesSection = lazy(() => import("./pages/settings/WorkspacesSection"));
 const ApprovalPoliciesListPage = lazy(() => import("./pages/settings/ApprovalPoliciesListPage"));
@@ -78,6 +82,7 @@ const App = () => (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <AuthProvider>
         <AppProvider>
+          <FirmProvider>
           <LanguageProvider>
             <TooltipProvider>
             <Toaster />
@@ -124,6 +129,11 @@ const App = () => (
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/accept-invite" element={<AcceptInvite />} />
+
+                {/* Phase 10 — firm context (firm members only; pages self-guard) */}
+                <Route path="/app/firm" element={<ProtectedRoute><FirmDashboard /></ProtectedRoute>} />
+                <Route path="/app/firm/inbox" element={<ProtectedRoute><FirmInbox /></ProtectedRoute>} />
+                <Route path="/app/firm/members" element={<ProtectedRoute><FirmMembers /></ProtectedRoute>} />
 
                 {/* Protected app routes */}
                 <Route
@@ -415,6 +425,7 @@ const App = () => (
               </BrowserRouter>
             </TooltipProvider>
           </LanguageProvider>
+          </FirmProvider>
         </AppProvider>
       </AuthProvider>
     </ThemeProvider>

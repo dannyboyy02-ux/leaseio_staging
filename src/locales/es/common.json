@@ -1,4 +1,65 @@
 {
+  "firm": {
+    "fallback": "su firma",
+    "none_title": "Aún no hay firma",
+    "none_desc": "No forma parte de una firma. Las firmas permiten que una organización gestione varios espacios de trabajo juntos.",
+    "back_to_workspace": "Volver al espacio de trabajo",
+    "restricted_badge": "Restringido",
+    "role": {
+      "owner": "Propietario",
+      "firm_admin": "Administrador",
+      "firm_member": "Miembro"
+    },
+    "nav": {
+      "inbox": "Bandeja",
+      "members": "Miembros"
+    },
+    "dashboard": {
+      "subtitle": "Actividad en todos los espacios de trabajo de su firma",
+      "children": "Espacios de trabajo",
+      "active_leases": "Contratos activos",
+      "documents": "Documentos",
+      "pending_actions": "Acciones pendientes",
+      "workspaces_heading": "Espacios de trabajo",
+      "no_children": "Aún no hay espacios de trabajo en esta firma.",
+      "leases_n": "{{count}} contratos",
+      "members_n": "{{count}} miembros"
+    },
+    "inbox": {
+      "title": "Bandeja de la firma",
+      "subtitle": "Todo lo que requiere su atención en los espacios de trabajo de su firma",
+      "all_workspaces": "Todos",
+      "empty": "Nada requiere su atención en este momento.",
+      "open": "Abrir",
+      "urgency_fresh": "Nuevo",
+      "urgency_aging": "En espera",
+      "urgency_overdue": "Vencido",
+      "action": {
+        "chain_step": "Paso de aprobación",
+        "unlock_request": "Solicitud de desbloqueo"
+      }
+    },
+    "members": {
+      "title": "Miembros de la firma",
+      "subtitle": "Quién puede acceder a los espacios de trabajo de esta firma",
+      "invite": "Invitar",
+      "invite_title": "Invitar a un miembro de la firma",
+      "email_placeholder": "nombre@empresa.com",
+      "send_invite": "Enviar invitación",
+      "roster": "Miembros",
+      "none": "Aún no hay miembros.",
+      "remove": "Eliminar miembro",
+      "pending": "Invitaciones pendientes",
+      "resend": "Reenviar",
+      "revoke": "Revocar",
+      "invite_failed": "No se pudo enviar la invitación",
+      "invite_sent": "Invitación enviada",
+      "action_failed": "La acción falló",
+      "removed": "Miembro eliminado",
+      "resent": "Invitación reenviada",
+      "revoked": "Invitación revocada"
+    }
+  },
   "lease_review": {
     "strip": {
       "extracting_label": "Extrayendo",
