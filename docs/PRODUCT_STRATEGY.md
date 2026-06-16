@@ -240,6 +240,8 @@ The Stripe webhook handler gets a new branch: when the subscribed customer is a 
 
 A child workspace's `plan` is read-only at the database level (a trigger prevents independent plan changes on Business-tier workspaces) — the firm's plan is the source of truth.
 
+**Firm pricing model — DECIDED 2026-06-16 (resolves KNOWN_ISSUES #105):** **per-child quantity at the standard Business rate.** The firm's single subscription is created on the **existing Business price** (`prod_TlQhRntCDhkxfK` / business monthly + `STRIPE_PRICE_BUSINESS_ANNUAL` — *not* a new firm Product) with `quantity` = number of bound child workspaces and `metadata.firm_id` set. A firm with N children pays **N × $499/mo** (or the annual equivalent); no separate firm base fee. Binding a child increments quantity (Stripe prorates); releasing decrements it (credit) and the child enters the 30-day offboarding grace above. `billing_summary_mode`: *summarized* = the single consolidated subscription line; *detailed* = the `invoice.created` webhook expands it into N per-child lines via `firm_child_label`. **Rationale:** each child is priced exactly like a standalone Business workspace, so the 75% margin floor is preserved and the firm layer is the Business-tier differentiator, not a per-child upcharge; the model is Stripe-native (quantity + proration), transparent, and reuses the Business price so it needs **no firm-specific operator Stripe setup** (only the live-mode Business price, already owed for standalone Business). **Deferred GTM lever:** no volume discount in v1 — tiers (cheaper above N children) can be layered later via a tiered price or per-firm coupon with no re-architecture.
+
 ---
 
 ## Risks and how we'll mitigate them

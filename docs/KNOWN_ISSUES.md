@@ -1937,7 +1937,18 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 
 ---
 
-### Item #105: Self-serve firm onboarding (Stripe checkout) deferred — pricing model undecided + operator Stripe setup owed
+### Item #105: Self-serve firm onboarding (Stripe checkout) — pricing model DECIDED 2026-06-16; now a build task (no longer operator-blocked)
+
+> **PRICING DECIDED 2026-06-16 (Daniel delegated; recorded in PRODUCT_STRATEGY.md §"Firm-level Stripe billing"): per-child quantity at the standard Business rate.** One Stripe subscription on the EXISTING Business price (`prod_TlQhRntCDhkxfK` / business monthly + `STRIPE_PRICE_BUSINESS_ANNUAL` — NOT a new firm Product) with `quantity` = bound child count + `metadata.firm_id`. N children = N × $499/mo; no base fee; no v1 volume discount (deferred GTM lever). Bind → quantity +1 (prorate); release → −1 (credit) + 30-day grace. summarized = one consolidated line; detailed = `invoice.created` webhook expands to N per-child lines via `firm_child_label`.
+>
+> **This resolves blocker (1) below and largely dissolves blocker (2):** reusing the Business price means NO firm-specific operator Stripe setup — the only operator dependency is the live-mode Business price (already owed for standalone Business, STOP 3/7). So this is now a **build task**, not an operator gate. **Remaining build (each its own beat, all under the decided model):**
+> 1. **FirmOnboarding checkout** — create the firm subscription on the Business price with `quantity` = initial child count, `metadata.firm_id`, on the owner's card (a `create-checkout` firm branch or a dedicated `create-firm-subscription` fn). The `applyFirmSubscription` webhook branch (already deployed) mirrors it onto `firms` + propagates `business` to children.
+> 2. **Quantity sync on bind/release** — `bind-workspace-to-firm` / `act-on-firm-workspace-join-request` (approve) increment the firm sub quantity; `release-workspace-from-firm` decrements it. Closes the Phase 9 gap where binding didn't touch the firm sub.
+> 3. **`create-workspace` firm_id** — create a firm child (no independent Stripe sub) + increment the firm sub quantity (= a new child line at $499 prorated).
+> 4. **`billing_summary_mode` invoice line-items** — on `invoice.created` for a firm customer, expand (detailed) or keep (summarized) the per-child lines.
+> 5. **FirmOnboarding "one company or multiple?" fork** + initial-setup UI (the non-Stripe shell) — build the page that drives 1–3.
+>
+> Original deferral context (now mostly resolved) preserved below.
 
 **Severity:** N/A — deferred-feature note (Phase 10 scope cut, surfaced 2026-06-16 during CP4b-ii). FirmOnboarding's self-serve flow up to firm creation is buildable, but the **Stripe-checkout step that creates the firm subscription** is blocked on two things, so it (and the pieces coupled to it) are deferred:
 
