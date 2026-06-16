@@ -33,17 +33,19 @@ describe('all firm edge functions — common auth gate', () => {
   }
 });
 
-describe('create-firm — operator-only provisioning', () => {
+describe('create-firm — self-serve provisioning (#105-C)', () => {
   const src = fn('create-firm');
-  it('gates on ops_admins membership (403 not_authorized)', () => {
+  it('is self-serve: a non-ops caller owns the firm they create (owner forced to user.id)', () => {
+    // ops_admins is still consulted, but only to ALLOW a foreign owner — not to gate.
     expect(src).toContain('.from("ops_admins")');
-    expect(src).toContain('if (!opsRow)');
-    expect(src).toContain('reason: "not_authorized"');
+    expect(src).toContain('const isOps = Boolean(opsRow)');
+    expect(src).toContain('isOps && requestedOwnerId && typeof requestedOwnerId === "string" ? requestedOwnerId : user.id');
+    // No standalone ops-only 403 gate anymore.
+    expect(src).not.toContain('if (!opsRow)');
   });
-  it('validates name/firmType/billingEmail/ownerId and writes firm_created audit', () => {
+  it('validates name/firmType/billingEmail and writes firm_created audit', () => {
     expect(src).toContain('firmType must be cpa_firm | parent_company | other');
     expect(src).toContain('name must be at least 2 characters');
-    expect(src).toContain('ownerId is required');
     expect(src).toContain('billingEmail is required');
     const audit = section(src, 'firm_activity_log', '});');
     expect(audit).toContain('"firm_created"');

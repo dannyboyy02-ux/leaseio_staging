@@ -112,7 +112,29 @@
       "mode_saved": "Invoice detail updated",
       "owner_only": "Only the firm owner can change billing settings.",
       "usage_heading": "Usage by workspace",
-      "no_usage": "No workspaces in this firm yet."
+      "no_usage": "No workspaces in this firm yet.",
+      "start": "Start firm billing",
+      "start_failed": "Could not start billing"
+    },
+    "onboarding": {
+      "title": "Set up your firm",
+      "subtitle": "Manage multiple workspaces under one organization",
+      "step_details": "Firm",
+      "step_workspace": "Workspace",
+      "step_billing": "Billing",
+      "name_placeholder": "Smith & Co",
+      "continue": "Continue",
+      "workspace_hint": "Add your first workspace. You can add more anytime — each is billed at the workspace rate.",
+      "workspace_name": "Workspace name",
+      "workspace_placeholder": "e.g. a client or subsidiary",
+      "billing_summary": "Your firm is billed per workspace, together.",
+      "price_per_workspace": "$499 / workspace / month",
+      "billing_note": "Add or remove workspaces anytime — billing adjusts automatically.",
+      "to_payment": "Continue to payment",
+      "do_later": "Set up billing later",
+      "create_failed": "Could not create the firm",
+      "workspace_failed": "Could not create the workspace",
+      "checkout_failed": "Could not start billing"
     },
     "accept": {
       "invalid": "This invitation link is invalid.",
@@ -1565,6 +1587,7 @@
     "error_create_workspace": "Failed to create workspace.",
     "name_workspace_title": "Name your workspace",
     "name_workspace_desc": "This is where you'll manage all your leases.",
+    "firm_fork": "Managing multiple companies? Set up a firm instead →",
     "workspace_name_label": "Workspace name",
     "workspace_name_placeholder": "Acme Properties",
     "continue": "Continue",

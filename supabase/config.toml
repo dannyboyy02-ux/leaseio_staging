@@ -228,6 +228,11 @@ verify_jwt = false
 [functions.create-firm-workspace]
 verify_jwt = true
 
+# Phase 10 / #105-C: start firm billing via a hosted Stripe Checkout Session
+# (firm owner; manual auth → structured 401).
+[functions.create-firm-checkout]
+verify_jwt = false
+
 # Document capacity packs — Bearer JWT + workspace owner/admin check.
 [functions.manage-document-pack]
 verify_jwt = true

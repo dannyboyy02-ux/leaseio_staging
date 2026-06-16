@@ -207,6 +207,14 @@ export default function Onboarding() {
                 <Button onClick={() => setStep(2)} className="w-full" disabled={!workspaceName.trim()}>
                   {t('onboarding_flow.continue')}
                 </Button>
+                {/* Phase 10 — fork: managing multiple companies → set up a firm. */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/app/firm/onboarding')}
+                  className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {t('onboarding_flow.firm_fork')}
+                </button>
               </CardContent>
             </>
           )}

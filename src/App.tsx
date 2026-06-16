@@ -66,6 +66,7 @@ const FirmMembers = lazy(() => import("./pages/app/firm/FirmMembers"));
 const FirmWorkspaces = lazy(() => import("./pages/app/firm/FirmWorkspaces"));
 const FirmSettings = lazy(() => import("./pages/app/firm/FirmSettings"));
 const FirmBilling = lazy(() => import("./pages/app/firm/FirmBilling"));
+const FirmOnboarding = lazy(() => import("./pages/app/firm/FirmOnboarding"));
 const AcceptFirmInvitation = lazy(() => import("./pages/AcceptFirmInvitation"));
 const AccountSettings = lazy(() => import("./pages/settings/AccountSettings"));
 const WorkspacesSection = lazy(() => import("./pages/settings/WorkspacesSection"));
@@ -142,6 +143,7 @@ const App = () => (
                 <Route path="/app/firm/workspaces" element={<ProtectedRoute><FirmWorkspaces /></ProtectedRoute>} />
                 <Route path="/app/firm/billing" element={<ProtectedRoute><FirmBilling /></ProtectedRoute>} />
                 <Route path="/app/firm/settings" element={<ProtectedRoute><FirmSettings /></ProtectedRoute>} />
+                <Route path="/app/firm/onboarding" element={<ProtectedRoute><FirmOnboarding /></ProtectedRoute>} />
 
                 {/* Protected app routes */}
                 <Route
