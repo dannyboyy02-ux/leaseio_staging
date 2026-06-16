@@ -223,6 +223,11 @@ verify_jwt = true
 [functions.create-firm-subscription]
 verify_jwt = false
 
+# Phase 10 / #105-B: create a firm-bound child workspace (firm admin/owner; no
+# independent Stripe sub — firm billing covers it via quantity).
+[functions.create-firm-workspace]
+verify_jwt = true
+
 # Document capacity packs — Bearer JWT + workspace owner/admin check.
 [functions.manage-document-pack]
 verify_jwt = true
