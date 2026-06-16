@@ -1953,3 +1953,17 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 **When unblocking (the decision + setup needed):** (a) decide the firm pricing model (recommend per-child `quantity` on the existing business price — simplest, makes detailed/summarized natural); (b) operator creates the firm Stripe Product/Price + `STRIPE_PRICE_FIRM_*` env; (c) build FirmOnboarding's checkout (create-checkout firm branch or a new create-firm-subscription fn), the create-workspace firm_id reconciliation, and the invoice line-item handler. Mirrors the Vault operator-gate pattern.
 
 **Where to look:** `src/pages/app/firm/FirmBilling.tsx` (the visibility page the checkout will extend); `supabase/functions/stripe-webhook/index.ts` (`applyFirmSubscription` + the deferred `invoice.created` handler); `docs/PRODUCT_STRATEGY.md` §"Firm-level Stripe billing"; `docs/ops/OPERATOR_PLAYBOOK.md` (add a firm-pricing STOP item).
+
+---
+
+### Item #106: Overlapping permissive `profiles` UPDATE policies — `current_firm_id`/`current_workspace_id` lack a WITH CHECK — Low (pre-existing)
+
+**Severity:** Low. **Surfaced 2026-06-16** by the lease-security-scanner during the Phase 10 firm-frontend review. **Pre-existing** (baseline `20260516120000_baseline_schema.sql`), NOT introduced by Phase 10.
+
+**Symptom:** `profiles` has two overlapping permissive UPDATE policies — `profiles_update_own` (`USING (id = auth.uid())`, **no WITH CHECK**) and `profiles_update_self` (with a WITH CHECK constraining `current_workspace_id` to a membership). Because Postgres OR's permissive policies and `profiles_update_own` has no WITH CHECK, the membership constraint is effectively bypassable, and `current_firm_id` (written by `FirmContext.tsx`) has no membership WITH CHECK at all.
+
+**Why it's Low:** it's the user's OWN row, and `current_firm_id`/`current_workspace_id` are selection POINTERS only — a forged value grants no access (every downstream read is still RLS-gated, and FirmContext re-resolves the active firm via `resolveActiveFirm` against real memberships, so a stale/forged pointer is ignored). No privilege escalation.
+
+**Fix (its own beat):** consolidate to a single `profiles` UPDATE policy with a complete WITH CHECK (id = auth.uid() AND the pointer columns reference real memberships, or simply id = auth.uid() with the membership checks dropped since pointers are harmless). Sweep both `current_workspace_id` and `current_firm_id`.
+
+**Where to look:** `supabase/migrations/20260516120000_baseline_schema.sql` (`profiles_update_own` / `profiles_update_self`); `src/contexts/FirmContext.tsx` (current_firm_id writes).

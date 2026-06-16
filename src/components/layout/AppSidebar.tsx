@@ -83,7 +83,6 @@ export function AppSidebar() {
   const firmMode = computeFirmSidebarMode({
     hasFirmMembership: firm.isFirmUser,
     onFirmRoute: location.pathname.startsWith('/app/firm'),
-    activeWorkspaceFirmId: workspace?.firmId ?? null,
   });
 
   // --- Phase 2: multi-workspace switcher state ---

@@ -89,20 +89,23 @@ export default function FirmBilling() {
           ) : null}
         </Card>
 
-        {/* Billing summary mode */}
-        <Card className="p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label>{t("firm.billing.mode_label")}</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">{detailed ? t("firm.billing.mode_detailed_desc") : t("firm.billing.mode_summarized_desc")}</p>
+        {/* Billing summary mode — only meaningful once a firm subscription exists
+            (it controls how the invoice is itemized). Hidden until then (#105). */}
+        {hasSubscription ? (
+          <Card className="p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>{t("firm.billing.mode_label")}</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">{detailed ? t("firm.billing.mode_detailed_desc") : t("firm.billing.mode_summarized_desc")}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{detailed ? t("firm.billing.detailed") : t("firm.billing.summarized")}</span>
+                <Switch checked={detailed} disabled={!isOwner} onCheckedChange={toggleMode} />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{detailed ? t("firm.billing.detailed") : t("firm.billing.summarized")}</span>
-              <Switch checked={detailed} disabled={!isOwner} onCheckedChange={toggleMode} />
-            </div>
-          </div>
-          {!isOwner ? <p className="text-[11px] text-muted-foreground">{t("firm.billing.owner_only")}</p> : null}
-        </Card>
+            {!isOwner ? <p className="text-[11px] text-muted-foreground">{t("firm.billing.owner_only")}</p> : null}
+          </Card>
+        ) : null}
 
         {/* Per-child usage */}
         <div>

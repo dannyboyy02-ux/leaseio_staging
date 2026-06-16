@@ -57,19 +57,16 @@ export function computeActionUrgency(
 }
 
 // Which navigation mode the sidebar renders (spec §sidebar refactor):
-//   'workspace'  — no firm membership, or a standalone workspace: existing nav
-//   'firm'       — firm member on a /app/firm route: firm-level nav
-//   'firm_child' — firm member viewing a firm-bound child workspace: workspace
-//                  nav + a "back to firm" affordance
-export type FirmSidebarMode = 'workspace' | 'firm' | 'firm_child';
+//   'firm'      — a firm member on a /app/firm* route: firm-level nav
+//   'workspace' — everything else: the existing per-workspace nav
+// The "Firm" sidebar entry (shown to firm members in workspace mode) is the path
+// INTO firm context, so a separate firm-bound-child mode isn't needed.
+export type FirmSidebarMode = 'workspace' | 'firm';
 
 export function computeFirmSidebarMode(input: {
   hasFirmMembership: boolean;
   onFirmRoute: boolean;
-  activeWorkspaceFirmId: string | null;
 }): FirmSidebarMode {
   if (!input.hasFirmMembership) return 'workspace';
-  if (input.onFirmRoute) return 'firm';
-  if (input.activeWorkspaceFirmId) return 'firm_child';
-  return 'workspace';
+  return input.onFirmRoute ? 'firm' : 'workspace';
 }

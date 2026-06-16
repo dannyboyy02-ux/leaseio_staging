@@ -54,6 +54,9 @@
       "roster": "Members",
       "none": "No members yet.",
       "remove": "Remove member",
+      "remove_title": "Remove member?",
+      "remove_confirm": "{{name}} will lose access to this firm's workspaces. You can re-invite them later.",
+      "this_member": "this member",
       "pending": "Pending invitations",
       "resend": "Resend",
       "revoke": "Revoke",
@@ -126,7 +129,8 @@
       "create_account": "Create account",
       "email_mismatch": "This invitation was sent to {{email}}. Sign in with that address to accept.",
       "as_role": "You'll join as a {{role}}.",
-      "join": "Accept & join"
+      "join": "Accept & join",
+      "switch_account": "Sign out & sign in with the right address"
     }
   },
   "lease_review": {

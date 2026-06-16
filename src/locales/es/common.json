@@ -54,6 +54,9 @@
       "roster": "Miembros",
       "none": "Aún no hay miembros.",
       "remove": "Eliminar miembro",
+      "remove_title": "¿Eliminar miembro?",
+      "remove_confirm": "{{name}} perderá el acceso a los espacios de trabajo de esta firma. Puede volver a invitarlo más tarde.",
+      "this_member": "este miembro",
       "pending": "Invitaciones pendientes",
       "resend": "Reenviar",
       "revoke": "Revocar",
@@ -126,7 +129,8 @@
       "create_account": "Crear cuenta",
       "email_mismatch": "Esta invitación se envió a {{email}}. Inicie sesión con esa dirección para aceptar.",
       "as_role": "Se unirá como {{role}}.",
-      "join": "Aceptar y unirse"
+      "join": "Aceptar y unirse",
+      "switch_account": "Cerrar sesión e iniciar con la dirección correcta"
     }
   },
   "lease_review": {

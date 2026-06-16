@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useFirm } from "@/contexts/FirmContext";
+import { useApp } from "@/contexts/AppContext";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
 
 type ChildUsage = {
@@ -24,6 +25,12 @@ export default function FirmDashboard() {
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   const { currentFirm, currentFirmRole, isFirmUser, isLoading, pendingActionsCount } = useFirm();
+  const { switchWorkspace } = useApp();
+
+  const openWorkspace = async (workspaceId: string) => {
+    await switchWorkspace(workspaceId);
+    navigate("/app/dashboard");
+  };
 
   const { data: childUsage = [], isLoading: usageLoading } = useQuery({
     queryKey: ["firm-child-usage", currentFirm?.firm_id],
@@ -109,10 +116,20 @@ export default function FirmDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {childUsage.map((c) => (
-              <Card key={c.workspace_id} className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
+              <Card
+                key={c.workspace_id}
+                onClick={() => openWorkspace(c.workspace_id)}
+                className="p-4 space-y-2 cursor-pointer hover:border-primary/50 hover:bg-accent/30 transition-colors"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter") openWorkspace(c.workspace_id); }}
+              >
+                <div className="flex items-center justify-between gap-2">
                   <span className="font-medium truncate">{c.firm_child_label || c.workspace_name}</span>
-                  {c.restrict_firm_access ? <Badge variant="outline" className="text-[10px]">{t("firm.restricted_badge")}</Badge> : null}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {c.restrict_firm_access ? <Badge variant="outline" className="text-[10px]">{t("firm.restricted_badge")}</Badge> : null}
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
                 </div>
                 <div className="flex gap-4 text-xs text-muted-foreground">
                   <span>{t("firm.dashboard.leases_n", { count: c.active_leases ?? 0 })}</span>

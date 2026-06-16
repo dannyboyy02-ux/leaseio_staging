@@ -65,33 +65,15 @@ describe('computeActionUrgency', () => {
 });
 
 describe('computeFirmSidebarMode', () => {
-  it('workspace mode for a user with no firm membership', () => {
-    expect(
-      computeFirmSidebarMode({ hasFirmMembership: false, onFirmRoute: true, activeWorkspaceFirmId: 'f1' }),
-    ).toBe('workspace');
+  it('workspace mode for a user with no firm membership (even on a firm route)', () => {
+    expect(computeFirmSidebarMode({ hasFirmMembership: false, onFirmRoute: true })).toBe('workspace');
   });
 
   it('firm mode for a firm member on a firm route', () => {
-    expect(
-      computeFirmSidebarMode({ hasFirmMembership: true, onFirmRoute: true, activeWorkspaceFirmId: null }),
-    ).toBe('firm');
+    expect(computeFirmSidebarMode({ hasFirmMembership: true, onFirmRoute: true })).toBe('firm');
   });
 
-  it('firm_child mode for a firm member viewing a firm-bound workspace', () => {
-    expect(
-      computeFirmSidebarMode({ hasFirmMembership: true, onFirmRoute: false, activeWorkspaceFirmId: 'f1' }),
-    ).toBe('firm_child');
-  });
-
-  it('workspace mode for a firm member viewing a standalone workspace', () => {
-    expect(
-      computeFirmSidebarMode({ hasFirmMembership: true, onFirmRoute: false, activeWorkspaceFirmId: null }),
-    ).toBe('workspace');
-  });
-
-  it('firm route takes precedence over an active firm-child workspace', () => {
-    expect(
-      computeFirmSidebarMode({ hasFirmMembership: true, onFirmRoute: true, activeWorkspaceFirmId: 'f1' }),
-    ).toBe('firm');
+  it('workspace mode for a firm member NOT on a firm route', () => {
+    expect(computeFirmSidebarMode({ hasFirmMembership: true, onFirmRoute: false })).toBe('workspace');
   });
 });

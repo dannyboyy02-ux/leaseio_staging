@@ -151,7 +151,16 @@ export default function Signup() {
     });
 
     setIsLoading(false);
-    navigate(`/app/onboarding?plan=${preselectedPlan}&billing=${preselectedBilling}`);
+    // Honor a post-signup `next` (e.g. a firm-invitation acceptance landing) the
+    // same way Login does — a firm invitee joins a firm and doesn't need the
+    // workspace-onboarding flow. Restrict to same-origin relative paths to avoid
+    // an open-redirect.
+    const nextParam = searchParams.get('next');
+    if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')) {
+      navigate(nextParam);
+    } else {
+      navigate(`/app/onboarding?plan=${preselectedPlan}&billing=${preselectedBilling}`);
+    }
   };
 
   return (

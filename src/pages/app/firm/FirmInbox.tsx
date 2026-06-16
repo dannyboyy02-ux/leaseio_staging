@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useFirm } from "@/contexts/FirmContext";
+import { useApp } from "@/contexts/AppContext";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
 import { computeActionUrgency, type ActionUrgency } from "@/lib/firmContext";
 
@@ -32,7 +33,16 @@ export default function FirmInbox() {
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   const { currentFirm, isFirmUser, isLoading } = useFirm();
+  const { switchWorkspace } = useApp();
   const [workspaceFilter, setWorkspaceFilter] = useState<string>("all");
+
+  // The inbox aggregates actions across child workspaces; switch the active
+  // workspace into the action's workspace before opening the lease, so the lease
+  // route resolves in the right scope.
+  const openAction = async (workspaceId: string, leaseId: string) => {
+    await switchWorkspace(workspaceId);
+    navigate(`/app/leases/${leaseId}`);
+  };
 
   const { data: actions = [], isLoading: actionsLoading } = useQuery({
     queryKey: ["firm-inbox", currentFirm?.firm_id],
@@ -116,7 +126,7 @@ export default function FirmInbox() {
                       <Badge variant={meta.variant} className="text-[10px]">{t(meta.key)}</Badge>
                     </div>
                   </div>
-                  <Button size="sm" variant="ghost" onClick={() => navigate(`/app/leases/${a.lease_id}`)} className="shrink-0">
+                  <Button size="sm" variant="ghost" onClick={() => openAction(a.workspace_id, a.lease_id)} className="shrink-0">
                     {t("firm.inbox.open")}<ArrowRight className="h-3.5 w-3.5 ml-1" />
                   </Button>
                 </Card>

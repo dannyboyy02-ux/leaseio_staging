@@ -72,7 +72,13 @@ export default function AcceptFirmInvitation() {
             </div>
           </>
         ) : status === "email_mismatch" ? (
-          <><XCircle className="h-8 w-8 mx-auto text-destructive" /><p className="text-sm">{t("firm.accept.email_mismatch", { email: info?.email })}</p></>
+          <>
+            <XCircle className="h-8 w-8 mx-auto text-destructive" />
+            <p className="text-sm">{t("firm.accept.email_mismatch", { email: info?.email })}</p>
+            <Button variant="outline" onClick={async () => { await supabase.auth.signOut(); goAuth("login"); }}>
+              {t("firm.accept.switch_account")}
+            </Button>
+          </>
         ) : (
           <>
             <h1 className="text-lg font-semibold">{t("firm.accept.title", { firm: info?.firmName })}</h1>

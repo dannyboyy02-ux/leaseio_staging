@@ -10,11 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useFirm } from "@/contexts/FirmContext";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
-import { isFirmAdminOrOwner } from "@/lib/firmAccess";
 
 type Member = { user_id: string; role: string; email: string | null; first_name: string | null; last_name: string | null };
 type Invite = { id: string; email: string; role: string; invited_at: string };
@@ -25,13 +28,16 @@ export default function FirmMembers() {
   const qc = useQueryClient();
   const { currentFirm, currentFirmRole, isFirmUser, isLoading } = useFirm();
   const firmId = currentFirm?.firm_id;
-  const canManage = isFirmAdminOrOwner({ isOwner: currentFirmRole === "owner", firmRole: currentFirmRole === "owner" ? null : (currentFirmRole as any) });
+  // Owner + firm_admin manage members (derive directly from the role — robust to
+  // any future FirmRole refactor; the server re-enforces owner-only-mints-admins).
+  const canManage = currentFirmRole === "owner" || currentFirmRole === "firm_admin";
   const isOwner = currentFirmRole === "owner";
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"firm_member" | "firm_admin">("firm_member");
   const [busy, setBusy] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
 
   const { data: members = [] } = useQuery({
     queryKey: ["firm-members", firmId],
@@ -160,7 +166,7 @@ export default function FirmMembers() {
               <Badge variant="secondary" className="text-[10px]">{t(`firm.role.${m.role}`)}</Badge>
               {/* Owner can remove admins; admins can remove members; never remove the owner. */}
               {canManage && m.role !== "owner" && (isOwner || m.role === "firm_member") ? (
-                <Button size="icon" variant="ghost" onClick={() => removeMember(m.user_id)} aria-label={t("firm.members.remove")}>
+                <Button size="icon" variant="ghost" onClick={() => setRemoveTarget(m)} aria-label={t("firm.members.remove")}>
                   <Trash2 className="h-4 w-4 text-muted-foreground" />
                 </Button>
               ) : null}
@@ -193,6 +199,29 @@ export default function FirmMembers() {
           </section>
         ) : null}
       </div>
+
+      <AlertDialog open={Boolean(removeTarget)} onOpenChange={(o) => !o && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("firm.members.remove_title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("firm.members.remove_confirm", {
+                name: removeTarget
+                  ? [removeTarget.first_name, removeTarget.last_name].filter(Boolean).join(" ") || removeTarget.email || t("firm.members.this_member", { defaultValue: "this member" })
+                  : "",
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel", { defaultValue: "Cancel" })}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (removeTarget) removeMember(removeTarget.user_id); setRemoveTarget(null); }}
+            >
+              {t("firm.members.remove")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
