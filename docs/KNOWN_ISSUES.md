@@ -1978,3 +1978,20 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 **Fix (its own beat):** consolidate to a single `profiles` UPDATE policy with a complete WITH CHECK (id = auth.uid() AND the pointer columns reference real memberships, or simply id = auth.uid() with the membership checks dropped since pointers are harmless). Sweep both `current_workspace_id` and `current_firm_id`.
 
 **Where to look:** `supabase/migrations/20260516120000_baseline_schema.sql` (`profiles_update_own` / `profiles_update_self`); `src/contexts/FirmContext.tsx` (current_firm_id writes).
+
+---
+
+### Item #107: Firm billing needs reconciliation + offboarding-cancel before customer #1 (hard rule #9)
+
+**Severity:** Medium — **before-customer-#1 gate**, NOT deploy-blocking (no firm subscription exists anywhere yet; zero money moves until self-serve onboarding ships AND a real firm subscribes). **Surfaced 2026-06-16** by the security+integrity review of the #105 firm-billing core. The per-child quantity sync (`_shared/firm_billing.ts` `syncFirmSubscriptionQuantity`, called best-effort from bind/release/act-on) is correct and idempotent (recompute-from-live-child-count), but two revenue-integrity gaps remain that conflict with **CLAUDE.md hard rule #9 ("no silent vendor failures")**:
+
+1. **Silent sync failure is unobserved.** Every `syncFirmBilling` caller swallows Stripe errors with only `console.error`. "Self-heals on next op" holds ONLY if there's a next bind/release for that firm — a firm that binds its last child (or releases one) and then stops is mis-billed indefinitely with no alarm. Per hard rule #9 this Stripe write is currently in the prohibited fourth "we'll notice if it breaks" state.
+2. **Last-child release over-bills.** When a release drops the child count to 0, `syncFirmSubscriptionQuantity` no-ops at `qty < 1` (correctly avoiding a Stripe `quantity: 0` rejection) — but nothing cancels the now-childless subscription, so the firm keeps paying 1 × $499/mo. The code comment says "offboarding cancels the sub instead," but that offboarding-cancel flow is **not built**.
+
+**Fix (before customer #1):**
+- A **reconcile cron** (scheduled edge fn, like `vendor-health-check`) that, for every firm with a `stripe_subscription_id`, recomputes quantity = live child count and corrects drift (+ alerts on mismatch). Register it in the `vendor-health-check` / monitoring framework so the Stripe-quantity dependency is in the "monitored" state hard rule #9 requires.
+- **Offboarding-cancel:** when a release drives the child count to 0, hand off to a cancel flow (`stripe.subscriptions.update(cancel_at_period_end: true)` or the 30-day grace offboarding path) rather than leaving a live 1×$499 sub.
+- **Quantity-change audit:** have `syncFirmSubscriptionQuantity` return old→new and the caller write a `firm_activity_log` row (the dollar amount changing should be attributable — integrity-lane). Needs a new `firm_activity_log` activity_type value (e.g. `firm_billing_quantity_changed`) added to the CHECK.
+- **#102 continuation:** `bind-workspace-to-firm` / `release-workspace-from-firm` still return raw DB error messages (`updErr.message`) — now in the money path; convert to structured `reason` codes like `create-firm-subscription` does.
+
+**Where to look:** `supabase/functions/_shared/firm_billing.ts`; `supabase/functions/{bind-workspace-to-firm,release-workspace-from-firm,act-on-firm-workspace-join-request,create-firm-subscription}/index.ts`; the monitoring framework in `docs/OPERATIONAL_MONITORING_SPEC.md`; `docs/ops/OPERATOR_PLAYBOOK.md` (add a firm-billing-reconcile STOP item).

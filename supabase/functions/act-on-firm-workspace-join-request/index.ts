@@ -1,6 +1,21 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import Stripe from "https://esm.sh/stripe@18.5.0";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { syncFirmSubscriptionQuantity } from "../_shared/firm_billing.ts";
+
+// #105: after an approved bind, recompute the firm subscription quantity (best-
+// effort; self-heals on the next bind/release; no-op without a firm sub).
+async function syncFirmBilling(supabaseAdmin: ReturnType<typeof createClient>, firmId: string) {
+  try {
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) return;
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
+    await syncFirmSubscriptionQuantity(stripe, supabaseAdmin, firmId);
+  } catch (e) {
+    console.error("[firm-billing] quantity sync failed (self-heals on next op):", e instanceof Error ? e.message : String(e));
+  }
+}
 
 // Phase 10: approve/reject a firm⇄workspace join request. The COUNTERPARTY (the
 // side that did NOT initiate) decides:
@@ -88,6 +103,9 @@ serve(async (req) => {
       activity_type: decision === "approved" ? "firm_join_request_approved" : "firm_join_request_rejected",
       details: { request_id: reqRow.id, workspace_id: reqRow.workspace_id, direction: reqRow.request_direction },
     });
+
+    if (decision === "approved") await syncFirmBilling(supabaseAdmin, reqRow.firm_id);
+
     return json({ ok: true, status: decision, workspace_bound: decision === "approved" }, 200);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

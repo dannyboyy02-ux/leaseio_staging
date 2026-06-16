@@ -218,6 +218,11 @@ verify_jwt = true
 [functions.set-firm-access]
 verify_jwt = true
 
+# Phase 10 / #105: create the firm's per-child Stripe subscription (firm owner;
+# manual auth so a missing token returns a structured 401).
+[functions.create-firm-subscription]
+verify_jwt = false
+
 # Document capacity packs — Bearer JWT + workspace owner/admin check.
 [functions.manage-document-pack]
 verify_jwt = true
