@@ -2048,6 +2048,12 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 
 ### Item #110: Dead/misleading controls — dashboard drill-down stubs + `mailto:`-as-a-feature — Med
 
+> **RESOLVED + REASSESSED 2026-06-18 (branch `claude/approval-jargon-fix`) — pending merge. The original finding was partly overstated; verified on inspection:**
+> - **(a) Dashboard tiles — dead code REMOVED, no UX defect.** Contrary to the original note, the tiles had **no** misleading clickable affordance — no `cursor-pointer`, `hover:shadow`, or bar `onClick` (the only `onClick` is the working 30/60/90-day toggle). The single real issue was genuinely-dead code: `const navigate = useNavigate(); void navigate; // future`. Removed from `IntakeTrend` + `PipelineByDepartment`. (Wiring real department/period drill-downs is a possible future enhancement, not a defect.)
+> - **(b) `mailto:` flows are NOT defects.** They're honest, legally-standard contact mechanisms: the privacy one is a proper GDPR/CCPA Subject Access Request card (the 5 rights listed + a documented 30-day response commitment + a SAR comment), and the data-export / "Contact Support" ones are Contact-style email buttons — the legitimate mechanism most SMB SaaS use. A *tracked in-app request queue* (so a request can't be lost if the inbox lapses — hard rule #9) remains an **optional enhancement**, not a bug; left un-filed as a defect.
+>
+> Typecheck green. Delete on merge.
+
 **Severity:** Medium (one carries GDPR/CCPA SLA exposure). **Surfaced 2026-06-17** (audit Class 2 #2-6).
 
 **Symptom:** (a) `IntakeTrend.tsx:36-37` and `PipelineByDepartment.tsx:80-81` render clickable-looking tiles whose handler is `void navigate; // future` — clicks go nowhere. (b) Three `mailto:`-as-a-feature flows: **`AccountSettings.tsx:1389-1393` "Submit a Privacy Rights Request" promises a 30-day GDPR/CCPA response but is just a `mailto:` with no tracking/SLA** (legal exposure); `AccountSettings.tsx:1362-1366` "Request Data Export" (mailto); `CancellationBanner.tsx:154-157` "Contact Support → restore workspace" (mailto).
