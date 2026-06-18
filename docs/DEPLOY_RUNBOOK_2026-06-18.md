@@ -42,10 +42,14 @@ are opened.
 - **Apply migrations:** `20260618120000_notification_deliveries.sql`,
   `20260618130000_firm_counter_delete_decrement.sql`
 - **Redeploy edge functions:** `dispatch-notifications`, `send-nudge`,
-  `delete-workspace` (all bundle the changed `_shared/`).
-- **⚠ Operator setup (fail-closed until done):** set
-  **`NOTIFICATION_DISPATCH_CRON_SECRET`** (32+ char) and **schedule the
-  `dispatch-notifications` cron**; confirm `RESEND_*` env for `send-nudge`.
+  `delete-workspace` (all bundle the changed `_shared/`). `dispatch-notifications`
+  is the email side of the `recipient_ids` rail (the in-app side is PR #62's
+  trigger); `_shared/notify_dispatch.ts` includes per-type email copy
+  (counter-sig / delegation / execution / signator), commit `ef9673a`.
+- **⚠ Operator setup (fail-closed until done — this is what makes approval/
+  delegation/counter-sig EMAIL work):** set **`NOTIFICATION_DISPATCH_CRON_SECRET`**
+  (32+ char) and **schedule the `dispatch-notifications` cron**; confirm
+  `RESEND_*` env for `send-nudge`.
 - **Verify:** nudge → row in `notification_deliveries`; delete a firm child
   workspace → firm counter decrements + Stripe quantity resyncs.
 
@@ -120,6 +124,20 @@ the RESOLVED stamps already in those entries.
 
 ---
 
+## Notification email delivery — already covered (correction 2026-06-18)
+The `recipient_ids` approval/delegation/counter-sig notifications **deliver by
+email via PR #57's `dispatch-notifications`** (verified) and **in-app via PR #62's
+fanout trigger** — together they're the two halves of one rail. Email is
+**operator-gated, not a missing build** (schedule the cron + set the secret — step
+② above). The `send-counter-signature-reminder` "no email" concern was an
+off-`main` artifact: it writes a `recipient_ids` row the dispatcher emails (with
+counter-sig-specific copy as of #57 `ef9673a`).
+
+**Genuinely still open (not in any current PR):**
+- **Email for the `notifications`-table rail** — `process-alerts`' in-app alerts
+  (expiry / approval_pending / covenant / variance) are in-app only;
+  `dispatch-notifications` reads `lease_activity_log`, not `notifications`. A
+  separate, smaller build if email for those is wanted.
+
 ## Follow-on PRs (append as opened)
-_(Pending — notification email delivery + the `send-counter-signature-reminder`
-no-email fix. Update this section + the per-PR steps when those land.)_
+_(none yet beyond the above)_
