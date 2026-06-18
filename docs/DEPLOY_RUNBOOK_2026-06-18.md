@@ -25,8 +25,15 @@ are opened.
   **each merge after the first conflicts on the appended tail** — resolve by
   keeping all blocks + assigning real sequential #-numbers.
 
-**Recommended sequence:** `#58 → #57 → #59 → #60 → #61 → #62 → #64`. (#63 is this
-doc; #64 process-alerts email is independent — merge any time.)
+**Recommended sequence:** `#58 → #57 → #59 → #60 → #61 → #62 → #64 → #65`. (#63 is
+this doc; #64 process-alerts email + #65 deno-lint CI are independent.)
+
+**⚠ Sequence #65 (deno-lint CI) LAST.** Once it's on `main`, every other open PR's
+next CI run gains the `deno-lint` job, which lints the edge `.ts` files that PR
+changes. Any PR touching an edge file with a pre-existing lint issue (e.g. #59's
+`act-on-chain-step` has an unused `activityType`) would then go red and need a
+small lint fix. Merging #65 after the others avoids re-running them against the
+new gate; the gate still applies to all *future* PRs.
 
 ---
 
@@ -108,6 +115,15 @@ doc; #64 process-alerts email is independent — merge any time.)
 - **Verify:** with an active `alert_rules` row that fires, the **lease owner**
   gets an email (if their `email_notifications_enabled` is on) + the in-app alert
   still appears. A second cron run within 24h does NOT re-email (dedup).
+
+### ⑧ PR #65 — deno-lint CI gate · → main (independent; sequence LAST — see above)
+- **Merge.**
+- **Apply migrations:** none.
+- **Edge functions:** none (CI config + `supabase/functions/deno.lint.json`).
+- **No operator action / no deploy.** Pure CI — adds the PR-only `deno-lint` job.
+- **Verify:** the `deno-lint` check appears on PRs and passes for PRs that touch
+  no edge `.ts`. (`deno check` type-checking remains deferred — esm.sh supabase-js
+  type-resolution 404; tracked in KNOWN_ISSUES.)
 
 ---
 
