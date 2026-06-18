@@ -38,6 +38,15 @@ describe('_shared/notify_dispatch.ts — idempotent, failure-recorded delivery',
     expect(src).toContain('checkWorkspaceLive');
     expect(src).toContain('if (!liveness.live) return out');
   });
+  it('gives counter-sig + delegation/execution/signator types specific email copy (not the generic "Lease update")', () => {
+    // Non-notify_ types previously fell to the "Lease update — LeaseIO" default.
+    expect(src).toContain('case "counter_signature_reminder":');
+    expect(src).toContain('a lease is awaiting counter-signature');
+    expect(src).toContain('case "signator_review_required":');
+    expect(src).toContain('case "execution_owner_assigned":');
+    expect(src).toContain('case "voluntary_delegation_received":');
+    expect(src).toContain('case "stuck_chain_detected":');
+  });
 });
 
 describe('dispatch-notifications cron', () => {

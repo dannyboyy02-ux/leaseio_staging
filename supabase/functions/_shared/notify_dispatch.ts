@@ -46,6 +46,43 @@ function copyForType(type: string | undefined): { subject: string; heading: stri
       return { subject: "Your lease was returned for revision", heading: "Your lease was returned for revision" };
     case "notify_submitter_rejected":
       return { subject: "Your lease request was rejected", heading: "Your lease request was rejected" };
+
+    // Counter-signature chase
+    case "counter_signature_reminder":
+      return { subject: "Reminder: a lease is awaiting counter-signature", heading: "A lease is awaiting counter-signature" };
+    case "counter_signature_received":
+      return { subject: "A lease was counter-signed", heading: "A lease was counter-signed" };
+
+    // Final review / signator
+    case "signator_review_required":
+      return { subject: "Action needed: a lease is ready for final signature", heading: "A lease is ready for your final review" };
+
+    // Execution owner
+    case "execution_owner_assigned":
+    case "execution_owner_reassigned":
+      return { subject: "You're the execution owner for a lease", heading: "You've been assigned to execute a lease" };
+
+    // An approval was routed TO you (delegation / OOO / reassignment / policy timeout) — action needed
+    case "voluntary_delegation_received":
+    case "ooo_delegated_steps":
+    case "admin_reassignment_received":
+    case "deactivated_approver_reassigned":
+    case "admin_override_notice":
+    case "policy_delegate_activated":
+      return { subject: "Action needed: an approval was assigned to you", heading: "An approval was assigned to you" };
+
+    // Delegation status (informational)
+    case "voluntary_delegation_revoked":
+      return { subject: "A delegated approval was returned to you", heading: "A delegated approval was returned to you" };
+    case "voluntary_delegation_chain_notified":
+      return { subject: "A lease approval was delegated", heading: "A lease approval was delegated" };
+
+    // Admin / governance alerts
+    case "stuck_chain_detected":
+      return { subject: "A lease approval is stuck", heading: "A lease approval is stuck" };
+    case "policy_assignee_validation_failed":
+      return { subject: "A lease approval needs attention", heading: "A lease approval needs attention" };
+
     default:
       if (type && type.startsWith("notify_")) {
         return { subject: "A lease is awaiting your approval", heading: "A lease needs your approval" };
