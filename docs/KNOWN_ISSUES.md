@@ -2000,3 +2000,19 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 - **(#105-C LOWs, 2026-06-16):** add a per-user rate limit / cap on self-serve `create-firm` (spam-create / row-pollution defense-in-depth — an empty firm is inert but unbounded creation pollutes); and align `create-firm-checkout`'s customer resolution to fully dedup (it now stamps + scans, closing the double-sub HIGH, but a net-new owner with a pre-existing Stripe customer may still get a duplicate customer record — minor).
 
 **Where to look:** `supabase/functions/_shared/firm_billing.ts`; `supabase/functions/{bind-workspace-to-firm,release-workspace-from-firm,act-on-firm-workspace-join-request,create-firm-subscription}/index.ts`; the monitoring framework in `docs/OPERATIONAL_MONITORING_SPEC.md`; `docs/ops/OPERATOR_PLAYBOOK.md` (add a firm-billing-reconcile STOP item).
+
+---
+
+### Edge-function CI lint gate added; `deno check` (type-check) still blocked — 2026-06-18
+
+> **Branch `claude/ci-deno-check` (off `main`), pending merge.** Closes the "edge functions have no CI verification" gap for LINT. The TYPE-CHECK half remains open (see below).
+
+**Done:** a PR-only `deno-lint` CI job (`.github/workflows/ci.yml`) lints the edge `.ts` files a PR *changes* (diff `base...HEAD` under `supabase/functions`), via `supabase/functions/deno.lint.json` which excludes `no-explicit-any` (the deliberate Supabase-row casting pattern; a dedicated non-`deno.json` name so Supabase deploy doesn't auto-pick it). So any new/modified edge function must be lint-clean (unused vars, unreachable code, missing await, etc.) — the class that previously escaped (Node `typecheck` covers only the Vite app). Scoped to changed files so it does NOT fail on the 233 `no-explicit-any` + 22 other pre-existing problems in untouched legacy functions. Self-validated (deno 2.1.4 installed locally: YAML parsed by 2 parsers; the diff+lint command run; secrets-in-`if:` grep clean). Test: `denoLintCi.test.ts`.
+
+**STILL OPEN — `deno check` (full type-checking) cannot run in CI:** it 404s resolving supabase-js's deep type graph via esm.sh (`@supabase/storage-js@2.99.1/dist/module/StorageClient` → 404 while the package root is 200; `skipLibCheck` doesn't help — it's a *load* failure). Every supabase-js function would false-red. **Fix (separate, bigger effort):** route supabase-js through a type-resolvable source — a bare specifier + import map to `jsr:@supabase/supabase-js` (or `deno.land/x`) — then add a blocking `deno check`. Until then, type errors in edge functions are caught only by review + the static `readFileSync` tests, not automatically.
+
+**Two follow-ups noted, not done:**
+- **22 pre-existing lint problems** (13 `no-unused-vars`, 3 `require-await`, 3 `prefer-const`, 3 `no-control-regex`) across 13 legacy functions — **9 in `process_lease`**. The changed-files gate means a future PR touching one of these must clean it (boy-scout). A one-time sweep could clear them + flip the gate to tree-wide. (`no-control-regex` ones are likely intentional → `// deno-lint-ignore`.)
+- **In-flight PR interaction:** once this lands on `main`, the other open PRs that change edge functions (#57/#59/#60/#64) will lint their changed edge files on the next CI run; any with a pre-existing issue in a touched file (e.g. #59's `act-on-chain-step` has an unused `activityType`) will need a small lint fix. Merge sequencing: landing this LAST avoids re-running the others; landing it first raises the bar on them.
+
+**Where to look:** `.github/workflows/ci.yml` (`deno-lint` job); `supabase/functions/deno.lint.json`; `denoLintCi.test.ts`.
