@@ -429,3 +429,43 @@ export function resolveEffectiveAssignee(
   }
   return { user_id: null, role: null, source: "policy_role" };
 }
+
+// ── #111 C1: frontier active-step predicate ─────────────────────────────────
+// Pure spec-mirror of the backfill migration 20260618150000's frontier WHERE
+// clause (and of resolve-approval-chain / advance-to-final-review creation
+// semantics): a pending REQUIRED step is the "active" wait the lease is blocked
+// on iff no earlier still-blocking required step exists for that lease.
+//   earlier   = concept stage before signator, then lower step_order
+//   blocking  = status is "pending" or "sent_back" (approved/skipped/superseded/
+//               rejected no longer block)
+//   parallel  = same stage + same step_order are co-active (neither is "earlier")
+// Keep in lockstep with the migration. detect-stuck-chains / process-delegate-
+// timers trust that any pending row with non-null pending_since is the active
+// blocker, so the backfill must set pending_since on exactly these rows.
+export interface FrontierStepLike {
+  stage: "concept" | "signator";
+  step_order: number;
+  status: string;
+  is_required: boolean;
+}
+
+const FRONTIER_STAGE_RANK: Record<string, number> = { concept: 0, signator: 1 };
+const FRONTIER_BLOCKING_STATUSES = new Set(["pending", "sent_back"]);
+
+export function isFrontierActiveRequiredStep(
+  step: FrontierStepLike,
+  allStepsForLease: FrontierStepLike[],
+): boolean {
+  // The backfill only targets pending + required rows.
+  if (!step.is_required || step.status !== "pending") return false;
+  const myRank = FRONTIER_STAGE_RANK[step.stage] ?? 1;
+  const hasEarlierBlocker = allStepsForLease.some((other) => {
+    if (!other.is_required || !FRONTIER_BLOCKING_STATUSES.has(other.status)) return false;
+    const otherRank = FRONTIER_STAGE_RANK[other.stage] ?? 1;
+    return (
+      otherRank < myRank ||
+      (otherRank === myRank && other.step_order < step.step_order)
+    );
+  });
+  return !hasEarlierBlocker;
+}
