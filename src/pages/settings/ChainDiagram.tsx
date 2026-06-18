@@ -61,7 +61,7 @@ export const FUNCTIONAL_ROLE_OPTIONS: Array<{
   { value: 'submitter', label: 'Submitter', abbrev: 'SU' },
   { value: 'manager_approver', label: 'Manager approver', abbrev: 'MA' },
   { value: 'financial_approver', label: 'Financial approver', abbrev: 'FA' },
-  { value: 'signator', label: 'Signator', abbrev: 'SG' },
+  { value: 'signator', label: 'Signatory', abbrev: 'SG' },
   { value: 'admin', label: 'Admin', abbrev: 'AD' },
 ];
 

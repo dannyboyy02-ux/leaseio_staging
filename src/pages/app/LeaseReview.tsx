@@ -98,7 +98,7 @@ import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
 import { createLeaseNotification } from '@/lib/leaseNotifications';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
-import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { displayLabel, isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { generateRentScheduleRows } from '@/lib/rentSchedule';
 import {
   buildApproverCandidates,
@@ -2997,7 +2997,7 @@ export default function LeaseReview() {
                                   </Link>
                                   <span className="text-xs text-purple-700/70">
                                     {' — '}matches on {c.match_reasons.join(' + ')}
-                                    {c.lifecycle_status ? ` · ${c.lifecycle_status}` : ''}
+                                    {c.lifecycle_status ? ` · ${displayLabel(c.lifecycle_status as LifecycleStatus)}` : ''}
                                   </span>
                                 </div>
                               </li>

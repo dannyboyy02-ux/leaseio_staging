@@ -95,7 +95,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   deactivated_approver_reassigned: 'Deactivated approver reassigned',
   delegate_activated: 'Delegate activated',
   document_iteration_uploaded: 'Document iteration uploaded',
-  negotiation_escalated_to_concept: 'Escalated to concept approver',
+  negotiation_escalated_to_concept: 'Escalated back to initial approval',
   ooo_revoked: 'Out of office revoked',
   ooo_routed_step: 'Step routed to out-of-office delegate',
   policy_assignee_validation_failed: 'Approver validation failed',
