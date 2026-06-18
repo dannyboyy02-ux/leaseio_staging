@@ -80,13 +80,13 @@ export function RentRollExport() {
         .from('leases')
         .select('*')
         .eq('workspace_id', workspace.id)
-        // #118 (R2): list committed leases keyed on lifecycle_status — the
-        // legacy `status` column is the doc-pipeline state and diverges (a
-        // draft can be status='Ready'; an active lease can be status='Uploaded').
-        // Exclude pre-approval/draft, terminal (rejected/cancelled/expired), and
-        // archived leases.
+        // #118 (R2): a rent roll lists leases actually ON THE BOOKS — executed
+        // or active — keyed on lifecycle_status (the legacy `status` column is
+        // the doc-pipeline state and diverges: a draft can be status='Ready', an
+        // active lease status='Uploaded'). Pre-signature pipeline
+        // (approved/in_negotiation/final_review), terminal states, and archived
+        // leases are excluded so the run-rate totals reflect committed rent only.
         .in('lifecycle_status', [
-          'approved', 'in_negotiation', 'final_review',
           'executed', 'fully_executed', 'pending_counter_signature', 'active',
         ])
         .eq('archived', false)
