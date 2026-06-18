@@ -25,7 +25,8 @@ are opened.
   **each merge after the first conflicts on the appended tail** — resolve by
   keeping all blocks + assigning real sequential #-numbers.
 
-**Recommended sequence:** `#58 → #57 → #59 → #60 → #61 → #62`.
+**Recommended sequence:** `#58 → #57 → #59 → #60 → #61 → #62 → #64`. (#63 is this
+doc; #64 process-alerts email is independent — merge any time.)
 
 ---
 
@@ -97,6 +98,17 @@ are opened.
   dispatch + nudge; #62 = in-app `recipient_ids` fanout). Confirm a single action
   doesn't produce a confusing double in-app entry.
 
+### ⑦ PR #64 — process-alerts email · → main (independent)
+- **Merge.**
+- **Apply migrations:** none.
+- **Redeploy edge functions:** `process-alerts`.
+- **Operator:** ensure `RESEND_ALERTS_FROM_EMAIL` (or `RESEND_FROM_EMAIL`) +
+  `RESEND_API_KEY` are set (already used by other crons). The `process-alerts`
+  cron + `PROCESS_ALERTS_CRON_SECRET` are pre-existing.
+- **Verify:** with an active `alert_rules` row that fires, the **lease owner**
+  gets an email (if their `email_notifications_enabled` is on) + the in-app alert
+  still appears. A second cron run within 24h does NOT re-email (dedup).
+
 ---
 
 ## At every merge — KNOWN_ISSUES.md reconciliation
@@ -133,11 +145,13 @@ fanout trigger** — together they're the two halves of one rail. Email is
 off-`main` artifact: it writes a `recipient_ids` row the dispatcher emails (with
 counter-sig-specific copy as of #57 `ef9673a`).
 
-**Genuinely still open (not in any current PR):**
-- **Email for the `notifications`-table rail** — `process-alerts`' in-app alerts
-  (expiry / approval_pending / covenant / variance) are in-app only;
-  `dispatch-notifications` reads `lease_activity_log`, not `notifications`. A
-  separate, smaller build if email for those is wanted.
+**Email for the `notifications`-table rail — now covered by PR #64** (step ⑦):
+`process-alerts` emails each new alert (expiry / approval_pending / covenant /
+variance) to the lease owner, gated by `email_notifications_enabled`, best-effort.
+So both notification rails now deliver in-app **and** by email.
 
 ## Follow-on PRs (append as opened)
-_(none yet beyond the above)_
+- **#64** — process-alerts email (step ⑦ above). Independent; reviewed clean.
+
+_(No remaining notification-email gaps. Possible future extension: also email
+workspace admins for governance alerts — a one-spot change in `sendAlertEmails`.)_
