@@ -2078,6 +2078,8 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 
 ### Item #112: `delete-workspace` is firm-unaware → child-counter drift + billing over-charge (W1 + B2) — High
 
+> **RESOLVED in code 2026-06-18 (branch `claude/approval-jargon-fix`), reviewed clean — pending merge + apply.** Migration `20260618130000_firm_counter_delete_decrement.sql` adds a DELETE branch to `maintain_firm_child_workspace_counter` (trigger now `BEFORE INSERT OR DELETE OR UPDATE OF firm_id`; `RETURN OLD`) and one-time-reconciles any drifted counter (bracketed by disable/enable of `enforce_firm_entitlement_guard`, since a migration isn't `service_role`). `delete-workspace` now resyncs the firm Stripe quantity after a firm-bound delete (best-effort; the #107 cron backstops). 5 static tests; firm-billing 105/107 green. Security/integrity/auditor reviewed (no Critical/High). **The sibling `delete-account` path has the same billing-resync gap → filed as #120.** Delete this item on merge + apply (security migration — the review gate is satisfied by the #112 review).
+
 **Severity:** High (integrity/availability + revenue). **Surfaced 2026-06-17** (audit W1 + B2 — same root cause).
 
 **Symptom:** `delete-workspace` deletes a workspace row with **no firm handling**. (a) `maintain_firm_child_workspace_counter` (`20260615172439_…:133-189`) has no DELETE branch and its trigger (`:191-194`) is `BEFORE INSERT OR UPDATE OF firm_id` — DELETE excluded — so `firms.child_workspaces_used` drifts upward permanently and the firm falsely hits `child_workspace_limit` (can't bind new children). (b) No firm billing resync fires, so the firm is over-billed for the deleted child until the #107 reconcile cron runs.
@@ -2169,3 +2171,15 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 **Fix:** R3 — exclude or flag index/CPI leases in the single-lease PV exactly as the portfolio path does (confirm the stored `calc_pv_liability` for an index lease first). R5 — add workspace-scoped rate limiting (20/hour) + use the user client for the initial fetch.
 
 **Where to look:** `src/lib/leaseCalculations.ts:66`; `src/lib/portfolioAnalytics.ts` (the index-lease exclusion to mirror); `supabase/functions/generate-summary-token/index.ts`.
+
+---
+
+### Item #120: `delete-account` doesn't resync firm billing when it deletes a firm-bound workspace — Med
+
+**Severity:** Medium (revenue drift; the #107 cron backstops it). **Surfaced 2026-06-18** during the #112 security/integrity review — filed as its own beat (CLAUDE.md "pre-existing issues are their own beat"), NOT bundled into #112.
+
+**Symptom:** `delete-account` deletes the user's owned workspaces by `owner_id` via the service role (`supabase/functions/delete-account/index.ts` workspace-delete). After #112, the `maintain_firm_child_workspace_counter` DELETE branch correctly decrements `firms.child_workspaces_used` for any firm-bound child removed — the **integrity** side is handled. BUT delete-account does NOT select `firm_id` or call `syncFirmSubscriptionQuantity`, so the firm's Stripe **quantity** is left stale until the #107 `firm-billing-reconcile` cron runs — a silent vendor drift (hard rule #9) for the interim. Mostly academic today: a firm *owner* can't hard-delete while children still reference the firm (#104 / FK guards), so the realistic case is a non-owner whose owned workspace was bound into someone else's firm.
+
+**Fix:** mirror the #112 `delete-workspace` change — select `firm_id` on the workspaces being deleted, and after the deletes call `syncFirmSubscriptionQuantity` once per distinct affected `firm_id` (best-effort; the cron stays the backstop).
+
+**Where to look:** `supabase/functions/delete-account/index.ts` (the workspace-delete path); `supabase/functions/_shared/firm_billing.ts`; reference fix in `supabase/functions/delete-workspace/index.ts` (#112).
