@@ -267,6 +267,8 @@ interface PendingChainStep {
   asset_type: string | null;
   monthly_payment: number | null;
   calc_total_commitment: number | null;
+  // Hydrated from approval_policies (#111 C6 — per-policy SLA aging badge):
+  slaDays?: number | null;
 }
 
 // C3 (#111) — a voluntary delegation the current user made that's still active
@@ -364,6 +366,7 @@ function ChainStepCard({
             pendingSince={step.pending_since ?? null}
             originalAssigneeName={null}
             delegateAfterDays={step.delegate_after_days ?? null}
+            slaDays={step.slaDays ?? null}
           />
 
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -711,14 +714,26 @@ export default function ApprovalQueue() {
       let hydratedChainSteps: PendingChainStep[] = [];
       if (chainSteps.length > 0) {
         const chainLeaseIds = Array.from(new Set(chainSteps.map((s) => s.lease_id)));
-        const { data: chainLeases } = await supabase
-          .from('leases')
-          .select(
-            'id, request_title, requesting_department, asset_type, monthly_payment, calc_total_commitment',
-          )
-          .in('id', chainLeaseIds);
+        // #111 C6: fetch each step's policy SLA so the badge can flag over-SLA.
+        const chainPolicyIds = Array.from(
+          new Set(chainSteps.map((s) => s.policy_id).filter((p): p is string => !!p)),
+        );
+        const [{ data: chainLeases }, { data: chainPolicies }] = await Promise.all([
+          supabase
+            .from('leases')
+            .select(
+              'id, request_title, requesting_department, asset_type, monthly_payment, calc_total_commitment',
+            )
+            .in('id', chainLeaseIds),
+          chainPolicyIds.length > 0
+            ? supabase.from('approval_policies').select('id, sla_days').in('id', chainPolicyIds)
+            : Promise.resolve({ data: [] as Array<{ id: string; sla_days: number | null }> }),
+        ]);
         const leaseMap = new Map(
           (chainLeases ?? []).map((l: any) => [l.id, l]),
+        );
+        const policySlaMap = new Map<string, number | null>(
+          (chainPolicies ?? []).map((p: any): [string, number | null] => [p.id, p.sla_days ?? null]),
         );
         hydratedChainSteps = chainSteps.map((s) => {
           const l: any = leaseMap.get(s.lease_id) ?? {};
@@ -729,6 +744,7 @@ export default function ApprovalQueue() {
             asset_type: l.asset_type ?? null,
             monthly_payment: l.monthly_payment ?? null,
             calc_total_commitment: l.calc_total_commitment ?? null,
+            slaDays: s.policy_id ? policySlaMap.get(s.policy_id) ?? null : null,
           };
         });
       }
