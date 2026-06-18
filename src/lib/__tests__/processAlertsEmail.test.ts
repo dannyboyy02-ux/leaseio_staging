@@ -34,6 +34,9 @@ describe('process-alerts → email the lease owner', () => {
     expect(src).toContain('catch (e)');
     // No RESEND_API_KEY → skip emails, still return (don't crash the cron).
     expect(src).toContain('RESEND_API_KEY unset');
+    // Hard rule #9: a profiles-lookup error is logged + skipped, not silent.
+    expect(src).toContain('error: profilesErr');
+    expect(src).toContain('profiles lookup failed');
   });
 
   it('only emails newly-created alerts (reuses the wasRecentlyAlerted dedup — no re-email)', () => {

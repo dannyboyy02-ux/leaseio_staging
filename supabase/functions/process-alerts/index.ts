@@ -215,10 +215,16 @@ async function sendAlertEmails(
   ];
   if (ownerIds.length === 0) return 0;
 
-  const { data: profiles } = await supabase
+  const { data: profiles, error: profilesErr } = await supabase
     .from("profiles")
     .select("id, email, email_notifications_enabled")
     .in("id", ownerIds);
+  if (profilesErr) {
+    // Hard rule #9 — don't fail silently: log + skip emails for this run (the
+    // in-app notifications already landed). Best-effort, never crash the cron.
+    console.warn("[process-alerts] profiles lookup failed — skipping alert emails:", profilesErr.message);
+    return 0;
+  }
   const profileMap = new Map(
     ((profiles ?? []) as Array<{ id: string; email: string | null; email_notifications_enabled: boolean | null }>)
       .map((p) => [p.id, p]),
