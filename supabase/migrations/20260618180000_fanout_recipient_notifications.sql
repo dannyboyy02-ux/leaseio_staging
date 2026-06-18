@@ -66,10 +66,19 @@ BEGIN
     v_alert_type := COALESCE(NULLIF(NEW.details ->> 'notification_type', ''), 'notification');
     v_message := NEW.details ->> 'message';
 
+    -- Fan ONLY to genuine members of the lease's workspace (firm-aware via
+    -- is_workspace_member). This drops unreadable junk rows for non-members +
+    -- a UUID-enumeration spam vector, and bounds a forged recipient_ids to real
+    -- co-members (security review Tier 2). The inner subquery regex-filters
+    -- BEFORE the ::uuid cast so a malformed id can never error the cast.
     FOR v_recipient IN
-      SELECT DISTINCT (elem #>> '{}')::uuid
-      FROM jsonb_array_elements(NEW.details -> 'recipient_ids') AS elem
-      WHERE (elem #>> '{}') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      SELECT DISTINCT v.rid
+      FROM (
+        SELECT (elem #>> '{}')::uuid AS rid
+        FROM jsonb_array_elements(NEW.details -> 'recipient_ids') AS elem
+        WHERE (elem #>> '{}') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      ) v
+      WHERE public.is_workspace_member(v_workspace_id, v.rid)
     LOOP
       INSERT INTO public.notifications (workspace_id, user_id, lease_id, alert_type, title, body)
       VALUES (

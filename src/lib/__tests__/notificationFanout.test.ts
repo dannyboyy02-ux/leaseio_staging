@@ -48,4 +48,11 @@ describe('notification fanout trigger migration', () => {
     expect(sql).toContain("jsonb_typeof(NEW.details -> 'recipient_ids') IS DISTINCT FROM 'array'");
     expect(sql).toMatch(/\^\[0-9a-fA-F\]\{8\}-/);
   });
+
+  it('fans only to genuine workspace members (firm-aware), regex-before-cast', () => {
+    expect(sql).toContain('public.is_workspace_member(v_workspace_id, v.rid)');
+    // The cast lives in the inner subquery, gated by the regex WHERE, so a
+    // malformed id is filtered before ::uuid runs.
+    expect(sql).toMatch(/SELECT \(elem #>> '\{\}'\)::uuid AS rid[\s\S]*?WHERE \(elem #>> '\{\}'\) ~/);
+  });
 });
