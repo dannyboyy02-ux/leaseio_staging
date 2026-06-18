@@ -10,6 +10,7 @@ import {
   Loader2,
   FileText,
   ChevronRight,
+  Undo2,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -268,6 +269,18 @@ interface PendingChainStep {
   calc_total_commitment: number | null;
 }
 
+// C3 (#111) — a voluntary delegation the current user made that's still active
+// (revoked_at IS NULL) and whose step is still pending. Shown in the "mine" tab
+// so the delegator can revoke it.
+interface DelegatedByMeRow {
+  chainStepId: string;
+  leaseId: string;
+  leaseTitle: string;
+  delegateName: string;
+  stage: 'concept' | 'signator';
+  delegatedAt: string;
+}
+
 function ChainStepCard({
   step,
   onView,
@@ -503,6 +516,12 @@ export default function ApprovalQueue() {
 
   // Phase 2 — chain-step inbox source. Parallel to the legacy state above.
   const [pendingChainSteps, setPendingChainSteps] = useState<PendingChainStep[]>([]);
+  // C3 (#111) — "Delegated by me": active voluntary delegations this user made.
+  // Exclusive delegation moves a step off the delegator's own queue, so this is
+  // the surface where they revoke a mis-delegation (backed by
+  // revoke-voluntary-delegation, which authorizes delegated_by === caller).
+  const [delegatedByMe, setDelegatedByMe] = useState<DelegatedByMeRow[]>([]);
+  const [revokingStepId, setRevokingStepId] = useState<string | null>(null);
   // Phase 5: leases in pending_counter_signature where the current user
   // is the execution_owner_id. Surfaced inside "Needs My Review" so the
   // execution owner has a single inbox view.
@@ -715,6 +734,51 @@ export default function ApprovalQueue() {
       }
       setPendingChainSteps(hydratedChainSteps);
 
+      // C3 (#111) — "Delegated by me": active voluntary delegations this user
+      // made, whose step is still pending. RLS (voluntary_delegations_select)
+      // scopes to the user's workspaces; we additionally filter delegated_by.
+      const { data: myDelegRows } = await supabase
+        .from('chain_step_voluntary_delegations')
+        .select('chain_step_id, lease_id, delegated_to, delegated_at')
+        .eq('workspace_id', workspace.id)
+        .eq('delegated_by', user.id)
+        .is('revoked_at', null);
+      const delegRows = (myDelegRows ?? []) as Array<{
+        chain_step_id: string; lease_id: string; delegated_to: string; delegated_at: string;
+      }>;
+      let hydratedDelegs: DelegatedByMeRow[] = [];
+      if (delegRows.length > 0) {
+        const dLeaseIds = Array.from(new Set(delegRows.map((d) => d.lease_id)));
+        const dDelegateIds = Array.from(new Set(delegRows.map((d) => d.delegated_to)));
+        const dStepIds = Array.from(new Set(delegRows.map((d) => d.chain_step_id)));
+        const [dLeasesRes, dProfilesRes, dStepsRes] = await Promise.all([
+          supabase.from('leases').select('id, request_title, tenant_name').in('id', dLeaseIds),
+          supabase.from('profiles').select('id, first_name, last_name, email').in('id', dDelegateIds),
+          supabase.from('lease_approval_chain').select('id, stage, status').in('id', dStepIds),
+        ]);
+        const dLeaseMap = new Map((dLeasesRes.data ?? []).map((l: any) => [l.id, l]));
+        const dProfMap = new Map((dProfilesRes.data ?? []).map((p: any) => [p.id, p]));
+        const dStepMap = new Map((dStepsRes.data ?? []).map((s: any) => [s.id, s]));
+        hydratedDelegs = delegRows
+          // Only steps still pending — a delegation on an already-acted step is
+          // moot (nothing to revoke usefully).
+          .filter((d) => (dStepMap.get(d.chain_step_id)?.status ?? 'pending') === 'pending')
+          .map((d) => {
+            const l: any = dLeaseMap.get(d.lease_id) ?? {};
+            const p: any = dProfMap.get(d.delegated_to) ?? {};
+            const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || 'the delegate';
+            return {
+              chainStepId: d.chain_step_id,
+              leaseId: d.lease_id,
+              leaseTitle: l.request_title || l.tenant_name || 'Untitled lease',
+              delegateName: name,
+              stage: (dStepMap.get(d.chain_step_id)?.stage ?? 'concept') as 'concept' | 'signator',
+              delegatedAt: d.delegated_at,
+            };
+          });
+      }
+      setDelegatedByMe(hydratedDelegs);
+
       // Phase 5 — execution-owner inbox section. Lists leases where the
       // user is the execution_owner_id and lifecycle is
       // pending_counter_signature. Workspace-scoped via the query.
@@ -881,6 +945,26 @@ export default function ApprovalQueue() {
     }
   };
 
+  // C3 (#111) — revoke a voluntary delegation I made. Calls
+  // revoke-voluntary-delegation (authorizes delegated_by === me; recomputes
+  // effective_assignee back to me), which returns the step to my queue.
+  const handleRevokeDelegation = async (chainStepId: string) => {
+    setRevokingStepId(chainStepId);
+    try {
+      const { data, error } = await supabase.functions.invoke('revoke-voluntary-delegation', {
+        body: { chainStepId },
+      });
+      if (error) throw new Error(error.message);
+      if ((data as any)?.ok === false) throw new Error((data as any)?.error || 'Revoke failed');
+      toast.success('Delegation revoked — the step is back in your queue.');
+      fetchLeases();
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not revoke the delegation.');
+    } finally {
+      setRevokingStepId(null);
+    }
+  };
+
   const handleApprove = async () => {
     if (!approveTarget || !user?.id) return;
     setIsActing(true);
@@ -1019,8 +1103,9 @@ export default function ApprovalQueue() {
     ].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
 
     const hasExecutionOwnerItems = executionOwnerLeases.length > 0;
+    const hasDelegatedByMe = delegatedByMe.length > 0;
 
-    if (items.length === 0 && !hasExecutionOwnerItems) {
+    if (items.length === 0 && !hasExecutionOwnerItems && !hasDelegatedByMe) {
       return (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <FileText className="h-12 w-12 mb-3 opacity-40" />
@@ -1098,6 +1183,50 @@ export default function ApprovalQueue() {
               onActed={() => fetchLeases()}
             />
           ),
+        )}
+
+        {hasDelegatedByMe && (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+              Delegated by me ({delegatedByMe.length})
+            </p>
+            <div className="space-y-2">
+              {delegatedByMe.map((d) => (
+                <Card key={`deleg-${d.chainStepId}`} className="overflow-hidden">
+                  <CardContent className="p-4 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      className="min-w-0 text-left"
+                      onClick={() => navigate(`/app/leases/${d.leaseId}`)}
+                    >
+                      <p className="text-sm font-semibold truncate hover:underline">
+                        {d.leaseTitle}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Delegated to {d.delegateName} ·{' '}
+                        {d.stage === 'signator' ? 'Final approval' : 'Initial approval'} ·{' '}
+                        {format(new Date(d.delegatedAt), 'MMM d, yyyy')}
+                      </p>
+                    </button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      disabled={revokingStepId === d.chainStepId}
+                      onClick={() => handleRevokeDelegation(d.chainStepId)}
+                    >
+                      {revokingStepId === d.chainStepId ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Revoke
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     );
