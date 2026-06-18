@@ -647,59 +647,62 @@ serve(async (req) => {
       );
     }
 
-    // ── Apply reconciliation ──────────────────────────────────────────
-    // 1. Mark superseded rows
-    if (reconciled.superseded.length > 0) {
-      const supersededIds = (reconciled.superseded as Array<{ id: string }>).map((s) => s.id);
-      const { error: supErr } = await supabaseAdmin
-        .from("lease_approval_chain")
-        .update({ status: "superseded" })
-        .in("id", supersededIds);
-      if (supErr) {
-        console.error("[resolve-approval-chain] supersede error:", supErr.message);
-      }
-    }
+    // ── Apply reconciliation (C5: atomic supersede + insert) ──────────────
+    // Build the superseded IDs + the added rows, then apply BOTH in a single
+    // transaction via reroute_reconcile_chain_steps. The previous code issued
+    // two separate PostgREST writes that each only console.error- d on failure
+    // and continued — so a failed insert after a successful supersede left the
+    // lease with zero active approvers while still reporting success (#111 C5).
+    const supersededIds = (reconciled.superseded as Array<{ id: string }>).map((s) => s.id);
 
-    // 2. Insert added rows
-    if (reconciled.added.length > 0) {
-      // Build full INSERT shape from newPolicySteps, filtered to added identities
-      const addedIdentities = new Set(
-        reconciled.added.map((a) => `${a.stage}::${a.approver_user_id ?? ""}::${a.approver_role ?? ""}`),
+    // Phase 7: rows added via reroute become immediately pending — the lease
+    // lifecycle has rolled back so they're what's blocking. Set pending_since on
+    // required ones. Build the full INSERT shape from newPolicySteps, filtered to
+    // the added identities.
+    const addedIdentities = new Set(
+      reconciled.added.map((a) => `${a.stage}::${a.approver_user_id ?? ""}::${a.approver_role ?? ""}`),
+    );
+    const rerouteNowIso = new Date().toISOString();
+    const rowsToInsert = newPolicySteps
+      .filter((s) =>
+        addedIdentities.has(`${s.stage}::${s.approver_user_id ?? ""}::${s.approver_role ?? ""}`),
+      )
+      .map((s) => ({
+        lease_id: leaseId,
+        workspace_id: workspaceId,
+        policy_id: newPolicy.id,
+        policy_version: newPolicy.version,
+        stage: s.stage,
+        step_order: s.step_order,
+        parallel_group: s.parallel_group,
+        approver_user_id: s.approver_user_id,
+        approver_role: s.approver_role,
+        delegate_user_id: s.delegate_user_id,
+        delegate_after_days: s.delegate_after_days,
+        is_required: s.is_required,
+        status: "pending",
+        // Phase 7 columns
+        effective_assignee_user_id: s.approver_user_id,
+        assignee_resolution_source: s.approver_user_id ? "policy_user" : "policy_role",
+        pending_since: s.is_required ? rerouteNowIso : null,
+      }));
+
+    if (supersededIds.length > 0 || rowsToInsert.length > 0) {
+      const { error: reconcileErr } = await supabaseAdmin.rpc(
+        "reroute_reconcile_chain_steps",
+        { p_superseded_ids: supersededIds, p_new_rows: rowsToInsert },
       );
-      // Phase 7: rows added via reroute become immediately pending —
-      // the lease lifecycle has rolled back so they're what's blocking.
-      // Set pending_since on required ones.
-      const rerouteNowIso = new Date().toISOString();
-      const rowsToInsert = newPolicySteps
-        .filter((s) =>
-          addedIdentities.has(`${s.stage}::${s.approver_user_id ?? ""}::${s.approver_role ?? ""}`),
-        )
-        .map((s) => ({
-          lease_id: leaseId,
-          workspace_id: workspaceId,
-          policy_id: newPolicy.id,
-          policy_version: newPolicy.version,
-          stage: s.stage,
-          step_order: s.step_order,
-          parallel_group: s.parallel_group,
-          approver_user_id: s.approver_user_id,
-          approver_role: s.approver_role,
-          delegate_user_id: s.delegate_user_id,
-          delegate_after_days: s.delegate_after_days,
-          is_required: s.is_required,
-          status: "pending",
-          // Phase 7 columns
-          effective_assignee_user_id: s.approver_user_id,
-          assignee_resolution_source: s.approver_user_id ? "policy_user" : "policy_role",
-          pending_since: s.is_required ? rerouteNowIso : null,
-        }));
-      if (rowsToInsert.length > 0) {
-        const { error: insErr } = await supabaseAdmin
-          .from("lease_approval_chain")
-          .insert(rowsToInsert);
-        if (insErr) {
-          console.error("[resolve-approval-chain] add error:", insErr.message);
-        }
+      if (reconcileErr) {
+        // Atomic: on failure NEITHER write landed, so the lease keeps its prior
+        // active approvers. Abort the reroute instead of swallowing the error.
+        console.error("[resolve-approval-chain] reconcile error:", reconcileErr.message);
+        await logActivity(leaseId, "chain_resolution_failed", {
+          reason: "reroute_reconcile_failed",
+          error: reconcileErr.message,
+          steps_superseded: supersededIds.length,
+          steps_added: rowsToInsert.length,
+        });
+        return jsonResponse({ ok: false, error: "reroute_reconcile_failed" }, 500, origin);
       }
     }
 
