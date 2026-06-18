@@ -2185,3 +2185,17 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 **Fix:** mirror the #112 `delete-workspace` change — select `firm_id` on the workspaces being deleted, and after the deletes call `syncFirmSubscriptionQuantity` once per distinct affected `firm_id` (best-effort; the cron stays the backstop).
 
 **Where to look:** `supabase/functions/delete-account/index.ts` (the workspace-delete path); `supabase/functions/_shared/firm_billing.ts`; reference fix in `supabase/functions/delete-workspace/index.ts` (#112).
+
+---
+
+### Item #121: CSV formula-injection in two more exporters (LeaseExports + AuditLog) — Med
+
+> **RESOLVED in code 2026-06-18 (branch `claude/approval-jargon-fix`) — pending merge.** Migrated both to the shared `escapeCsvCell()` (#118); widened its param to `unknown`. Surfaced by the #118 review.
+
+**Severity:** Medium (CSV/formula injection; same class as #118 R1, different surfaces). **Surfaced 2026-06-18** during the #118 review — filed as its own beat, then fixed.
+
+**Symptom:** `LeaseExports.tsx` (lease-detail + rent-schedule CSV) and `AuditLog.tsx` (audit-log CSV) used local escaping that only RFC-4180-quoted commas/quotes/newlines — it did NOT neutralize formula prefixes (`=`/`+`/`-`/`@`). CSV quoting escapes *delimiters*, not formulas: Excel/Sheets strip the surrounding quotes and still execute a leading `=` (e.g. a tenant_name or audit-reason of `=HYPERLINK(...)`). Same injection vector as #118 R1 on two more user/AI-sourced surfaces.
+
+**Fix (done):** both route every cell through `src/lib/csv.ts` `escapeCsvCell()` (formula-prefix neutralization + RFC-4180). Delete on merge.
+
+**Where to look:** `src/components/leases/LeaseExports.tsx`; `src/pages/app/AuditLog.tsx`; `src/lib/csv.ts`.

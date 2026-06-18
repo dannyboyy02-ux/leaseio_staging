@@ -12,7 +12,7 @@
  *
  * Use this for EVERY CSV export cell.
  */
-export function escapeCsvCell(val: string | number | null | undefined): string {
+export function escapeCsvCell(val: unknown): string {
   let str = val == null ? '' : String(val);
   // Formula-injection guard first, so the prefixed value is then quoted if needed.
   if (/^[=+\-@\t\r]/.test(str)) {
