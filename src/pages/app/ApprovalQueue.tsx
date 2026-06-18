@@ -666,16 +666,23 @@ export default function ApprovalQueue() {
         .eq('workspace_id', workspace.id)
         .eq('status', 'pending');
 
-      // Phase 7: surface steps where user is the original assignee, holds
-      // the role, OR is the effective assignee (covers admin reassign /
-      // voluntary delegation / OOO routing / activated policy delegate).
+      // C3 (#111): EXCLUSIVE delegation — mirror act-on-chain-step's authz
+      // precedence so a delegator no longer SEES a step they handed off. Surface
+      // a step when the user is the effective assignee (the precedence-resolved
+      // actor: admin reassign / voluntary / OOO / activated policy delegate), OR
+      // — only when there is no resolved effective assignee (role-based row, or a
+      // pre-Phase-7 chain not yet backfilled) — when they are the original
+      // assignee or hold the role.
       if (myRoleNames.length > 0) {
         chainQuery = chainQuery.or(
-          `approver_user_id.eq.${user.id},approver_role.in.(${myRoleNames.join(',')}),effective_assignee_user_id.eq.${user.id}`,
+          `effective_assignee_user_id.eq.${user.id},` +
+          `and(effective_assignee_user_id.is.null,approver_user_id.eq.${user.id}),` +
+          `and(effective_assignee_user_id.is.null,approver_role.in.(${myRoleNames.join(',')}))`,
         );
       } else {
         chainQuery = chainQuery.or(
-          `approver_user_id.eq.${user.id},effective_assignee_user_id.eq.${user.id}`,
+          `effective_assignee_user_id.eq.${user.id},` +
+          `and(effective_assignee_user_id.is.null,approver_user_id.eq.${user.id})`,
         );
       }
 
