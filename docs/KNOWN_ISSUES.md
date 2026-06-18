@@ -2104,6 +2104,8 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 
 ### Item #114: `NeedsReviewBanner` low-confidence warnings are DEAD — `leases.confidence_scores` is never written — High
 
+> **RESOLVED in code 2026-06-18 (branch `claude/approval-jargon-fix`) — pending merge.** Frontend fix (no deploy gate): `LeaseReview`'s `confidenceScores` memo no longer reads the always-empty `leases.confidence_scores` column — it now builds the 0–100 per-field map from `extracted_json` via `getFieldConfidence` (the same populated source the inline field borders use; 0-1 → 0-100). This revives the NeedsReviewBanner low-confidence list (the one genuine consumer). The four section-card pass-sites turned out to be **vestigial** — `SectionCard` destructures `confidenceScores` but never uses it (it reads `extracted_json` directly via `getFieldConfidence`), so they're unchanged; that dead prop is filed as #122. The unused `confidence_scores` column could later be dropped or populated by process_lease. Reviewed clean; typecheck green. Delete on merge.
+
 **Severity:** High (a core review-trust signal is silently off). **Surfaced 2026-06-17** (audit E1, verified — grep shows 0 writes).
 
 **Symptom:** `process_lease` never writes the `leases.confidence_scores` JSONB column (it persists per-field confidence to the normalized `lease_field_confidence` table instead). `LeaseReview.tsx:330-332` builds a `confidenceScores` memo from that always-empty column and feeds it to `NeedsReviewBanner.tsx:45-50`, where `confidenceScores[field.key]` is therefore always `undefined` → the "X has low confidence (Y%)" list never renders. (The inline amber/red field borders still work — they read `extracted_json` via `getFieldConfidence` — so it's a precise dead-summary, not "confidence is broken.")
@@ -2199,3 +2201,15 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 **Fix (done):** both route every cell through `src/lib/csv.ts` `escapeCsvCell()` (formula-prefix neutralization + RFC-4180). Delete on merge.
 
 **Where to look:** `src/components/leases/LeaseExports.tsx`; `src/pages/app/AuditLog.tsx`; `src/lib/csv.ts`.
+
+---
+
+### Item #122: `SectionCard` `confidenceScores` prop is vestigial (dead prop) — Low
+
+**Severity:** Low (dead code; no user impact). **Surfaced 2026-06-18** during the #114 review. **Pre-existing** (predates #114; the prop was equally ignored when it received `{}`).
+
+**Symptom:** `LeaseReviewSections.tsx` `SectionCard` declares + destructures a `confidenceScores` prop (`:128`, `:152`) but never references it in its body — all per-field confidence display inside the card reads `extracted_json` directly via `getFieldConfidence` (`:176` border, `:210`/`ConfidenceBadge`). `LeaseReview` passes `confidenceScores={confidenceScores}` at four section-card sites where it has no effect (so #114's memo fix correctly revives only the `NeedsReviewBanner`, the one real consumer).
+
+**Fix:** remove the unused prop from `SectionCard`'s interface + destructure + the four `LeaseReview` pass-sites. (Alternatively route `SectionCard` confidence through the prop, but the inline `extracted_json` read is the working path — removal is simpler.) lease-code-auditor territory.
+
+**Where to look:** `src/components/leases/LeaseReviewSections.tsx:128,152`; `src/pages/app/LeaseReview.tsx` (the four `confidenceScores={confidenceScores}` section-card pass-sites).
