@@ -2000,3 +2000,15 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 - **(#105-C LOWs, 2026-06-16):** add a per-user rate limit / cap on self-serve `create-firm` (spam-create / row-pollution defense-in-depth — an empty firm is inert but unbounded creation pollutes); and align `create-firm-checkout`'s customer resolution to fully dedup (it now stamps + scans, closing the double-sub HIGH, but a net-new owner with a pre-existing Stripe customer may still get a duplicate customer record — minor).
 
 **Where to look:** `supabase/functions/_shared/firm_billing.ts`; `supabase/functions/{bind-workspace-to-firm,release-workspace-from-firm,act-on-firm-workspace-join-request,create-firm-subscription}/index.ts`; the monitoring framework in `docs/OPERATIONAL_MONITORING_SPEC.md`; `docs/ops/OPERATOR_PLAYBOOK.md` (add a firm-billing-reconcile STOP item).
+
+---
+
+### process-alerts notifications now email the lease owner — RESOLVED 2026-06-18
+
+> **Branch `claude/process-alerts-email` (off `main`), pending merge.** Assign a #-number at merge. This was the one genuinely-open email gap noted in the notification-rail entry: `process-alerts` writes `notifications`-table alerts (expiry_approaching / approval_pending / covenant_breach / variance_high) that were **in-app only** — `dispatch-notifications` reads `lease_activity_log`, not `notifications`, so the alert-rule alerts never emailed.
+
+**Fix:** `process-alerts` now emails each newly-created alert to the **lease owner** (`leases.user_id` → `profiles.email`) via Resend (`RESEND_ALERTS_FROM_EMAIL`), in addition to the in-app insert. Best-effort (per-recipient try/catch + a profiles-lookup guard; never fails the cron or undoes the in-app rows — hard rule #9), `escapeHtml`'d title/body, respects the existing `profiles.email_notifications_enabled` opt-out (the AccountSettings toggle, default on). Reuses the existing `wasRecentlyAlerted` 24h dedup → no re-email. No schema change; no migration; no #57 dependency. Reviewed BEFORE push — security/integrity/code-auditor all clean (no Critical/High/Medium). Test: `processAlertsEmail.test.ts`.
+
+**Design note:** recipient = **lease owner only** — deliberately narrower than the in-app notification (which is a workspace-wide broadcast, `user_id` NULL). Conservative for a new outbound-email channel. If broader reach is wanted (e.g. also workspace admins for governance alerts like covenant/variance), that's a one-spot extension to `sendAlertEmails`'s recipient resolution.
+
+**Where to look:** `supabase/functions/process-alerts/index.ts` (`sendAlertEmails`); `supabase/functions/send-lease-notifications/index.ts` (the email/escape precedent); `profiles.email_notifications_enabled` + `src/pages/settings/AccountSettings.tsx`.
