@@ -604,7 +604,8 @@
     "actions": "Actions",
     "retry": "Retry",
     "view": "View lease",
-    "delete": "Delete"
+    "delete": "Delete",
+    "archive_committed": "Confirmed leases can't be deleted here — open the lease to archive it instead"
   },
   "notifications": {
     "title": "Notifications",
