@@ -23,6 +23,7 @@
 //   - Acknowledge and Override: workspace owner / admin only.
 
 import { useEffect, useMemo, useState } from 'react';
+import { roleLabel, stageLabel } from '@/lib/lifecycleStates';
 import {
   AlertOctagon,
   ChevronRight,
@@ -239,15 +240,15 @@ export function ChainViolationBanner({
                     key={s.id}
                     className="flex items-center gap-2 text-xs"
                   >
-                    <Badge variant="outline" className="text-[10px] capitalize">
-                      {s.stage}
+                    <Badge variant="outline" className="text-[10px]">
+                      {stageLabel(s.stage)}
                     </Badge>
                     <span>
-                      {s.approver_name ?? s.approver_role ?? 'Unknown approver'}
+                      {s.approver_name ?? (s.approver_role ? roleLabel(s.approver_role) : 'Unknown approver')}
                     </span>
                     {s.approver_role && s.approver_name && (
                       <span className="text-muted-foreground">
-                        ({s.approver_role})
+                        ({roleLabel(s.approver_role)})
                       </span>
                     )}
                   </li>

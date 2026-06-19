@@ -13,6 +13,7 @@
 // lease detail.
 
 import { useEffect, useState } from 'react';
+import { stageLabel } from '@/lib/lifecycleStates';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistance } from 'date-fns';
 import {
@@ -266,7 +267,7 @@ export default function ExceptionsDashboard() {
                         <p className="text-xs text-muted-foreground">
                           Detected {formatDistance(new Date(r.created_at), new Date(), { addSuffix: true })}
                           {' · '}
-                          {(r.details?.days_stuck ?? '?')} days stuck on {(r.details?.stage ?? '—')} stage
+                          {(r.details?.days_stuck ?? '?')} days stuck in {r.details?.stage ? stageLabel(r.details.stage as string) : '—'}
                         </p>
                       </div>
                       <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />

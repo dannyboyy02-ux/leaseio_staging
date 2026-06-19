@@ -51,6 +51,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 
 interface AuditFinding {
   id: string;
@@ -313,8 +314,8 @@ export default function RerouteAuditDashboard() {
                           </span>
                           <span>
                             <span className="text-muted-foreground">Lifecycle:</span>{' '}
-                            {f.details?.prior_lifecycle_status} →{' '}
-                            {f.details?.proposed_lifecycle_status}
+                            {f.details?.prior_lifecycle_status ? displayLabel(f.details.prior_lifecycle_status as LifecycleStatus) : '—'} →{' '}
+                            {f.details?.proposed_lifecycle_status ? displayLabel(f.details.proposed_lifecycle_status as LifecycleStatus) : '—'}
                           </span>
                           <span>
                             <span className="text-muted-foreground">Steps:</span>{' '}

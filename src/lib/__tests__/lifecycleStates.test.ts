@@ -12,6 +12,8 @@ import {
   groupOf,
   isEquivalent,
   normalizeToChainStates,
+  roleLabel,
+  stageLabel,
 } from '../lifecycleStates';
 
 // ─── groupOf ─────────────────────────────────────────────────────────────
@@ -407,5 +409,33 @@ describe('counterSignatureUrgencyLabel', () => {
     expect(counterSignatureUrgencyLabel('overdue')).toBe('Overdue');
     expect(counterSignatureUrgencyLabel('critically_overdue')).toBe('Critically Overdue');
     expect(counterSignatureUrgencyLabel('no_due_date')).toBe('No Due Date Set');
+  });
+});
+
+// ─── stageLabel / roleLabel (KNOWN_ISSUES #108) ───────────────────────────
+describe('stageLabel', () => {
+  it('maps internal stage codes to finance-English (no jargon)', () => {
+    expect(stageLabel('concept')).toBe('Initial approval');
+    expect(stageLabel('signator')).toBe('Final approval');
+  });
+  it('falls through to the raw value for an unknown stage', () => {
+    expect(stageLabel('something_else')).toBe('something_else');
+  });
+});
+
+describe('roleLabel', () => {
+  it('maps functional role codes to labels (no raw snake_case)', () => {
+    expect(roleLabel('manager_approver')).toBe('Manager');
+    expect(roleLabel('financial_approver')).toBe('Finance');
+    expect(roleLabel('signator')).toBe('Signatory');
+    expect(roleLabel('submitter')).toBe('Submitter');
+    expect(roleLabel('admin')).toBe('Admin');
+  });
+  it('returns an empty string for null/undefined', () => {
+    expect(roleLabel(null)).toBe('');
+    expect(roleLabel(undefined)).toBe('');
+  });
+  it('de-underscores an unknown role rather than leaking the raw code', () => {
+    expect(roleLabel('regional_director')).toBe('regional director');
   });
 });

@@ -7,6 +7,7 @@
 // payloads were never the deliverable. This file is now CSV-only.
 
 import type { RentScheduleEntry } from './RentScheduleTable';
+import { escapeCsvCell } from '@/lib/csv';
 
 interface ExportLease {
   id: string;
@@ -85,14 +86,7 @@ export const downloadCSV = (
   const leaseFields = data.lease;
 
   const leaseHeaders = Object.keys(leaseFields);
-  const leaseValues = Object.values(leaseFields).map((v) => {
-    if (v === null || v === undefined) return '';
-    const str = String(v);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  });
+  const leaseValues = Object.values(leaseFields).map(escapeCsvCell);
 
   let csvContent = '### LEASE DATA ###\n';
   csvContent += leaseHeaders.join(',') + '\n';
@@ -104,15 +98,9 @@ export const downloadCSV = (
     csvContent += scheduleHeaders.join(',') + '\n';
 
     data.rent_schedule.forEach((entry) => {
-      const row = scheduleHeaders.map((header) => {
-        const val = entry[header as keyof typeof entry];
-        if (val === null || val === undefined) return '';
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-      });
+      const row = scheduleHeaders.map((header) =>
+        escapeCsvCell(entry[header as keyof typeof entry]),
+      );
       csvContent += row.join(',') + '\n';
     });
   }
