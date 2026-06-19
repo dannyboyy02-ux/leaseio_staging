@@ -88,6 +88,50 @@ export async function sendInviteEmail(opts: SendInviteEmailOpts): Promise<SendRe
   }
 }
 
+export interface SendEmailOpts {
+  resendApiKey: string;
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+  from?: string;
+}
+
+/**
+ * Generic transactional email send (notifications, reminders, etc.). Same
+ * never-throws `{ sent, error }` contract as sendInviteEmail; callers decide
+ * how to surface failures (e.g. record status='failed' for hard rule #9).
+ */
+export async function sendEmail(opts: SendEmailOpts): Promise<SendResult> {
+  const { resendApiKey, to, subject, html, text, from } = opts;
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resendApiKey}`,
+      },
+      body: JSON.stringify({
+        from: from ?? Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
+        to: [to],
+        subject,
+        html,
+        ...(text ? { text } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '(no body)');
+      console.error('[resend] API error:', res.status, body);
+      return { sent: false, error: `Resend returned ${res.status}` };
+    }
+    return { sent: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[resend] fetch error:', msg);
+    return { sent: false, error: msg };
+  }
+}
+
 /** Generate a cryptographically random 64-char hex token (matches DB DEFAULT format). */
 export function generateInviteToken(): string {
   const bytes = new Uint8Array(32);

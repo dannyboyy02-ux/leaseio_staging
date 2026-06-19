@@ -19,6 +19,7 @@
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Clock, ShieldCheck, UserCheck, UserCog } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { pendingSlaStatus } from '@/lib/slaStatus';
 
 export type AssigneeResolutionSource =
   | 'policy_user'
@@ -43,14 +44,10 @@ interface ChainStepBadgesProps {
   /** Threshold for the "pending N days" badge. Default 3 — anything
    *  smaller is too noisy. */
   pendingDaysThreshold?: number;
+  /** Per-policy SLA in days (approval_policies.sla_days). Drives the "over SLA"
+   *  red badge; falls back to DEFAULT_SLA_DAYS (7) when null/unset. #111 C6. */
+  slaDays?: number | null;
   className?: string;
-}
-
-function daysSince(iso: string | null, now: Date = new Date()): number | null {
-  if (!iso) return null;
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return null;
-  return Math.floor((now.getTime() - t) / (24 * 60 * 60 * 1000));
 }
 
 export function ChainStepBadges({
@@ -59,9 +56,10 @@ export function ChainStepBadges({
   originalAssigneeName,
   delegateAfterDays,
   pendingDaysThreshold = 3,
+  slaDays,
   className,
 }: ChainStepBadgesProps) {
-  const days = daysSince(pendingSince);
+  const { daysPending: days, overSla } = pendingSlaStatus(pendingSince, slaDays);
   const badges: React.ReactNode[] = [];
 
   if (source === 'voluntary_delegate') {
@@ -100,18 +98,23 @@ export function ChainStepBadges({
     );
   }
 
-  if (days !== null && days >= pendingDaysThreshold) {
+  // Show once aging is meaningful (>= threshold) OR once it's breached SLA (so a
+  // short per-policy SLA still surfaces even below the noise floor). Over SLA →
+  // red + "over SLA"; otherwise amber.
+  if (days !== null && (days >= pendingDaysThreshold || overSla)) {
     badges.push(
       <Badge
         key="pending"
         variant="outline"
         className={cn(
           'text-[10px] gap-1',
-          days >= 7 ? 'text-destructive' : 'text-warning',
+          overSla ? 'text-destructive' : 'text-warning',
         )}
       >
-        {days >= 7 ? <AlertTriangle className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
-        Pending {days} {days === 1 ? 'day' : 'days'}
+        {overSla ? <AlertTriangle className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
+        {overSla
+          ? `Pending ${days} ${days === 1 ? 'day' : 'days'} · over SLA`
+          : `Pending ${days} ${days === 1 ? 'day' : 'days'}`}
       </Badge>,
     );
   }

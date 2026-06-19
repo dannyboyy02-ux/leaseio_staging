@@ -280,7 +280,78 @@ serve(async (req) => {
     }
   }
 
-  // ── Apply lifecycle transition ─────────────────────────────────────
+  // ── Audit row capturing the escalation intent (before the action) ──
+  const { error: escLogError } = await supabaseAdmin
+    .from("lease_activity_log")
+    .insert({
+      lease_id: lease.id,
+      user_id: user.id,
+      activity_type: "negotiation_escalated_to_concept",
+      details: {
+        reason,
+        escalated_by: user.id,
+      },
+    });
+  if (escLogError) {
+    console.error("[escalate-to-concept-approver] escalation log error:", escLogError.message);
+  }
+
+  // ── Rebuild the concept stage from the CURRENT policy (C4 #111) ─────
+  // Replaces the old verbatim clone, which re-inserted the prior concept rows
+  // of ANY status — resurrecting superseded prior-policy approvers — and never
+  // re-matched the policy. resolve-approval-chain's forceConceptReactivation
+  // mode re-matches the live policy and atomically rebuilds the concept rows.
+  // We invoke it BEFORE flipping the lifecycle so a failed match leaves the
+  // lease safely in in_negotiation (never stranded in concept_under_review with
+  // zero approvers).
+  let resolverResp: Response;
+  try {
+    resolverResp = await fetch(`${supabaseUrl}/functions/v1/resolve-approval-chain`, {
+      method: "POST",
+      headers: { Authorization: authHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ leaseId: lease.id, forceConceptReactivation: true }),
+    });
+  } catch (err: any) {
+    await supabaseAdmin.from("lease_activity_log").insert({
+      lease_id: lease.id,
+      user_id: user.id,
+      activity_type: "comment",
+      details: {
+        notification_type: "escalation_reactivation_failed",
+        message: `Concept reactivation could not reach the resolver: ${err?.message ?? String(err)}`,
+      },
+    });
+    return jsonResponse(
+      { ok: false, error: `Concept reactivation failed: ${err?.message ?? String(err)}`, reason: "reactivation_failed" },
+      502,
+      origin,
+    );
+  }
+  const resolverJson = await resolverResp.json().catch(() => ({} as Record<string, unknown>));
+  if (!resolverResp.ok || (resolverJson as any)?.ok === false) {
+    const detail = (resolverJson as any)?.error ?? `HTTP ${resolverResp.status}`;
+    await supabaseAdmin.from("lease_activity_log").insert({
+      lease_id: lease.id,
+      user_id: user.id,
+      activity_type: "comment",
+      details: {
+        notification_type: "escalation_reactivation_failed",
+        message: `Concept reactivation rejected: ${detail}`,
+      },
+    });
+    return jsonResponse(
+      {
+        ok: false,
+        error: `Concept reactivation rejected: ${detail}`,
+        reason: (resolverJson as any)?.reason ?? "reactivation_failed",
+      },
+      400,
+      origin,
+    );
+  }
+  const reactivatedStepCount = Number((resolverJson as any)?.stepsCreated ?? 0);
+
+  // ── Apply the lifecycle transition (only AFTER the chain is rebuilt) ─
   const updateResult = await updateLifecycle("concept_under_review");
   if (!updateResult.ok) {
     return jsonResponse(
@@ -297,100 +368,6 @@ serve(async (req) => {
   await logStatusChange("in_negotiation", "concept_under_review", {
     triggered_by: "negotiation_escalation",
   });
-
-  // ── Audit row capturing the reason ─────────────────────────────────
-  const { error: escLogError } = await supabaseAdmin
-    .from("lease_activity_log")
-    .insert({
-      lease_id: lease.id,
-      user_id: user.id,
-      activity_type: "negotiation_escalated_to_concept",
-      details: {
-        reason,
-        escalated_by: user.id,
-      },
-    });
-  if (escLogError) {
-    console.error("[escalate-to-concept-approver] escalation log error:", escLogError.message);
-  }
-
-  // ── Reactivate concept stage with fresh pending chain rows ─────────
-  // Strategy: clone the most recent concept-stage rows (any status) into
-  // new pending rows. The prior approved rows stay marked 'approved' so
-  // the audit trail is preserved.
-  //
-  // We pick rows from the highest step_order group present in the
-  // concept stage, then re-insert all required steps as pending. This
-  // covers single-step and multi-step concept stages uniformly.
-  const { data: priorConceptRows } = await supabaseAdmin
-    .from("lease_approval_chain")
-    .select(
-      "policy_id, policy_version, step_order, parallel_group, approver_user_id, approver_role, delegate_user_id, delegate_after_days, is_required",
-    )
-    .eq("lease_id", lease.id)
-    .eq("stage", "concept");
-
-  const conceptRows = (priorConceptRows ?? []) as Array<{
-    policy_id: string | null;
-    policy_version: number | null;
-    step_order: number;
-    parallel_group: number;
-    approver_user_id: string | null;
-    approver_role: string | null;
-    delegate_user_id: string | null;
-    delegate_after_days: number | null;
-    is_required: boolean;
-  }>;
-
-  let newChainStepIds: string[] = [];
-  if (conceptRows.length > 0) {
-    // Re-insert each prior concept row as a fresh pending row. Every
-    // row of the prior concept stage is re-activated — the chain
-    // history grows, nothing destructive.
-    const newRows = conceptRows.map((r) => ({
-      lease_id: lease.id,
-      workspace_id: lease.workspace_id,
-      policy_id: r.policy_id,
-      policy_version: r.policy_version,
-      stage: "concept",
-      step_order: r.step_order,
-      parallel_group: r.parallel_group,
-      approver_user_id: r.approver_user_id,
-      approver_role: r.approver_role,
-      delegate_user_id: r.delegate_user_id,
-      delegate_after_days: r.delegate_after_days,
-      is_required: r.is_required,
-      status: "pending",
-    }));
-    const { data: insertedRows, error: insertError } = await supabaseAdmin
-      .from("lease_approval_chain")
-      .insert(newRows)
-      .select("id");
-    if (insertError) {
-      console.error(
-        "[escalate-to-concept-approver] chain reactivation insert error:",
-        insertError.message,
-      );
-    } else {
-      newChainStepIds = (insertedRows ?? []).map((r: { id: string }) => r.id);
-    }
-  } else {
-    // No prior concept chain rows (legacy lease with no chain at all,
-    // or chain was previously cleared). Note this in the audit log but
-    // proceed — the lifecycle is still rolled back to concept_under_review,
-    // which is the spec's primary effect.
-    const { error: auditErr } = await supabaseAdmin.from("lease_activity_log").insert({
-      lease_id: lease.id,
-      user_id: user.id,
-      activity_type: "comment",
-      details: {
-        notification_type: "escalation_no_prior_chain",
-        message:
-          "Escalation requested but no prior concept-stage chain rows existed to reactivate.",
-      },
-    });
-    if (auditErr) console.error("lease_activity_log insert failed (comment/escalation_no_prior_chain):", auditErr.message);
-  }
 
   // ── Notify the manager_approver workspace_roles cohort ─────────────
   // Same notification shape as resolve-approval-chain / handleApprove —
@@ -423,7 +400,7 @@ serve(async (req) => {
       ok: true,
       leaseId: lease.id,
       newLifecycleStatus: "concept_under_review",
-      newChainStepCount: newChainStepIds.length,
+      newChainStepCount: reactivatedStepCount,
     },
     200,
     origin,
