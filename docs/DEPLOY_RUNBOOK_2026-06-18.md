@@ -21,6 +21,38 @@ Merged, in order: **#63 → #58 → #57 → #59 → #60 → #66 → #62 → #64 
 The **Merge order** / sequencing section below is retained as history; it no longer
 drives action. **Jump to "Per-PR steps" for the operator runbook.**
 
+### Deploy progress (updated 2026-06-19)
+
+**① Migrations — ✅ APPLIED + VERIFIED (2026-06-19)** to the single live project
+`wwkwoxxcprnjjufkbzac` ("LeaseIO"). Applied individually via MCP `apply_migration`
+in timestamp order (NOT `db push` — the history has apply-time version drift that
+would re-run ~9 already-applied migrations). Catalog-verified; the C1 backfill left
+zero frontier required-steps without `pending_since`; security advisor clean (no new
+issues). The seven: `notification_deliveries`, `firm_counter_delete_decrement`,
+`prevent_committed_lease_hard_delete`, `backfill_phase7_chain_columns`,
+`reroute_reconcile_chain_steps_rpc`, `approval_policy_sla_days`,
+`fanout_recipient_notifications`.
+
+- *Live immediately (DB-only):* hard-delete guard, firm-counter DELETE decrement +
+  drift reconcile, in-app notification fanout, existing-chain backfill, `sla_days`
+  column.
+
+**② Edge-function redeploys — ⏳ NOT DONE (still required).** Migrations alone don't
+activate the edge-side fixes:
+- `resolve-approval-chain` — **the key one (= the deferred #84 redeploy):** until it's
+  redeployed, NEW chains still get NULL Phase-7 columns, and C5 reroute-atomicity +
+  C4 escalate stay dormant (the RPC + backfill exist, but only this fn calls them).
+  Plus `act-on-chain-step`, `escalate-to-concept-approver`.
+- `dispatch-notifications` + `send-nudge` (+ `NOTIFICATION_DISPATCH_CRON_SECRET` +
+  cron schedule) → approval/nudge EMAIL. `process-alerts` → alert EMAIL.
+  `delete-workspace` → firm Stripe-quantity resync on delete.
+
+**③ Operator secrets/cron — ⏳ NOT DONE** (see ② + the per-PR steps).
+
+**Out of this round (still unapplied):** `20260612170000_cancellation_lifecycle_cron`
+(pre-existing; needs `CANCELLATION_LIFECYCLE_CRON_SECRET` + `process-cancellation-lifecycle`
+deployed to function).
+
 ## Cardinal rules
 1. **Migrations + edge functions are applied/redeployed MANUALLY after each merge.**
    This project's CI/CD auto-deploys only the **frontend (Vercel)**. Migrations
