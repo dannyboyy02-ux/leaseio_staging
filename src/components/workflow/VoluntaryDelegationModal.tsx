@@ -126,7 +126,7 @@ export function VoluntaryDelegationModal({
         toast.error(msg);
         return;
       }
-      toast.success('Step delegated. The new delegate has been notified.');
+      toast.success("Step delegated — it's moved to their queue and out of yours. Revoke it from “Delegated by me” if needed.");
       onOpenChange(false);
       onDelegated();
     } catch (err: any) {
@@ -147,8 +147,9 @@ export function VoluntaryDelegationModal({
           </DialogTitle>
           <DialogDescription>
             Hand this approval to a workspace member. They'll receive a
-            notification and the step will move to their queue. You can
-            revoke before they act.
+            notification and the step moves to their queue (and off yours).
+            You can revoke it before they act from “Delegated by me” in your
+            queue.
           </DialogDescription>
         </DialogHeader>
 
