@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { format } from "date-fns";
 import {
   FileText,
@@ -205,6 +205,7 @@ function renderWarning(w: unknown): string {
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, userRole, userFunctionalRoles, workspace } = useApp();
   // Vault (read-only retention) workspaces are view + export only. The server
   // already blocks every write (V1 RLS + config guard); this flag suppresses
@@ -1988,6 +1989,24 @@ export default function LeaseReview() {
   const isManagerApprover = (userFunctionalRoles ?? []).includes('manager_approver');
   const isFinancialApprover = (userFunctionalRoles ?? []).includes('financial_approver');
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
+
+  // #116: honor the ?action=archive deep-link from ImportHistory's Archive
+  // steer. A committed lease can't be hard-deleted there; the steer opens the
+  // lease here with the archive dialog already up so it's one gesture, not a
+  // scavenger hunt through the ⋯ menu. This handles the non-locked workbench
+  // path; the locked-active path (early-returned to LockedLeaseDetail below) is
+  // handled in LockedHeader. Gated to admin/owner (only they can archive) and
+  // self-stripping so a refresh doesn't re-trigger.
+  useEffect(() => {
+    if (searchParams.get('action') !== 'archive') return;
+    const lockedActive = lease?.model_locked === true && lease?.lifecycle_status === 'active';
+    if (lockedActive) return;
+    if (!lease || lease.archived || isReadOnly || !isAdminUser) return;
+    setShowArchiveDialog(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('action');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, lease, isReadOnly, isAdminUser, setSearchParams]);
   // Phase 3: include chain post_concept_pre_signator + signator stages +
   // executed equivalent (active is identical in both vocabularies).
   const canShareFinancialSummary = Boolean(

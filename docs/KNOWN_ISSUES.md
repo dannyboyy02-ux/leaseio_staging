@@ -2136,6 +2136,8 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 
 ### Item #116: Lease hard-delete destroys the audit trail — no `BEFORE DELETE` guard on `leases` — Med
 
+> **RESOLVED — merged via PR #58 (`claude/lease-delete-audit-guard`).** Closed by a `BEFORE DELETE` trigger `prevent_committed_lease_hard_delete` on `public.leases` (migration `20260618140000`) + an ImportHistory Archive-steer (deep-links to the lease's archive dialog). Disposable (client-hard-deletable) allowlist = `model_locked IS NOT TRUE AND (lifecycle_status IS NULL OR lifecycle_status = 'draft')`; `service_role` bypasses (delete-workspace/-account + FK cascade). Extracted `isCommittedLease()` (`src/lib/leaseDisposability.ts`) as the client mirror + behavioral test. 5-way reviewed clean before push (security/integrity/auditor/polish/test). Full detail in PR #58. The original audit description is preserved below.
+
 **Severity:** Medium (forensic integrity). **Surfaced 2026-06-17** (audit DF1; analog of #83 for leases).
 
 **Symptom:** the `leases` DELETE RLS `leases_delete_own_or_workspace_admin` (`20260516120000_baseline_schema.sql:4206`) lets the lease's creator OR a workspace admin hard-delete **any** lease via PostgREST — including a `model_locked`/active one, because the governance triggers (`prevent_locked_lease_edits`, `prevent_unauthorized_lease_workflow_edits`) are **`BEFORE UPDATE` only and don't cover DELETE**. The `lease_activity_log`/`lease_governance_audit` FKs are `ON DELETE CASCADE`, so the delete **cascades away the entire audit trail** with no archive-first requirement and no forensic record. (Intended for ImportHistory rollback, but the RLS isn't gated to Failed/unapproved leases.)
