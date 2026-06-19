@@ -36,6 +36,8 @@ import { cn } from '@/lib/utils';
 import {
   displayLabel,
   isEquivalent,
+  roleLabel,
+  stageLabel,
   type LifecycleStatus,
 } from '@/lib/lifecycleStates';
 import { ChainStepBadges } from '@/components/leases/ChainStepBadges';
@@ -298,10 +300,10 @@ function ChainStepCard({
 
   // Visual tag distinguishing source — per the Phase 2 guard rail, makes
   // it obvious where each row came from when merged with legacy ones.
-  const stageLabel = step.stage === 'concept' ? 'Concept' : 'Signator';
+  const stageText = stageLabel(step.stage);
   const tagLabel = step.approver_role
-    ? `${stageLabel} approver: role ${step.approver_role}`
-    : `${stageLabel} approver: step ${step.step_order}`;
+    ? `${stageText} · ${roleLabel(step.approver_role)}`
+    : `${stageText} · Step ${step.step_order}`;
 
   const submit = async (action: 'approve' | 'reject' | 'send_back') => {
     setBusy(true);

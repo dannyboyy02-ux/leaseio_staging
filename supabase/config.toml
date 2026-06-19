@@ -279,3 +279,15 @@ verify_jwt = true
 # for the authenticated user only.
 [functions.record-login-event]
 verify_jwt = true
+
+# Approval-notification delivery (#109). send-nudge is Bearer-JWT — the
+# requester/admin nudges a lease's pending approver(s): resolves them,
+# records + emails the nudge, returns who was notified.
+[functions.send-nudge]
+verify_jwt = true
+
+# dispatch-notifications is cron-only (x-cron-secret = NOTIFICATION_DISPATCH_CRON_SECRET):
+# sweeps recent lease_activity_log 'comment' rows with recipient_ids and emails
+# them (the delivery backbone for the whole approval-notification system).
+[functions.dispatch-notifications]
+verify_jwt = false

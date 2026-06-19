@@ -10,6 +10,7 @@
 // structured view for admins and auditors.
 
 import { useEffect, useState } from 'react';
+import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { format } from 'date-fns';
 import { ChevronDown, ChevronUp, GitBranch, Shield } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -200,7 +201,7 @@ export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs mt-1">
                     <span>
                       <span className="text-muted-foreground">Lifecycle:</span>{' '}
-                      {e.prior_lifecycle_status} → {e.new_lifecycle_status}
+                      {displayLabel(e.prior_lifecycle_status as LifecycleStatus)} → {displayLabel(e.new_lifecycle_status as LifecycleStatus)}
                     </span>
                     <span>
                       <span className="text-muted-foreground">Steps:</span>{' '}

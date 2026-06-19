@@ -65,7 +65,7 @@ export function EscalateToConceptDialog({
         newChainStepCount: number;
       };
       toast.success(
-        `Escalated to concept review — ${result.newChainStepCount} chain step${result.newChainStepCount === 1 ? '' : 's'} reactivated`,
+        `Escalated back to initial approval — ${result.newChainStepCount} chain step${result.newChainStepCount === 1 ? '' : 's'} reactivated`,
       );
       onOpenChange(false);
       onEscalated();
@@ -83,13 +83,13 @@ export function EscalateToConceptDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowLeftCircle className="h-5 w-5 text-warning" />
-            Escalate back to concept review
+            Escalate back to initial approval
           </DialogTitle>
           <DialogDescription className="pt-2">
-            Material terms have shifted during negotiation enough to require concept
-            approver re-validation. The lease will roll back to
-            <strong> Under Review</strong> and a fresh round of pending concept-stage
-            chain steps will be created. Prior approvals are preserved in the audit trail.
+            Material terms have shifted during negotiation enough to require
+            initial-approval re-validation. The lease will roll back to
+            <strong> Under Review</strong> and a fresh round of pending
+            initial-approval steps will be created. Prior approvals are preserved in the audit trail.
           </DialogDescription>
         </DialogHeader>
 
@@ -98,8 +98,8 @@ export function EscalateToConceptDialog({
           <div className="space-y-1">
             <p className="font-medium text-warning">This visibly resets the workflow.</p>
             <p className="text-muted-foreground">
-              Your reason text is stored on the audit log so concept approvers know
-              what changed.
+              Your reason text is stored on the audit log so the initial approvers
+              know what changed.
             </p>
           </div>
         </div>
@@ -127,7 +127,7 @@ export function EscalateToConceptDialog({
           </Button>
           <Button onClick={handleSubmit} disabled={!canSubmit}>
             {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-            {busy ? 'Escalating…' : 'Escalate to concept review'}
+            {busy ? 'Escalating…' : 'Escalate to initial approval'}
           </Button>
         </DialogFooter>
       </DialogContent>

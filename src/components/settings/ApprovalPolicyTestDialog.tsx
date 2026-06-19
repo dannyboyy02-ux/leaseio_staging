@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { roleLabel, stageLabel } from '@/lib/lifecycleStates';
 import { Loader2, AlertTriangle, CheckCircle2, XCircle, Users } from 'lucide-react';
 import {
   Dialog,
@@ -238,7 +239,7 @@ export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Pr
                       return (
                         <div key={stage}>
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                            {stage} chain
+                            {stageLabel(stage)}
                           </p>
                           {stageSteps.length === 0 ? (
                             <p className="text-xs text-muted-foreground italic px-3 py-2">No steps configured.</p>
@@ -259,7 +260,7 @@ export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Pr
                                     <span>
                                       {s.approver_user_id
                                         ? `User ${s.approver_user_id.slice(0, 8)}…`
-                                        : `Role: ${s.approver_role}`}
+                                        : `Role: ${roleLabel(s.approver_role)}`}
                                     </span>
                                     {s.delegate_user_id && (
                                       <span className="text-muted-foreground">

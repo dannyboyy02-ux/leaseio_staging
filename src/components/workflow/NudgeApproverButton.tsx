@@ -15,34 +15,35 @@ interface NudgeApproverButtonProps {
   disabled?: boolean;
 }
 
-const COOLDOWN_SECONDS = 60;
+// Mirrors the server-side cooldown in supabase/functions/send-nudge (#109).
+// The server is the source of truth; this is just UX debounce + display.
+const COOLDOWN_SECONDS = 30 * 60;
 
-export function NudgeApproverButton({ 
-  leaseId, 
+function formatWait(s: number): string {
+  return s >= 60 ? `${Math.ceil(s / 60)}m` : `${s}s`;
+}
+
+export function NudgeApproverButton({
+  leaseId,
   lastNudgedAt,
-  disabled = false 
+  disabled = false,
 }: NudgeApproverButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
-  // Calculate initial cooldown based on lastNudgedAt
+  // Initial cooldown from the lease's last_nudged_at.
   useEffect(() => {
     if (!lastNudgedAt) {
       setSecondsLeft(0);
       return;
     }
-
-    const nudgeTime = new Date(lastNudgedAt).getTime();
-    const now = Date.now();
-    const elapsed = Math.floor((now - nudgeTime) / 1000);
-    const remaining = Math.max(0, COOLDOWN_SECONDS - elapsed);
-    setSecondsLeft(remaining);
+    const elapsed = Math.floor((Date.now() - new Date(lastNudgedAt).getTime()) / 1000);
+    setSecondsLeft(Math.max(0, COOLDOWN_SECONDS - elapsed));
   }, [lastNudgedAt]);
 
-  // Countdown timer
+  // Countdown timer.
   useEffect(() => {
     if (secondsLeft <= 0) return;
-
     const timer = setInterval(() => {
       setSecondsLeft((s) => {
         if (s <= 1) {
@@ -52,7 +53,6 @@ export function NudgeApproverButton({
         return s - 1;
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, [secondsLeft]);
 
@@ -61,17 +61,41 @@ export function NudgeApproverButton({
 
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from('leases')
-        .update({ last_nudged_at: new Date().toISOString() })
-        .eq('id', leaseId);
+      const { data, error } = await supabase.functions.invoke('send-nudge', {
+        body: { leaseId },
+      });
+      const res = data as {
+        ok?: boolean;
+        reason?: string;
+        retryAfterSeconds?: number;
+        recipients?: string[];
+        notificationsSent?: number;
+        error?: string;
+      } | null;
 
-      if (error) throw error;
+      if (error || !res?.ok) {
+        if (res?.reason === 'cooldown' && res.retryAfterSeconds) {
+          setSecondsLeft(res.retryAfterSeconds);
+          toast.message(res.error || 'Already nudged recently.');
+        } else if (res?.reason === 'no_approver') {
+          toast.error(res.error || 'No pending approver to nudge.');
+        } else {
+          toast.error(res?.error || error?.message || 'Failed to send nudge');
+        }
+        return;
+      }
 
-      toast.success('Nudge sent to approver!');
+      const recipients = res.recipients ?? [];
+      if (recipients.length > 0) {
+        const shown = recipients.slice(0, 2).join(', ');
+        const more = recipients.length > 2 ? ` +${recipients.length - 2} more` : '';
+        toast.success(`Nudged ${shown}${more}`);
+      } else {
+        toast.success('Nudge sent to approver');
+      }
       setSecondsLeft(COOLDOWN_SECONDS);
-    } catch (error: any) {
-      console.error('Error sending nudge:', error);
+    } catch (err) {
+      console.error('Error sending nudge:', err);
       toast.error('Failed to send nudge');
     } finally {
       setIsLoading(false);
@@ -94,14 +118,13 @@ export function NudgeApproverButton({
           ) : (
             <Bell className="h-4 w-4 mr-2" />
           )}
-          {isOnCooldown ? `Wait ${secondsLeft}s` : 'Nudge Approver'}
+          {isOnCooldown ? `Wait ${formatWait(secondsLeft)}` : 'Nudge Approver'}
         </Button>
       </TooltipTrigger>
       <TooltipContent>
         {isOnCooldown
-          ? `You can nudge again in ${secondsLeft} seconds`
-          : 'Send a reminder to the approver'
-        }
+          ? `You can nudge again in ${formatWait(secondsLeft)}`
+          : 'Email the pending approver a reminder'}
       </TooltipContent>
     </Tooltip>
   );

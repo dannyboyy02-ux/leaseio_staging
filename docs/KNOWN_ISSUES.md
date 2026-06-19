@@ -1900,7 +1900,11 @@ green.
 
 ---
 
-### Item #103: Firm-bound workspace billing lockdown is incomplete + UI-only — complete in Phase 10 (firm billing surface)
+### Item #103: Firm-bound workspace billing lockdown — server-side bypass RESOLVED in Phase 10; UI/UX residual open
+
+> **PARTIALLY RESOLVED — server-side sub-items closed in Phase 10 (2026-06-16), re-verified by the 2026-06-17 audit (`docs/AUDIT_FINDINGS_2026-06-17.md`, Sweep 4).** The **HIGH server-side bypass is closed**: **sub-item 1** (`create-checkout` + `customer-portal` now firm-aware) and the **server half of sub-item 3** (`manage-document-pack` rejects firm-bound capacity purchase) all return **403 `reason: 'firm_managed'`** for any firm-bound workspace — `create-checkout/index.ts:129`, `customer-portal/index.ts:64`, `manage-document-pack/index.ts:207` (the latter gates `confirm`/`buy_single` modes). A firm-bound child can therefore no longer create a duplicate independent sub, open an irrelevant portal, or buy a workspace-scoped capacity pack via the server — the lockdown is **no longer "UI-only."**
+>
+> **STILL OPEN (UI/UX only — no security/revenue risk):** sub-item **2** (hide the "Update/Add payment method" button on a firm-bound workspace — server now rejects it, but the button still renders), sub-item **3-UI** (hide the Active-leases "Add capacity" CTA + short-circuit the `?packs=1` deep-link), and sub-items **4–8** (firm-banner dead-end, thin/stale plan-header card, sidebar switcher crowding, awkward fallback copy, selector inconsistency). Original gap description preserved below.
 
 **Severity:** High (latent — not customer-reachable until Phase 10). **Surfaced 2026-06-15** by the lease-security-scanner + lease-product-polish sweep of the Phase 9 minimal frontend (branch `claude/phase9-firm-foundation`, PR #49). **Decision (Daniel, 2026-06-15): defer all of it to Phase 10**, which owns the firm billing surface end-to-end. Nothing here is reachable by a customer today because firm minting is service-role-only (the 4 Phase 9 edge functions) — no user-facing firm onboarding exists until Phase 10, so no customer workspace has `firm_id` set. Filed as one beat; do NOT bundle a fix into the Phase 9 foundation PR.
 
@@ -2003,6 +2007,63 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 
 ---
 
+**Status reconciliation (six-sweep project audit, 2026-06-17):** items #108–#119 filed below from a project-wide defect + UX audit (Approval / Workspace-isolation / Extraction / Billing / Data-fidelity / Reports). Full evidence + remediation + the items cleared/refuted lives in **`docs/AUDIT_FINDINGS_2026-06-17.md`**; each item below carries a first-hand verification status. NOT re-filed (already tracked): **W3** = #102 (`add-firm-member` raw error); **C1** relates to #84 (resolve-approval-chain deployed snapshot). Recorded but NOT bugs: **B1** (firm billing counts `restrict_firm_access=true` children — a "bill per bound Business child" *product decision* to confirm, not over-billing); **E4** (re-extraction clobbering approval — **REFUTED**: executed upload writes a separate `executed_extracted_json` + is `model_locked`-gated). Security-critical surfaces (tenant isolation, billing integrity, audit-log immutability, the not-a-compliance-tool line) were verified SOUND.
+
+---
+
+### Item #108: Internal stage/role jargon leaks into user-facing UI (the "concept approver" bug) — High
+
+> **RESOLVED in code 2026-06-18 (branch `claude/approval-jargon-fix`), reviewed clean — pending merge.** Added shared `stageLabel()`/`roleLabel()` to `lifecycleStates.ts` (+ Deno mirror) and routed all 11 documented sites + 3 more found in review (`RerouteAuditDashboard`, the Escalate-to-Concept dialog/button, `LeaseReview` parent-match list) + the `ChainDiagram` role label. Terms: concept→"Initial approval", signator→"Final approval"; manager_approver→"Manager", financial_approver→"Finance", signator→"Signatory"; "Signator Review" page→"Final Review", PDF "Signator Attestation"→"Final Approval Attestation". Typecheck clean; `lifecycleStates`/`chainDiagram` tests green. Delete this item on merge.
+
+**Severity:** High (user-facing comprehensibility; one site reaches external auditors). **Surfaced 2026-06-17** (audit Class 1). **Root cause:** the team de-jargoned lifecycle *statuses* (`lifecycleStates.ts:114-137` `displayLabel()`, comment "no jargon") but never built the equivalent `stageLabel()`/`roleLabel()` for chain-step **stages** (`concept`/`signator`) and raw `*_approver` roles. A role-label map exists but is walled inside the policy editor (`ChainDiagram.tsx:61-65`) and still ships "Signator".
+
+**Symptom:** 11 render sites print internal vocabulary to users. The worst: `ApprovalQueue.tsx:288-291` ("Concept approver: role manager_approver" — the reported bug); `RerouteNotificationModal.tsx:151,153` (raw `concept_submitted → in_negotiation` enum in a modal, bypassing `displayLabel()`); `SignatorReview.tsx:357` (page title "Signator Review"); **`leaseDisclosureSections.tsx:451` ("Signator Attestation" printed into the exported disclosure PDF that can reach auditors/board)**. Full list (11) in the audit doc.
+
+**Fix:** add shared `stageLabel()`/`roleLabel()` to `lifecycleStates.ts` with decided finance-English terms (concept→"Initial approval", signator→"Final/signature approval"; manager_approver→"Manager", etc.); route all 11 sites through `displayLabel()`/`stageLabel()`/`roleLabel()`; delete the inline ternary at `ApprovalQueue.tsx:288` and the `.replace('_',' ')`/`.slice(0,2)` hacks; keep `en`/`es` in lockstep. Add a static test asserting no raw stage/role/status string renders outside the helpers.
+
+**Where to look:** `docs/AUDIT_FINDINGS_2026-06-17.md` (Class 1 leak register); `src/lib/lifecycleStates.ts`; the 11 cited files.
+
+---
+
+### Item #109: "Nudge approver" is a no-op — and the whole approval-notification system was write-only — High
+
+> **BUILT 2026-06-18 (branch `claude/approval-jargon-fix`) — pending apply + deploy + cron schedule.** Investigation found the gap is bigger than the nudge: **every** approval event (submit/approve/reject/escalate/reroute) writes `lease_activity_log` 'comment' rows with `details.recipient_ids`, but NOTHING ever delivered them (the one dispatcher, `send-lease-notifications`, reads a different table and emails the lease *owner* about *dates*). Per Daniel's decision (2026-06-18) we fixed the **whole gap**, not just the nudge:
+> - **Migration `20260618120000_notification_deliveries.sql`** — idempotency/delivery log (UNIQUE(activity_log_id, recipient_user_id, channel); service-role-only RLS).
+> - **`_shared/notify_dispatch.ts`** (`dispatchNotificationRow`) — resolves each recipient's email, gates on `checkWorkspaceLive`, sends via Resend, upserts delivery status ('sent'/'failed'+error — hard rule #9), idempotent (never re-sends a 'sent' row).
+> - **`dispatch-notifications`** (cron, `x-cron-secret` = `NOTIFICATION_DISPATCH_CRON_SECRET`) — sweeps recent comment/recipient_ids rows and delivers them (short 2h lookback so a first run can't blast historical backlog). This delivers **every** approval notification going forward.
+> - **`send-nudge`** (Bearer JWT) — resolves the lease's pending approver(s) (chain `effective_assignee_user_id`/`approver_user_id`/role→`workspace_roles`; legacy manager/financial fallback), writes the notification + `lease_nudges` + `last_nudged_at`, **dispatches immediately**, returns who was emailed. Server-side 30-min cooldown + `enforceWorkspaceRateLimit`.
+> - **`NudgeApproverButton`** rewired to call `send-nudge` (real cooldown; toast names the approver). **`_shared/resend.ts`** gained a generic `sendEmail`. Registered in `config.toml`; secret added to `.env.example`.
+>
+> **REMAINING (operator / deploy, before this is live):** (1) apply the migration (security-review the new RLS table first per CLAUDE.md); (2) deploy `send-nudge` + `dispatch-notifications` (+ the updated `_shared`); (3) set `NOTIFICATION_DISPATCH_CRON_SECRET` (32+ char) + schedule `dispatch-notifications` every ~10 min; `RESEND_API_KEY`/`RESEND_FROM_EMAIL` already exist. **Still UNBUILT (deliberately out of scope):** an in-app notification center (a UI surfacing `notification_deliveries`/recipient_ids) — the data model is laid for it. Original description preserved below.
+
+**Severity:** High (a core approval action that silently does nothing; the requester gets false confidence). **Surfaced 2026-06-17** (audit Class 2).
+
+**Symptom:** `NudgeApproverButton.tsx:64-71` toasts "Nudge sent to approver" and `useLifecycleWorkflow.ts:372-387` inserts a `lease_nudges` row (with `type`/`channel` fields) + sets `leases.last_nudged_at` — but **nothing anywhere reads `lease_nudges`**: no email, no in-app notification, no cron consumer. The table is write-only; the approver receives nothing.
+
+**Fix:** wire `lease_nudges` to a real notification (email + in-app) with a per-approver cooldown and a "delivered" confirmation back to the requester. Integration test: a nudge produces a delivered notification row a consumer reads.
+
+**Where to look:** `src/components/workflow/NudgeApproverButton.tsx`; `src/hooks/useLifecycleWorkflow.ts`; the `lease_nudges` table; the notification path.
+
+---
+
+### Item #110: Dead/misleading controls — dashboard drill-down stubs + `mailto:`-as-a-feature — Med
+
+> **RESOLVED + REASSESSED 2026-06-18 (branch `claude/approval-jargon-fix`) — pending merge. The original finding was partly overstated; verified on inspection:**
+> - **(a) Dashboard tiles — dead code REMOVED, no UX defect.** Contrary to the original note, the tiles had **no** misleading clickable affordance — no `cursor-pointer`, `hover:shadow`, or bar `onClick` (the only `onClick` is the working 30/60/90-day toggle). The single real issue was genuinely-dead code: `const navigate = useNavigate(); void navigate; // future`. Removed from `IntakeTrend` + `PipelineByDepartment`. (Wiring real department/period drill-downs is a possible future enhancement, not a defect.)
+> - **(b) `mailto:` flows are NOT defects.** They're honest, legally-standard contact mechanisms: the privacy one is a proper GDPR/CCPA Subject Access Request card (the 5 rights listed + a documented 30-day response commitment + a SAR comment), and the data-export / "Contact Support" ones are Contact-style email buttons — the legitimate mechanism most SMB SaaS use. A *tracked in-app request queue* (so a request can't be lost if the inbox lapses — hard rule #9) remains an **optional enhancement**, not a bug; left un-filed as a defect.
+>
+> Typecheck green. Delete on merge.
+
+**Severity:** Medium (one carries GDPR/CCPA SLA exposure). **Surfaced 2026-06-17** (audit Class 2 #2-6).
+
+**Symptom:** (a) `IntakeTrend.tsx:36-37` and `PipelineByDepartment.tsx:80-81` render clickable-looking tiles whose handler is `void navigate; // future` — clicks go nowhere. (b) Three `mailto:`-as-a-feature flows: **`AccountSettings.tsx:1389-1393` "Submit a Privacy Rights Request" promises a 30-day GDPR/CCPA response but is just a `mailto:` with no tracking/SLA** (legal exposure); `AccountSettings.tsx:1362-1366` "Request Data Export" (mailto); `CancellationBanner.tsx:154-157` "Contact Support → restore workspace" (mailto).
+
+**Fix:** wire the dead tiles to their drill-downs or make them non-interactive. Convert the `mailto:` flows to tracked in-app requests (or at minimum a monitored queue per hard rule #9); prioritize the privacy-rights one.
+
+**Where to look:** the cited files; `docs/AUDIT_FINDINGS_2026-06-17.md` (Class 2).
+
+---
+
 ### Item #111: Approval-chain Phase-7 edges (C1–C6) — High
 
 > **PARTIALLY RESOLVED 2026-06-18 (branch `claude/approval-chain-phase7-edges`, pending merge — update this stub on merge).** C1/C2/C3/C5 shipped; **C4 + C6 are deliberate follow-on chunks** (see below). Originated as audit Class 3 in `docs/AUDIT_FINDINGS_2026-06-17.md`. **Cross-branch note:** also stubbed as #111 on PR #57's branch (`claude/approval-jargon-fix`, #108–#122) — whichever merges second conflicts on this entry; keep the most-resolved version. Daniel's directive: do all six, phased, verify-and-pivot; **C3 delegation = EXCLUSIVE.**
@@ -2028,3 +2089,145 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 - *C5 atomicity is smoke-tier-only (LOW):* the static test proves the supersede+insert live in one body + the edge aborts, but not that the rollback fires; a `scripts/smoke-*` firing the RPC with a malformed payload would prove it.
 
 **Where to look:** the four migrations/edge files above; `src/pages/app/ApprovalQueue.tsx`; `src/lib/approvalChainLogic.ts` (`isFrontierActiveRequiredStep`); `docs/PHASE_7_BUILD_SPEC.md` (A4); `docs/AUDIT_FINDINGS_2026-06-17.md` (Class 3 + C4 caveat).
+
+---
+
+### Item #112: `delete-workspace` is firm-unaware → child-counter drift + billing over-charge (W1 + B2) — High
+
+> **RESOLVED in code 2026-06-18 (branch `claude/approval-jargon-fix`), reviewed clean — pending merge + apply.** Migration `20260618130000_firm_counter_delete_decrement.sql` adds a DELETE branch to `maintain_firm_child_workspace_counter` (trigger now `BEFORE INSERT OR DELETE OR UPDATE OF firm_id`; `RETURN OLD`) and one-time-reconciles any drifted counter (bracketed by disable/enable of `enforce_firm_entitlement_guard`, since a migration isn't `service_role`). `delete-workspace` now resyncs the firm Stripe quantity after a firm-bound delete (best-effort; the #107 cron backstops). 5 static tests; firm-billing 105/107 green. Security/integrity/auditor reviewed (no Critical/High). **The sibling `delete-account` path has the same billing-resync gap → filed as #120.** Delete this item on merge + apply (security migration — the review gate is satisfied by the #112 review).
+
+**Severity:** High (integrity/availability + revenue). **Surfaced 2026-06-17** (audit W1 + B2 — same root cause).
+
+**Symptom:** `delete-workspace` deletes a workspace row with **no firm handling**. (a) `maintain_firm_child_workspace_counter` (`20260615172439_…:133-189`) has no DELETE branch and its trigger (`:191-194`) is `BEFORE INSERT OR UPDATE OF firm_id` — DELETE excluded — so `firms.child_workspaces_used` drifts upward permanently and the firm falsely hits `child_workspace_limit` (can't bind new children). (b) No firm billing resync fires, so the firm is over-billed for the deleted child until the #107 reconcile cron runs.
+
+**Fix:** make `delete-workspace` release `firm_id` (→ NULL, which fires the counter decrement) **and** call `syncFirmSubscriptionQuantity` before/after the delete; OR add a DELETE branch to the counter trigger + a billing resync hook. New migration; reconcile already-drifted counters in the same migration. One fix covers both W1 and B2.
+
+**Where to look:** `supabase/functions/delete-workspace/index.ts`; `supabase/migrations/20260615172439_phase9_firm_layer_foundation.sql` (counter trigger); `supabase/functions/_shared/firm_billing.ts`. Related: #107 (reconcile cron is the billing safety net), #83 (the workspaces hard-delete analog).
+
+---
+
+### Item #113: Firm plan-lock trigger is UPDATE-only — a firm-bound INSERT keeps a non-business plan — Med (latent)
+
+**Severity:** Medium, **latent** (only the UPDATE bind path exists today; bites when self-serve firm-workspace creation ships). **Surfaced 2026-06-17** (audit W2).
+
+**Symptom:** `workspaces_plan_firm_lock` (`20260615172439_…:219-222`) is `BEFORE UPDATE` only, so the force-to-`business` logic can't fire on an INSERT that already carries `firm_id`. The sibling counter trigger DOES handle INSERT — the two are asymmetric. A firm-bound workspace created via INSERT (the `create_firm_workspace_locked` RPC path / #105) would keep a non-business plan.
+
+**Fix:** extend the trigger to `BEFORE INSERT OR UPDATE` and force `plan='business'` when `NEW.firm_id IS NOT NULL` on INSERT. Ship alongside the #105 create-workspace-with-firm path so children are plan-locked from creation.
+
+**Where to look:** `supabase/migrations/20260615172439_phase9_firm_layer_foundation.sql` (`prevent_independent_plan_change_for_firm_workspace` + its trigger); #105.
+
+---
+
+### Item #114: `NeedsReviewBanner` low-confidence warnings are DEAD — `leases.confidence_scores` is never written — High
+
+> **RESOLVED in code 2026-06-18 (branch `claude/approval-jargon-fix`) — pending merge.** Frontend fix (no deploy gate): `LeaseReview`'s `confidenceScores` memo no longer reads the always-empty `leases.confidence_scores` column — it now builds the 0–100 per-field map from `extracted_json` via `getFieldConfidence` (the same populated source the inline field borders use; 0-1 → 0-100). This revives the NeedsReviewBanner low-confidence list (the one genuine consumer). The four section-card pass-sites turned out to be **vestigial** — `SectionCard` destructures `confidenceScores` but never uses it (it reads `extracted_json` directly via `getFieldConfidence`), so they're unchanged; that dead prop is filed as #122. The unused `confidence_scores` column could later be dropped or populated by process_lease. Reviewed clean; typecheck green. Delete on merge.
+
+**Severity:** High (a core review-trust signal is silently off). **Surfaced 2026-06-17** (audit E1, verified — grep shows 0 writes).
+
+**Symptom:** `process_lease` never writes the `leases.confidence_scores` JSONB column (it persists per-field confidence to the normalized `lease_field_confidence` table instead). `LeaseReview.tsx:330-332` builds a `confidenceScores` memo from that always-empty column and feeds it to `NeedsReviewBanner.tsx:45-50`, where `confidenceScores[field.key]` is therefore always `undefined` → the "X has low confidence (Y%)" list never renders. (The inline amber/red field borders still work — they read `extracted_json` via `getFieldConfidence` — so it's a precise dead-summary, not "confidence is broken.")
+
+**Fix:** feed `NeedsReviewBanner` from `extracted_json` via `getFieldConfidence` (consistent with the inline borders), OR write `confidence_scores` in the extraction UPDATE. (Note the historical NUMERIC(3,2) overflow scar at `process_lease:245` when re-introducing a confidence write.)
+
+**Where to look:** `src/components/leases/NeedsReviewBanner.tsx`; `src/pages/app/LeaseReview.tsx:330-341`; `supabase/functions/process_lease/index.ts`.
+
+---
+
+### Item #115: Extraction fidelity residuals — per-entry confidence dropped, amendment field-coverage incomplete — Med
+
+**Severity:** Medium / Low. **Surfaced 2026-06-17** (audit E2/E6/E7).
+
+**Symptom:** (E2) `rent_schedule`/`risks` arrays carry per-item `confidence` in the Opus JSON, but the INSERT payloads (`process_lease:~2740,~2758`) omit it → uncertain rows/risks can't be flagged downstream. (E6) Amendment comparison diffs only a hardcoded ~12-field list (`COMPARABLE_FIELDS`, `process_lease:~2549`); clause fields (permitted_use, guarantees, the `rent_schedule` array) aren't compared → a material amendment change can go unsurfaced (matches CLAUDE.md's "verify completeness" flag). (E7, Low) No AI-origin-vs-human marker on the `leases` row; attribution lives only in `field_corrections` + `lease_field_confidence`.
+
+**Fix:** add `confidence` columns to `rent_schedules`/`risks` and persist; drive `COMPARABLE_FIELDS` from the full extracted field set (+ flag uncompared fields); optionally a self-describing origin marker on the lease row.
+
+**Where to look:** `supabase/functions/process_lease/index.ts` (the rent_schedule/risks inserts + `COMPARABLE_FIELDS`); `docs/AUDIT_FINDINGS_2026-06-17.md` (Sweep 3).
+
+---
+
+### Item #116: Lease hard-delete destroys the audit trail — no `BEFORE DELETE` guard on `leases` — Med
+
+> **RESOLVED — merged via PR #58 (`claude/lease-delete-audit-guard`).** Closed by a `BEFORE DELETE` trigger `prevent_committed_lease_hard_delete` on `public.leases` (migration `20260618140000`) + an ImportHistory Archive-steer (deep-links to the lease's archive dialog). Disposable (client-hard-deletable) allowlist = `model_locked IS NOT TRUE AND (lifecycle_status IS NULL OR lifecycle_status = 'draft')`; `service_role` bypasses (delete-workspace/-account + FK cascade). Extracted `isCommittedLease()` (`src/lib/leaseDisposability.ts`) as the client mirror + behavioral test. 5-way reviewed clean before push (security/integrity/auditor/polish/test). Full detail in PR #58. The original audit description is preserved below.
+
+**Severity:** Medium (forensic integrity). **Surfaced 2026-06-17** (audit DF1; analog of #83 for leases).
+
+**Symptom:** the `leases` DELETE RLS `leases_delete_own_or_workspace_admin` (`20260516120000_baseline_schema.sql:4206`) lets the lease's creator OR a workspace admin hard-delete **any** lease via PostgREST — including a `model_locked`/active one, because the governance triggers (`prevent_locked_lease_edits`, `prevent_unauthorized_lease_workflow_edits`) are **`BEFORE UPDATE` only and don't cover DELETE**. The `lease_activity_log`/`lease_governance_audit` FKs are `ON DELETE CASCADE`, so the delete **cascades away the entire audit trail** with no archive-first requirement and no forensic record. (Intended for ImportHistory rollback, but the RLS isn't gated to Failed/unapproved leases.)
+
+**Fix:** add a `BEFORE DELETE` guard on `leases` that blocks deleting `model_locked`/non-`Failed` leases (require archive-first) and/or writes a `workspace_activity_log` forensic row on hard-delete; tighten the DELETE RLS to Failed/unapproved. Verify: a client hard-delete of a locked lease is blocked + a forensic row is written.
+
+**Where to look:** `supabase/migrations/20260516120000_baseline_schema.sql` (the leases DELETE policy + audit FKs + governance triggers); `src/pages/app/ImportHistory.tsx`; #83.
+
+---
+
+### Item #117: Lease-review integrity residuals — executed-variance ungated, concurrent-edit overwrite, model_lock gate — Med
+
+**Severity:** Medium / Low. **Surfaced 2026-06-17** (audit DF2/DF3/DF5/DF4/DF6; DF2 = E5).
+
+**Symptom:** (DF2/E5, Med) an executed-document upload flips lifecycle to `executed` and records variance but has **no server-side materiality gate / re-approval** — materially-different signed terms can replace approved terms without acknowledgment (`process_lease:2069-2148`, flip at `:2106`; related #94; hard rule #2 leans toward a gate). (DF3, Med) the review save (`LeaseReview.tsx:1596-1599`) has **no optimistic-concurrency check** → two simultaneous editors silently last-writer-wins. (DF5/E3, Low) server `model_lock` (`legacy-lease-action:247-252`) lacks a `confirmed_sections` check (client-gated only; asymmetric vs the chain path). (DF4, Low) unchecking a confirmed tab strips `_approval` from `extracted_json` with no activity row (`LeaseReview.tsx:1314-1335`). (DF6, Low) rent-schedule re-generate appends instead of replacing (`LeaseReview.tsx:1478`).
+
+**Fix:** DF2 — server-side materiality gate → re-route to approval on material executed variance. DF3 — `updated_at`/version guard → 409 on conflict. DF5 — enforce `confirmed_sections` server-side if locking must require review. DF4 — log the approval-revert. DF6 — DELETE before INSERT.
+
+**Where to look:** `supabase/functions/process_lease/index.ts`; `src/pages/app/LeaseReview.tsx`; `supabase/functions/legacy-lease-action/index.ts`; #94.
+
+---
+
+### Item #118: `RentRollExport` is a diverged export — CSV formula injection + wrong status/archived filter — High
+
+> **RESOLVED in code 2026-06-18 (branch `claude/approval-jargon-fix`) — pending merge.** R1: extracted a shared, tested `src/lib/csv.ts` `escapeCsvCell()` that neutralizes formula-injection prefixes (`=`/`+`/`-`/`@`/tab/CR → leading `'`) on top of RFC-4180 quoting, and routed RentRollExport through it (use it for any future CSV export). R2: the query now filters `lifecycle_status` (on-the-books states: executed/fully_executed/pending_counter_signature/active) + `archived=false` instead of the legacy `status` column. R4: "Total Annual Obligation" → "Total Annual Rent (run-rate)". Frontend-only (no deploy gate); 6 csv tests + typecheck green. **Product decision (Daniel, 2026-06-18): executed + active only** — pre-signature pipeline (approved/in_negotiation/final_review) excluded so the run-rate totals reflect committed rent. Delete on merge.
+
+**Severity:** High (injection + completeness). **Surfaced 2026-06-17** (audit R1/R2/R4, verified).
+
+**Symptom:** (R1) `escapeCSV` (`RentRollExport.tsx:135-141`) quotes only `,`/`"`/`\n` and does **not** neutralize formula prefixes (`=`/`+`/`-`/`@`) → user+AI-sourced tenant/landlord/address fields execute as formulas in Excel/Sheets. (R2) the query filters the legacy `status` column (`:82` `.in('status', ['Ready','final','review'])`) instead of `lifecycle_status`, and omits an `archived=false` filter → it includes draft/archived leases and misses some active ones (`Reports.tsx` uses `lifecycle_status` — this surface diverged). (R4, Low) "Total Annual Obligation" = `monthly × 12` (`:93,123`) ignores escalations — misleading label.
+
+**Fix:** prefix-escape `=/+/-/@` in `escapeCSV` (and reuse for any other CSV export); switch the query to `lifecycle_status` + `archived=false` (align with `Reports.tsx`); relabel the annualization. Verify: a tenant name of `=HYPERLINK(...)` exports neutralized.
+
+**Where to look:** `src/components/reports/RentRollExport.tsx`; `src/pages/Reports.tsx` (the correct filter pattern).
+
+---
+
+### Item #119: Index/CPI lease PV may be understated in the single-lease path; summary-token lacks rate limiting — Med
+
+**Severity:** Medium (R3) / Low (R5). **Surfaced 2026-06-17** (audit R3/R5).
+
+**Symptom:** (R3, Med — needs caller-trace) `calculateLease:66` computes `monthlyPayment * (1 + escalationRate/100)^yearIndex`; a null `escalationRate` coerces to **0%**. The *portfolio* path explicitly excludes index/CPI leases from PV, but the *single-lease* stored PV likely passes null→0% and understates the liability — an inconsistency between the two surfaces. (R5, Low) `generate-summary-token` has no rate limiting (not exploitable — RLS-protected — but every sibling report fn rate-limits; + a service-role lease-fetch code smell).
+
+**Fix:** R3 — exclude or flag index/CPI leases in the single-lease PV exactly as the portfolio path does (confirm the stored `calc_pv_liability` for an index lease first). R5 — add workspace-scoped rate limiting (20/hour) + use the user client for the initial fetch.
+
+**Where to look:** `src/lib/leaseCalculations.ts:66`; `src/lib/portfolioAnalytics.ts` (the index-lease exclusion to mirror); `supabase/functions/generate-summary-token/index.ts`.
+
+---
+
+### Item #120: `delete-account` doesn't resync firm billing when it deletes a firm-bound workspace — Med
+
+**Severity:** Medium (revenue drift; the #107 cron backstops it). **Surfaced 2026-06-18** during the #112 security/integrity review — filed as its own beat (CLAUDE.md "pre-existing issues are their own beat"), NOT bundled into #112.
+
+**Symptom:** `delete-account` deletes the user's owned workspaces by `owner_id` via the service role (`supabase/functions/delete-account/index.ts` workspace-delete). After #112, the `maintain_firm_child_workspace_counter` DELETE branch correctly decrements `firms.child_workspaces_used` for any firm-bound child removed — the **integrity** side is handled. BUT delete-account does NOT select `firm_id` or call `syncFirmSubscriptionQuantity`, so the firm's Stripe **quantity** is left stale until the #107 `firm-billing-reconcile` cron runs — a silent vendor drift (hard rule #9) for the interim. Mostly academic today: a firm *owner* can't hard-delete while children still reference the firm (#104 / FK guards), so the realistic case is a non-owner whose owned workspace was bound into someone else's firm.
+
+**Fix:** mirror the #112 `delete-workspace` change — select `firm_id` on the workspaces being deleted, and after the deletes call `syncFirmSubscriptionQuantity` once per distinct affected `firm_id` (best-effort; the cron stays the backstop).
+
+**Where to look:** `supabase/functions/delete-account/index.ts` (the workspace-delete path); `supabase/functions/_shared/firm_billing.ts`; reference fix in `supabase/functions/delete-workspace/index.ts` (#112).
+
+---
+
+### Item #121: CSV formula-injection in two more exporters (LeaseExports + AuditLog) — Med
+
+> **RESOLVED in code 2026-06-18 (branch `claude/approval-jargon-fix`) — pending merge.** Migrated both to the shared `escapeCsvCell()` (#118); widened its param to `unknown`. Surfaced by the #118 review.
+
+**Severity:** Medium (CSV/formula injection; same class as #118 R1, different surfaces). **Surfaced 2026-06-18** during the #118 review — filed as its own beat, then fixed.
+
+**Symptom:** `LeaseExports.tsx` (lease-detail + rent-schedule CSV) and `AuditLog.tsx` (audit-log CSV) used local escaping that only RFC-4180-quoted commas/quotes/newlines — it did NOT neutralize formula prefixes (`=`/`+`/`-`/`@`). CSV quoting escapes *delimiters*, not formulas: Excel/Sheets strip the surrounding quotes and still execute a leading `=` (e.g. a tenant_name or audit-reason of `=HYPERLINK(...)`). Same injection vector as #118 R1 on two more user/AI-sourced surfaces.
+
+**Fix (done):** both route every cell through `src/lib/csv.ts` `escapeCsvCell()` (formula-prefix neutralization + RFC-4180). Delete on merge.
+
+**Where to look:** `src/components/leases/LeaseExports.tsx`; `src/pages/app/AuditLog.tsx`; `src/lib/csv.ts`.
+
+---
+
+### Item #122: `SectionCard` `confidenceScores` prop is vestigial (dead prop) — Low
+
+**Severity:** Low (dead code; no user impact). **Surfaced 2026-06-18** during the #114 review. **Pre-existing** (predates #114; the prop was equally ignored when it received `{}`).
+
+**Symptom:** `LeaseReviewSections.tsx` `SectionCard` declares + destructures a `confidenceScores` prop (`:128`, `:152`) but never references it in its body — all per-field confidence display inside the card reads `extracted_json` directly via `getFieldConfidence` (`:176` border, `:210`/`ConfidenceBadge`). `LeaseReview` passes `confidenceScores={confidenceScores}` at four section-card sites where it has no effect (so #114's memo fix correctly revives only the `NeedsReviewBanner`, the one real consumer).
+
+**Fix:** remove the unused prop from `SectionCard`'s interface + destructure + the four `LeaseReview` pass-sites. (Alternatively route `SectionCard` confidence through the prop, but the inline `extracted_json` read is the working path — removal is simpler.) lease-code-auditor territory.
+
+**Where to look:** `src/components/leases/LeaseReviewSections.tsx:128,152`; `src/pages/app/LeaseReview.tsx` (the four `confidenceScores={confidenceScores}` section-card pass-sites).
