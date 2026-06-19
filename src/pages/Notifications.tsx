@@ -230,7 +230,15 @@ export default function Notifications() {
               <div className="space-y-3">
                 {alerts.map((alert, idx) => {
                   const cfg = ALERT_CONFIG[alert.alert_type] ?? {
-                    icon: Bell, variant: 'default' as const, label: alert.alert_type,
+                    icon: Bell,
+                    variant: 'default' as const,
+                    // Fanned approval/delegation notifications (#111 follow-on)
+                    // carry their notification_type as alert_type, e.g.
+                    // "notify_financial_approver" → "Financial Approver".
+                    label: alert.alert_type
+                      .replace(/^notify_/, '')
+                      .replace(/_/g, ' ')
+                      .replace(/\b\w/g, (c) => c.toUpperCase()),
                   };
                   const AlertIcon = cfg.icon;
                   const isUnread = !alert.read_at;
