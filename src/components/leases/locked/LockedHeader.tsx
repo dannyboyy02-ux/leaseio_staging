@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronLeft, Lock, RotateCcw, Loader2, History, MoreHorizontal, Archive, ArchiveRestore } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -57,8 +57,21 @@ export function LockedHeader({
   readOnly = false,
 }: Props) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useAppTranslation();
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+
+  // #116: honor the ?action=archive deep-link from ImportHistory's Archive
+  // steer for a locked-active lease (this header owns the archive control for
+  // that view). Opens the archive dialog for an admin and self-strips the param.
+  useEffect(() => {
+    if (searchParams.get('action') !== 'archive') return;
+    if (!isAdmin || readOnly || isArchived) return;
+    setArchiveDialogOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('action');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, isAdmin, readOnly, isArchived, setSearchParams]);
 
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border">

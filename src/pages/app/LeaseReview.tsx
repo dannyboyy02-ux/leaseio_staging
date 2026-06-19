@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { format } from "date-fns";
 import {
   FileText,
@@ -98,7 +98,7 @@ import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
 import { createLeaseNotification } from '@/lib/leaseNotifications';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
-import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { displayLabel, isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { generateRentScheduleRows } from '@/lib/rentSchedule';
 import {
   buildApproverCandidates,
@@ -205,6 +205,7 @@ function renderWarning(w: unknown): string {
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, userRole, userFunctionalRoles, workspace } = useApp();
   // Vault (read-only retention) workspaces are view + export only. The server
   // already blocks every write (V1 RLS + config guard); this flag suppresses
@@ -326,10 +327,21 @@ export default function LeaseReview() {
 
   const [form, setForm] = useState<Record<string, string>>({});
 
-  // Get confidence scores from lease
+  // Per-field confidence (0-100) for the review surfaces (NeedsReviewBanner +
+  // the section cards). #114: process_lease never populates
+  // leases.confidence_scores, so reading it left this map permanently empty —
+  // silently disabling the banner's low-confidence warnings. The real per-field
+  // confidence lives in extracted_json (the same source the inline field
+  // borders use), so build the map from there via getFieldConfidence (0-1 → 0-100).
   const confidenceScores: ConfidenceScores = useMemo(() => {
-    return (lease?.confidence_scores as ConfidenceScores) || {};
-  }, [lease?.confidence_scores]);
+    const extractedJson = lease?.extracted_json as ExtractedJson | null;
+    const scores: ConfidenceScores = {};
+    for (const fieldId of allFieldIds) {
+      const conf = getFieldConfidence(extractedJson, fieldId);
+      if (conf !== null) scores[fieldId] = Math.round(conf * 100);
+    }
+    return scores;
+  }, [lease?.extracted_json, allFieldIds]);
 
   // Get low-confidence fields
   const lowConfidenceFields = useMemo(() => {
@@ -1977,6 +1989,24 @@ export default function LeaseReview() {
   const isManagerApprover = (userFunctionalRoles ?? []).includes('manager_approver');
   const isFinancialApprover = (userFunctionalRoles ?? []).includes('financial_approver');
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
+
+  // #116: honor the ?action=archive deep-link from ImportHistory's Archive
+  // steer. A committed lease can't be hard-deleted there; the steer opens the
+  // lease here with the archive dialog already up so it's one gesture, not a
+  // scavenger hunt through the ⋯ menu. This handles the non-locked workbench
+  // path; the locked-active path (early-returned to LockedLeaseDetail below) is
+  // handled in LockedHeader. Gated to admin/owner (only they can archive) and
+  // self-stripping so a refresh doesn't re-trigger.
+  useEffect(() => {
+    if (searchParams.get('action') !== 'archive') return;
+    const lockedActive = lease?.model_locked === true && lease?.lifecycle_status === 'active';
+    if (lockedActive) return;
+    if (!lease || lease.archived || isReadOnly || !isAdminUser) return;
+    setShowArchiveDialog(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('action');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, lease, isReadOnly, isAdminUser, setSearchParams]);
   // Phase 3: include chain post_concept_pre_signator + signator stages +
   // executed equivalent (active is identical in both vocabularies).
   const canShareFinancialSummary = Boolean(
@@ -2997,7 +3027,7 @@ export default function LeaseReview() {
                                   </Link>
                                   <span className="text-xs text-purple-700/70">
                                     {' — '}matches on {c.match_reasons.join(' + ')}
-                                    {c.lifecycle_status ? ` · ${c.lifecycle_status}` : ''}
+                                    {c.lifecycle_status ? ` · ${displayLabel(c.lifecycle_status as LifecycleStatus)}` : ''}
                                   </span>
                                 </div>
                               </li>

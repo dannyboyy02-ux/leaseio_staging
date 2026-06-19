@@ -448,7 +448,7 @@ export function renderLeaseSections(sections: ReportSection[]) {
           {audit.signator_attestation && (
             <View style={styles.attestationBox}>
               <Text style={styles.attestationLabel}>
-                Signator Attestation
+                Final Approval Attestation
                 {audit.signator_approved_at ? ` — ${audit.signator_approved_at.slice(0, 10)}` : ''}
               </Text>
               <Text style={styles.attestationBody}>{audit.signator_attestation}</Text>

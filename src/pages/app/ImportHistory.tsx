@@ -4,10 +4,11 @@ import {
   Plus, 
   Search, 
   Loader2, 
-  Eye, 
-  RotateCcw, 
-  Trash2, 
+  Eye,
+  RotateCcw,
+  Trash2,
   FileText,
+  Archive,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -18,6 +19,7 @@ import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
 import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
+import { isCommittedLease } from '@/lib/leaseDisposability';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -45,7 +47,17 @@ interface ImportRow {
   processed_at: string | null;
   error_message: string | null;
   storage_path: string | null;
+  lifecycle_status: string | null;
+  model_locked: boolean | null;
 }
+
+// #116: a "committed" lease (model_locked, or any lifecycle_status beyond
+// 'draft') carries an audit trail and is protected from client hard-delete by
+// the prevent_committed_lease_hard_delete trigger. The UI steers it to the
+// restorable Archive flow instead of offering a delete the DB would reject.
+// Disposable imports (NULL/'draft' lifecycle, not locked) stay hard-deletable
+// here for import rollback. isCommittedLease lives in @/lib/leaseDisposability
+// (kept in lockstep with the SQL allowlist; behavior-tested there).
 
 // Note: Using unified LeaseStatusBadge component for consistent status display
 
@@ -80,7 +92,7 @@ export default function ImportHistory() {
       // Workspace scoping mandatory — see Leases.tsx for the same rationale.
       const { data, error } = await supabase
         .from('leases')
-        .select('id, filename, status, uploaded_at, processed_at, error_message, storage_path')
+        .select('id, filename, status, uploaded_at, processed_at, error_message, storage_path, lifecycle_status, model_locked')
         .eq('workspace_id', workspace.id)
         .order('uploaded_at', { ascending: false });
 
@@ -195,7 +207,13 @@ export default function ImportHistory() {
       fetchImports();
     } catch (error) {
       console.error('Delete error:', error);
-      toast.error('Failed to delete lease');
+      // The prevent_committed_lease_hard_delete trigger (#116) rejects deletes
+      // of committed leases with an actionable message. Surface it verbatim if
+      // present (the UI already steers committed leases to Archive, so this is a
+      // defense-in-depth backstop) rather than a generic failure toast.
+      const message =
+        error instanceof Error && error.message ? error.message : 'Failed to delete lease';
+      toast.error(message);
     }
   };
 
@@ -332,19 +350,34 @@ export default function ImportHistory() {
                               </TooltipTrigger>
                               <TooltipContent>{t('import.view')}</TooltipContent>
                             </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  onClick={() => handleDeleteClick(imp)}
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>{t('import.delete')}</TooltipContent>
-                            </Tooltip>
+                            {isCommittedLease(imp) ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => navigate(`/app/leases/${imp.id}?action=archive`)}
+                                  >
+                                    <Archive className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>{t('import.archive_committed')}</TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => handleDeleteClick(imp)}
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>{t('import.delete')}</TooltipContent>
+                              </Tooltip>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
