@@ -4,6 +4,23 @@ Covers the PRs produced in the 2026-06-18 execution round. **Living doc** — up
 it as later follow-on PRs (notification email delivery, counter-sig email, etc.)
 are opened.
 
+## ✅ Status: all 9 PRs MERGED to `main` (2026-06-19)
+
+The merge campaign is **complete** — every PR below is squash-merged to `main`
+(HEAD `10336b7`, CI green) with its KNOWN_ISSUES tail reconciled. **What remains is
+the OPERATOR side: apply migrations + redeploy edge functions + set secrets/cron,
+per the per-PR steps below.** None of that is automatic.
+
+Merged, in order: **#63 → #58 → #57 → #59 → #60 → #66 → #62 → #64 → #65.**
+
+> **Note:** the #111 C6 SLA work merged as **#66**, not #61. #61 was auto-closed when
+> its stacked base branch (#60's) was deleted before its base was retargeted to
+> `main`; it was re-opened as #66 with identical rebased content. (Lesson: retarget a
+> stacked PR's base to `main` *before* deleting its parent branch.)
+
+The **Merge order** / sequencing section below is retained as history; it no longer
+drives action. **Jump to "Per-PR steps" for the operator runbook.**
+
 ## Cardinal rules
 1. **Migrations + edge functions are applied/redeployed MANUALLY after each merge.**
    This project's CI/CD auto-deploys only the **frontend (Vercel)**. Migrations
@@ -88,7 +105,7 @@ new gate; the gate still applies to all *future* PRs.
   rebuilt from the *current* policy (no resurrected superseded approvers); a
   no-match policy leaves the lease in `in_negotiation` (not stranded).
 
-### ⑤ PR #61 — #111 C6 per-policy SLA · → main (after #60)
+### ⑤ PR #66 (was #61) — #111 C6 per-policy SLA · → main (after #60)
 - **Merge** (base auto-retargets to main once #60 lands; resolve KNOWN_ISSUES conflict).
 - **Apply migration:** `20260618170000_approval_policy_sla_days.sql`
 - **Edge functions:** none (frontend-only).
