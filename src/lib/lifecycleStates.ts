@@ -136,6 +136,35 @@ export function displayLabel(status: LifecycleStatus): string {
   return labels[status] ?? status;
 }
 
+// Display label for a chain-step STAGE. Same rule as displayLabel: keep the
+// internal stage codes out of the UI. 'concept' = the initial request approval
+// (before negotiation); 'signator' = the final / signature approval (the
+// execution-ready lease). One source of truth for the queue, audit log,
+// violation banner, policy test dialog, and exception views.
+export function stageLabel(stage: string): string {
+  const labels: Record<string, string> = {
+    concept: 'Initial approval',
+    signator: 'Final approval',
+  };
+  return labels[stage] ?? stage;
+}
+
+// Display label for a workspace functional role. Keeps raw snake_case role
+// codes ('manager_approver', etc.) out of the UI. Mirrors the labels the
+// policy editor (ChainDiagram) surfaces; the snake_case fallback only fires
+// for an unknown role.
+export function roleLabel(role: string | null | undefined): string {
+  if (!role) return '';
+  const labels: Record<string, string> = {
+    submitter: 'Submitter',
+    manager_approver: 'Manager',
+    financial_approver: 'Finance',
+    signator: 'Signatory',
+    admin: 'Admin',
+  };
+  return labels[role] ?? role.replace(/_/g, ' ');
+}
+
 // Defines what transitions are valid from each state. Used to guard manual
 // transitions in the UI and to validate state changes in edge functions.
 // Phase 3 includes both legacy and chain transitions; rerouting (Phase 6)

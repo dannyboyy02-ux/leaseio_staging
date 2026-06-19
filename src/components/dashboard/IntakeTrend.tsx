@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
-import { useNavigate } from 'react-router-dom';
 
 interface MonthPoint {
   month: string;
@@ -29,12 +28,8 @@ function formatCurrency(value: number): string {
 
 export function IntakeTrend() {
   const { workspace } = useApp();
-  const navigate = useNavigate();
   const [data, setData] = useState<MonthPoint[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // navigate retained for future drill-down use
-  void navigate;
 
   useEffect(() => {
     async function fetchData() {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { escapeCsvCell } from '@/lib/csv';
 import { format } from "date-fns";
 import {
   Calendar,
@@ -95,7 +96,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
   deactivated_approver_reassigned: 'Deactivated approver reassigned',
   delegate_activated: 'Delegate activated',
   document_iteration_uploaded: 'Document iteration uploaded',
-  negotiation_escalated_to_concept: 'Escalated to concept approver',
+  negotiation_escalated_to_concept: 'Escalated back to initial approval',
   ooo_revoked: 'Out of office revoked',
   ooo_routed_step: 'Step routed to out-of-office delegate',
   policy_assignee_validation_failed: 'Approver validation failed',
@@ -197,11 +198,11 @@ export default function AuditLog() {
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+      ...rows.map(row => row.map(escapeCsvCell).join(',')),
       // Evidence-gap disclosure (#76) — the export is what leaves the
       // building during an audit, so the gap must travel with it.
       '',
-      `"${t('audit.gap_notice').replace(/"/g, '""')}"`,
+      escapeCsvCell(t('audit.gap_notice')),
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

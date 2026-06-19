@@ -178,7 +178,7 @@ export function DocumentsPanel({
                     onClick={() => setEscalateOpen(true)}
                   >
                     <ArrowLeftCircle className="h-3.5 w-3.5 mr-1.5" />
-                    Escalate to Concept
+                    Send back to initial approval
                   </Button>
                   <Button
                     size="sm"

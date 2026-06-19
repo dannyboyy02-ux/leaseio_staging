@@ -24,6 +24,7 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
@@ -54,6 +55,7 @@ interface AlertRule {
 interface Lease {
   id: string;
   workspace_id: string;
+  user_id: string | null;
   filename: string | null;
   tenant_name: string | null;
   lifecycle_status: string | null;
@@ -71,6 +73,9 @@ interface NotificationRow {
   title: string;
   body: string;
 }
+
+// A NotificationRow plus the lease owner to email (stripped before the DB insert).
+type EmailableAlert = NotificationRow & { ownerId: string | null };
 
 async function wasRecentlyAlerted(
   supabase: ReturnType<typeof createClient>,
@@ -94,8 +99,8 @@ async function evaluate(
   supabase: ReturnType<typeof createClient>,
   rules: AlertRule[],
   leases: Lease[],
-): Promise<NotificationRow[]> {
-  const toInsert: NotificationRow[] = [];
+): Promise<EmailableAlert[]> {
+  const toInsert: EmailableAlert[] = [];
   const now = new Date();
 
   for (const rule of rules) {
@@ -168,6 +173,7 @@ async function evaluate(
             alert_type: rule.alert_type,
             title,
             body,
+            ownerId: lease.user_id,
           });
         }
       }
@@ -175,6 +181,92 @@ async function evaluate(
   }
 
   return toInsert;
+}
+
+// P2-05: inline escapeHtml (matches send-lease-notifications' choice — keeps the
+// email path free of a shared-module import).
+function escapeHtml(text: unknown): string {
+  if (text === null || text === undefined) return "";
+  const s = typeof text === "string" ? text : String(text);
+  const map: Record<string, string> = {
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+  };
+  return s.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+// Email each newly-created alert to its lease owner. Best-effort: per-recipient
+// failures are logged + skipped, never thrown — an email failure must not fail
+// the cron or undo the in-app notifications that already landed. Respects the
+// owner's profiles.email_notifications_enabled (default true; the AccountSettings
+// "Email notifications" toggle). Recipient = the lease owner only (conservative
+// for a new outbound-email behavior; the in-app alert still broadcasts to all
+// members). Returns the count actually sent.
+async function sendAlertEmails(
+  supabase: ReturnType<typeof createClient>,
+  alerts: EmailableAlert[],
+): Promise<number> {
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  if (!resendApiKey) {
+    console.warn("[process-alerts] RESEND_API_KEY unset — skipping alert emails");
+    return 0;
+  }
+  const ownerIds = [
+    ...new Set(alerts.map((a) => a.ownerId).filter((id): id is string => Boolean(id))),
+  ];
+  if (ownerIds.length === 0) return 0;
+
+  const { data: profiles, error: profilesErr } = await supabase
+    .from("profiles")
+    .select("id, email, email_notifications_enabled")
+    .in("id", ownerIds);
+  if (profilesErr) {
+    // Hard rule #9 — don't fail silently: log + skip emails for this run (the
+    // in-app notifications already landed). Best-effort, never crash the cron.
+    console.warn("[process-alerts] profiles lookup failed — skipping alert emails:", profilesErr.message);
+    return 0;
+  }
+  const profileMap = new Map(
+    ((profiles ?? []) as Array<{ id: string; email: string | null; email_notifications_enabled: boolean | null }>)
+      .map((p) => [p.id, p]),
+  );
+
+  const resend = new Resend(resendApiKey);
+  const from = Deno.env.get("RESEND_ALERTS_FROM_EMAIL")
+    ?? Deno.env.get("RESEND_FROM_EMAIL")
+    ?? "LeaseIO <noreply@notifications.theleaseio.com>";
+
+  let sent = 0;
+  for (const alert of alerts) {
+    if (!alert.ownerId) continue;
+    const profile = profileMap.get(alert.ownerId);
+    if (!profile?.email) continue;
+    if (profile.email_notifications_enabled === false) continue; // opt-out respected
+    const leaseLink = `https://app.theleaseio.com/app/leases/${alert.lease_id}`;
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="font-size: 18px;">${escapeHtml(alert.title)}</h2>
+        <p style="color: #374151;">${escapeHtml(alert.body)}</p>
+        <p style="margin-top: 24px;"><a href="${leaseLink}" style="color: #2563eb;">View in LeaseIO</a></p>
+        <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">You're receiving this because lease alerts are enabled for your account. Manage this in Account Settings → Notifications.</p>
+      </div>`;
+    try {
+      const { error } = await resend.emails.send({
+        from,
+        to: [profile.email],
+        subject: alert.title,
+        html,
+        text: `${alert.title}\n\n${alert.body}\n\nView: ${leaseLink}`,
+      });
+      if (error) {
+        console.error("[process-alerts] alert email failed:", (error as { message?: string }).message ?? error);
+        continue;
+      }
+      sent++;
+    } catch (e) {
+      console.error("[process-alerts] alert email threw:", e instanceof Error ? e.message : String(e));
+    }
+  }
+  return sent;
 }
 
 serve(async (req) => {
@@ -235,25 +327,32 @@ serve(async (req) => {
     const { data: leases, error: leasesErr } = await supabase
       .from("leases")
       .select(
-        "id, workspace_id, filename, tenant_name, lifecycle_status, executed_expiry_date, covenant_flagged, monthly_payment, executed_monthly_payment, submitted_for_approval_at",
+        "id, workspace_id, user_id, filename, tenant_name, lifecycle_status, executed_expiry_date, covenant_flagged, monthly_payment, executed_monthly_payment, submitted_for_approval_at",
       )
       .not("lifecycle_status", "is", null);
 
     if (leasesErr) throw leasesErr;
 
-    const notifications = await evaluate(
+    const alerts = await evaluate(
       supabase,
       liveRules,
       (leases ?? []) as unknown as Lease[],
     );
 
-    if (notifications.length > 0) {
-      const { error: insertErr } = await supabase.from("notifications").insert(notifications);
+    if (alerts.length > 0) {
+      // Strip the local-only ownerId before the DB insert (not a notifications column).
+      const rows = alerts.map(({ ownerId: _ownerId, ...row }) => row);
+      const { error: insertErr } = await supabase.from("notifications").insert(rows);
       if (insertErr) throw insertErr;
     }
 
+    // Email each new alert to the lease owner (best-effort; respects the owner's
+    // email_notifications_enabled preference). Only newly-created alerts reach
+    // here (the evaluate dedup), so this never re-emails a recently-alerted lease.
+    const emailed = await sendAlertEmails(supabase, alerts);
+
     return jsonResponse(
-      { processed: notifications.length, timestamp: new Date().toISOString() },
+      { processed: alerts.length, emailed, timestamp: new Date().toISOString() },
       200,
       origin,
     );

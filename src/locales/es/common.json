@@ -604,7 +604,8 @@
     "actions": "Acciones",
     "retry": "Reintentar",
     "view": "Ver arrendamiento",
-    "delete": "Eliminar"
+    "delete": "Eliminar",
+    "archive_committed": "Los arrendamientos confirmados no se pueden eliminar desde aquí — abra el arrendamiento para archivarlo"
   },
   "notifications": {
     "title": "Notificaciones",

@@ -51,6 +51,8 @@ interface PolicyForm {
   match_min_annual_cost: string;
   match_max_annual_cost: string;
   sod_mode: SodMode;
+  /** #111 C6 — per-policy SLA in days. Empty string = use the default (7). */
+  sla_days: string;
 }
 
 const emptyForm = (): PolicyForm => ({
@@ -66,6 +68,7 @@ const emptyForm = (): PolicyForm => ({
   match_min_annual_cost: '',
   match_max_annual_cost: '',
   sod_mode: 'inherit',
+  sla_days: '',
 });
 
 const newUiId = () => `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -184,6 +187,7 @@ export default function ApprovalPolicyEditPage() {
           match_max_annual_cost:
             (p as any).match_max_annual_cost == null ? '' : String((p as any).match_max_annual_cost),
           sod_mode: sodMode,
+          sla_days: (p as any).sla_days == null ? '' : String((p as any).sla_days),
         });
         const concept: ChainStep[] = [];
         const signator: ChainStep[] = [];
@@ -223,6 +227,13 @@ export default function ApprovalPolicyEditPage() {
       toast.error(err);
       return;
     }
+    if (form.sla_days.trim() !== '') {
+      const slaNum = Number(form.sla_days);
+      if (!Number.isInteger(slaNum) || slaNum <= 0) {
+        toast.error('Approval SLA must be a whole number of days greater than 0 (or leave it blank for the default of 7).');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -248,6 +259,8 @@ export default function ApprovalPolicyEditPage() {
         match_max_annual_cost:
           form.match_max_annual_cost.trim() === '' ? null : parseFloat(form.match_max_annual_cost),
         separation_of_duties_override: sodOverride,
+        // #111 C6 — per-policy SLA. Empty → null (logic falls back to 7).
+        sla_days: form.sla_days.trim() === '' ? null : parseInt(form.sla_days, 10),
         updated_by: userId,
       } as any;
 
@@ -455,6 +468,22 @@ export default function ApprovalPolicyEditPage() {
                     min={1}
                   />
                   <p className="text-[10px] text-muted-foreground">Higher number wins when multiple rules match the same request.</p>
+                </div>
+
+                {/* Approval SLA — #111 C6 */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs" htmlFor="approval-rule-sla">Approval SLA (days)</Label>
+                  <Input
+                    id="approval-rule-sla"
+                    type="number"
+                    min={1}
+                    placeholder="7"
+                    value={form.sla_days}
+                    onChange={(e) => setForm({ ...form, sla_days: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Steps pending longer than this are flagged “over SLA” in the approver's queue. Leave blank to use the default of 7 days.
+                  </p>
                 </div>
 
                 {/* Use this rule when no other rule fits */}

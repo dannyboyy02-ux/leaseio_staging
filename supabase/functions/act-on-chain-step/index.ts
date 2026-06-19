@@ -279,20 +279,23 @@ serve(async (req) => {
   let actedAsDelegate = false;
   let delegateResolution: string | null = null;
 
-  if (step.approver_user_id && step.approver_user_id === user.id) {
-    authorized = true;
-  }
-
-  // Phase 7: effective_assignee_user_id covers all delegation sources
-  // (admin reassign / voluntary / OOO / activated policy delegate).
-  // If the actor is the effective assignee but NOT the original, tag
-  // the action as a delegated action for the audit trail.
-  if (!authorized && step.effective_assignee_user_id && step.effective_assignee_user_id === user.id) {
-    authorized = true;
-    if (step.approver_user_id !== user.id) {
-      actedAsDelegate = true;
-      delegateResolution = step.assignee_resolution_source ?? "unknown";
+  // C3 (#111): effective_assignee_user_id is the precedence-resolved actor
+  // (voluntary > OOO > policy delegate > original). Delegation is EXCLUSIVE —
+  // when it is set, ONLY that user is assignee-authorized; the original approver
+  // can no longer act on a step they handed off (they retain only the owner/admin
+  // override paths below). Fall back to approver_user_id solely when there is no
+  // resolved effective assignee: role-based rows (no user), or a pre-Phase-7
+  // chain not yet backfilled by migration 20260618150000.
+  if (step.effective_assignee_user_id) {
+    if (step.effective_assignee_user_id === user.id) {
+      authorized = true;
+      if (step.approver_user_id !== user.id) {
+        actedAsDelegate = true;
+        delegateResolution = step.assignee_resolution_source ?? "unknown";
+      }
     }
+  } else if (step.approver_user_id && step.approver_user_id === user.id) {
+    authorized = true;
   }
 
   // Phase 7: also accept active (un-revoked) voluntary delegations as

@@ -38,6 +38,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { enforceWorkspaceRateLimit } from "../_shared/audit.ts";
+import { syncFirmSubscriptionQuantity } from "../_shared/firm_billing.ts";
 import {
   cancelWorkspaceSubscriptions,
   purgeWorkspaceStorage,
@@ -129,7 +130,7 @@ serve(async (req) => {
   // ── Authorization: load workspace, verify owner ─────────────────────
   const { data: workspace, error: wsError } = await supabaseAdmin
     .from("workspaces")
-    .select("id, owner_id, name, plan, stripe_customer_id")
+    .select("id, owner_id, name, plan, stripe_customer_id, firm_id")
     .eq("id", workspaceId)
     .maybeSingle();
   if (wsError) {
@@ -153,6 +154,7 @@ serve(async (req) => {
     name: string | null;
     plan: string | null;
     stripe_customer_id: string | null;
+    firm_id: string | null;
   };
   if (ws.owner_id !== user.id) {
     // Don't leak whether the workspace exists vs. user lacks access; both
@@ -329,6 +331,21 @@ serve(async (req) => {
       500,
       origin,
     );
+  }
+
+  // ── #112: firm billing resync ───────────────────────────────────────
+  // The deleted workspace's child-counter decrement is handled by the
+  // maintain_firm_child_workspace_counter trigger (DELETE branch). If this was
+  // a firm child, also resync the firm's Stripe quantity NOW so it isn't
+  // over-billed until the next bind/release or the firm-billing-reconcile cron.
+  // Best-effort + self-healing (the cron is the backstop); recompute is from the
+  // live child count, which is already correct now that the row is gone.
+  if (ws.firm_id && stripe) {
+    try {
+      await syncFirmSubscriptionQuantity(stripe, supabaseAdmin, ws.firm_id);
+    } catch (e) {
+      console.error("[delete-workspace] firm billing resync failed (self-heals on next op / reconcile):", e instanceof Error ? e.message : String(e));
+    }
   }
 
   // ── Storage purge LAST — files are unreachable once the rows are gone;

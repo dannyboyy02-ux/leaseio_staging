@@ -223,7 +223,7 @@ export function LeaseAnalysisDocument({ lease, prose, generatedAt }: Props) {
           </View>
           <View style={styles.cell}>
             <Text style={styles.cellLabel}>Asset Type</Text>
-            <Text style={styles.cellValue}>{lease.asset_type ? lease.asset_type.replace('_', ' ') : '—'}</Text>
+            <Text style={styles.cellValue}>{lease.asset_type ? lease.asset_type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—'}</Text>
           </View>
         </View>
         <View style={styles.grid2}>
