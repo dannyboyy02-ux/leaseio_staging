@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LeaseIO — End-to-End Audit &amp; Remediation Plan</title>
+<style>
+  :root{
+    --bg:#f5f6f9; --panel:#ffffff; --ink:#1b2233; --muted:#5d6675; --faint:#8b93a4;
+    --line:#e4e7ee; --line2:#eef0f5; --accent:#3d4fb5; --accent-soft:#eef1fb;
+    --high:#dc2626; --high-bg:#fdecec; --med:#d97706; --med-bg:#fdf3e3;
+    --low:#2563eb; --low-bg:#e9f0fe; --good:#15924f; --good-bg:#e7f5ec;
+    --code-bg:#1d2331; --code-ink:#e7ebf4;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink);
+    line-height:1.55;font-size:15px;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.86em;background:#eceef4;border:1px solid var(--line);
+    padding:1px 5px;border-radius:5px;color:#2a3350;white-space:nowrap}
+  h1,h2,h3,h4{line-height:1.25;font-weight:680}
+  h2{font-size:1.5rem;margin:0 0 .2rem;letter-spacing:-.01em}
+  h3{font-size:1.12rem;margin:1.6rem 0 .5rem}
+  .wrap{display:flex;max-width:1280px;margin:0 auto;align-items:flex-start}
+
+  /* Sidebar TOC */
+  aside{position:sticky;top:0;height:100vh;width:264px;flex:0 0 264px;overflow-y:auto;
+    padding:22px 14px 40px 22px;border-right:1px solid var(--line);background:#fbfcfe}
+  aside .brand{font-weight:760;font-size:.95rem;letter-spacing:-.01em;margin-bottom:2px}
+  aside .brand small{display:block;font-weight:500;color:var(--faint);font-size:.7rem;
+    letter-spacing:.04em;text-transform:uppercase;margin-top:3px}
+  nav{margin-top:18px}
+  nav a{display:block;color:var(--muted);font-size:.83rem;padding:5px 10px;border-radius:7px;
+    border-left:2px solid transparent;margin:1px 0}
+  nav a:hover{background:var(--accent-soft);text-decoration:none}
+  nav a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent);font-weight:620}
+  nav .grp{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);
+    margin:14px 0 4px 10px;font-weight:700}
+
+  main{flex:1 1 auto;min-width:0;padding:34px 46px 120px;max-width:940px}
+
+  /* Top bar */
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(245,246,249,.86);backdrop-filter:blur(8px);
+    margin:-34px -46px 26px;padding:14px 46px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .topbar .ttl{font-weight:700;font-size:.9rem}
+  .filterbar{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .filterbar span{font-size:.74rem;color:var(--faint);margin-right:2px}
+  .fbtn{font:inherit;font-size:.76rem;font-weight:600;border:1px solid var(--line);background:#fff;
+    color:var(--muted);padding:4px 11px;border-radius:999px;cursor:pointer}
+  .fbtn[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .fbtn.h[aria-pressed="true"]{background:var(--high);border-color:var(--high)}
+  .fbtn.m[aria-pressed="true"]{background:var(--med);border-color:var(--med)}
+  .fbtn.l[aria-pressed="true"]{background:var(--low);border-color:var(--low)}
+
+  /* Cover */
+  .cover{background:linear-gradient(135deg,#2c3681 0%,#3d4fb5 55%,#5466cf 100%);color:#fff;
+    border-radius:18px;padding:40px 40px 34px;margin-bottom:14px;box-shadow:0 18px 40px -22px #3d4fb5}
+  .cover h1{font-size:2.2rem;margin:0 0 8px;letter-spacing:-.02em;font-weight:760}
+  .cover p.sub{font-size:1.05rem;opacity:.92;margin:0 0 20px;max-width:62ch}
+  .cover .meta{display:flex;gap:26px;flex-wrap:wrap;font-size:.82rem;opacity:.92;
+    border-top:1px solid rgba(255,255,255,.22);padding-top:16px}
+  .cover .meta b{display:block;font-size:1.05rem;opacity:1;margin-top:2px}
+
+  section{margin:46px 0;scroll-margin-top:80px}
+  .lede{color:var(--muted);font-size:1.02rem;max-width:70ch;margin:.3rem 0 1.2rem}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:22px 24px;margin:16px 0;box-shadow:0 1px 2px rgba(20,30,60,.03)}
+
+  .callout{border-radius:13px;padding:18px 22px;margin:16px 0;border:1px solid}
+  .callout h4{margin:0 0 6px;font-size:1.05rem}
+  .callout.verdict{background:var(--good-bg);border-color:#bfe6cd}
+  .callout.verdict h4{color:#0f6b39}
+  .callout.warn{background:var(--med-bg);border-color:#f1d7a8}
+  .callout.info{background:var(--accent-soft);border-color:#cdd6f6}
+
+  /* Scoreboard / tiles */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:14px 0}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px}
+  .tile .n{font-size:1.85rem;font-weight:740;letter-spacing:-.02em;line-height:1}
+  .tile .k{font-size:.74rem;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-top:7px}
+  .tile.h .n{color:var(--high)} .tile.m .n{color:var(--med)} .tile.l .n{color:var(--low)}
+  .tile.g .n{color:var(--good)}
+  .tile .sub{font-size:.72rem;color:var(--muted);margin-top:3px}
+
+  .chips{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .sev{font-size:.66rem;font-weight:720;text-transform:uppercase;letter-spacing:.05em;
+    padding:2px 9px;border-radius:999px;border:1px solid}
+  .sev.high{color:var(--high);background:var(--high-bg);border-color:#f3c3c3}
+  .sev.med{color:var(--med);background:var(--med-bg);border-color:#f1d7a8}
+  .sev.low{color:var(--low);background:var(--low-bg);border-color:#c4d6fb}
+  .cat{font-size:.66rem;font-weight:680;letter-spacing:.03em;padding:2px 9px;border-radius:999px;
+    background:#eef0f5;color:#56607a;border:1px solid var(--line)}
+  .vchk{font-size:.66rem;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--good-bg);
+    color:#0f6b39;border:1px solid #bfe6cd}
+  .vq{font-size:.66rem;font-weight:700;padding:2px 9px;border-radius:999px;background:#f3f0e7;
+    color:#8a6d2a;border:1px solid #e6d9b8}
+
+  /* Finding cards */
+  .find{background:var(--panel);border:1px solid var(--line);border-radius:13px;margin:12px 0;
+    overflow:hidden;box-shadow:0 1px 2px rgba(20,30,60,.03)}
+  .find > .fh{display:flex;gap:12px;align-items:flex-start;padding:15px 18px;cursor:pointer;
+    user-select:none;list-style:none}
+  .find > .fh::-webkit-details-marker{display:none}
+  .find .fid{font-family:var(--mono);font-weight:700;font-size:.78rem;color:var(--accent);
+    background:var(--accent-soft);border-radius:6px;padding:3px 7px;flex:0 0 auto;margin-top:1px}
+  .find .ftitle{font-weight:650;flex:1 1 auto;min-width:0}
+  .find .ftitle .meta{margin-top:6px}
+  .find .caret{flex:0 0 auto;color:var(--faint);transition:transform .18s;margin-top:2px;font-size:.85rem}
+  .find[open] .caret{transform:rotate(90deg)}
+  .find .fbody{padding:2px 18px 18px;border-top:1px solid var(--line2)}
+  .find .fbody dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:14px 0 0}
+  .find .fbody dt{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);
+    font-weight:700;padding-top:2px}
+  .find .fbody dd{margin:0}
+  .floc{font-family:var(--mono);font-size:.8rem}
+
+  pre{background:var(--code-bg);color:var(--code-ink);border-radius:10px;padding:14px 16px;
+    overflow-x:auto;font-family:var(--mono);font-size:.8rem;line-height:1.5;margin:12px 0;
+    border:1px solid #2b3346}
+  pre .c{color:#7e8aa6} pre .k{color:#c792ea} pre .s{color:#a5d6a4} pre .f{color:#82aaff}
+  pre .del{color:#ff8a8a} pre .add{color:#9fe0a4}
+
+  table{border-collapse:collapse;width:100%;font-size:.85rem;margin:14px 0}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line)}
+  th{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);
+    border-bottom:2px solid var(--line)}
+  tbody tr:hover{background:#fafbfd}
+  td.mono{font-family:var(--mono);font-size:.8rem}
+
+  /* Mockups */
+  .mock{border:1px dashed #c6cdde;border-radius:12px;padding:16px;background:#fcfdff;margin:8px 0}
+  .mock .cap{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    margin-bottom:10px}
+  .mock.before .cap{color:var(--high)} .mock.after .cap{color:var(--good)}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0}
+  @media(max-width:760px){.ba{grid-template-columns:1fr}}
+  .ui-alert{border-radius:9px;padding:12px 14px;font-size:.83rem;display:flex;gap:9px;align-items:flex-start}
+  .ui-alert.err{background:var(--high-bg);border:1px solid #f3c3c3;color:#7c2020}
+  .ui-alert.warn{background:var(--med-bg);border:1px solid #f1d7a8;color:#7a531a}
+  .ui-alert.info{background:var(--accent-soft);border:1px solid #cdd6f6;color:#2b3577}
+  .ui-btn{display:inline-block;font-size:.78rem;font-weight:600;padding:6px 12px;border-radius:7px;
+    border:1px solid var(--line);background:#fff;color:var(--ink);margin-top:9px;cursor:default}
+  .ui-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .ui-btn.danger{border-color:#e3a3a3;color:#a33}
+  .ui-btn.ghost{opacity:.5;text-decoration:line-through}
+  .ui-badge{display:inline-block;font-size:.7rem;font-weight:650;padding:2px 9px;border-radius:999px;border:1px solid}
+  .b-green{color:var(--good);background:var(--good-bg);border-color:#bfe6cd}
+  .b-amber{color:var(--med);background:var(--med-bg);border-color:#f1d7a8}
+  .b-red{color:var(--high);background:var(--high-bg);border-color:#f3c3c3}
+  .b-gray{color:#56607a;background:#eef0f5;border-color:var(--line)}
+  .b-blue{color:var(--low);background:var(--low-bg);border-color:#c4d6fb}
+
+  .diagram{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:18px;
+    margin:14px 0;overflow-x:auto}
+  .diagram svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  .dcap{font-size:.8rem;color:var(--muted);text-align:center;margin-top:8px}
+
+  .phase{border-left:3px solid var(--accent);padding:2px 0 2px 16px;margin:18px 0}
+  .phase h4{margin:0 0 2px;font-size:1.02rem}
+  .phase .eff{font-size:.74rem;color:var(--faint)}
+
+  ul.tight{margin:.4rem 0;padding-left:1.2rem} ul.tight li{margin:.22rem 0}
+  .foot{margin-top:60px;padding-top:18px;border-top:1px solid var(--line);font-size:.78rem;color:var(--faint)}
+  .pill-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+
+  @media print{
+    aside,.topbar,.caret{display:none!important}
+    main{max-width:none;padding:0}
+    .find[open] .fbody,.find .fbody{display:block!important}
+    .find{break-inside:avoid} .cover{box-shadow:none}
+    body{background:#fff;font-size:11.5px}
+  }
+  @media(max-width:900px){
+    aside{display:none} main{padding:24px 18px 80px}
+    .topbar{margin:-24px -18px 20px;padding:12px 18px}
+  }
+</style>
+</head>
+<body>
+<!-- Global SVG defs (shared arrowhead marker for all diagrams) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#3d4fb5"/>
+    </marker>
+  </defs>
+</svg>
+<div class="wrap">
+
+<!-- ============ SIDEBAR ============ -->
+<aside>
+  <div class="brand">LeaseIO Audit<small>End-to-end · 2026-06-20</small></div>
+  <nav id="toc">
+    <a href="#summary">Executive summary</a>
+    <a href="#health">Health snapshot</a>
+    <div class="grp">Findings</div>
+    <a href="#theme-a">A · Format &amp; layout</a>
+    <a href="#theme-b">B · Bugs / correctness</a>
+    <a href="#theme-c">C · Dead-ends</a>
+    <a href="#theme-d">D · Firm / billing</a>
+    <a href="#theme-e">E · Engineering hygiene</a>
+    <a href="#theme-f">F · AI assistant</a>
+    <div class="grp">Visuals</div>
+    <a href="#mockups">Mockups (before→after)</a>
+    <a href="#diagrams">Data-flow diagrams</a>
+    <div class="grp">Plan</div>
+    <a href="#roadmap">Remediation roadmap</a>
+    <a href="#appendix">Appendix</a>
+  </nav>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<main>
+  <div class="topbar">
+    <span class="ttl">LeaseIO — Audit &amp; Remediation Plan</span>
+    <div class="filterbar">
+      <span>Filter:</span>
+      <button class="fbtn all" data-sev="all" aria-pressed="true" onclick="setFilter('all',this)">All</button>
+      <button class="fbtn h" data-sev="high" aria-pressed="false" onclick="setFilter('high',this)">High</button>
+      <button class="fbtn m" data-sev="med" aria-pressed="false" onclick="setFilter('med',this)">Medium</button>
+      <button class="fbtn l" data-sev="low" aria-pressed="false" onclick="setFilter('low',this)">Low</button>
+    </div>
+  </div>
+
+  <!-- COVER -->
+  <div class="cover">
+    <h1>LeaseIO — End-to-End Audit</h1>
+    <p class="sub">A complete, workflow-by-workflow review of every surface: bugs, dead-ends, polish gaps, and format/layout inconsistencies — each with file:line evidence and a prioritized plan to drive the build to <em>done</em>.</p>
+    <div class="meta">
+      <div>Date<b>20 Jun 2026</b></div>
+      <div>Verdict<b>Finish — don't rewrite</b></div>
+      <div>Findings<b>25 (4 High · 14 Med · 7 Low)</b></div>
+      <div>Foundation<b>Sound (A− health)</b></div>
+    </div>
+  </div>
+
+  <div class="callout info" style="margin-top:14px">
+    <h4>How to read this</h4>
+    <div class="pill-row">
+      <span class="sev high">High</span> material correctness / user-stranding / cost
+      <span class="sev med">Medium</span> friction, fragility, inconsistency
+      <span class="sev low">Low</span> cosmetic / cleanup
+    </div>
+    <div class="pill-row">
+      <span class="cat">BUG</span><span class="cat">DEAD-END</span><span class="cat">POLISH</span>
+      <span class="cat">INCONSISTENCY</span><span class="cat">FRAGILITY</span>
+    </div>
+    <div class="pill-row" style="margin-top:4px">
+      <span class="vchk">Verified ✓</span> read in code for this report
+      <span class="vq">Verify</span> strong signal, confirm before fixing
+    </div>
+    <p style="margin:.6rem 0 0;color:var(--muted);font-size:.9rem">Every <strong>High</strong> finding was personally read in the source for this report. That verification <em>downgraded three</em> machine-flagged items (noted inline) — this document carries the corrected reality, not raw scanner output. Click any finding to expand. Use the severity filter (top-right) to focus.</p>
+  </div>
+
+  <!-- ============ EXECUTIVE SUMMARY ============ -->
+  <section id="summary">
+    <h2>Executive summary</h2>
+    <p class="lede">The honest headline: LeaseIO is <strong>much closer to done than it feels</strong>. The "always 10% away" sensation is real, but it's a <em>convergence</em> problem, not a foundation problem — and convergence problems are fixable in weeks, not rebuilds.</p>
+
+    <div class="callout verdict">
+      <h4>✓ Verdict — finish, don't start over</h4>
+      <p style="margin:.2rem 0 .5rem">A rewrite would discard ~88% genuinely-built, tested, working code to escape problems that aren't in the foundation. The evidence:</p>
+      <ul class="tight">
+        <li><strong>TypeScript typecheck: clean</strong> (0 errors). <strong>971 tests passing</strong>, 0 failing — covering the load-bearing logic (approval chains, entitlements, RLS governance, lifecycle, audit trail).</li>
+        <li><strong>CI is genuinely strong</strong>: typecheck + tests + security smoke + a Postgres <em>migration-replay</em> job + a Node⇄Deno <em>mirror-parity</em> gate. Better discipline than most funded startups.</li>
+        <li><strong>The app is real</strong>: ~80k lines of frontend, 62 edge functions (several 700–2,800 lines of real logic), 49 tables with real RLS, working Stripe + three-tier Claude pipeline. Not a prototype in costume.</li>
+      </ul>
+    </div>
+
+    <div class="callout warn">
+      <h4>Why it feels "always 10% away"</h4>
+      <ol class="tight">
+        <li><strong>Too many parallel fronts at 80–95%.</strong> Firm layer, firm billing, email intake, market data — each new front resets the "almost done" clock before the last one hard-closes. <em>Biggest driver.</em></li>
+        <li><strong>Polish debt sprayed thin across 6–8 surfaces.</strong> Each nit is small; collectively the product <em>feels</em> unfinished. This audit concentrates them so they can be fixed as batches, not whack-a-mole.</li>
+        <li><strong>Doc-drift.</strong> When the status docs can't be trusted (this audit found #103's server side is far more complete than the docs say), nothing <em>feels</em> done even when it is.</li>
+      </ol>
+    </div>
+
+    <h3>Severity scoreboard</h3>
+    <div class="tiles">
+      <div class="tile"><div class="n">25</div><div class="k">Total findings</div></div>
+      <div class="tile h"><div class="n">4</div><div class="k">High</div><div class="sub">A1 · B1 · C1 · C3</div></div>
+      <div class="tile m"><div class="n">14</div><div class="k">Medium</div></div>
+      <div class="tile l"><div class="n">7</div><div class="k">Low</div></div>
+      <div class="tile g"><div class="n">3</div><div class="k">Scanner overstatements corrected</div><div class="sub">B1 · D1 · #103</div></div>
+    </div>
+
+    <h3>Top 5 highest-leverage fixes</h3>
+    <div class="panel" style="padding:6px 4px">
+    <table>
+      <thead><tr><th>#</th><th>Fix</th><th>Kills</th><th>Why it's leverage</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><strong>Shared <code>formatMoney()</code> / <code>formatDate()</code></strong></td><td>A1 · A2 · A3 · A5</td><td>One change neutralizes the entire "inconsistent across formats" complaint app-wide.</td></tr>
+        <tr><td>2</td><td><strong>Re-point confidence banner to live data</strong></td><td>B1</td><td>Restores a silently-dead audit-gate safety feature.</td></tr>
+        <tr><td>3</td><td><strong>FailedLeaseBanner re-upload CTA</strong></td><td>C1</td><td>Removes a hard dead-end that strands a lease in <code>Failed</code> forever.</td></tr>
+        <tr><td>4</td><td><strong>Hide firm-bound billing buttons + reconcile #103</strong></td><td>D1 · E3</td><td>Removes confusing errors and closes a tracked issue almost for free.</td></tr>
+        <tr><td>5</td><td><strong>Single status-badge helper</strong></td><td>A4</td><td>Same status looks the same on every surface — instant visual coherence.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ============ HEALTH SNAPSHOT ============ -->
+  <section id="health">
+    <h2>Health snapshot</h2>
+    <p class="lede">Objective engineering signals — the basis for the "finish, don't rewrite" call.</p>
+    <div class="tiles">
+      <div class="tile g"><div class="n">✓</div><div class="k">Typecheck</div><div class="sub">0 errors</div></div>
+      <div class="tile g"><div class="n">971</div><div class="k">Tests passing</div><div class="sub">0 failing</div></div>
+      <div class="tile g"><div class="n">7</div><div class="k">CI gates</div><div class="sub">incl. migration-replay</div></div>
+      <div class="tile"><div class="n">~80k</div><div class="k">Frontend LOC</div><div class="sub">319 TS/TSX files</div></div>
+      <div class="tile"><div class="n">62</div><div class="k">Edge functions</div><div class="sub">several 700–2,800 LOC</div></div>
+      <div class="tile"><div class="n">49</div><div class="k">DB tables</div><div class="sub">30 migrations</div></div>
+      <div class="tile m"><div class="n">6</div><div class="k">npm vulns</div><div class="sub">3 high · all patchable</div></div>
+      <div class="tile m"><div class="n">906</div><div class="k">ESLint errors</div><div class="sub">~95% Deno tooling noise</div></div>
+    </div>
+    <p style="color:var(--muted);font-size:.9rem">The two amber tiles are <em>papercuts, not rot</em>: the npm vulns all have patches (<code>npm audit fix</code>), and the lint errors are overwhelmingly Deno-tier <code>no-explicit-any</code> from sharing one ESLint config across Node and Deno code — a config split, not a code-quality problem. The Node/React surface has &lt;20 real lint issues.</p>
+  </section>
+
+  <!-- ============ THEME A ============ -->
+  <section id="theme-a">
+    <h2>A · Format &amp; layout consistency</h2>
+    <p class="lede">This theme <em>is</em> the "inconsistent across formats/layouts" complaint, made concrete. The same value — money, a date, a status — is rendered differently depending on which component you're looking at. Fixing it is mostly one shared-helper change with high visible payoff.</p>
+
+    <details class="find" data-sev="high" open>
+      <summary class="fh"><span class="fid">A1</span>
+        <span class="ftitle">Currency is formatted nine different ways across the app
+          <span class="chips meta"><span class="sev high">High</span><span class="cat">INCONSISTENCY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">ApprovalQueue.tsx:64 · LeaseRequestForm.tsx:500 · RentScheduleTable.tsx · SummaryStrip.tsx · LeasePipeline.tsx · RentRollExport.tsx · Reports.tsx · CommitmentHistory.tsx · ai-assistant/index.ts:27</dd>
+          <dt>What</dt><dd>At least nine distinct money-formatting paths coexist: <code>toLocaleString('en-US')</code>, raw <code>toLocaleString()</code>, locale-aware <code>formatLocalizedCurrency()</code>, <code>formatCurrency()</code> vs <code>formatCurrencyDecimals()</code>, <code>formatCompactCurrency()</code> (<code>$1.2M</code>), CSV-with-cents, and two <code>en-AU</code> sites. Some respect the EN/ES language toggle; most don't.</dd>
+          <dt>Why it matters</dt><dd>A user sees <code>$50,000</code> on the dashboard, <code>$50,000.00</code> in the CSV, <code>$1.2M</code> in a chart, and a Spanish-locale figure in the rent schedule — for the same number. It reads as "unfinished," and it generates "why is this different?" support questions from finance users who care about exactly these details.</dd>
+          <dt>Fix</dt><dd>Add one <code>formatMoney(amount, {compact?, decimals?, language})</code> in <code>src/lib/dateFormatters.ts</code> (extend the existing <code>formatLocalizedCurrency</code>), then replace all call sites. Policy: <strong>UI = locale-aware, no decimals</strong>; <strong>exports = explicit 2-dp</strong> (documented in the export header).</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="low">
+      <summary class="fh"><span class="fid">A2</span>
+        <span class="ftitle">Australian (<code>en-AU</code>) locale used for US currency/dates
+          <span class="chips meta"><span class="sev low">Low</span><span class="cat">BUG</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">Reports.tsx:321, 323 · CommitmentHistory.tsx:50, 102</dd>
+          <dt>What</dt><dd>Four sites pass <code>'en-AU'</code> to <code>toLocaleString</code>/<code>toLocaleDateString</code>. Verified — and <em>broader</em> than the first scan suggested (the scan found Reports only).</dd>
+          <dt>Why it matters</dt><dd>Almost certainly copy-paste drift. Output is usually identical to <code>en-US</code>, so it hides — but it's a latent locale bug and a trivial, satisfying win.</dd>
+          <dt>Fix</dt><dd>Replace with <code>en-US</code> (or route through the A1 shared helper, which removes the literal entirely).</dd>
+        </dl>
+        <pre><span class="c">// Reports.tsx:321,323 — both lines</span>
+Pipeline: ${Number(lease.monthly_payment||0)<span class="del">.toLocaleString('en-AU')</span>}/mo
+Executed: ${Number(lease.executed_monthly_payment||0)<span class="del">.toLocaleString('en-AU')</span>}/mo</pre>
+      </div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">A3</span>
+        <span class="ftitle">Dates rendered in four different formats
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">INCONSISTENCY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">Leases.tsx:329 &amp; AuditLog.tsx:327 (<code>MMM d, yyyy</code>) · RentRollExport.tsx:47 (<code>MM/dd/yyyy</code>) · Portfolio.tsx:322 (<code>YYYY-MM</code> string-slice) · LeaseAudit.tsx:55 (browser <code>toLocaleDateString</code>)</dd>
+          <dt>What</dt><dd>Four date styles in the UI. <code>MM/dd/yyyy</code> in the CSV is intentional (spreadsheet standard); the others are accidental drift, and <code>LeaseAudit</code>'s output even changes with the viewer's browser locale.</dd>
+          <dt>Why it matters</dt><dd>Scannability and trust. The portfolio register's <code>2023-06 → 2026-06</code> is the odd one out and is harder to read at a glance than <code>Jun 2023 → Jun 2026</code>.</dd>
+          <dt>Fix</dt><dd>Standardize all <em>UI</em> dates on <code>MMM d, yyyy</code> via a shared <code>formatDate()</code>; keep the CSV explicit and documented.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">A4</span>
+        <span class="ftitle">The same lease status shows different badge colors on different screens
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">INCONSISTENCY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">LeaseStatusBadge.tsx · LifecycleStatusBadge.tsx · AuditLog.tsx:214 (<code>getStatusBadgeColor</code>) · workflow.ts:61 (<code>WORKFLOW_STATUS_CONFIG</code>)</dd>
+          <dt>What</dt><dd>At least four independent mappings from status→color. <code>AuditLog</code> even uses fragile substring matching (<code>status.includes('failed')</code>), which would also match a hypothetical <code>partially_failed</code>.</dd>
+          <dt>Why it matters</dt><dd>An "Approved" lease is one color in the list and another in the audit log. Status color is a primary scanning cue for finance users; divergence undercuts trust in the whole UI.</dd>
+          <dt>Fix</dt><dd>One <code>getStatusBadgeVariant(status)</code> + a single <code>&lt;StatusBadge&gt;</code> consumed everywhere; delete the substring matcher. See the <a href="#mockups">A4 mockup</a>.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="low">
+      <summary class="fh"><span class="fid">A5</span>
+        <span class="ftitle">Percentages mix <code>.toFixed(0)</code> and <code>.toFixed(1)</code>
+          <span class="chips meta"><span class="sev low">Low</span><span class="cat">INCONSISTENCY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">ExtractionAnalytics.tsx:267 (<code>92.5%</code>) · LeaseAudit.tsx:360 (<code>92%</code>) · Reports.tsx:329 (<code>12.3%</code>)</dd>
+          <dt>What &amp; fix</dt><dd>Pick one precision for each metric class (confidence/quality = 1 dp; variance/share = 0–1 dp) and apply consistently. Folds naturally into the shared-formatter pass.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ THEME B ============ -->
+  <section id="theme-b">
+    <h2>B · Bugs / correctness</h2>
+
+    <details class="find" data-sev="high" open>
+      <summary class="fh"><span class="fid">B1</span>
+        <span class="ftitle">"Needs review" low-confidence warnings can never fire — the column they read is never written
+          <span class="chips meta"><span class="sev high">High</span><span class="cat">BUG</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <div class="callout warn" style="margin-top:12px">
+          <h4>⚠ Scanner overstatement corrected</h4>
+          <p style="margin:0">The automated pass claimed this banner <em>falsely flags every field as low-confidence</em>. Reading the code shows the <strong>opposite</strong>: the banner's low-confidence branch <strong>never fires at all</strong>, because its data source is empty. Both are bugs — but the real one fails <em>silent</em>, not <em>noisy</em>, and the fix is different. This is exactly why High findings get hand-verified.</p>
+        </div>
+        <dl>
+          <dt>Where</dt><dd class="floc">NeedsReviewBanner.tsx:22,48 · LeaseReview.tsx:332 · workflow.ts:24 · LeaseReviewSections.tsx:51 · process_lease/index.ts</dd>
+          <dt>What</dt><dd>Two parallel confidence systems exist, on two scales:
+            <ul class="tight">
+              <li><strong>Banner path (0–100):</strong> reads <code>lease.confidence_scores</code> and flags fields below 80. But a repo-wide search shows <code>confidence_scores</code> is <strong>only ever read</strong> (LeaseReview.tsx:332) and <strong>never written</strong> by any code path — <code>process_lease</code> writes none. So it's always <code>{}</code>, and the low-confidence warning is dead.</li>
+              <li><strong>Badge path (0–1):</strong> the per-field <code>ConfidenceBadge</code> reads the live <code>extracted_json[field].confidence</code> (0–1) and works correctly.</li>
+            </ul>
+          </dd>
+          <dt>Why it matters</dt><dd>The "review low-confidence fields before posting" gate is a core human-in-the-loop safety promise — and it's silently inert. A user can post a lease with a 0.55-confidence landlord name and get no warning, because the badge is easy to miss and the banner is dead.</dd>
+          <dt>Fix</dt><dd>Re-point the banner to the live source: use <code>getFieldConfidence(extracted_json, field)</code>, unify on the 0–1 scale with a <code>0.80</code> threshold, and drop (or properly populate) the dead <code>confidence_scores</code> column. See the <a href="#mockups">B1 mockup</a>.</dd>
+        </dl>
+        <pre><span class="c">// NeedsReviewBanner.tsx — reads a column nothing populates</span>
+const score = confidenceScores[field.key];           <span class="c">// from lease.confidence_scores → always undefined</span>
+return score !== undefined &amp;&amp; score &lt; <span class="del">80</span> &amp;&amp; fieldValues[field.dataKey];
+
+<span class="c">// LeaseReview.tsx:332 — the only reference to the column anywhere</span>
+return (lease?.confidence_scores as ConfidenceScores) || {};   <span class="c">// nothing writes it</span></pre>
+      </div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">B3</span>
+        <span class="ftitle">"Pick the right monthly rent" logic is copy-pasted in 5 places
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">FRAGILITY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">Portfolio.tsx:62 · Leases.tsx:285 · LeaseAudit.tsx:47 · portfolioAnalytics.ts · SummaryStrip.tsx:86 (already uses <code>getCurrentMonthlyRent</code>)</dd>
+          <dt>What</dt><dd>The fallback chain <code>executed_monthly_payment || current_monthly_rent || monthly_payment || 0</code> is reimplemented inline 5×. Only SummaryStrip uses the shared helper.</dd>
+          <dt>Why it matters</dt><dd>If the priority ever changes (e.g. consult <code>rent_schedules</code> first), four sites drift silently and the portfolio total disagrees with the dashboard total — a financial-trust bug waiting to happen.</dd>
+          <dt>Fix</dt><dd>Promote to a single <code>getMonthlyRent(lease)</code> in <code>src/lib/leaseCalculations.ts</code>; reuse everywhere.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">B4</span>
+        <span class="ftitle">Rent Roll export filters on legacy status values
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">BUG</span><span class="vq">Verify</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">RentRollExport.tsx (status filter <code>['Ready','final','review']</code>)</dd>
+          <dt>What / why</dt><dd>This looks like the legacy <code>status</code> vocabulary, not <code>lifecycle_status</code>. If so, valid active/executed leases are silently excluded from the rent roll — a quietly incomplete financial export.</dd>
+          <dt>Fix</dt><dd>Confirm the intended column, then filter on <code>lifecycle_status</code> (active/executed/fully_executed) consistent with Portfolio.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="low">
+      <summary class="fh"><span class="fid">B5</span>
+        <span class="ftitle">Portfolio annual-obligation sums an unfiltered set
+          <span class="chips meta"><span class="sev low">Low</span><span class="cat">FRAGILITY</span><span class="vq">Verify</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">Portfolio.tsx:62–69</dd>
+          <dt>What / fix</dt><dd>The query restricts to <code>['executed','active','fully_executed']</code>, but <code>annualObligation</code> folds over all non-archived rows. Harmless today (non-active rows have null rent) but fragile — fold over the same <code>activeLeases</code> set the query returns.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ THEME C ============ -->
+  <section id="theme-c">
+    <h2>C · Dead-ends &amp; stranding</h2>
+    <p class="lede">States a user can enter but not cleanly exit. These hurt disproportionately — one dead-end can sink confidence in an otherwise-working flow.</p>
+
+    <details class="find" data-sev="high" open>
+      <summary class="fh"><span class="fid">C1</span>
+        <span class="ftitle">A failed lease with no stored file strands forever — no re-upload button
+          <span class="chips meta"><span class="sev high">High</span><span class="cat">DEAD-END</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">FailedLeaseBanner.tsx:98–102</dd>
+          <dt>What</dt><dd>When extraction fails <em>and</em> <code>storage_path</code> is missing, the banner shows "Original file not available for retry. Please upload a new document." — next to a <code>{/* TODO */}</code> and <strong>no upload control</strong>. Retry is disabled. The lease sits in <code>Failed</code> with no exit.</dd>
+          <dt>Why it matters</dt><dd>The UI tells the user to do something the UI gives them no way to do. It's the textbook dead-end, on an error path users already arrive at frustrated.</dd>
+          <dt>Fix</dt><dd>Render an "Upload New Document" button (opens the existing upload modal) whenever <code>!canRetry</code>. See the <a href="#mockups">C1 mockup</a>.</dd>
+        </dl>
+        <pre><span class="c">// FailedLeaseBanner.tsx:98-103 — today</span>
+{!canRetry &amp;&amp; (
+  &lt;p className="text-xs mt-2 text-muted-foreground"&gt;
+    {<span class="c">/* TODO: Allow re-upload when storage_path is missing */</span>}
+    Original file not available for retry. Please upload a new document.
+  &lt;/p&gt;   <span class="del">// ← no button. the user is stuck.</span>
+)}</pre>
+      </div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">C2</span>
+        <span class="ftitle">A request whose approval routing failed sits in <code>draft</code> with no retry
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">DEAD-END</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">LeaseRequestForm.tsx:345–360 → LeaseReview.tsx</dd>
+          <dt>What / why</dt><dd>If <code>resolve-approval-chain</code> errors/times out, the lease is saved as <code>draft</code> with a toast, then the form closes. On the detail page there's no "Retry routing" CTA, so a transient failure looks permanent — and users may re-upload, creating duplicates.</dd>
+          <dt>Fix</dt><dd>On LeaseReview, when a lease is <code>draft</code> with no <code>submitted_for_approval_at</code>, show a banner + "Retry routing" that re-invokes the chain resolver.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="high">
+      <summary class="fh"><span class="fid">C3</span>
+        <span class="ftitle">Firm checkout gives no confirmation — invites a double-charge attempt
+          <span class="chips meta"><span class="sev high">High</span><span class="cat">DEAD-END</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">FirmOnboarding.tsx:71 → create-firm-checkout (redirects <code>/app/firm?checkout=success</code>)</dd>
+          <dt>What / why</dt><dd>Checkout works, but the success redirect lands on the firm dashboard with <strong>no toast and no acknowledgment</strong>. A user who doesn't see an obvious "you're subscribed" can reasonably assume the card was declined and try again. Stripe idempotency mitigates an actual double-charge, but the anxiety and support contact are real.</dd>
+          <dt>Fix</dt><dd>Redirect to <code>/app/firm/billing</code> (which shows live subscription status) and fire an explicit success toast.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="low">
+      <summary class="fh"><span class="fid">C4</span>
+        <span class="ftitle">Audit-log empty state can't tell "no activity" from "filters too strict"
+          <span class="chips meta"><span class="sev low">Low</span><span class="cat">POLISH</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">AuditLog.tsx:315</dd>
+          <dt>What / fix</dt><dd>The same "no transitions" message shows whether or not filters are applied. Make it contextual: <em>"No activity matches these filters"</em> when a filter is set, else <em>"No activity yet."</em></dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="low">
+      <summary class="fh"><span class="fid">C5</span>
+        <span class="ftitle">Routes reachable only by URL, with no navigation
+          <span class="chips meta"><span class="sev low">Low</span><span class="cat">POLISH</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">/app/leases/:id/financial-review · /signator-review · /app/admin/reroute-audit · /app/admin/reports</dd>
+          <dt>What / fix</dt><dd>These resolve but have no UI entry (chain-state or admin-only). Confirm each is intentionally URL/role-gated and add a one-line code comment documenting that, so they don't read as orphans in future audits.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ THEME D ============ -->
+  <section id="theme-d">
+    <h2>D · Firm / billing surfaces</h2>
+    <p class="lede">The firm layer (Phases 9–10) is well-built and the billing <em>server</em> is guarded better than the docs claim. The residual issues are mostly UI affordances that should be hidden, plus consistency.</p>
+
+    <details class="find" data-sev="med" open>
+      <summary class="fh"><span class="fid">D1</span>
+        <span class="ftitle">Firm-bound workspaces still show billing buttons the server rejects
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">POLISH</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <div class="callout verdict" style="margin-top:12px">
+          <h4>✓ Scanner overstatement corrected — and good news for #103</h4>
+          <p style="margin:0">The scan rated this <strong>High ("duplicate-subscription billing hole")</strong>. Reading the edge functions shows the <strong>server is guarded fail-closed</strong>: <code>create-checkout</code> (line 64), <code>customer-portal</code> (line 64), and <code>manage-document-pack</code> (line 207, covering its real modes <code>confirm</code>/<code>buy_single</code>) all reject firm-bound workspaces with <code>firm_managed</code>. There is <em>no</em> <code>buy_subscription</code> mode (the scan invented it). So this is a <strong>Medium UI-polish</strong> issue, not a billing breach — and it means <strong>KNOWN_ISSUES #103's server side is essentially closed</strong>; only the client affordances remain.</p>
+        </div>
+        <dl>
+          <dt>Where</dt><dd class="floc">LimitReachedDialog.tsx:350 · AccountSettings.tsx:1140 (UI) — guards in create-checkout / customer-portal / manage-document-pack</dd>
+          <dt>What</dt><dd>"Buy a pack", "Buy single", and "Update payment method" still render on firm-bound workspaces. Clicking them hits a 403 <code>firm_managed</code> — correct safety, confusing UX.</dd>
+          <dt>Why it matters</dt><dd>The user is offered a door that's wired to a wall. Better to hide it and explain that the firm owns billing.</dd>
+          <dt>Fix</dt><dd>Hide these controls when <code>workspace.firmId</code> is set; add a short "Billing is managed by {firm}" note. Then update #103 + CLAUDE.md to record that the server side is closed. See the <a href="#mockups">D1 mockup</a>.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">D2</span>
+        <span class="ftitle">Vault (read-only) tier still surfaces intake CTAs on some screens
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">POLISH</span><span class="vq">Verify</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">LeaseReview / amendment-upload surfaces (KNOWN_ISSUES #88)</dd>
+          <dt>What / why</dt><dd><code>FailedLeaseBanner</code> already honors a <code>readOnly</code> prop, but not every intake affordance threads <code>isReadOnlyRetention()</code>. A Vault workspace is an archive; showing "Upload"/"Add lease" buttons that fail server-side contradicts the calm "your data is safe" promise.</dd>
+          <dt>Fix</dt><dd>Sweep all intake affordances (upload, add-amendment, add-lease) and gate on <code>isReadOnlyRetention(plan)</code> / the <code>readOnly</code> prop already plumbed through LeaseReview.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">D3</span>
+        <span class="ftitle">Member-role save reports success even on partial failure
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">DEAD-END</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">WorkspaceSettings.tsx:224 (<code>handleSaveRoles</code>)</dd>
+          <dt>What / why</dt><dd>The handler does a DELETE+INSERT against <code>workspace_roles</code> and shows a blanket "Saved!" toast. If RLS rejects some rows, the user is told it worked; the next load shows the role reverted, with no explanation.</dd>
+          <dt>Fix</dt><dd>Surface per-member outcome — "Couldn't update roles for X" — and disable the checkboxes during save.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">D4</span>
+        <span class="ftitle">Plan controls live only in Account → Billing, not Workspace settings
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">INCONSISTENCY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">AccountSettings.tsx (Billing tab) vs WorkspaceSettings.tsx (no plan controls)</dd>
+          <dt>What / fix</dt><dd>Plan is workspace-scoped but only editable from the account page. Users hunt for it in Workspace settings. Either relocate the plan card, or add a one-line signpost in WorkspaceSettings pointing to Account → Billing.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="low">
+      <summary class="fh"><span class="fid">D5</span>
+        <span class="ftitle">Firm onboarding hard-codes <code>$499</code> instead of reading pricing config
+          <span class="chips meta"><span class="sev low">Low</span><span class="cat">FRAGILITY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">FirmOnboarding.tsx:150</dd>
+          <dt>What / fix</dt><dd>The per-workspace price is a literal. Render from <code>PLANS.business.price.monthly</code> (<code>src/config/pricing.ts</code>) so a price change can't strand a stale figure on the onboarding screen.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details class="find" data-sev="low">
+      <summary class="fh"><span class="fid">D6</span>
+        <span class="ftitle">The six firm pages don't share a header pattern
+          <span class="chips meta"><span class="sev low">Low</span><span class="cat">INCONSISTENCY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody">
+        <dl>
+          <dt>Where</dt><dd class="floc">FirmDashboard.tsx:75 vs FirmBilling.tsx:79 (and siblings)</dd>
+          <dt>What / fix</dt><dd>Each firm page hand-rolls its own header; the rest of the app uses <code>&lt;AppHeader&gt;</code>. Introduce a shared <code>&lt;FirmPageHeader&gt;</code> (or reuse <code>AppHeader</code>) across <code>/app/firm/*</code>.</dd>
+        </dl>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ THEME E ============ -->
+  <section id="theme-e">
+    <h2>E · Engineering hygiene</h2>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">E1</span>
+        <span class="ftitle">906 ESLint errors — almost all Deno tooling noise
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">FRAGILITY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody"><dl>
+        <dt>What / fix</dt><dd>~95% are <code>no-explicit-any</code> in <code>supabase/functions/**</code> (Deno code linted with the Node/React config). Split the ESLint config (separate <code>overrides</code> block or a Deno-specific config) so lint becomes a real signal again. The Node/React surface has &lt;20 genuine issues.</dd>
+      </dl></div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">E2</span>
+        <span class="ftitle">6 npm vulnerabilities (3 high) — all patchable
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">FRAGILITY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody"><dl>
+        <dt>What / fix</dt><dd>Includes a react-router redirect-bypass and an undici TLS issue. Run <code>npm audit fix</code>, then re-run the test suite to confirm no regressions, before any production deploy.</dd>
+      </dl></div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">E3</span>
+        <span class="ftitle">Doc-drift: source-of-truth docs lag reality
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">POLISH</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody"><dl>
+        <dt>What</dt><dd>CLAUDE.md already carries "verify before trusting" notes. This audit confirmed at least one concrete drift: <strong>#103's server side is essentially closed</strong>, yet the docs describe it as broadly incomplete.</dd>
+        <dt>Why it matters</dt><dd>Untrustworthy status docs are a direct cause of the "10% away" feeling — you can't tell what's done.</dd>
+        <dt>Fix</dt><dd>One reconciliation pass: stamp #103 server-side closed, refresh the firm-layer status, and remove stale "unbuilt" framings. Treat docs as part of each change going forward.</dd>
+      </dl></div>
+    </details>
+
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">E4</span>
+        <span class="ftitle">Strong unit tests, but no end-to-end coverage
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">FRAGILITY</span><span class="vchk">Verified ✓</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody"><dl>
+        <dt>What / fix</dt><dd>971 unit tests protect the business logic well; there's no e2e covering the full request→extraction→review→approval→repository loop. Add a thin Playwright/Cypress happy-path before customer #1 — the gaps that hurt in production live in integration seams, not pure functions.</dd>
+      </dl></div>
+    </details>
+  </section>
+
+  <!-- ============ THEME F ============ -->
+  <section id="theme-f">
+    <h2>F · AI assistant</h2>
+    <details class="find" data-sev="med">
+      <summary class="fh"><span class="fid">F1</span>
+        <span class="ftitle">Assistant context packet ships full <code>extracted_json</code> per lease
+          <span class="chips meta"><span class="sev med">Medium</span><span class="cat">FRAGILITY</span><span class="vq">Verify</span></span>
+        </span><span class="caret">▶</span></summary>
+      <div class="fbody"><dl>
+        <dt>Where</dt><dd class="floc">ai-assistant/index.ts</dd>
+        <dt>What / why</dt><dd>The workspace context builder includes each lease's full extracted JSON. For a 50+ lease portfolio this inflates tokens and cost and risks context-window pressure.</dd>
+        <dt>Fix</dt><dd>Summarize to the high-value fields (rent, term, escalation, dates, risks) per lease; reserve full detail for a follow-up/drill-down call.</dd>
+      </dl></div>
+    </details>
+  </section>
+
+  <!-- ============ MOCKUPS ============ -->
+  <section id="mockups">
+    <h2>Mockups · before → after</h2>
+    <p class="lede">Rendered inline (no images) so they're faithful to the actual component styling. Each pairs the current behavior with the proposed fix.</p>
+
+    <h3>C1 · Failed lease — give the user a way out</h3>
+    <div class="ba">
+      <div class="mock before"><div class="cap">▲ Before — dead-end</div>
+        <div class="ui-alert err"><span>✕</span><div>
+          <strong>Processing Failed</strong><br><span style="font-size:.8rem">We couldn't read this document.</span>
+          <div style="font-size:.74rem;opacity:.8;margin-top:8px">Original file not available for retry. Please upload a new document.</div>
+        </div></div>
+        <div style="font-size:.74rem;color:var(--high);margin-top:8px">No button. The lease is stuck in <code>Failed</code>.</div>
+      </div>
+      <div class="mock after"><div class="cap">▼ After — recoverable</div>
+        <div class="ui-alert err"><span>✕</span><div>
+          <strong>Processing Failed</strong><br><span style="font-size:.8rem">We couldn't read this document.</span>
+          <div style="font-size:.74rem;opacity:.8;margin-top:8px">The original file isn't available to retry — upload a fresh copy to try again.</div>
+          <span class="ui-btn primary">⤓ Upload New Document</span>
+        </div></div>
+        <div style="font-size:.74rem;color:var(--good);margin-top:8px">Opens the existing upload modal; lease leaves <code>Failed</code>.</div>
+      </div>
+    </div>
+
+    <h3>B1 · Re-point the "needs review" banner to live confidence</h3>
+    <div class="ba">
+      <div class="mock before"><div class="cap">▲ Before — silently inert</div>
+        <div class="ui-alert warn"><span>⚠</span><div>
+          <strong>Review Required</strong>
+          <div style="font-size:.8rem;margin-top:6px">• <strong>Lease Start Date</strong> is missing</div>
+          <div style="font-size:.74rem;opacity:.7;margin-top:8px">Low-confidence fields are <em>never</em> listed — the source column is empty.</div>
+        </div></div>
+      </div>
+      <div class="mock after"><div class="cap">▼ After — reads <code>extracted_json[].confidence</code></div>
+        <div class="ui-alert warn"><span>⚠</span><div>
+          <strong>Review Required</strong>
+          <div style="font-size:.8rem;margin-top:6px">• <strong>Lease Start Date</strong> is missing</div>
+          <div style="font-size:.8rem">• <strong>Landlord Name</strong> has low confidence (55%) — please verify</div>
+        </div></div>
+        <div style="font-size:.74rem;color:var(--good);margin-top:8px">Threshold unified at <code>0.80</code> on the 0–1 scale the badges already use.</div>
+      </div>
+    </div>
+
+    <h3>A4 · One status, one badge — everywhere</h3>
+    <div class="ba">
+      <div class="mock before"><div class="cap">▲ Before — same status, different colors</div>
+        <div>Leases list: <span class="ui-badge b-green">Approved</span></div>
+        <div style="margin-top:6px">Audit log: <span class="ui-badge b-gray">approved</span></div>
+        <div style="margin-top:6px">Pipeline: <span class="ui-badge b-blue">Approved</span></div>
+        <div style="font-size:.74rem;color:var(--high);margin-top:8px">4 independent status→color maps, incl. fragile substring matching.</div>
+      </div>
+      <div class="mock after"><div class="cap">▼ After — single helper</div>
+        <div>Leases list: <span class="ui-badge b-green">Approved</span></div>
+        <div style="margin-top:6px">Audit log: <span class="ui-badge b-green">Approved</span></div>
+        <div style="margin-top:6px">Pipeline: <span class="ui-badge b-green">Approved</span></div>
+        <div style="font-size:.74rem;color:var(--good);margin-top:8px"><code>getStatusBadgeVariant(status)</code> + one <code>&lt;StatusBadge&gt;</code>.</div>
+      </div>
+    </div>
+
+    <h3>D1 · Firm-bound billing — hide the wall, explain the door</h3>
+    <div class="ba">
+      <div class="mock before"><div class="cap">▲ Before — buttons that 403</div>
+        <div style="font-size:.85rem;font-weight:600;margin-bottom:6px">Billing · Plan</div>
+        <div style="font-size:.8rem">Business — $499/mo</div>
+        <span class="ui-btn">Adjust plan</span> <span class="ui-btn">Update payment</span> <span class="ui-btn">Buy a pack</span>
+        <div style="font-size:.74rem;color:var(--high);margin-top:8px">All three hit <code>firm_managed</code> 403.</div>
+      </div>
+      <div class="mock after"><div class="cap">▼ After — managed-by-firm state</div>
+        <div style="font-size:.85rem;font-weight:600;margin-bottom:6px">Billing · Plan</div>
+        <div class="ui-alert info"><span>🏢</span><div><strong>Billing is managed by your firm</strong><br>
+          <span style="font-size:.8rem">Acme Advisors handles this workspace's plan and payment. Contact a firm admin to make changes.</span></div></div>
+        <span class="ui-btn ghost">Adjust plan</span> <span class="ui-btn ghost">Update payment</span>
+        <div style="font-size:.74rem;color:var(--good);margin-top:8px">Controls hidden; intent made obvious.</div>
+      </div>
+    </div>
+
+    <h3>EmptyLeaseState · role-aware copy</h3>
+    <div class="ba">
+      <div class="mock before"><div class="cap">▲ Before — one message for everyone</div>
+        <div style="text-align:center;padding:14px;font-size:.85rem;color:var(--muted)">No leases yet.<br>Submit a request to get started.<br><span class="ui-btn" style="margin-top:10px">+ Add Lease</span></div>
+        <div style="font-size:.74rem;color:var(--high);margin-top:8px">On a Vault/read-only workspace the button is hidden but the copy still says "submit a request."</div>
+      </div>
+      <div class="mock after"><div class="cap">▼ After — matches the user's actual ability</div>
+        <div style="text-align:center;padding:14px;font-size:.85rem;color:var(--muted)">No leases available in this archive.<br>Contact your administrator to view leases.</div>
+        <div style="font-size:.74rem;color:var(--good);margin-top:8px">Read-only path drops the CTA copy; admin path keeps the button.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DIAGRAMS ============ -->
+  <section id="diagrams">
+    <h2>Data-flow diagrams</h2>
+    <p class="lede">The four flows most relevant to the findings above. Boxes are surfaces/functions; cylinders are tables; dashed = the problem area.</p>
+
+    <h3>1 · Intake → extraction → review → approval (the core loop)</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 860 250" role="img" aria-label="Core lease lifecycle data flow">
+        <g font-family="var(--sans)" font-size="12">
+          <rect x="12" y="40" width="120" height="50" rx="9" fill="#eef1fb" stroke="#cdd6f6"/>
+          <text x="72" y="60" text-anchor="middle" font-weight="700">LeaseRequest</text>
+          <text x="72" y="76" text-anchor="middle" fill="#5d6675">/ Upload</text>
+
+          <rect x="180" y="30" width="150" height="70" rx="9" fill="#fff" stroke="#e4e7ee"/>
+          <text x="255" y="50" text-anchor="middle" font-weight="700">process_lease</text>
+          <text x="255" y="67" text-anchor="middle" fill="#5d6675" font-size="11">Haiku map →</text>
+          <text x="255" y="82" text-anchor="middle" fill="#5d6675" font-size="11">Opus extract → score</text>
+
+          <rect x="380" y="40" width="130" height="50" rx="9" fill="#fff" stroke="#e4e7ee"/>
+          <text x="445" y="60" text-anchor="middle" font-weight="700">LeaseReview</text>
+          <text x="445" y="76" text-anchor="middle" fill="#5d6675" font-size="11">confirm sections</text>
+
+          <rect x="560" y="40" width="130" height="50" rx="9" fill="#eef1fb" stroke="#cdd6f6"/>
+          <text x="625" y="60" text-anchor="middle" font-weight="700">Approval chain</text>
+          <text x="625" y="76" text-anchor="middle" fill="#5d6675" font-size="11">act-on-chain-step</text>
+
+          <rect x="740" y="40" width="108" height="50" rx="9" fill="#e7f5ec" stroke="#bfe6cd"/>
+          <text x="794" y="60" text-anchor="middle" font-weight="700">Repository</text>
+          <text x="794" y="76" text-anchor="middle" fill="#5d6675" font-size="11">active</text>
+
+          <!-- arrows -->
+          <line x1="132" y1="65" x2="178" y2="65" stroke="#3d4fb5" stroke-width="1.6" marker-end="url(#ar)"/>
+          <line x1="330" y1="65" x2="378" y2="65" stroke="#3d4fb5" stroke-width="1.6" marker-end="url(#ar)"/>
+          <line x1="510" y1="65" x2="558" y2="65" stroke="#3d4fb5" stroke-width="1.6" marker-end="url(#ar)"/>
+          <line x1="690" y1="65" x2="738" y2="65" stroke="#3d4fb5" stroke-width="1.6" marker-end="url(#ar)"/>
+
+          <!-- tables -->
+          <ellipse cx="255" cy="150" rx="58" ry="13" fill="#f4f0fb" stroke="#d8c9ee"/>
+          <text x="255" y="154" text-anchor="middle" font-size="11">extracted_json ✓</text>
+          <ellipse cx="255" cy="195" rx="62" ry="13" fill="#fbeeee" stroke="#f0caca" stroke-dasharray="4 3"/>
+          <text x="255" y="199" text-anchor="middle" font-size="11" fill="#a33">confidence_scores ⌀</text>
+          <line x1="255" y1="100" x2="255" y2="137" stroke="#9aa3b8" stroke-width="1.2" marker-end="url(#ar)"/>
+          <text x="318" y="178" font-size="10" fill="#a33">never written → B1</text>
+
+          <ellipse cx="445" cy="150" rx="56" ry="13" fill="#eef1fb" stroke="#cdd6f6"/>
+          <text x="445" y="154" text-anchor="middle" font-size="11">lease_activity_log</text>
+          <line x1="445" y1="90" x2="445" y2="137" stroke="#9aa3b8" stroke-width="1.2" marker-end="url(#ar)"/>
+
+          <ellipse cx="625" cy="150" rx="60" ry="13" fill="#eef1fb" stroke="#cdd6f6"/>
+          <text x="625" y="154" text-anchor="middle" font-size="11">lease_approval_chain</text>
+          <line x1="625" y1="90" x2="625" y2="137" stroke="#9aa3b8" stroke-width="1.2" marker-end="url(#ar)"/>
+        </g>
+      </svg>
+      <div class="dcap">The dashed <code>confidence_scores</code> table is written by nothing — the root of finding B1.</div>
+    </div>
+
+    <h3>2 · Stripe checkout → webhook → entitlement (workspace &amp; firm)</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 860 240" role="img" aria-label="Stripe billing data flow">
+        <g font-family="var(--sans)" font-size="12">
+          <rect x="12" y="30" width="140" height="46" rx="9" fill="#eef1fb" stroke="#cdd6f6"/>
+          <text x="82" y="50" text-anchor="middle" font-weight="700">create-checkout</text>
+          <text x="82" y="66" text-anchor="middle" fill="#a33" font-size="10">rejects firm_id ✓</text>
+
+          <rect x="12" y="150" width="160" height="46" rx="9" fill="#eef1fb" stroke="#cdd6f6"/>
+          <text x="92" y="170" text-anchor="middle" font-weight="700">create-firm-checkout</text>
+          <text x="92" y="186" text-anchor="middle" fill="#5d6675" font-size="10">qty = child count</text>
+
+          <rect x="230" y="90" width="120" height="50" rx="9" fill="#fff" stroke="#e4e7ee"/>
+          <text x="290" y="113" text-anchor="middle" font-weight="700">Stripe</text>
+          <text x="290" y="129" text-anchor="middle" fill="#5d6675" font-size="11">checkout + 3DS</text>
+
+          <rect x="410" y="90" width="130" height="50" rx="9" fill="#fff" stroke="#e4e7ee"/>
+          <text x="475" y="113" text-anchor="middle" font-weight="700">stripe-webhook</text>
+          <text x="475" y="129" text-anchor="middle" fill="#5d6675" font-size="11">on metadata</text>
+
+          <rect x="600" y="30" width="150" height="46" rx="9" fill="#e7f5ec" stroke="#bfe6cd"/>
+          <text x="675" y="50" text-anchor="middle" font-weight="700">workspaces</text>
+          <text x="675" y="66" text-anchor="middle" fill="#5d6675" font-size="10">plan, sub_status…</text>
+
+          <rect x="600" y="150" width="150" height="46" rx="9" fill="#e7f5ec" stroke="#bfe6cd"/>
+          <text x="675" y="170" text-anchor="middle" font-weight="700">firms</text>
+          <text x="675" y="186" text-anchor="middle" fill="#5d6675" font-size="10">+ child plan lock</text>
+
+          <line x1="152" y1="53" x2="228" y2="100" stroke="#3d4fb5" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="172" y1="173" x2="228" y2="130" stroke="#3d4fb5" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="350" y1="115" x2="408" y2="115" stroke="#3d4fb5" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="540" y1="105" x2="598" y2="58" stroke="#3d4fb5" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="540" y1="125" x2="598" y2="170" stroke="#3d4fb5" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="475" y="225" text-anchor="middle" font-size="10" fill="#5d6675">metadata.workspace_id → workspaces · metadata.firm_id → firms</text>
+        </g>
+      </svg>
+      <div class="dcap">Server guards (create-checkout / customer-portal / manage-document-pack) all reject <code>firm_id</code> — #103's server side is effectively closed (D1).</div>
+    </div>
+
+    <h3>3 · Firm effective-access resolution</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 860 150" role="img" aria-label="Firm effective access resolution">
+        <g font-family="var(--sans)" font-size="12">
+          <rect x="12" y="55" width="150" height="46" rx="9" fill="#eef1fb" stroke="#cdd6f6"/>
+          <text x="87" y="75" text-anchor="middle" font-weight="700">workspace owner?</text>
+          <text x="87" y="91" text-anchor="middle" fill="#5d6675" font-size="10">→ admin</text>
+
+          <rect x="210" y="55" width="180" height="46" rx="9" fill="#fff" stroke="#e4e7ee"/>
+          <text x="300" y="75" text-anchor="middle" font-weight="700">direct workspace_member?</text>
+          <text x="300" y="91" text-anchor="middle" fill="#5d6675" font-size="10">→ that role</text>
+
+          <rect x="440" y="55" width="210" height="46" rx="9" fill="#fff" stroke="#e4e7ee"/>
+          <text x="545" y="72" text-anchor="middle" font-weight="700">firm member &amp; workspace bound</text>
+          <text x="545" y="88" text-anchor="middle" fill="#5d6675" font-size="10">&amp; !restrict_firm_access → mapped role</text>
+
+          <rect x="700" y="55" width="148" height="46" rx="9" fill="#fbeeee" stroke="#f0caca"/>
+          <text x="774" y="75" text-anchor="middle" font-weight="700">else</text>
+          <text x="774" y="91" text-anchor="middle" fill="#a33" font-size="10">no access (foreign)</text>
+
+          <line x1="162" y1="78" x2="208" y2="78" stroke="#3d4fb5" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="390" y1="78" x2="438" y2="78" stroke="#3d4fb5" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="650" y1="78" x2="698" y2="78" stroke="#3d4fb5" stroke-width="1.5" marker-end="url(#ar)"/>
+        </g>
+      </svg>
+      <div class="dcap">First match wins (firmAccess.ts + Deno mirror). <code>restrict_firm_access=true</code> hard-excludes a child even from its own firm.</div>
+    </div>
+
+    <h3>4 · The split confidence model (finding B1)</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 860 170" role="img" aria-label="Split confidence model">
+        <g font-family="var(--sans)" font-size="12">
+          <rect x="12" y="60" width="150" height="50" rx="9" fill="#fff" stroke="#e4e7ee"/>
+          <text x="87" y="82" text-anchor="middle" font-weight="700">process_lease</text>
+          <text x="87" y="98" text-anchor="middle" fill="#5d6675" font-size="10">writes per-field conf.</text>
+
+          <ellipse cx="340" cy="45" rx="120" ry="16" fill="#f4f0fb" stroke="#d8c9ee"/>
+          <text x="340" y="50" text-anchor="middle" font-size="11">extracted_json[].confidence (0–1) ✓</text>
+          <ellipse cx="340" cy="125" rx="135" ry="16" fill="#fbeeee" stroke="#f0caca" stroke-dasharray="4 3"/>
+          <text x="340" y="130" text-anchor="middle" font-size="11" fill="#a33">leases.confidence_scores (0–100) ⌀ never written</text>
+
+          <rect x="560" y="22" width="150" height="46" rx="9" fill="#e7f5ec" stroke="#bfe6cd"/>
+          <text x="635" y="42" text-anchor="middle" font-weight="700">ConfidenceBadge</text>
+          <text x="635" y="58" text-anchor="middle" fill="#5d6675" font-size="10">works ✓</text>
+
+          <rect x="560" y="102" width="150" height="46" rx="9" fill="#fdf3e3" stroke="#f1d7a8"/>
+          <text x="635" y="122" text-anchor="middle" font-weight="700">NeedsReviewBanner</text>
+          <text x="635" y="138" text-anchor="middle" fill="#a33" font-size="10">inert — no data</text>
+
+          <line x1="162" y1="80" x2="232" y2="52" stroke="#3d4fb5" stroke-width="1.4" marker-end="url(#ar)"/>
+          <line x1="460" y1="45" x2="558" y2="45" stroke="#3d4fb5" stroke-width="1.4" marker-end="url(#ar)"/>
+          <line x1="475" y1="125" x2="558" y2="125" stroke="#c98" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+          <text x="775" y="125" font-size="10" fill="#a33">fix: point here ↑</text>
+        </g>
+      </svg>
+      <div class="dcap">Fix = route the banner to the working 0–1 source the badge already uses; retire the empty 0–100 column.</div>
+    </div>
+  </section>
+
+  <!-- ============ ROADMAP ============ -->
+  <section id="roadmap">
+    <h2>Remediation roadmap</h2>
+    <p class="lede">Ordered for leverage and to impose convergence discipline — close a phase fully (code + tests + docs + review) before opening the next. Effort is rough developer-days. Every code phase routes through the mandated review subagents (auditor + security always; integrity for data paths; polish for UI).</p>
+
+    <div class="phase">
+      <h4>P0 · Quick wins &amp; safety <span class="eff">— ~1–1.5 days</span></h4>
+      <ul class="tight">
+        <li><strong>B1</strong> re-point confidence banner to live data (restores the audit-gate warning).</li>
+        <li><strong>C1</strong> FailedLeaseBanner "Upload New Document" CTA.</li>
+        <li><strong>A2</strong> kill the four <code>en-AU</code> literals. <strong>E2</strong> <code>npm audit fix</code> + retest.</li>
+      </ul>
+      <div class="eff">Routes: code-auditor, security-scanner, product-polish (C1), test-author. Reviewers: integrity (B1 audit gate).</div>
+    </div>
+
+    <div class="phase">
+      <h4>P1 · The consistency pass (kills the core complaint) <span class="eff">— ~2–3 days</span></h4>
+      <ul class="tight">
+        <li><strong>A1/A3/A5</strong> shared <code>formatMoney()</code> + <code>formatDate()</code>; replace all call sites.</li>
+        <li><strong>A4</strong> single <code>getStatusBadgeVariant()</code> + one <code>&lt;StatusBadge&gt;</code>; delete the substring matcher.</li>
+        <li><strong>B3</strong> single <code>getMonthlyRent(lease)</code> helper; reuse in all 5 sites.</li>
+      </ul>
+      <div class="eff">Highest visible payoff for "it finally looks finished." Routes: auditor, polish, test-author (formatter + selector unit tests).</div>
+    </div>
+
+    <div class="phase">
+      <h4>P2 · Firm / billing UI lockdown + read-only <span class="eff">— ~2 days</span></h4>
+      <ul class="tight">
+        <li><strong>D1</strong> hide firm-bound billing controls + "managed by firm" note; then <strong>E3</strong> reconcile #103/CLAUDE.md (server side closed).</li>
+        <li><strong>C3</strong> firm-checkout success toast + redirect to FirmBilling.</li>
+        <li><strong>D2</strong> thread read-only gating through all intake affordances. <strong>D3</strong> per-member role-save feedback.</li>
+      </ul>
+      <div class="eff">Routes: security-scanner (authz affordances), integrity (billing entitlement paths), polish.</div>
+    </div>
+
+    <div class="phase">
+      <h4>P3 · Dead-ends &amp; polish cleanup <span class="eff">— ~1.5 days</span></h4>
+      <ul class="tight">
+        <li><strong>C2</strong> retry-routing CTA · <strong>C4</strong> contextual empty states · <strong>C5</strong> document URL-only routes.</li>
+        <li><strong>B4</strong> verify + fix RentRoll status filter · <strong>B5</strong> tighten annual-obligation fold.</li>
+        <li><strong>D4</strong> plan-control signpost · <strong>D5</strong> de-hardcode firm price · <strong>D6</strong> shared firm header.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <h4>P4 · Hygiene &amp; durability <span class="eff">— ~1.5 days</span></h4>
+      <ul class="tight">
+        <li><strong>E1</strong> split the Deno ESLint config (lint becomes a real gate). <strong>F1</strong> summarize AI context packet.</li>
+        <li><strong>E4</strong> one Playwright happy-path e2e (request → review → approval → repository).</li>
+      </ul>
+    </div>
+
+    <div class="callout info">
+      <h4>Operating principle (the actual cure for "10% away")</h4>
+      <p style="margin:0">Close before you open. Each phase ends only when code + tests + <em>docs</em> + reviewer sign-off all match reality — then the next begins. This converts the fan of 80%-done branches into a stack of 100%-done ones, which is what makes a build <em>feel</em> finished.</p>
+    </div>
+  </section>
+
+  <!-- ============ APPENDIX ============ -->
+  <section id="appendix">
+    <h2>Appendix</h2>
+
+    <h3>Full findings index</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Severity</th><th>Category</th><th>Title</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">A1</td><td><span class="sev high">High</span></td><td>Inconsistency</td><td>Currency formatted 9 ways</td><td>Verified</td></tr>
+        <tr><td class="mono">A2</td><td><span class="sev low">Low</span></td><td>Bug</td><td><code>en-AU</code> locale (4 sites)</td><td>Verified</td></tr>
+        <tr><td class="mono">A3</td><td><span class="sev med">Med</span></td><td>Inconsistency</td><td>Dates in 4 formats</td><td>Verified</td></tr>
+        <tr><td class="mono">A4</td><td><span class="sev med">Med</span></td><td>Inconsistency</td><td>Status badge color drift</td><td>Verified</td></tr>
+        <tr><td class="mono">A5</td><td><span class="sev low">Low</span></td><td>Inconsistency</td><td>Percentage precision mix</td><td>Verified</td></tr>
+        <tr><td class="mono">B1</td><td><span class="sev high">High</span></td><td>Bug</td><td>Confidence banner inert (dead column)</td><td>Verified</td></tr>
+        <tr><td class="mono">B3</td><td><span class="sev med">Med</span></td><td>Fragility</td><td>Monthly-rent fallback ×5</td><td>Verified</td></tr>
+        <tr><td class="mono">B4</td><td><span class="sev med">Med</span></td><td>Bug</td><td>RentRoll legacy status filter</td><td>Verify</td></tr>
+        <tr><td class="mono">B5</td><td><span class="sev low">Low</span></td><td>Fragility</td><td>Annual-obligation unfiltered fold</td><td>Verify</td></tr>
+        <tr><td class="mono">C1</td><td><span class="sev high">High</span></td><td>Dead-end</td><td>Failed lease no re-upload</td><td>Verified</td></tr>
+        <tr><td class="mono">C2</td><td><span class="sev med">Med</span></td><td>Dead-end</td><td>Draft routing failure no retry</td><td>Verified</td></tr>
+        <tr><td class="mono">C3</td><td><span class="sev high">High</span></td><td>Dead-end</td><td>Firm checkout no confirmation</td><td>Verified</td></tr>
+        <tr><td class="mono">C4</td><td><span class="sev low">Low</span></td><td>Polish</td><td>Ambiguous audit-log empty state</td><td>Verified</td></tr>
+        <tr><td class="mono">C5</td><td><span class="sev low">Low</span></td><td>Polish</td><td>URL-only routes undocumented</td><td>Verified</td></tr>
+        <tr><td class="mono">D1</td><td><span class="sev med">Med</span></td><td>Polish</td><td>Firm-bound billing buttons shown</td><td>Verified</td></tr>
+        <tr><td class="mono">D2</td><td><span class="sev med">Med</span></td><td>Polish</td><td>Vault intake CTAs leak</td><td>Verify</td></tr>
+        <tr><td class="mono">D3</td><td><span class="sev med">Med</span></td><td>Dead-end</td><td>Role save silent partial failure</td><td>Verified</td></tr>
+        <tr><td class="mono">D4</td><td><span class="sev med">Med</span></td><td>Inconsistency</td><td>Plan controls split across pages</td><td>Verified</td></tr>
+        <tr><td class="mono">D5</td><td><span class="sev low">Low</span></td><td>Fragility</td><td>Firm price hardcoded</td><td>Verified</td></tr>
+        <tr><td class="mono">D6</td><td><span class="sev low">Low</span></td><td>Inconsistency</td><td>Firm page headers diverge</td><td>Verified</td></tr>
+        <tr><td class="mono">E1</td><td><span class="sev med">Med</span></td><td>Fragility</td><td>906 ESLint errors (Deno config)</td><td>Verified</td></tr>
+        <tr><td class="mono">E2</td><td><span class="sev med">Med</span></td><td>Fragility</td><td>6 npm vulns (3 high)</td><td>Verified</td></tr>
+        <tr><td class="mono">E3</td><td><span class="sev med">Med</span></td><td>Polish</td><td>Doc-drift (#103 status)</td><td>Verified</td></tr>
+        <tr><td class="mono">E4</td><td><span class="sev med">Med</span></td><td>Fragility</td><td>No e2e coverage</td><td>Verified</td></tr>
+        <tr><td class="mono">F1</td><td><span class="sev med">Med</span></td><td>Fragility</td><td>AI packet ships full JSON</td><td>Verify</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Currency formatting matrix</h3>
+    <table>
+      <thead><tr><th>Surface</th><th>Format</th><th>Example</th><th>Locale-aware?</th></tr></thead>
+      <tbody>
+        <tr><td>Dashboard KPI</td><td>no decimals</td><td class="mono">$50,000</td><td>no</td></tr>
+        <tr><td>Per-sqft</td><td>2 decimals</td><td class="mono">$15.75/sqft</td><td>no</td></tr>
+        <tr><td>Pipeline / charts</td><td>compact</td><td class="mono">$1.2M</td><td>no</td></tr>
+        <tr><td>Rent schedule</td><td>locale</td><td class="mono">1.234,56 €</td><td>yes</td></tr>
+        <tr><td>Rent Roll CSV</td><td>2 decimals</td><td class="mono">$50,000.00</td><td>no</td></tr>
+        <tr><td>Reports / Commitment</td><td><code>en-AU</code> ⚠</td><td class="mono">$50,000</td><td>wrong locale</td></tr>
+        <tr><td>AI packet</td><td>no decimals</td><td class="mono">$50,000</td><td>no</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Date formatting matrix</h3>
+    <table>
+      <thead><tr><th>Surface</th><th>Format</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Leases list · Audit log</td><td class="mono">MMM d, yyyy</td><td>Jun 15, 2026</td></tr>
+        <tr><td>Rent Roll CSV (intentional)</td><td class="mono">MM/dd/yyyy</td><td>06/15/2026</td></tr>
+        <tr><td>Portfolio register</td><td class="mono">YYYY-MM</td><td>2026-06</td></tr>
+        <tr><td>Lease Audit page</td><td class="mono">browser locale</td><td>6/15/2026</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Glossary</h3>
+    <ul class="tight">
+      <li><strong>Lifecycle status</strong> — the canonical lease state (legacy + chain vocabularies, mapped via <code>isEquivalent()</code>).</li>
+      <li><strong>Firm-bound workspace</strong> — a child workspace whose <code>firm_id</code> is set; plan locked to <code>business</code>, billing owned by the firm.</li>
+      <li><strong>Vault / read-only retention</strong> — the archive offramp tier; all intake should be disabled (<code>isReadOnlyRetention()</code>).</li>
+      <li><strong>Verified ✓ / Verify</strong> — read in code for this report / strong signal pending one confirmation.</li>
+    </ul>
+
+    <div class="foot">
+      LeaseIO end-to-end audit · generated 2026-06-20 · 25 findings across 6 themes · sources: three workflow audit passes + three health passes, with all High-severity claims hand-verified in source. This is an audit &amp; plan document; remediation lands in follow-up sessions per the roadmap.
+    </div>
+  </section>
+</main>
+</div>
+
+<script>
+  // Collapsible cards are native <details>. Severity filter + TOC scroll-spy below.
+  function setFilter(sev, btn){
+    document.querySelectorAll('.fbtn').forEach(b=>b.setAttribute('aria-pressed','false'));
+    btn.setAttribute('aria-pressed','true');
+    document.querySelectorAll('.find').forEach(f=>{
+      var s=f.getAttribute('data-sev');
+      f.style.display=(sev==='all'||s===sev)?'':'none';
+    });
+  }
+  // Scroll-spy: highlight active TOC entry
+  (function(){
+    var links=[].slice.call(document.querySelectorAll('#toc a'));
+    var map={};
+    links.forEach(function(a){var id=a.getAttribute('href').slice(1);var el=document.getElementById(id);if(el)map[id]=a;});
+    var obs=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          links.forEach(function(l){l.classList.remove('active');});
+          var a=map[e.target.id]; if(a)a.classList.add('active');
+        }
+      });
+    },{rootMargin:'-10% 0px -78% 0px',threshold:0});
+    Object.keys(map).forEach(function(id){var el=document.getElementById(id);if(el)obs.observe(el);});
+  })();
+</script>
+</body>
+</html>
