@@ -1,5 +1,7 @@
 import { format } from 'date-fns';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface SummaryData {
   requestTitle: string;
@@ -48,8 +50,8 @@ const APPROVED_STATUSES = [
   'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
 ];
 
-function fmt(n: number) {
-  return '$' + Math.round(n).toLocaleString();
+function fmt(n: number, language: SupportedLocale) {
+  return formatLocalizedCurrency(n, language);
 }
 
 function fmtDate(d: string) {
@@ -75,6 +77,7 @@ function titleCase(s: string) {
 }
 
 export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
+  const { language } = useLanguage();
   const isApproved = APPROVED_STATUSES.includes(data.lifecycleStatus);
   const isDraft = !isApproved;
 
@@ -94,7 +97,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
   const metrics = [
     {
       label: 'Total Cash Commitment',
-      value: fmt(data.calcTotalCommitment),
+      value: fmt(data.calcTotalCommitment, language),
       sublabel: `Over ${data.termMonths} months`,
       color: '#1d4ed8',
       bg: '#eff6ff',
@@ -102,7 +105,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
     },
     {
       label: 'Estimated Lease Liability',
-      value: fmt(data.calcPvLiability),
+      value: fmt(data.calcPvLiability, language),
       sublabel: `PV at ${data.discountRateUsed}% discount rate`,
       color: '#7c3aed',
       bg: '#f5f3ff',
@@ -110,7 +113,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
     },
     {
       label: 'Monthly P&L Charge',
-      value: fmt(data.calcStraightLineExp),
+      value: fmt(data.calcStraightLineExp, language),
       sublabel: 'Straight-line per month',
       color: '#059669',
       bg: '#f0fdf4',
@@ -118,7 +121,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
     },
     {
       label: 'Cash vs. P&L Delta',
-      value: (data.calcCashPlDelta >= 0 ? '+' : '') + fmt(data.calcCashPlDelta),
+      value: (data.calcCashPlDelta >= 0 ? '+' : '') + fmt(data.calcCashPlDelta, language),
       sublabel: 'At lease midpoint',
       color: '#d97706',
       bg: '#fffbeb',
@@ -260,7 +263,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
           <SectionHeading>Lease Terms</SectionHeading>
           <FieldTable
             rows={[
-              ['Monthly Payment', data.monthlyPayment ? fmt(data.monthlyPayment) : '\u2014'],
+              ['Monthly Payment', data.monthlyPayment ? fmt(data.monthlyPayment, language) : '\u2014'],
               ['Term', data.termMonths ? `${data.termMonths} months` : '\u2014'],
               ['Start Date', fmtDate(data.startDate)],
               ['End Date', fmtDate(data.endDate)],

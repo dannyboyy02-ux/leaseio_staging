@@ -8,6 +8,8 @@ import { AlertTriangle, Building2, Car, Cpu, Loader2, Package, Upload, X } from 
 import { toast } from 'sonner';
 
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { supabase } from '@/integrations/supabase/client';
 import { getApprovalRequirements, getInitialStatusAfterSubmission } from '@/lib/approvalRouting';
 import {
@@ -76,6 +78,7 @@ const ASSET_TYPE_OPTIONS = [
 
 export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequestFormProps) {
   const { user, workspace, userRole } = useApp();
+  const { language } = useLanguage();
   const isAdminRole = userRole === 'admin' || userRole === 'owner';
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -497,7 +500,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                 ? 'Financial review is required because this request is covenant-flagged.'
                 : workspaceSettings.approvalThreshold != null &&
                   (calcs?.totalCashCommitment ?? 0) >= workspaceSettings.approvalThreshold
-                ? `Financial review is required because the total commitment meets or exceeds the $${Math.round(workspaceSettings.approvalThreshold).toLocaleString()} threshold.`
+                ? `Financial review is required because the total commitment meets or exceeds the ${formatLocalizedCurrency(workspaceSettings.approvalThreshold, language)} threshold.`
                 : 'Financial review is required based on your workspace approval settings.'
               : 'No additional reviewers are required with the current values.'}
           </p>

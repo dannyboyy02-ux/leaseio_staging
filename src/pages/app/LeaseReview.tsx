@@ -74,6 +74,7 @@ import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
 import { downloadCSV } from "@/components/leases/LeaseExports";
 import { LeaseReviewStatusStrip } from "@/components/leases/LeaseReviewStatusStrip";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { formatLocalizedCurrency } from "@/lib/dateFormatters";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
 import { AmendmentsList } from "@/components/leases/AmendmentsList";
@@ -2380,7 +2381,7 @@ export default function LeaseReview() {
                   <div>
                     <p className="text-xs text-muted-foreground">Monthly Payment</p>
                     <p className="font-medium">
-                      {lease.monthly_payment ? `$${Number(lease.monthly_payment).toLocaleString()}` : '\u2014'}
+                      {lease.monthly_payment ? formatLocalizedCurrency(Number(lease.monthly_payment), language) : '\u2014'}
                     </p>
                   </div>
                   <div>
@@ -2436,7 +2437,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-muted-foreground">Total Cash Commitment</p>
                         <p className="font-medium">
                           {lease.calc_total_commitment
-                            ? `$${Math.round(Number(lease.calc_total_commitment)).toLocaleString()}`
+                            ? formatLocalizedCurrency(Number(lease.calc_total_commitment), language)
                             : '\u2014'}
                         </p>
                       </div>
@@ -2444,7 +2445,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-muted-foreground">Est. Lease Liability (PV)</p>
                         <p className="font-medium">
                           {lease.calc_pv_liability
-                            ? `$${Math.round(Number(lease.calc_pv_liability)).toLocaleString()}`
+                            ? formatLocalizedCurrency(Number(lease.calc_pv_liability), language)
                             : '\u2014'}
                         </p>
                       </div>
@@ -2452,7 +2453,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-muted-foreground">Monthly P&amp;L Charge</p>
                         <p className="font-medium">
                           {lease.calc_straight_line_exp
-                            ? `$${Math.round(Number(lease.calc_straight_line_exp)).toLocaleString()}`
+                            ? formatLocalizedCurrency(Number(lease.calc_straight_line_exp), language)
                             : '\u2014'}
                         </p>
                       </div>
@@ -2460,7 +2461,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-muted-foreground">Cash vs. P&amp;L Delta</p>
                         <p className="font-medium">
                           {lease.calc_cash_pl_delta != null
-                            ? `$${Math.round(Number(lease.calc_cash_pl_delta)).toLocaleString()}`
+                            ? formatLocalizedCurrency(Number(lease.calc_cash_pl_delta), language)
                             : '\u2014'}
                         </p>
                       </div>

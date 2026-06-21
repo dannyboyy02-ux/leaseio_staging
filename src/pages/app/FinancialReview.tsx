@@ -40,6 +40,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { LeaseDiscountRateCard } from '@/components/leases/LeaseDiscountRateCard';
 
@@ -90,15 +92,14 @@ const ASC842_CRITERIA = [
   { id: 'specialized', label: 'Is the asset so specialized it has no alternative use to the lessor at the end of the term?' },
 ];
 
-const fmt = (n: number | null | undefined) =>
-  n != null ? `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—';
-const fmtDec = (n: number | null | undefined) =>
-  n != null ? `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
-
 export default function FinancialReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
   const { user, workspace, userFunctionalRoles, userRole } = useApp();
+  const { language } = useLanguage();
+  const fmt = (n: number | null | undefined) => formatLocalizedCurrency(n, language);
+  const fmtDec = (n: number | null | undefined) =>
+    formatLocalizedCurrency(n, language, { cents: true });
   const canEditDiscountRate =
     userFunctionalRoles.includes('financial_approver') ||
     userRole === 'admin' ||
