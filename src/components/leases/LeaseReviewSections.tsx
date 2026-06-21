@@ -37,7 +37,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
-import { getFieldConfidence } from '@/lib/extractedFieldHelpers';
+import { getFieldConfidence, confidenceTier } from '@/lib/extractedFieldHelpers';
 import type { ConfidenceScores } from '@/types/workflow';
 
 // P2-04: SECTION_CONFIG, SectionKey, findFieldLabel moved to
@@ -60,8 +60,9 @@ export const ConfidenceBadge = ({ confidence }: { confidence: number | null }) =
   }
 
   const percentage = Math.round(confidence * 100);
+  const tier = confidenceTier(confidence);
 
-  if (confidence >= 0.90) {
+  if (tier === 'high') {
     return (
       <Badge variant="outline" className="text-[9px] h-4 font-medium text-green-600 border-green-400 bg-green-50">
         <CheckCircle2 size={8} className="mr-0.5" />
@@ -70,7 +71,7 @@ export const ConfidenceBadge = ({ confidence }: { confidence: number | null }) =
     );
   }
 
-  if (confidence >= 0.70) {
+  if (tier === 'medium') {
     return (
       <Badge variant="outline" className="text-[9px] h-4 font-medium text-amber-600 border-amber-400 bg-amber-50">
         <AlertTriangle size={8} className="mr-0.5" />

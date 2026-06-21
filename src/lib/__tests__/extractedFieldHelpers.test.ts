@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getFieldConfidence } from '../extractedFieldHelpers';
+import { getFieldConfidence, confidenceTier } from '../extractedFieldHelpers';
 
 // Regression coverage for the B1 fix: getFieldConfidence is the single source
 // of truth for per-field extraction confidence — the field badges, the
@@ -64,5 +64,27 @@ describe('getFieldConfidence — null cases', () => {
   it('returns null when the field value is null/undefined', () => {
     expect(getFieldConfidence({ f: null }, 'f')).toBeNull();
     expect(getFieldConfidence({ f: undefined }, 'f')).toBeNull();
+  });
+});
+
+// confidenceTier is the single banding used by BOTH the ConfidenceBadge and the
+// NeedsReviewBanner, so their visual severity (red/amber/green) can't drift.
+describe('confidenceTier — shared severity bands', () => {
+  it('bands high (>= 0.90)', () => {
+    expect(confidenceTier(0.90)).toBe('high');
+    expect(confidenceTier(0.95)).toBe('high');
+    expect(confidenceTier(1)).toBe('high');
+  });
+
+  it('bands medium (0.70 <= x < 0.90)', () => {
+    expect(confidenceTier(0.70)).toBe('medium');
+    expect(confidenceTier(0.80)).toBe('medium');
+    expect(confidenceTier(0.899)).toBe('medium');
+  });
+
+  it('bands low (< 0.70)', () => {
+    expect(confidenceTier(0.699)).toBe('low');
+    expect(confidenceTier(0.55)).toBe('low');
+    expect(confidenceTier(0)).toBe('low');
   });
 });

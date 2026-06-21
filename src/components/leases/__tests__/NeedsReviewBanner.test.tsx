@@ -1,23 +1,40 @@
 // @vitest-environment jsdom
 import '../../workspace/__tests__/_jsdomPolyfills';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 
-// Regression coverage for the B1 fix. NeedsReviewBanner was rewritten to read
-// per-field confidence from the live `extracted_json` via getFieldConfidence
-// (cutoff = LOW_CONFIDENCE_THRESHOLD/100 = 0.80) instead of the never-populated
-// `lease.confidence_scores` column — so the low-confidence warning could never
-// fire before. This pins:
+// Regression coverage for the B1 fix + its polish follow-up. NeedsReviewBanner
+// was rewritten to read per-field confidence from the live `extracted_json` via
+// getFieldConfidence (cutoff = LOW_CONFIDENCE_THRESHOLD/100 = 0.80) instead of
+// the never-populated `lease.confidence_scores` column — so the low-confidence
+// warning could never fire before. This pins:
 //   - a present field below the cutoff is flagged with its rounded percentage,
 //   - a present field at/above the cutoff is NOT flagged,
-//   - a missing (falsy) field is surfaced as "is missing",
+//   - a missing (falsy) field is surfaced as "missing",
 //   - all-good renders nothing (the component returns null),
-//   - the 0.80 boundary: 0.80 not flagged, 0.79 flagged.
+//   - the 0.80 boundary: 0.80 not flagged, 0.79 flagged,
+//   - the icon severity matches the per-field ConfidenceBadge tiers: red
+//     (XCircle / text-destructive) below 70%, amber (text-amber-500) for 70–80%.
 //
-// Note: NeedsReviewBanner imports getFieldConfidence from the pure
-// `@/lib/extractedFieldHelpers` module — NOT the supabase client. This test
-// mounting cleanly (no module-resolution error pulling in supabase) is itself
-// part of the contract.
+// Note: NeedsReviewBanner imports getFieldConfidence/confidenceTier from the
+// pure `@/lib/extractedFieldHelpers` module — NOT the supabase client. This
+// test mounting cleanly is itself part of the contract.
+
+// Echo the i18n key (+ interpolated params) so assertions match on keys rather
+// than translated copy — the repo convention (see PlanPickerDialog.test.tsx).
+vi.mock('@/hooks/useAppTranslation', () => ({
+  useAppTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => {
+      if (opts && typeof opts === 'object') {
+        const params = Object.entries(opts)
+          .map(([k, v]) => `${k}=${String(v)}`)
+          .join(',');
+        return params ? `${key}(${params})` : key;
+      }
+      return key;
+    },
+  }),
+}));
 
 import { NeedsReviewBanner } from '../NeedsReviewBanner';
 
@@ -40,7 +57,7 @@ const HIGH_CONF_JSON = {
 };
 
 describe('NeedsReviewBanner — low-confidence flagging', () => {
-  it('flags a present field with confidence 0.55 as "low confidence (55%)"', () => {
+  it('flags a present field with confidence 0.55, rendering the rounded percentage', () => {
     render(
       <NeedsReviewBanner
         {...ALL_PRESENT}
@@ -50,10 +67,10 @@ describe('NeedsReviewBanner — low-confidence flagging', () => {
         }}
       />,
     );
-    expect(screen.getByText('Review Required')).toBeTruthy();
-    // Rounded percentage rendered as "(55%)".
-    expect(screen.getByText(/low confidence \(55%\)/i)).toBeTruthy();
-    expect(screen.getByText('Landlord Name')).toBeTruthy();
+    expect(screen.getByText('needs_review.title')).toBeTruthy();
+    expect(
+      screen.getByText('needs_review.low_confidence(label=Landlord Name,pct=55)'),
+    ).toBeTruthy();
   });
 
   it('does NOT flag a present field with high confidence (0.95)', () => {
@@ -68,13 +85,12 @@ describe('NeedsReviewBanner — low-confidence flagging', () => {
     );
     // No issues at all -> the component renders nothing.
     expect(container.firstChild).toBeNull();
-    expect(screen.queryByText('Review Required')).toBeNull();
-    expect(screen.queryByText(/low confidence/i)).toBeNull();
+    expect(screen.queryByText('needs_review.title')).toBeNull();
   });
 });
 
 describe('NeedsReviewBanner — missing fields', () => {
-  it('surfaces a missing (falsy) field as "is missing"', () => {
+  it('surfaces a missing (falsy) field as "missing"', () => {
     render(
       <NeedsReviewBanner
         landlordName={null}
@@ -84,11 +100,10 @@ describe('NeedsReviewBanner — missing fields', () => {
         extractedJson={HIGH_CONF_JSON}
       />,
     );
-    expect(screen.getByText('Review Required')).toBeTruthy();
-    expect(screen.getByText('Landlord Name')).toBeTruthy();
-    expect(screen.getByText(/is missing/i)).toBeTruthy();
+    expect(screen.getByText('needs_review.title')).toBeTruthy();
+    expect(screen.getByText('needs_review.missing(label=Landlord Name)')).toBeTruthy();
     // A missing field is reported as missing, never as low-confidence.
-    expect(screen.queryByText(/low confidence/i)).toBeNull();
+    expect(screen.queryByText(/needs_review\.low_confidence/)).toBeNull();
   });
 });
 
@@ -112,11 +127,10 @@ describe('NeedsReviewBanner — 0.80 cutoff boundary', () => {
         }}
       />,
     );
-    // 0.80 >= cutoff -> not flagged -> no issues -> renders nothing.
     expect(container.firstChild).toBeNull();
   });
 
-  it('flags a field just below the cutoff (0.79 -> "79%")', () => {
+  it('flags a field just below the cutoff (0.79 -> "pct=79")', () => {
     render(
       <NeedsReviewBanner
         {...ALL_PRESENT}
@@ -126,9 +140,9 @@ describe('NeedsReviewBanner — 0.80 cutoff boundary', () => {
         }}
       />,
     );
-    expect(screen.getByText('Review Required')).toBeTruthy();
-    expect(screen.getByText(/low confidence \(79%\)/i)).toBeTruthy();
-    expect(screen.getByText('Tenant Name')).toBeTruthy();
+    expect(
+      screen.getByText('needs_review.low_confidence(label=Tenant Name,pct=79)'),
+    ).toBeTruthy();
   });
 
   it("treats a 'medium' string confidence (0.80) as at-cutoff -> not flagged", () => {
@@ -154,7 +168,36 @@ describe('NeedsReviewBanner — 0.80 cutoff boundary', () => {
         }}
       />,
     );
-    expect(screen.getByText(/low confidence \(60%\)/i)).toBeTruthy();
+    expect(
+      screen.getByText('needs_review.low_confidence(label=Tenant Name,pct=60)'),
+    ).toBeTruthy();
+  });
+});
+
+describe('NeedsReviewBanner — icon severity matches the field badge tiers', () => {
+  it('uses a red icon below 70% and an amber icon for 70–80%', () => {
+    render(
+      <NeedsReviewBanner
+        {...ALL_PRESENT}
+        extractedJson={{
+          ...HIGH_CONF_JSON,
+          landlord_name: { value: 'Acme LLC', confidence: 0.55 }, // tier low -> red
+          tenant_name: { value: 'Beta Corp', confidence: 0.75 }, // tier medium -> amber
+        }}
+      />,
+    );
+
+    const lowLi = screen
+      .getByText('needs_review.low_confidence(label=Landlord Name,pct=55)')
+      .closest('li');
+    expect(lowLi?.querySelector('.text-destructive')).toBeTruthy();
+    expect(lowLi?.querySelector('.text-amber-500')).toBeNull();
+
+    const midLi = screen
+      .getByText('needs_review.low_confidence(label=Tenant Name,pct=75)')
+      .closest('li');
+    expect(midLi?.querySelector('.text-amber-500')).toBeTruthy();
+    expect(midLi?.querySelector('.text-destructive')).toBeNull();
   });
 });
 
@@ -175,9 +218,7 @@ describe('NeedsReviewBanner — no extracted_json', () => {
         leaseEnd="2027-01-01"
       />,
     );
-    expect(screen.getByText('Landlord Name')).toBeTruthy();
-    expect(screen.getByText('Tenant Name')).toBeTruthy();
-    const missing = screen.getAllByText(/is missing/i);
+    const missing = screen.getAllByText(/needs_review\.missing/);
     expect(missing.length).toBe(2);
   });
 });

@@ -2028,3 +2028,29 @@ The `deleted_firms` table + the `firm_deleted` activity_type already exist (Phas
 - *49 pre-existing jsdom test failures (MEDIUM, test infra):* `NewWorkspaceDialog`/`WorkspaceCommandPalette` tests fail at `localStorage.clear()` — the Vitest jsdom env doesn't provide `localStorage` and `_jsdomPolyfills.ts` doesn't stub it. Unrelated to #116 (fail in isolation with no #116 code loaded). Add a `localStorage` stub to `_jsdomPolyfills.ts`.
 
 **Where to look:** `supabase/migrations/20260618140000_prevent_committed_lease_hard_delete.sql`; `src/pages/app/ImportHistory.tsx`; `src/lib/leaseDisposability.ts`; the deep-link in `src/pages/app/LeaseReview.tsx` + `src/components/leases/locked/LockedHeader.tsx`; the sibling guard `prevent_locked_lease_edits` (`baseline_schema.sql:526`) and the #77/#83 destruction-guard pattern (`20260613030000_destruction_guards.sql`); archive flow `src/components/leases/ArchiveButton.tsx`.
+
+---
+
+### Item #123: Dead `confidenceScores` plumbing (`leases.confidence_scores` is never written)
+
+> **Filed 2026-06-21** (branch `claude/affectionate-hamilton-bp58tu`, P0 audit remediation). Surfaced by the code-auditor while reviewing the B1 fix; **pre-existing** (git blame `^0575f35`, 2026-06-04), exposed — not introduced — by that fix. Per "pre-existing issues are their own beat," filed here rather than bundled.
+
+**Severity:** Medium (dead code / fragility — the exact "reads a column nothing populates" pattern B1 just removed from the banner, still live on the section-card surface).
+
+**Symptom:** `leases.confidence_scores` (a `Json` column typed `0-100` via `ConfidenceScores` in `src/types/workflow.ts:23`) is **read-only across the entire codebase and written by nothing** — no edge function (`process_lease` emits per-field confidence into `extracted_json`, not this column), no client write. After the B1 fix re-pointed `NeedsReviewBanner` to the live `extracted_json[field].confidence` source, the only remaining consumer is:
+- `LeaseReview.tsx:331-333` — the `confidenceScores` memo reads `lease?.confidence_scores` (always `{}`),
+- passed to `SectionCard` at `LeaseReview.tsx:3112/3289/3310/3342` via the `confidenceScores` prop,
+- which `SectionCard` (`LeaseReviewSections.tsx:122` decl, `:146` destructure) **never references** — the section cards read confidence solely via `getFieldConfidence(extractedJson, …)`.
+
+So the prop, the memo, the `ConfidenceScores` type, and the column read form a dead chain that implies a data dependency that isn't real.
+
+**Fix (stub):**
+- Remove the `confidenceScores` prop from `SectionCardProps` + the four `LeaseReview.tsx` call sites.
+- Delete the `confidenceScores` memo (`LeaseReview.tsx:331-333`) and the now-unused `ConfidenceScores` import; the `ConfidenceScores` interface in `types/workflow.ts:23` would then have no consumers (remove it too).
+- Optional DB cleanup: a migration to drop the unpopulated `leases.confidence_scores` column (schema-change rule applies — write the `.sql`, confirm no other reader first).
+
+**Where to look:** `src/pages/app/LeaseReview.tsx:331-333,3112/3289/3310/3342`; `src/components/leases/LeaseReviewSections.tsx:122,146`; `src/types/workflow.ts:23`.
+
+**Adjacent minor items surfaced in the same B1/polish review (not bundled):**
+- *Banner field-name lost `<strong>` emphasis (LOW, polish):* moving `NeedsReviewBanner`'s copy into single-`<span>` i18n strings dropped the bold on the interpolated field name (both the missing + low-confidence lines), a minor scan-ability regression. Restoring it correctly needs react-i18next `<Trans>` (a `<strong>` placeholder) — deferred because `<Trans>` is not an established pattern here and would require reworking the `useAppTranslation`-mock-based banner tests; disproportionate for a LOW.
+- *Banner field labels render English inside Spanish copy (LOW, i18n):* `TIER1_FIELDS` labels ("Landlord Name", …) are English literals interpolated into the translated `{{label}}` slot, so ES users see "Falta Landlord Name". Intentional for now — field labels are English everywhere on this surface (section cards / `SECTION_CONFIG`), so translating them banner-only would create a same-field-two-names mismatch. Fix only as part of an app-wide field-label i18n pass (TIER1_FIELDS + section config together).

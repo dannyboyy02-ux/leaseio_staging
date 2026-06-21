@@ -1856,6 +1856,12 @@
     "vault_unavailable": "Vault no está disponible en este momento. Escriba a support@theleaseio.com para conservar sus datos.",
     "wall_vault_note": "La opción de retención Vault estaba disponible durante el período de gracia. Renovar es ahora la única forma de restaurar el acceso."
   },
+  "needs_review": {
+    "title": "Revisión necesaria",
+    "intro": "Revise los siguientes elementos antes de publicar este arrendamiento:",
+    "missing": "Falta {{label}}",
+    "low_confidence": "Verifique {{label}}: la extracción fue menos precisa aquí ({{pct}}%)"
+  },
   "vault": {
     "banner_text": "Vault — repositorio de solo lectura. Se renueva el {{date}} por ${{price}}/año.",
     "banner_text_nodate": "Vault — repositorio de solo lectura. Se renueva anualmente por ${{price}}/año.",

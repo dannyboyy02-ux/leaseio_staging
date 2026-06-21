@@ -1856,6 +1856,12 @@
     "vault_unavailable": "Vault isn't available right now — please contact support@theleaseio.com to keep your data.",
     "wall_vault_note": "The Vault retention option was available during the grace window. Renewing is the only way to restore access now."
   },
+  "needs_review": {
+    "title": "Review Required",
+    "intro": "Please review the following items before posting this lease:",
+    "missing": "{{label}} is missing",
+    "low_confidence": "Double-check {{label}} — we were less certain here ({{pct}}%)"
+  },
   "vault": {
     "banner_text": "Vault — read-only repository. Renews {{date}} at ${{price}}/yr.",
     "banner_text_nodate": "Vault — read-only repository. Renews annually at ${{price}}/yr.",
