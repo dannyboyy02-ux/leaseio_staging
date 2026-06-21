@@ -1156,17 +1156,19 @@ Verified via `pg_policy` query immediately post-apply: the only INSERT policy on
 
 ---
 
-### Item #45: ~18 of 97 `src/lib` exports are unused
+### Item #45: ~18 of 97 `src/lib` exports are unused — **i18n.ts portion RESOLVED 2026-06-21**
 
-**Symptom:** A grep sweep found ~19% of `src/lib` exports with no importer. Worst offenders: 8 unused formatters in `src/lib/i18n.ts` (`formatNumber/formatShortDate/formatLongDate/formatDateTime/formatMonthYear/getDateLocale/formatRelativeDate/formatDateDistance`), 4 in `src/lib/dateFormatters.ts`, 5 `canAccess*` helpers in `src/lib/authorization.ts`, and `severityColor` in `reportGeneration.ts`.
+**Symptom:** A grep sweep found ~19% of `src/lib` exports with no importer. Original worst offenders: ~~8 unused formatters in `src/lib/i18n.ts`~~ (now deleted — see resolution), 4 in `src/lib/dateFormatters.ts`, 5 `canAccess*` helpers in `src/lib/authorization.ts`, and `severityColor` in `reportGeneration.ts`.
 
 **Severity:** Low. Clutter. The unused `canAccess*` authorization helpers are a mild correctness smell (intended guards never called) — worth confirming nothing should be calling them.
 
-**Where to look:** `src/lib/i18n.ts`, `src/lib/dateFormatters.ts`, `src/lib/authorization.ts`, `src/lib/reportGeneration.ts`. Verify each via grep (some may be reached by dynamic/string paths — none found, but confirm before deleting).
+**RESOLVED 2026-06-21 (i18n.ts portion only):** `src/lib/i18n.ts` was entirely dead (0 importers; the i18next init at `src/i18n.ts` is a different file) and was **deleted** in the formatting-consistency sweep (commit `5b5853f`). Its 8 unused formatters are gone. The canonical money/date/number module is now `src/lib/dateFormatters.ts`. Remaining open: the `dateFormatters.ts` exports (the sweep's later parts add callers — e.g. `formatLocalizedPercent`), the `canAccess*` helpers, and `severityColor`.
+
+**Where to look (remaining):** `src/lib/dateFormatters.ts`, `src/lib/authorization.ts`, `src/lib/reportGeneration.ts`. Verify each via grep (some may be reached by dynamic/string paths — none found, but confirm before deleting).
 
 **Stub remediation:** Delete confirmed-dead exports; for the `canAccess*` helpers, first confirm no surface *should* be calling them.
 
-**Decision:** Filed not fixed. Surfaced during the 2026-05-24 full-codebase audit (dead-ends pass).
+**Decision:** Filed not fixed (i18n.ts portion now resolved). Surfaced during the 2026-05-24 full-codebase audit (dead-ends pass).
 
 ---
 
