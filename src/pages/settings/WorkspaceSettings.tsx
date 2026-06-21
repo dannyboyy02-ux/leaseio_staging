@@ -1,4 +1,4 @@
-import { useState, useEffect, type Dispatch, type SetStateAction } from 'react';
+import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react';
 import { Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -167,23 +167,24 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
       });
   }, [workspace?.id]);
 
-  // Load functional roles from workspace_roles table
-  useEffect(() => {
+  // Load functional roles from workspace_roles table. Extracted so the save
+  // handler can re-sync the UI to the true persisted state after a failure.
+  const loadRoles = useCallback(async () => {
     if (!workspace?.id) return;
-    (supabase as any)
+    const { data } = await (supabase as any)
       .from('workspace_roles')
       .select('user_id, role')
-      .eq('workspace_id', workspace.id)
-      .then(({ data }: { data: Array<{ user_id: string; role: string }> | null }) => {
-        const map: Record<string, Set<FunctionalRole>> = {};
-        for (const row of data || []) {
-          if (!map[row.user_id]) map[row.user_id] = new Set();
-          map[row.user_id].add(row.role as FunctionalRole);
-        }
-        setMemberRoles(map);
-        setRolesLoaded(true);
-      });
+      .eq('workspace_id', workspace.id);
+    const map: Record<string, Set<FunctionalRole>> = {};
+    for (const row of (data as Array<{ user_id: string; role: string }> | null) || []) {
+      if (!map[row.user_id]) map[row.user_id] = new Set();
+      map[row.user_id].add(row.role as FunctionalRole);
+    }
+    setMemberRoles(map);
+    setRolesLoaded(true);
   }, [workspace?.id]);
+
+  useEffect(() => { void loadRoles(); }, [loadRoles]);
 
   const toggleFunctionalRole = (userId: string, role: FunctionalRole) => {
     setMemberRoles((prev) => {
@@ -226,31 +227,29 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     if (!workspace?.id) { toast.error('No workspace found'); return; }
     setIsSavingRoles(true);
     try {
-      // Delete all existing roles for this workspace, then re-insert
-      const { error: deleteError } = await (supabase as any)
-        .from('workspace_roles')
-        .delete()
-        .eq('workspace_id', workspace.id);
-      if (deleteError) throw deleteError;
-
-      const rows: Array<{ workspace_id: string; user_id: string; role: FunctionalRole }> = [];
+      // Atomic replace via RPC — the delete + re-insert happen in one
+      // transaction server-side, so a failed insert can no longer leave the
+      // workspace with all functional roles wiped (audit D3).
+      const assignments: Array<{ user_id: string; role: FunctionalRole }> = [];
       for (const [userId, roles] of Object.entries(memberRoles)) {
         for (const role of roles) {
-          rows.push({ workspace_id: workspace.id, user_id: userId, role });
+          assignments.push({ user_id: userId, role });
         }
       }
 
-      if (rows.length > 0) {
-        const { error: insertError } = await (supabase as any)
-          .from('workspace_roles')
-          .insert(rows);
-        if (insertError) throw insertError;
-      }
+      const { error } = await (supabase as any).rpc('set_workspace_roles', {
+        p_workspace_id: workspace.id,
+        p_assignments: assignments,
+      });
+      if (error) throw error;
 
       toast.success('Team roles saved');
     } catch (error) {
       console.error('Error saving roles:', error);
-      toast.error('Failed to save team roles');
+      toast.error("Couldn't save team roles — no changes were applied. Please try again.");
+      // The atomic RPC left the stored roles untouched on failure; re-sync the
+      // UI to that true state instead of leaving the optimistic edits showing.
+      await loadRoles();
     } finally {
       setIsSavingRoles(false);
     }
@@ -677,8 +676,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                         <span className="text-xs text-muted-foreground sm:hidden capitalize">{role}:</span>
                                         <Checkbox
                                           checked={roles.has(role)}
-                                          onCheckedChange={() => { if (canEdit) toggleFunctionalRole(member.user_id, role); }}
-                                          disabled={!canEdit}
+                                          onCheckedChange={() => { if (canEdit && !isSavingRoles) toggleFunctionalRole(member.user_id, role); }}
+                                          disabled={!canEdit || isSavingRoles}
                                         />
                                       </div>
                                     ))}
