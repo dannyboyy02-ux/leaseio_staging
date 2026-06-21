@@ -68,7 +68,9 @@ export function IntakeTrend() {
       setLoading(false);
     }
     fetchData();
-  }, [workspace?.id]);
+    // `language` is read when building the month labels, so re-run on switch
+    // (mirrors CommitmentHistory) — otherwise the axis keeps stale en labels.
+  }, [workspace?.id, language]);
 
   const isEmpty = !loading && data.every((d) => d.count === 0);
 
