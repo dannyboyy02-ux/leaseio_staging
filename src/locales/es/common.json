@@ -114,7 +114,14 @@
       "usage_heading": "Uso por espacio de trabajo",
       "no_usage": "Aún no hay espacios de trabajo en esta firma.",
       "start": "Iniciar facturación de la firma",
-      "start_failed": "No se pudo iniciar la facturación"
+      "start_failed": "No se pudo iniciar la facturación",
+      "checkout_success": "Pago recibido: estamos finalizando la suscripción de su firma.",
+      "checkout_canceled": "Pago cancelado: no se realizó ningún cargo.",
+      "finalizing": "Finalizando su suscripción…",
+      "finalizing_note": "Esto puede tardar unos segundos después del pago; no necesita volver a pagar.",
+      "finalizing_delayed": "Aún sincronizando su suscripción",
+      "finalizing_delayed_note": "Se recibió su pago. Esto suele resolverse en un minuto: actualice o contacte a soporte si no aparece.",
+      "refresh": "Actualizar"
     },
     "onboarding": {
       "title": "Configure su firma",

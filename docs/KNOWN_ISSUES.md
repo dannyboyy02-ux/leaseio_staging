@@ -2102,3 +2102,15 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 - **(LOW — note, already tracked) `src/components/dashboard/FinancialSummary.tsx` appears orphaned/unmounted** (no JSX mount; only unrelated identifiers `buildFinancialSummary`/`canShareFinancialSummary` match elsewhere) — see KNOWN_ISSUES #42. CLAUDE.md's file-map still presents it as a live Dashboard component. This orphan status is what kept the (now-fixed) PV double-count latent rather than live. **Fix:** confirm orphan status and either re-mount or delete (owned by #42).
 
 **Where to look:** `src/lib/leaseCalculations.ts` (`getMonthlyRent` vs `getBaseMonthlyRent`), `src/lib/portfolioAnalytics.ts:57`, `src/components/reports/RentRollExport.tsx`, `src/pages/app/Portfolio.tsx`, `src/pages/Dashboard.tsx`, the four edge functions above.
+
+---
+
+### Item #127: Checkout edge functions interpolate the raw `Origin` header into Stripe `success_url`/`cancel_url` — Low (pre-existing, codebase-wide)
+
+> **Filed 2026-06-21** (branch `claude/affectionate-hamilton-bp58tu`). Surfaced by lease-security-scanner while reviewing the audit-C3 firm-checkout fix. Pre-existing convention, NOT introduced by C3 (C3 only changed the path segment of an already-existing `${origin}/...` string).
+
+**Severity:** Low. **Where:** `supabase/functions/create-firm-checkout/index.ts` (`const origin = req.headers.get("origin") || "http://localhost:5173"` → interpolated into `success_url`/`cancel_url`) and the identical pattern in `supabase/functions/create-checkout/index.ts` (workspace billing).
+
+**What / why low:** `getCorsHeaders` only *chooses the response header value* via `resolveAllowedOrigin`; it never *rejects* a disallowed origin, so a non-browser caller (curl/Postman) can send `Origin: https://evil.com` and have it land in the Stripe return URLs. Blast radius is small: the owner-auth gate means the caller is acting on their own firm/workspace, and they can only redirect *their own* checkout return — there's no third-party victim (it's a self-redirect, not a reflected/stored redirect). The same raw-`origin` pattern is the established convention across both checkout functions.
+
+**Fix:** gate on `isAllowedOrigin(req.headers.get("origin"))` and fall back to a canonical `APP_URL` when not allowlisted, applied uniformly across `create-firm-checkout` + `create-checkout`. Hardening, not urgent.

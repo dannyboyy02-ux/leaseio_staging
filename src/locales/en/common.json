@@ -114,7 +114,14 @@
       "usage_heading": "Usage by workspace",
       "no_usage": "No workspaces in this firm yet.",
       "start": "Start firm billing",
-      "start_failed": "Could not start billing"
+      "start_failed": "Could not start billing",
+      "checkout_success": "Payment received — finalizing your firm subscription.",
+      "checkout_canceled": "Checkout canceled — no charge was made.",
+      "finalizing": "Finalizing your subscription…",
+      "finalizing_note": "This can take a few seconds after payment — no need to pay again.",
+      "finalizing_delayed": "Still syncing your subscription",
+      "finalizing_delayed_note": "Your payment was received. This usually clears within a minute — refresh, or contact support if it doesn't appear.",
+      "refresh": "Refresh"
     },
     "onboarding": {
       "title": "Set up your firm",

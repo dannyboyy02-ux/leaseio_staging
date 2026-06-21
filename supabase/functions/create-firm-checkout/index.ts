@@ -83,8 +83,14 @@ serve(async (req) => {
       customer: customerId,
       line_items: [{ price: BUSINESS_MONTHLY_PRICE_ID, quantity }],
       mode: "subscription",
-      success_url: `${origin}/app/firm?checkout=success`,
-      cancel_url: `${origin}/app/firm/onboarding?checkout=canceled`,
+      // Land on Billing (shows live subscription status) — not the bare firm
+      // dashboard — so the user gets an unambiguous "you're subscribed"
+      // acknowledgment instead of a silent return (audit C3).
+      success_url: `${origin}/app/firm/billing?checkout=success`,
+      // Cancel also returns to Billing (which acknowledges checkout=canceled and
+      // lets the owner retry) rather than the onboarding wizard, which resets and
+      // gives no cancel acknowledgment (audit C3).
+      cancel_url: `${origin}/app/firm/billing?checkout=canceled`,
       metadata: { firm_id: firmId, plan_id: "business", billing_interval: "monthly" },
       subscription_data: {
         metadata: { firm_id: firmId, plan_id: "business", billing_interval: "monthly" },
