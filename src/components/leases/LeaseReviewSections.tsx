@@ -37,6 +37,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { getFieldConfidence } from '@/lib/extractedFieldHelpers';
 import type { ConfidenceScores } from '@/types/workflow';
 
 // P2-04: SECTION_CONFIG, SectionKey, findFieldLabel moved to
@@ -93,17 +94,10 @@ interface ExtractedField {
   source_text?: string;
 }
 
-// Get confidence from extracted_json field
-export const getFieldConfidence = (extractedJson: Record<string, any> | null, fieldId: string): number | null => {
-  if (!extractedJson) return null;
-  const field = extractedJson[fieldId] as ExtractedField | undefined;
-  if (!field) return null;
-  if (typeof field.confidence === 'number') return field.confidence;
-  if (field.confidence === 'high') return 0.95;
-  if (field.confidence === 'medium') return 0.80;
-  if (field.confidence === 'low') return 0.60;
-  return null;
-};
+// getFieldConfidence now lives in the pure helper lib (so presentational
+// components can read per-field confidence without this module's supabase
+// import). Imported above; re-exported here for existing call sites.
+export { getFieldConfidence };
 
 // Get page from extracted_json field
 export const getFieldPage = (extractedJson: Record<string, any> | null, fieldId: string): number | undefined => {

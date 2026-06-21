@@ -47,7 +47,7 @@ export function CommitmentHistory() {
         .sort(([a], [b]) => a.localeCompare(b))
         .slice(-12)
         .map(([key, commitment]) => ({
-          month: new Date(key + '-01').toLocaleDateString('en-AU', { month: 'short', year: '2-digit' }),
+          month: new Date(key + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
           commitment,
         }));
 
@@ -99,7 +99,7 @@ export function CommitmentHistory() {
               />
               <Tooltip
                 formatter={(val: number) => [
-                  `$${val.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`,
+                  `$${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
                   'Commitment',
                 ]}
                 contentStyle={{

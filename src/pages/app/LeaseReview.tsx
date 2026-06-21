@@ -2991,7 +2991,7 @@ export default function LeaseReview() {
                       tenantName={form.tenant_name}
                       leaseStart={form.lease_start}
                       leaseEnd={form.lease_end}
-                      confidenceScores={confidenceScores}
+                      extractedJson={extractedJson}
                     />
                   )}
                   {Array.isArray(extractedJson?._parent_lease_candidates) && extractedJson._parent_lease_candidates.length > 0 && (

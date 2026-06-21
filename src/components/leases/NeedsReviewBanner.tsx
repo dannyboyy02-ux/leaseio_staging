@@ -1,14 +1,22 @@
-import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertTriangle, XCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import type { ConfidenceScores } from '@/types/workflow';
+import { getFieldConfidence } from '@/lib/extractedFieldHelpers';
+import { LOW_CONFIDENCE_THRESHOLD } from '@/types/workflow';
 
 interface NeedsReviewBannerProps {
   landlordName: string | null;
   tenantName: string | null;
   leaseStart: string | null;
   leaseEnd: string | null;
-  confidenceScores?: ConfidenceScores | null;
+  /**
+   * Live per-field confidence source (the lease's `extracted_json`). This
+   * banner used to read `lease.confidence_scores`, a column the extraction
+   * pipeline never populates — so the low-confidence warning could never
+   * fire. It now reads the same `extracted_json[field].confidence` (0–1
+   * scale) that the field badges and the LeaseReview review-gate use.
+   */
+  extractedJson?: Record<string, any> | null;
   className?: string;
 }
 
@@ -19,14 +27,16 @@ const TIER1_FIELDS = [
   { key: 'lease_end', label: 'Lease End Date', dataKey: 'leaseEnd' },
 ] as const;
 
-const LOW_CONFIDENCE_THRESHOLD = 80;
+// LOW_CONFIDENCE_THRESHOLD is on the 0–100 scale; getFieldConfidence returns
+// 0–1, so compare against the fractional cutoff (matches LeaseReview's gate).
+const LOW_CONFIDENCE_CUTOFF = LOW_CONFIDENCE_THRESHOLD / 100;
 
 export function NeedsReviewBanner({
   landlordName,
   tenantName,
   leaseStart,
   leaseEnd,
-  confidenceScores,
+  extractedJson,
   className,
 }: NeedsReviewBannerProps) {
   const fieldValues: Record<string, string | null> = {
@@ -36,18 +46,19 @@ export function NeedsReviewBanner({
     leaseEnd,
   };
 
-  // Check for missing fields
+  // Missing Tier-1 fields.
   const missingFields = TIER1_FIELDS.filter(
     (field) => !fieldValues[field.dataKey]
   );
 
-  // Check for low-confidence fields
-  const lowConfidenceFields = confidenceScores
-    ? TIER1_FIELDS.filter((field) => {
-        const score = confidenceScores[field.key];
-        return score !== undefined && score < LOW_CONFIDENCE_THRESHOLD && fieldValues[field.dataKey];
-      })
-    : [];
+  // Low-confidence Tier-1 fields that DO have a value (missing ones are
+  // already surfaced above). Reads the live extracted_json confidence.
+  const lowConfidenceFields = TIER1_FIELDS.flatMap((field) => {
+    if (!fieldValues[field.dataKey]) return [];
+    const conf = getFieldConfidence(extractedJson ?? null, field.key);
+    if (conf === null || conf >= LOW_CONFIDENCE_CUTOFF) return [];
+    return [{ key: field.key, label: field.label, pct: Math.round(conf * 100) }];
+  });
 
   const hasIssues = missingFields.length > 0 || lowConfidenceFields.length > 0;
 
@@ -76,8 +87,7 @@ export function NeedsReviewBanner({
             <li key={field.key} className="flex items-center gap-2 text-sm">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
               <span>
-                <strong>{field.label}</strong> has low confidence (
-                {confidenceScores?.[field.key]}%) — please verify
+                <strong>{field.label}</strong> has low confidence ({field.pct}%) — please verify
               </span>
             </li>
           ))}

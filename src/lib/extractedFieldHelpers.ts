@@ -47,6 +47,33 @@ export function getExtractedFieldValue(field: unknown): string | null {
 }
 
 /**
+ * Returns a field's extraction confidence on a 0–1 scale, or null when the
+ * field is absent or carries no confidence. String confidences
+ * ('low' | 'medium' | 'high') map to representative numeric values.
+ *
+ * This is the single source of truth for per-field confidence — the field
+ * badges, the LeaseReview review-gate, and the NeedsReviewBanner all read
+ * it. (Lives here, in a pure module, so presentational components can use it
+ * without pulling a component-level supabase import.)
+ */
+export function getFieldConfidence(
+  // Permissive to accept both the typed ExtractedJson and loose maps that
+  // call sites pass; matches the helper's prior signature.
+  extractedJson: Record<string, any> | null,
+  fieldId: string,
+): number | null {
+  if (!extractedJson) return null;
+  const field = extractedJson[fieldId];
+  if (!field || typeof field !== 'object') return null;
+  const confidence = (field as ExtractedFieldObject).confidence;
+  if (typeof confidence === 'number') return confidence;
+  if (confidence === 'high') return 0.95;
+  if (confidence === 'medium') return 0.80;
+  if (confidence === 'low') return 0.60;
+  return null;
+}
+
+/**
  * Safely extracts the property_address from lease extracted_json.
  */
 export function getPropertyAddress(extractedJson: Record<string, unknown> | null): string | null {

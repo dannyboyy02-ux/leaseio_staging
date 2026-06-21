@@ -318,9 +318,9 @@ export default function Reports() {
                           {lease.filename || lease.tenant_name || 'Unnamed lease'}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Pipeline: ${Number(lease.monthly_payment || 0).toLocaleString('en-AU')}/mo
+                          Pipeline: ${Number(lease.monthly_payment || 0).toLocaleString('en-US')}/mo
                           &nbsp;&middot;&nbsp;
-                          Executed: ${Number(lease.executed_monthly_payment || 0).toLocaleString('en-AU')}/mo
+                          Executed: ${Number(lease.executed_monthly_payment || 0).toLocaleString('en-US')}/mo
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
