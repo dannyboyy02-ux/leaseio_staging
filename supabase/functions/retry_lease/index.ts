@@ -57,6 +57,28 @@ function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
 }
 
+// File-upload helpers (mirror process_lease) — used by the in-place
+// re-upload path when a failed lease has no stored source file.
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const PDF_MAGIC_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+
+function isPdfFile(bytes: ArrayBuffer): boolean {
+  const header = new Uint8Array(bytes.slice(0, 4));
+  return header.every((byte, index) => byte === PDF_MAGIC_BYTES[index]);
+}
+
+function sanitizeFilename(filename: string): string {
+  const sanitized = filename
+    .replace(/[\/\\]/g, '_')
+    .replace(/\.\./g, '_')
+    .replace(/[<>:"|?*\x00-\x1f]/g, '_')
+    .trim();
+  if (!sanitized || sanitized.length > 255) {
+    return `lease_${Date.now()}.pdf`;
+  }
+  return sanitized;
+}
+
 function safeDate(input: string | null | undefined): string | null {
   if (!input || typeof input !== 'string') return null;
   const trimmed = input.trim();
@@ -453,24 +475,47 @@ serve(async (req) => {
 
     console.log(`[retry_lease] User authenticated: ${user.id}`);
 
-    let body: unknown;
-    try {
-      body = await req.json();
-    } catch {
-      return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    // Accept either JSON ({ leaseId }) — the existing retry-from-stored-file
+    // path — or multipart/form-data ({ file, leaseId }) for in-place
+    // re-upload when a failed lease has no stored source file (#C1). The file
+    // (if any) is validated + stored below, after the permission checks.
+    let leaseId: unknown;
+    let uploadedFile: File | null = null;
+    const contentType = req.headers.get('content-type') || '';
 
-    if (!body || typeof body !== 'object') {
-      return new Response(JSON.stringify({ error: 'Request body must be an object' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    if (contentType.includes('multipart/form-data')) {
+      let formData: FormData;
+      try {
+        formData = await req.formData();
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid form data in request body' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const f = formData.get('file');
+      uploadedFile = f instanceof File ? f : null;
+      leaseId = formData.get('leaseId');
+    } else {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
 
-    const { leaseId } = body as { leaseId?: unknown };
+      if (!body || typeof body !== 'object') {
+        return new Response(JSON.stringify({ error: 'Request body must be an object' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      leaseId = (body as { leaseId?: unknown }).leaseId;
+    }
 
     if (!leaseId || typeof leaseId !== 'string') {
       return new Response(JSON.stringify({ error: 'leaseId must be a non-empty string' }), {
@@ -533,6 +578,26 @@ serve(async (req) => {
       });
     }
 
+    // Integrity gate: retry / re-upload only operates on FAILED leases. The
+    // reprocess below is destructive (clears risks + rent_schedules and
+    // overwrites every extracted field), and the optional source-document
+    // replacement swaps the stored PDF — neither must ever touch a confirmed
+    // or locked lease. The UI only surfaces retry for failed leases; this
+    // enforces it server-side (a permitted caller could otherwise POST against
+    // any of their leases, including a confirmed one, via the API directly).
+    if (lease.status !== 'Failed') {
+      return new Response(
+        JSON.stringify({ error: 'Only failed leases can be retried or re-uploaded.', reason: 'not_failed' }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+    if (lease.model_locked) {
+      return new Response(
+        JSON.stringify({ error: 'This lease is locked and cannot be reprocessed.', reason: 'model_locked' }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     // Cancellation lifecycle (2026-06-12): a canceled workspace is
     // read-only — retries burn paid Opus tokens just like first-pass
     // extraction, so they get the same backstop process_lease has.
@@ -569,8 +634,9 @@ serve(async (req) => {
       }
     }
 
-    if (!lease.storage_path) {
-      return new Response(JSON.stringify({ error: 'No file found for this lease' }), {
+    // No stored file AND no replacement uploaded -> nothing to process.
+    if (!lease.storage_path && !uploadedFile) {
+      return new Response(JSON.stringify({ error: 'No file found for this lease. Upload a document to retry.' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -589,6 +655,76 @@ serve(async (req) => {
       requestOrigin,
     );
     if (rateLimitResponse) return rateLimitResponse;
+
+    // #C1 — in-place re-upload: if the caller attached a replacement file,
+    // store it server-side under the lease's canonical path and point the
+    // lease at it, then fall through to the normal reprocess. Service-role
+    // write keeps the privileged storage mutation off the client; mirrors
+    // process_lease's storage convention (bucket 'leases', upsert).
+    if (uploadedFile) {
+      if (uploadedFile.size > MAX_FILE_SIZE) {
+        return new Response(JSON.stringify({ error: 'File too large. Maximum size is 50MB.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const newFileBytes = await uploadedFile.arrayBuffer();
+      if (!isPdfFile(newFileBytes)) {
+        return new Response(JSON.stringify({ error: 'Invalid file type. Only PDF files are allowed.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const sanitizedFilename = sanitizeFilename(uploadedFile.name);
+      const previousStoragePath = lease.storage_path ?? null;
+      const newStoragePath = `${lease.user_id}/${leaseId}/${sanitizedFilename}`;
+      const { error: reuploadError } = await supabaseAdmin.storage
+        .from('leases')
+        .upload(newStoragePath, newFileBytes, { contentType: 'application/pdf', upsert: true });
+      if (reuploadError) {
+        // Don't leak the raw storage/vendor error to the client.
+        console.error(`[retry_lease] Storage upload failed for ${leaseId}: ${reuploadError.message}`);
+        return new Response(JSON.stringify({ error: 'Failed to store the uploaded file.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { error: pathUpdateError } = await supabaseAdmin
+        .from('leases')
+        .update({ storage_path: newStoragePath, filename: sanitizedFilename })
+        .eq('id', leaseId);
+      if (pathUpdateError) {
+        // The file is stored but the row didn't repoint — fail rather than
+        // reprocess against an inconsistent record.
+        console.error(`[retry_lease] storage_path update failed for ${leaseId}: ${pathUpdateError.message}`);
+        return new Response(JSON.stringify({ error: 'Failed to record the uploaded file.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Attribute the source-document replacement ("every change is
+      // attributable"). Best-effort: a logging failure must not undo the
+      // already-stored file, but it IS surfaced server-side.
+      const { error: logError } = await supabaseAdmin.from('lease_activity_log').insert({
+        lease_id: leaseId,
+        workspace_id: lease.workspace_id ?? null,
+        user_id: user.id,
+        activity_type: 'source_document_replaced',
+        details: {
+          filename: sanitizedFilename,
+          storage_path: newStoragePath,
+          previous_storage_path: previousStoragePath,
+          reason: 'retry_reupload_missing_source',
+        },
+      });
+      if (logError) {
+        console.error(`[retry_lease] activity-log insert failed for ${leaseId}: ${logError.message}`);
+      }
+      // Point the in-memory record at the new file so the existing download +
+      // reprocess path below picks it up.
+      lease.storage_path = newStoragePath;
+      console.log(`[retry_lease] In-place re-upload stored at ${newStoragePath}`);
+    }
 
     // Update status to Processing
     await supabaseAdmin

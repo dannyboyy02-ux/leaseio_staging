@@ -2054,3 +2054,16 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 **Adjacent minor items surfaced in the same B1/polish review (not bundled):**
 - *Banner field-name lost `<strong>` emphasis (LOW, polish):* moving `NeedsReviewBanner`'s copy into single-`<span>` i18n strings dropped the bold on the interpolated field name (both the missing + low-confidence lines), a minor scan-ability regression. Restoring it correctly needs react-i18next `<Trans>` (a `<strong>` placeholder) — deferred because `<Trans>` is not an established pattern here and would require reworking the `useAppTranslation`-mock-based banner tests; disproportionate for a LOW.
 - *Banner field labels render English inside Spanish copy (LOW, i18n):* `TIER1_FIELDS` labels ("Landlord Name", …) are English literals interpolated into the translated `{{label}}` slot, so ES users see "Falta Landlord Name". Intentional for now — field labels are English everywhere on this surface (section cards / `SECTION_CONFIG`), so translating them banner-only would create a same-field-two-names mismatch. Fix only as part of an app-wide field-label i18n pass (TIER1_FIELDS + section config together).
+
+---
+
+### Item #124: FailedLeaseBanner partial i18n + retry_lease raw-error leak (C1 review pre-existing LOWs)
+
+> **Filed 2026-06-21** (branch `claude/affectionate-hamilton-bp58tu`, C1 in-place re-upload review). Two pre-existing LOWs surfaced by product-polish + security while reviewing C1. The C1 change made the i18n contrast more visible but did **not** introduce either (the new re-upload paths already return generic errors + are localized). Filed, not bundled.
+
+**Severity:** Low (×2).
+
+- **FailedLeaseBanner partial i18n (polish).** `src/components/leases/FailedLeaseBanner.tsx` — the new re-upload branch is fully localized (`failed_lease.*`, en+es), but the rest is hardcoded English: the title "Processing Failed", the `errorMessage` fallback, the canRetry button ("Retry Processing" / "Retrying..."), and the `handleRetry` toasts ("Re-processing started", "Failed to retry processing", "Cannot retry: original file not found in storage", "Please log in to retry"). An ES user on a failed lease that DOES have a stored file (the common retry case) sees a half-translated surface. **Fix:** migrate the remaining literals into the established `failed_lease.*` namespace as a small i18n pass.
+- **retry_lease top-level catch leaks raw error (security).** `supabase/functions/retry_lease/index.ts` — the outer `catch` returns `error.message` to the client, which can surface the Anthropic/Azure vendor error string or the internal "Failed to download file" message. Pre-existing; C1's own new failure paths already return generic copy + `console.error` the detail. **Fix:** apply the same generic-to-client + log-server pattern to the top-level catch (and audit `process_lease`'s outer catch for the same habit).
+
+**Where to look:** `src/components/leases/FailedLeaseBanner.tsx`; `src/locales/{en,es}/common.json` (`failed_lease`); `supabase/functions/retry_lease/index.ts` (top-level catch).

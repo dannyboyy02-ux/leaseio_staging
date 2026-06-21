@@ -1862,6 +1862,15 @@
     "missing": "{{label}} is missing",
     "low_confidence": "Double-check {{label}} — we were less certain here ({{pct}}%)"
   },
+  "failed_lease": {
+    "reupload_button": "Upload New Document",
+    "uploading": "Uploading…",
+    "reupload_hint": "The original file isn't available to retry — upload a fresh copy to try again. PDF only · Max 50 MB.",
+    "reupload_not_pdf": "Please choose a PDF file.",
+    "reupload_too_large": "That file is over the 50 MB limit. Please choose a smaller PDF.",
+    "reupload_started": "Re-processing started",
+    "reupload_failed": "Couldn't upload the document. Please try again."
+  },
   "vault": {
     "banner_text": "Vault — read-only repository. Renews {{date}} at ${{price}}/yr.",
     "banner_text_nodate": "Vault — read-only repository. Renews annually at ${{price}}/yr.",

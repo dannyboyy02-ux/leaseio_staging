@@ -2981,7 +2981,7 @@ export default function LeaseReview() {
                       leaseId={lease.id}
                       errorMessage={lease.error_message}
                       storagePath={lease.storage_path}
-                      onRetrySuccess={() => window.location.reload()}
+                      onRetrySuccess={refetchLease}
                       readOnly={isReadOnly}
                     />
                   )}

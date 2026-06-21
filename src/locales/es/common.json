@@ -1862,6 +1862,15 @@
     "missing": "Falta {{label}}",
     "low_confidence": "Verifique {{label}}: la extracción fue menos precisa aquí ({{pct}}%)"
   },
+  "failed_lease": {
+    "reupload_button": "Subir documento nuevo",
+    "uploading": "Subiendo…",
+    "reupload_hint": "El archivo original no está disponible para reintentar; suba una copia nueva para volver a intentarlo. Solo PDF · Máx. 50 MB.",
+    "reupload_not_pdf": "Elija un archivo PDF.",
+    "reupload_too_large": "Ese archivo supera el límite de 50 MB. Elija un PDF más pequeño.",
+    "reupload_started": "Reprocesamiento iniciado",
+    "reupload_failed": "No se pudo subir el documento. Inténtelo de nuevo."
+  },
   "vault": {
     "banner_text": "Vault — repositorio de solo lectura. Se renueva el {{date}} por ${{price}}/año.",
     "banner_text_nodate": "Vault — repositorio de solo lectura. Se renueva anualmente por ${{price}}/año.",
