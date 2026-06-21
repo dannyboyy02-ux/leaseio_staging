@@ -53,6 +53,17 @@ describe('formatLocalizedCurrency', () => {
     expect(out).toContain('1,234.50');
   });
 
+  it('abbreviates with { compact: true } for chart axes', () => {
+    expect(formatLocalizedCurrency(1234, 'en', { compact: true })).toBe('$1.2K');
+    expect(formatLocalizedCurrency(3400000, 'en', { compact: true })).toBe('$3.4M');
+  });
+
+  it('honors a { currency } override (defaults to USD)', () => {
+    const eur = formatLocalizedCurrency(1234, 'en', { currency: 'EUR' });
+    expect(eur).toContain('€');
+    expect(eur).not.toContain('$');
+  });
+
   it('is locale-aware (es renders differently from a hardcoded en-US copy)', () => {
     // The bug this sweep fixes: components hardcoded en-US, so Spanish users
     // saw en formatting. The canonical helper must actually localize.

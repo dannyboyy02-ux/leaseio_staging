@@ -114,7 +114,10 @@ export function formatLocalizedDateTime(
  *
  * Whole-dollars by default ($1,234) — the dominant convention across the app.
  * Pass `{ cents: true }` for line-item surfaces (rent schedules, variance
- * tables) that need $1,234.56. USD-only product, so currency is fixed.
+ * tables) that need $1,234.56. Pass `{ compact: true }` for chart axes/labels
+ * that want abbreviated values ($1.2K, $3.4M). USD by default (USD-only
+ * product), but `{ currency }` overrides it for the rare parameterized case
+ * (e.g. Stripe invoice currency).
  *
  * This is the single canonical currency formatter — components must not roll
  * their own `Intl.NumberFormat` (doing so silently drops locale awareness,
@@ -123,15 +126,27 @@ export function formatLocalizedDateTime(
 export function formatLocalizedCurrency(
   amount: number | null | undefined,
   language: SupportedLocale,
-  options?: { cents?: boolean }
+  options?: { cents?: boolean; compact?: boolean; currency?: string }
 ): string {
   if (amount === null || amount === undefined) return '—';
 
   const locale = LOCALE_MAP[language];
+  const currency = options?.currency ?? 'USD';
+
+  if (options?.compact) {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      notation: 'compact',
+      compactDisplay: 'short',
+      maximumFractionDigits: 1,
+    }).format(amount);
+  }
+
   const fractionDigits = options?.cents ? 2 : 0;
   return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'USD',
+    currency,
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(amount);
