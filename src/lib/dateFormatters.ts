@@ -119,6 +119,10 @@ export function formatLocalizedDateTime(
  * product), but `{ currency }` overrides it for the rare parameterized case
  * (e.g. Stripe invoice currency).
  *
+ * `currencyDisplay: 'narrowSymbol'` keeps it as "$1,234" for es users too (a
+ * USD-only product shouldn't show the verbose "USD 1,234" code form es-419
+ * defaults to); it's a no-op for en. Product decision 2026-06-21.
+ *
  * This is the single canonical currency formatter — components must not roll
  * their own `Intl.NumberFormat` (doing so silently drops locale awareness,
  * which is how Spanish users ended up seeing en-US-formatted money).
@@ -137,6 +141,7 @@ export function formatLocalizedCurrency(
     return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency,
+      currencyDisplay: 'narrowSymbol',
       notation: 'compact',
       compactDisplay: 'short',
       maximumFractionDigits: 1,
@@ -147,6 +152,7 @@ export function formatLocalizedCurrency(
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
+    currencyDisplay: 'narrowSymbol',
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(amount);

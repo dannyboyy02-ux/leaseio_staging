@@ -64,16 +64,26 @@ describe('formatLocalizedCurrency', () => {
     expect(eur).not.toContain('$');
   });
 
-  it('is locale-aware (es renders differently from a hardcoded en-US copy)', () => {
-    // The bug this sweep fixes: components hardcoded en-US, so Spanish users
-    // saw en formatting. The canonical helper must actually localize.
+  it('passes the locale through and keeps the digits intact in both locales', () => {
+    // The helper must localize (pass the locale to Intl) — the bug this sweep
+    // fixes was components hardcoding en-US. For USD specifically, es-419 groups
+    // with commas like en-US, and narrowSymbol normalizes the symbol to "$", so
+    // the two happen to render identically here — that's expected, not a bug.
+    // (The visible locale difference lives in dates; see formatLocalizedDate.)
     const en = formatLocalizedCurrency(1234567, 'en');
     const es = formatLocalizedCurrency(1234567, 'es');
-    expect(en).toContain('1,234,567');
-    // es-419 groups differently (e.g. 1.234.567); just assert it's not the
-    // identical en string and still contains the digits.
-    expect(es).not.toBe(en);
+    expect(en).toContain('$1,234,567');
+    expect(es).toContain('$');
     expect(es.replace(/[^0-9]/g, '')).toBe('1234567');
+  });
+
+  it('renders USD with the $ symbol for es users (narrowSymbol), not "USD"', () => {
+    // Product decision (2026-06-21): USD-only product, so es should show "$"
+    // (locale-aware grouping) rather than the verbose "USD 5,000" code form.
+    const es = formatLocalizedCurrency(5000, 'es');
+    expect(es).toContain('$');
+    expect(es).not.toContain('USD');
+    expect(formatLocalizedCurrency(1200000, 'es', { compact: true })).toContain('$');
   });
 });
 
