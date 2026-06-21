@@ -5,6 +5,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -19,16 +21,10 @@ interface LeaseRow {
   monthly_payment: number | null;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 export function IntakeTrend() {
+  const { language } = useLanguage();
   const { workspace } = useApp();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const navigate = useNavigate();
   const [data, setData] = useState<MonthPoint[]>([]);
   const [loading, setLoading] = useState(true);

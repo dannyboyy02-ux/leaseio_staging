@@ -2,16 +2,11 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Shield } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
 import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
-
-const formatCurrency = (value: number): string =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
 
 interface Risk {
   leaseId: string;
@@ -34,7 +29,9 @@ const CHIP_LABELS: Record<FilterType, string> = {
 };
 
 export function UpcomingRisks() {
+  const { language } = useLanguage();
   const { workspace } = useApp();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');

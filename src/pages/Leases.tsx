@@ -31,6 +31,7 @@ import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { isReadOnlyRetention } from '@/config/pricing';
@@ -81,18 +82,10 @@ const IN_FLIGHT_STATUSES = new Set([
   'final_review', 'pending_counter_signature',
 ]);
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 export default function Leases() {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const { workspace, user, userRole, refreshProfile } = useApp();
   // Vault (read-only retention): hide intake entry points (server also blocks).
   const isReadOnly = isReadOnlyRetention(workspace?.plan);

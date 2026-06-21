@@ -9,22 +9,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { isReadOnlyRetention } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { computePortfolioMetrics } from '@/lib/portfolioAnalytics';
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 export default function Portfolio() {
+  const { language } = useLanguage();
   const { workspace, canAccessFeature } = useApp();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   // KNOWN_ISSUES #46: Portfolio Intelligence is a Business-tier feature per the
   // pricing model. Gate the page (matching the Reports / AI Assistant pattern)
   // and skip the data fetch entirely for Starter workspaces. The AppSidebar nav

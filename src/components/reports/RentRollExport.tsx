@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { canExportReports } from '@/lib/authorization';
@@ -26,7 +27,7 @@ interface LeaseData {
 
 export function RentRollExport() {
   const [isExporting, setIsExporting] = useState(false);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { userRole, workspace } = useApp();
   const canExport = canExportReports(userRole);
 
@@ -34,11 +35,7 @@ export function RentRollExport() {
     if (!amount) return '';
     const num = typeof amount === 'string' ? parseFloat(amount.replace(/[^0-9.-]/g, '')) : amount;
     if (isNaN(num)) return '';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(num);
+    return formatLocalizedCurrency(num, language, { cents: true });
   };
 
   const formatDate = (dateStr: string | null): string => {

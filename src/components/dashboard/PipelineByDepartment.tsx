@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building2, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,14 +33,6 @@ const IN_PROGRESS_STATUSES = [
   'concept_submitted', 'concept_under_review', 'in_negotiation',
   'final_review', 'pending_counter_signature', 'fully_executed',
 ];
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 function buildDeptSummaries(leases: LeaseRow[], days: number): DeptSummary[] {
   const cutoff = new Date();
@@ -71,7 +65,9 @@ function buildDeptSummaries(leases: LeaseRow[], days: number): DeptSummary[] {
 }
 
 export function PipelineByDepartment() {
+  const { language } = useLanguage();
   const { workspace } = useApp();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const navigate = useNavigate();
   const [rawData, setRawData] = useState<LeaseRow[]>([]);
   const [days, setDays] = useState<30 | 60 | 90>(30);

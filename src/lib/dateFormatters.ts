@@ -110,22 +110,48 @@ export function formatLocalizedDateTime(
 }
 
 /**
- * Format currency with locale
+ * Format currency with locale.
+ *
+ * Whole-dollars by default ($1,234) — the dominant convention across the app.
+ * Pass `{ cents: true }` for line-item surfaces (rent schedules, variance
+ * tables) that need $1,234.56. USD-only product, so currency is fixed.
+ *
+ * This is the single canonical currency formatter — components must not roll
+ * their own `Intl.NumberFormat` (doing so silently drops locale awareness,
+ * which is how Spanish users ended up seeing en-US-formatted money).
  */
 export function formatLocalizedCurrency(
   amount: number | null | undefined,
   language: SupportedLocale,
-  currency: string = 'USD'
+  options?: { cents?: boolean }
 ): string {
   if (amount === null || amount === undefined) return '—';
-  
+
   const locale = LOCALE_MAP[language];
+  const fractionDigits = options?.cents ? 2 : 0;
   return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    currency: 'USD',
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(amount);
+}
+
+/**
+ * Format a percentage with locale (value is a 0–100 percent, not a 0–1 ratio).
+ */
+export function formatLocalizedPercent(
+  value: number | null | undefined,
+  language: SupportedLocale,
+  decimals: number = 1
+): string {
+  if (value === null || value === undefined) return '—';
+
+  const locale = LOCALE_MAP[language];
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  }).format(value) + '%';
 }
 
 /**
@@ -136,7 +162,7 @@ export function formatLocalizedNumber(
   language: SupportedLocale
 ): string {
   if (num === null || num === undefined) return '—';
-  
+
   const locale = LOCALE_MAP[language];
   return new Intl.NumberFormat(locale).format(num);
 }

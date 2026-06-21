@@ -10,6 +10,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { differenceInDays, format } from 'date-fns';
+import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
@@ -27,12 +28,7 @@ interface UpcomingEvent {
 }
 
 function formatCurrency(amount: number, language: string): string {
-  return new Intl.NumberFormat(language === 'es' ? 'es-MX' : 'en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return formatLocalizedCurrency(amount, language as SupportedLocale);
 }
 
 const DOT_COLORS: Record<string, string> = {
