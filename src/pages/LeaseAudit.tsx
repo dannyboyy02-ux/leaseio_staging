@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate, type SupportedLocale } from '@/lib/dateFormatters';
 
 const MAX_DOCS = 5;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -50,9 +52,9 @@ function fmt(n: number): string {
   }).format(n);
 }
 
-function fmtDate(d: string | null): string {
+function fmtDate(d: string | null, language: SupportedLocale): string {
   if (!d) return '—';
-  try { return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+  try { return formatLocalizedDate(d, language, { year: 'numeric', month: 'short', day: 'numeric' }); }
   catch { return d; }
 }
 
@@ -524,6 +526,7 @@ function ResultsStep({
 }
 
 function LeaseCard({ lease }: { lease: ExtractedLease }) {
+  const { language } = useLanguage();
   const highRisks   = lease.risks.filter((r) => r.severity === 'high').length;
   const mediumRisks = lease.risks.filter((r) => r.severity === 'medium').length;
 
@@ -564,7 +567,7 @@ function LeaseCard({ lease }: { lease: ExtractedLease }) {
           </div>
           <div>
             <p className="text-muted-foreground">Start → End</p>
-            <p className="font-medium">{fmtDate(lease.lease_start)} → {fmtDate(lease.lease_end)}</p>
+            <p className="font-medium">{fmtDate(lease.lease_start, language)} → {fmtDate(lease.lease_end, language)}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Monthly Rent</p>

@@ -5,7 +5,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { useNavigate } from 'react-router-dom';
@@ -51,7 +51,7 @@ export function IntakeTrend() {
       for (let i = 5; i >= 0; i--) {
         const d = new Date();
         d.setMonth(d.getMonth() - i);
-        const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+        const label = formatLocalizedDate(d, language, { month: 'short', year: '2-digit' });
         const monthLeases = rows.filter((l) => {
           if (!l.uploaded_at) return false;
           const ld = new Date(l.uploaded_at);

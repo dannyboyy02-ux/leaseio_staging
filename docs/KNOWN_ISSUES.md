@@ -2069,3 +2069,17 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 - **retry_lease top-level catch leaks raw error (security).** `supabase/functions/retry_lease/index.ts` — the outer `catch` returns `error.message` to the client, which can surface the Anthropic/Azure vendor error string or the internal "Failed to download file" message. Pre-existing; C1's own new failure paths already return generic copy + `console.error` the detail. **Fix:** apply the same generic-to-client + log-server pattern to the top-level catch (and audit `process_lease`'s outer catch for the same habit).
 
 **Where to look:** `src/components/leases/FailedLeaseBanner.tsx`; `src/locales/{en,es}/common.json` (`failed_lease`); `supabase/functions/retry_lease/index.ts` (top-level catch).
+
+---
+
+### Item #125: Formatting-sweep leftovers — LeaseReview parent-rent currency + deferred date tail
+
+> **Filed 2026-06-21** (branch `claude/affectionate-hamilton-bp58tu`, formatting-consistency sweep). Surfaced by product-polish while reviewing the currency/date migration. Filed, not bundled — each needs a small targeted decision the sweep deliberately scoped out.
+
+**Severity:** Low (×3).
+
+- **`src/pages/app/LeaseReview.tsx:3153` — un-migrated parent-lease rent currency (same-screen inconsistency).** `${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount || 'N/A'}` was left as-is by the currency sweep because its `||` fallback chain relies on `?.toLocaleString()` returning `undefined`; the canonical helper's truthy `'—'` sentinel would break the `|| base_rent_amount` fallback. After the sweep, the migrated metric cards on the same screen render `-$1,234` / `USD 1,234` (es) while this sibling still shows `$1,234` (browser-locale, no es). Polish flagged the side-by-side dialect mismatch. **Secondary bug:** the `||` chain mixes a formatted string, a raw `base_rent_amount` (string of uncertain format), and the literal `'N/A'`. **Fix:** `parentLease.current_monthly_rent != null ? formatLocalizedCurrency(parentLease.current_monthly_rent, language) : (parentLease.base_rent_amount ? '$' + parentLease.base_rent_amount : 'N/A')` — but first confirm `base_rent_amount`'s stored format (it may already include `$`/grouping).
+- **Deferred date tail — bare `.toLocaleString()` admin/internal timestamps.** `OperationsPage.tsx:248,343`, `PortfolioReportsAdmin.tsx:271`, `DisclosureReportLibrary.tsx:238`, `LeaseReportDetail.tsx:127,317`, `Asc842InputsTab.tsx:660`, `LeaseDiscountRateCard.tsx:299` render "generated/last-updated" timestamps via bare `new Date(x).toLocaleString()` (follows browser locale). Migrating to `formatLocalizedDateTime(x, language)` would localize them but also CHANGE the format (short month, no seconds), so it needs a quick design nod. Low value (admin/internal surfaces). **Fix:** migrate to `formatLocalizedDateTime` if a format change is acceptable.
+- **Deferred date tail — already-correct DRY collapses.** `VaultBanner.tsx:32`, `CancellationBanner.tsx:79`, `AccountSettings.tsx` (×4), `DocumentPackDialog.tsx:116` already localize correctly via an inline `language === 'es' ? 'es-419' : 'en-US'` ternary. They're not buggy — just a second date-formatting pattern alongside the canonical `formatLocalizedDate`. **Fix:** optional DRY collapse onto the helper (watch the `parseToLocalDate` off-by-one semantics for any date-only inputs).
+
+**Where to look:** `src/pages/app/LeaseReview.tsx:3153`; the timestamp + DRY files listed above; canonical helpers in `src/lib/dateFormatters.ts`.

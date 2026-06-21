@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Inbox, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate, type SupportedLocale } from '@/lib/dateFormatters';
 import { useNavigate } from 'react-router-dom';
 
 interface ActivityRow {
@@ -88,7 +90,7 @@ function getDotColor(lifecycleStatus: string | null): string {
   }
 }
 
-function getRelativeDate(dateStr: string): string {
+function getRelativeDate(dateStr: string, language: SupportedLocale): string {
   const date = new Date(dateStr);
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -100,11 +102,12 @@ function getRelativeDate(dateStr: string): string {
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 30) return `${diffDays} days ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatLocalizedDate(date, language, { month: 'short', day: 'numeric' });
 }
 
 export function RecentActivity() {
   const { workspace } = useApp();
+  const { language } = useLanguage();
   const navigate = useNavigate();
   const [activityData, setActivityData] = useState<ActivityRow[]>([]);
   const [extractionData, setExtractionData] = useState<ExtractionRow[]>([]);
@@ -175,7 +178,7 @@ export function RecentActivity() {
                   const title = lease.request_title ?? lease.filename ?? 'Untitled';
                   const label = getActivityLabel(item.activity_type, lease.lifecycle_status);
                   const dotColor = getDotColor(lease.lifecycle_status);
-                  const relDate = getRelativeDate(item.created_at);
+                  const relDate = getRelativeDate(item.created_at, language);
 
                   return (
                     <div key={item.id} className="flex items-center gap-3 py-2 border-b last:border-0">

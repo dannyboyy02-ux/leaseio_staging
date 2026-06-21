@@ -14,6 +14,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 
 type Policy = {
   id: string;
@@ -36,9 +38,6 @@ const fmtMoney = (n: number | null): string =>
     ? '—'
     : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 
-const fmtDate = (iso: string): string =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
 const matchSummary = (p: Policy): { label: string; value: string }[] => {
   const out: { label: string; value: string }[] = [];
   if (p.match_asset_types.length) out.push({ label: 'Asset', value: p.match_asset_types.join(', ') });
@@ -60,7 +59,10 @@ export default function ApprovalPoliciesListPage() {
   const { workspace } = useApp();
   const navigate = useNavigate();
   const { t } = useAppTranslation();
+  const { language } = useLanguage();
   const queryClient = useQueryClient();
+  const fmtDate = (iso: string): string =>
+    formatLocalizedDate(iso, language, { month: 'short', day: 'numeric', year: 'numeric' });
   const [testOpen, setTestOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
