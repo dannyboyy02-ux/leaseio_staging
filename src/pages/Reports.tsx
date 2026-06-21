@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
 import { isReadOnlyRetention } from '@/config/pricing';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedPercent } from '@/lib/dateFormatters';
 import { Link } from 'react-router-dom';
 import { RentRollExport } from '@/components/reports/RentRollExport';
 import { ReportSettingsCard } from '@/components/workspace/ReportSettingsCard';
@@ -318,7 +318,7 @@ export default function Reports() {
                       <div className="flex items-center gap-2 shrink-0">
                         {pct !== null && (
                           <Badge variant={pct >= 10 ? 'destructive' : 'warning'} className="text-[10px]">
-                            {pct.toFixed(1)}% variance
+                            {formatLocalizedPercent(pct, language, 1, 1)} variance
                           </Badge>
                         )}
                         <Button variant="ghost" size="sm" asChild>

@@ -4,7 +4,7 @@
  * Pure module: no DB reads, no side effects.
  */
 import type { Database } from '@/integrations/supabase/types';
-import { calculateLease } from './leaseCalculations';
+import { calculateLease, getBaseMonthlyRent } from './leaseCalculations';
 
 type LeaseRecord = Database['public']['Tables']['leases']['Row'];
 
@@ -31,15 +31,6 @@ interface PortfolioOptions {
   discountRate: number | null | undefined;
 }
 
-function getMonthlyRent(lease: LeaseRow): number {
-  return (
-    Number(lease.executed_monthly_payment) ||
-    Number(lease.current_monthly_rent) ||
-    Number(lease.monthly_payment) ||
-    0
-  );
-}
-
 function getTermMonths(lease: LeaseRow): number {
   if (typeof lease.term_months === 'number' && lease.term_months > 0) {
     return lease.term_months;
@@ -63,7 +54,11 @@ function calcLeasePV(
   discountRate: number,
   escalationRateOverride?: number,
 ): { value: number; excluded: boolean } {
-  const monthly = getMonthlyRent(lease);
+  // Base rent only — calculateLease projects escalation forward from here, so
+  // starting off the current (already-escalated) schedule step would
+  // double-count. getBaseMonthlyRent ignores rent_schedules even if a caller's
+  // row carries them (e.g. FinancialSummary passes schedule-bearing rows).
+  const monthly = getBaseMonthlyRent(lease);
   if (!monthly) return { value: 0, excluded: false };
 
   const termMonths = getTermMonths(lease);

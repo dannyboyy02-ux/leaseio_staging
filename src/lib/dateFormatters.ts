@@ -160,18 +160,24 @@ export function formatLocalizedCurrency(
 
 /**
  * Format a percentage with locale (value is a 0–100 percent, not a 0–1 ratio).
+ *
+ * `decimals` is the MAX fractional digits; by default trailing zeros are
+ * trimmed (`minDecimals = 0`, so 5 → "5%", 5.5 → "5.5%"). Pass `minDecimals`
+ * to pin a fixed precision — e.g. `(12, language, 1, 1)` → "12.0%" so a list of
+ * variance figures all read at one decimal instead of a ragged 0/1-decimal mix.
  */
 export function formatLocalizedPercent(
   value: number | null | undefined,
   language: SupportedLocale,
-  decimals: number = 1
+  decimals: number = 1,
+  minDecimals: number = 0
 ): string {
   if (value === null || value === undefined) return '—';
 
   const locale = LOCALE_MAP[language];
   return new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: decimals,
+    minimumFractionDigits: minDecimals,
+    maximumFractionDigits: Math.max(decimals, minDecimals),
   }).format(value) + '%';
 }
 

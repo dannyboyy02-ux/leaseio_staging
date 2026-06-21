@@ -24,7 +24,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { calculateLease } from '@/lib/leaseCalculations';
+import { calculateLease, getBaseMonthlyRent } from '@/lib/leaseCalculations';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 async function recomputeWorkspaceLeaseFinancials(workspaceId: string, discountRate: number) {
@@ -38,11 +38,9 @@ async function recomputeWorkspaceLeaseFinancials(workspaceId: string, discountRa
   if (error) throw error;
 
   const updates = (leases || []).map((lease) => {
-    const monthlyPayment =
-      Number((lease as any).executed_monthly_payment) ||
-      Number((lease as any).current_monthly_rent) ||
-      Number((lease as any).monthly_payment) ||
-      0;
+    // PV base rent — calculateLease projects escalation below, so this must be
+    // the base (static chain), never a current escalated schedule step.
+    const monthlyPayment = getBaseMonthlyRent(lease as any);
 
     const termMonths = Number((lease as any).term_months) || 0;
     const startDate = (lease as any).lease_start;

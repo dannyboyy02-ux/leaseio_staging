@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { computePortfolioMetrics } from '@/lib/portfolioAnalytics';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 export default function Portfolio() {
   const { language } = useLanguage();
@@ -55,22 +56,14 @@ export default function Portfolio() {
       const portfolio = computePortfolioMetrics(activeLeases as any[], { discountRate });
 
       const annualObligation = activeLeases.reduce((sum, lease) => {
-        const monthly =
-          Number((lease as any).executed_monthly_payment) ||
-          Number((lease as any).current_monthly_rent) ||
-          Number((lease as any).monthly_payment) ||
-          0;
+        const monthly = getMonthlyRent(lease as any);
         return sum + monthly * 12;
       }, 0);
 
       const assetBreakdown = Object.values(
         activeLeases.reduce((acc, lease) => {
           const key = lease.asset_type || 'unclassified';
-          const monthly =
-            Number((lease as any).executed_monthly_payment) ||
-            Number((lease as any).current_monthly_rent) ||
-            Number((lease as any).monthly_payment) ||
-            0;
+          const monthly = getMonthlyRent(lease as any);
 
           acc[key] = acc[key] || { label: key, count: 0, annualObligation: 0 };
           acc[key].count += 1;
@@ -297,11 +290,7 @@ export default function Portfolio() {
               <CardContent className="p-0">
                 <div className="divide-y divide-border">
                   {(data.leases as any[]).map((lease) => {
-                    const monthly =
-                      Number(lease.executed_monthly_payment) ||
-                      Number(lease.current_monthly_rent) ||
-                      Number(lease.monthly_payment) ||
-                      0;
+                    const monthly = getMonthlyRent(lease);
                     const displayName =
                       lease.request_title ||
                       lease.property_address ||

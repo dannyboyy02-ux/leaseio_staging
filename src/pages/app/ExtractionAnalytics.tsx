@@ -41,6 +41,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
 import { useApp } from "@/contexts/AppContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { formatLocalizedPercent } from "@/lib/dateFormatters";
 
 interface StatsData {
   totalLeases: number;
@@ -71,6 +73,7 @@ interface RecentCorrection {
 
 export default function ExtractionAnalytics() {
   const { t } = useAppTranslation();
+  const { language } = useLanguage();
   const navigate = useNavigate();
   const { workspace } = useApp();
   const [loading, setLoading] = useState(true);
@@ -264,7 +267,7 @@ export default function ExtractionAnalytics() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {(stats.avgConfidence * 100).toFixed(1)}%
+                    {formatLocalizedPercent(stats.avgConfidence * 100, language, 1, 1)}
                   </div>
                   <Badge
                     variant={stats.avgConfidence >= 0.9 ? "default" : stats.avgConfidence >= 0.7 ? "secondary" : "destructive"}

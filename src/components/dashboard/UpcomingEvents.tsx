@@ -14,7 +14,7 @@ import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatt
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
-import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 interface UpcomingEvent {
   id: string;
@@ -124,12 +124,7 @@ export function UpcomingEvents() {
           lease.filename,
         );
 
-        const monthlyRent = getCurrentMonthlyRent(
-          (lease as any).rent_schedules,
-          (lease as any).executed_monthly_payment,
-          lease.current_monthly_rent,
-          (lease as any).monthly_payment,
-        );
+        const monthlyRent = getMonthlyRent(lease as any);
 
         // Prefer executed_expiry_date, fall back to lease_end
         const expiryRaw = (lease as any).executed_expiry_date || lease.lease_end;

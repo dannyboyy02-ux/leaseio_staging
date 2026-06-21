@@ -132,3 +132,65 @@ export function getCurrentMonthlyRent(
     0
   );
 }
+
+/**
+ * Lease-shaped subset needed to resolve the current monthly rent. Every field
+ * is optional so any partial lease row (or an `any`-typed query result) can be
+ * passed without ceremony.
+ */
+export interface MonthlyRentSource {
+  rent_schedules?: RentSchedulePeriod[] | null;
+  executed_monthly_payment?: number | null;
+  current_monthly_rent?: number | null;
+  monthly_payment?: number | null;
+}
+
+/**
+ * Canonical "what is this lease's current monthly rent?" resolver — the single
+ * source of truth for the priority chain, so the dashboard, portfolio, and
+ * Leases-list totals can never silently drift apart (audit finding B3). Prefer
+ * this object form over calling getCurrentMonthlyRent with four positional
+ * args (which is easy to call with mismatched fields from two objects).
+ *
+ * Consults rent_schedules for the period covering today first (so escalating
+ * leases reflect their *current* step), then falls back to the static fields:
+ * executed → current → base monthly_payment → 0.
+ *
+ * IMPORTANT: schedule-awareness only engages when rent_schedules is actually
+ * loaded onto the row. Display/obligation callers that load rent_schedules get
+ * the current escalated step; callers that intentionally want the *base* rent
+ * (PV modeling, where escalation is projected separately — portfolioAnalytics,
+ * DiscountRateCard) simply don't select rent_schedules and so resolve the
+ * static chain. If a PV caller ever starts loading rent_schedules, revisit
+ * whether PV should compound off the current step (KNOWN_ISSUES — B3 follow-up).
+ */
+export function getMonthlyRent(lease: MonthlyRentSource): number {
+  return getCurrentMonthlyRent(
+    lease.rent_schedules ?? null,
+    lease.executed_monthly_payment,
+    lease.current_monthly_rent,
+    lease.monthly_payment,
+  );
+}
+
+/**
+ * The lease's *base* monthly rent — the static chain only
+ * (executed → current → base monthly_payment → 0), DELIBERATELY ignoring
+ * rent_schedules even when present.
+ *
+ * Use this (not getMonthlyRent) for PV / escalation modeling, where
+ * calculateLease projects escalation forward from the base: starting that
+ * projection off an already-escalated current schedule step would double-count
+ * the escalation. This is an EXPLICIT resolver rather than relying on a caller's
+ * query happening not to select rent_schedules — that implicit coupling is a
+ * trap (the row often carries rent_schedules at runtime even when the caller's
+ * TypeScript Pick omits it).
+ */
+export function getBaseMonthlyRent(lease: MonthlyRentSource): number {
+  return getCurrentMonthlyRent(
+    null,
+    lease.executed_monthly_payment,
+    lease.current_monthly_rent,
+    lease.monthly_payment,
+  );
+}

@@ -113,6 +113,16 @@ describe('formatLocalizedPercent', () => {
   it('respects the decimals cap', () => {
     expect(formatLocalizedPercent(5.456, 'en', 2)).toBe('5.46%');
   });
+
+  it('minDecimals pins a fixed precision (no trailing-zero trim)', () => {
+    // Variance lists want a stable one-decimal read instead of a ragged
+    // 12% / 12.3% mix, so they pass minDecimals = 1.
+    expect(formatLocalizedPercent(12, 'en', 1, 1)).toBe('12.0%');
+    expect(formatLocalizedPercent(12.3, 'en', 1, 1)).toBe('12.3%');
+    // es-419 (Latin American Spanish) uses a PERIOD decimal separator, same as
+    // en-US — so percentages render identically. (Only es-ES would show "12,3%".)
+    expect(formatLocalizedPercent(12.3, 'es', 1, 1)).toBe('12.3%');
+  });
 });
 
 describe('formatLocalizedDate', () => {

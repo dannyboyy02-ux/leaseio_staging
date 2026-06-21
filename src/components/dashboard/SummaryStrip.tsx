@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
-import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 interface StatBox {
   label: string;
@@ -73,13 +73,13 @@ export function SummaryStrip() {
           l.lifecycle_status === 'fully_executed'
       );
       const monthlyRentSum = portfolioLeases.reduce(
-        (sum, l) => sum + getCurrentMonthlyRent((l as any).rent_schedules, l.executed_monthly_payment, l.current_monthly_rent, l.monthly_payment),
+        (sum, l) => sum + getMonthlyRent(l as any),
         0
       );
 
       const leasesWithSqft = portfolioLeases.filter((l) => Number(l.square_footage ?? 0) > 0);
       const totalMonthlyRent = leasesWithSqft.reduce(
-        (sum, l) => sum + getCurrentMonthlyRent((l as any).rent_schedules, l.executed_monthly_payment, l.current_monthly_rent, l.monthly_payment),
+        (sum, l) => sum + getMonthlyRent(l as any),
         0
       );
       const totalSqft = leasesWithSqft.reduce((sum, l) => sum + Number(l.square_footage ?? 0), 0);

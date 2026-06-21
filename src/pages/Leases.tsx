@@ -32,6 +32,7 @@ import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { isReadOnlyRetention } from '@/config/pricing';
@@ -273,24 +274,6 @@ export default function Leases() {
   const getPropertyAddress = (lease: LeaseRow): string => {
     const json = lease.extracted_json as Record<string, unknown> | null;
     return lease.request_title || getExtractedFieldValue(json?.address) || lease.filename || '';
-  };
-
-  const getMonthlyRent = (lease: LeaseRow): number => {
-    if (lease.rent_schedules && lease.rent_schedules.length > 0) {
-      const today = new Date();
-      const currentPeriod = lease.rent_schedules.find((p) => {
-        const start = new Date(p.period_start);
-        const end = p.period_end ? new Date(p.period_end) : null;
-        return start <= today && (!end || end >= today);
-      });
-      if (currentPeriod?.monthly_amount) return currentPeriod.monthly_amount;
-    }
-    return (
-      Number(lease.executed_monthly_payment) ||
-      Number(lease.current_monthly_rent) ||
-      Number(lease.monthly_payment) ||
-      0
-    );
   };
 
   const getLeaseEnd = (lease: LeaseRow): string | null =>

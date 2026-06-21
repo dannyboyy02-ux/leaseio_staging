@@ -347,4 +347,50 @@ describe('Additional audit regressions', () => {
 
     expect(result.pvLiability).toBeCloseTo(11688.17, 2);
   });
+
+  it('PV uses the base rent, never an escalated rent_schedules step (B3 regression)', () => {
+    // A row that physically carries a CURRENT escalated schedule step (5500)
+    // while its base current_monthly_rent is 5000. calcLeasePV must compound
+    // escalation off the 5000 base via calculateLease — starting from 5500 would
+    // double-count escalation. (FinancialSummary passes schedule-bearing rows
+    // into computePortfolioMetrics, so the LeaseRow Pick type is not a guard.)
+    const now = Date.now();
+    const day = 86_400_000;
+    const leaseWithStep = {
+      escalation_type: 'percent',
+      current_monthly_rent: 5000,
+      term_months: 24,
+      lease_start: '2026-01-01',
+      escalation_rate: 3,
+      lease_end: null,
+      monthly_payment: null,
+      executed_monthly_payment: null,
+      rent_schedules: [
+        {
+          period_start: new Date(now - 30 * day).toISOString().slice(0, 10),
+          period_end: new Date(now + 30 * day).toISOString().slice(0, 10),
+          monthly_amount: 5500,
+        },
+      ],
+    } as unknown as LeaseRow;
+
+    const result = computePortfolioMetrics([leaseWithStep], { discountRate: 5 });
+    const basePV = calculateLease({
+      monthlyPayment: 5000,
+      termMonths: 24,
+      startDate: '2026-01-01',
+      escalationRate: 3,
+      discountRate: 5,
+    }).pvLiability;
+    const stepPV = calculateLease({
+      monthlyPayment: 5500,
+      termMonths: 24,
+      startDate: '2026-01-01',
+      escalationRate: 3,
+      discountRate: 5,
+    }).pvLiability;
+
+    expect(result.totalPVLiability).toBeCloseTo(basePV, 0);
+    expect(result.totalPVLiability).not.toBeCloseTo(stepPV, 0);
+  });
 });

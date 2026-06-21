@@ -6,7 +6,7 @@ import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { cn } from '@/lib/utils';
-import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 interface Risk {
   leaseId: string;
@@ -80,12 +80,7 @@ export function UpcomingRisks() {
           ['index', 'cpi'].includes(escalationType) ||
           ['index', 'cpi'].includes(rentEscalationType);
 
-        const annualRent = getCurrentMonthlyRent(
-          (lease as any).rent_schedules,
-          lease.executed_monthly_payment,
-          lease.current_monthly_rent,
-          lease.monthly_payment,
-        ) * 12;
+        const annualRent = getMonthlyRent(lease as any) * 12;
 
         if (
           hasRenewal &&
