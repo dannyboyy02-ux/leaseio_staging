@@ -18,6 +18,8 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedNumber } from '@/lib/dateFormatters';
 import { Button } from '@/components/ui/button';
 
 interface QuotaSnapshot {
@@ -39,6 +41,7 @@ function dismissalKey(workspaceId: string, metric: string, pctBucket: number): s
 export function QuotaWarningBanner() {
   const { workspace, userRole } = useApp();
   const { t } = useAppTranslation();
+  const { language } = useLanguage();
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
   const [snapshots, setSnapshots] = useState<QuotaSnapshot[]>([]);
   const [dismissedTick, setDismissedTick] = useState(0);
@@ -127,8 +130,8 @@ export function QuotaWarningBanner() {
           </p>
           <p className={`text-xs ${isCritical ? 'text-red-800' : 'text-amber-800'}`}>
             {t('quota_banner.detail', {
-              current: banner.current_value.toLocaleString(),
-              limit: banner.limit_value?.toLocaleString() ?? '',
+              current: formatLocalizedNumber(banner.current_value, language),
+              limit: banner.limit_value != null ? formatLocalizedNumber(banner.limit_value, language) : '',
               label,
               tierSuffix,
             })}

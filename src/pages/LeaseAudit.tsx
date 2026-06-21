@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedDate, type SupportedLocale } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate, type SupportedLocale } from '@/lib/dateFormatters';
 
 const MAX_DOCS = 5;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -45,11 +45,8 @@ interface FileItem {
 
 type Step = 'collect' | 'processing' | 'results';
 
-function fmt(n: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD',
-    minimumFractionDigits: 0, maximumFractionDigits: 0,
-  }).format(n);
+function fmt(n: number, language: SupportedLocale): string {
+  return formatLocalizedCurrency(n, language);
 }
 
 function fmtDate(d: string | null, language: SupportedLocale): string {
@@ -390,6 +387,7 @@ function ResultsStep({
   escalationBreakdown: [string, number][];
   riskCounts: Record<string, number>;
 }) {
+  const { language } = useLanguage();
   const highRisks = riskCounts['high'] ?? 0;
 
   if (leases.length === 0) {
@@ -430,13 +428,13 @@ function ResultsStep({
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Monthly Obligation</p>
-            <p className="text-2xl font-bold font-display">{fmt(totalMonthly)}</p>
+            <p className="text-2xl font-bold font-display">{fmt(totalMonthly, language)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-xs text-muted-foreground mb-1">Annual Obligation</p>
-            <p className="text-2xl font-bold font-display">{fmt(annualObligation)}</p>
+            <p className="text-2xl font-bold font-display">{fmt(annualObligation, language)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -572,7 +570,7 @@ function LeaseCard({ lease }: { lease: ExtractedLease }) {
           <div>
             <p className="text-muted-foreground">Monthly Rent</p>
             <p className="font-medium">
-              {lease.current_monthly_rent ? fmt(lease.current_monthly_rent) : '—'}
+              {lease.current_monthly_rent ? fmt(lease.current_monthly_rent, language) : '—'}
             </p>
           </div>
         </div>

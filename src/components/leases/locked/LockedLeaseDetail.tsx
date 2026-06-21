@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
-import { parseToLocalDate } from '@/lib/dateFormatters';
+import { parseToLocalDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -59,8 +60,8 @@ interface Props {
 const fmtDate = (d: string | null | undefined) =>
   d ? format(parseToLocalDate(d), 'MMM d, yyyy') : null;
 
-const fmtCurrency = (n: number | null | undefined, currency = 'USD') =>
-  n == null ? null : new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
+const fmtCurrency = (n: number | null | undefined, language: SupportedLocale, currency = 'USD') =>
+  n == null ? null : formatLocalizedCurrency(n, language, { currency });
 
 const fmtPercent = (n: number | null | undefined) =>
   n == null ? null : `${n.toFixed(2)}%`;
@@ -149,13 +150,13 @@ const parseUsAddress = (raw: string | null | undefined): ParsedAddress => {
  * format it as currency; fall back to the raw string for descriptive
  * values like "two months' rent".
  */
-const fmtSecurityDeposit = (raw: string | null | undefined): string | null => {
+const fmtSecurityDeposit = (raw: string | null | undefined, language: SupportedLocale): string | null => {
   if (!raw) return null;
   const cleaned = raw.replace(/[^0-9.]/g, '');
   if (!cleaned) return raw;
   const n = Number(cleaned);
   if (!Number.isFinite(n) || n <= 0) return raw;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+  return formatLocalizedCurrency(n, language);
 };
 
 /**
@@ -217,6 +218,7 @@ const remainingMonths = (leaseEnd: string | null | undefined): number | null => 
 
 export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Props) {
   const { t } = useAppTranslation();
+  const { language } = useLanguage();
   const { userRole } = useApp();
   const isAdmin = userRole === 'admin' || userRole === 'owner';
 
@@ -433,15 +435,15 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
     const annual = currentMonthlyRent != null ? currentMonthlyRent * 12 : null;
     const months = remainingMonths(lease.lease_end);
     return [
-      { label: t('locked_lease.rent.monthly_rent'), value: fmtCurrency(currentMonthlyRent) },
-      { label: t('locked_lease.rent.annual_rent'), value: fmtCurrency(annual) },
-      { label: t('locked_lease.rent.security_deposit'), value: fmtSecurityDeposit(lease.security_deposit) },
+      { label: t('locked_lease.rent.monthly_rent'), value: fmtCurrency(currentMonthlyRent, language) },
+      { label: t('locked_lease.rent.annual_rent'), value: fmtCurrency(annual, language) },
+      { label: t('locked_lease.rent.security_deposit'), value: fmtSecurityDeposit(lease.security_deposit, language) },
       {
         label: t('locked_lease.rent.remaining_months'),
         value: months == null ? null : `${months} ${months === 1 ? t('locked_lease.rent.month') : t('locked_lease.rent.months')}`,
       },
     ];
-  }, [currentMonthlyRent, lease, t]);
+  }, [currentMonthlyRent, lease, t, language]);
 
   const escalationRows: LabelValueRow[] = useMemo(() => [
     { label: t('locked_lease.escalations.rate'), value: fmtPercent(lease.escalation_rate) },

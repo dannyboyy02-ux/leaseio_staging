@@ -5,22 +5,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 
 /**
  * Compact currency formatter — `$1.2M`, `$870K`, `$1.4B`. Keeps stage rows
  * narrow so the pipeline doesn't overflow on portfolios with $10M+ totals.
  */
-const formatCompactCurrency = (value: number): string => {
+const formatCompactCurrency = (value: number, language: SupportedLocale): string => {
   if (!Number.isFinite(value) || value === 0) return '$0';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    notation: 'compact',
-    compactDisplay: 'short',
-    maximumFractionDigits: 1,
-  }).format(value);
+  return formatLocalizedCurrency(value, language, { compact: true });
 };
 
 // "Active" in the pipeline = activated within this lookback window. Older
@@ -48,6 +44,7 @@ interface StageData {
 
 export function LeasePipeline() {
   const { workspace } = useApp();
+  const { language } = useLanguage();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -179,13 +176,9 @@ export function LeasePipeline() {
                 </span>
                 <span
                   className="w-14 text-xs text-muted-foreground text-right shrink-0 tabular-nums"
-                  title={new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    maximumFractionDigits: 0,
-                  }).format(stage.annualValue)}
+                  title={formatLocalizedCurrency(stage.annualValue, language)}
                 >
-                  {formatCompactCurrency(stage.annualValue)}
+                  {formatCompactCurrency(stage.annualValue, language)}
                 </span>
                 {stage.key === bottleneckStage && (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-100 rounded px-1.5 py-0.5 shrink-0">

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
 import { isReadOnlyRetention } from '@/config/pricing';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { Link } from 'react-router-dom';
 import { RentRollExport } from '@/components/reports/RentRollExport';
 import { ReportSettingsCard } from '@/components/workspace/ReportSettingsCard';
@@ -64,7 +65,7 @@ const reports: Array<{
 
 export default function Reports() {
   const { canAccessFeature, userRole, workspace } = useApp();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   // Vault (read-only retention) keeps full view + export of Reports under the
   // flatten rule — gating exports in Vault is a bug by definition.
   const hasAccess = canAccessFeature('business') || isReadOnlyRetention(workspace?.plan);
@@ -254,23 +255,14 @@ export default function Reports() {
                   />
                   <YAxis
                     tickFormatter={(value: number) =>
-                      new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD',
-                        notation: 'compact',
-                        maximumFractionDigits: 1,
-                      }).format(value)
+                      formatLocalizedCurrency(value, language, { compact: true })
                     }
                     tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                     width={72}
                   />
                   <Tooltip
                     formatter={(val: number) => [
-                      new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD',
-                        maximumFractionDigits: 0,
-                      }).format(val),
+                      formatLocalizedCurrency(val, language),
                       'Commitment',
                     ]}
                     labelFormatter={(l) => String(l).replace('_', ' ')}
@@ -318,9 +310,9 @@ export default function Reports() {
                           {lease.filename || lease.tenant_name || 'Unnamed lease'}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Pipeline: ${Number(lease.monthly_payment || 0).toLocaleString('en-US')}/mo
+                          Pipeline: {formatLocalizedCurrency(Number(lease.monthly_payment || 0), language)}/mo
                           &nbsp;&middot;&nbsp;
-                          Executed: ${Number(lease.executed_monthly_payment || 0).toLocaleString('en-US')}/mo
+                          Executed: {formatLocalizedCurrency(Number(lease.executed_monthly_payment || 0), language)}/mo
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

@@ -36,7 +36,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedNumber } from '@/lib/dateFormatters';
 import { getFieldConfidence, confidenceTier } from '@/lib/extractedFieldHelpers';
 import type { ConfidenceScores } from '@/types/workflow';
 
@@ -404,7 +404,7 @@ export function SectionCard({
                     {value
                       ? isCurrencyField(field.id)
                         ? formatLocalizedCurrency(parseFloat(value) || null, language)
-                        : Number(value).toLocaleString()
+                        : formatLocalizedNumber(Number(value), language)
                       : <span className="text-muted-foreground italic">—</span>
                     }
                     {sparklesAffordance}

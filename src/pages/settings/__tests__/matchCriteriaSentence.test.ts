@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 
 // Mirror of pure helpers from `src/pages/settings/MatchCriteriaSentence.tsx`.
 // The component imports radix UI / lucide-react, so we keep the test
@@ -36,14 +37,12 @@ const empty = (): MatchCriteriaState => ({
 
 // ────── helpers under test (mirrors of MatchCriteriaSentence.tsx) ──────
 
+// Mirrors the migrated component helper, which now delegates to the canonical
+// formatLocalizedCurrency (locale 'en' here — the test pins the en-US output).
 const fmtMoney = (raw: string): string => {
   const n = parseFloat(raw);
   if (!Number.isFinite(n)) return `$${raw}`;
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(n);
+  return formatLocalizedCurrency(n, 'en');
 };
 
 function joinWithOr(values: string[]): string {
