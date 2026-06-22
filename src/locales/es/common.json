@@ -1893,5 +1893,13 @@
     "member_wall_desc": "{{name}} es un repositorio de retención de solo lectura. El acceso a Vault es exclusivo del propietario: comuníquese con el propietario del espacio para restaurar el acceso completo o reactivar un plan.",
     "lease_readonly_note": "Este espacio está en Vault — solo lectura. La edición, las aprobaciones y las cargas están deshabilitadas.",
     "member_wall_switch": "Cambiar de espacio"
+  },
+  "routing_failed": {
+    "title": "El enrutamiento de aprobación no se completó",
+    "body": "Esta solicitud se guardó como borrador porque no se pudo enrutar automáticamente a los aprobadores. Reintentar suele resolverlo; si sigue fallando, es posible que sus políticas de aprobación necesiten la atención de un administrador.",
+    "retry": "Reintentar enrutamiento",
+    "admin_hint": "Reintentar es seguro: no creará una solicitud duplicada.",
+    "cannot_retry": "Pídale al solicitante o a un administrador del espacio que reintente el enrutamiento de este borrador.",
+    "last_error": "Último intento: {{message}}"
   }
 }

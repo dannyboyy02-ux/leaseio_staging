@@ -1893,5 +1893,13 @@
     "member_wall_desc": "{{name}} is a read-only retention repository. Vault access is owner-only — contact the workspace owner to restore full access or reactivate a plan.",
     "lease_readonly_note": "This workspace is in Vault — read-only. Editing, approvals, and uploads are disabled.",
     "member_wall_switch": "Switch workspace"
+  },
+  "routing_failed": {
+    "title": "Approval routing didn't finish",
+    "body": "This request is saved as a draft because it couldn't be routed to approvers automatically. Retrying often resolves it — if it keeps failing, your approval policies may need an admin's attention.",
+    "retry": "Retry routing",
+    "admin_hint": "Retrying is safe — it won't create a duplicate request.",
+    "cannot_retry": "Ask the requester or a workspace admin to retry routing for this draft.",
+    "last_error": "Last attempt: {{message}}"
   }
 }

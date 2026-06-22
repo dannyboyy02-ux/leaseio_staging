@@ -94,6 +94,7 @@ import { ArchiveButton } from "@/components/leases/ArchiveButton";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { retryRequestRouting } from "@/lib/retryRequestRouting";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
@@ -309,6 +310,10 @@ export default function LeaseReview() {
     covenantFlagged: false,
   });
   const [resubmitting, setResubmitting] = useState(false);
+  const [retryingRouting, setRetryingRouting] = useState(false);
+  // C2: the last routing-failure reason, kept on the page (not just a toast) so
+  // the person who can fix the policy can read what's wrong without re-triggering.
+  const [lastRoutingError, setLastRoutingError] = useState<string | null>(null);
 
   // Processing cancel state
   const [cancellingProcessing, setCancellingProcessing] = useState(false);
@@ -540,6 +545,51 @@ export default function LeaseReview() {
       toast.error('Failed to resubmit');
     } finally {
       setResubmitting(false);
+    }
+  };
+
+  // Audit C2 — a request-workflow lease whose initial approval routing failed is
+  // left in 'draft'. resolve-approval-chain is idempotent on initialResolution,
+  // so offer a retry that re-runs the full route → flip → notify orchestration.
+  const isFailedRoutingDraft =
+    lease?.intake_source === 'request_workflow' && lifecycleStatus === 'draft';
+
+  const handleRetryRouting = async () => {
+    if (!lease || !user || !lease.workspace_id) return;
+    setRetryingRouting(true);
+    try {
+      const result = await retryRequestRouting(
+        supabase,
+        {
+          id: lease.id,
+          calc_total_commitment: lease.calc_total_commitment ?? null,
+          covenant_flagged: lease.covenant_flagged ?? null,
+          request_title: lease.request_title ?? null,
+        },
+        lease.workspace_id,
+        user.id,
+      );
+      if (!result.ok) {
+        // NB: this project compiles with strictNullChecks off, so a boolean
+        // discriminant (`if (!result.ok)`) does not narrow the union — use the
+        // `in` operator, which narrows regardless of strict mode.
+        const message = 'errorMessage' in result ? result.errorMessage : 'Could not retry routing. Please try again.';
+        setLastRoutingError(message);
+        toast.error(message);
+        return;
+      }
+      const finalStatus = 'finalStatus' in result ? result.finalStatus : undefined;
+      setLastRoutingError(null);
+      toast.success('Request routed for approval');
+      setLease((prev: any) => (prev ? { ...prev, lifecycle_status: finalStatus } : prev));
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
+    } catch (err) {
+      console.error('Retry routing failed:', err);
+      const message = 'Could not retry routing. Please try again.';
+      setLastRoutingError(message);
+      toast.error(message);
+    } finally {
+      setRetryingRouting(false);
     }
   };
 
@@ -815,6 +865,9 @@ export default function LeaseReview() {
         const { data, error } = await supabase.from("leases").select("*").eq("id", leaseId).single();
         if (error) { console.error('[LeaseReview] Failed to load lease:', error.message); return; }
 
+        // The route has no key={leaseId}, so this instance is reused across leases.
+        // Clear the per-lease retry-failure message so it can't bleed into another.
+        setLastRoutingError(null);
         setLease(data);
         setRequestEdits({
           request_title: data.request_title || '',
@@ -2028,6 +2081,62 @@ export default function LeaseReview() {
     }
   } else if (isEquivalent(lifecycle, 'approved')) {
     nextStepBanner = { type: 'info', message: 'This request is approved. Upload the executed document to advance to Executed status.' };
+  }
+
+  // C2 — failed-routing draft: a focused page with a retry, instead of the
+  // (mostly-empty, confusing) review workbench. Once routing succeeds the lease
+  // flips out of 'draft' and re-renders as the intake-stage page below.
+  if (isFailedRoutingDraft && lease) {
+    return (
+      <AppLayout>
+        <div className="max-w-3xl mx-auto p-6 space-y-4">
+          <AppHeader
+            title={lease.request_title || 'Lease Request'}
+            subtitle={
+              <div className="flex items-center gap-2">
+                <LifecycleStatusBadge status={lease.lifecycle_status as any} />
+                <span className="text-sm text-muted-foreground">{lease.requesting_department || 'Unknown department'}</span>
+              </div>
+            }
+            actions={
+              <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
+                Approval Queue
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            }
+          />
+          <Card className="border-amber-300 bg-amber-50/60 dark:bg-amber-950/10 dark:border-amber-800">
+            <CardContent className="py-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">{t('routing_failed.title')}</p>
+                  <p className="text-sm text-muted-foreground">{t('routing_failed.body')}</p>
+                  {lastRoutingError ? (
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-400 pt-1">
+                      {t('routing_failed.last_error', { message: lastRoutingError })}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              {isReadOnly ? (
+                <p className="text-sm text-muted-foreground pl-8">{t('vault.lease_readonly_note')}</p>
+              ) : isRequestor || isAdminUser ? (
+                <div className="flex items-center gap-3 pl-8">
+                  <Button onClick={handleRetryRouting} disabled={retryingRouting}>
+                    {retryingRouting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                    {t('routing_failed.retry')}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">{t('routing_failed.admin_hint')}</span>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground pl-8">{t('routing_failed.cannot_retry')}</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
   }
 
   if (isIntakeStage && lease) {
