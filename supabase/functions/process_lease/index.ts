@@ -342,58 +342,6 @@ interface PageMap {
   total_pages: number;
 }
 
-async function callAnthropicAPI(
-  model: string,
-  system: string,
-  userContent: string,
-  maxTokens: number,
-): Promise<string> {
-  const maxRetries = 2;
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': ANTHROPIC_API_KEY!,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          system,
-          messages: [{ role: 'user', content: userContent }],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Anthropic] Request failed (attempt ${attempt + 1}): ${errorText}`);
-        lastError = new Error(`Anthropic API error: ${response.status} - ${errorText}`);
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-        throw lastError;
-      }
-
-      const data = await response.json();
-      const content = data.content?.[0]?.text;
-      if (!content) {
-        lastError = new Error('Anthropic response missing content');
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-        throw lastError;
-      }
-
-      console.log(`[Anthropic:${model}] tokens in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
-      return content;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-    }
-  }
-  throw lastError || new Error('All Anthropic API attempts failed');
-}
-
 async function callAnthropicAPIWithPDF(
   model: string,
   system: string,
@@ -827,26 +775,6 @@ Return ONLY valid JSON. Empty array if a category has no relevant pages. Pages m
   }
 }
 
-function slicePagesByNumbers(documentText: string, pageNumbers: number[]): string {
-  if (pageNumbers.length === 0) return documentText;
-  const pageSet = new Set(pageNumbers);
-  const segments = documentText.split(/(\[PAGE \d+\])/);
-  let result = '';
-  let currentPage = 1;
-  let inTarget = pageSet.has(1);
-  for (const segment of segments) {
-    const m = segment.match(/\[PAGE (\d+)\]/);
-    if (m) {
-      currentPage = parseInt(m[1]);
-      inTarget = pageSet.has(currentPage);
-      if (inTarget) result += segment;
-    } else if (inTarget) {
-      result += segment;
-    }
-  }
-  return result.trim() || documentText;
-}
-
 function buildPageGroups(pageMap: PageMap): { groupA: number[]; groupB: number[]; groupC: number[] } {
   const totalPages = pageMap.total_pages || 999;
   const withBuffer = (pages: number[]) => {
@@ -934,57 +862,6 @@ Return ONLY valid JSON:
   "uncertain_fields": ["list field names where you encountered ambiguous, cross-referenced, or multi-hop language — e.g. 'escalation_clauses', 'renewal_options', 'termination_clauses', 'risks'"],
   "complex_clause_flags": ["list complex clause types identified — e.g. 'percentage_rent', 'snda_provision', 'ground_rent', 'sale_leaseback', 'cpi_floor_cap', 'exhibit_cross_reference', 'personal_guarantee']"
 }`;
-
-// System prompt for the conditional Opus pass — targets only uncertain/complex fields
-const OPUS_TARGETED_SYSTEM = `You are an expert commercial lease abstraction specialist. A prior extraction pass has already captured most lease fields. Your task is to re-examine ONLY the fields explicitly listed in the user prompt, which had low confidence or complex language.
-
-Apply maximum precision. For each field requested:
-- Read the relevant clause language carefully, including any cross-references to exhibits or addendums
-- Resolve ambiguous language (e.g. CPI floor/cap mechanics, multi-hop references, percentage rent formulas)
-- If a field genuinely cannot be determined, return null — do not guess
-
-Return ONLY valid JSON using the same schema as the original extraction (each field as {value, confidence, page, source_text}). Include only the fields explicitly listed in the prompt, plus an updated "risks" array if complex clause types were flagged.`;
-
-// Fields that can have low confidence and trigger Opus fallback
-const OPUS_FALLBACK_FIELDS = [
-  'escalation_clauses',
-  'rent_escalation_type',
-  'renewal_options',
-  'termination_clauses',
-  'security_deposit',
-  'permitted_use',
-  'insurance_requirements',
-  'maintenance_responsibilities',
-];
-
-function getUncertainFields(merged: any, threshold: number): string[] {
-  return OPUS_FALLBACK_FIELDS.filter(field => {
-    const fieldData = merged[field];
-    if (!fieldData || typeof fieldData !== 'object') return false;
-    const conf = fieldData.confidence;
-    // Only flag if a value was extracted but with low confidence (ambiguous, not just missing)
-    return typeof conf === 'number' && conf < threshold && extractValue(fieldData) !== null;
-  });
-}
-
-function mergeOpusOverrides(sonnetMerged: any, opusMerged: any, targetFields: string[], hadComplexFlags: boolean): void {
-  for (const field of targetFields) {
-    if (opusMerged[field] !== undefined && extractValue(opusMerged[field]) !== null) {
-      const opusConf = opusMerged[field]?.confidence ?? 0;
-      const sonnetConf = sonnetMerged[field]?.confidence ?? 0;
-      // Only override if Opus is more confident
-      if (opusConf >= sonnetConf) {
-        sonnetMerged[field] = opusMerged[field];
-        console.log(`[Claude] Opus override: ${field} (${sonnetConf.toFixed(2)} → ${opusConf.toFixed(2)})`);
-      }
-    }
-  }
-  // Override risks when complex clause flags triggered the call — Opus risk analysis is deeper
-  if (hadComplexFlags && opusMerged.risks && opusMerged.risks.length > 0) {
-    sonnetMerged.risks = opusMerged.risks;
-    console.log(`[Claude] Opus risks override: ${opusMerged.risks.length} risks`);
-  }
-}
 
 /**
  * Privacy gate. Reads profiles.ai_processing_consent_at for the calling
@@ -1264,7 +1141,6 @@ async function extractLeaseDataWithClaude(
   // and field-shape-agnostic access, so the wider type is safe.
 ): Promise<Record<string, any>> {
   console.log('[Claude] Starting two-pass native-PDF extraction...');
-  const extractionStart = Date.now();
 
   // Pass 1: Haiku page map (native PDF)
   const pageMap = await callHaikuForPageMap(pdfBase64);
@@ -1337,15 +1213,6 @@ async function extractLeaseDataWithClaude(
   if (!Array.isArray(merged.risks))         merged.risks = [];
 
   return merged;
-}
-
-// Legacy stub — unused, retained for reference only. Signature kept
-// loose; if ever called, the module-level supabaseAdmin reference
-// inside extractLeaseDataWithClaude would have already thrown, which
-// is the existing dead-code-path behavior.
-async function _extractLeaseDataWithOpenAI_STUB(pdfBase64: string): Promise<LeaseExtractionResult> {
-  // @ts-expect-error — legacy stub; supabaseAdmin would be undefined here
-  return extractLeaseDataWithClaude(undefined, pdfBase64);
 }
 
 // Original OpenAI implementation below — retained for reference, not called
@@ -1727,7 +1594,7 @@ Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
         throw new Error(`OpenAI request failed: ${response.status} - ${errorText}`);
       }
       if (!contentType?.includes('application/json')) {
-        const textResponse = await response.text();
+        await response.text(); // drain the non-JSON body before retry/throw
         lastError = new Error(`OpenAI returned non-JSON response: ${contentType}`);
         if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
         throw lastError;

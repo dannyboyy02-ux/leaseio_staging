@@ -114,7 +114,7 @@ CRITICAL RULES:
 
 Format numbers as currency where appropriate. Dates as Month DD, YYYY.`;
 
-serve(async (req) => {
+serve((req) => {
   const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
