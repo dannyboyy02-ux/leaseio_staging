@@ -108,7 +108,7 @@ import {
   type ApproverProfile,
 } from '@/lib/approverCandidates';
 import { classifyRentScheduleDiff } from '@/lib/rentScheduleDiff';
-import { isReadOnlyRetention } from '@/config/pricing';
+import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -211,10 +211,13 @@ export default function LeaseReview() {
   const { user, userRole, userFunctionalRoles, workspace } = useApp();
   // Vault (read-only retention) workspaces are view + export only. The server
   // already blocks every write (V1 RLS + config guard); this flag suppresses
-  // the mutating UI affordances so a Vault owner sees a clean read-only
+  // the mutating UI affordances so a read-only owner sees a clean read-only
   // repository instead of buttons that fail opaquely. Every gate is
-  // `&& !isReadOnly`, so live (non-vault) workspaces are unaffected.
-  const isReadOnly = isReadOnlyRetention(workspace?.plan);
+  // `&& !isReadOnly`, so live workspaces are unaffected. #136: read-only now
+  // covers BOTH the Vault retention tier AND the cancellation grace /
+  // soft-delete window (whose plan is still starter/business but whose writes
+  // the server RLS rejects) — previously this missed grace users.
+  const isReadOnly = isWorkspaceReadOnly(workspace);
   const [tier2CorrectionOpen, setTier2CorrectionOpen] = useState(false);
   const [showAmendmentDialog, setShowAmendmentDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);

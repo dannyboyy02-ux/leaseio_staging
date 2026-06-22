@@ -1892,7 +1892,7 @@
     "reactivate_cta": "Reactivate a plan",
     "member_wall_title": "This workspace is in Vault",
     "member_wall_desc": "{{name}} is a read-only retention repository. Vault access is owner-only — contact the workspace owner to restore full access or reactivate a plan.",
-    "lease_readonly_note": "This workspace is in Vault — read-only. Editing, approvals, and uploads are disabled.",
+    "lease_readonly_note": "This workspace is read-only — you can view and export, but editing, approvals, and uploads are disabled.",
     "member_wall_switch": "Switch workspace"
   },
   "routing_failed": {
