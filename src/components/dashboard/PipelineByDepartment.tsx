@@ -5,7 +5,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
-import { useNavigate } from 'react-router-dom';
 
 interface LeaseRow {
   requesting_department: string | null;
@@ -68,13 +67,9 @@ export function PipelineByDepartment() {
   const { language } = useLanguage();
   const { workspace } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
-  const navigate = useNavigate();
   const [rawData, setRawData] = useState<LeaseRow[]>([]);
   const [days, setDays] = useState<30 | 60 | 90>(30);
   const [loading, setLoading] = useState(true);
-
-  // navigate is used for potential future drill-down; suppress lint warning
-  void navigate;
 
   useEffect(() => {
     async function fetchData() {

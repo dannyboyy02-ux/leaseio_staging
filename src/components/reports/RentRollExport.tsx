@@ -11,6 +11,7 @@ import { useApp } from '@/contexts/AppContext';
 import { canExportReports } from '@/lib/authorization';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { getBaseMonthlyRent } from '@/lib/leaseCalculations';
+import { escapeCsvCell } from '@/lib/csv';
 
 export function RentRollExport() {
   const [isExporting, setIsExporting] = useState(false);
@@ -59,16 +60,21 @@ export function RentRollExport() {
       // Workspace scoping mandatory — exports for the active workspace only.
       // Replaces the previous user_id filter, which would have mixed data
       // for users with leases in multiple workspaces.
-      // Audit B4: filter on lifecycle_status (the canonical in-force set),
-      // consistent with Portfolio — NOT the legacy `status` vocabulary
-      // (['Ready','final','review']), which silently dropped valid
-      // active/executed leases from the rent roll.
+      // #118 (R2) / Audit B4: a rent roll lists leases actually ON THE BOOKS —
+      // executed or active — keyed on lifecycle_status (the legacy `status`
+      // column is the doc-pipeline state and diverges: a draft can be
+      // status='Ready', an active lease status='Uploaded'). Pre-signature
+      // pipeline (approved/in_negotiation/final_review), terminal states, and
+      // archived leases are excluded so the run-rate totals reflect committed
+      // rent only.
       const { data: leases, error } = await supabase
         .from('leases')
         .select('*')
         .eq('workspace_id', workspace.id)
+        .in('lifecycle_status', [
+          'executed', 'fully_executed', 'pending_counter_signature', 'active',
+        ])
         .eq('archived', false)
-        .in('lifecycle_status', ['executed', 'active', 'fully_executed'])
         .order('lease_end', { ascending: true });
 
       if (error) throw error;
@@ -126,19 +132,11 @@ export function RentRollExport() {
       rows.push(['PORTFOLIO SUMMARY', '', '', '', '', '', '', '', '', '']);
       rows.push(['Total Active Leases', String(leases.length), '', '', '', '', '', '', '', '']);
       rows.push(['Total Monthly Rent', formatCurrency(totalMonthly), '', '', '', '', '', '', '', '']);
-      rows.push(['Total Annual Obligation', formatCurrency(totalAnnual), '', '', '', '', '', '', '', '']);
-
-      const escapeCSV = (val: string | number) => {
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-      };
+      rows.push(['Total Annual Rent (run-rate)', formatCurrency(totalAnnual), '', '', '', '', '', '', '', '']);
 
       const csvContent = [
-        headers.map(escapeCSV).join(','),
-        ...rows.map(row => row.map(escapeCSV).join(',')),
+        headers.map(escapeCsvCell).join(','),
+        ...rows.map(row => row.map(escapeCsvCell).join(',')),
       ].join('\n');
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

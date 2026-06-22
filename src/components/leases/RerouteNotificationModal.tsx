@@ -10,6 +10,7 @@
 // links to the chain reroute history for full transparency."
 
 import { useEffect, useMemo, useState } from 'react';
+import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { format } from 'date-fns';
 import { ArrowDown, GitBranch, Shield } from 'lucide-react';
 import {
@@ -148,9 +149,9 @@ export function RerouteNotificationModal({
           <div>
             <p className="text-xs text-muted-foreground">Lifecycle</p>
             <p className="flex items-center gap-2">
-              <span>{unseenEvent.prior_lifecycle_status}</span>
+              <span>{displayLabel(unseenEvent.prior_lifecycle_status as LifecycleStatus)}</span>
               <ArrowDown className="h-3 w-3 -rotate-90" />
-              <span className="font-medium">{unseenEvent.new_lifecycle_status}</span>
+              <span className="font-medium">{displayLabel(unseenEvent.new_lifecycle_status as LifecycleStatus)}</span>
               {unseenEvent.resulted_in_chain_violation && (
                 <Badge variant="destructive" className="text-[10px] gap-0.5">
                   <Shield className="h-2.5 w-2.5" />

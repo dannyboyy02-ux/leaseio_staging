@@ -61,6 +61,11 @@ interface RequestBody {
   auditMode?: boolean;
   detectionMode?: "auto" | "manual_admin" | "manual_audit";
   triggerReason?: string;
+  // C4 (#111) — force concept reactivation. When true, rebuilds the CONCEPT
+  // stage from the CURRENT policy (re-match, not a verbatim clone) and returns;
+  // does not touch the signator stage or the lifecycle. Used by
+  // escalate-to-concept-approver. Short-circuits before reroute/initial modes.
+  forceConceptReactivation?: boolean;
 }
 
 interface PolicyRow {
@@ -229,6 +234,7 @@ serve(async (req) => {
   const auditMode = body?.auditMode === true;
   const detectionMode = body?.detectionMode ?? "auto";
   const triggerReason = body?.triggerReason ?? "attribute_change_detected";
+  const forceConceptReactivation = body?.forceConceptReactivation === true;
 
   if (!leaseId || typeof leaseId !== "string") {
     return jsonResponse(
@@ -379,6 +385,221 @@ serve(async (req) => {
     if (error) {
       console.error("[resolve-approval-chain] snapshot write error:", error.message);
     }
+  }
+
+  // ─── Branch: C4 (#111) force concept reactivation ────────────────────
+  // escalate-to-concept-approver calls this to rebuild the CONCEPT stage from
+  // the CURRENT policy match (NOT a verbatim clone of the prior rows, which
+  // resurrected superseded prior-policy approvers). Concept-only: signator rows
+  // are untouched. Does NOT change the lifecycle — the caller flips it to
+  // concept_under_review only AFTER this succeeds, so a failed policy match can
+  // never strand the lease with no approvers.
+  if (forceConceptReactivation) {
+    let m: MatchOutcome;
+    try {
+      m = await matchPolicy();
+    } catch (e: any) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "policy_load_failed",
+        error: e?.message ?? String(e),
+        reactivation: true,
+      });
+      return jsonResponse(
+        { ok: false, error: e?.message ?? "Policy load failed", reason: "invalid_lease" },
+        500,
+        origin,
+      );
+    }
+    if (m.kind === "no_policies" || m.kind === "no_match_no_fallback") {
+      await logActivity(leaseId, "chain_resolution_failed", { reason: m.kind, reactivation: true });
+      return jsonResponse(
+        {
+          ok: false,
+          error: "No matching policy to reactivate concept review. Ask an admin to add a fallback or matching policy.",
+          reason: "no_match_no_fallback",
+        },
+        409,
+        origin,
+      );
+    }
+    if (m.kind === "ambiguous") {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "ambiguous_match",
+        tied_policy_ids: m.tied.map((t) => t.id),
+        reactivation: true,
+      });
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Multiple policies tied at top priority. Ask an admin to disambiguate.",
+          reason: "ambiguous_match",
+          details: { tiedPolicies: m.tied },
+        },
+        409,
+        origin,
+      );
+    }
+    const chosen = m.policy;
+
+    // Load CONCEPT steps for the current policy only.
+    const { data: cStepsData, error: cStepsError } = await supabaseAdmin
+      .from("approval_chain_steps")
+      .select(
+        "stage, step_order, parallel_group, approver_user_id, approver_role, delegate_user_id, delegate_after_days, is_required",
+      )
+      .eq("policy_id", chosen.id)
+      .eq("stage", "concept")
+      .order("step_order")
+      .order("parallel_group");
+    if (cStepsError) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "steps_load_failed",
+        policy_id: chosen.id,
+        error: cStepsError.message,
+        reactivation: true,
+      });
+      return jsonResponse({ ok: false, error: cStepsError.message, reason: "invalid_lease" }, 500, origin);
+    }
+    const conceptPolicySteps = (cStepsData ?? []) as PolicyStepRow[];
+    if (conceptPolicySteps.length === 0) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "policy_has_no_concept_steps",
+        policy_id: chosen.id,
+        reactivation: true,
+      });
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Selected policy has no concept steps to reactivate.",
+          reason: "no_match_no_fallback",
+          details: { policyId: chosen.id, policyName: chosen.name },
+        },
+        409,
+        origin,
+      );
+    }
+
+    // Separation-of-duties over the concept steps.
+    const sodEffective = getEffectiveSeparationOfDuties(wsSod, chosen.separation_of_duties_override);
+    const sodViolator = checkSeparationOfDuties(
+      conceptPolicySteps.map((s) => ({
+        stage: s.stage,
+        step_order: s.step_order,
+        parallel_group: s.parallel_group,
+        approver_user_id: s.approver_user_id,
+        approver_role: s.approver_role,
+        is_required: s.is_required,
+        status: "pending",
+      })),
+      sodEffective,
+    );
+    if (sodViolator) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "separation_violation",
+        policy_id: chosen.id,
+        conflicting_user_id: sodViolator,
+        reactivation: true,
+      });
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Separation of duties violated in the concept stage. Ask an admin to fix the policy.",
+          reason: "separation_violation",
+          details: { conflictingUserId: sodViolator, policyId: chosen.id },
+        },
+        409,
+        origin,
+      );
+    }
+
+    // Supersede any LINGERING pending concept rows (defensive — normally the
+    // prior concept rows are 'approved' history and stay untouched; this guards
+    // against a double-reactivation leaving stale pending rows).
+    const { data: lingering } = await supabaseAdmin
+      .from("lease_approval_chain")
+      .select("id")
+      .eq("lease_id", leaseId)
+      .eq("stage", "concept")
+      .eq("status", "pending");
+    const supersededIds = ((lingering ?? []) as Array<{ id: string }>).map((r) => r.id);
+
+    // Build fresh pending concept rows (Phase-7 columns; pending_since on the
+    // first-active required step, mirroring creation semantics).
+    const firstConceptOrder = (() => {
+      const req = conceptPolicySteps.filter((s) => s.is_required);
+      return req.length > 0 ? Math.min(...req.map((s) => s.step_order)) : null;
+    })();
+    const reactivateNowIso = new Date().toISOString();
+    const freshRows = conceptPolicySteps.map((s) => ({
+      lease_id: leaseId,
+      workspace_id: workspaceId,
+      policy_id: chosen.id,
+      policy_version: chosen.version,
+      stage: "concept",
+      step_order: s.step_order,
+      parallel_group: s.parallel_group,
+      approver_user_id: s.approver_user_id,
+      approver_role: s.approver_role,
+      delegate_user_id: s.delegate_user_id,
+      delegate_after_days: s.delegate_after_days,
+      is_required: s.is_required,
+      status: "pending",
+      effective_assignee_user_id: s.approver_user_id,
+      assignee_resolution_source: s.approver_user_id ? "policy_user" : "policy_role",
+      pending_since:
+        s.is_required && firstConceptOrder !== null && s.step_order === firstConceptOrder
+          ? reactivateNowIso
+          : null,
+    }));
+
+    // Atomic supersede + insert (C5 RPC) — never leave the lease mid-rebuild.
+    const { error: reconErr } = await supabaseAdmin.rpc("reroute_reconcile_chain_steps", {
+      p_superseded_ids: supersededIds,
+      p_new_rows: freshRows,
+    });
+    if (reconErr) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "concept_reactivation_failed",
+        policy_id: chosen.id,
+        error: reconErr.message,
+        reactivation: true,
+      });
+      return jsonResponse(
+        { ok: false, error: `Failed to reactivate concept chain: ${reconErr.message}`, reason: "invalid_lease" },
+        500,
+        origin,
+      );
+    }
+
+    await logActivity(leaseId, "chain_resolved", {
+      policy_id: chosen.id,
+      policy_name: chosen.name,
+      policy_version: chosen.version,
+      steps_created: freshRows.length,
+      superseded_pending: supersededIds.length,
+      reactivation: true,
+      used_default_fallback: m.usedFallback,
+    });
+
+    const firstAssignees =
+      firstConceptOrder == null
+        ? []
+        : conceptPolicySteps
+            .filter((s) => s.is_required && s.step_order === firstConceptOrder)
+            .map((s) => ({ userId: s.approver_user_id, role: s.approver_role }));
+
+    return jsonResponse(
+      {
+        ok: true,
+        reactivated: true,
+        policyId: chosen.id,
+        policyName: chosen.name,
+        stepsCreated: freshRows.length,
+        assignees: firstAssignees,
+      },
+      200,
+      origin,
+    );
   }
 
   // ─── Branch: Phase 6 reroute mode ────────────────────────────────────
@@ -647,59 +868,62 @@ serve(async (req) => {
       );
     }
 
-    // ── Apply reconciliation ──────────────────────────────────────────
-    // 1. Mark superseded rows
-    if (reconciled.superseded.length > 0) {
-      const supersededIds = (reconciled.superseded as Array<{ id: string }>).map((s) => s.id);
-      const { error: supErr } = await supabaseAdmin
-        .from("lease_approval_chain")
-        .update({ status: "superseded" })
-        .in("id", supersededIds);
-      if (supErr) {
-        console.error("[resolve-approval-chain] supersede error:", supErr.message);
-      }
-    }
+    // ── Apply reconciliation (C5: atomic supersede + insert) ──────────────
+    // Build the superseded IDs + the added rows, then apply BOTH in a single
+    // transaction via reroute_reconcile_chain_steps. The previous code issued
+    // two separate PostgREST writes that each only console.error- d on failure
+    // and continued — so a failed insert after a successful supersede left the
+    // lease with zero active approvers while still reporting success (#111 C5).
+    const supersededIds = (reconciled.superseded as Array<{ id: string }>).map((s) => s.id);
 
-    // 2. Insert added rows
-    if (reconciled.added.length > 0) {
-      // Build full INSERT shape from newPolicySteps, filtered to added identities
-      const addedIdentities = new Set(
-        reconciled.added.map((a) => `${a.stage}::${a.approver_user_id ?? ""}::${a.approver_role ?? ""}`),
+    // Phase 7: rows added via reroute become immediately pending — the lease
+    // lifecycle has rolled back so they're what's blocking. Set pending_since on
+    // required ones. Build the full INSERT shape from newPolicySteps, filtered to
+    // the added identities.
+    const addedIdentities = new Set(
+      reconciled.added.map((a) => `${a.stage}::${a.approver_user_id ?? ""}::${a.approver_role ?? ""}`),
+    );
+    const rerouteNowIso = new Date().toISOString();
+    const rowsToInsert = newPolicySteps
+      .filter((s) =>
+        addedIdentities.has(`${s.stage}::${s.approver_user_id ?? ""}::${s.approver_role ?? ""}`),
+      )
+      .map((s) => ({
+        lease_id: leaseId,
+        workspace_id: workspaceId,
+        policy_id: newPolicy.id,
+        policy_version: newPolicy.version,
+        stage: s.stage,
+        step_order: s.step_order,
+        parallel_group: s.parallel_group,
+        approver_user_id: s.approver_user_id,
+        approver_role: s.approver_role,
+        delegate_user_id: s.delegate_user_id,
+        delegate_after_days: s.delegate_after_days,
+        is_required: s.is_required,
+        status: "pending",
+        // Phase 7 columns
+        effective_assignee_user_id: s.approver_user_id,
+        assignee_resolution_source: s.approver_user_id ? "policy_user" : "policy_role",
+        pending_since: s.is_required ? rerouteNowIso : null,
+      }));
+
+    if (supersededIds.length > 0 || rowsToInsert.length > 0) {
+      const { error: reconcileErr } = await supabaseAdmin.rpc(
+        "reroute_reconcile_chain_steps",
+        { p_superseded_ids: supersededIds, p_new_rows: rowsToInsert },
       );
-      // Phase 7: rows added via reroute become immediately pending —
-      // the lease lifecycle has rolled back so they're what's blocking.
-      // Set pending_since on required ones.
-      const rerouteNowIso = new Date().toISOString();
-      const rowsToInsert = newPolicySteps
-        .filter((s) =>
-          addedIdentities.has(`${s.stage}::${s.approver_user_id ?? ""}::${s.approver_role ?? ""}`),
-        )
-        .map((s) => ({
-          lease_id: leaseId,
-          workspace_id: workspaceId,
-          policy_id: newPolicy.id,
-          policy_version: newPolicy.version,
-          stage: s.stage,
-          step_order: s.step_order,
-          parallel_group: s.parallel_group,
-          approver_user_id: s.approver_user_id,
-          approver_role: s.approver_role,
-          delegate_user_id: s.delegate_user_id,
-          delegate_after_days: s.delegate_after_days,
-          is_required: s.is_required,
-          status: "pending",
-          // Phase 7 columns
-          effective_assignee_user_id: s.approver_user_id,
-          assignee_resolution_source: s.approver_user_id ? "policy_user" : "policy_role",
-          pending_since: s.is_required ? rerouteNowIso : null,
-        }));
-      if (rowsToInsert.length > 0) {
-        const { error: insErr } = await supabaseAdmin
-          .from("lease_approval_chain")
-          .insert(rowsToInsert);
-        if (insErr) {
-          console.error("[resolve-approval-chain] add error:", insErr.message);
-        }
+      if (reconcileErr) {
+        // Atomic: on failure NEITHER write landed, so the lease keeps its prior
+        // active approvers. Abort the reroute instead of swallowing the error.
+        console.error("[resolve-approval-chain] reconcile error:", reconcileErr.message);
+        await logActivity(leaseId, "chain_resolution_failed", {
+          reason: "reroute_reconcile_failed",
+          error: reconcileErr.message,
+          steps_superseded: supersededIds.length,
+          steps_added: rowsToInsert.length,
+        });
+        return jsonResponse({ ok: false, error: "reroute_reconcile_failed" }, 500, origin);
       }
     }
 

@@ -100,7 +100,7 @@ import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
 import { createLeaseNotification } from '@/lib/leaseNotifications';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
-import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { displayLabel, isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { generateRentScheduleRows } from '@/lib/rentSchedule';
 import {
   buildApproverCandidates,
@@ -336,10 +336,21 @@ export default function LeaseReview() {
 
   const [form, setForm] = useState<Record<string, string>>({});
 
-  // Get confidence scores from lease
+  // Per-field confidence (0-100) for the review surfaces (NeedsReviewBanner +
+  // the section cards). #114: process_lease never populates
+  // leases.confidence_scores, so reading it left this map permanently empty —
+  // silently disabling the banner's low-confidence warnings. The real per-field
+  // confidence lives in extracted_json (the same source the inline field
+  // borders use), so build the map from there via getFieldConfidence (0-1 → 0-100).
   const confidenceScores: ConfidenceScores = useMemo(() => {
-    return (lease?.confidence_scores as ConfidenceScores) || {};
-  }, [lease?.confidence_scores]);
+    const extractedJson = lease?.extracted_json as ExtractedJson | null;
+    const scores: ConfidenceScores = {};
+    for (const fieldId of allFieldIds) {
+      const conf = getFieldConfidence(extractedJson, fieldId);
+      if (conf !== null) scores[fieldId] = Math.round(conf * 100);
+    }
+    return scores;
+  }, [lease?.extracted_json, allFieldIds]);
 
   // Get low-confidence fields
   const lowConfidenceFields = useMemo(() => {
@@ -3189,7 +3200,7 @@ export default function LeaseReview() {
                                   </Link>
                                   <span className="text-xs text-purple-700/70">
                                     {' — '}matches on {c.match_reasons.join(' + ')}
-                                    {c.lifecycle_status ? ` · ${c.lifecycle_status}` : ''}
+                                    {c.lifecycle_status ? ` · ${displayLabel(c.lifecycle_status as LifecycleStatus)}` : ''}
                                   </span>
                                 </div>
                               </li>

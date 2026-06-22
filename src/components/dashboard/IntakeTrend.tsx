@@ -8,7 +8,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
-import { useNavigate } from 'react-router-dom';
 
 interface MonthPoint {
   month: string;
@@ -25,12 +24,8 @@ export function IntakeTrend() {
   const { language } = useLanguage();
   const { workspace } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
-  const navigate = useNavigate();
   const [data, setData] = useState<MonthPoint[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // navigate retained for future drill-down use
-  void navigate;
 
   useEffect(() => {
     async function fetchData() {

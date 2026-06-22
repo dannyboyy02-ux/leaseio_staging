@@ -5,10 +5,11 @@ import { join } from 'node:path';
 // Static regression guard for the rent-roll export query + rent resolution.
 // Converts audit findings B4 + #126 into permanent contracts.
 //
-//   - B4: the rent-roll query must filter on the canonical IN-FORCE
-//     lifecycle_status set (executed / active / fully_executed) and archived=false,
-//     NOT the legacy `status` vocabulary (['Ready','final','review']) which
-//     silently dropped valid active/executed leases from the roll.
+//   - B4 / #118 R2: the rent-roll query must filter on the canonical IN-FORCE
+//     lifecycle_status set (executed / fully_executed / pending_counter_signature
+//     / active) and archived=false, NOT the legacy `status` vocabulary
+//     (['Ready','final','review']) which silently dropped valid active/executed
+//     leases from the roll. (The set converged with main's #118 R2 on merge.)
 //   - #126: monthly rent must resolve through getBaseMonthlyRent (the static
 //     executed → current → base chain), NOT a bare `current_monthly_rent || 0`,
 //     which exported an executed lease whose rent lives in
@@ -44,9 +45,11 @@ describe('RentRollExport — query lifecycle filter (audit B4)', () => {
   const query = sliceBetween(source, "from('leases')", "order('lease_end'");
 
   it('filters on the canonical in-force lifecycle_status set, not the legacy status vocabulary', () => {
-    expect(query).toContain(
-      ".in('lifecycle_status', ['executed', 'active', 'fully_executed'])",
-    );
+    expect(query).toContain(".in('lifecycle_status'");
+    // The in-force set (the B4/#118-R2 union), regardless of formatting/order.
+    for (const s of ['executed', 'fully_executed', 'pending_counter_signature', 'active']) {
+      expect(query, `lifecycle_status set should include '${s}'`).toContain(`'${s}'`);
+    }
     // The exact regression we are guarding against: the legacy `status` filter.
     expect(query).not.toContain(".in('status'");
     expect(query).not.toContain("'Ready'");

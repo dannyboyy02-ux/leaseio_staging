@@ -165,7 +165,7 @@ export default function SignatorReview() {
         if (leaseRow.lifecycle_status !== 'final_review') {
           if (!cancelled) {
             setAuthError(
-              `This lease is in ${leaseRow.lifecycle_status}, not final_review. Signator review is only available at final_review.`,
+              `This lease isn't at the final-review stage yet — it can't be reviewed here until it gets there.`,
             );
           }
           return;
@@ -338,7 +338,7 @@ export default function SignatorReview() {
   if (appLoading || loading) {
     return (
       <AppLayout>
-        <AppHeader title="Signator Review" />
+        <AppHeader title="Final Review" />
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -349,7 +349,7 @@ export default function SignatorReview() {
   if (authError || !lease || !step) {
     return (
       <AppLayout>
-        <AppHeader title="Signator Review" />
+        <AppHeader title="Final Review" />
         <div className="max-w-2xl mx-auto py-10">
           <Card className="border-destructive/40">
             <CardHeader>
@@ -360,7 +360,7 @@ export default function SignatorReview() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                {authError || 'Unable to load signator review for this lease.'}
+                {authError || 'Unable to load the final review for this lease.'}
               </p>
               <Button
                 variant="outline"
@@ -379,7 +379,7 @@ export default function SignatorReview() {
   return (
     <AppLayout>
       <AppHeader
-        title="Signator Review"
+        title="Final Review"
         subtitle={lease.filename || 'Untitled lease'}
       />
 

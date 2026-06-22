@@ -99,3 +99,42 @@ jobs:
 
       - name: Replay migration chain on clean Postgres
         run: supabase start
+
+  # Edge functions are Deno → NOT covered by `npm run typecheck` (which is the
+  # Node/Vite app only). `deno check` (full type-check) can't run here yet: it
+  # 404s resolving supabase-js's deep type graph via esm.sh, which would false-
+  # red every supabase-js function (needs a separate import-map refactor). So
+  # this is `deno lint` instead, and scoped to the edge files a PR actually
+  # changes — it enforces lint-clean on any new/modified function (catching
+  # unused vars, unreachable code, missing await, etc.) without failing on the
+  # large pre-existing `no-explicit-any` debt in untouched legacy functions.
+  # `no-explicit-any` is excluded repo-wide via supabase/functions/deno.lint.json
+  # (the deliberate Supabase-row casting pattern). PR-only: a post-merge lint
+  # failure on main couldn't be acted on (the commit is already in).
+  deno-lint:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Lint changed edge functions
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          CHANGED=$(git diff --name-only --diff-filter=ACMR "${PR_BASE_SHA}...HEAD" -- supabase/functions | grep -E '\.ts$' || true)
+          if [ -z "$CHANGED" ]; then
+            echo "No changed edge functions (.ts under supabase/functions) — nothing to lint."
+            exit 0
+          fi
+          echo "Linting changed edge files:"
+          echo "$CHANGED"
+          deno lint --config supabase/functions/deno.lint.json $CHANGED
