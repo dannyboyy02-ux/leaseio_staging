@@ -1,6 +1,8 @@
 import { AlertTriangle, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import type { LeaseCalculations } from '@/lib/leaseCalculations';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 
 interface FinancialImpactPreviewProps {
   calculations: LeaseCalculations;
@@ -10,15 +12,6 @@ interface FinancialImpactPreviewProps {
   termMonths: number;
 }
 
-function fmt(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 export function FinancialImpactPreview({
   calculations,
   covenantFlagged,
@@ -26,6 +19,8 @@ export function FinancialImpactPreview({
   discountRate,
   termMonths,
 }: FinancialImpactPreviewProps) {
+  const { language } = useLanguage();
+  const fmt = (amount: number) => formatLocalizedCurrency(amount, language);
   const exceedsThreshold =
     covenantThreshold != null &&
     covenantThreshold > 0 &&

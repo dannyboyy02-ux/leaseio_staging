@@ -22,7 +22,7 @@ describe('#111 C3 — act-on-chain-step authorizes the effective assignee exclus
   it('no longer authorizes the original approver before the effective assignee (the additive bug)', () => {
     // The old code's first check authorized approver_user_id unconditionally,
     // before effective_assignee. That ordering must be gone.
-    expect(src).not.toMatch(/let actedAsDelegate = false;[\s\S]*?\n  if \(step\.approver_user_id && step\.approver_user_id === user\.id\) \{\n    authorized = true;\n  \}\n\n  \/\/ Phase 7: effective_assignee_user_id covers/);
+    expect(src).not.toMatch(/let actedAsDelegate = false;[\s\S]*?\n {2}if \(step\.approver_user_id && step\.approver_user_id === user\.id\) \{\n {4}authorized = true;\n {2}\}\n\n {2}\/\/ Phase 7: effective_assignee_user_id covers/);
   });
 
   it('still tags a delegated action + keeps the defensive voluntary-delegation path', () => {

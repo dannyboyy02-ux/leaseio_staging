@@ -5,29 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { canExportReports } from '@/lib/authorization';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
+import { getBaseMonthlyRent } from '@/lib/leaseCalculations';
 import { escapeCsvCell } from '@/lib/csv';
-
-interface LeaseData {
-  id: string;
-  filename: string;
-  landlord_name: string | null;
-  tenant_name: string | null;
-  lease_start: string | null;
-  lease_end: string | null;
-  current_monthly_rent: number | null;
-  base_rent_amount: string | null;
-  base_rent_frequency: string | null;
-  rent_escalation_type: string | null;
-  extracted_json: Record<string, unknown> | null;
-}
 
 export function RentRollExport() {
   const [isExporting, setIsExporting] = useState(false);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { userRole, workspace } = useApp();
   const canExport = canExportReports(userRole);
 
@@ -35,11 +23,7 @@ export function RentRollExport() {
     if (!amount) return '';
     const num = typeof amount === 'string' ? parseFloat(amount.replace(/[^0-9.-]/g, '')) : amount;
     if (isNaN(num)) return '';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(num);
+    return formatLocalizedCurrency(num, language, { cents: true });
   };
 
   const formatDate = (dateStr: string | null): string => {
@@ -76,16 +60,17 @@ export function RentRollExport() {
       // Workspace scoping mandatory — exports for the active workspace only.
       // Replaces the previous user_id filter, which would have mixed data
       // for users with leases in multiple workspaces.
+      // #118 (R2) / Audit B4: a rent roll lists leases actually ON THE BOOKS —
+      // executed or active — keyed on lifecycle_status (the legacy `status`
+      // column is the doc-pipeline state and diverges: a draft can be
+      // status='Ready', an active lease status='Uploaded'). Pre-signature
+      // pipeline (approved/in_negotiation/final_review), terminal states, and
+      // archived leases are excluded so the run-rate totals reflect committed
+      // rent only.
       const { data: leases, error } = await supabase
         .from('leases')
         .select('*')
         .eq('workspace_id', workspace.id)
-        // #118 (R2): a rent roll lists leases actually ON THE BOOKS — executed
-        // or active — keyed on lifecycle_status (the legacy `status` column is
-        // the doc-pipeline state and diverges: a draft can be status='Ready', an
-        // active lease status='Uploaded'). Pre-signature pipeline
-        // (approved/in_negotiation/final_review), terminal states, and archived
-        // leases are excluded so the run-rate totals reflect committed rent only.
         .in('lifecycle_status', [
           'executed', 'fully_executed', 'pending_counter_signature', 'active',
         ])
@@ -99,7 +84,14 @@ export function RentRollExport() {
         return;
       }
 
-      const totalMonthly = leases.reduce((sum, l) => sum + (l.current_monthly_rent || 0), 0);
+      // Audit #126: resolve rent via the canonical chain
+      // (executed → current → base), not current_monthly_rent alone — an
+      // executed lease whose rent lives in executed_monthly_payment was
+      // exported as $0, understating the rent roll handed to auditors.
+      // getBaseMonthlyRent (not getMonthlyRent) pins the STATIC chain, matching
+      // Portfolio and keeping the export immune to the query later embedding
+      // rent_schedules (the schedule-vs-static call is KNOWN_ISSUES #126).
+      const totalMonthly = leases.reduce((sum, l) => sum + getBaseMonthlyRent(l), 0);
       const totalAnnual = totalMonthly * 12;
 
       const headers = [
@@ -116,7 +108,7 @@ export function RentRollExport() {
       ];
 
       const rows = leases.map((lease) => {
-        const monthly = lease.current_monthly_rent || 0;
+        const monthly = getBaseMonthlyRent(lease);
         const extractedJson = lease.extracted_json as Record<string, unknown> | null;
         const propertyAddress =
           getExtractedFieldValue(extractedJson?.property_address) ||

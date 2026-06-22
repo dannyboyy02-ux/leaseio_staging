@@ -50,6 +50,20 @@ describe('create-firm-checkout — owner-gated hosted Checkout Session', () => {
     // Customer resolution is create-only on the email fallback (#61-safe).
     expect(src).toContain('stripe.customers.create({ email: user.email');
   });
+  it('audit C3 — Checkout success lands on /app/firm/billing, not the bare dashboard', () => {
+    // Regression guard for audit C3: the post-payment redirect must land on the
+    // firm Billing screen (which acknowledges the return + flips the status
+    // badge to Active) rather than the bare /app/firm dashboard dead-end, where
+    // the user got no confirmation and could assume the card was declined and
+    // pay again. A future edit must not silently revert to the dead-end form.
+    // Narrow the read window to the success_url assignment (CLAUDE.md: full-file
+    // toContain produces false positives).
+    const successUrlLine = src.split('\n').find((l) => l.includes('success_url:'));
+    expect(successUrlLine).toBeDefined();
+    expect(successUrlLine).toContain('${origin}/app/firm/billing?checkout=success');
+    // The bare-dashboard form must be gone everywhere in the file.
+    expect(src).not.toContain('${origin}/app/firm?checkout=success');
+  });
 });
 
 describe('create-firm — #102 structured errors (now money-adjacent)', () => {

@@ -17,6 +17,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { LeaseAnalysisDocument } from '@/components/leases/LeaseAnalysisExport';
 import { type ReportLease } from '@/lib/reportGeneration';
@@ -41,14 +43,6 @@ type PendingDelete =
   | { kind: 'executed'; path: string; name: string }
   | { kind: 'summary'; url: string; name: string };
 
-function formatNow(): string {
-  return new Date().toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 export function LeaseDocumentsTab({
   leaseId,
   filename,
@@ -60,7 +54,14 @@ export function LeaseDocumentsTab({
 }: LeaseDocumentsTabProps) {
   const { user } = useAuth();
   const { userRole } = useApp();
+  const { language } = useLanguage();
   const { t } = useAppTranslation();
+  const formatNow = (): string =>
+    formatLocalizedDate(new Date(), language, {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [analyses, setAnalyses] = useState<AnalysisVersion[]>([]);
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
@@ -267,7 +268,7 @@ export function LeaseDocumentsTab({
     } finally {
       setGeneratingPdf(false);
     }
-  }, [leaseId, analyses.length]);
+  }, [leaseId, analyses.length, language]);
 
   const hasDocuments =
     Boolean(storagePath && filename) ||

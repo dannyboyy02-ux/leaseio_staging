@@ -148,8 +148,10 @@ describe('AmendmentsList archive-delete', () => {
     expect(failureBranch).toContain("t('amendments.delete_audit_warning')");
   });
 
-  it('renders the archive button only for admins', () => {
-    const gated = sliceBetween(source, '{isAdmin && (', 'setPendingDelete(amendment)');
+  it('renders the archive button only for admins, and hides it on read-only (Vault)', () => {
+    // Audit D2: the per-amendment archive is a write, so it's gated on
+    // `isAdmin && !readOnly` — hidden on a read-only retention workspace.
+    const gated = sliceBetween(source, '{isAdmin && !readOnly && (', 'setPendingDelete(amendment)');
     expect(gated).toContain('<Button');
     // #92: archive vocabulary — the action archives, so the label says
     // "Archive", not "Delete".
@@ -444,7 +446,9 @@ describe('LockedHeader archived state + overflow menu', () => {
   it('renders an unmissable archived banner with an inline admin restore action', () => {
     const banner = sliceBetween(source, 'border-destructive/40', '</Card>');
     expect(banner).toContain("t('archive.deleted_banner')");
-    const restore = sliceBetween(banner, '{isAdmin && leaseId && (', '</Button>');
+    // Audit D2: restore (unarchive) is a write, so it's also gated on !readOnly
+    // — hidden on a read-only retention workspace.
+    const restore = sliceBetween(banner, '{!readOnly && isAdmin && leaseId && (', '</Button>');
     expect(restore).toContain('setArchiveDialogOpen(true)');
     expect(restore).toContain("t('archive.unarchive')");
   });
@@ -452,7 +456,8 @@ describe('LockedHeader archived state + overflow menu', () => {
   it('has an overflow menu containing the audit-trail link and the admin archive item', () => {
     const menu = sliceBetween(source, '<DropdownMenu>', '</DropdownMenu>');
     expect(menu).toContain('audit-log?leaseId=${leaseId}');
-    const adminItems = sliceBetween(menu, '{isAdmin && (', '</DropdownMenuContent>');
+    // Audit D2: the archive item is a write, gated on !readOnly (hidden on Vault).
+    const adminItems = sliceBetween(menu, '{!readOnly && isAdmin && (', '</DropdownMenuContent>');
     expect(adminItems).toContain('setArchiveDialogOpen(true)');
     // Trigger is labeled for screen readers.
     expect(menu).toContain("aria-label={t('common.more_actions')}");

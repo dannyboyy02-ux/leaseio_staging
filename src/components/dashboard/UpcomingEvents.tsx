@@ -10,10 +10,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { differenceInDays, format } from 'date-fns';
+import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
-import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 interface UpcomingEvent {
   id: string;
@@ -27,12 +28,7 @@ interface UpcomingEvent {
 }
 
 function formatCurrency(amount: number, language: string): string {
-  return new Intl.NumberFormat(language === 'es' ? 'es-MX' : 'en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return formatLocalizedCurrency(amount, language as SupportedLocale);
 }
 
 const DOT_COLORS: Record<string, string> = {
@@ -128,12 +124,7 @@ export function UpcomingEvents() {
           lease.filename,
         );
 
-        const monthlyRent = getCurrentMonthlyRent(
-          (lease as any).rent_schedules,
-          (lease as any).executed_monthly_payment,
-          lease.current_monthly_rent,
-          (lease as any).monthly_payment,
-        );
+        const monthlyRent = getMonthlyRent(lease as any);
 
         // Prefer executed_expiry_date, fall back to lease_end
         const expiryRaw = (lease as any).executed_expiry_date || lease.lease_end;

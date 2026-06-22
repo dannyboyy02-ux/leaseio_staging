@@ -109,7 +109,7 @@ export function LockedHeader({
 
           <div className="shrink-0 flex items-center gap-2">
             {readOnly && (
-              <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+              <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
             )}
             {!readOnly && !isAdmin && !pendingUnlockRequest && (
               <Button variant="outline" size="sm" onClick={onRequestUnlock} disabled={isRequestingUnlock}>
@@ -152,7 +152,7 @@ export function LockedHeader({
                       {t('locked_lease.view_audit_trail')}
                     </Link>
                   </DropdownMenuItem>
-                  {isAdmin && (
+                  {!readOnly && isAdmin && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => setArchiveDialogOpen(true)}>
@@ -168,7 +168,7 @@ export function LockedHeader({
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            {leaseId && isAdmin && (
+            {!readOnly && leaseId && isAdmin && (
               <ArchiveButton
                 leaseId={leaseId}
                 isArchived={!!isArchived}
@@ -189,7 +189,7 @@ export function LockedHeader({
               <p className="text-sm text-destructive min-w-0">
                 {t('archive.deleted_banner')}
               </p>
-              {isAdmin && leaseId && (
+              {!readOnly && isAdmin && leaseId && (
                 <Button
                   variant="outline"
                   size="sm"

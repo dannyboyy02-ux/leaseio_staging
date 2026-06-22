@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { TrendingUp, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 
 interface MonthPoint {
   month: string;
@@ -20,6 +22,7 @@ function formatCompact(n: number): string {
 
 export function CommitmentHistory() {
   const { workspace } = useApp();
+  const { language } = useLanguage();
   const [data, setData] = useState<MonthPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,7 +50,7 @@ export function CommitmentHistory() {
         .sort(([a], [b]) => a.localeCompare(b))
         .slice(-12)
         .map(([key, commitment]) => ({
-          month: new Date(key + '-01').toLocaleDateString('en-AU', { month: 'short', year: '2-digit' }),
+          month: formatLocalizedDate(key + '-01', language, { month: 'short', year: '2-digit' }),
           commitment,
         }));
 
@@ -55,7 +58,7 @@ export function CommitmentHistory() {
       setLoading(false);
     }
     fetchData();
-  }, [workspace?.id]);
+  }, [workspace?.id, language]);
 
   // Hide entirely when there's no data — don't show an empty card to new users
   if (!loading && data.length === 0) return null;
@@ -99,7 +102,7 @@ export function CommitmentHistory() {
               />
               <Tooltip
                 formatter={(val: number) => [
-                  `$${val.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`,
+                  `$${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
                   'Commitment',
                 ]}
                 contentStyle={{

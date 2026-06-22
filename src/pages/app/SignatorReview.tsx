@@ -51,8 +51,10 @@ import {
 
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { documentTypeLabel } from '@/lib/leaseDocuments';
 
 const ATTESTATION_MIN_CHARS = 30;
@@ -101,15 +103,6 @@ interface DocRow {
   is_current_latest: boolean;
 }
 
-function formatCurrency(value: number | null): string {
-  if (value == null) return '—';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 function formatDate(value: string | null): string {
   if (!value) return '—';
   try {
@@ -122,7 +115,9 @@ function formatDate(value: string | null): string {
 export default function SignatorReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
+  const { language } = useLanguage();
   const { user, workspace, userFunctionalRoles, isLoading: appLoading } = useApp();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
 
   const [loading, setLoading] = useState(true);
   const [lease, setLease] = useState<LeaseRow | null>(null);

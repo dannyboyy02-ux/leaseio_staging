@@ -5,17 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useNeedsAction } from '@/hooks/useNeedsAction';
 
-const formatCurrency = (value: number): string =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-
 export function NeedsAction() {
+  const { language } = useLanguage();
   const navigate = useNavigate();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const toggleSection = (key: string) =>

@@ -33,9 +33,12 @@ interface Amendment {
 interface AmendmentsListProps {
   parentLeaseId: string;
   refreshTrigger?: number;
+  /** Vault / read-only retention: hide the write affordance (archive) — the
+   *  workspace is an archive and the server blocks the write anyway. */
+  readOnly?: boolean;
 }
 
-export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsListProps) {
+export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false }: AmendmentsListProps) {
   const { userRole, refreshProfile } = useApp();
   const { user } = useAuth();
   const { t } = useAppTranslation();
@@ -192,7 +195,7 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger }: AmendmentsList
                       <ExternalLink size={14} />
                     </Link>
                   </Button>
-                  {isAdmin && (
+                  {isAdmin && !readOnly && (
                     <Button
                       variant="ghost"
                       size="sm"

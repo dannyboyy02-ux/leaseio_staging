@@ -74,6 +74,9 @@ function UsageRow({
 export function UsageContent({ onAddCapacity }: { onAddCapacity?: () => void } = {}) {
   const { t } = useAppTranslation();
   const { workspace, availableWorkspaces, userRole } = useApp();
+  // Firm-bound: capacity is firm-managed, so the "approaching limit" CTA must
+  // point at the firm owner, not the (now firm-locked) workspace Billing tab.
+  const firmBound = Boolean(workspace?.firmId);
 
   if (!workspace) {
     return <p className="text-sm text-muted-foreground">{t('common.loading')}</p>;
@@ -138,8 +141,13 @@ export function UsageContent({ onAddCapacity }: { onAddCapacity?: () => void } =
             {/* Both plans land on Billing; only the label differs — a
                 Business user already owns the top plan, so "upgrade" copy
                 would loop them into buying what they have. Non-admins can't
-                act on Billing, so they get a directive line instead. */}
-            {isAdminUser ? (
+                act on Billing, so they get a directive line instead.
+                Firm-bound: Billing is firm-locked, so point at the firm owner. */}
+            {firmBound ? (
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-300 shrink-0">
+                {t('usage.firm_managed')}
+              </p>
+            ) : isAdminUser ? (
               <Button variant="accent" size="sm" asChild>
                 <Link
                   to="/app/settings/account?tab=billing"

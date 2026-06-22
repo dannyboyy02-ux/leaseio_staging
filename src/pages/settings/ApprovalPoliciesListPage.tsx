@@ -14,6 +14,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 
 type Policy = {
   id: string;
@@ -31,15 +33,12 @@ type Policy = {
   updated_at: string;
 };
 
-const fmtMoney = (n: number | null): string =>
+const fmtMoney = (n: number | null, language: SupportedLocale): string =>
   n == null
     ? '—'
-    : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+    : formatLocalizedCurrency(n, language);
 
-const fmtDate = (iso: string): string =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-const matchSummary = (p: Policy): { label: string; value: string }[] => {
+const matchSummary = (p: Policy, language: SupportedLocale): { label: string; value: string }[] => {
   const out: { label: string; value: string }[] = [];
   if (p.match_asset_types.length) out.push({ label: 'Asset', value: p.match_asset_types.join(', ') });
   if (p.match_lease_types.length) out.push({ label: 'Type', value: p.match_lease_types.join(', ') });
@@ -50,7 +49,7 @@ const matchSummary = (p: Policy): { label: string; value: string }[] => {
   if (min != null || max != null) {
     out.push({
       label: 'Annual',
-      value: `${min != null ? fmtMoney(min) : '—'} – ${max != null ? fmtMoney(max) : '—'}`,
+      value: `${min != null ? fmtMoney(min, language) : '—'} – ${max != null ? fmtMoney(max, language) : '—'}`,
     });
   }
   return out;
@@ -60,7 +59,10 @@ export default function ApprovalPoliciesListPage() {
   const { workspace } = useApp();
   const navigate = useNavigate();
   const { t } = useAppTranslation();
+  const { language } = useLanguage();
   const queryClient = useQueryClient();
+  const fmtDate = (iso: string): string =>
+    formatLocalizedDate(iso, language, { month: 'short', day: 'numeric', year: 'numeric' });
   const [testOpen, setTestOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -268,7 +270,7 @@ export default function ApprovalPoliciesListPage() {
             ) : (
               <div className="space-y-2">
                 {sortedPolicies.map((p) => {
-                  const chips = matchSummary(p);
+                  const chips = matchSummary(p, language);
                   return (
                     <div
                       key={p.id}

@@ -31,9 +31,11 @@ import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
-import { isReadOnlyRetention } from '@/config/pricing';
+import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -81,21 +83,14 @@ const IN_FLIGHT_STATUSES = new Set([
   'final_review', 'pending_counter_signature',
 ]);
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 export default function Leases() {
   const navigate = useNavigate();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const { workspace, user, userRole, refreshProfile } = useApp();
-  // Vault (read-only retention): hide intake entry points (server also blocks).
-  const isReadOnly = isReadOnlyRetention(workspace?.plan);
+  // #136/#137: hide intake/archive affordances for ANY read-only workspace —
+  // Vault OR a cancellation-grace/soft-deleted one (the server also blocks).
+  const isReadOnly = isWorkspaceReadOnly(workspace);
   // Archive is admin/owner-only (server-enforced by the #78 trigger); the
   // list "Delete" action uses restorable-archive semantics, matching the
   // detail page (#79) — true hard-delete is not offered from the list.
@@ -280,24 +275,6 @@ export default function Leases() {
   const getPropertyAddress = (lease: LeaseRow): string => {
     const json = lease.extracted_json as Record<string, unknown> | null;
     return lease.request_title || getExtractedFieldValue(json?.address) || lease.filename || '';
-  };
-
-  const getMonthlyRent = (lease: LeaseRow): number => {
-    if (lease.rent_schedules && lease.rent_schedules.length > 0) {
-      const today = new Date();
-      const currentPeriod = lease.rent_schedules.find((p) => {
-        const start = new Date(p.period_start);
-        const end = p.period_end ? new Date(p.period_end) : null;
-        return start <= today && (!end || end >= today);
-      });
-      if (currentPeriod?.monthly_amount) return currentPeriod.monthly_amount;
-    }
-    return (
-      Number(lease.executed_monthly_payment) ||
-      Number(lease.current_monthly_rent) ||
-      Number(lease.monthly_payment) ||
-      0
-    );
   };
 
   const getLeaseEnd = (lease: LeaseRow): string | null =>

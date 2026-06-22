@@ -129,7 +129,9 @@ non-Vault no-op): main workbench, LockedLeaseDetail (active+model_locked, the
 dominant state — initially missed, fixed), LockedHeader/VendorCard,
 FailedLeaseBanner (Retry hidden — AI spend), DocumentsPanel, intake uploads,
 and the counter-signature / chain-violation panels — each shows
-`vault.lease_readonly_note`; view + export intact. Billing: Vault card is the
+`readonly.lease_note` (renamed from `vault.lease_readonly_note` in #137 when
+the read-only surface was extended to cancellation-grace workspaces, not just
+Vault); view + export intact. Billing: Vault card is the
 single surface (Reactivate Starter/Business, no refund; subordinate "Manage in
 Stripe" link); generic plan card + packs + credits suppressed for Vault.
 Renewal reminder: `vault-renewal-reminder` cron (deployed v1, verify_jwt=false)

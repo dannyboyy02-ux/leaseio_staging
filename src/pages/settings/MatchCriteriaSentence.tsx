@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — must stay aligned with leases.asset_type and leases.lease_type
@@ -57,14 +59,10 @@ const PILL_EMPTY =
 // Pure helpers — exported for vitest.
 // ───────────────────────────────────────────────────────────────────────────
 
-const fmtMoney = (raw: string): string => {
+const fmtMoney = (raw: string, language: SupportedLocale): string => {
   const n = parseFloat(raw);
   if (!Number.isFinite(n)) return `$${raw}`;
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(n);
+  return formatLocalizedCurrency(n, language);
 };
 
 export function joinWithOr(values: string[]): string {
@@ -94,13 +92,13 @@ export function regionLabel(state: MatchCriteriaState): string {
   return joinWithOr(state.match_regions);
 }
 
-export function costLabel(state: MatchCriteriaState): string {
+export function costLabel(state: MatchCriteriaState, language: SupportedLocale): string {
   const min = state.match_min_annual_cost.trim();
   const max = state.match_max_annual_cost.trim();
   if (!min && !max) return 'any annual cost';
-  if (min && max) return `${fmtMoney(min)} – ${fmtMoney(max)}`;
-  if (min) return `at least ${fmtMoney(min)}`;
-  return `at most ${fmtMoney(max)}`;
+  if (min && max) return `${fmtMoney(min, language)} – ${fmtMoney(max, language)}`;
+  if (min) return `at least ${fmtMoney(min, language)}`;
+  return `at most ${fmtMoney(max, language)}`;
 }
 
 export function isLeaseTypeActive(state: MatchCriteriaState): boolean {
@@ -136,6 +134,7 @@ export function MatchCriteriaSentence({
   departmentSuggestions,
   regionSuggestions,
 }: Props) {
+  const { language } = useLanguage();
   return (
     <p className="text-sm leading-8 text-foreground">
       When someone requests a{' '}
@@ -166,7 +165,7 @@ export function MatchCriteriaSentence({
       </CriterionPill>
       {' '}for{' '}
       <CriterionPill
-        label={costLabel(state)}
+        label={costLabel(state, language)}
         active={isCostActive(state)}
         color="violet"
         onClear={() =>

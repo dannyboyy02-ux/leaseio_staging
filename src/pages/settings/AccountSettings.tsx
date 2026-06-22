@@ -54,6 +54,9 @@ const timezones = [
 
 export default function AccountSettings() {
   const { user, workspace, userRole, refreshProfile, isLoading } = useApp();
+  // Firm-bound: plan, payment, and capacity are all managed at the firm level;
+  // the matching billing controls are hidden (their edge fns 403 firm_managed).
+  const firmBound = Boolean(workspace?.firmId);
   const { user: authUser, signOut } = useAuth();
   const { t, language } = useLanguage();
   const navigate = useNavigate();
@@ -177,8 +180,9 @@ export default function AccountSettings() {
     }
 
     // Deep-link from the quota banner's "Add capacity" CTA opens the pack dialog.
+    // Suppressed on firm-bound workspaces — capacity is firm-managed (audit D1).
     if (searchParams.get('packs') === '1') {
-      setPackDialogOpen(true);
+      if (!firmBound) setPackDialogOpen(true);
       const next = new URLSearchParams(searchParams);
       next.delete('packs');
       navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
@@ -192,7 +196,7 @@ export default function AccountSettings() {
       setBillingInterval(billing);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, refreshProfile]);
+  }, [searchParams, refreshProfile, firmBound]);
 
   useEffect(() => {
     if (user) {
@@ -487,11 +491,6 @@ export default function AccountSettings() {
   const currentPlan = normalizePlanId(workspace?.plan);
 
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
-
-  // Firm layer (Phase 9): a firm-bound workspace's plan + billing are managed at
-  // the firm level (the DB locks the plan), so the Billing tab shows a read-only
-  // banner and suppresses the plan-change + cancel controls.
-  const firmBound = Boolean(workspace?.firmId);
 
   // Real billing dates come from subscription_period_end (mirrored from
   // Stripe by the webhook). Null until first checkout; guard every render
@@ -989,8 +988,11 @@ export default function AccountSettings() {
               </div>
             )}
 
-            {/* Trial banner — visible while subscription is in Stripe's trial window. */}
-            {workspace.subscriptionStatus === 'trialing' && formattedPeriodEnd && (
+            {/* Trial banner — visible while subscription is in Stripe's trial window.
+                Suppressed on firm-bound workspaces: the firm owns billing, so a
+                stale workspace-level trial status must not show a portal button
+                that 403s firm_managed (audit D1). */}
+            {!firmBound && workspace.subscriptionStatus === 'trialing' && formattedPeriodEnd && (
               <div className="rounded-lg border border-accent/40 bg-accent/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
                 <div>
                   <p className="text-sm font-medium text-foreground">{t('account.trial_banner_title')}</p>
@@ -1018,8 +1020,11 @@ export default function AccountSettings() {
               </div>
             )}
 
-            {/* Past-due / unpaid / incomplete states — payment failed; user must update method. */}
-            {workspace?.subscriptionStatus &&
+            {/* Past-due / unpaid / incomplete states — payment failed; user must update method.
+                Suppressed on firm-bound workspaces — the firm owns billing and the
+                child admin cannot fix a firm sub from here (audit D1); a stale
+                status would otherwise show an alarming red button that 403s. */}
+            {!firmBound && workspace?.subscriptionStatus &&
               ['past_due', 'unpaid', 'incomplete'].includes(workspace.subscriptionStatus) && (
                 <div className="rounded-lg border border-destructive/50 bg-destructive/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
                   <div>
@@ -1128,6 +1133,13 @@ export default function AccountSettings() {
               </section>
             )}
 
+            {/* Payment + Invoices are workspace-scoped billing. On firm-bound
+                workspaces the firm owns billing (the banner above explains) and
+                get-billing-summary is workspace-scoped, so these would render
+                empty/actionless — hide them entirely rather than show a header
+                over a bare card line + a button that 403s (audit D1). */}
+            {!firmBound && (
+            <>
             {/* Payment — saved card from get-billing-summary; "Update" opens the
                 Stripe portal. Card data is admin-only (privileged); members see
                 an explanatory note rather than an empty section. */}
@@ -1225,6 +1237,8 @@ export default function AccountSettings() {
                   </Table>
                 )}
               </section>
+            </>
+            )}
 
             {/* Capacity packs moved to the Usage tab's Active leases row
                 (2026-06-15) to keep Billing focused on plan + payment + invoices.
@@ -1276,7 +1290,7 @@ export default function AccountSettings() {
 
           {/* Usage — embedded inside Settings (Claude pattern) */}
           <TabsContent value="usage" className="space-y-6 mt-0">
-            <UsageContent onAddCapacity={() => setPackDialogOpen(true)} />
+            <UsageContent onAddCapacity={firmBound ? undefined : () => setPackDialogOpen(true)} />
           </TabsContent>
 
           {/* Appearance — theme toggle */}

@@ -9,6 +9,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedNumber } from '@/lib/dateFormatters';
 import {
   ANNUAL_DISCOUNT_PERCENT,
   PLANS,
@@ -49,6 +51,7 @@ export function PlanPickerDialog({
   isBusy,
 }: PlanPickerDialogProps) {
   const { t } = useAppTranslation();
+  const { language } = useLanguage();
   const annual = billingInterval === 'annual';
 
   return (
@@ -111,7 +114,7 @@ export function PlanPickerDialog({
                 </div>
                 {annual && (
                   <p className="text-[11px] text-muted-foreground mt-0.5 text-right">
-                    {t('account.billed_annually', { total: plan.price.annual.toLocaleString() })}
+                    {t('account.billed_annually', { total: formatLocalizedNumber(plan.price.annual, language) })}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground mt-1">

@@ -417,15 +417,74 @@ serve(async (req) => {
   // (eventually consistent — would lag the just-fired event). cancel_at_period_end
   // packs stay status='active' until the period ends, so their capacity correctly
   // persists until Stripe flips them to 'canceled' and fires another event.
-  async function applyDocumentPack(subscription: Stripe.Subscription) {
+  // #65: durably record any paid event we could NOT honor, so a dropped grant
+  // is forensically recoverable (and ops-surfaceable) instead of a vanished
+  // console.warn. Best-effort — if even this write fails we're back to the prior
+  // log-only status quo, so it logs loudly but never re-raises: an un-honorable
+  // event must not loop the webhook on retries.
+  async function recordBillingDeadLetter(params: {
+    source: "document_pack" | "single_lease_credit";
+    reason:
+      | "missing_workspace_id"
+      | "missing_customer"
+      | "unknown_workspace"
+      | "underpaid"
+      | "customer_mismatch";
+    stripeObjectId: string;
+    eventId: string | null;
+    stripeCustomerId?: string | null;
+    claimedWorkspaceId?: string | null;
+    amountCents?: number | null;
+    purchasedBy?: string | null;
+    rawMetadata?: Record<string, unknown> | null;
+  }) {
+    const { error } = await supabaseAdmin.rpc("record_billing_dead_letter", {
+      p_source: params.source,
+      p_reason: params.reason,
+      p_stripe_object_id: params.stripeObjectId,
+      p_stripe_event_id: params.eventId,
+      p_stripe_customer_id: params.stripeCustomerId ?? null,
+      p_claimed_workspace_id: params.claimedWorkspaceId ?? null,
+      p_amount_cents: params.amountCents ?? null,
+      p_purchased_by: params.purchasedBy ?? null,
+      p_raw_metadata: params.rawMetadata ?? {},
+    });
+    if (error) {
+      console.error(
+        "[stripe-webhook] FAILED to record billing dead-letter",
+        params.source,
+        params.reason,
+        params.stripeObjectId,
+        error.message,
+      );
+    }
+  }
+
+  async function applyDocumentPack(subscription: Stripe.Subscription, eventId: string) {
     const workspaceId = subscription.metadata?.workspace_id;
     if (!workspaceId) {
       console.warn("[stripe-webhook] document-pack event missing workspace_id", subscription.id);
+      await recordBillingDeadLetter({
+        source: "document_pack",
+        reason: "missing_workspace_id",
+        stripeObjectId: subscription.id,
+        eventId,
+        stripeCustomerId: resolveCustomerId(subscription),
+        rawMetadata: subscription.metadata ?? {},
+      });
       return;
     }
     const customerId = resolveCustomerId(subscription);
     if (!customerId) {
       console.warn("[stripe-webhook] document-pack event missing customer", subscription.id);
+      await recordBillingDeadLetter({
+        source: "document_pack",
+        reason: "missing_customer",
+        stripeObjectId: subscription.id,
+        eventId,
+        claimedWorkspaceId: workspaceId,
+        rawMetadata: subscription.metadata ?? {},
+      });
       return;
     }
 
@@ -453,12 +512,30 @@ serve(async (req) => {
       startingAfter = page.data[page.data.length - 1].id;
     }
 
-    const { error } = await supabaseAdmin
+    // .select() so a 0-row update (workspace_id present in metadata but no such
+    // workspace — deleted/unknown) is detectable: a 0-row PostgREST update is
+    // NOT an error, so without this the paid pack would be silently dropped
+    // (Codex PR review).
+    const { data: updated, error } = await supabaseAdmin
       .from("workspaces")
       .update({ addon_document_capacity: total })
-      .eq("id", workspaceId);
+      .eq("id", workspaceId)
+      .select("id");
     if (error) {
       throw new Error(`Failed to update addon_document_capacity: ${error.message}`);
+    }
+    if (!updated || updated.length === 0) {
+      console.warn("[stripe-webhook] document-pack event references unknown workspace", workspaceId, subscription.id);
+      await recordBillingDeadLetter({
+        source: "document_pack",
+        reason: "unknown_workspace",
+        stripeObjectId: subscription.id,
+        eventId,
+        stripeCustomerId: customerId,
+        claimedWorkspaceId: workspaceId,
+        rawMetadata: subscription.metadata ?? {},
+      });
+      return;
     }
   }
 
@@ -467,10 +544,27 @@ serve(async (req) => {
   // duplicate insert no-ops and the grant trigger never fires twice. The
   // workspace counter is incremented by the lease_credit_purchases AFTER
   // INSERT trigger, not here, so grant accounting has exactly one writer.
-  async function applySingleLeaseCredit(pi: Stripe.PaymentIntent) {
+  async function applySingleLeaseCredit(pi: Stripe.PaymentIntent, eventId: string) {
+    // Derived once up front so every drop branch can attribute the dropped grant
+    // (#65): who paid, how much, which customer.
+    const piCustomer = typeof pi.customer === "string" ? pi.customer : pi.customer?.id ?? null;
+    const paidCents = pi.amount_received ?? pi.amount ?? 0;
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const purchasedBy = uuidRe.test(pi.metadata?.purchased_by ?? "") ? (pi.metadata?.purchased_by ?? null) : null;
+
     const workspaceId = pi.metadata?.workspace_id;
     if (!workspaceId) {
       console.warn("[stripe-webhook] single-lease PI missing workspace_id", pi.id);
+      await recordBillingDeadLetter({
+        source: "single_lease_credit",
+        reason: "missing_workspace_id",
+        stripeObjectId: pi.id,
+        eventId,
+        stripeCustomerId: piCustomer,
+        amountCents: paidCents,
+        purchasedBy,
+        rawMetadata: pi.metadata ?? {},
+      });
       return;
     }
 
@@ -488,6 +582,17 @@ serve(async (req) => {
     const wsRow = ws as { plan?: string; stripe_customer_id?: string | null } | null;
     if (!wsRow) {
       console.warn("[stripe-webhook] single-lease PI references unknown workspace", workspaceId, pi.id);
+      await recordBillingDeadLetter({
+        source: "single_lease_credit",
+        reason: "unknown_workspace",
+        stripeObjectId: pi.id,
+        eventId,
+        stripeCustomerId: piCustomer,
+        claimedWorkspaceId: workspaceId,
+        amountCents: paidCents,
+        purchasedBy,
+        rawMetadata: pi.metadata ?? {},
+      });
       return;
     }
     // Vault edge (audit review 2026-06-13): a credit legitimately purchased
@@ -501,22 +606,40 @@ serve(async (req) => {
     const expectedCents = wsRow.plan === "vault"
       ? Math.min(SINGLE_LEASE_PRICE_CENTS.starter, SINGLE_LEASE_PRICE_CENTS.business)
       : SINGLE_LEASE_PRICE_CENTS[wsRow.plan === "business" ? "business" : "starter"];
-    const paidCents = pi.amount_received ?? pi.amount ?? 0;
-    const piCustomer = typeof pi.customer === "string" ? pi.customer : pi.customer?.id ?? null;
-
     // Clamp quantity to exactly 1 (the only supported single-lease purchase),
     // and require the charge to cover the price and belong to this workspace's
-    // customer. Reject rather than over-grant on any mismatch.
+    // customer. Reject rather than over-grant on any mismatch — and dead-letter
+    // the rejected-but-paid charge (#65: money moved, grant withheld).
     if (paidCents < expectedCents) {
       console.error(`[stripe-webhook] single-lease PI underpaid: ${paidCents} < ${expectedCents}`, pi.id);
+      await recordBillingDeadLetter({
+        source: "single_lease_credit",
+        reason: "underpaid",
+        stripeObjectId: pi.id,
+        eventId,
+        stripeCustomerId: piCustomer,
+        claimedWorkspaceId: workspaceId,
+        amountCents: paidCents,
+        purchasedBy,
+        rawMetadata: { ...(pi.metadata ?? {}), expected_cents: expectedCents },
+      });
       return;
     }
     if (wsRow.stripe_customer_id && piCustomer && piCustomer !== wsRow.stripe_customer_id) {
       console.error("[stripe-webhook] single-lease PI customer mismatch", pi.id);
+      await recordBillingDeadLetter({
+        source: "single_lease_credit",
+        reason: "customer_mismatch",
+        stripeObjectId: pi.id,
+        eventId,
+        stripeCustomerId: piCustomer,
+        claimedWorkspaceId: workspaceId,
+        amountCents: paidCents,
+        purchasedBy,
+        rawMetadata: { ...(pi.metadata ?? {}), workspace_customer: wsRow.stripe_customer_id },
+      });
       return;
     }
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const purchasedBy = uuidRe.test(pi.metadata?.purchased_by ?? "") ? pi.metadata?.purchased_by : null;
 
     const { error } = await supabaseAdmin
       .from("lease_credit_purchases")
@@ -598,7 +721,7 @@ serve(async (req) => {
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
         if (pi.metadata?.addon_type === ADDON_TYPE_SINGLE_LEASE) {
-          await applySingleLeaseCredit(pi);
+          await applySingleLeaseCredit(pi, event.id);
         }
         break;
       }
@@ -626,7 +749,7 @@ serve(async (req) => {
         if (isFirmSubscription(subscription)) {
           await applyFirmSubscription(subscription, event.type);
         } else if (isDocumentPack(subscription)) {
-          await applyDocumentPack(subscription);
+          await applyDocumentPack(subscription, event.id);
         } else {
           await applySubscription(subscription, workspaceId);
         }
@@ -640,7 +763,7 @@ serve(async (req) => {
         if (isFirmSubscription(subscription)) {
           await applyFirmSubscription(subscription, event.type);
         } else if (isDocumentPack(subscription)) {
-          await applyDocumentPack(subscription);
+          await applyDocumentPack(subscription, event.id);
         } else {
           await applySubscription(subscription);
         }

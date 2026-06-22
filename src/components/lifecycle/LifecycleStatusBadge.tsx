@@ -1,7 +1,5 @@
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import type { LifecycleStatus } from '@/types/lifecycle';
-import { LIFECYCLE_STATUS_CONFIG } from '@/types/lifecycle';
+import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 
 interface LifecycleStatusBadgeProps {
   status: LifecycleStatus;
@@ -9,25 +7,21 @@ interface LifecycleStatusBadgeProps {
   size?: 'sm' | 'default';
 }
 
-export function LifecycleStatusBadge({ 
-  status, 
+// Thin, type-narrowed wrapper over the canonical LeaseStatusBadge (soft
+// appearance). Retained as the lifecycle-specific entry point so call sites
+// stay self-documenting and get LifecycleStatus type-checking; the rendering,
+// styling, and labels all live in LeaseStatusBadge now (single source of truth).
+export function LifecycleStatusBadge({
+  status,
   className,
-  size = 'default' 
+  size = 'default',
 }: LifecycleStatusBadgeProps) {
-  const config = LIFECYCLE_STATUS_CONFIG[status];
-  
   return (
-    <Badge
-      variant={config.color}
-      className={cn(
-        config.bgClass,
-        config.textClass,
-        'border-0 font-medium',
-        size === 'sm' && 'text-xs px-2 py-0.5',
-        className
-      )}
-    >
-      {size === 'sm' ? config.shortLabel : config.label}
-    </Badge>
+    <LeaseStatusBadge
+      status={status}
+      appearance="soft"
+      size={size}
+      className={className}
+    />
   );
 }

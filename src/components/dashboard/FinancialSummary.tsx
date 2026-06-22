@@ -5,11 +5,12 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, differenceInDays } from 'date-fns';
+import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 import { computePortfolioMetrics, type PortfolioMetrics } from '@/lib/portfolioAnalytics';
-import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 interface PipelineData {
   pendingCount: number;
@@ -38,12 +39,7 @@ interface FinancialData {
 }
 
 function formatCurrency(amount: number, language: string): string {
-  return new Intl.NumberFormat(language === 'es' ? 'es-MX' : 'en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return formatLocalizedCurrency(amount, language as SupportedLocale);
 }
 
 export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }) {
@@ -117,12 +113,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
       const in120Days = new Date(now.getTime() + 120 * 86_400_000);
 
       const totalMonthlyRent = activeLeases.reduce((sum, lease) => {
-        return sum + getCurrentMonthlyRent(
-          (lease as any).rent_schedules,
-          (lease as any).executed_monthly_payment,
-          lease.current_monthly_rent,
-          (lease as any).monthly_payment,
-        );
+        return sum + getMonthlyRent(lease as any);
       }, 0);
 
       // Rent increasing next 90 days: sum of upcoming escalations within 90 days
@@ -154,12 +145,7 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         return d >= now && d <= in90Days;
       });
       expiringCount.forEach((lease) => {
-        rentExpiringNext90 += getCurrentMonthlyRent(
-          (lease as any).rent_schedules,
-          (lease as any).executed_monthly_payment,
-          lease.current_monthly_rent,
-          (lease as any).monthly_payment,
-        );
+        rentExpiringNext90 += getMonthlyRent(lease as any);
       });
       const expiringLeasesCount = expiringCount.length;
 
@@ -192,18 +178,8 @@ export function FinancialSummary({ onNewRequest }: { onNewRequest?: () => void }
         const daysUntil = differenceInDays(nextMonth, now);
 
         const highestRentLease = activeLeases.reduce((max, lease) => {
-          const rent = getCurrentMonthlyRent(
-            (lease as any).rent_schedules,
-            (lease as any).executed_monthly_payment,
-            lease.current_monthly_rent,
-            (lease as any).monthly_payment,
-          );
-          const maxRent = getCurrentMonthlyRent(
-            (max as any).rent_schedules,
-            (max as any).executed_monthly_payment,
-            max.current_monthly_rent,
-            (max as any).monthly_payment,
-          );
+          const rent = getMonthlyRent(lease as any);
+          const maxRent = getMonthlyRent(max as any);
           return rent > maxRent ? lease : max;
         }, activeLeases[0]);
 

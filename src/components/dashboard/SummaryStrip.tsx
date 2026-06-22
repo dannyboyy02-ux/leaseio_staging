@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Check } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
-import { getCurrentMonthlyRent } from '@/lib/leaseCalculations';
+import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 interface StatBox {
   label: string;
@@ -15,23 +17,11 @@ interface StatBox {
   onDismiss?: () => void;
 }
 
-const formatCurrency = (value: number): string =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-
-const formatCurrencyDecimals = (value: number): string =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-
 export function SummaryStrip() {
+  const { language } = useLanguage();
   const { workspace } = useApp();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
+  const formatCurrencyDecimals = (value: number | null | undefined) => formatLocalizedCurrency(value, language, { cents: true });
   const navigate = useNavigate();
   const [stats, setStats] = useState<StatBox[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,13 +73,13 @@ export function SummaryStrip() {
           l.lifecycle_status === 'fully_executed'
       );
       const monthlyRentSum = portfolioLeases.reduce(
-        (sum, l) => sum + getCurrentMonthlyRent((l as any).rent_schedules, l.executed_monthly_payment, l.current_monthly_rent, l.monthly_payment),
+        (sum, l) => sum + getMonthlyRent(l as any),
         0
       );
 
       const leasesWithSqft = portfolioLeases.filter((l) => Number(l.square_footage ?? 0) > 0);
       const totalMonthlyRent = leasesWithSqft.reduce(
-        (sum, l) => sum + getCurrentMonthlyRent((l as any).rent_schedules, l.executed_monthly_payment, l.current_monthly_rent, l.monthly_payment),
+        (sum, l) => sum + getMonthlyRent(l as any),
         0
       );
       const totalSqft = leasesWithSqft.reduce((sum, l) => sum + Number(l.square_footage ?? 0), 0);

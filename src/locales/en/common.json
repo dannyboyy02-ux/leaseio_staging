@@ -114,7 +114,14 @@
       "usage_heading": "Usage by workspace",
       "no_usage": "No workspaces in this firm yet.",
       "start": "Start firm billing",
-      "start_failed": "Could not start billing"
+      "start_failed": "Could not start billing",
+      "checkout_success": "Payment received — finalizing your firm subscription.",
+      "checkout_canceled": "Checkout canceled — no charge was made.",
+      "finalizing": "Finalizing your subscription…",
+      "finalizing_note": "This can take a few seconds after payment — no need to pay again.",
+      "finalizing_delayed": "Still syncing your subscription",
+      "finalizing_delayed_note": "Your payment was received. This usually clears within a minute — refresh, or contact support if it doesn't appear.",
+      "refresh": "Refresh"
     },
     "onboarding": {
       "title": "Set up your firm",
@@ -128,7 +135,7 @@
       "workspace_name": "Workspace name",
       "workspace_placeholder": "e.g. a client or subsidiary",
       "billing_summary": "Your firm is billed per workspace, together.",
-      "price_per_workspace": "$499 / workspace / month",
+      "price_per_workspace": "${{price}} / workspace / month",
       "billing_note": "Add or remove workspaces anytime — billing adjusts automatically.",
       "to_payment": "Continue to payment",
       "do_later": "Set up billing later",
@@ -176,7 +183,8 @@
       "awaiting_approval_detail": "Lease is locked and routed to approvers.",
       "final_label": "Approved & locked",
       "final_detail": "Lease record is finalized.",
-      "marked_reviewed_toast": "Marked {{sections}} reviewed."
+      "marked_reviewed_toast": "Marked {{sections}} reviewed.",
+      "save_review_failed": "Couldn't save your review. If this keeps happening, your workspace may be read-only."
     }
   },
   "nav": {
@@ -222,6 +230,7 @@
     "vault_readonly_note": "This workspace is in Vault — read-only retention. Usage limits don't apply; your repository is fully retained and exportable.",
     "vault_reactivate_link": "Reactivate a full plan",
     "ask_admin_upgrade": "Ask a workspace admin to upgrade your plan.",
+    "firm_managed": "Capacity is managed by your firm — ask your firm owner to add capacity.",
     "approaching_limit": "Approaching your usage limit",
     "approaching_limit_desc": "You're close to one of your plan's limits — abstractions, leases, or workspaces.",
     "upgrade_plan": "Upgrade plan",
@@ -770,7 +779,7 @@
     "view_usage_link": "View usage",
     "billing_admin_only": "Only workspace admins and owners can manage billing.",
     "firm_managed_title": "Managed by your firm",
-    "firm_managed_desc": "This workspace is part of {{firm}}. Plan and billing are managed at the firm level.",
+    "firm_managed_desc": "This workspace is part of {{firm}}. Plan and billing are managed at the firm level — contact your firm owner to make changes.",
     "firm_fallback": "your firm",
     "auto_renews_on": "Auto renews on {{date}}",
     "plan_benefit_starter": "15 AI abstractions per month · up to 3 users",
@@ -921,7 +930,9 @@
     "single_success_desc": "You can add your lease now — the credit is used automatically.",
     "single_pending_title": "Payment confirmed",
     "single_pending": "Your credit will be ready in a moment — try your upload shortly. No need to pay again.",
-    "member_note": "This workspace is at its lease limit. Only workspace admins can buy more capacity — contact your admin to purchase additional leases."
+    "member_note": "This workspace is at its lease limit. Only workspace admins can buy more capacity — contact your admin to purchase additional leases.",
+    "firm_managed_title": "Capacity is managed by your firm",
+    "firm_managed_desc": "This workspace is part of {{firm}}. Ask your firm owner to add capacity or a workspace — billing is handled at the firm level."
   },
   "quota_banner": {
     "metric_active_leases": "active leases",
@@ -958,6 +969,8 @@
     "security": "Security",
     "details": "Workspace Details",
     "basic_info": "Basic information about your workspace",
+    "plan_billing_signpost": "Plan and billing for this workspace are managed in your Account settings.",
+    "go_to_billing": "Plan & billing",
     "name": "Workspace Name",
     "default_timezone": "Default Timezone",
     "timezone_desc": "Used for scheduling notifications and displaying dates",
@@ -1626,7 +1639,9 @@
     "transition": "Transition",
     "reason": "Reason",
     "loading": "Loading...",
-    "no_transitions": "No state transitions found",
+    "no_transitions": "No activity recorded yet",
+    "no_match": "No activity matches these filters",
+    "clear_filters": "Clear filters",
     "showing": "Showing",
     "of": "of",
     "previous": "Previous",
@@ -1856,13 +1871,38 @@
     "vault_unavailable": "Vault isn't available right now — please contact support@theleaseio.com to keep your data.",
     "wall_vault_note": "The Vault retention option was available during the grace window. Renewing is the only way to restore access now."
   },
+  "needs_review": {
+    "title": "Review Required",
+    "intro": "Please review the following items before posting this lease:",
+    "missing": "{{label}} is missing",
+    "low_confidence": "Double-check {{label}} — we were less certain here ({{pct}}%)"
+  },
+  "failed_lease": {
+    "reupload_button": "Upload New Document",
+    "uploading": "Uploading…",
+    "reupload_hint": "The original file isn't available to retry — upload a fresh copy to try again. PDF only · Max 50 MB.",
+    "reupload_not_pdf": "Please choose a PDF file.",
+    "reupload_too_large": "That file is over the 50 MB limit. Please choose a smaller PDF.",
+    "reupload_started": "Re-processing started",
+    "reupload_failed": "Couldn't upload the document. Please try again."
+  },
   "vault": {
     "banner_text": "Vault — read-only repository. Renews {{date}} at ${{price}}/yr.",
     "banner_text_nodate": "Vault — read-only repository. Renews annually at ${{price}}/yr.",
     "reactivate_cta": "Reactivate a plan",
     "member_wall_title": "This workspace is in Vault",
     "member_wall_desc": "{{name}} is a read-only retention repository. Vault access is owner-only — contact the workspace owner to restore full access or reactivate a plan.",
-    "lease_readonly_note": "This workspace is in Vault — read-only. Editing, approvals, and uploads are disabled.",
     "member_wall_switch": "Switch workspace"
+  },
+  "readonly": {
+    "lease_note": "This workspace is read-only — you can view and export, but editing, approvals, and uploads are disabled."
+  },
+  "routing_failed": {
+    "title": "Approval routing didn't finish",
+    "body": "This request is saved as a draft because it couldn't be routed to approvers automatically. Retrying often resolves it — if it keeps failing, your approval policies may need an admin's attention.",
+    "retry": "Retry routing",
+    "admin_hint": "Retrying is safe — it won't create a duplicate request.",
+    "cannot_retry": "Ask the requester or a workspace admin to retry routing for this draft.",
+    "last_error": "Last attempt: {{message}}"
   }
 }

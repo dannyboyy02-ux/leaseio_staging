@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Layers, ShieldOff, ShieldCheck, LogOut } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,10 +66,7 @@ export default function FirmWorkspaces() {
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto space-y-5">
-        <div>
-          <div className="flex items-center gap-2"><Layers className="h-5 w-5 text-primary" /><h1 className="text-2xl font-semibold">{t("firm.workspaces.title")}</h1></div>
-          <p className="text-sm text-muted-foreground mt-1">{t("firm.workspaces.subtitle")}</p>
-        </div>
+        <FirmPageHeader icon={Layers} title={t("firm.workspaces.title")} subtitle={t("firm.workspaces.subtitle")} />
 
         {children.length === 0 ? (
           <Card className="p-8 text-center text-sm text-muted-foreground">{t("firm.workspaces.none")}</Card>

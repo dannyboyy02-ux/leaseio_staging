@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Building2, Inbox, Users, FileText, Layers, ArrowRight } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,23 +76,21 @@ export default function FirmDashboard() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
-              <h1 className="text-2xl font-semibold">{currentFirm?.firm_name ?? t("firm.fallback")}</h1>
-              {currentFirmRole ? <Badge variant="secondary" className="text-[10px]">{t(`firm.role.${currentFirmRole}`)}</Badge> : null}
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">{t("firm.dashboard.subtitle")}</p>
-          </div>
-          <Button variant="outline" asChild>
-            <Link to="/app/firm/inbox" className="flex items-center gap-2">
-              <Inbox className="h-4 w-4" />
-              {t("firm.nav.inbox")}
-              {pendingActionsCount > 0 ? <Badge className="ml-1">{pendingActionsCount}</Badge> : null}
-            </Link>
-          </Button>
-        </div>
+        <FirmPageHeader
+          icon={Building2}
+          title={currentFirm?.firm_name ?? t("firm.fallback")}
+          subtitle={t("firm.dashboard.subtitle")}
+          badge={currentFirmRole ? <Badge variant="secondary" className="text-[10px]">{t(`firm.role.${currentFirmRole}`)}</Badge> : null}
+          actions={
+            <Button variant="outline" asChild>
+              <Link to="/app/firm/inbox" className="flex items-center gap-2">
+                <Inbox className="h-4 w-4" />
+                {t("firm.nav.inbox")}
+                {pendingActionsCount > 0 ? <Badge className="ml-1">{pendingActionsCount}</Badge> : null}
+              </Link>
+            </Button>
+          }
+        />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {stat(<Layers className="h-4 w-4" />, t("firm.dashboard.children"), childUsage.length)}

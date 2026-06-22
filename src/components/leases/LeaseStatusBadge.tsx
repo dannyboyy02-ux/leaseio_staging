@@ -12,23 +12,23 @@ import {
   XCircle,
 } from 'lucide-react';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { LIFECYCLE_STATUS_CONFIG } from '@/types/lifecycle';
 
-interface LeaseStatusBadgeProps {
-  status: string | null;
-  className?: string;
-  showIcon?: boolean;
-}
-
-// Phase 3 audit miss reconciled here: this component is a SEPARATE badge
-// from LifecycleStatusBadge.tsx (the canonical chain-aware badge in
-// /components/lifecycle/). It's used by Leases.tsx + ImportHistory.tsx
-// and the audit only traced the lifecycle/ badge.
+// Canonical status badge for the whole app. Unifies the two former badges:
+//   - appearance="variant" (default): icon + semantic Badge variant. Covers the
+//     AI-extraction `status` column (Processing/Uploaded/Failed/Ready) AND
+//     lifecycle/chain vocabulary — used by the Leases list, ImportHistory, and
+//     the LeaseReview header.
+//   - appearance="soft": bg/text pill with optional short labels at size="sm".
+//     Used by lifecycle surfaces via the LifecycleStatusBadge wrapper.
 //
-// The Phase 3 fix: every label is sourced from displayLabel() so chain
-// vocabulary states render correctly ("Submitted" for both submitted and
-// concept_submitted, etc.). The local STATUS_CONFIG below stays — it
-// drives icon + variant per status — and is extended with chain values.
-const STATUS_CONFIG: Record<string, {
+// Single label source: displayLabel() handles every lifecycle/chain value and
+// falls back to the raw string for AI-extraction statuses it doesn't know
+// (which render fine). The soft pill's short labels + bg/text styling come from
+// LIFECYCLE_STATUS_CONFIG (the only place those are defined). Its full labels
+// are kept in lock-step with displayLabel(), so the two appearances never drift.
+
+const VARIANT_CONFIG: Record<string, {
   variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning' | 'success' | 'info';
   icon?: ComponentType<{ className?: string }>;
   iconClassName?: string;
@@ -64,22 +64,55 @@ const STATUS_CONFIG: Record<string, {
   chain_violation: { variant: 'destructive', icon: AlertCircle },
 };
 
-export function LeaseStatusBadge({ status, className, showIcon = true }: LeaseStatusBadgeProps) {
-  const key = status ?? '';
-  const config = STATUS_CONFIG[key] ?? { variant: 'outline' as const };
-  // displayLabel handles every lifecycle vocabulary value and falls back
-  // to the raw string for non-lifecycle values like 'Processing',
-  // 'Uploaded', etc., which it doesn't know but which render fine.
-  const label = key
-    ? displayLabel(key as LifecycleStatus)
-    : 'Unknown';
+export interface StatusBadgeProps {
+  status: string | null;
+  className?: string;
+  /** 'variant' (default): icon + semantic Badge variant. 'soft': bg/text pill. */
+  appearance?: 'variant' | 'soft';
+  /** variant appearance only. */
+  showIcon?: boolean;
+  /** soft appearance only — 'sm' renders the short label + tighter padding. */
+  size?: 'sm' | 'default';
+}
 
+export function LeaseStatusBadge({
+  status,
+  className,
+  appearance = 'variant',
+  showIcon = true,
+  size = 'default',
+}: StatusBadgeProps) {
+  const key = status ?? '';
+  // Canonical full label, shared by both appearances.
+  const fullLabel = key ? displayLabel(key as LifecycleStatus) : 'Unknown';
+
+  if (appearance === 'soft') {
+    const lifecycleConfig = LIFECYCLE_STATUS_CONFIG[key as LifecycleStatus];
+    const label =
+      size === 'sm' ? (lifecycleConfig?.shortLabel ?? fullLabel) : fullLabel;
+    return (
+      <Badge
+        variant={lifecycleConfig?.color ?? 'outline'}
+        className={cn(
+          lifecycleConfig?.bgClass,
+          lifecycleConfig?.textClass,
+          'border-0 font-medium',
+          size === 'sm' && 'text-xs px-2 py-0.5',
+          className,
+        )}
+      >
+        {label}
+      </Badge>
+    );
+  }
+
+  const config = VARIANT_CONFIG[key] ?? { variant: 'outline' as const };
   const Icon = config.icon;
 
   return (
     <Badge variant={config.variant} className={cn('gap-1', className)}>
       {showIcon && Icon && <Icon className={cn('h-3 w-3', config.iconClassName)} />}
-      {label}
+      {fullLabel}
     </Badge>
   );
 }

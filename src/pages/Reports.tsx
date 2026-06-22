@@ -11,7 +11,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useApp } from '@/contexts/AppContext';
 import { isReadOnlyRetention } from '@/config/pricing';
+import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedCurrency, formatLocalizedPercent } from '@/lib/dateFormatters';
 import { Link } from 'react-router-dom';
 import { RentRollExport } from '@/components/reports/RentRollExport';
 import { ReportSettingsCard } from '@/components/workspace/ReportSettingsCard';
@@ -64,7 +66,7 @@ const reports: Array<{
 
 export default function Reports() {
   const { canAccessFeature, userRole, workspace } = useApp();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   // Vault (read-only retention) keeps full view + export of Reports under the
   // flatten rule — gating exports in Vault is a bug by definition.
   const hasAccess = canAccessFeature('business') || isReadOnlyRetention(workspace?.plan);
@@ -254,23 +256,14 @@ export default function Reports() {
                   />
                   <YAxis
                     tickFormatter={(value: number) =>
-                      new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD',
-                        notation: 'compact',
-                        maximumFractionDigits: 1,
-                      }).format(value)
+                      formatLocalizedCurrency(value, language, { compact: true })
                     }
                     tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                     width={72}
                   />
                   <Tooltip
                     formatter={(val: number) => [
-                      new Intl.NumberFormat('en-US', {
-                        style: 'currency',
-                        currency: 'USD',
-                        maximumFractionDigits: 0,
-                      }).format(val),
+                      formatLocalizedCurrency(val, language),
                       'Commitment',
                     ]}
                     labelFormatter={(l) => String(l).replace('_', ' ')}
@@ -318,15 +311,15 @@ export default function Reports() {
                           {lease.filename || lease.tenant_name || 'Unnamed lease'}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Pipeline: ${Number(lease.monthly_payment || 0).toLocaleString('en-AU')}/mo
+                          Pipeline: {formatLocalizedCurrency(Number(lease.monthly_payment || 0), language)}/mo
                           &nbsp;&middot;&nbsp;
-                          Executed: ${Number(lease.executed_monthly_payment || 0).toLocaleString('en-AU')}/mo
+                          Executed: {formatLocalizedCurrency(Number(lease.executed_monthly_payment || 0), language)}/mo
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {pct !== null && (
                           <Badge variant={pct >= 10 ? 'destructive' : 'warning'} className="text-[10px]">
-                            {pct.toFixed(1)}% variance
+                            {formatLocalizedPercent(pct, language, 1, 1)} variance
                           </Badge>
                         )}
                         <Button variant="ghost" size="sm" asChild>
@@ -344,12 +337,14 @@ export default function Reports() {
         {/* Report settings — moved here from Workspace Settings (settings
             live where reports are generated). Admin/editor visible,
             admin-editable; same gates the old tab used. */}
-        {/* Report/financial CONFIG is hidden on a read-only retention (Vault)
-            workspace — those cards write to workspaces.discount_rate/report_*,
-            which the server now also rejects for non-live workspaces
-            (20260613010000). Vault keeps view + export of the reports above;
-            it just can't reconfigure them. */}
-        {(isAdmin || isEditor) && workspace?.id && !isReadOnlyRetention(workspace?.plan) && (
+        {/* Report/financial CONFIG is hidden on ANY read-only workspace — Vault
+            OR a cancellation-grace/soft-deleted one (#137) — those cards write to
+            workspaces.discount_rate/report_*, which the server rejects for
+            non-live workspaces (20260613010000). Read-only workspaces keep view +
+            export of the reports above; they just can't reconfigure them.
+            (Line 71's hasAccess deliberately KEEPS isReadOnlyRetention — that's a
+            read-access GRANT for Vault, not a write-gate.) */}
+        {(isAdmin || isEditor) && workspace?.id && !isWorkspaceReadOnly(workspace) && (
           <div className="mt-8 space-y-6">
             <div>
               <h2 className="text-lg font-semibold">{t('reports.settings_title')}</h2>

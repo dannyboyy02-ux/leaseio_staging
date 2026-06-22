@@ -5,6 +5,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 
 interface MonthPoint {
@@ -18,16 +20,10 @@ interface LeaseRow {
   monthly_payment: number | null;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 export function IntakeTrend() {
+  const { language } = useLanguage();
   const { workspace } = useApp();
+  const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const [data, setData] = useState<MonthPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -50,7 +46,7 @@ export function IntakeTrend() {
       for (let i = 5; i >= 0; i--) {
         const d = new Date();
         d.setMonth(d.getMonth() - i);
-        const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+        const label = formatLocalizedDate(d, language, { month: 'short', year: '2-digit' });
         const monthLeases = rows.filter((l) => {
           if (!l.uploaded_at) return false;
           const ld = new Date(l.uploaded_at);
@@ -67,7 +63,9 @@ export function IntakeTrend() {
       setLoading(false);
     }
     fetchData();
-  }, [workspace?.id]);
+    // `language` is read when building the month labels, so re-run on switch
+    // (mirrors CommitmentHistory) — otherwise the axis keeps stale en labels.
+  }, [workspace?.id, language]);
 
   const isEmpty = !loading && data.every((d) => d.count === 0);
 

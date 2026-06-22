@@ -114,7 +114,14 @@
       "usage_heading": "Uso por espacio de trabajo",
       "no_usage": "Aún no hay espacios de trabajo en esta firma.",
       "start": "Iniciar facturación de la firma",
-      "start_failed": "No se pudo iniciar la facturación"
+      "start_failed": "No se pudo iniciar la facturación",
+      "checkout_success": "Pago recibido: estamos finalizando la suscripción de su firma.",
+      "checkout_canceled": "Pago cancelado: no se realizó ningún cargo.",
+      "finalizing": "Finalizando su suscripción…",
+      "finalizing_note": "Esto puede tardar unos segundos después del pago; no necesita volver a pagar.",
+      "finalizing_delayed": "Aún sincronizando su suscripción",
+      "finalizing_delayed_note": "Se recibió su pago. Esto suele resolverse en un minuto: actualice o contacte a soporte si no aparece.",
+      "refresh": "Actualizar"
     },
     "onboarding": {
       "title": "Configure su firma",
@@ -128,7 +135,7 @@
       "workspace_name": "Nombre del espacio de trabajo",
       "workspace_placeholder": "p. ej. un cliente o subsidiaria",
       "billing_summary": "Su firma se factura por espacio de trabajo, en conjunto.",
-      "price_per_workspace": "$499 / espacio de trabajo / mes",
+      "price_per_workspace": "${{price}} / espacio de trabajo / mes",
       "billing_note": "Agregue o quite espacios de trabajo en cualquier momento — la facturación se ajusta automáticamente.",
       "to_payment": "Continuar al pago",
       "do_later": "Configurar la facturación más tarde",
@@ -176,7 +183,8 @@
       "awaiting_approval_detail": "El arrendamiento está bloqueado y enviado a los aprobadores.",
       "final_label": "Aprobado y bloqueado",
       "final_detail": "El registro del arrendamiento está finalizado.",
-      "marked_reviewed_toast": "Se marcaron {{sections}} como revisadas."
+      "marked_reviewed_toast": "Se marcaron {{sections}} como revisadas.",
+      "save_review_failed": "No se pudo guardar tu revisión. Si esto continúa, tu espacio de trabajo puede ser de solo lectura."
     }
   },
   "nav": {
@@ -222,6 +230,7 @@
     "vault_readonly_note": "Este espacio de trabajo está en Vault: retención de solo lectura. Los límites de uso no aplican; su repositorio se conserva por completo y es exportable.",
     "vault_reactivate_link": "Reactivar un plan completo",
     "ask_admin_upgrade": "Solicite a un administrador del espacio de trabajo que actualice su plan.",
+    "firm_managed": "La capacidad la gestiona su firma — pida al propietario de la firma que agregue capacidad.",
     "approaching_limit": "Acercándose al límite",
     "approaching_limit_desc": "Está cerca de uno de los límites de su plan: abstracciones, arrendamientos o espacios de trabajo.",
     "upgrade_plan": "Actualizar plan",
@@ -770,7 +779,7 @@
     "view_usage_link": "Ver uso",
     "billing_admin_only": "Solo los administradores y propietarios del espacio de trabajo pueden gestionar la facturación.",
     "firm_managed_title": "Gestionado por su firma",
-    "firm_managed_desc": "Este espacio de trabajo forma parte de {{firm}}. El plan y la facturación se gestionan a nivel de firma.",
+    "firm_managed_desc": "Este espacio de trabajo forma parte de {{firm}}. El plan y la facturación se gestionan a nivel de firma — contacte al propietario de la firma para hacer cambios.",
     "firm_fallback": "su firma",
     "auto_renews_on": "Se renueva automáticamente el {{date}}",
     "plan_benefit_starter": "15 abstracciones de IA al mes · hasta 3 usuarios",
@@ -921,7 +930,9 @@
     "single_success_desc": "Ya puede agregar su arrendamiento — el crédito se usa automáticamente.",
     "single_pending_title": "Pago confirmado",
     "single_pending": "Su crédito estará listo en un momento — intente su carga en breve. No necesita pagar de nuevo.",
-    "member_note": "Este espacio de trabajo está en su límite de arrendamientos. Solo los administradores pueden comprar más capacidad — contacte a su administrador para comprar arrendamientos adicionales."
+    "member_note": "Este espacio de trabajo está en su límite de arrendamientos. Solo los administradores pueden comprar más capacidad — contacte a su administrador para comprar arrendamientos adicionales.",
+    "firm_managed_title": "La capacidad la gestiona su firma",
+    "firm_managed_desc": "Este espacio de trabajo forma parte de {{firm}}. Pida al propietario de la firma que agregue capacidad o un espacio de trabajo — la facturación se gestiona a nivel de la firma."
   },
   "quota_banner": {
     "metric_active_leases": "arrendamientos activos",
@@ -958,6 +969,8 @@
     "security": "Seguridad",
     "details": "Detalles del Espacio de Trabajo",
     "basic_info": "Información básica sobre su espacio de trabajo",
+    "plan_billing_signpost": "El plan y la facturación de este espacio de trabajo se gestionan en la configuración de su Cuenta.",
+    "go_to_billing": "Plan y facturación",
     "name": "Nombre del Espacio de Trabajo",
     "default_timezone": "Zona Horaria Predeterminada",
     "timezone_desc": "Se usa para programar notificaciones y mostrar fechas",
@@ -1626,7 +1639,9 @@
     "transition": "Transición",
     "reason": "Razón",
     "loading": "Cargando...",
-    "no_transitions": "No se encontraron transiciones de estado",
+    "no_transitions": "Aún no se ha registrado actividad",
+    "no_match": "Ninguna actividad coincide con estos filtros",
+    "clear_filters": "Borrar filtros",
     "showing": "Mostrando",
     "of": "de",
     "previous": "Anterior",
@@ -1856,13 +1871,38 @@
     "vault_unavailable": "Vault no está disponible en este momento. Escriba a support@theleaseio.com para conservar sus datos.",
     "wall_vault_note": "La opción de retención Vault estaba disponible durante el período de gracia. Renovar es ahora la única forma de restaurar el acceso."
   },
+  "needs_review": {
+    "title": "Revisión necesaria",
+    "intro": "Revise los siguientes elementos antes de publicar este arrendamiento:",
+    "missing": "Falta {{label}}",
+    "low_confidence": "Verifique {{label}}: la extracción fue menos precisa aquí ({{pct}}%)"
+  },
+  "failed_lease": {
+    "reupload_button": "Subir documento nuevo",
+    "uploading": "Subiendo…",
+    "reupload_hint": "El archivo original no está disponible para reintentar; suba una copia nueva para volver a intentarlo. Solo PDF · Máx. 50 MB.",
+    "reupload_not_pdf": "Elija un archivo PDF.",
+    "reupload_too_large": "Ese archivo supera el límite de 50 MB. Elija un PDF más pequeño.",
+    "reupload_started": "Reprocesamiento iniciado",
+    "reupload_failed": "No se pudo subir el documento. Inténtelo de nuevo."
+  },
   "vault": {
     "banner_text": "Vault — repositorio de solo lectura. Se renueva el {{date}} por ${{price}}/año.",
     "banner_text_nodate": "Vault — repositorio de solo lectura. Se renueva anualmente por ${{price}}/año.",
     "reactivate_cta": "Reactivar un plan",
     "member_wall_title": "Este espacio está en Vault",
     "member_wall_desc": "{{name}} es un repositorio de retención de solo lectura. El acceso a Vault es exclusivo del propietario: comuníquese con el propietario del espacio para restaurar el acceso completo o reactivar un plan.",
-    "lease_readonly_note": "Este espacio está en Vault — solo lectura. La edición, las aprobaciones y las cargas están deshabilitadas.",
     "member_wall_switch": "Cambiar de espacio"
+  },
+  "readonly": {
+    "lease_note": "Este espacio de trabajo es de solo lectura: puedes ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas."
+  },
+  "routing_failed": {
+    "title": "El enrutamiento de aprobación no se completó",
+    "body": "Esta solicitud se guardó como borrador porque no se pudo enrutar automáticamente a los aprobadores. Reintentar suele resolverlo; si sigue fallando, es posible que sus políticas de aprobación necesiten la atención de un administrador.",
+    "retry": "Reintentar enrutamiento",
+    "admin_hint": "Reintentar es seguro: no creará una solicitud duplicada.",
+    "cannot_retry": "Pídale al solicitante o a un administrador del espacio que reintente el enrutamiento de este borrador.",
+    "last_error": "Último intento: {{message}}"
   }
 }

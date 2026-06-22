@@ -74,6 +74,7 @@ import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
 import { downloadCSV } from "@/components/leases/LeaseExports";
 import { LeaseReviewStatusStrip } from "@/components/leases/LeaseReviewStatusStrip";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { formatLocalizedCurrency } from "@/lib/dateFormatters";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
 import { AmendmentsList } from "@/components/leases/AmendmentsList";
@@ -93,6 +94,7 @@ import { ArchiveButton } from "@/components/leases/ArchiveButton";
 
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { retryRequestRouting } from "@/lib/retryRequestRouting";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { LOW_CONFIDENCE_THRESHOLD, type AuditEntry, type ConfidenceScores } from "@/types/workflow";
@@ -106,7 +108,7 @@ import {
   type ApproverProfile,
 } from '@/lib/approverCandidates';
 import { classifyRentScheduleDiff } from '@/lib/rentScheduleDiff';
-import { isReadOnlyRetention } from '@/config/pricing';
+import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 
 interface ApprovalMetadata {
   approved: boolean;
@@ -209,10 +211,13 @@ export default function LeaseReview() {
   const { user, userRole, userFunctionalRoles, workspace } = useApp();
   // Vault (read-only retention) workspaces are view + export only. The server
   // already blocks every write (V1 RLS + config guard); this flag suppresses
-  // the mutating UI affordances so a Vault owner sees a clean read-only
+  // the mutating UI affordances so a read-only owner sees a clean read-only
   // repository instead of buttons that fail opaquely. Every gate is
-  // `&& !isReadOnly`, so live (non-vault) workspaces are unaffected.
-  const isReadOnly = isReadOnlyRetention(workspace?.plan);
+  // `&& !isReadOnly`, so live workspaces are unaffected. #136: read-only now
+  // covers BOTH the Vault retention tier AND the cancellation grace /
+  // soft-delete window (whose plan is still starter/business but whose writes
+  // the server RLS rejects) — previously this missed grace users.
+  const isReadOnly = isWorkspaceReadOnly(workspace);
   const [tier2CorrectionOpen, setTier2CorrectionOpen] = useState(false);
   const [showAmendmentDialog, setShowAmendmentDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
@@ -308,6 +313,10 @@ export default function LeaseReview() {
     covenantFlagged: false,
   });
   const [resubmitting, setResubmitting] = useState(false);
+  const [retryingRouting, setRetryingRouting] = useState(false);
+  // C2: the last routing-failure reason, kept on the page (not just a toast) so
+  // the person who can fix the policy can read what's wrong without re-triggering.
+  const [lastRoutingError, setLastRoutingError] = useState<string | null>(null);
 
   // Processing cancel state
   const [cancellingProcessing, setCancellingProcessing] = useState(false);
@@ -550,6 +559,51 @@ export default function LeaseReview() {
       toast.error('Failed to resubmit');
     } finally {
       setResubmitting(false);
+    }
+  };
+
+  // Audit C2 — a request-workflow lease whose initial approval routing failed is
+  // left in 'draft'. resolve-approval-chain is idempotent on initialResolution,
+  // so offer a retry that re-runs the full route → flip → notify orchestration.
+  const isFailedRoutingDraft =
+    lease?.intake_source === 'request_workflow' && lifecycleStatus === 'draft';
+
+  const handleRetryRouting = async () => {
+    if (!lease || !user || !lease.workspace_id) return;
+    setRetryingRouting(true);
+    try {
+      const result = await retryRequestRouting(
+        supabase,
+        {
+          id: lease.id,
+          calc_total_commitment: lease.calc_total_commitment ?? null,
+          covenant_flagged: lease.covenant_flagged ?? null,
+          request_title: lease.request_title ?? null,
+        },
+        lease.workspace_id,
+        user.id,
+      );
+      if (!result.ok) {
+        // NB: this project compiles with strictNullChecks off, so a boolean
+        // discriminant (`if (!result.ok)`) does not narrow the union — use the
+        // `in` operator, which narrows regardless of strict mode.
+        const message = 'errorMessage' in result ? result.errorMessage : 'Could not retry routing. Please try again.';
+        setLastRoutingError(message);
+        toast.error(message);
+        return;
+      }
+      const finalStatus = 'finalStatus' in result ? result.finalStatus : undefined;
+      setLastRoutingError(null);
+      toast.success('Request routed for approval');
+      setLease((prev: any) => (prev ? { ...prev, lifecycle_status: finalStatus } : prev));
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
+    } catch (err) {
+      console.error('Retry routing failed:', err);
+      const message = 'Could not retry routing. Please try again.';
+      setLastRoutingError(message);
+      toast.error(message);
+    } finally {
+      setRetryingRouting(false);
     }
   };
 
@@ -825,6 +879,9 @@ export default function LeaseReview() {
         const { data, error } = await supabase.from("leases").select("*").eq("id", leaseId).single();
         if (error) { console.error('[LeaseReview] Failed to load lease:', error.message); return; }
 
+        // The route has no key={leaseId}, so this instance is reused across leases.
+        // Clear the per-lease retry-failure message so it can't bleed into another.
+        setLastRoutingError(null);
         setLease(data);
         setRequestEdits({
           request_title: data.request_title || '',
@@ -1193,7 +1250,7 @@ export default function LeaseReview() {
     const extractedJson = lease?.extracted_json as ExtractedJson | null;
     const fieldConfidence = getFieldConfidence(extractedJson, fieldId);
 
-    await supabase.from('field_corrections').insert({
+    const { error } = await supabase.from('field_corrections').insert({
       lease_id: lease.id,
       field_name: fieldId,
       original_value: originalValue || null,
@@ -1201,6 +1258,14 @@ export default function LeaseReview() {
       ai_confidence: fieldConfidence,
       correction_type: !originalValue ? 'add_missing' : !currentValue ? 'delete_wrong' : 'edit'
     });
+    if (error) {
+      // #85: this is a background analytics write (no user-facing toast), but it
+      // must not drop silently — surface to logs and DON'T advance the tracked
+      // baseline, so the next field change re-attempts rather than losing the
+      // correction.
+      console.error('Failed to record field correction:', error);
+      return;
+    }
 
     originalValues.current[fieldId] = currentValue;
   }, [form, lease?.id, lease?.extracted_json, isUnlockedForEditing, activeChangeSet?.id, stageFieldChange]);
@@ -1221,12 +1286,19 @@ export default function LeaseReview() {
     const newConfirmed = isAlready
       ? confirmedSections.filter((k) => k !== sectionKey)
       : [...confirmedSections, sectionKey];
+    const prevConfirmed = confirmedSections;
     setConfirmedSections(newConfirmed);
     if (lease?.id) {
-      await supabase
+      const { error } = await supabase
         .from('leases')
         .update({ confirmed_sections: newConfirmed })
         .eq('id', lease.id);
+      if (error) {
+        // #85: the write was rejected (e.g. Vault/grace read-only RLS) — revert
+        // the optimistic state instead of leaving the UI claiming a saved review.
+        setConfirmedSections(prevConfirmed);
+        toast.error(String(t('lease_review.strip.save_review_failed')));
+      }
     }
   }, [confirmedSections, lease?.id]);
 
@@ -1280,13 +1352,21 @@ export default function LeaseReview() {
   // the section is not yet confirmed.
   const handleConfirmAndAdvance = useCallback(async (sectionKey: SectionKey) => {
     if (!confirmedSections.includes(sectionKey)) {
+      const prevConfirmed = confirmedSections;
       const newConfirmed = [...confirmedSections, sectionKey];
       setConfirmedSections(newConfirmed);
       if (lease?.id) {
-        await supabase
+        const { error } = await supabase
           .from('leases')
           .update({ confirmed_sections: newConfirmed })
           .eq('id', lease.id);
+        if (error) {
+          // #85: revert the optimistic confirm and surface; don't advance to
+          // the next section when the save was rejected.
+          setConfirmedSections(prevConfirmed);
+          toast.error(String(t('lease_review.strip.save_review_failed')));
+          return;
+        }
       }
     }
     const next = nextUnconfirmedAfter(sectionKey, sectionKey);
@@ -1330,10 +1410,12 @@ export default function LeaseReview() {
     const newConfirmed = allIn
       ? confirmedSections.filter((s) => !tab.sections.includes(s as SectionKey))
       : Array.from(new Set([...confirmedSections, ...tab.sections]));
+    const prevConfirmed = confirmedSections;
     setConfirmedSections(newConfirmed);
 
     // Unmark while approved → revert approval in the same update.
     const shouldRevertApproval = allIn && isApproved;
+    const prevExtractedJson = lease?.extracted_json;
     const updatePayload: Record<string, any> = { confirmed_sections: newConfirmed };
     if (shouldRevertApproval) {
       const currentExtractedJson = (lease?.extracted_json || {}) as ExtractedJson;
@@ -1343,7 +1425,18 @@ export default function LeaseReview() {
       setLease((prev: any) => prev ? { ...prev, extracted_json: rest } : prev);
     }
     if (lease?.id) {
-      await supabase.from('leases').update(updatePayload).eq('id', lease.id);
+      const { error } = await supabase.from('leases').update(updatePayload).eq('id', lease.id);
+      if (error) {
+        // #85: revert BOTH optimistic updates (confirm state + the approval-strip
+        // mutation) and surface, instead of showing "Tab reopened" over a write
+        // the DB rejected (e.g. Vault/grace read-only RLS).
+        setConfirmedSections(prevConfirmed);
+        if (shouldRevertApproval) {
+          setLease((prev: any) => prev ? { ...prev, extracted_json: prevExtractedJson } : prev);
+        }
+        toast.error(String(t('lease_review.strip.save_review_failed')));
+        return;
+      }
     }
     if (shouldRevertApproval) {
       toast.message('Tab reopened — lease unapproved and editable.');
@@ -1407,6 +1500,7 @@ export default function LeaseReview() {
   const handleConfirmAllRequired = useCallback(async () => {
     const newlyAdded = SECTION_TRAVERSAL_ORDER.filter((k) => !confirmedSections.includes(k));
     if (newlyAdded.length === 0) return;
+    const prevConfirmed = confirmedSections;
     const merged = [...confirmedSections, ...newlyAdded];
     setConfirmedSections(merged);
     const newlyAddedTitles = newlyAdded.map((k) => SECTION_CONFIG[k].title);
@@ -1421,13 +1515,20 @@ export default function LeaseReview() {
       }
       return newlyAddedTitles.join(', ');
     })();
-    toast.success(String(t('lease_review.strip.marked_reviewed_toast', { sections: formatter })));
     if (lease?.id) {
-      await supabase
+      const { error } = await supabase
         .from('leases')
         .update({ confirmed_sections: merged })
         .eq('id', lease.id);
+      if (error) {
+        // #85: revert + surface; the success toast must follow a confirmed
+        // write, not precede an unchecked one.
+        setConfirmedSections(prevConfirmed);
+        toast.error(String(t('lease_review.strip.save_review_failed')));
+        return;
+      }
     }
+    toast.success(String(t('lease_review.strip.marked_reviewed_toast', { sections: formatter })));
   }, [confirmedSections, lease?.id]);
 
   // Rent schedule: persist inline edits
@@ -1930,6 +2031,29 @@ export default function LeaseReview() {
     }
   }, [lease, user, refetchLease]);
 
+  // #116: honor the ?action=archive deep-link from ImportHistory's Archive
+  // steer. A committed lease can't be hard-deleted there; the steer opens the
+  // lease here with the archive dialog already up so it's one gesture, not a
+  // scavenger hunt through the ⋯ menu. This handles the non-locked workbench
+  // path; the locked-active path (early-returned to LockedLeaseDetail below) is
+  // handled in LockedHeader. Gated to admin/owner (only they can archive) and
+  // self-stripping so a refresh doesn't re-trigger.
+  // NB: must live ABOVE the `if (loading)` / `if (isProcessing)` early returns —
+  // a hook called after a conditional return violates the rules of hooks (#133).
+  // The body self-guards (it no-ops until `lease` loads), so the early position
+  // is harmless.
+  useEffect(() => {
+    if (searchParams.get('action') !== 'archive') return;
+    const lockedActive = lease?.model_locked === true && lease?.lifecycle_status === 'active';
+    if (lockedActive) return;
+    const isAdmin = userRole === 'admin' || userRole === 'owner';
+    if (!lease || lease.archived || isReadOnly || !isAdmin) return;
+    setShowArchiveDialog(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('action');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, lease, isReadOnly, userRole, setSearchParams]);
+
   if (loading)
     return (
       <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
@@ -1990,28 +2114,12 @@ export default function LeaseReview() {
   const isFinancialApprover = (userFunctionalRoles ?? []).includes('financial_approver');
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
 
-  // #116: honor the ?action=archive deep-link from ImportHistory's Archive
-  // steer. A committed lease can't be hard-deleted there; the steer opens the
-  // lease here with the archive dialog already up so it's one gesture, not a
-  // scavenger hunt through the ⋯ menu. This handles the non-locked workbench
-  // path; the locked-active path (early-returned to LockedLeaseDetail below) is
-  // handled in LockedHeader. Gated to admin/owner (only they can archive) and
-  // self-stripping so a refresh doesn't re-trigger.
-  useEffect(() => {
-    if (searchParams.get('action') !== 'archive') return;
-    const lockedActive = lease?.model_locked === true && lease?.lifecycle_status === 'active';
-    if (lockedActive) return;
-    if (!lease || lease.archived || isReadOnly || !isAdminUser) return;
-    setShowArchiveDialog(true);
-    const next = new URLSearchParams(searchParams);
-    next.delete('action');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, lease, isReadOnly, isAdminUser, setSearchParams]);
   // Phase 3: include chain post_concept_pre_signator + signator stages +
   // executed equivalent (active is identical in both vocabularies).
   const canShareFinancialSummary = Boolean(
     lease?.calc_total_commitment &&
     isAdminUser &&
+    !isReadOnly &&  // Vault read-only: minting a share link is a write that 403s server-side (audit D2)
     [
       'approved', 'executed', 'active',
       'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
@@ -2037,6 +2145,62 @@ export default function LeaseReview() {
     }
   } else if (isEquivalent(lifecycle, 'approved')) {
     nextStepBanner = { type: 'info', message: 'This request is approved. Upload the executed document to advance to Executed status.' };
+  }
+
+  // C2 — failed-routing draft: a focused page with a retry, instead of the
+  // (mostly-empty, confusing) review workbench. Once routing succeeds the lease
+  // flips out of 'draft' and re-renders as the intake-stage page below.
+  if (isFailedRoutingDraft && lease) {
+    return (
+      <AppLayout>
+        <div className="max-w-3xl mx-auto p-6 space-y-4">
+          <AppHeader
+            title={lease.request_title || 'Lease Request'}
+            subtitle={
+              <div className="flex items-center gap-2">
+                <LifecycleStatusBadge status={lease.lifecycle_status as any} />
+                <span className="text-sm text-muted-foreground">{lease.requesting_department || 'Unknown department'}</span>
+              </div>
+            }
+            actions={
+              <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
+                Approval Queue
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            }
+          />
+          <Card className="border-amber-300 bg-amber-50/60 dark:bg-amber-950/10 dark:border-amber-800">
+            <CardContent className="py-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">{t('routing_failed.title')}</p>
+                  <p className="text-sm text-muted-foreground">{t('routing_failed.body')}</p>
+                  {lastRoutingError ? (
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-400 pt-1">
+                      {t('routing_failed.last_error', { message: lastRoutingError })}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              {isReadOnly ? (
+                <p className="text-sm text-muted-foreground pl-8">{t('readonly.lease_note')}</p>
+              ) : isRequestor || isAdminUser ? (
+                <div className="flex items-center gap-3 pl-8">
+                  <Button onClick={handleRetryRouting} disabled={retryingRouting}>
+                    {retryingRouting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+                    {t('routing_failed.retry')}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">{t('routing_failed.admin_hint')}</span>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground pl-8">{t('routing_failed.cannot_retry')}</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
   }
 
   if (isIntakeStage && lease) {
@@ -2079,15 +2243,20 @@ export default function LeaseReview() {
                     Cancel Request
                   </Button>
                 )}
-                {isReadOnly && (
-                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
-                )}
               </div>
             }
           />
 
-          {/* Role-aware next-step guidance */}
-          {nextStepBanner && (
+          {/* #137: read-only note as a standalone caption under the header, not
+              wedged into the actions button-row (cramped at narrow widths). */}
+          {isReadOnly && (
+            <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
+          )}
+
+          {/* Role-aware next-step guidance. #137: suppressed under read-only —
+              the "upload the executed document" / "action required" copy would
+              instruct a write the read-only caption above just said is disabled. */}
+          {!isReadOnly && nextStepBanner && (
             <div className={cn(
               'flex items-start gap-3 rounded-lg border p-4',
               nextStepBanner.type === 'action'
@@ -2118,9 +2287,13 @@ export default function LeaseReview() {
                     "{lease.financial_rejection_reason}"
                   </p>
                 )}
-                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                  Edit your financial inputs and resubmit to route through the approval chain again.
-                </p>
+                {/* #137: the resubmit instruction is a write directive — hide it
+                    under read-only (the rejection reason above stays, it's info). */}
+                {!isReadOnly && (
+                  <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+                    Edit your financial inputs and resubmit to route through the approval chain again.
+                  </p>
+                )}
               </div>
               {!isReadOnly && (
                 <Button size="sm" variant="outline" className="flex-shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100" onClick={openResubmit}>
@@ -2373,7 +2546,7 @@ export default function LeaseReview() {
                 )}
 
                 {isReadOnly && (
-                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+                  <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
                 )}
               </CardContent>
           </Card>
@@ -2391,7 +2564,7 @@ export default function LeaseReview() {
                   <div>
                     <p className="text-xs text-muted-foreground">Monthly Payment</p>
                     <p className="font-medium">
-                      {lease.monthly_payment ? `$${Number(lease.monthly_payment).toLocaleString()}` : '\u2014'}
+                      {lease.monthly_payment ? formatLocalizedCurrency(Number(lease.monthly_payment), language) : '\u2014'}
                     </p>
                   </div>
                   <div>
@@ -2447,7 +2620,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-muted-foreground">Total Cash Commitment</p>
                         <p className="font-medium">
                           {lease.calc_total_commitment
-                            ? `$${Math.round(Number(lease.calc_total_commitment)).toLocaleString()}`
+                            ? formatLocalizedCurrency(Number(lease.calc_total_commitment), language)
                             : '\u2014'}
                         </p>
                       </div>
@@ -2455,7 +2628,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-muted-foreground">Est. Lease Liability (PV)</p>
                         <p className="font-medium">
                           {lease.calc_pv_liability
-                            ? `$${Math.round(Number(lease.calc_pv_liability)).toLocaleString()}`
+                            ? formatLocalizedCurrency(Number(lease.calc_pv_liability), language)
                             : '\u2014'}
                         </p>
                       </div>
@@ -2463,7 +2636,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-muted-foreground">Monthly P&amp;L Charge</p>
                         <p className="font-medium">
                           {lease.calc_straight_line_exp
-                            ? `$${Math.round(Number(lease.calc_straight_line_exp)).toLocaleString()}`
+                            ? formatLocalizedCurrency(Number(lease.calc_straight_line_exp), language)
                             : '\u2014'}
                         </p>
                       </div>
@@ -2471,7 +2644,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-muted-foreground">Cash vs. P&amp;L Delta</p>
                         <p className="font-medium">
                           {lease.calc_cash_pl_delta != null
-                            ? `$${Math.round(Number(lease.calc_cash_pl_delta)).toLocaleString()}`
+                            ? formatLocalizedCurrency(Number(lease.calc_cash_pl_delta), language)
                             : '\u2014'}
                         </p>
                       </div>
@@ -2802,7 +2975,7 @@ export default function LeaseReview() {
                     (executed / active-unlocked / needs-review / archived) are
                     not silently action-less. */}
                 {isReadOnly && (
-                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+                  <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
                 )}
                 {/* Primary action — state-aware, visually dominant.
                     font-semibold + shadow + slight x-padding pull the
@@ -2992,7 +3165,7 @@ export default function LeaseReview() {
                       leaseId={lease.id}
                       errorMessage={lease.error_message}
                       storagePath={lease.storage_path}
-                      onRetrySuccess={() => window.location.reload()}
+                      onRetrySuccess={refetchLease}
                       readOnly={isReadOnly}
                     />
                   )}
@@ -3002,7 +3175,7 @@ export default function LeaseReview() {
                       tenantName={form.tenant_name}
                       leaseStart={form.lease_start}
                       leaseEnd={form.lease_end}
-                      confidenceScores={confidenceScores}
+                      extractedJson={extractedJson}
                     />
                   )}
                   {Array.isArray(extractedJson?._parent_lease_candidates) && extractedJson._parent_lease_candidates.length > 0 && (
@@ -3442,7 +3615,7 @@ export default function LeaseReview() {
                           (lease.lifecycle_status === 'pending_counter_signature' ||
                             lease.lifecycle_status === 'chain_violation') && (
                             <p className="text-sm text-muted-foreground">
-                              {t('vault.lease_readonly_note')}
+                              {t('readonly.lease_note')}
                             </p>
                           )}
                         {!isReadOnly && lease.lifecycle_status === 'pending_counter_signature' && (
@@ -3486,6 +3659,7 @@ export default function LeaseReview() {
                           <AmendmentsList
                             parentLeaseId={lease.id}
                             refreshTrigger={amendmentsRefresh}
+                            readOnly={isReadOnly}
                           />
                         )}
                       </TabsContent>

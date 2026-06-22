@@ -110,22 +110,75 @@ export function formatLocalizedDateTime(
 }
 
 /**
- * Format currency with locale
+ * Format currency with locale.
+ *
+ * Whole-dollars by default ($1,234) — the dominant convention across the app.
+ * Pass `{ cents: true }` for line-item surfaces (rent schedules, variance
+ * tables) that need $1,234.56. Pass `{ compact: true }` for chart axes/labels
+ * that want abbreviated values ($1.2K, $3.4M). USD by default (USD-only
+ * product), but `{ currency }` overrides it for the rare parameterized case
+ * (e.g. Stripe invoice currency).
+ *
+ * `currencyDisplay: 'narrowSymbol'` keeps it as "$1,234" for es users too (a
+ * USD-only product shouldn't show the verbose "USD 1,234" code form es-419
+ * defaults to); it's a no-op for en. Product decision 2026-06-21.
+ *
+ * This is the single canonical currency formatter — components must not roll
+ * their own `Intl.NumberFormat` (doing so silently drops locale awareness,
+ * which is how Spanish users ended up seeing en-US-formatted money).
  */
 export function formatLocalizedCurrency(
   amount: number | null | undefined,
   language: SupportedLocale,
-  currency: string = 'USD'
+  options?: { cents?: boolean; compact?: boolean; currency?: string }
 ): string {
   if (amount === null || amount === undefined) return '—';
-  
+
   const locale = LOCALE_MAP[language];
+  const currency = options?.currency ?? 'USD';
+
+  if (options?.compact) {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'narrowSymbol',
+      notation: 'compact',
+      compactDisplay: 'short',
+      maximumFractionDigits: 1,
+    }).format(amount);
+  }
+
+  const fractionDigits = options?.cents ? 2 : 0;
   return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    currencyDisplay: 'narrowSymbol',
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(amount);
+}
+
+/**
+ * Format a percentage with locale (value is a 0–100 percent, not a 0–1 ratio).
+ *
+ * `decimals` is the MAX fractional digits; by default trailing zeros are
+ * trimmed (`minDecimals = 0`, so 5 → "5%", 5.5 → "5.5%"). Pass `minDecimals`
+ * to pin a fixed precision — e.g. `(12, language, 1, 1)` → "12.0%" so a list of
+ * variance figures all read at one decimal instead of a ragged 0/1-decimal mix.
+ */
+export function formatLocalizedPercent(
+  value: number | null | undefined,
+  language: SupportedLocale,
+  decimals: number = 1,
+  minDecimals: number = 0
+): string {
+  if (value === null || value === undefined) return '—';
+
+  const locale = LOCALE_MAP[language];
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: minDecimals,
+    maximumFractionDigits: Math.max(decimals, minDecimals),
+  }).format(value) + '%';
 }
 
 /**
@@ -136,7 +189,7 @@ export function formatLocalizedNumber(
   language: SupportedLocale
 ): string {
   if (num === null || num === undefined) return '—';
-  
+
   const locale = LOCALE_MAP[language];
   return new Intl.NumberFormat(locale).format(num);
 }

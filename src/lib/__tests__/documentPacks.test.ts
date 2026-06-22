@@ -186,7 +186,7 @@ describe('stripe-webhook document-pack classification', () => {
     );
     expect(block.length).toBeGreaterThan(0);
     expect(block).toContain('if (isDocumentPack(subscription)) {');
-    expect(block).toContain('await applyDocumentPack(subscription);');
+    expect(block).toContain('await applyDocumentPack(subscription, event.id);');
     expect(block).toContain('await applySubscription(subscription, workspaceId);');
     // The C2 consent override must derive from session metadata WITH the
     // subscription-metadata fallback — without it the override is always
@@ -206,7 +206,7 @@ describe('stripe-webhook document-pack classification', () => {
     expect(block).toContain('case "customer.subscription.updated"');
     expect(block).toContain('case "customer.subscription.deleted"');
     expect(block).toContain('if (isDocumentPack(subscription)) {');
-    expect(block).toContain('await applyDocumentPack(subscription);');
+    expect(block).toContain('await applyDocumentPack(subscription, event.id);');
     expect(block).toContain('await applySubscription(subscription);');
   });
 

@@ -6,6 +6,7 @@ import {
   displayLabel,
   type LifecycleStatus,
 } from "../_shared/lifecycle.ts";
+import { FIELD_MAX, NAME_MAX, truncate, summarizeRisks } from "../_shared/ai_context.ts";
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   return baseCorsHeaders(requestOrigin, "POST, OPTIONS");
@@ -53,26 +54,31 @@ function buildLeaseContext(leases: any[], workspaceName: string): string {
   ];
 
   for (const lease of activeLeases) {
-    const name = lease.request_title || lease.filename || lease.id;
+    // F1: every variable-length field below is bounded (truncate / summarizeRisks)
+    // so a verbose lease can't blow up the prompt — total size is capped at
+    // (active lease count × a fixed per-lease budget).
+    const name = truncate(lease.request_title || lease.filename || lease.id, NAME_MAX) ?? 'unknown';
     const monthly =
       Number(lease.executed_monthly_payment) ||
       Number(lease.current_monthly_rent) ||
       Number(lease.monthly_payment) || null;
 
     const json = lease.extracted_json as Record<string, unknown> | null;
-    const address = json ? extractValue(json.property_address) as string | null : null;
-    const securityDeposit = json ? extractValue(json.security_deposit) as string | null : null;
-    const renewalOptions = json ? extractValue(json.renewal_options) as string | null : null;
-    const terminationClauses = json ? extractValue(json.termination_clauses) as string | null : null;
-    const escalationClauses = json ? extractValue(json.escalation_clauses) as string | null : null;
-    const risks = Array.isArray(json?.risks) ? (json!.risks as any[]) : [];
+    const address = truncate(json ? extractValue(json.property_address) : null, NAME_MAX);
+    const securityDeposit = truncate(json ? extractValue(json.security_deposit) : null, FIELD_MAX);
+    const renewalOptions = truncate(json ? extractValue(json.renewal_options) : null, FIELD_MAX);
+    const terminationClauses = truncate(json ? extractValue(json.termination_clauses) : null, FIELD_MAX);
+    const escalationClauses = truncate(json ? extractValue(json.escalation_clauses) : null, FIELD_MAX);
+    const landlord = truncate(lease.landlord_name || extractValue(json?.landlord_name), NAME_MAX) ?? 'unknown';
+    const tenant = truncate(lease.tenant_name || extractValue(json?.tenant_name), NAME_MAX) ?? 'unknown';
+    const riskSummary = summarizeRisks(json?.risks);
 
     const leaseLine = [
       `LEASE: ${name}`,
       `  Status: ${displayLabel(lease.lifecycle_status as LifecycleStatus)}`,
       `  Asset type: ${lease.asset_type || 'unspecified'}`,
-      `  Landlord: ${lease.landlord_name || extractValue(json?.landlord_name) || 'unknown'}`,
-      `  Tenant: ${lease.tenant_name || extractValue(json?.tenant_name) || 'unknown'}`,
+      `  Landlord: ${landlord}`,
+      `  Tenant: ${tenant}`,
       `  Address: ${address || 'unknown'}`,
       `  Start: ${lease.lease_start || 'unknown'}`,
       `  End: ${lease.lease_end || 'unknown'}`,
@@ -84,9 +90,7 @@ function buildLeaseContext(leases: any[], workspaceName: string): string {
       `  Renewal options: ${renewalOptions || 'none stated'}`,
       `  Termination clauses: ${terminationClauses || 'none stated'}`,
       `  Escalation clauses: ${escalationClauses || 'none stated'}`,
-      risks.length > 0
-        ? `  Identified risks: ${risks.map((r: any) => `${r.severity?.toUpperCase()} - ${r.title}`).join('; ')}`
-        : '  Identified risks: none',
+      riskSummary ? `  Identified risks: ${riskSummary}` : '  Identified risks: none',
     ];
 
     lines.push(...leaseLine, '');
@@ -106,10 +110,11 @@ CRITICAL RULES:
 4. Do not give legal advice. You summarize contract data, not legal obligations.
 5. Keep answers focused and professional. Finance teams value precision over prose.
 6. If asked about something not in the data (e.g., "what will rents be in 5 years"), explain that you can only report what the leases state, not forecast.
+7. Some long clause fields are truncated to keep this brief and end with an ellipsis ("…"). When a field you are quoting ends with "…", treat it as incomplete: tell the user the full clause text is longer than shown and they should consult the source document for the complete terms. Never assume the visible portion is the whole clause.
 
 Format numbers as currency where appropriate. Dates as Month DD, YYYY.`;
 
-serve(async (req) => {
+serve((req) => {
   const corsHeaders = getCorsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 

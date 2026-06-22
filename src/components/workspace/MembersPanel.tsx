@@ -114,7 +114,14 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
   const handleRemoveMember = async (memberId: string) => {
     const target = members?.find((m) => m.id === memberId);
     try {
-      const { error } = await supabase.from('workspace_members').delete().eq('id', memberId);
+      // #52: scope the DELETE to this workspace as well as the member PK.
+      // RLS (is_workspace_owner) already blocks cross-workspace writes; this
+      // makes the query express its own scope intent (defense-in-depth).
+      const { error } = await supabase
+        .from('workspace_members')
+        .delete()
+        .eq('id', memberId)
+        .eq('workspace_id', workspaceId);
       if (error) throw error;
       toast.success('Member removed');
       refetchMembers();
