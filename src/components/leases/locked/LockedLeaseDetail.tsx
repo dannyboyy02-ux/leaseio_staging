@@ -503,9 +503,14 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
                 <LabelValueGrid rows={timingRows} />
               </SectionCard>
 
-              <SectionCard title={t('locked_lease.share.section_title')} defaultOpen={false}>
-                <SummaryShareControls leaseId={lease.id} lifecycleStatus={lease.lifecycle_status ?? ''} />
-              </SectionCard>
+              {/* Minting a share link is a write (generate-summary-token 403s on
+                  a read-only Vault workspace), so hide it on read-only — matches
+                  the rest of the D2 cleanly-hidden treatment (audit D2). */}
+              {!readOnly && (
+                <SectionCard title={t('locked_lease.share.section_title')} defaultOpen={false}>
+                  <SummaryShareControls leaseId={lease.id} lifecycleStatus={lease.lifecycle_status ?? ''} />
+                </SectionCard>
+              )}
             </TabsContent>
 
             <TabsContent value="vendor" className="space-y-4 mt-0">
@@ -688,10 +693,10 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
                 storagePath={lease.storage_path ?? null}
                 executedFilename={lease.executed_filename ?? null}
                 executedStoragePath={lease.executed_storage_path ?? null}
-                isLocked={!!lease.model_locked}
+                isLocked={!!lease.model_locked || readOnly}
               />
               <SectionCard title={t('locked_lease.documents.section_title')}>
-                <AmendmentsList parentLeaseId={lease.id} />
+                <AmendmentsList parentLeaseId={lease.id} readOnly={readOnly} />
               </SectionCard>
             </TabsContent>
           </Tabs>

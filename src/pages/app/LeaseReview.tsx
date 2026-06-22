@@ -2002,6 +2002,7 @@ export default function LeaseReview() {
   const canShareFinancialSummary = Boolean(
     lease?.calc_total_commitment &&
     isAdminUser &&
+    !isReadOnly &&  // Vault read-only: minting a share link is a write that 403s server-side (audit D2)
     [
       'approved', 'executed', 'active',
       'in_negotiation', 'final_review', 'pending_counter_signature', 'fully_executed',
@@ -3476,6 +3477,7 @@ export default function LeaseReview() {
                           <AmendmentsList
                             parentLeaseId={lease.id}
                             refreshTrigger={amendmentsRefresh}
+                            readOnly={isReadOnly}
                           />
                         )}
                       </TabsContent>

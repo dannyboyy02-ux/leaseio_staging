@@ -2135,3 +2135,11 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 **Severity:** Low. **Where:** `supabase/functions/bind-workspace-to-firm/index.ts` (+ `stripe-webhook` `applyFirmSubscription`) only write `plan = 'business'` (and firm columns) when a workspace joins a firm; they never normalize the workspace's own `subscription_status`/`subscription_period_end`/`intended_plan`. So a workspace bound while it was `trialing` (or `past_due`, or mid-abandoned-checkout) keeps that stale status on its `workspaces` row even though billing is now firm-governed.
 
 **Why low now:** audit D1 gates every workspace-level billing banner on `!firmBound`, so the stale status no longer drives any UI. It's a latent data-hygiene gap: any future code that reads a firm-bound child's `subscription_status` without also checking `firm_id` would misbehave. **Fix:** when binding, clear/normalize the child's `subscription_status` (e.g. to `'active'` or null) + `intended_plan`, so a firm-bound child's billing columns reflect "firm-governed" rather than a frozen pre-bind snapshot.
+
+---
+
+### Item #130: Vault read-only ASC 842 / discount-rate cards show a permission-flavored "read-only" note that misdescribes WHY — Low (copy)
+
+> **Filed 2026-06-22** (branch `claude/affectionate-hamilton-bp58tu`). Surfaced by lease-product-polish during the audit-D2 Vault read-only surface sweep.
+
+**Severity:** Low (copy). **Where:** `src/components/leases/Asc842InputsTab.tsx:673-678` + `src/components/leases/LeaseDiscountRateCard.tsx:384-389`. On a Vault (read-only retention) workspace, `canEditAsc842` is false (because `!readOnly` is false), so the inputs + Save are correctly disabled — but the explainer note reads "Read-only — only workspace admins, editors, or the owner can edit…". The Vault user IS the owner, so the copy implies they should be able to edit; the real reason is the archive/read-only state. **Fix:** when the disable is due to read-only retention (not a permission gap), swap the note for the Vault message (`t('vault.lease_readonly_note')`, matching what `LockedHeader` already shows). Needs a read-only signal threaded into those two cards to branch the copy.
