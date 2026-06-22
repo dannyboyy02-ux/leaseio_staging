@@ -229,6 +229,7 @@
     "vault_readonly_note": "Este espacio de trabajo está en Vault: retención de solo lectura. Los límites de uso no aplican; su repositorio se conserva por completo y es exportable.",
     "vault_reactivate_link": "Reactivar un plan completo",
     "ask_admin_upgrade": "Solicite a un administrador del espacio de trabajo que actualice su plan.",
+    "firm_managed": "La capacidad la gestiona su firma — pida al propietario de la firma que agregue capacidad.",
     "approaching_limit": "Acercándose al límite",
     "approaching_limit_desc": "Está cerca de uno de los límites de su plan: abstracciones, arrendamientos o espacios de trabajo.",
     "upgrade_plan": "Actualizar plan",
@@ -777,7 +778,7 @@
     "view_usage_link": "Ver uso",
     "billing_admin_only": "Solo los administradores y propietarios del espacio de trabajo pueden gestionar la facturación.",
     "firm_managed_title": "Gestionado por su firma",
-    "firm_managed_desc": "Este espacio de trabajo forma parte de {{firm}}. El plan y la facturación se gestionan a nivel de firma.",
+    "firm_managed_desc": "Este espacio de trabajo forma parte de {{firm}}. El plan y la facturación se gestionan a nivel de firma — contacte al propietario de la firma para hacer cambios.",
     "firm_fallback": "su firma",
     "auto_renews_on": "Se renueva automáticamente el {{date}}",
     "plan_benefit_starter": "15 abstracciones de IA al mes · hasta 3 usuarios",
@@ -928,7 +929,9 @@
     "single_success_desc": "Ya puede agregar su arrendamiento — el crédito se usa automáticamente.",
     "single_pending_title": "Pago confirmado",
     "single_pending": "Su crédito estará listo en un momento — intente su carga en breve. No necesita pagar de nuevo.",
-    "member_note": "Este espacio de trabajo está en su límite de arrendamientos. Solo los administradores pueden comprar más capacidad — contacte a su administrador para comprar arrendamientos adicionales."
+    "member_note": "Este espacio de trabajo está en su límite de arrendamientos. Solo los administradores pueden comprar más capacidad — contacte a su administrador para comprar arrendamientos adicionales.",
+    "firm_managed_title": "La capacidad la gestiona su firma",
+    "firm_managed_desc": "Este espacio de trabajo forma parte de {{firm}}. Pida al propietario de la firma que agregue capacidad o un espacio de trabajo — la facturación se gestiona a nivel de la firma."
   },
   "quota_banner": {
     "metric_active_leases": "arrendamientos activos",

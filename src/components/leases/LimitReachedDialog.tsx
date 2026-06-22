@@ -64,6 +64,11 @@ export function LimitReachedDialog({
   const isAdminUser = userRole === "admin" || userRole === "owner";
 
   const currentPlan = normalizePlanId(workspace?.plan);
+  // Firm-bound workspaces have billing + capacity managed by the firm; the
+  // paid doors (upgrade/pack/single) all 403 with firm_managed server-side, so
+  // we hide them and point the admin at the firm instead (audit D1). The free
+  // archive door still works (it's a workspace op, not a purchase).
+  const firmBound = Boolean(workspace?.firmId);
   const overagePerDoc = PLANS[currentPlan].overagePerDoc;
   const cheapestPackPerLease = Math.min(...DOCUMENT_PACKS.map(packPerLeasePrice));
   const cheapestPackMonthly = Math.min(...DOCUMENT_PACKS.map((p) => p.priceMonthly));
@@ -293,7 +298,11 @@ export function LimitReachedDialog({
             </div>
           ) : !isAdminUser ? (
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">{t("limit_wall.member_note")}</p>
+              <p className="text-sm text-muted-foreground">
+                {/* Firm-bound: the admin can't purchase either (capacity is
+                    firm-managed), so point the member at the firm, not the admin. */}
+                {firmBound ? t("limit_wall.firm_managed_desc", { firm: workspace?.firmName ?? t("account.firm_fallback") }) : t("limit_wall.member_note")}
+              </p>
               <div className="flex justify-end">
                 <Button variant="outline" onClick={() => requestClose(false)}>
                   {t("common.close")}
@@ -321,6 +330,17 @@ export function LimitReachedDialog({
                 </button>
               )}
 
+              {/* Firm-bound: the paid doors below all 403; explain who owns
+                  capacity instead. (Archive above still works.) */}
+              {firmBound ? (
+                <div className="rounded-md border border-primary/40 bg-primary/5 p-4">
+                  <p className="font-medium text-sm">{t("limit_wall.firm_managed_title")}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t("limit_wall.firm_managed_desc", { firm: workspace?.firmName ?? t("account.firm_fallback") })}
+                  </p>
+                </div>
+              ) : (
+              <>
               {/* Door 1 — upgrade (Starter only; Business has no higher tier) */}
               {currentPlan === "starter" && (
                 <button
@@ -373,6 +393,8 @@ export function LimitReachedDialog({
                   <p className="text-xs text-muted-foreground mt-0.5">{t("limit_wall.single_desc")}</p>
                 </div>
               </button>
+              </>
+              )}
 
               <div className="flex justify-end pt-1">
                 <Button variant="ghost" size="sm" onClick={() => requestClose(false)}>

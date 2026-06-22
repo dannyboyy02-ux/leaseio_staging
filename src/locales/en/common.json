@@ -229,6 +229,7 @@
     "vault_readonly_note": "This workspace is in Vault — read-only retention. Usage limits don't apply; your repository is fully retained and exportable.",
     "vault_reactivate_link": "Reactivate a full plan",
     "ask_admin_upgrade": "Ask a workspace admin to upgrade your plan.",
+    "firm_managed": "Capacity is managed by your firm — ask your firm owner to add capacity.",
     "approaching_limit": "Approaching your usage limit",
     "approaching_limit_desc": "You're close to one of your plan's limits — abstractions, leases, or workspaces.",
     "upgrade_plan": "Upgrade plan",
@@ -777,7 +778,7 @@
     "view_usage_link": "View usage",
     "billing_admin_only": "Only workspace admins and owners can manage billing.",
     "firm_managed_title": "Managed by your firm",
-    "firm_managed_desc": "This workspace is part of {{firm}}. Plan and billing are managed at the firm level.",
+    "firm_managed_desc": "This workspace is part of {{firm}}. Plan and billing are managed at the firm level — contact your firm owner to make changes.",
     "firm_fallback": "your firm",
     "auto_renews_on": "Auto renews on {{date}}",
     "plan_benefit_starter": "15 AI abstractions per month · up to 3 users",
@@ -928,7 +929,9 @@
     "single_success_desc": "You can add your lease now — the credit is used automatically.",
     "single_pending_title": "Payment confirmed",
     "single_pending": "Your credit will be ready in a moment — try your upload shortly. No need to pay again.",
-    "member_note": "This workspace is at its lease limit. Only workspace admins can buy more capacity — contact your admin to purchase additional leases."
+    "member_note": "This workspace is at its lease limit. Only workspace admins can buy more capacity — contact your admin to purchase additional leases.",
+    "firm_managed_title": "Capacity is managed by your firm",
+    "firm_managed_desc": "This workspace is part of {{firm}}. Ask your firm owner to add capacity or a workspace — billing is handled at the firm level."
   },
   "quota_banner": {
     "metric_active_leases": "active leases",
