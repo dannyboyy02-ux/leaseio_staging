@@ -157,7 +157,7 @@ export default function FinancialReview() {
 
         // Fetch user profiles
         const userIds = [leaseData.requestor_id, leaseData.manager_approved_by].filter(Boolean) as string[];
-        let profileMap: Record<string, { email: string; name: string }> = {};
+        const profileMap: Record<string, { email: string; name: string }> = {};
         if (userIds.length) {
           const { data: profiles } = await supabase
             .from('profiles')
