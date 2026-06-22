@@ -1973,6 +1973,29 @@ export default function LeaseReview() {
     }
   }, [lease, user, refetchLease]);
 
+  // #116: honor the ?action=archive deep-link from ImportHistory's Archive
+  // steer. A committed lease can't be hard-deleted there; the steer opens the
+  // lease here with the archive dialog already up so it's one gesture, not a
+  // scavenger hunt through the ⋯ menu. This handles the non-locked workbench
+  // path; the locked-active path (early-returned to LockedLeaseDetail below) is
+  // handled in LockedHeader. Gated to admin/owner (only they can archive) and
+  // self-stripping so a refresh doesn't re-trigger.
+  // NB: must live ABOVE the `if (loading)` / `if (isProcessing)` early returns —
+  // a hook called after a conditional return violates the rules of hooks (#133).
+  // The body self-guards (it no-ops until `lease` loads), so the early position
+  // is harmless.
+  useEffect(() => {
+    if (searchParams.get('action') !== 'archive') return;
+    const lockedActive = lease?.model_locked === true && lease?.lifecycle_status === 'active';
+    if (lockedActive) return;
+    const isAdmin = userRole === 'admin' || userRole === 'owner';
+    if (!lease || lease.archived || isReadOnly || !isAdmin) return;
+    setShowArchiveDialog(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('action');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, lease, isReadOnly, userRole, setSearchParams]);
+
   if (loading)
     return (
       <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
@@ -2033,23 +2056,6 @@ export default function LeaseReview() {
   const isFinancialApprover = (userFunctionalRoles ?? []).includes('financial_approver');
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
 
-  // #116: honor the ?action=archive deep-link from ImportHistory's Archive
-  // steer. A committed lease can't be hard-deleted there; the steer opens the
-  // lease here with the archive dialog already up so it's one gesture, not a
-  // scavenger hunt through the ⋯ menu. This handles the non-locked workbench
-  // path; the locked-active path (early-returned to LockedLeaseDetail below) is
-  // handled in LockedHeader. Gated to admin/owner (only they can archive) and
-  // self-stripping so a refresh doesn't re-trigger.
-  useEffect(() => {
-    if (searchParams.get('action') !== 'archive') return;
-    const lockedActive = lease?.model_locked === true && lease?.lifecycle_status === 'active';
-    if (lockedActive) return;
-    if (!lease || lease.archived || isReadOnly || !isAdminUser) return;
-    setShowArchiveDialog(true);
-    const next = new URLSearchParams(searchParams);
-    next.delete('action');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, lease, isReadOnly, isAdminUser, setSearchParams]);
   // Phase 3: include chain post_concept_pre_signator + signator stages +
   // executed equivalent (active is identical in both vocabularies).
   const canShareFinancialSummary = Boolean(
