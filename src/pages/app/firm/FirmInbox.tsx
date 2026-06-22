@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Inbox, ArrowRight, Clock } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -80,13 +81,7 @@ export default function FirmInbox() {
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto space-y-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <Inbox className="h-5 w-5 text-primary" />
-            <h1 className="text-2xl font-semibold">{t("firm.inbox.title")}</h1>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">{t("firm.inbox.subtitle")}</p>
-        </div>
+        <FirmPageHeader icon={Inbox} title={t("firm.inbox.title")} subtitle={t("firm.inbox.subtitle")} />
 
         {workspaces.length > 1 ? (
           <div className="flex flex-wrap gap-2">

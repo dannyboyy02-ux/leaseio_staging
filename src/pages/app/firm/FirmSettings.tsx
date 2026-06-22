@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Settings, Building2 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,10 +67,7 @@ export default function FirmSettings() {
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex items-center gap-2">
-          <Settings className="h-5 w-5 text-primary" />
-          <h1 className="text-2xl font-semibold">{t("firm.settings.title")}</h1>
-        </div>
+        <FirmPageHeader icon={Settings} title={t("firm.settings.title")} />
 
         <Card className="p-5 space-y-4">
           <div className="space-y-1.5">

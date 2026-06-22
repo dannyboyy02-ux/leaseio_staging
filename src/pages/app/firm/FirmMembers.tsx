@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Users, UserPlus, Mail, Trash2, RefreshCw } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
+import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -121,12 +122,11 @@ export default function FirmMembers() {
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /><h1 className="text-2xl font-semibold">{t("firm.members.title")}</h1></div>
-            <p className="text-sm text-muted-foreground mt-1">{t("firm.members.subtitle")}</p>
-          </div>
-          {canManage ? (
+        <FirmPageHeader
+          icon={Users}
+          title={t("firm.members.title")}
+          subtitle={t("firm.members.subtitle")}
+          actions={canManage ? (
             <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
               <DialogTrigger asChild>
                 <Button><UserPlus className="h-4 w-4 mr-2" />{t("firm.members.invite")}</Button>
@@ -151,7 +151,7 @@ export default function FirmMembers() {
               </DialogContent>
             </Dialog>
           ) : null}
-        </div>
+        />
 
         <section className="space-y-2">
           <h2 className="text-sm font-medium text-muted-foreground">{t("firm.members.roster")}</h2>
