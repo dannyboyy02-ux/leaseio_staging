@@ -24,6 +24,9 @@ export const FIELD_MAX = 280;
 export const NAME_MAX = 120;
 /** Max risks listed per lease before collapsing the tail to "+N more". */
 export const MAX_RISKS = 8;
+/** Max chars for a risk severity token (legit values are <=~11 chars, e.g.
+ *  "medium-high"); bounds a malformed long-string severity from the raw blob. */
+export const SEVERITY_MAX = 24;
 
 /** Severity ordering so the risk cap drops the LEAST important risks, not
  *  whatever happened to land past the cap in document-discovery order. Lower
@@ -79,7 +82,11 @@ export function summarizeRisks(
   // slice could silently drop a HIGH risk while keeping LOWs (audit F1 HIGH).
   const ordered = [...risks].sort((a, b) => severityRank(a?.severity) - severityRank(b?.severity));
   const shown = ordered.slice(0, max).map((r) => {
-    const sev = r?.severity ? String(r.severity).toUpperCase() : 'RISK';
+    // Bound the severity too (Codex PR review): a malformed long-string severity
+    // is otherwise copied into the prompt unbounded for up to MAX_RISKS, defeating
+    // the F1 cap even though titles/clauses are truncated. Keep the original
+    // falsy guard (0 / '' / missing → "RISK") so only a present value is bounded.
+    const sev = r?.severity ? (truncate(r.severity, SEVERITY_MAX) ?? 'RISK').toUpperCase() : 'RISK';
     const title = truncate(r?.title, NAME_MAX) ?? 'untitled';
     return `${sev} - ${title}`;
   });

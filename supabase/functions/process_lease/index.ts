@@ -57,8 +57,12 @@ function isValidUUID(id: string): boolean {
 }
 
 function isPdfFile(bytes: ArrayBuffer): boolean {
-  const header = new Uint8Array(bytes.slice(0, 4));
-  return header.every((byte, index) => byte === PDF_MAGIC_BYTES[index]);
+  // Require the FULL 4-byte magic. A shorter slice makes header.every()
+  // vacuously true for a 0-byte file and accepts a partial "%PD" prefix
+  // (Codex PR review) — guard the length and compare over the fixed magic.
+  if (bytes.byteLength < PDF_MAGIC_BYTES.length) return false;
+  const header = new Uint8Array(bytes.slice(0, PDF_MAGIC_BYTES.length));
+  return PDF_MAGIC_BYTES.every((byte, index) => header[index] === byte);
 }
 
 function sanitizeFilename(filename: string): string {

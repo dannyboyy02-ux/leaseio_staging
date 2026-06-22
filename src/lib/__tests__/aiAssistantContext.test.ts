@@ -5,6 +5,7 @@ import {
   FIELD_MAX,
   NAME_MAX,
   MAX_RISKS,
+  SEVERITY_MAX,
   truncate,
   summarizeRisks,
 } from '../../../supabase/functions/_shared/ai_context';
@@ -187,6 +188,15 @@ describe('ai-assistant context bounding — summarizeRisks', () => {
     expect(summarizeRisks([{ severity: {}, title: 'Object sev' }])).toBe(
       '[OBJECT OBJECT] - Object sev',
     );
+  });
+
+  it('bounds a malformed long-string severity so it cannot blow up the prompt (Codex PR review)', () => {
+    const out = summarizeRisks([{ severity: 'z'.repeat(500), title: 'Verbose sev' }])!;
+    const sevPart = out.split(' - ')[0];
+    // The severity token is bounded to SEVERITY_MAX (+ the single ellipsis glyph),
+    // uppercased — never the full 500 chars.
+    expect(sevPart.length).toBeLessThanOrEqual(SEVERITY_MAX + 1);
+    expect(sevPart.endsWith('…')).toBe(true);
   });
 
   it('falls back to "RISK" for a falsy-but-present severity (0 / empty string)', () => {
