@@ -481,6 +481,20 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
 
           {/* General Settings */}
           <TabsContent value="profile" className="space-y-6">
+            {/* D4: plan + billing are workspace-scoped but edited from Account →
+                Billing; signpost it here so admins don't hunt for plan controls
+                in Workspace settings. */}
+            <Card>
+              <CardContent className="py-3 px-4 flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-sm text-muted-foreground">{t('workspace.plan_billing_signpost')}</p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/settings/account?tab=billing">
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                    {t('workspace.go_to_billing')}
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle>{t('workspace.details')}</CardTitle>

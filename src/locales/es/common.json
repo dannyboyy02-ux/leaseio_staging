@@ -968,6 +968,8 @@
     "security": "Seguridad",
     "details": "Detalles del Espacio de Trabajo",
     "basic_info": "Información básica sobre su espacio de trabajo",
+    "plan_billing_signpost": "El plan y la facturación de este espacio de trabajo se gestionan en la configuración de su Cuenta.",
+    "go_to_billing": "Plan y facturación",
     "name": "Nombre del Espacio de Trabajo",
     "default_timezone": "Zona Horaria Predeterminada",
     "timezone_desc": "Se usa para programar notificaciones y mostrar fechas",

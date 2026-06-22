@@ -968,6 +968,8 @@
     "security": "Security",
     "details": "Workspace Details",
     "basic_info": "Basic information about your workspace",
+    "plan_billing_signpost": "Plan and billing for this workspace are managed in your Account settings.",
+    "go_to_billing": "Plan & billing",
     "name": "Workspace Name",
     "default_timezone": "Default Timezone",
     "timezone_desc": "Used for scheduling notifications and displaying dates",
