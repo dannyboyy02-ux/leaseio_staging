@@ -143,7 +143,7 @@ describe('stripe-webhook single-lease credit grant (static-source)', () => {
     expect(block).toContain(
       'if (pi.metadata?.addon_type === ADDON_TYPE_SINGLE_LEASE)',
     );
-    expect(block).toContain('await applySingleLeaseCredit(pi);');
+    expect(block).toContain('await applySingleLeaseCredit(pi, event.id);');
   });
 
   function applyFnBlock(): string {
@@ -193,7 +193,13 @@ describe('stripe-webhook single-lease credit grant (static-source)', () => {
     expect(guard).toBeGreaterThan(-1);
     // The guard returns before the upsert.
     expect(guard).toBeLessThan(fn.indexOf('.upsert('));
-    expect(fn.slice(guard, fn.indexOf('}', guard))).toContain('return;');
+    // #65: the guard now dead-letters the un-attributable paid credit, then
+    // returns — both BEFORE the workspace lookup that follows. Slice to that
+    // lookup so the dead-letter object-literal braces don't confuse a
+    // first-`}` scan, and pin both the dead-letter write and the early return.
+    const missingWsBlock = fn.slice(guard, fn.indexOf('.from("workspaces")'));
+    expect(missingWsBlock).toContain('recordBillingDeadLetter');
+    expect(missingWsBlock).toContain('return;');
   });
 
   it('imports ADDON_TYPE_SINGLE_LEASE from the shared Deno mirror (no string drift)', () => {
