@@ -10,20 +10,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { canExportReports } from '@/lib/authorization';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
-
-interface LeaseData {
-  id: string;
-  filename: string;
-  landlord_name: string | null;
-  tenant_name: string | null;
-  lease_start: string | null;
-  lease_end: string | null;
-  current_monthly_rent: number | null;
-  base_rent_amount: string | null;
-  base_rent_frequency: string | null;
-  rent_escalation_type: string | null;
-  extracted_json: Record<string, unknown> | null;
-}
+import { getBaseMonthlyRent } from '@/lib/leaseCalculations';
 
 export function RentRollExport() {
   const [isExporting, setIsExporting] = useState(false);
@@ -72,11 +59,16 @@ export function RentRollExport() {
       // Workspace scoping mandatory — exports for the active workspace only.
       // Replaces the previous user_id filter, which would have mixed data
       // for users with leases in multiple workspaces.
+      // Audit B4: filter on lifecycle_status (the canonical in-force set),
+      // consistent with Portfolio — NOT the legacy `status` vocabulary
+      // (['Ready','final','review']), which silently dropped valid
+      // active/executed leases from the rent roll.
       const { data: leases, error } = await supabase
         .from('leases')
         .select('*')
         .eq('workspace_id', workspace.id)
-        .in('status', ['Ready', 'final', 'review'])
+        .eq('archived', false)
+        .in('lifecycle_status', ['executed', 'active', 'fully_executed'])
         .order('lease_end', { ascending: true });
 
       if (error) throw error;
@@ -86,7 +78,14 @@ export function RentRollExport() {
         return;
       }
 
-      const totalMonthly = leases.reduce((sum, l) => sum + (l.current_monthly_rent || 0), 0);
+      // Audit #126: resolve rent via the canonical chain
+      // (executed → current → base), not current_monthly_rent alone — an
+      // executed lease whose rent lives in executed_monthly_payment was
+      // exported as $0, understating the rent roll handed to auditors.
+      // getBaseMonthlyRent (not getMonthlyRent) pins the STATIC chain, matching
+      // Portfolio and keeping the export immune to the query later embedding
+      // rent_schedules (the schedule-vs-static call is KNOWN_ISSUES #126).
+      const totalMonthly = leases.reduce((sum, l) => sum + getBaseMonthlyRent(l), 0);
       const totalAnnual = totalMonthly * 12;
 
       const headers = [
@@ -103,7 +102,7 @@ export function RentRollExport() {
       ];
 
       const rows = leases.map((lease) => {
-        const monthly = lease.current_monthly_rent || 0;
+        const monthly = getBaseMonthlyRent(lease);
         const extractedJson = lease.extracted_json as Record<string, unknown> | null;
         const propertyAddress =
           getExtractedFieldValue(extractedJson?.property_address) ||
