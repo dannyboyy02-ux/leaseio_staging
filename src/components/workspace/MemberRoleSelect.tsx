@@ -35,10 +35,19 @@ export function MemberRoleSelect({
 
     setIsUpdating(true);
     try {
-      const { error } = await supabase
+      // #52: scope the UPDATE to this workspace as well as the member PK when
+      // workspaceId is known. RLS (is_workspace_owner) already blocks
+      // cross-workspace writes; this makes the query express its own scope
+      // intent (defense-in-depth). workspaceId is optional on this component,
+      // so only add the predicate when present — no behavior change otherwise.
+      let updateQuery = supabase
         .from('workspace_members')
         .update({ role: newRole })
         .eq('id', memberId);
+      if (workspaceId) {
+        updateQuery = updateQuery.eq('workspace_id', workspaceId);
+      }
+      const { error } = await updateQuery;
 
       if (error) throw error;
 

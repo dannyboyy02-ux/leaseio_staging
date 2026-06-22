@@ -1285,6 +1285,8 @@ For now, leave alone.
 
 **Stub remediation:** Add `.eq('workspace_id', workspaceId)` to both queries (MemberRoleSelect already receives `workspaceId` as a prop; MembersPanel has it in scope). Pure belt-and-braces — no behavior change when RLS is intact.
 
+**RESOLVED 2026-06-22** (branch `claude/affectionate-hamilton-bp58tu`). `MembersPanel.handleRemoveMember` DELETE now chains `.eq('workspace_id', workspaceId)` (required prop); `MemberRoleSelect.handleRoleChange` UPDATE conditionally adds it when `workspaceId` is present (optional prop — byte-identical when absent, which only happens in tests; the sole production call site at `MembersPanel.tsx:248` always passes it). Strictly row-narrowing — the `id` predicate is preserved, so it can only narrow to zero in the cross-workspace abuse case RLS already blocks; happy-path targeting is unchanged because `workspace_members.id` is the global PK and the member list is read under workspace scope. Reviewed: security + integrity clean (no findings); auditor clean on the production code but caught that the second `.eq()` broke `MemberRoleSelect.test.tsx`'s single-chain mock — fixed in the same change (the update builder is now a chainable thenable) plus new assertions pinning the `('workspace_id','ws-1')` predicate when known and its absence when `workspaceId` is omitted. typecheck clean; 1084 tests pass.
+
 ---
 
 ### Item #53: `workspace_activity_log.event_type` has no CHECK constraint

@@ -90,8 +90,18 @@ function wireSupabase({
   updateError = null,
   auditError = null,
 }: { updateError?: unknown; auditError?: unknown } = {}) {
-  updateEqMock.mockImplementation(() => Promise.resolve({ error: updateError }));
-  updateMock.mockImplementation(() => ({ eq: updateEqMock }));
+  // The update builder must be chainable: #52 added a second
+  // .eq('workspace_id', …) after .eq('id', …), so each .eq() returns the same
+  // thenable builder and the chain only resolves when awaited. updateEqMock
+  // still records every .eq() call for the assertions below.
+  const updateBuilder: { eq: (...a: unknown[]) => unknown; then: (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => unknown } = {
+    eq: (...args: unknown[]) => {
+      updateEqMock(...args);
+      return updateBuilder;
+    },
+    then: (resolve, reject) => Promise.resolve({ error: updateError }).then(resolve, reject),
+  };
+  updateMock.mockImplementation(() => updateBuilder);
   insertMock.mockImplementation(() => Promise.resolve({ error: auditError }));
   fromMock.mockImplementation((table: string) => {
     if (table === "workspace_members") return { update: updateMock };
@@ -157,9 +167,12 @@ describe("MemberRoleSelect — audit-trail correctness", () => {
     );
     expect(eventTypes).not.toContain("member_added");
 
-    // The role UPDATE itself targeted the member row by id.
+    // The role UPDATE itself targeted the member row by id AND scoped to the
+    // workspace (#52 defense-in-depth — the predicate must be present when
+    // workspaceId is known).
     expect(updateMock).toHaveBeenCalledWith({ role: "editor" });
     expect(updateEqMock).toHaveBeenCalledWith("id", "member-1");
+    expect(updateEqMock).toHaveBeenCalledWith("workspace_id", "ws-1");
     expect(onRoleChanged).toHaveBeenCalledTimes(1);
     expect(toastSuccessMock).toHaveBeenCalled();
   });
@@ -178,6 +191,10 @@ describe("MemberRoleSelect — audit-trail correctness", () => {
     });
 
     await waitFor(() => expect(updateEqMock).toHaveBeenCalled());
+    // #52: with no workspaceId, the workspace_id scope predicate is omitted
+    // (behavior-identical to pre-fix); only the id predicate is applied.
+    expect(updateEqMock).toHaveBeenCalledWith("id", "member-1");
+    expect(updateEqMock).not.toHaveBeenCalledWith("workspace_id", expect.anything());
     expect(insertMock).not.toHaveBeenCalled();
   });
 
