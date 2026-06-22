@@ -2173,7 +2173,7 @@ export default function LeaseReview() {
                 </div>
               </div>
               {isReadOnly ? (
-                <p className="text-sm text-muted-foreground pl-8">{t('vault.lease_readonly_note')}</p>
+                <p className="text-sm text-muted-foreground pl-8">{t('readonly.lease_note')}</p>
               ) : isRequestor || isAdminUser ? (
                 <div className="flex items-center gap-3 pl-8">
                   <Button onClick={handleRetryRouting} disabled={retryingRouting}>
@@ -2232,15 +2232,20 @@ export default function LeaseReview() {
                     Cancel Request
                   </Button>
                 )}
-                {isReadOnly && (
-                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
-                )}
               </div>
             }
           />
 
-          {/* Role-aware next-step guidance */}
-          {nextStepBanner && (
+          {/* #137: read-only note as a standalone caption under the header, not
+              wedged into the actions button-row (cramped at narrow widths). */}
+          {isReadOnly && (
+            <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
+          )}
+
+          {/* Role-aware next-step guidance. #137: suppressed under read-only —
+              the "upload the executed document" / "action required" copy would
+              instruct a write the read-only caption above just said is disabled. */}
+          {!isReadOnly && nextStepBanner && (
             <div className={cn(
               'flex items-start gap-3 rounded-lg border p-4',
               nextStepBanner.type === 'action'
@@ -2271,9 +2276,13 @@ export default function LeaseReview() {
                     "{lease.financial_rejection_reason}"
                   </p>
                 )}
-                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                  Edit your financial inputs and resubmit to route through the approval chain again.
-                </p>
+                {/* #137: the resubmit instruction is a write directive — hide it
+                    under read-only (the rejection reason above stays, it's info). */}
+                {!isReadOnly && (
+                  <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+                    Edit your financial inputs and resubmit to route through the approval chain again.
+                  </p>
+                )}
               </div>
               {!isReadOnly && (
                 <Button size="sm" variant="outline" className="flex-shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100" onClick={openResubmit}>
@@ -2526,7 +2535,7 @@ export default function LeaseReview() {
                 )}
 
                 {isReadOnly && (
-                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+                  <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
                 )}
               </CardContent>
           </Card>
@@ -2955,7 +2964,7 @@ export default function LeaseReview() {
                     (executed / active-unlocked / needs-review / archived) are
                     not silently action-less. */}
                 {isReadOnly && (
-                  <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+                  <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
                 )}
                 {/* Primary action — state-aware, visually dominant.
                     font-semibold + shadow + slight x-padding pull the
@@ -3595,7 +3604,7 @@ export default function LeaseReview() {
                           (lease.lifecycle_status === 'pending_counter_signature' ||
                             lease.lifecycle_status === 'chain_violation') && (
                             <p className="text-sm text-muted-foreground">
-                              {t('vault.lease_readonly_note')}
+                              {t('readonly.lease_note')}
                             </p>
                           )}
                         {!isReadOnly && lease.lifecycle_status === 'pending_counter_signature' && (

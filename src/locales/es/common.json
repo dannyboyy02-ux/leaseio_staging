@@ -1892,8 +1892,10 @@
     "reactivate_cta": "Reactivar un plan",
     "member_wall_title": "Este espacio está en Vault",
     "member_wall_desc": "{{name}} es un repositorio de retención de solo lectura. El acceso a Vault es exclusivo del propietario: comuníquese con el propietario del espacio para restaurar el acceso completo o reactivar un plan.",
-    "lease_readonly_note": "Este espacio de trabajo es de solo lectura: puedes ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas.",
     "member_wall_switch": "Cambiar de espacio"
+  },
+  "readonly": {
+    "lease_note": "Este espacio de trabajo es de solo lectura: puedes ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas."
   },
   "routing_failed": {
     "title": "El enrutamiento de aprobación no se completó",

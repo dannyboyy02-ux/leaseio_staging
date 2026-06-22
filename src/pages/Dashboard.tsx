@@ -18,15 +18,16 @@ import { PendingCounterSignatureCard } from '@/components/dashboard/PendingCount
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useApp } from '@/contexts/AppContext';
-import { isReadOnlyRetention } from '@/config/pricing';
+import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 
 export default function Dashboard() {
   const { user, workspace } = useApp();
-  // Vault (read-only retention): hide intake entry points (server also blocks).
-  const isReadOnly = isReadOnlyRetention(workspace?.plan);
+  // #136/#137: hide intake entry points for ANY read-only workspace — Vault OR
+  // a cancellation-grace/soft-deleted one (the server also blocks the write).
+  const isReadOnly = isWorkspaceReadOnly(workspace);
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   const quota = useWorkspaceQuota();

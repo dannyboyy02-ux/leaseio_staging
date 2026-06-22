@@ -131,7 +131,7 @@ export function FailedLeaseBanner({
           {errorMessage || 'An error occurred while processing this lease document.'}
         </p>
         {readOnly ? (
-          <p className="text-xs text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+          <p className="text-xs text-muted-foreground">{t('readonly.lease_note')}</p>
         ) : canRetry ? (
           <Button
             variant="outline"

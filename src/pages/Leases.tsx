@@ -35,7 +35,7 @@ import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
-import { isReadOnlyRetention } from '@/config/pricing';
+import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -88,8 +88,9 @@ export default function Leases() {
   const { t, language } = useLanguage();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const { workspace, user, userRole, refreshProfile } = useApp();
-  // Vault (read-only retention): hide intake entry points (server also blocks).
-  const isReadOnly = isReadOnlyRetention(workspace?.plan);
+  // #136/#137: hide intake/archive affordances for ANY read-only workspace —
+  // Vault OR a cancellation-grace/soft-deleted one (the server also blocks).
+  const isReadOnly = isWorkspaceReadOnly(workspace);
   // Archive is admin/owner-only (server-enforced by the #78 trigger); the
   // list "Delete" action uses restorable-archive semantics, matching the
   // detail page (#79) — true hard-delete is not offered from the list.

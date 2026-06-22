@@ -132,8 +132,8 @@ describe('FailedLeaseBanner — readOnly (Vault) state', () => {
   it('renders the read-only note and NO retry/upload control', () => {
     renderBanner({ readOnly: true, storagePath: 's3/path.pdf' });
 
-    // The Vault read-only note key renders.
-    expect(screen.getByText('vault.lease_readonly_note')).toBeTruthy();
+    // The read-only note key renders.
+    expect(screen.getByText('readonly.lease_note')).toBeTruthy();
 
     // No retry button (even though storagePath is present, readOnly wins).
     expect(screen.queryByRole('button', { name: /Retry Processing/ })).toBeNull();

@@ -109,7 +109,7 @@ export function LockedHeader({
 
           <div className="shrink-0 flex items-center gap-2">
             {readOnly && (
-              <p className="text-sm text-muted-foreground">{t('vault.lease_readonly_note')}</p>
+              <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
             )}
             {!readOnly && !isAdmin && !pendingUnlockRequest && (
               <Button variant="outline" size="sm" onClick={onRequestUnlock} disabled={isRequestingUnlock}>
