@@ -315,7 +315,22 @@ export default function AuditLog() {
                 ) : entries.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      {t('audit.no_transitions')}
+                      {/* C4: distinguish "filters too strict" from "nothing happened
+                          yet", and give the over-filtered state a one-click escape. */}
+                      {(leaseIdFilter || activityFilter) ? (
+                        <div className="space-y-2">
+                          <p>{t('audit.no_match')}</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setLeaseIdFilter(''); setActivityFilter(''); setPage(0); }}
+                          >
+                            {t('audit.clear_filters')}
+                          </Button>
+                        </div>
+                      ) : (
+                        t('audit.no_transitions')
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (

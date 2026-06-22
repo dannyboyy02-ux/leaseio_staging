@@ -2143,3 +2143,12 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 > **Filed 2026-06-22** (branch `claude/affectionate-hamilton-bp58tu`). Surfaced by lease-product-polish during the audit-D2 Vault read-only surface sweep.
 
 **Severity:** Low (copy). **Where:** `src/components/leases/Asc842InputsTab.tsx:673-678` + `src/components/leases/LeaseDiscountRateCard.tsx:384-389`. On a Vault (read-only retention) workspace, `canEditAsc842` is false (because `!readOnly` is false), so the inputs + Save are correctly disabled — but the explainer note reads "Read-only — only workspace admins, editors, or the owner can edit…". The Vault user IS the owner, so the copy implies they should be able to edit; the real reason is the archive/read-only state. **Fix:** when the disable is due to read-only retention (not a permission gap), swap the note for the Vault message (`t('vault.lease_readonly_note')`, matching what `LockedHeader` already shows). Needs a read-only signal threaded into those two cards to branch the copy.
+
+---
+
+### Item #131: Two polish LOWs surfaced during the P3 C4/D5 batch (deferred)
+
+> **Filed 2026-06-22** (branch `claude/affectionate-hamilton-bp58tu`). Surfaced by lease-product-polish while reviewing the C4/D5 fixes. Both deferred — out of those findings' de-scoped intent.
+
+- **(Low — firm onboarding) The billing step shows the per-workspace *rate*, not the firm's *total*.** `src/pages/app/firm/FirmOnboarding.tsx` billing step renders "$499 / workspace / month" (now from config, audit D5) under "billed per workspace, together." A finance buyer scanning for their monthly charge may read $499 as the whole bill rather than the per-unit rate. At onboarding the firm has 1 child so total == rate, but it's a preview-the-outcome gap before the Stripe redirect. **Fix:** show the computed total (e.g. "N workspaces × $499 = $X / month") using the bound-child count, or make the multiplier explicit in `billing_summary`.
+- **(Low — pre-existing) `src/pages/app/AuditLog.tsx` has hardcoded English on an otherwise-i18n'd surface.** The "Activity type" label, "All activity types" item, the "Activity"/"Transition" table headers, and the `ACTIVITY_LABELS` map (~line 62) are literal English while the rest of the page uses `t()`. Predates the C4 change (which only touched the empty state). **Fix:** move these into the `audit` locale block in both en + es.

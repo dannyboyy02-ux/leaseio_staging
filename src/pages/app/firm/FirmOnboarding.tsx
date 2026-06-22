@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useApp } from "@/contexts/AppContext";
 import { useFirm } from "@/contexts/FirmContext";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
+import { PLANS } from "@/config/pricing";
 
 type Step = "details" | "workspace" | "billing";
 
@@ -147,7 +148,7 @@ export default function FirmOnboarding() {
         ) : (
           <Card className="p-5 space-y-4 text-center">
             <p className="text-sm">{t("firm.onboarding.billing_summary")}</p>
-            <p className="text-2xl font-semibold">{t("firm.onboarding.price_per_workspace")}</p>
+            <p className="text-2xl font-semibold">{t("firm.onboarding.price_per_workspace", { price: PLANS.business.price.monthly })}</p>
             <p className="text-xs text-muted-foreground">{t("firm.onboarding.billing_note")}</p>
             <Button className="w-full" onClick={startCheckout} disabled={busy}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t("firm.onboarding.to_payment")}

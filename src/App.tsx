@@ -196,6 +196,9 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+                {/* Financial-impact review — URL/chain-state only (no nav entry):
+                    reached from the approval flow when a request needs a finance
+                    sign-off step. Intentionally not in the sidebar (C5). */}
                 <Route
                   path="/app/leases/:leaseId/financial-review"
                   element={
