@@ -183,7 +183,8 @@
       "awaiting_approval_detail": "El arrendamiento está bloqueado y enviado a los aprobadores.",
       "final_label": "Aprobado y bloqueado",
       "final_detail": "El registro del arrendamiento está finalizado.",
-      "marked_reviewed_toast": "Se marcaron {{sections}} como revisadas."
+      "marked_reviewed_toast": "Se marcaron {{sections}} como revisadas.",
+      "save_review_failed": "No se pudo guardar tu revisión. Si esto continúa, tu espacio de trabajo puede ser de solo lectura."
     }
   },
   "nav": {

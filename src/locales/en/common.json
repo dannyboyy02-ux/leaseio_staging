@@ -183,7 +183,8 @@
       "awaiting_approval_detail": "Lease is locked and routed to approvers.",
       "final_label": "Approved & locked",
       "final_detail": "Lease record is finalized.",
-      "marked_reviewed_toast": "Marked {{sections}} reviewed."
+      "marked_reviewed_toast": "Marked {{sections}} reviewed.",
+      "save_review_failed": "Couldn't save your review. If this keeps happening, your workspace may be read-only."
     }
   },
   "nav": {

@@ -1236,7 +1236,7 @@ export default function LeaseReview() {
     const extractedJson = lease?.extracted_json as ExtractedJson | null;
     const fieldConfidence = getFieldConfidence(extractedJson, fieldId);
 
-    await supabase.from('field_corrections').insert({
+    const { error } = await supabase.from('field_corrections').insert({
       lease_id: lease.id,
       field_name: fieldId,
       original_value: originalValue || null,
@@ -1244,6 +1244,14 @@ export default function LeaseReview() {
       ai_confidence: fieldConfidence,
       correction_type: !originalValue ? 'add_missing' : !currentValue ? 'delete_wrong' : 'edit'
     });
+    if (error) {
+      // #85: this is a background analytics write (no user-facing toast), but it
+      // must not drop silently — surface to logs and DON'T advance the tracked
+      // baseline, so the next field change re-attempts rather than losing the
+      // correction.
+      console.error('Failed to record field correction:', error);
+      return;
+    }
 
     originalValues.current[fieldId] = currentValue;
   }, [form, lease?.id, lease?.extracted_json, isUnlockedForEditing, activeChangeSet?.id, stageFieldChange]);
@@ -1264,12 +1272,19 @@ export default function LeaseReview() {
     const newConfirmed = isAlready
       ? confirmedSections.filter((k) => k !== sectionKey)
       : [...confirmedSections, sectionKey];
+    const prevConfirmed = confirmedSections;
     setConfirmedSections(newConfirmed);
     if (lease?.id) {
-      await supabase
+      const { error } = await supabase
         .from('leases')
         .update({ confirmed_sections: newConfirmed })
         .eq('id', lease.id);
+      if (error) {
+        // #85: the write was rejected (e.g. Vault/grace read-only RLS) — revert
+        // the optimistic state instead of leaving the UI claiming a saved review.
+        setConfirmedSections(prevConfirmed);
+        toast.error(String(t('lease_review.strip.save_review_failed')));
+      }
     }
   }, [confirmedSections, lease?.id]);
 
@@ -1323,13 +1338,21 @@ export default function LeaseReview() {
   // the section is not yet confirmed.
   const handleConfirmAndAdvance = useCallback(async (sectionKey: SectionKey) => {
     if (!confirmedSections.includes(sectionKey)) {
+      const prevConfirmed = confirmedSections;
       const newConfirmed = [...confirmedSections, sectionKey];
       setConfirmedSections(newConfirmed);
       if (lease?.id) {
-        await supabase
+        const { error } = await supabase
           .from('leases')
           .update({ confirmed_sections: newConfirmed })
           .eq('id', lease.id);
+        if (error) {
+          // #85: revert the optimistic confirm and surface; don't advance to
+          // the next section when the save was rejected.
+          setConfirmedSections(prevConfirmed);
+          toast.error(String(t('lease_review.strip.save_review_failed')));
+          return;
+        }
       }
     }
     const next = nextUnconfirmedAfter(sectionKey, sectionKey);
@@ -1373,10 +1396,12 @@ export default function LeaseReview() {
     const newConfirmed = allIn
       ? confirmedSections.filter((s) => !tab.sections.includes(s as SectionKey))
       : Array.from(new Set([...confirmedSections, ...tab.sections]));
+    const prevConfirmed = confirmedSections;
     setConfirmedSections(newConfirmed);
 
     // Unmark while approved → revert approval in the same update.
     const shouldRevertApproval = allIn && isApproved;
+    const prevExtractedJson = lease?.extracted_json;
     const updatePayload: Record<string, any> = { confirmed_sections: newConfirmed };
     if (shouldRevertApproval) {
       const currentExtractedJson = (lease?.extracted_json || {}) as ExtractedJson;
@@ -1386,7 +1411,18 @@ export default function LeaseReview() {
       setLease((prev: any) => prev ? { ...prev, extracted_json: rest } : prev);
     }
     if (lease?.id) {
-      await supabase.from('leases').update(updatePayload).eq('id', lease.id);
+      const { error } = await supabase.from('leases').update(updatePayload).eq('id', lease.id);
+      if (error) {
+        // #85: revert BOTH optimistic updates (confirm state + the approval-strip
+        // mutation) and surface, instead of showing "Tab reopened" over a write
+        // the DB rejected (e.g. Vault/grace read-only RLS).
+        setConfirmedSections(prevConfirmed);
+        if (shouldRevertApproval) {
+          setLease((prev: any) => prev ? { ...prev, extracted_json: prevExtractedJson } : prev);
+        }
+        toast.error(String(t('lease_review.strip.save_review_failed')));
+        return;
+      }
     }
     if (shouldRevertApproval) {
       toast.message('Tab reopened — lease unapproved and editable.');
@@ -1450,6 +1486,7 @@ export default function LeaseReview() {
   const handleConfirmAllRequired = useCallback(async () => {
     const newlyAdded = SECTION_TRAVERSAL_ORDER.filter((k) => !confirmedSections.includes(k));
     if (newlyAdded.length === 0) return;
+    const prevConfirmed = confirmedSections;
     const merged = [...confirmedSections, ...newlyAdded];
     setConfirmedSections(merged);
     const newlyAddedTitles = newlyAdded.map((k) => SECTION_CONFIG[k].title);
@@ -1464,13 +1501,20 @@ export default function LeaseReview() {
       }
       return newlyAddedTitles.join(', ');
     })();
-    toast.success(String(t('lease_review.strip.marked_reviewed_toast', { sections: formatter })));
     if (lease?.id) {
-      await supabase
+      const { error } = await supabase
         .from('leases')
         .update({ confirmed_sections: merged })
         .eq('id', lease.id);
+      if (error) {
+        // #85: revert + surface; the success toast must follow a confirmed
+        // write, not precede an unchecked one.
+        setConfirmedSections(prevConfirmed);
+        toast.error(String(t('lease_review.strip.save_review_failed')));
+        return;
+      }
     }
+    toast.success(String(t('lease_review.strip.marked_reviewed_toast', { sections: formatter })));
   }, [confirmedSections, lease?.id]);
 
   // Rent schedule: persist inline edits
