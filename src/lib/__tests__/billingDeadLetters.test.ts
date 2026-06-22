@@ -15,6 +15,7 @@ const read = (p: string) => readFileSync(join(root, p), 'utf8');
 const WEBHOOK = 'supabase/functions/stripe-webhook/index.ts';
 const TABLE_MIG = 'supabase/migrations/20260622000000_billing_dead_letters.sql';
 const RPC_MIG = 'supabase/migrations/20260622010000_record_billing_dead_letter_rpc.sql';
+const WIDEN_MIG = 'supabase/migrations/20260622020000_billing_dead_letters_doc_pack_unknown_workspace.sql';
 
 describe('#65 stripe-webhook dead-letter wiring', () => {
   const src = read(WEBHOOK);
@@ -39,8 +40,9 @@ describe('#65 stripe-webhook dead-letter wiring', () => {
   });
 
   it('emits only CHECK-valid (source, reason) pairs for every drop branch', () => {
-    // document_pack: attribution-only. single_lease_credit: + charge rejections.
-    const docPackReasons = ['missing_workspace_id', 'missing_customer'];
+    // document_pack: attribution + unknown_workspace (the 0-row UPDATE case).
+    // single_lease_credit: + the charge-validation rejections.
+    const docPackReasons = ['missing_workspace_id', 'missing_customer', 'unknown_workspace'];
     const singleReasons = ['missing_workspace_id', 'unknown_workspace', 'underpaid', 'customer_mismatch'];
 
     // Each reason literal appears wired to a recordBillingDeadLetter call.
@@ -50,10 +52,20 @@ describe('#65 stripe-webhook dead-letter wiring', () => {
     // Both sources are emitted.
     expect(src).toContain('source: "document_pack"');
     expect(src).toContain('source: "single_lease_credit"');
-    // The single-lease charge-rejection reasons must NEVER be tagged document_pack
-    // (the migration's composite CHECK would reject such a row at runtime).
-    expect(src).not.toMatch(/source: "document_pack"[\s\S]{0,200}reason: "underpaid"/);
-    expect(src).not.toMatch(/source: "document_pack"[\s\S]{0,200}reason: "customer_mismatch"/);
+    // document_pack now dead-letters the unknown-workspace (0-row UPDATE) case.
+    expect(src).toMatch(/source: "document_pack",[\s\S]{0,80}reason: "unknown_workspace"/);
+    // ...but the single-lease charge-rejection reasons must NEVER be tagged
+    // document_pack (the migration's composite CHECK would reject such a row).
+    expect(src).not.toMatch(/source: "document_pack",[\s\S]{0,200}reason: "underpaid"/);
+    expect(src).not.toMatch(/source: "document_pack",[\s\S]{0,200}reason: "customer_mismatch"/);
+  });
+
+  it('detects the 0-row document-pack UPDATE (unknown workspace) instead of silently acking', () => {
+    // The capacity UPDATE must .select() so a 0-row match (deleted/unknown
+    // workspace) is observable — a 0-row PostgREST update is not an error.
+    expect(src).toContain('.update({ addon_document_capacity: total })');
+    expect(src).toMatch(/\.eq\("id", workspaceId\)\s*\.select\("id"\)/);
+    expect(src).toContain('if (!updated || updated.length === 0)');
   });
 
   it('threads the Stripe event id into both grant functions', () => {
@@ -102,5 +114,20 @@ describe('#65 record_billing_dead_letter RPC migration', () => {
     expect(mig).toContain('ON CONFLICT (source, stripe_object_id, reason) DO UPDATE');
     expect(mig).toContain('attempt_count = public.billing_dead_letters.attempt_count + 1');
     expect(mig).toContain('last_seen_at  = now()');
+  });
+});
+
+describe('#65 doc-pack unknown_workspace CHECK widening migration', () => {
+  const mig = read(WIDEN_MIG);
+
+  it('drops + re-adds the matrix CHECK allowing document_pack + unknown_workspace', () => {
+    expect(mig).toContain('DROP CONSTRAINT IF EXISTS billing_dead_letters_source_reason_valid');
+    expect(mig).toContain('ADD CONSTRAINT billing_dead_letters_source_reason_valid');
+    expect(mig).toMatch(
+      /source = 'document_pack' AND reason IN \([^)]*'unknown_workspace'[^)]*\)/,
+    );
+    // The single-lease rejection reasons remain single-lease-only (not widened).
+    expect(mig).toMatch(/source = 'single_lease_credit' AND reason IN \([^)]*'underpaid'[^)]*\)/);
+    expect(mig).not.toMatch(/document_pack' AND reason IN \([^)]*'underpaid'/);
   });
 });

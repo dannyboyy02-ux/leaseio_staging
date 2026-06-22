@@ -512,12 +512,30 @@ serve(async (req) => {
       startingAfter = page.data[page.data.length - 1].id;
     }
 
-    const { error } = await supabaseAdmin
+    // .select() so a 0-row update (workspace_id present in metadata but no such
+    // workspace — deleted/unknown) is detectable: a 0-row PostgREST update is
+    // NOT an error, so without this the paid pack would be silently dropped
+    // (Codex PR review).
+    const { data: updated, error } = await supabaseAdmin
       .from("workspaces")
       .update({ addon_document_capacity: total })
-      .eq("id", workspaceId);
+      .eq("id", workspaceId)
+      .select("id");
     if (error) {
       throw new Error(`Failed to update addon_document_capacity: ${error.message}`);
+    }
+    if (!updated || updated.length === 0) {
+      console.warn("[stripe-webhook] document-pack event references unknown workspace", workspaceId, subscription.id);
+      await recordBillingDeadLetter({
+        source: "document_pack",
+        reason: "unknown_workspace",
+        stripeObjectId: subscription.id,
+        eventId,
+        stripeCustomerId: customerId,
+        claimedWorkspaceId: workspaceId,
+        rawMetadata: subscription.metadata ?? {},
+      });
+      return;
     }
   }
 
