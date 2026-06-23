@@ -11,10 +11,11 @@
 //   decision logic is pulled into a pure function and tested directly.
 //
 // LIFECYCLE TRANSITION CONVENTION (CLAUDE.md)
-//   This helper produces the destination lifecycle status. The form
-//   applies it (UPDATE leases SET lifecycle_status = ..., status_changed_at
-//   = now()) and writes the status_change activity log. This file does not
-//   write — it only decides.
+//   This helper only DECIDES (proceed vs leave-draft, and the destination
+//   status). The draft → destination flip AND its status_change activity-log
+//   row are applied SERVER-SIDE by resolve-approval-chain — the browser cannot
+//   write lifecycle_status (the governance trigger rejects it). For the legacy
+//   path this helper prefers the server-returned finalStatus.
 // ─────────────────────────────────────────────────────────────────────────
 
 export type ChainSuccess = {
@@ -36,12 +37,11 @@ export type ChainLegacyFallback = {
   ok: true;
   legacyFallback: true;
   message: string;
-  // Phase: the edge function now applies the legacy flip server-side and
-  // returns the authoritative destination + the requirements it computed
-  // (so the caller notifies the right approvers without re-deriving them).
+  // The edge function now applies the legacy flip + status_change log
+  // server-side and returns the authoritative destination. The caller still
+  // re-derives approval requirements locally to choose the NOTIFICATION target
+  // (not a security/audit boundary).
   finalStatus?: string;
-  requiresManagerApproval?: boolean;
-  requiresFinancialApproval?: boolean;
 };
 
 export type ChainFailure = {

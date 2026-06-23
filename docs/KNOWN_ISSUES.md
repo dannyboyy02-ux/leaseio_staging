@@ -3,6 +3,22 @@
 Tracked here so they survive across sessions. When fixing, remove from this
 list and reference it in the commit message.
 
+---
+
+## Cluster A — core request-workflow transitions blocked by the governance trigger (filed + partly resolved 2026-06-23)
+
+Surfaced by a live health audit (the core Path-1 submission was silently failing in production). Root cause: the `prevent_unauthorized_lease_workflow_edits` BEFORE-UPDATE trigger on `leases` `RAISE EXCEPTION`s on any `authenticated`/browser UPDATE that changes `lifecycle_status` (or approval/lock columns), but several client paths still did exactly that direct write — silently rejected, leaving leases stranded and, worse, writing `status_change` audit rows asserting transitions that never happened.
+
+- **#A1 + #A4 — RESOLVED 2026-06-23 (code; PENDING LIVE EDGE DEPLOY).** Primary Lease Request submission (`LeaseRequestForm.tsx:369`) and the retry path (`retryRequestRouting.ts`) flipped `lifecycle_status` in the browser → rejected → lease stranded in `draft` with a misleading "submitted" audit row. Fixed by moving the flip + `status_change` log SERVER-SIDE into `resolve-approval-chain` (fresh-chain / legacy / idempotent-recovery branches); legacy target computed server-side via the new `_shared/approval_routing.ts` mirror so a submitter cannot self-approve. Client now only notifies. Reviewer-clean (security/integrity/auditor/test-author); `retryRequestRouting.test.ts` rewritten to assert the ABSENCE of any client lifecycle write. **`resolve-approval-chain` must be redeployed to the live project for this to take effect** (owner/operator step).
+- **#A2 — OPEN.** `LeaseReview.tsx` intake-stage buttons ("Move to Under Review/Approved", "Mark Executed", "Cancel Request", "Resubmit") do the same blocked browser flip with no try/catch → silent no-op, no toast. Fix: route through `legacy-lease-action` (add a `cancel` action); wrap calls in error handling.
+- **#A3 — OPEN.** `LeaseReview.tsx` "Post Lease" button (`handlePostLease`) is blocked → "Failed to post lease" every time; it is a redundant broken sibling of the working Lock & Activate path. Fix: remove it, or route via `legacy-lease-action`.
+- **#A5 — OPEN.** Legacy `/app/leases/new` (`NewLease.tsx` + `useLifecycleWorkflow` mutating methods) is URL-reachable, all its transitions are blocked, and it bypasses chain resolution. Fix: redirect to the working request form; retire the legacy hook methods.
+
+### Deferred LOWs from the #A1/#A4 review (2026-06-23)
+- **[LOW] flip+log non-atomicity** in `resolve-approval-chain` — `updateLifecycle` + `logStatusChange` are separate awaits; a log-insert failure after a successful flip leaves an unattributed transition. Pre-existing pattern (matches `act-on-chain-step`). A hard guarantee would need a SECURITY DEFINER RPC (or a DB trigger writing the `status_change` from the lifecycle UPDATE itself).
+- **[LOW] legacy notification target** is chosen from client-recomputed approval requirements while the flip status is server-authoritative — a divergence window if the two computations ever drift (notifications only; not an audit/security boundary). Accepted tradeoff (the form also needs the requirements for its financial preview).
+- **[COVERAGE GAP] no Deno-level test** for `resolve-approval-chain`'s server-side flip/log/`recovered` branches (vitest doesn't cover edge functions). Suggested: `scripts/smoke-resolve-approval-chain.mjs` — seed a draft lease → invoke → assert it advanced + a server-written `status_change` row exists.
+
 **Status reconciliation (Phase 3 close, 2026-05-05):**
 - Items 1-7 (pre-Phase-3 backlog) all still open. Phase 3 did not touch them.
 - Three new items added (8, 9, 10) from the Phase 3 smoke run.

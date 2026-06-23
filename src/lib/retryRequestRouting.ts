@@ -13,17 +13,12 @@
 // safe to invoke repeatedly.
 //
 // This mirrors the orchestration LeaseRequestForm runs inline after the draft
-// insert (resolve → decideSubmissionOutcome → flip → notify → log). All the
-// business logic is the SHARED helpers (getApprovalRequirements /
-// getInitialStatusAfterSubmission / decideSubmissionOutcome / notify*); only the
-// ~25-line orchestration SEQUENCE is repeated here, deliberately — refactoring
-// the primary submission path to share this orchestration is a follow-up that
-// should land only once that path has an integration-test safety net
-// (KNOWN_ISSUES #132).
-//
-// LIFECYCLE TRANSITION CONVENTION (CLAUDE.md): the status_change log sets both
-// the top-level from_status/to_status columns AND the equivalent fields inside
-// details, plus routing_path.
+// insert (resolve → decideSubmissionOutcome → notify). The lifecycle flip AND
+// the status_change audit row are applied SERVER-SIDE by resolve-approval-chain
+// (the browser cannot write lifecycle_status — the governance trigger rejects
+// it), so this path only re-runs routing and fires notifications. The business
+// logic is the SHARED helpers (getApprovalRequirements /
+// getInitialStatusAfterSubmission / decideSubmissionOutcome / notify*).
 // ─────────────────────────────────────────────────────────────────────────
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getApprovalRequirements, getInitialStatusAfterSubmission } from '@/lib/approvalRouting';

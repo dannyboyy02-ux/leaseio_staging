@@ -191,7 +191,7 @@ Any code that transitions `leases.lifecycle_status` MUST:
 2. Insert a `lease_activity_log` row with `activity_type = 'status_change'`, populating **both** the top-level `from_status`/`to_status` columns **and** the equivalent fields inside the `details` JSON (backward compatibility).
 3. Include a `routing_path` in `details` (`'legacy'` or `'chain'`).
 
-This keeps activity-log shape consistent across the form-path writer (`LeaseRequestForm.tsx`, both shapes inline in legacy + chain branches) and the edge-function writer (`act-on-chain-step/index.ts`, which routes every transition through `updateLifecycle()` + `logStatusChange()` helpers — do not write the UPDATE/INSERT inline). **Each new transition code path must follow this convention.**
+This keeps activity-log shape consistent across the edge-function writers — `act-on-chain-step/index.ts` and `resolve-approval-chain/index.ts` (as of 2026-06-23 / Cluster A #1/#4, the request-submission `draft → submitted/under_review/approved/concept_submitted` flip **and** its `status_change` row are written here, server-side, because the `prevent_unauthorized_lease_workflow_edits` trigger rejects any browser/`authenticated` lifecycle write) — both routing every transition through `updateLifecycle()` + `logStatusChange()` helpers; do not write the UPDATE/INSERT inline. `LeaseRequestForm.tsx` now writes only the `created` (draft) row and `retryRequestRouting.ts` only notifies — neither writes the submission lifecycle flip/log anymore (that was the silently-rejected client write). **Each new transition code path must follow this convention — and must run server-side (service role), never as a browser UPDATE.**
 
 ### Project Configuration Source of Truth
 

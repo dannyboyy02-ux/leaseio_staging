@@ -1126,7 +1126,7 @@ serve(async (req) => {
       const flipped = await updateLifecycle(leaseId, legacyStatus);
       if (!flipped) {
         return jsonResponse(
-          { ok: false, error: "Failed to update request status", reason: "invalid_lease" },
+          { ok: false, error: "Failed to update request status", reason: "flip_failed" },
           500,
           origin,
         );
@@ -1143,9 +1143,12 @@ serve(async (req) => {
       {
         ok: true,
         legacyFallback: true,
+        // finalStatus is the server-authoritative destination (the flip +
+        // status_change log are owned here). The caller re-derives approval
+        // requirements locally only to pick the NOTIFICATION target — not a
+        // security/audit boundary — so we don't ship requirement flags it
+        // doesn't read.
         finalStatus,
-        requiresManagerApproval: requirements.requiresManagerApproval,
-        requiresFinancialApproval: requirements.requiresFinancialApproval,
         message: "No approval policies configured; legacy notification path.",
       },
       200,
@@ -1345,14 +1348,23 @@ serve(async (req) => {
   let finalStatus = currentLifecycle;
   if (currentLifecycle === "draft") {
     const flipped = await updateLifecycle(leaseId, "concept_submitted");
-    if (flipped) {
-      finalStatus = "concept_submitted";
-      await logStatusChange(leaseId, "draft", "concept_submitted", {
-        triggered_by: "request_submission",
-        policy_id: chosen.id,
-        policy_version: chosen.version,
-      });
+    if (!flipped) {
+      // The chain rows already exist; do NOT fall through and return success
+      // with a target the lease never reached — that would re-create the
+      // lying-audit / stranded-draft defect this change removes. Surface the
+      // failure; the idempotent-recovery branch completes the flip on retry.
+      return jsonResponse(
+        { ok: false, error: "Failed to update request status", reason: "flip_failed" },
+        500,
+        origin,
+      );
     }
+    finalStatus = "concept_submitted";
+    await logStatusChange(leaseId, "draft", "concept_submitted", {
+      triggered_by: "request_submission",
+      policy_id: chosen.id,
+      policy_version: chosen.version,
+    });
   }
 
   const conceptSteps = policySteps.filter(

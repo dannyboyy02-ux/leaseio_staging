@@ -97,6 +97,56 @@ describe('decideSubmissionOutcome — legacy fallback', () => {
   });
 });
 
+// ─── Scenario 2b: legacy fallback finalStatus precedence (Cluster A #1/#4) ──
+//
+// The edge function now applies the legacy flip SERVER-SIDE and returns the
+// authoritative `finalStatus` it computed. decideSubmissionOutcome must PREFER
+// that server value over the locally-computed legacyInitialStatus — the server
+// is the source of truth (a submitter must never supply their own target). When
+// the field is absent (older edge deploy), it falls back to legacyInitialStatus.
+
+describe('decideSubmissionOutcome — legacy fallback finalStatus precedence', () => {
+  it('returns the edge-supplied finalStatus, NOT the locally-computed legacyInitialStatus', () => {
+    const fallbackWithServerStatus: ChainLegacyFallback = {
+      ok: true,
+      legacyFallback: true,
+      message: 'No approval policies configured; legacy notification path.',
+      finalStatus: 'under_review',
+    };
+    // Local computation would say 'submitted'; the server said 'under_review'.
+    const out = decideSubmissionOutcome(fallbackWithServerStatus, 'submitted', null);
+    if (out.kind !== 'proceed') throw new Error('expected proceed');
+    expect(out.finalStatus).toBe('under_review'); // server value wins
+    expect(out.routingPath).toBe('legacy');
+  });
+
+  it('prefers the server finalStatus even for the auto-approved destination', () => {
+    const serverAutoApproved: ChainLegacyFallback = {
+      ok: true,
+      legacyFallback: true,
+      message: 'legacy',
+      finalStatus: 'approved',
+    };
+    // Local would have said 'submitted'; the server auto-approved.
+    const out = decideSubmissionOutcome(serverAutoApproved, 'submitted', null);
+    if (out.kind !== 'proceed') throw new Error('expected proceed');
+    expect(out.finalStatus).toBe('approved');
+  });
+
+  it('falls back to legacyInitialStatus when the edge response omits finalStatus (back-compat)', () => {
+    const noServerStatus: ChainLegacyFallback = {
+      ok: true,
+      legacyFallback: true,
+      message: 'No approval policies configured',
+      // no finalStatus — simulate a pre-Cluster-A edge deploy
+    };
+    const out = decideSubmissionOutcome(noServerStatus, 'submitted', null);
+    if (out.kind !== 'proceed') throw new Error('expected proceed');
+    expect(out.finalStatus).toBe('submitted'); // local fallback
+    expect(out.routingPath).toBe('legacy');
+  });
+});
+
 // ─── Scenario 3: ambiguous match — toast + lease stays in draft ──────────
 //
 // resolve-approval-chain returns { ok: false, reason: 'ambiguous_match', ... }
