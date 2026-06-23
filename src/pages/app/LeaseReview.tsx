@@ -1270,6 +1270,23 @@ export default function LeaseReview() {
     originalValues.current[fieldId] = currentValue;
   }, [form, lease?.id, lease?.extracted_json, isUnlockedForEditing, activeChangeSet?.id, stageFieldChange]);
 
+  // Flush any dirty-but-unblurred edits into the change set BEFORE opening the
+  // finalize dialog, so stagedItemCount reflects every change. Without this, a
+  // field that was typed but not blurred races the dialog open: the empty-draft
+  // branch could fire and cancel_change_set would silently discard the edit
+  // (integrity HIGH). Uses the same null/'' normalization as isDirty so
+  // untouched empty fields are never spuriously staged.
+  const flushStagedEdits = useCallback(async () => {
+    if (!isUnlockedForEditing || !activeChangeSet?.id) return;
+    const dirty = Object.keys(form).filter(
+      (k) => (form[k] ?? '') !== (originalValues.current[k] ?? ''),
+    );
+    for (const fieldId of dirty) {
+      await stageFieldImmediate(fieldId, form[fieldId]);
+    }
+    await refreshStagedItemCount();
+  }, [isUnlockedForEditing, activeChangeSet?.id, form, stageFieldImmediate, refreshStagedItemCount]);
+
   // Track low-confidence field focus
   const handleFieldFocus = useCallback((fieldId: string) => {
     const extractedJson = lease?.extracted_json as ExtractedJson | null;
@@ -2921,22 +2938,30 @@ export default function LeaseReview() {
       <div className="flex flex-col h-screen max-h-screen overflow-hidden bg-muted/30">
         <AppHeader
           title={
-            <div className="flex items-center gap-1.5">
-              <span>{lease.request_title || lease.property_address || lease.filename || 'Untitled Lease'}</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="truncate min-w-0">{lease.request_title || lease.property_address || lease.filename || 'Untitled Lease'}</span>
               {!isReadOnly && (
                 <button
                   onClick={() => { setRenameValue(lease.request_title || ''); setRenameDialogOpen(true); }}
-                  className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
                   title="Rename lease"
                 >
                   <Pencil size={13} />
                 </button>
               )}
               {lease.lifecycle_status && (
-                <LifecycleStatusBadge status={lease.lifecycle_status as any} />
+                <span className="shrink-0">
+                  <LifecycleStatusBadge status={lease.lifecycle_status as any} />
+                </span>
+              )}
+              {isUnlockedDraft && (
+                <Badge className="shrink-0 bg-amber-100 text-amber-800 border border-amber-300 text-xs dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
+                  <Unlock size={11} className="mr-1" />
+                  Editing — {stagedItemCount} staged
+                </Badge>
               )}
               {isApproved && (
-                <Badge className="bg-green-600 text-white text-xs">
+                <Badge className="shrink-0 bg-green-600 text-white text-xs">
                   <CheckCircle size={12} className="mr-1" />
                   Approved
                 </Badge>
@@ -2945,43 +2970,52 @@ export default function LeaseReview() {
           }
           actions={
             isUnlockedDraft ? (
-              /* Unlocked-for-editing draft: the primary exit is "Lock & submit"
-                 (opens the finalize dialog → submit_change_set / self-approve /
-                 empty-draft re-lock, all attributable). Without it the user is
-                 stranded — edits stage forever and the lease stays unlocked.
-                 Then save (stage), discard, archive. */
+              /* Unlocked-for-editing draft. Primary exit: "Lock & submit" — opens
+                 the finalize dialog (submit_change_set / self-approve / empty-draft
+                 re-lock, all attributable) AND first flushes any dirty-but-unblurred
+                 edit into the change set so a just-typed value can't be dropped.
+                 Discard / Archive live in the ⋯ menu so the bar can't overflow
+                 off-screen and re-hide the exit at narrow widths. Edits auto-stage
+                 on blur — there is intentionally NO separate direct-write "Save"
+                 here (it bypassed the change-set audit chain). */
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  className="bg-success hover:bg-success/90 text-white"
-                  onClick={() => setLockConfirmDialogOpen(true)}
+                  className="bg-green-600 hover:bg-green-700 text-white font-semibold shadow-sm"
+                  onClick={async () => { await flushStagedEdits(); setLockConfirmDialogOpen(true); }}
                   disabled={submittingChanges || saving}
+                  title={stagedItemCount > 0
+                    ? 'Re-lock the lease and route your staged edits for approval'
+                    : 'Re-lock this lease (no staged changes)'}
                 >
                   {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
                   {stagedItemCount > 0
                     ? `Lock & submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}`
                     : 'Re-lock'}
                 </Button>
-                <Button size="sm" variant="outline" onClick={handleSync} disabled={saving}>
-                  {saving ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Save size={14} className="mr-1.5" />}
-                  Save changes
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                  onClick={() => setCancelChangeSetDialogOpen(true)}
-                  disabled={cancelingChangeSet}
-                >
-                  {cancelingChangeSet ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-                  Discard
-                </Button>
-                {(userRole === 'admin' || userRole === 'owner') && (
-                  <Button size="sm" variant="outline" onClick={() => setShowArchiveDialog(true)}>
-                    <Archive className="h-3.5 w-3.5 mr-1.5" />
-                    {lease.archived ? t('archive.unarchive') : t('archive.archive')}
-                  </Button>
-                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" aria-label="More actions">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem
+                      onClick={() => setCancelChangeSetDialogOpen(true)}
+                      disabled={cancelingChangeSet}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Discard edits & re-lock
+                    </DropdownMenuItem>
+                    {(userRole === 'admin' || userRole === 'owner') && (
+                      <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
+                        <Archive className="h-4 w-4 mr-2" />
+                        {lease.archived ? t('archive.unarchive') : t('archive.archive')}
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -3470,7 +3504,7 @@ export default function LeaseReview() {
                                       ? `Edits are staged for approval — ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} pending.`
                                       : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
                                   </p>
-                                  {/* "Lock & submit changes" / Save changes / Discard live in the header actions slot above. */}
+                                  {/* "Lock & submit" (and Discard, in the ⋯ menu) live in the header actions slot above. */}
                                 </CardContent>
                               </Card>
                             )}
@@ -3755,14 +3789,14 @@ export default function LeaseReview() {
       <Dialog open={cancelChangeSetDialogOpen} onOpenChange={setCancelChangeSetDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Cancel changes?</DialogTitle>
+            <DialogTitle>Discard edits?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel? Your changes will not be saved and the lease will lock.
+              Your staged edits will be discarded and the lease will re-lock to its prior state. This can't be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelChangeSetDialogOpen(false)} disabled={cancelingChangeSet}>
-              Keep Editing
+              Keep editing
             </Button>
             <Button
               variant="destructive"
@@ -3770,7 +3804,7 @@ export default function LeaseReview() {
               disabled={cancelingChangeSet}
             >
               {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Yes, cancel
+              Discard & re-lock
             </Button>
           </DialogFooter>
         </DialogContent>

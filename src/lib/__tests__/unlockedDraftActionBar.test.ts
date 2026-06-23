@@ -27,7 +27,7 @@ const readRepoFile = (path: string) => readFileSync(join(root, path), 'utf8');
  *
  * The two call sites are also syntactically distinguishable:
  *   - unreachable builder: object property  `onClick: () => setLockConfirmDialogOpen(true),`
- *   - the fix (JSX prop):  `onClick={() => setLockConfirmDialogOpen(true)}`
+ *   - the fix (JSX prop):  `onClick={async () => { await flushStagedEdits(); setLockConfirmDialogOpen(true); }}`
  * We assert the JSX form is present in the block and the object form is absent,
  * so the test cannot pass merely because the unreachable site exists.
  */
@@ -49,8 +49,9 @@ describe('unlocked-draft action bar — finalize/re-lock affordance', () => {
   });
 
   it('wires the finalize dialog as a JSX onClick prop (not the unreachable builder form)', () => {
-    // The reachable, in-bar button uses the JSX prop form.
-    expect(unlockedDraftBlock).toContain('onClick={() => setLockConfirmDialogOpen(true)}');
+    // The reachable, in-bar button wires the dialog via a JSX onClick prop
+    // (the handler flushes pending edits first, then opens the dialog).
+    expect(unlockedDraftBlock).toMatch(/onClick=\{[^}]*setLockConfirmDialogOpen\(true\)/);
     // The unreachable primaryAction-builder object-property form must NOT be how
     // the unlocked-draft branch gets its dialog — proves the guard distinguishes
     // "button wired in the unlocked-draft bar" from "call exists somewhere in file".
