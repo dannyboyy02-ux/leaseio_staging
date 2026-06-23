@@ -41,6 +41,29 @@ DECLARE
   new_using text;
   new_check text;
 BEGIN
+  -- Fail-closed pre-flight (security review, 2026-06-23): regexp_replace is a
+  -- blind text substitution — if any in-scope policy predicate ever carried the
+  -- text `auth.uid` INSIDE a single-quoted string literal, the wrap would
+  -- corrupt that literal. No current policy does, but the loop reads the LIVE
+  -- catalog, so enforce it as an invariant for any future replay.
+  --
+  -- Detection must be precise: a naive `'…auth.uid…'` match false-positives on a
+  -- real auth.uid() CALL that merely sits between two literals (e.g.
+  -- 'draft' … auth.uid() … 'pending_approval'), because `[^']*` spans the gap.
+  -- Instead, EXTRACT each balanced single-quoted literal and check IT — only a
+  -- literal that itself contains `auth.uid` is a genuine hazard.
+  IF EXISTS (
+    SELECT 1
+    FROM pg_policies p,
+         LATERAL regexp_matches(
+           coalesce(p.qual, '') || ' ' || coalesce(p.with_check, ''),
+           $lit$'[^']*'$lit$, 'g'
+         ) AS m
+    WHERE p.schemaname = 'public' AND m[1] ~ 'auth\.uid'
+  ) THEN
+    RAISE EXCEPTION 'aborting auth.uid() wrap: a public policy predicate contains auth.uid inside a string literal; blind regex substitution would corrupt it';
+  END IF;
+
   FOR r IN
     SELECT schemaname, tablename, policyname, qual, with_check
     FROM pg_policies
