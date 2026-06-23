@@ -52,7 +52,6 @@ const Portfolio = lazy(() => import("./pages/app/Portfolio"));
 const ApprovalQueue = lazy(() => import("./pages/app/ApprovalQueue"));
 const FinancialReview = lazy(() => import("./pages/app/FinancialReview"));
 const ImportHistory = lazy(() => import("./pages/app/ImportHistory"));
-const NewLease = lazy(() => import("./pages/app/NewLease"));
 const ExtractionAnalytics = lazy(() => import("./pages/app/ExtractionAnalytics"));
 const AuditLog = lazy(() => import("./pages/app/AuditLog"));
 const Support = lazy(() => import("./pages/app/Support"));
@@ -170,14 +169,11 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/app/leases/new"
-                  element={
-                    <ProtectedRoute>
-                      <NewLease />
-                    </ProtectedRoute>
-                  }
-                />
+                {/* Legacy /app/leases/new (NewLease + useLifecycleWorkflow) retired
+                    2026-06-23 (Cluster A #5): its transitions did browser lifecycle
+                    writes the governance trigger rejects, and it bypassed approval-
+                    chain resolution. Redirect to the leases list. */}
+                <Route path="/app/leases/new" element={<Navigate to="/app/leases" replace />} />
                 {/* Primary lease workbench */}
                 <Route
                   path="/app/leases/:leaseId"

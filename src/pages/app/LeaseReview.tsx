@@ -2238,15 +2238,12 @@ export default function LeaseReview() {
                   Approval Queue
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
-                {!isReadOnly && lifecycleStatus === 'submitted' && (
-                  <Button onClick={() => updateLifecycleStatus('under_review')}>Move to Under Review</Button>
-                )}
-                {!isReadOnly && lifecycleStatus === 'under_review' && (
-                  <Button onClick={() => updateLifecycleStatus('approved')}>Move to Approved</Button>
-                )}
-                {!isReadOnly && lifecycleStatus === 'approved' && (
-                  <Button onClick={() => updateLifecycleStatus('executed')}>Mark Executed</Button>
-                )}
+                {/* Manual "Move to Under Review / Approved / Mark Executed" overrides
+                    were removed (2026-06-23, Cluster A #2): they bypassed the
+                    approval queue/chain (and the executed-document upload) and were
+                    silently rejected by the prevent_unauthorized_lease_workflow_edits
+                    trigger anyway. Approvals go through the Approval Queue; executed
+                    status comes from uploading the executed document. */}
                 {!isReadOnly && lifecycleStatus && !['active', 'expired', 'cancelled', 'rejected'].includes(lifecycleStatus) && (
                   <Button
                     variant="outline"
