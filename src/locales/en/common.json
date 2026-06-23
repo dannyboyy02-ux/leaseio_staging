@@ -210,7 +210,11 @@
     "language": "Language",
     "get_help": "Get help",
     "upgrade_plan": "Upgrade plan",
-    "plan_label": "{{plan}} plan"
+    "plan_label": "{{plan}} plan",
+    "sidebar_collapse": "Collapse sidebar",
+    "sidebar_expand": "Expand sidebar",
+    "sidebar_resize": "Resize sidebar",
+    "sidebar_reorder": "Drag to reorder"
   },
   "usage": {
     "title": "Usage",

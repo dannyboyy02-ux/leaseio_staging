@@ -210,7 +210,11 @@
     "language": "Idioma",
     "get_help": "Obtener ayuda",
     "upgrade_plan": "Mejorar plan",
-    "plan_label": "Plan {{plan}}"
+    "plan_label": "Plan {{plan}}",
+    "sidebar_collapse": "Contraer barra lateral",
+    "sidebar_expand": "Expandir barra lateral",
+    "sidebar_resize": "Redimensionar barra lateral",
+    "sidebar_reorder": "Arrastrar para reordenar"
   },
   "usage": {
     "title": "Uso",

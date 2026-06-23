@@ -303,9 +303,13 @@ describe('AppSidebar trial countdown pill', () => {
   it('renders the pill only when a count exists and deep-links to the subscription tab', () => {
     const pill = sliceBetween(source, '{trialDaysLeft !== null && (', '</Link>');
     expect(pill).toContain('to="/app/settings/account?tab=billing"');
-    expect(pill).toContain("t('account.trial_pill', { count: trialDaysLeft })");
+    // The pill text is computed once into trialPillText (shared by the expanded
+    // pill and the collapsed-rail tooltip) rather than inline in the JSX.
+    expect(pill).toContain('trialPillText');
+    const text = sliceBetween(source, 'const trialPillText =', ';');
+    expect(text).toContain("t('account.trial_pill', { count: trialDaysLeft ?? 0 })");
     // Day-of-charge collapses to a dedicated "ends today" string.
-    expect(pill).toContain("t('account.trial_pill_today')");
+    expect(text).toContain("t('account.trial_pill_today')");
   });
 });
 

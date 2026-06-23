@@ -3,18 +3,30 @@ import { useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { AiAssistant } from '@/components/ai/AiAssistant';
 import { ProcessingProvider } from '@/contexts/ProcessingContext';
+import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
 import { QuotaWarningBanner } from '@/components/QuotaWarningBanner';
 import { CancellationBanner, SoftDeletedWall } from '@/components/CancellationBanner';
 import { VaultBanner, VaultMemberWall } from '@/components/VaultBanner';
 import { useApp } from '@/contexts/AppContext';
 import { isReadOnlyRetention } from '@/config/pricing';
+import { SIDEBAR_COLLAPSED_WIDTH } from '@/lib/sidebarPrefs';
+import { cn } from '@/lib/utils';
 
 interface AppLayoutProps {
   children: ReactNode;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  return (
+    <SidebarProvider>
+      <AppLayoutInner>{children}</AppLayoutInner>
+    </SidebarProvider>
+  );
+}
+
+function AppLayoutInner({ children }: AppLayoutProps) {
   const { workspace, userRole } = useApp();
+  const { collapsed, width, resizing } = useSidebar();
   const location = useLocation();
 
   const inSettings = location.pathname.startsWith('/app/settings');
@@ -33,11 +45,23 @@ export function AppLayout({ children }: AppLayoutProps) {
   const isOwner = userRole === 'owner';
   const vaultWalled = isVault && !isOwner && !inSettings;
 
+  // The sidebar is a fixed overlay; <main> reserves space for it via padding.
+  // Width tracks the collapse/resize state. The transition is suppressed while
+  // the user is actively dragging the resize handle (so the offset follows the
+  // pointer 1:1) and under reduced-motion preferences.
+  const mainPaddingLeft = collapsed ? SIDEBAR_COLLAPSED_WIDTH : width;
+
   return (
     <ProcessingProvider>
       <div className="min-h-screen bg-background">
         <AppSidebar />
-        <main className="pl-64 min-h-screen">
+        <main
+          className={cn(
+            'min-h-screen',
+            !resizing && 'transition-[padding] duration-200 ease-out motion-reduce:transition-none',
+          )}
+          style={{ paddingLeft: mainPaddingLeft }}
+        >
           <CancellationBanner />
           <VaultBanner />
           <QuotaWarningBanner />
