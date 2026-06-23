@@ -217,8 +217,8 @@ export function SummaryStrip() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-5 gap-4">
-        {[1, 2, 3, 4].map((i) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="animate-pulse bg-muted h-20 rounded-lg" />
         ))}
       </div>
@@ -233,7 +233,7 @@ export function SummaryStrip() {
   };
 
   return (
-    <div className="grid grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
       {stats.map((box) => (
         <div
           key={box.label}
@@ -258,7 +258,7 @@ export function SummaryStrip() {
               )}
             </div>
           </div>
-          <p className="mt-1 text-2xl font-semibold tracking-tight">{box.primary}</p>
+          <p className="mt-1 text-xl lg:text-2xl font-semibold tracking-tight truncate tabular-nums">{box.primary}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{box.sub}</p>
         </div>
       ))}

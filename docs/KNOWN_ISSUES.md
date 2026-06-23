@@ -2552,3 +2552,17 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 - **FirmDashboard loading-frame flash.** `src/pages/app/firm/FirmDashboard.tsx` — the not-member guard is `!isLoading && !isFirmUser`, so during the brief `isLoading` window a real firm user sees the header title fall back to `firm.fallback` ("your firm") and all four stat cards render `0` — reads as "your firm is empty" rather than "loading" for ~1 frame. **Fix:** gate the header title on `currentFirm?.firm_name` (skeleton title while loading) and skeleton the stat cards, matching the `usageLoading` line already shown below.
 - **FirmOnboarding has no Back affordance between wizard steps.** `src/pages/app/firm/FirmOnboarding.tsx` — the `details → workspace → billing` stepper only advances; a user who mistypes the firm name on step 1 has no in-wizard way back. **Fix:** add a ghost "Back" button on steps 2/3 that decrements `step`. (The centered-wizard treatment itself is correct and documented inline — no change there.)
 - **FirmNotMemberState title may oversell an action it doesn't offer.** `src/components/firm/FirmNotMemberState.tsx` — `firm.none_title` ("No firm yet") reads like a setup prompt, but the only action is "Back to workspace." **Fix:** either soften the title to a closed-state phrasing, or (if self-serve firm onboarding is surfaced) add a "Set up a firm" link to `/app/firm/onboarding` — a product/copy decision tied to #105's self-serve onboarding rollout.
+
+---
+
+### Item #145: App shell has no mobile/narrow-viewport sidebar collapse — content unusable below ~640px (pre-existing, app-wide)
+
+> **Filed 2026-06-23** (branch `claude/relaxed-clarke-oksfz4`). Surfaced by `lease-layout-design-reviewer` while reviewing the Cluster C.2 Dashboard responsiveness fix. **Pre-existing** app-shell limitation, identical on every authenticated page — NOT introduced by the responsiveness work (which correctly targets laptop + tablet and nails both). Filed for prioritization, not bundled.
+
+**Severity:** High (true-mobile usability) — calibrated below "Critical" because LeaseIO is a desktop/laptop-first SMB finance tool and phone usage is likely rare, but it IS a real broken state.
+
+**Symptom:** `src/components/layout/AppSidebar.tsx:260` is `fixed left-0 top-0 h-screen w-64` with no responsive collapse, and `src/components/layout/AppLayout.tsx:40` applies an unconditional `pl-64` (256px) to `<main>`. So below ~640px the content column is only ~70–120px wide regardless of which page — every page's body is crushed to unusability on a phone. The per-page responsive grids (Dashboard, etc.) are correct, but they have almost no width to work with because the shell never yields the 256px sidebar inset.
+
+**Fix (stub):** make the sidebar an off-canvas drawer below `lg` (hamburger toggle in `AppHeader`; `AppSidebar` slides in over a scrim) and make `<main>`'s `pl-64` conditional (`lg:pl-64`, `pl-0` below). This is a shell-level change touching `AppLayout` + `AppHeader` + `AppSidebar` and every page benefits at once — do it as its own ticket with layout + polish review, not folded into a page-level change. Confirm with the product owner whether mobile is a target before investing.
+
+**Where to look:** `src/components/layout/{AppLayout,AppHeader,AppSidebar}.tsx`.

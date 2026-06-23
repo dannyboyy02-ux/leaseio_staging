@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
 import { SummaryStrip } from '@/components/dashboard/SummaryStrip';
@@ -70,7 +71,7 @@ export default function Dashboard() {
         }
       />
 
-      <div className="p-6 space-y-6">
+      <PageLayout width="wide">
         {/* Onboarding — auto-hides when all steps complete or dismissed */}
         <OnboardingChecklist />
 
@@ -83,14 +84,14 @@ export default function Dashboard() {
         {/* Phase 5 — auto-hides when nothing is in pending_counter_signature */}
         <PendingCounterSignatureCard />
 
-        {/* Row 1: Action queue (wide) + Pipeline funnel (narrow) */}
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2"><NeedsAction /></div>
-          <div className="col-span-1"><LeasePipeline /></div>
+        {/* Row 1: Action queue (wide) + Pipeline funnel (narrow) — stacks below lg */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2"><NeedsAction /></div>
+          <div className="lg:col-span-1"><LeasePipeline /></div>
         </div>
 
         {/* Row 2: Upcoming risks + Recent activity & AI extractions */}
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <UpcomingRisks />
           <RecentActivity />
         </div>
@@ -99,11 +100,11 @@ export default function Dashboard() {
         <UpcomingEvents />
 
         {/* Row 3: Department breakdown + Intake trend */}
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <PipelineByDepartment />
           <IntakeTrend />
         </div>
-      </div>
+      </PageLayout>
 
       <LeaseRequestForm
         open={createDrawerOpen}
