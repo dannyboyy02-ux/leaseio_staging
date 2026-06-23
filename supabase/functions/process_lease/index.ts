@@ -349,11 +349,26 @@ async function callAnthropicAPIWithPDF(
   textPrompt: string,
   maxTokens: number,
   timeoutMs = 110_000,
+  maxAttempts = 2,
 ): Promise<string> {
-  // Single attempt — no retries on PDF calls. Under the 150s wall clock,
-  // a failed retry + sleep would exceed the budget anyway.
+  // Backstop: never send an empty payload. Anthropic returns 400 "PDF cannot be
+  // empty", which previously surfaced as an opaque "AI extraction failed" and a
+  // dead lease (a 0-byte object read back from storage was the real-world cause).
+  // Catch it here for every native-PDF caller before the request is made.
+  if (!pdfBase64 || pdfBase64.length === 0) {
+    throw new Error('Refusing to call Anthropic with an empty PDF payload');
+  }
+
+  // Bounded retry on TRANSIENT HTTP statuses only — 429 (org rate limit, the
+  // observed terminal failure), 529 (overloaded), 5xx. These return fast, so a
+  // capped backoff (honoring Retry-After) keeps the call within the edge wall
+  // clock. Terminal statuses (400/401/403) and network timeouts do NOT retry —
+  // the stuck-extraction sweep (reclaim-stuck-extractions) is the safety net for
+  // timeouts. Replaces the previous single-attempt behavior.
+  const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504, 529]);
   let lastError: Error | null = null;
-  try {
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       signal: AbortSignal.timeout(timeoutMs),
@@ -380,22 +395,28 @@ async function callAnthropicAPIWithPDF(
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      lastError = new Error(`Anthropic PDF API error: ${response.status} - ${errorText}`);
-      throw lastError;
+    if (response.ok) {
+      const data = await response.json();
+      const content = data.content?.[0]?.text;
+      if (!content) throw new Error('Anthropic PDF response missing content');
+      console.log(`[Anthropic PDF:${model}] tokens in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
+      return content;
     }
 
-    const data = await response.json();
-    const content = data.content?.[0]?.text;
-    if (!content) throw new Error('Anthropic PDF response missing content');
-
-    console.log(`[Anthropic PDF:${model}] tokens in=${data.usage?.input_tokens} out=${data.usage?.output_tokens}`);
-    return content;
-  } catch (error) {
-    lastError = error instanceof Error ? error : new Error(String(error));
-    throw lastError;
+    const errorText = await response.text();
+    lastError = new Error(`Anthropic PDF API error: ${response.status} - ${errorText}`);
+    if (RETRYABLE_STATUS.has(response.status) && attempt < maxAttempts) {
+      const retryAfter = Number(response.headers.get('retry-after'));
+      const backoffMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter * 1000, 15_000)
+        : Math.min(1000 * 2 ** (attempt - 1), 8000);
+      console.warn(`[Anthropic PDF:${model}] ${response.status}; retry ${attempt}/${maxAttempts - 1} in ${backoffMs}ms`);
+      await new Promise((r) => setTimeout(r, backoffMs));
+      continue;
+    }
+    throw lastError; // terminal status, or retries exhausted
   }
+  throw lastError ?? new Error('Anthropic PDF call failed');
 }
 
 // ─────────────────────────────────────────────────────────────────────

@@ -756,6 +756,17 @@ serve(async (req) => {
     const fileBytes = await fileData.arrayBuffer();
     console.log(`[retry_lease] Downloaded file: ${fileBytes.byteLength} bytes`);
 
+    // Guard the storage-download path: a 0-byte object downloads "successfully"
+    // (downloadError null, fileData truthy) and would otherwise flow into the AI
+    // call as an empty payload. Validate non-empty + PDF magic bytes here.
+    if (fileBytes.byteLength === 0 || !isPdfFile(fileBytes)) {
+      await supabaseAdmin.from('leases').update({
+        status: 'Failed',
+        error_message: 'Stored document is empty or not a valid PDF. Please re-upload the file.',
+      }).eq('id', leaseId);
+      throw new Error('Stored file is empty or not a valid PDF');
+    }
+
     // OCR with Azure DI (with page delimiters for Haiku mapping)
     let extractedText: string;
     try {
