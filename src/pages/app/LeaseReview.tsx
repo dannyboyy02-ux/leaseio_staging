@@ -2945,8 +2945,23 @@ export default function LeaseReview() {
           }
           actions={
             isUnlockedDraft ? (
-              /* Unlocked-for-editing draft: focused set — save, cancel, archive. */
+              /* Unlocked-for-editing draft: the primary exit is "Lock & submit"
+                 (opens the finalize dialog → submit_change_set / self-approve /
+                 empty-draft re-lock, all attributable). Without it the user is
+                 stranded — edits stage forever and the lease stays unlocked.
+                 Then save (stage), discard, archive. */
               <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="bg-success hover:bg-success/90 text-white"
+                  onClick={() => setLockConfirmDialogOpen(true)}
+                  disabled={submittingChanges || saving}
+                >
+                  {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
+                  {stagedItemCount > 0
+                    ? `Lock & submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}`
+                    : 'Re-lock'}
+                </Button>
                 <Button size="sm" variant="outline" onClick={handleSync} disabled={saving}>
                   {saving ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Save size={14} className="mr-1.5" />}
                   Save changes
@@ -3455,7 +3470,7 @@ export default function LeaseReview() {
                                       ? `Edits are staged for approval — ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} pending.`
                                       : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
                                   </p>
-                                  {/* Save Draft / Cancel / Lock now live in the AppHeader actions slot. */}
+                                  {/* "Lock & submit changes" / Save changes / Discard live in the header actions slot above. */}
                                 </CardContent>
                               </Card>
                             )}
