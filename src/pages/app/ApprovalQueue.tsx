@@ -13,6 +13,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -1314,7 +1315,7 @@ export default function ApprovalQueue() {
         subtitle="Review and act on commitment requests requiring your approval"
       />
 
-      <div className="p-4 sm:p-6 max-w-3xl mx-auto">
+      <PageLayout width="narrow">
         <Tabs defaultValue="mine">
           <TabsList className={`w-full sm:w-auto mb-6 grid sm:inline-flex ${showGovernanceTab ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="mine" className="gap-1.5">
@@ -1488,7 +1489,7 @@ export default function ApprovalQueue() {
             </TabsContent>
           )}
         </Tabs>
-      </div>
+      </PageLayout>
 
       {/* Governance: Unlock Request Action Dialog */}
       <Dialog

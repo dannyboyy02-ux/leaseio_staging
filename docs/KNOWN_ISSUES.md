@@ -2566,3 +2566,14 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 **Fix (stub):** make the sidebar an off-canvas drawer below `lg` (hamburger toggle in `AppHeader`; `AppSidebar` slides in over a scrim) and make `<main>`'s `pl-64` conditional (`lg:pl-64`, `pl-0` below). This is a shell-level change touching `AppLayout` + `AppHeader` + `AppSidebar` and every page benefits at once — do it as its own ticket with layout + polish review, not folded into a page-level change. Confirm with the product owner whether mobile is a target before investing.
 
 **Where to look:** `src/components/layout/{AppLayout,AppHeader,AppSidebar}.tsx`.
+
+---
+
+### Item #146: Layout-scaffold residuals from Cluster C.3 (deferred)
+
+> **Filed 2026-06-23** (branch `claude/relaxed-clarke-oksfz4`). Surfaced by `lease-layout-design-reviewer` + `lease-product-polish` while reviewing the content-page width standardization (Cluster C.3). Both **pre-existing** / scaffold-level — filed, not bundled.
+
+**Severity:** Low (×2).
+
+- **AppHeader is full-bleed while PageLayout caps the body → header right-edge floats on ultrawide.** `src/components/layout/AppHeader.tsx:34` (`px-4 sm:px-6`, no `mx-auto`/max-width) vs `src/components/layout/PageLayout.tsx` (`mx-auto max-w-*`). On a screen wider than the page's width cap (≈≥1536px for a `wide` page), the sticky header's right-aligned actions (e.g. "Add Lease", "Export all", "New Request") sit flush to the viewport edge while the body content is pulled in — header and body no longer share a right edge. Consistent app-wide (every AppHeader page), so it reads as a deliberate convention, not a regression — but it's the one remaining "is this on purpose?" beat in the scaffold. **Fix (scaffold ticket, not page-level):** give `AppHeader`'s inner content the same width treatment as the page body — either a width prop matching PageLayout's variant, or wrap the header's title/actions row in `mx-auto max-w-7xl` (keeping the bar itself full-bleed for the border/backdrop). Note a single header cap won't perfectly align the `narrow` ApprovalQueue, so a width-prop is the clean solution.
+- **Leases over-filtered empty result has no one-click "Clear filters".** `src/pages/Leases.tsx` (the `filteredAndSortedLeases.length === 0` cell, ~:530) shows "No leases match your filters" but the user must manually clear the search box AND reset the expiration Select to recover. Pre-existing; C.3 made the table the page's focal element so the blank result cell is more prominent. **Fix:** when the filtered result is empty while filters are active, render a "Clear filters" button in the empty cell that resets `searchQuery=''` + `expirationFilter='all'`.

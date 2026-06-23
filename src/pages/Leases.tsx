@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -415,7 +416,7 @@ export default function Leases() {
         }
       />
 
-      <div className="space-y-4 p-6">
+      <PageLayout width="wide" spacing="space-y-4">
         {loading ? (
           <div className="flex h-[40vh] items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -474,8 +475,8 @@ export default function Leases() {
               </Button>
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              <Table>
+            <div className="overflow-x-auto rounded-lg border border-border bg-card">
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>
@@ -628,7 +629,7 @@ export default function Leases() {
             </div>
           </>
         )}
-      </div>
+      </PageLayout>
 
       <AddLeaseDialog
         open={addLeaseDialogOpen}

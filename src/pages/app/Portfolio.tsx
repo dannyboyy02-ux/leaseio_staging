@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -112,8 +113,8 @@ export default function Portfolio() {
           title="Portfolio"
           subtitle="Live portfolio metrics, lease liability disclosure, and concentration views"
         />
-        <div className="p-6">
-          <Card variant="ghost" className="border-2 border-dashed border-border">
+        <PageLayout width="wide">
+          <Card variant="ghost" className="mx-auto max-w-2xl border-2 border-dashed border-border">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-6">
                 <Lock className="h-8 w-8 text-muted-foreground" />
@@ -129,7 +130,7 @@ export default function Portfolio() {
               </Button>
             </CardContent>
           </Card>
-        </div>
+        </PageLayout>
       </AppLayout>
     );
   }
@@ -141,7 +142,7 @@ export default function Portfolio() {
         subtitle="Live portfolio metrics, lease liability disclosure, and concentration views"
       />
 
-      <div className="space-y-6 p-6">
+      <PageLayout width="wide">
         {isLoading ? (
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
             {[...Array(4)].map((_, i) => (
@@ -347,7 +348,7 @@ export default function Portfolio() {
             )}
           </>
         )}
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

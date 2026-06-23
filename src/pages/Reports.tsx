@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -119,8 +120,8 @@ export default function Reports() {
     return (
       <AppLayout>
         <AppHeader title={t('reports.title')} subtitle={t('reports.subtitle')} />
-        <div className="p-6 space-y-6">
-          <div><RentRollExport /></div>
+        <PageLayout width="wide" spacing="space-y-8">
+          <RentRollExport />
           {/* ASC 842 disclosure reports are available regardless of plan
               tier — they're the primary deliverable customers buy LeaseIO
               for and the data lives per-lease. */}
@@ -158,7 +159,7 @@ export default function Reports() {
               live where reports are generated). Admin/editor visible,
               admin-editable; same gates the old tab used. */}
           {(isAdmin || isEditor) && workspace?.id && (
-            <div className="space-y-6 pt-2">
+            <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold">{t('reports.settings_title')}</h2>
                 <p className="text-sm text-muted-foreground">{t('reports.settings_desc')}</p>
@@ -167,7 +168,7 @@ export default function Reports() {
               <DiscountRateCard workspaceId={workspace.id} canEdit={isAdmin} />
             </div>
           )}
-        </div>
+        </PageLayout>
       </AppLayout>
     );
   }
@@ -185,8 +186,8 @@ export default function Reports() {
         }
       />
 
-      <div className="p-6">
-        <div className="mb-8"><RentRollExport /></div>
+      <PageLayout width="wide" spacing="space-y-8">
+        <RentRollExport />
 
         <div className="grid gap-6 md:grid-cols-2">
           {reports
@@ -231,7 +232,7 @@ export default function Reports() {
         </div>
 
         {/* Portfolio Breakdown Chart */}
-        <Card className="mt-8">
+        <Card>
           <CardHeader>
             <CardTitle>{t('reports.monthly_overview')}</CardTitle>
             <CardDescription>Total commitment by lifecycle status across your portfolio</CardDescription>
@@ -290,7 +291,7 @@ export default function Reports() {
 
         {/* Variance Outliers */}
         {varianceLeases.length > 0 && (
-          <Card className="mt-6">
+          <Card>
             <CardHeader>
               <CardTitle className="text-base">Variance Outliers</CardTitle>
               <CardDescription>Leases with the largest executed vs pipeline payment variance</CardDescription>
@@ -345,7 +346,7 @@ export default function Reports() {
             (Line 71's hasAccess deliberately KEEPS isReadOnlyRetention — that's a
             read-access GRANT for Vault, not a write-gate.) */}
         {(isAdmin || isEditor) && workspace?.id && !isWorkspaceReadOnly(workspace) && (
-          <div className="mt-8 space-y-6">
+          <div className="space-y-6">
             <div>
               <h2 className="text-lg font-semibold">{t('reports.settings_title')}</h2>
               <p className="text-sm text-muted-foreground">{t('reports.settings_desc')}</p>
@@ -354,7 +355,7 @@ export default function Reports() {
             <DiscountRateCard workspaceId={workspace.id} canEdit={isAdmin} />
           </div>
         )}
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }
