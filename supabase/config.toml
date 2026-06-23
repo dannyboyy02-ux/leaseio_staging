@@ -63,6 +63,12 @@ verify_jwt = false
 [functions.detect-stuck-chains]
 verify_jwt = false
 
+# Cluster B2 (2026-06-23) — stuck-extraction sweep. Cron-only; auth via
+# x-cron-secret (RECLAIM_STUCK_EXTRACTIONS_CRON_SECRET), no JWT. Fails leases
+# stuck in status='Processing' (extraction timed out / isolate killed mid-run).
+[functions.reclaim-stuck-extractions]
+verify_jwt = false
+
 [functions.send-counter-signature-reminder]
 verify_jwt = false
 
