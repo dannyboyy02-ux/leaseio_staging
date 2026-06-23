@@ -36,6 +36,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { enforceWorkspaceRateLimit } from "../_shared/audit.ts";
 import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
+import {
+  getApprovalRequirements,
+  getInitialStatusAfterSubmission,
+} from "../_shared/approval_routing.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -54,7 +58,9 @@ type Action =
   | "financial_approve"
   | "financial_send_back"
   | "financial_reject"
-  | "model_lock";
+  | "model_lock"
+  | "cancel_request"
+  | "resubmit_request";
 
 const MANAGER_ACTIONS = new Set<Action>(["manager_approve", "manager_reject"]);
 const FINANCIAL_ACTIONS = new Set<Action>([
@@ -62,9 +68,13 @@ const FINANCIAL_ACTIONS = new Set<Action>([
   "financial_send_back",
   "financial_reject",
 ]);
+// Requester-or-admin actions: the submitter can withdraw their own request, or
+// fix-and-resubmit one that financial returned for revision.
+const REQUESTER_ACTIONS = new Set<Action>(["cancel_request", "resubmit_request"]);
 const VALID_ACTIONS = new Set<Action>([
   ...MANAGER_ACTIONS,
   ...FINANCIAL_ACTIONS,
+  ...REQUESTER_ACTIONS,
   "model_lock",
 ]);
 
@@ -141,7 +151,7 @@ serve(async (req) => {
   const { data: lease, error: leaseError } = await supabaseAdmin
     .from("leases")
     .select(
-      "id, workspace_id, lifecycle_status, request_title, model_locked, requestor_id",
+      "id, workspace_id, lifecycle_status, request_title, model_locked, requestor_id, financial_returned_to_submitter, calc_total_commitment, covenant_flagged",
     )
     .eq("id", leaseId)
     .maybeSingle();
@@ -222,6 +232,9 @@ serve(async (req) => {
   if (action === "model_lock" && !canFinancial) {
     return jsonResponse({ error: "Financial approver role required to lock executed records" }, 403, origin);
   }
+  if (REQUESTER_ACTIONS.has(action) && !(isAdmin || lease.requestor_id === user.id)) {
+    return jsonResponse({ error: "Only the requester or a workspace admin can do this" }, 403, origin);
+  }
 
   // Lifecycle-state preconditions. Defense-in-depth — the UI shouldn't
   // surface these actions in the wrong state, but a hand-rolled call
@@ -250,6 +263,27 @@ serve(async (req) => {
       return jsonResponse({ error: "Lease is already model-locked" }, 409, origin);
     }
   }
+  if (action === "cancel_request") {
+    // Withdraw a still-in-flight request. Terminal/active states can't be cancelled.
+    if (["cancelled", "rejected", "active", "expired"].includes(status)) {
+      return jsonResponse(
+        { error: `Cannot cancel a request in lifecycle_status='${status}'` },
+        409,
+        origin,
+      );
+    }
+  }
+  if (action === "resubmit_request") {
+    // Only a request financial returned for revision (status submitted +
+    // financial_returned_to_submitter) can be resubmitted.
+    if (status !== "submitted" || !lease.financial_returned_to_submitter) {
+      return jsonResponse(
+        { error: "Resubmit is only valid for a request returned for revision" },
+        409,
+        origin,
+      );
+    }
+  }
 
   // Conservative per-workspace rate limit. These are intentional human
   // actions; 60/hour gives an active workspace plenty of headroom.
@@ -263,6 +297,26 @@ serve(async (req) => {
   if (rateBlock) return rateBlock;
 
   const now = new Date().toISOString();
+
+  // resubmit_request recomputes the post-revision status SERVER-SIDE from the
+  // (already client-saved) lease financials + workspace roles/threshold. Never
+  // trust a client-supplied target — a submitter could otherwise self-approve.
+  let resubmitNewStatus = "submitted";
+  if (action === "resubmit_request") {
+    const [{ data: mgrRoles }, { data: finRoles }, { data: wsThresh }] = await Promise.all([
+      supabaseAdmin.from("workspace_roles").select("user_id").eq("workspace_id", lease.workspace_id).eq("role", "manager_approver"),
+      supabaseAdmin.from("workspace_roles").select("user_id").eq("workspace_id", lease.workspace_id).eq("role", "financial_approver"),
+      supabaseAdmin.from("workspaces").select("approval_threshold").eq("id", lease.workspace_id).maybeSingle(),
+    ]);
+    const requirements = getApprovalRequirements({
+      totalCashCommitment: Number((lease as any).calc_total_commitment ?? 0),
+      approvalThreshold: (wsThresh as any)?.approval_threshold ?? null,
+      hasManagerApprovers: ((mgrRoles ?? []) as unknown[]).length > 0,
+      hasFinancialApprovers: ((finRoles ?? []) as unknown[]).length > 0,
+      covenantFlagged: Boolean((lease as any).covenant_flagged),
+    });
+    resubmitNewStatus = getInitialStatusAfterSubmission(requirements);
+  }
 
   type Update = Record<string, unknown>;
   let update: Update;
@@ -355,6 +409,29 @@ serve(async (req) => {
       };
       activityType = "status_change";
       activityDetails = { action: "model_locked", locked_at: now };
+      break;
+    case "cancel_request":
+      toStatus = "cancelled";
+      update = {
+        lifecycle_status: toStatus,
+        status_changed_at: now,
+      };
+      activityType = "status_change";
+      activityDetails = { action: "request_cancelled" };
+      break;
+    case "resubmit_request":
+      toStatus = resubmitNewStatus;
+      update = {
+        lifecycle_status: toStatus,
+        financial_returned_to_submitter: false,
+        financial_rejection_reason: null,
+        manager_approved_by: null,
+        manager_approved_at: null,
+        manager_rejection_reason: null,
+        status_changed_at: now,
+      };
+      activityType = "status_change";
+      activityDetails = { action: "resubmitted", auto_approved: toStatus === "approved" };
       break;
     default:
       // VALID_ACTIONS guard above makes this unreachable; cast appeases TS.

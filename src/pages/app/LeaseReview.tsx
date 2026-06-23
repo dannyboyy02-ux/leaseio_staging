@@ -479,7 +479,6 @@ export default function LeaseReview() {
   const handleResubmit = async () => {
     if (!lease || !user) return;
     setResubmitting(true);
-    const now = new Date().toISOString();
     try {
       const monthlyPayment = parseFloat(resubmitFields.monthlyPayment) || lease.monthly_payment;
       const termMonths = parseInt(resubmitFields.termMonths) || lease.term_months;
@@ -505,24 +504,10 @@ export default function LeaseReview() {
         };
       }
 
-      // Re-evaluate approval routing
-      const { getApprovalRequirements, getInitialStatusAfterSubmission } = await import('@/lib/approvalRouting');
-      const [managerRoles, financialRoles, wsSettings] = await Promise.all([
-        (supabase as any).from('workspace_roles').select('user_id').eq('workspace_id', lease.workspace_id).eq('role', 'manager_approver').then((r: any) => r.data || []),
-        (supabase as any).from('workspace_roles').select('user_id').eq('workspace_id', lease.workspace_id).eq('role', 'financial_approver').then((r: any) => r.data || []),
-        (supabase as any).from('workspaces').select('approval_threshold').eq('id', lease.workspace_id).single().then((r: any) => r.data),
-      ]);
-
-      const requirements = getApprovalRequirements({
-        totalCashCommitment: updatedCalcs.calc_total_commitment ?? lease.calc_total_commitment ?? 0,
-        approvalThreshold: wsSettings?.approval_threshold ?? null,
-        hasManagerApprovers: managerRoles.length > 0,
-        hasFinancialApprovers: financialRoles.length > 0,
-        covenantFlagged: resubmitFields.covenantFlagged,
-      });
-      const newStatus = getInitialStatusAfterSubmission(requirements);
-
-      await supabase
+      // 1) Save the edited fields (NOT lifecycle/approval columns — those are
+      //    trigger-guarded and reset server-side in step 2). calc_* are not
+      //    guarded, so persist the recompute here too.
+      const { error: saveErr } = await supabase
         .from('leases')
         .update({
           monthly_payment: monthlyPayment,
@@ -530,25 +515,20 @@ export default function LeaseReview() {
           escalation_rate: escalationRate,
           lease_start: startDate,
           covenant_flagged: resubmitFields.covenantFlagged,
-          financial_returned_to_submitter: false,
-          financial_rejection_reason: null,
-          manager_approved_by: null,
-          manager_approved_at: null,
-          manager_rejection_reason: null,
-          lifecycle_status: newStatus,
-          status_changed_at: now,
           ...updatedCalcs,
         } as any)
         .eq('id', lease.id);
+      if (saveErr) throw saveErr;
 
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user.id,
-        activity_type: 'status_change',
-        from_status: 'submitted',
-        to_status: newStatus,
-        details: { action: 'resubmitted', monthly_payment: monthlyPayment, term_months: termMonths },
-      } as any);
+      // 2) Server-side: reset the approval columns, recompute the status from the
+      //    saved financials, and flip lifecycle — under service role, since a
+      //    browser write of those columns is rejected by the governance trigger.
+      const { data: resubmitData, error: resubmitError } = await supabase.functions.invoke('legacy-lease-action', {
+        body: { action: 'resubmit_request', leaseId: lease.id },
+      });
+      if (resubmitError) throw new Error(resubmitError.message ?? 'Resubmit failed');
+      if ((resubmitData as any)?.error) throw new Error((resubmitData as any).error);
+      const newStatus = (resubmitData as any)?.to_status ?? 'submitted';
 
       toast.success('Resubmitted for review');
       setResubmitDialogOpen(false);
@@ -607,36 +587,24 @@ export default function LeaseReview() {
     }
   };
 
-  const updateLifecycleStatus = useCallback(async (newStatus: string) => {
-    if (!lease || !user) return;
-
-    const previousStatus = lease.lifecycle_status;
-    const now = new Date().toISOString();
-    const { error } = await supabase
-      .from('leases')
-      .update({ lifecycle_status: newStatus, status_changed_at: now })
-      .eq('id', lease.id);
-
-    if (error) throw error;
-
-    await supabase.from('lease_activity_log').insert({
-      lease_id: lease.id,
-      user_id: user.id,
-      activity_type: 'status_change',
-      from_status: previousStatus,
-      to_status: newStatus,
-      details: { source: 'lease_review' },
-    });
-
-    await createLeaseNotification({
-      leaseId: lease.id,
-      eventType: 'status_changed',
-      description: `Lease status updated: ${previousStatus || 'unknown'} \u2192 ${newStatus}`,
-    });
-
-    setLease((prev: any) => (prev ? { ...prev, lifecycle_status: newStatus, status_changed_at: now } : prev));
-    queryClient.invalidateQueries({ queryKey: ['needs-action'] });
-  }, [lease, user, queryClient]);
+  // Cancel (withdraw) a request. The lifecycle flip is trigger-guarded, so it
+  // runs SERVER-SIDE via legacy-lease-action (which writes the status_change
+  // audit row); the browser cannot set lifecycle_status directly.
+  const handleCancelRequest = useCallback(async () => {
+    if (!lease) return;
+    try {
+      const { data, error } = await supabase.functions.invoke('legacy-lease-action', {
+        body: { action: 'cancel_request', leaseId: lease.id },
+      });
+      if (error) throw new Error(error.message ?? 'Cancel failed');
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success('Request cancelled');
+      setLease((prev: any) => (prev ? { ...prev, lifecycle_status: 'cancelled' } : prev));
+      queryClient.invalidateQueries({ queryKey: ['needs-action'] });
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to cancel request');
+    }
+  }, [lease, queryClient]);
 
   const saveRequestEdits = useCallback(async () => {
     if (!lease || !user) return;
@@ -1749,12 +1717,7 @@ export default function LeaseReview() {
 
     setPosting(true);
     try {
-      // Lifecycle Transition Convention (CLAUDE.md): capture prior status
-      // BEFORE the UPDATE, set status_changed_at in the same UPDATE, and emit
-      // a status_change row to lease_activity_log after success.
-      const previousLifecycleStatus = (lease.lifecycle_status as string | null) ?? null;
-      const lifecycleChangedAt = new Date().toISOString();
-
+      // 1) Persist the reviewed fields (these columns are NOT trigger-guarded).
       const updateData: Record<string, any> = {
         landlord_name:          form.landlord_name          || null,
         tenant_name:            form.tenant_name            || null,
@@ -1773,39 +1736,32 @@ export default function LeaseReview() {
         renewal_options:        form.renewal_options        || null,
         escalation_clauses:     form.escalation_clauses     || null,
         termination_clauses:    form.termination_clauses    || null,
-        lifecycle_status: 'active',
-        status_changed_at: lifecycleChangedAt,
         confirmed_sections: confirmedSections,
         audit_log: JSON.parse(JSON.stringify(auditLog)),
       };
 
-      const { error } = await supabase
+      const { error: saveError } = await supabase
         .from("leases")
         .update(updateData)
         .eq("id", lease.id);
+      if (saveError) throw saveError;
 
-      if (error) throw error;
-
-      const { error: logError } = await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user?.id ?? null,
-        activity_type: 'status_change',
-        from_status: previousLifecycleStatus,
-        to_status: 'active',
-        details: {
-          from: previousLifecycleStatus,
-          to: 'active',
-          routing_path: 'legacy',
-          triggered_by: 'lease_review_post',
-        },
+      // 2) Lock & activate SERVER-SIDE. The browser cannot write
+      //    lifecycle_status / model_locked (the governance trigger rejects it);
+      //    model_lock sets active + model_locked and writes the status_change
+      //    audit row under service role. This also puts the lease in the
+      //    locked-active state the unlock workflow expects.
+      const { data: lockData, error: lockError } = await supabase.functions.invoke('legacy-lease-action', {
+        body: { action: 'model_lock', leaseId: lease.id },
       });
-      if (logError) console.error('[handlePostLease] activity log error:', logError.message);
+      if (lockError) throw new Error(lockError.message ?? 'Activation failed');
+      if ((lockData as any)?.error) throw new Error((lockData as any).error);
 
       toast.success("Lease posted successfully", { duration: 5000 });
       navigate('/app/leases');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error posting lease:', err);
-      toast.error("Failed to post lease");
+      toast.error(err?.message ?? "Failed to post lease");
     } finally {
       setPosting(false);
     }
@@ -2250,7 +2206,7 @@ export default function LeaseReview() {
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => {
                       if (window.confirm('Are you sure you want to cancel this lease request? This action cannot be undone.')) {
-                        updateLifecycleStatus('cancelled');
+                        handleCancelRequest();
                       }
                     }}
                   >
