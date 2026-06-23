@@ -2138,7 +2138,7 @@ export default function LeaseReview() {
                     variant="outline"
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => {
-                      if (window.confirm('Are you sure you want to cancel this lease request? This action cannot be undone.')) {
+                      if (window.confirm("Cancel this lease request? The request is withdrawn and preserved in your records — you won't be able to resubmit it.")) {
                         handleCancelRequest();
                       }
                     }}
@@ -2207,11 +2207,9 @@ export default function LeaseReview() {
             </div>
           )}
 
-          {lifecycleStatus === 'cancelled' && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center">
-              <p className="text-sm font-medium text-destructive">This lease request has been cancelled</p>
-            </div>
-          )}
+          {/* Cancelled/rejected requests now render the dedicated terminal view
+              (above, before this intake-stage branch) — isIntakeStage excludes
+              terminal states, so a banner here was never reachable. */}
 
           <div className="grid gap-4 lg:grid-cols-3">
             {/* Report Attributes */}
@@ -2665,6 +2663,52 @@ export default function LeaseReview() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </AppLayout>
+    );
+  }
+
+  // Terminal-negative request states (cancelled / rejected) must NOT fall
+  // through to the editable workbench — that surfaced an "approve" primary
+  // action on a dead request with no terminal messaging (and the intake view's
+  // cancelled banner was unreachable, since isIntakeStage excludes terminal
+  // states). Render a clear terminal view instead. isEquivalent(x,'cancelled')
+  // matches the terminal_negative group — both 'cancelled' and 'rejected'.
+  if (lifecycleStatusTyped != null && isEquivalent(lifecycleStatusTyped, 'cancelled') && lease) {
+    const isCancelled = lifecycleStatusTyped === 'cancelled';
+    const rejectionReason = isCancelled
+      ? null
+      : (lease.financial_rejection_reason || lease.manager_rejection_reason || lease.rejection_reason || null);
+    return (
+      <AppLayout>
+        <div className="p-6 space-y-4">
+          <AppHeader
+            title={lease.request_title || 'Lease Request'}
+            subtitle={
+              <div className="flex items-center gap-2">
+                <LifecycleStatusBadge status={lease.lifecycle_status as any} />
+                <span className="text-sm text-muted-foreground">{lease.requesting_department || 'Unknown department'}</span>
+              </div>
+            }
+            actions={
+              <Button variant="outline" size="sm" onClick={() => navigate('/app/leases')}>
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Back to Leases
+              </Button>
+            }
+          />
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center space-y-2">
+            <X className="h-7 w-7 text-destructive mx-auto" />
+            <p className="text-sm font-medium text-destructive">
+              {isCancelled ? 'This lease request was cancelled.' : 'This lease request was rejected.'}
+            </p>
+            {rejectionReason && (
+              <p className="text-sm text-muted-foreground max-w-prose mx-auto">&ldquo;{rejectionReason}&rdquo;</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              The request is preserved in your records. Start a new request from the Leases page if you need to.
+            </p>
+          </div>
+        </div>
       </AppLayout>
     );
   }
