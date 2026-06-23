@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { CreditCard, FileText, Loader2, RefreshCw } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
-import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { FirmNotMemberState } from "@/components/firm/FirmNotMemberState";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +22,6 @@ type ChildUsage = { workspace_id: string; workspace_name: string; firm_child_lab
 
 export default function FirmBilling() {
   const { t } = useAppTranslation();
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentFirm, currentFirmRole, isFirmUser, isLoading } = useFirm();
@@ -135,22 +136,13 @@ export default function FirmBilling() {
   };
 
   if (!isLoading && !isFirmUser) {
-    return (
-      <AppLayout>
-        <div className="max-w-2xl mx-auto py-16 text-center">
-          <CreditCard className="h-10 w-10 mx-auto text-muted-foreground/50 mb-4" />
-          <h1 className="text-xl font-semibold">{t("firm.none_title")}</h1>
-          <Button className="mt-6" onClick={() => navigate("/app/dashboard")}>{t("firm.back_to_workspace")}</Button>
-        </div>
-      </AppLayout>
-    );
+    return <FirmNotMemberState icon={CreditCard} />;
   }
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto space-y-6">
-        <FirmPageHeader icon={CreditCard} title={t("firm.billing.title")} />
-
+      <AppHeader icon={CreditCard} title={t("firm.billing.title")} />
+      <PageLayout width="default">
         {/* Subscription status */}
         {finalizing && !hasSubscription ? (
           // Post-checkout, pre-webhook: speak with one voice. No "Not set up"
@@ -240,7 +232,7 @@ export default function FirmBilling() {
             </Card>
           )}
         </div>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

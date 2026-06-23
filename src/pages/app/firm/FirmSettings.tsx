@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Settings, Building2 } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
-import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { FirmNotMemberState } from "@/components/firm/FirmNotMemberState";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,6 @@ type FirmRow = { id: string; name: string; firm_type: string; billing_email: str
 
 export default function FirmSettings() {
   const { t } = useAppTranslation();
-  const navigate = useNavigate();
   const { currentFirm, currentFirmRole, isFirmUser, isLoading, refreshFirm } = useFirm();
   const firmId = currentFirm?.firm_id;
   const isOwner = currentFirmRole === "owner"; // firms UPDATE RLS is owner-only
@@ -53,22 +53,13 @@ export default function FirmSettings() {
   };
 
   if (!isLoading && !isFirmUser) {
-    return (
-      <AppLayout>
-        <div className="max-w-2xl mx-auto py-16 text-center">
-          <Settings className="h-10 w-10 mx-auto text-muted-foreground/50 mb-4" />
-          <h1 className="text-xl font-semibold">{t("firm.none_title")}</h1>
-          <Button className="mt-6" onClick={() => navigate("/app/dashboard")}>{t("firm.back_to_workspace")}</Button>
-        </div>
-      </AppLayout>
-    );
+    return <FirmNotMemberState icon={Settings} />;
   }
 
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto space-y-6">
-        <FirmPageHeader icon={Settings} title={t("firm.settings.title")} />
-
+      <AppHeader icon={Settings} title={t("firm.settings.title")} />
+      <PageLayout width="narrow">
         <Card className="p-5 space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="firm-name">{t("firm.settings.name")}</Label>
@@ -100,7 +91,7 @@ export default function FirmSettings() {
             </p>
           )}
         </Card>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

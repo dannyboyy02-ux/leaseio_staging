@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Users, UserPlus, Mail, Trash2, RefreshCw } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
-import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { FirmNotMemberState } from "@/components/firm/FirmNotMemberState";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,6 @@ type Invite = { id: string; email: string; role: string; invited_at: string };
 
 export default function FirmMembers() {
   const { t } = useAppTranslation();
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const { currentFirm, currentFirmRole, isFirmUser, isLoading } = useFirm();
   const firmId = currentFirm?.firm_id;
@@ -108,25 +108,16 @@ export default function FirmMembers() {
   };
 
   if (!isLoading && !isFirmUser) {
-    return (
-      <AppLayout>
-        <div className="max-w-2xl mx-auto py-16 text-center">
-          <Users className="h-10 w-10 mx-auto text-muted-foreground/50 mb-4" />
-          <h1 className="text-xl font-semibold">{t("firm.none_title")}</h1>
-          <Button className="mt-6" onClick={() => navigate("/app/dashboard")}>{t("firm.back_to_workspace")}</Button>
-        </div>
-      </AppLayout>
-    );
+    return <FirmNotMemberState icon={Users} />;
   }
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto space-y-6">
-        <FirmPageHeader
-          icon={Users}
-          title={t("firm.members.title")}
-          subtitle={t("firm.members.subtitle")}
-          actions={canManage ? (
+      <AppHeader
+        icon={Users}
+        title={t("firm.members.title")}
+        subtitle={t("firm.members.subtitle")}
+        actions={canManage ? (
             <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
               <DialogTrigger asChild>
                 <Button><UserPlus className="h-4 w-4 mr-2" />{t("firm.members.invite")}</Button>
@@ -151,8 +142,8 @@ export default function FirmMembers() {
               </DialogContent>
             </Dialog>
           ) : null}
-        />
-
+      />
+      <PageLayout width="default">
         <section className="space-y-2">
           <h2 className="text-sm font-medium text-muted-foreground">{t("firm.members.roster")}</h2>
           {members.length === 0 ? (
@@ -198,7 +189,7 @@ export default function FirmMembers() {
             ))}
           </section>
         ) : null}
-      </div>
+      </PageLayout>
 
       <AlertDialog open={Boolean(removeTarget)} onOpenChange={(o) => !o && setRemoveTarget(null)}>
         <AlertDialogContent>

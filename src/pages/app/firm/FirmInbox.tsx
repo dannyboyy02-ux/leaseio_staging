@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { Inbox, ArrowRight, Clock } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
-import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { FirmNotMemberState } from "@/components/firm/FirmNotMemberState";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,22 +69,13 @@ export default function FirmInbox() {
   const filtered = workspaceFilter === "all" ? actions : actions.filter((a) => a.workspace_id === workspaceFilter);
 
   if (!isLoading && !isFirmUser) {
-    return (
-      <AppLayout>
-        <div className="max-w-2xl mx-auto py-16 text-center">
-          <Inbox className="h-10 w-10 mx-auto text-muted-foreground/50 mb-4" />
-          <h1 className="text-xl font-semibold">{t("firm.none_title")}</h1>
-          <Button className="mt-6" onClick={() => navigate("/app/dashboard")}>{t("firm.back_to_workspace")}</Button>
-        </div>
-      </AppLayout>
-    );
+    return <FirmNotMemberState icon={Inbox} />;
   }
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto space-y-5">
-        <FirmPageHeader icon={Inbox} title={t("firm.inbox.title")} subtitle={t("firm.inbox.subtitle")} />
-
+      <AppHeader icon={Inbox} title={t("firm.inbox.title")} subtitle={t("firm.inbox.subtitle")} />
+      <PageLayout width="default">
         {workspaces.length > 1 ? (
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant={workspaceFilter === "all" ? "default" : "outline"} onClick={() => setWorkspaceFilter("all")}>
@@ -129,7 +122,7 @@ export default function FirmInbox() {
             })}
           </div>
         )}
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

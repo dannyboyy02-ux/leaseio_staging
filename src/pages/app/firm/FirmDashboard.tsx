@@ -3,7 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { Building2, Inbox, Users, FileText, Layers, ArrowRight } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
-import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { FirmNotMemberState } from "@/components/firm/FirmNotMemberState";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,16 +48,7 @@ export default function FirmDashboard() {
   });
 
   if (!isLoading && !isFirmUser) {
-    return (
-      <AppLayout>
-        <div className="max-w-2xl mx-auto py-16 text-center">
-          <Building2 className="h-10 w-10 mx-auto text-muted-foreground/50 mb-4" />
-          <h1 className="text-xl font-semibold">{t("firm.none_title")}</h1>
-          <p className="text-sm text-muted-foreground mt-2">{t("firm.none_desc")}</p>
-          <Button className="mt-6" onClick={() => navigate("/app/dashboard")}>{t("firm.back_to_workspace")}</Button>
-        </div>
-      </AppLayout>
-    );
+    return <FirmNotMemberState icon={Building2} />;
   }
 
   const totals = childUsage.reduce(
@@ -75,23 +68,22 @@ export default function FirmDashboard() {
 
   return (
     <AppLayout>
-      <div className="max-w-6xl mx-auto space-y-6">
-        <FirmPageHeader
-          icon={Building2}
-          title={currentFirm?.firm_name ?? t("firm.fallback")}
-          subtitle={t("firm.dashboard.subtitle")}
-          badge={currentFirmRole ? <Badge variant="secondary" className="text-[10px]">{t(`firm.role.${currentFirmRole}`)}</Badge> : null}
-          actions={
-            <Button variant="outline" asChild>
-              <Link to="/app/firm/inbox" className="flex items-center gap-2">
-                <Inbox className="h-4 w-4" />
-                {t("firm.nav.inbox")}
-                {pendingActionsCount > 0 ? <Badge className="ml-1">{pendingActionsCount}</Badge> : null}
-              </Link>
-            </Button>
-          }
-        />
-
+      <AppHeader
+        icon={Building2}
+        title={currentFirm?.firm_name ?? t("firm.fallback")}
+        subtitle={t("firm.dashboard.subtitle")}
+        badge={currentFirmRole ? <Badge variant="secondary" className="text-[10px]">{t(`firm.role.${currentFirmRole}`)}</Badge> : null}
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/app/firm/inbox" className="flex items-center gap-2">
+              <Inbox className="h-4 w-4" />
+              {t("firm.nav.inbox")}
+              {pendingActionsCount > 0 ? <Badge className="ml-1">{pendingActionsCount > 99 ? "99+" : pendingActionsCount}</Badge> : null}
+            </Link>
+          </Button>
+        }
+      />
+      <PageLayout width="default">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {stat(<Layers className="h-4 w-4" />, t("firm.dashboard.children"), childUsage.length)}
           {stat(<FileText className="h-4 w-4" />, t("firm.dashboard.active_leases"), totals.leases)}
@@ -138,7 +130,7 @@ export default function FirmDashboard() {
             ))}
           </div>
         )}
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

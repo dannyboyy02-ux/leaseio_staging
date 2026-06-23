@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Layers, ShieldOff, ShieldCheck, LogOut } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
-import { FirmPageHeader } from "@/components/firm/FirmPageHeader";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { FirmNotMemberState } from "@/components/firm/FirmNotMemberState";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +19,6 @@ type ChildRow = { id: string; name: string; firm_child_label: string | null; res
 
 export default function FirmWorkspaces() {
   const { t } = useAppTranslation();
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const { currentFirm, currentFirmRole, isFirmUser, isLoading, refreshFirm } = useFirm();
   const { user: authUser } = useAuth();
@@ -52,22 +52,13 @@ export default function FirmWorkspaces() {
   };
 
   if (!isLoading && !isFirmUser) {
-    return (
-      <AppLayout>
-        <div className="max-w-2xl mx-auto py-16 text-center">
-          <Layers className="h-10 w-10 mx-auto text-muted-foreground/50 mb-4" />
-          <h1 className="text-xl font-semibold">{t("firm.none_title")}</h1>
-          <Button className="mt-6" onClick={() => navigate("/app/dashboard")}>{t("firm.back_to_workspace")}</Button>
-        </div>
-      </AppLayout>
-    );
+    return <FirmNotMemberState icon={Layers} />;
   }
 
   return (
     <AppLayout>
-      <div className="max-w-3xl mx-auto space-y-5">
-        <FirmPageHeader icon={Layers} title={t("firm.workspaces.title")} subtitle={t("firm.workspaces.subtitle")} />
-
+      <AppHeader icon={Layers} title={t("firm.workspaces.title")} subtitle={t("firm.workspaces.subtitle")} />
+      <PageLayout width="default">
         {children.length === 0 ? (
           <Card className="p-8 text-center text-sm text-muted-foreground">{t("firm.workspaces.none")}</Card>
         ) : (
@@ -102,7 +93,7 @@ export default function FirmWorkspaces() {
             })}
           </div>
         )}
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

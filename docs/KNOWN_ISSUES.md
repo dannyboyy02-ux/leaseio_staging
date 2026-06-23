@@ -2540,3 +2540,15 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 **Fix (stub):** drop the `workspace_id` key from the insert object (the reclaim-stuck-extractions sweep + the convention writers already omit it). Confirm no other `lease_activity_log` insert in the repo passes `workspace_id` (grep `lease_activity_log`); if others do, fix them in the same pass. Then exercise a retry-with-re-upload and confirm the `source_document_replaced` row lands.
 
 **Where to look:** `supabase/functions/retry_lease/index.ts:712-726`; schema `supabase/migrations/20260516120000_baseline_schema.sql` (lease_activity_log).
+
+---
+
+### Item #144: Firm-page polish LOWs surfaced during the Cluster C layout consolidation (deferred)
+
+> **Filed 2026-06-23** (branch `claude/relaxed-clarke-oksfz4`). Surfaced by `lease-product-polish` while reviewing the firm-page layout consolidation (Cluster C). All **pre-existing** (the consolidation only changed page wrappers/headers, not these behaviors) — filed, not bundled, per "pre-existing issues are their own beat."
+
+**Severity:** Low (×3).
+
+- **FirmDashboard loading-frame flash.** `src/pages/app/firm/FirmDashboard.tsx` — the not-member guard is `!isLoading && !isFirmUser`, so during the brief `isLoading` window a real firm user sees the header title fall back to `firm.fallback` ("your firm") and all four stat cards render `0` — reads as "your firm is empty" rather than "loading" for ~1 frame. **Fix:** gate the header title on `currentFirm?.firm_name` (skeleton title while loading) and skeleton the stat cards, matching the `usageLoading` line already shown below.
+- **FirmOnboarding has no Back affordance between wizard steps.** `src/pages/app/firm/FirmOnboarding.tsx` — the `details → workspace → billing` stepper only advances; a user who mistypes the firm name on step 1 has no in-wizard way back. **Fix:** add a ghost "Back" button on steps 2/3 that decrements `step`. (The centered-wizard treatment itself is correct and documented inline — no change there.)
+- **FirmNotMemberState title may oversell an action it doesn't offer.** `src/components/firm/FirmNotMemberState.tsx` — `firm.none_title` ("No firm yet") reads like a setup prompt, but the only action is "Back to workspace." **Fix:** either soften the title to a closed-state phrasing, or (if self-serve firm onboarding is surfaced) add a "Set up a firm" link to `/app/firm/onboarding` — a product/copy decision tied to #105's self-serve onboarding rollout.

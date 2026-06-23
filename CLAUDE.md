@@ -258,18 +258,19 @@ A set of orphaned files was deleted per audit (e.g. `ApproverSelect.tsx`, `Pipel
 
 ## Subagent Routing — Required Before Declaring Any Change Complete
 
-LeaseIO has six project-level subagents in `.claude/agents/`. Routing review through the appropriate agents before declaring a change complete is **mandatory**, not optional.
+LeaseIO has seven project-level subagents in `.claude/agents/`. Routing review through the appropriate agents before declaring a change complete is **mandatory**, not optional.
 
 | Agent | When to invoke |
 |---|---|
 | **lease-code-auditor** | Every code change. Dead code, broken references, deprecated APIs, unreachable paths, unused exports. |
 | **lease-security-scanner** | Every code change. Hardcoded secrets, missing input validation, injection, IDORs, and especially missing or UI-only authorization checks. |
 | **lease-repository-integrity-reviewer** | Changes touching lease data storage, import, edit flows, audit logging, reporting, permissions, approval workflows, or lifecycle enforcement. Defends "customer entered it, we stored it faithfully, every change is attributable." |
-| **lease-product-polish** | Changes touching any user-facing surface — copy, errors, empty states, dialogs, onboarding, import, exports, keyboard nav. Defends against friction/opacity for the SMB finance user. |
+| **lease-product-polish** | Changes touching any user-facing surface — copy, errors, empty states, dialogs, onboarding, import, exports, keyboard nav. Defends against friction/opacity for the SMB finance user. Owns the felt-flow lane. |
+| **lease-layout-design-reviewer** | Changes to the VISUAL LAYOUT / design-system consistency — page composition, width/container consistency, spacing rhythm, responsive behavior, density, component reuse. The LAYOUT lane (pixels + structure); pairs with product-polish (copy + felt flow) with intentional overlap. Invoke when a page/screen is added or restyled, or before a release. |
 | **lease-test-author** | Alongside reviewers — covers surfaced gaps + proactively finds missing coverage (lifecycle transitions, audit-trail correctness, server-side governance, reporting edge cases, import/export fidelity). Runs tests and reports results honestly. |
 | **lease-explorer** | On demand, before changing an unfamiliar area. Read-only navigator (purpose, key files, entry points, data flow, fragility). |
 
-**Routing in practice:** no user-facing surface, no data-path impact → auditor + security + test-author. Add **product-polish** for user-facing surfaces. Add **integrity-reviewer** for data/audit/governance/reporting paths. Invoke **explorer** first on unfamiliar areas. Independent reviewers run in parallel (one message, multiple `Agent` calls).
+**Routing in practice:** no user-facing surface, no data-path impact → auditor + security + test-author. Add **product-polish** for user-facing surfaces. Add **lease-layout-design-reviewer** for layout/visual-structure changes (new or restyled pages). Add **integrity-reviewer** for data/audit/governance/reporting paths. Invoke **explorer** first on unfamiliar areas. Independent reviewers run in parallel (one message, multiple `Agent` calls).
 
 **The hard rule on polish:** the product owner should never be the first to notice an obvious UX problem on a surface that just changed. If they are, the polish agent failed to surface it and the routing failed to catch the miss. "Obvious" = visible in a screenshot, reachable in one click, present in a state the happy path crosses. To enforce this, polish review on UI changes is NOT a diff sweep — it is a surface sweep + state walk. Specifically:
 

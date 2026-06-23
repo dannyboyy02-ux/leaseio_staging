@@ -94,7 +94,10 @@ export default function FirmOnboarding() {
 
   return (
     <AppLayout>
-      <div className="max-w-lg mx-auto space-y-6">
+      {/* Intentional centered-wizard treatment (not the sticky AppHeader) — a
+          pre-firm creation flow. Padding matches PageLayout so cards don't
+          touch the viewport edge on mobile. */}
+      <div className="max-w-lg mx-auto px-4 py-6 sm:px-6 space-y-6">
         <div className="text-center">
           <Building2 className="h-8 w-8 mx-auto text-primary mb-2" />
           <h1 className="text-2xl font-semibold">{t("firm.onboarding.title")}</h1>
