@@ -1,12 +1,21 @@
 -- Cluster B2 — stuck-extraction sweep (2026-06-23).
 --
--- Two parts:
---   1. Add 'extraction_timed_out' to the lease_activity_log activity_type CHECK
+-- Three parts:
+--   1. Add a `processing_started_at` timestamptz column to leases. This records
+--      WHEN extraction last began, which is the correct clock for "is this
+--      extraction stuck?". `uploaded_at` is NOT — retry_lease flips a lease back
+--      to status='Processing' without changing uploaded_at, so a lease retried
+--      long after its original upload would be (incorrectly) eligible for the
+--      stuck-sweep the instant the retry starts. process_lease and retry_lease
+--      both stamp this on their flip-to-Processing; the sweep falls back to
+--      uploaded_at when it is NULL (pre-existing zombies + the brief window
+--      between this migration and the function redeploys).
+--   2. Add 'extraction_timed_out' to the lease_activity_log activity_type CHECK
 --      so the reclaim-stuck-extractions sweep can write an audit row when it
 --      fails a zombie 'Processing' lease. Append-only (snapshot the live list,
 --      verbatim from 20260621000000_source_document_replaced_activity_type.sql,
 --      + append) — dropping any value would break live writers. Re-runnable.
---   2. Schedule the reclaim-stuck-extractions edge function every 15 minutes.
+--   3. Schedule the reclaim-stuck-extractions edge function every 15 minutes.
 --      Secret pulled from private.cron_secrets at runtime (same pattern as the
 --      other LeaseIO cron jobs — never stored plaintext in cron.job).
 --
@@ -16,7 +25,16 @@
 --     VALUES ('reclaim_stuck_extractions', '<same value>');
 --   (and deploy the reclaim-stuck-extractions function.)
 
--- ── 1. activity_type CHECK: append 'extraction_timed_out' ──────────────────
+-- ── 1. leases.processing_started_at ───────────────────────────────────────
+-- Nullable; only the service-role extraction functions write it. No backfill of
+-- existing rows is needed — the sweep COALESCEs to uploaded_at when this is NULL.
+ALTER TABLE public.leases
+  ADD COLUMN IF NOT EXISTS processing_started_at timestamptz;
+
+COMMENT ON COLUMN public.leases.processing_started_at IS
+  'When extraction last began (set by process_lease on create and retry_lease on retry). The clock the reclaim-stuck-extractions sweep uses to decide a Processing lease is stuck; falls back to uploaded_at when NULL.';
+
+-- ── 2. activity_type CHECK: append 'extraction_timed_out' ──────────────────
 ALTER TABLE public.lease_activity_log
   DROP CONSTRAINT IF EXISTS lease_activity_log_activity_type_check;
 
@@ -65,7 +83,7 @@ ALTER TABLE public.lease_activity_log
     'extraction_timed_out'
   ]));
 
--- ── 2. schedule the sweep every 15 minutes ─────────────────────────────────
+-- ── 3. schedule the sweep every 15 minutes ─────────────────────────────────
 -- cron.schedule upserts by job name, so re-running this migration replaces the
 -- schedule rather than erroring (same pattern as the cancellation cron).
 SELECT cron.schedule(

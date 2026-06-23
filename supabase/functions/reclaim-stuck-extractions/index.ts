@@ -72,6 +72,13 @@ serve(async (req) => {
   // Atomic-per-row flip. The filters make this idempotent: a row already flipped
   // to 'Failed' (or that has a processed_at) no longer matches, so re-runs only
   // touch genuinely-stuck rows. .select() returns exactly the rows we changed.
+  //
+  // "Stuck" is measured from processing_started_at (when extraction last began),
+  // NOT uploaded_at — retry_lease re-enters 'Processing' without touching
+  // uploaded_at, so keying off uploaded_at would let the sweep fail a lease
+  // mid-retry. processing_started_at is NULL for rows created before this column
+  // shipped (pre-existing zombies) and during the brief window before the
+  // extraction functions redeploy, so fall back to uploaded_at when it is NULL.
   const { data: reclaimed, error: updErr } = await supabaseAdmin
     .from("leases")
     .update({
@@ -82,30 +89,44 @@ serve(async (req) => {
     })
     .eq("status", "Processing")
     .is("processed_at", null)
-    .lt("uploaded_at", cutoffIso)
-    .select("id, workspace_id");
+    .or(
+      `processing_started_at.lt.${cutoffIso},and(processing_started_at.is.null,uploaded_at.lt.${cutoffIso})`,
+    )
+    .select("id, processing_started_at, uploaded_at");
 
   if (updErr) {
     console.error("[reclaim-stuck-extractions] update error:", updErr.message);
     return jsonResponse({ ok: false, error: updErr.message, reason: "internal" }, 500, origin);
   }
 
-  const rows = (reclaimed ?? []) as Array<{ id: string; workspace_id: string | null }>;
+  const rows = (reclaimed ?? []) as Array<{
+    id: string;
+    processing_started_at: string | null;
+    uploaded_at: string | null;
+  }>;
 
   if (rows.length > 0) {
     // Audit each reclaim. user_id is null — this is a system sweep, not a user
-    // action (honest attribution; #90 NULL-attribution convention).
+    // action (honest attribution; #90 NULL-attribution convention). Record WHICH
+    // clock fired the timeout (a never-stamped zombie vs a genuinely-stuck retry
+    // have different defensible stories) and the stamp value, so an auditor can
+    // reconstruct exactly why this lease was auto-failed.
     const { error: logErr } = await supabaseAdmin.from("lease_activity_log").insert(
-      rows.map((r) => ({
-        lease_id: r.id,
-        user_id: null,
-        activity_type: "extraction_timed_out",
-        details: {
-          previous_status: "Processing",
-          reason: "stuck_extraction_timeout",
-          stuck_threshold_minutes: STUCK_THRESHOLD_MINUTES,
-        },
-      })),
+      rows.map((r) => {
+        const usedProcessingClock = r.processing_started_at != null;
+        return {
+          lease_id: r.id,
+          user_id: null,
+          activity_type: "extraction_timed_out",
+          details: {
+            previous_status: "Processing",
+            reason: "stuck_extraction_timeout",
+            stuck_threshold_minutes: STUCK_THRESHOLD_MINUTES,
+            clock_used: usedProcessingClock ? "processing_started_at" : "uploaded_at",
+            stuck_since: usedProcessingClock ? r.processing_started_at : r.uploaded_at,
+          },
+        };
+      }),
     );
     if (logErr) {
       console.error("[reclaim-stuck-extractions] activity log error:", logErr.message);

@@ -730,10 +730,13 @@ serve(async (req) => {
       console.log(`[retry_lease] In-place re-upload stored at ${newStoragePath}`);
     }
 
-    // Update status to Processing
+    // Update status to Processing. Stamp processing_started_at so the
+    // reclaim-stuck-extractions sweep measures "stuck" from when THIS retry
+    // began, not from the original upload — otherwise a lease retried >30 min
+    // after its first upload could be failed mid-retry by the next sweep.
     await supabaseAdmin
       .from('leases')
-      .update({ status: 'Processing', error_message: null })
+      .update({ status: 'Processing', error_message: null, processing_started_at: new Date().toISOString() })
       .eq('id', leaseId);
 
     // Clear derived artifacts before regenerating
