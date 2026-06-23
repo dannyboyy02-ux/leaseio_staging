@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -13,6 +13,9 @@ import {
   ClipboardCheck,
   Building2,
   ChevronsUpDown,
+  ChevronLeft,
+  ChevronRight,
+  GripVertical,
   Check,
   Languages,
   Plus,
@@ -21,11 +24,29 @@ import {
   ArrowLeft,
   CreditCard,
 } from 'lucide-react';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useFirm } from '@/contexts/FirmContext';
+import { useSidebar } from '@/contexts/SidebarContext';
 import { computeFirmSidebarMode } from '@/lib/firmContext';
 import { isReadOnlyRetention } from '@/config/pricing';
+import { applyReorder, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_DEFAULT_WIDTH } from '@/lib/sidebarPrefs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { shouldOpenCommandPalette } from '@/lib/cmdKHandler';
@@ -50,6 +71,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import {
@@ -59,17 +81,61 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { trialDaysRemaining } from '@/lib/trialStatus';
 
-// Top nav items — rendered before Approvals
-const topNavItems = [
-  { title: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
-  { title: 'Leases',    href: '/app/leases',     icon: FileText },
-];
+// A standard (workspace-mode) nav item. `key` is a stable identifier used for
+// drag-reorder persistence — never the (i18n / renameable) label.
+type StandardNavItem = {
+  key: string;
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: number;
+  requiresBusiness?: boolean;
+  visible: boolean;
+};
 
-// Bottom nav items — rendered after Approvals
-const bottomNavItems = [
-  { title: 'Portfolio', href: '/app/portfolio', icon: Layers, requiresBusiness: true },
-  { title: 'Reports',   href: '/app/reports',   icon: BarChart3 },
-];
+// A single draggable row: the nav link plus a hover/focus grip handle. The grip
+// is the drag activator (setActivatorNodeRef) so clicking the link still
+// navigates — only the grip (or keyboard on the grip) starts a reorder.
+function SortableNavItem({
+  id,
+  gripLabel,
+  children,
+}: {
+  id: string;
+  gripLabel: string;
+  children: ReactNode;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn('group relative', isDragging && 'z-10 opacity-90')}
+    >
+      {children}
+      <button
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        type="button"
+        aria-label={gripLabel}
+        onClick={(e) => e.preventDefault()}
+        className="absolute right-3 top-1/2 -translate-y-1/2 flex h-6 w-5 cursor-grab items-center justify-center rounded text-sidebar-foreground/40 opacity-0 transition-opacity hover:text-sidebar-foreground/70 focus-visible:opacity-100 group-hover:opacity-100 active:cursor-grabbing"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 export function AppSidebar() {
   const location = useLocation();
@@ -78,6 +144,17 @@ export function AppSidebar() {
   const { signOut, user: authUser } = useAuth();
   const { t, language, setLanguage } = useLanguage();
   const firm = useFirm();
+  const {
+    collapsed,
+    toggleCollapsed,
+    width,
+    setWidth,
+    previewWidth,
+    resizing,
+    setResizing,
+    navOrder,
+    setNavOrder,
+  } = useSidebar();
 
   // Phase 10 — which navigation mode the sidebar shows.
   const firmMode = computeFirmSidebarMode({
@@ -188,6 +265,7 @@ export function AppSidebar() {
     lastName: authUser?.user_metadata?.last_name || user?.lastName || '',
     email: authUser?.email || user?.email || '',
   };
+  const displayName = `${safeText(displayUser.firstName)} ${safeText(displayUser.lastName)}`.trim();
 
   const currentPlan = workspace?.plan || 'starter';
   const planLabel = t(`plan.${currentPlan}`);
@@ -202,85 +280,284 @@ export function AppSidebar() {
         : null,
     [workspace?.subscriptionStatus, workspace?.subscriptionPeriodEnd],
   );
+  const trialPillText =
+    trialDaysLeft === 0
+      ? t('account.trial_pill_today')
+      : t('account.trial_pill', { count: trialDaysLeft ?? 0 });
 
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const showApprovals = canAccessApprovals(userFunctionalRoles) || isAdmin;
   const hideApprovalsForSubmitterOnly = isSubmitterOnly(userFunctionalRoles);
 
-  const renderNavItem = (item: { title: string; href: string; icon: React.ComponentType<{ className?: string }>; requiresBusiness?: boolean }) => {
+  // --- Standard (workspace-mode) nav, declarative + reorderable ---
+  const standardItems: StandardNavItem[] = [
+    { key: 'dashboard', label: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard, visible: true },
+    { key: 'leases', label: 'Leases', href: '/app/leases', icon: FileText, visible: true },
+    { key: 'firm', label: t('firm.nav.firm'), href: '/app/firm', icon: Building2, badge: firm.pendingActionsCount, visible: firm.isFirmUser },
+    { key: 'approvals', label: 'Approvals', href: '/app/approvals', icon: ClipboardCheck, badge: approvalBadge, visible: showApprovals && !hideApprovalsForSubmitterOnly },
+    { key: 'portfolio', label: 'Portfolio', href: '/app/portfolio', icon: Layers, requiresBusiness: true, visible: true },
+    { key: 'reports', label: 'Reports', href: '/app/reports', icon: BarChart3, visible: true },
+  ];
+  const itemByKey = new Map(standardItems.map((i) => [i.key, i]));
+  const orderedItems = navOrder
+    .map((k) => itemByKey.get(k))
+    .filter((i): i is StandardNavItem => !!i && i.visible);
+  const visibleKeys = orderedItems.map((i) => i.key);
+
+  const sensors = useSensors(
+    // distance:6 lets a plain click through (no drag) while still arming a drag.
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setNavOrder(applyReorder(navOrder, visibleKeys, String(active.id), String(over.id)));
+  }
+
+  // Drag the right edge to resize; commit (persist) on release. previewWidth
+  // updates live without writing localStorage on every frame. The teardown is
+  // tracked in a ref so an unmount mid-drag (route change / workspace switch)
+  // or a swallowed pointerup can't leak window listeners or leave the global
+  // body cursor / user-select stuck.
+  const resizeTeardownRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => resizeTeardownRef.current?.(), []);
+
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    setResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: PointerEvent) => previewWidth(startWidth + (ev.clientX - startX));
+    const finish = (commitX?: number) => {
+      if (commitX !== undefined) setWidth(startWidth + (commitX - startX));
+      setResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      resizeTeardownRef.current = null;
+    };
+    const onUp = (ev: PointerEvent) => finish(ev.clientX);
+    const onCancel = () => finish();
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    resizeTeardownRef.current = () => finish();
+  };
+
+  // Shared link classes. Collapsed = a centered icon button; expanded = the
+  // full-width row.
+  const navLinkClass = (isActive: boolean, isLocked?: boolean) =>
+    cn(
+      'relative flex items-center rounded-lg text-sm font-medium transition-all',
+      collapsed ? 'mx-auto h-11 w-11 justify-center px-0' : 'gap-3 px-3 py-2.5',
+      isActive
+        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+        : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+      isLocked && 'opacity-50 cursor-not-allowed',
+    );
+
+  // Expanded standard row. Trailing content fades on hover so the grip handle
+  // can occupy the same right-edge slot without overlap.
+  const renderExpandedStandardLink = (item: StandardNavItem) => {
     const isActive = location.pathname === item.href;
     const isLocked = item.requiresBusiness && !canAccessFeature('business') && !isReadOnlyRetention(workspace?.plan);
     return (
       <Link
-        key={item.href}
         to={isLocked ? '#' : item.href}
-        className={cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-          isActive
-            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-          isLocked && 'opacity-50 cursor-not-allowed'
-        )}
-        onClick={(e) => isLocked && e.preventDefault()}
+        className={navLinkClass(isActive, isLocked)}
+        onClick={(e) => { if (isLocked) e.preventDefault(); }}
       >
-        <item.icon className="h-5 w-5" />
-        <span className="flex-1">{item.title}</span>
-        {isLocked && <Lock className="h-4 w-4" />}
-        {item.requiresBusiness && !isLocked && (
-          <Badge variant="business" className="text-[10px] px-1.5">Business</Badge>
-        )}
+        <item.icon className="h-5 w-5 shrink-0" />
+        <span className="flex-1 truncate">{item.label}</span>
+        <span className="flex items-center gap-1.5 transition-opacity group-hover:opacity-0">
+          {isLocked && <Lock className="h-4 w-4" />}
+          {item.requiresBusiness && !isLocked && (
+            <Badge variant="business" className="text-[10px] px-1.5">Business</Badge>
+          )}
+          {!item.requiresBusiness && item.badge && item.badge > 0 ? (
+            <Badge variant="destructive" className="text-[10px] h-5 min-w-[1.25rem] px-1.5 flex items-center justify-center">{item.badge}</Badge>
+          ) : null}
+        </span>
       </Link>
     );
   };
 
-  // Phase 10 — a firm-context nav link (optional count badge for the inbox).
+  // Collapsed standard row — icon only, label via tooltip, badge → dot.
+  const renderCollapsedStandardLink = (item: StandardNavItem) => {
+    const isActive = location.pathname === item.href;
+    const isLocked = item.requiresBusiness && !canAccessFeature('business') && !isReadOnlyRetention(workspace?.plan);
+    return (
+      <Tooltip key={item.key}>
+        <TooltipTrigger asChild>
+          <Link
+            to={isLocked ? '#' : item.href}
+            aria-label={item.label}
+            className={navLinkClass(isActive, isLocked)}
+            onClick={(e) => { if (isLocked) e.preventDefault(); }}
+          >
+            <item.icon className="h-5 w-5 shrink-0" />
+            {item.badge && item.badge > 0 ? (
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
+            ) : null}
+            {isLocked ? <Lock className="absolute bottom-1 right-1.5 h-3 w-3" /> : null}
+          </Link>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {/* Restore the count lost to the collapsed badge-dot. */}
+          {item.label}
+          {item.badge && item.badge > 0 ? ` · ${item.badge}` : ''}
+          {isLocked ? ' · Business' : ''}
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
+  // Phase 10 — a firm-context nav link (collapsed-aware; optional inbox badge).
   const renderFirmLink = (href: string, label: string, Icon: React.ComponentType<{ className?: string }>, badge?: number) => {
     const isActive = location.pathname === href;
-    return (
+    const linkEl = (
       <Link
-        key={href}
         to={href}
-        className={cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-          isActive
-            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-        )}
+        aria-label={collapsed ? label : undefined}
+        className={navLinkClass(isActive)}
       >
-        <Icon className="h-5 w-5" />
-        <span className="flex-1">{label}</span>
-        {badge && badge > 0 ? (
+        <Icon className="h-5 w-5 shrink-0" />
+        {!collapsed && <span className="flex-1 truncate">{label}</span>}
+        {!collapsed && badge && badge > 0 ? (
           <Badge variant="destructive" className="text-[10px] h-5 min-w-[1.25rem] px-1.5 flex items-center justify-center">{badge}</Badge>
+        ) : null}
+        {collapsed && badge && badge > 0 ? (
+          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
         ) : null}
       </Link>
     );
+    if (!collapsed) return <div key={href}>{linkEl}</div>;
+    return (
+      <Tooltip key={href}>
+        <TooltipTrigger asChild>{linkEl}</TooltipTrigger>
+        <TooltipContent side="right">
+          {label}
+          {badge && badge > 0 ? ` · ${badge}` : ''}
+        </TooltipContent>
+      </Tooltip>
+    );
   };
 
+  const backToWorkspaceEl = (
+    <Link
+      to="/app/dashboard"
+      aria-label={collapsed ? t('firm.back_to_workspace') : undefined}
+      className={cn(
+        'flex items-center rounded-lg text-xs font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all',
+        collapsed ? 'mx-auto h-11 w-11 justify-center px-0' : 'gap-3 px-3 py-2.5',
+      )}
+    >
+      <ArrowLeft className="h-4 w-4 shrink-0" />
+      {!collapsed && <span className="flex-1">{t('firm.back_to_workspace')}</span>}
+    </Link>
+  );
+
   return (
-    <aside className="fixed left-0 top-0 z-40 h-screen w-64 bg-sidebar text-sidebar-foreground flex flex-col">
+    <aside
+      className={cn(
+        'fixed left-0 top-0 z-40 h-screen bg-sidebar text-sidebar-foreground flex flex-col',
+        !resizing && 'transition-[width] duration-200 ease-out motion-reduce:transition-none',
+      )}
+      style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : width }}
+    >
+      {/* Collapse / expand toggle — straddles the right edge. */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? t('nav.sidebar_expand') : t('nav.sidebar_collapse')}
+            className="absolute -right-3 top-[76px] z-[60] flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {collapsed ? t('nav.sidebar_expand') : t('nav.sidebar_collapse')}
+        </TooltipContent>
+      </Tooltip>
+
+      {/* Drag-to-resize handle (expanded only). Double-click resets to default.
+          Starts below the collapse toggle (top-[104px]) so the two edge
+          affordances don't share the same grab zone. */}
+      {!collapsed && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t('nav.sidebar_resize')}
+              onPointerDown={startResize}
+              onDoubleClick={() => setWidth(SIDEBAR_DEFAULT_WIDTH)}
+              className="group/resize absolute right-0 top-[104px] z-50 h-[calc(100%-104px)] w-2 cursor-col-resize"
+            >
+              <div
+                className={cn(
+                  'absolute right-0 top-0 h-full w-0.5 bg-sidebar-primary transition-opacity',
+                  resizing ? 'opacity-100' : 'opacity-0 group-hover/resize:opacity-100',
+                )}
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('nav.sidebar_resize')}</TooltipContent>
+        </Tooltip>
+      )}
+
       {/* Logo */}
-      <Link to="/app/dashboard" className="flex h-16 items-center gap-2 px-6 border-b border-sidebar-border hover:bg-sidebar-accent/30 transition-colors">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+      <Link
+        to="/app/dashboard"
+        className={cn(
+          'flex h-16 items-center border-b border-sidebar-border hover:bg-sidebar-accent/30 transition-colors',
+          collapsed ? 'justify-center px-0' : 'gap-2 px-6',
+        )}
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shrink-0">
           <FileText className="h-5 w-5" />
         </div>
-        <span className="font-display text-lg font-bold text-sidebar-foreground">
-          Lease<span className="text-sidebar-primary">IO</span>
-        </span>
+        {!collapsed && (
+          <span className="font-display text-lg font-bold text-sidebar-foreground">
+            Lease<span className="text-sidebar-primary">IO</span>
+          </span>
+        )}
       </Link>
 
       {/* Workspace Switcher */}
-      <div className="px-3 py-2 border-b border-sidebar-border">
+      <div className={cn('border-b border-sidebar-border', collapsed ? 'flex justify-center px-2 py-2' : 'px-3 py-2')}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
-              {workspace ? (
-                <WorkspaceAvatar id={workspace.id} name={workspace.name} size="sm" />
-              ) : (
-                <Building2 className="h-3.5 w-3.5 text-sidebar-foreground/60 shrink-0" />
-              )}
-              <span className="flex-1 text-left truncate font-medium">{workspace?.name}</span>
-              <ChevronsUpDown className="h-3.5 w-3.5 text-sidebar-foreground/40 shrink-0" />
-            </button>
+            {collapsed ? (
+              <button
+                aria-label={workspace?.name ?? 'Workspace'}
+                className="mx-auto flex h-11 w-11 items-center justify-center rounded-md hover:bg-sidebar-accent transition-colors"
+              >
+                {workspace ? (
+                  <WorkspaceAvatar id={workspace.id} name={workspace.name} size="sm" />
+                ) : (
+                  <Building2 className="h-4 w-4 text-sidebar-foreground/60" />
+                )}
+              </button>
+            ) : (
+              <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
+                {workspace ? (
+                  <WorkspaceAvatar id={workspace.id} name={workspace.name} size="sm" />
+                ) : (
+                  <Building2 className="h-3.5 w-3.5 text-sidebar-foreground/60 shrink-0" />
+                )}
+                <span className="flex-1 text-left truncate font-medium">{workspace?.name}</span>
+                <ChevronsUpDown className="h-3.5 w-3.5 text-sidebar-foreground/40 shrink-0" />
+              </button>
+            )}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-64">
             {showPalette ? (
@@ -401,19 +678,20 @@ export function AppSidebar() {
       {/* /Phase 2 */}
 
       {/* Main Navigation — flat list, no section labels */}
-      <nav className="flex-1 py-6 px-3">
+      <nav className={cn('flex-1 py-6', collapsed ? 'px-2' : 'px-3')}>
         {firmMode === 'firm' ? (
           /* Phase 10 — firm context nav. "Back to workspace" returns to the
-             active workspace's dashboard. */
+             active workspace's dashboard. Not reorderable. */
           <div className="space-y-1">
-            <Link
-              to="/app/dashboard"
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span className="flex-1">{t('firm.back_to_workspace')}</span>
-            </Link>
-            <DropdownMenuSeparator className="my-2" />
+            {collapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>{backToWorkspaceEl}</TooltipTrigger>
+                <TooltipContent side="right">{t('firm.back_to_workspace')}</TooltipContent>
+              </Tooltip>
+            ) : (
+              backToWorkspaceEl
+            )}
+            <DropdownMenuSeparator className={cn('my-2', collapsed && 'mx-auto w-8')} />
             {renderFirmLink('/app/firm', t('firm.nav.dashboard'), Building2)}
             {renderFirmLink('/app/firm/inbox', t('firm.nav.inbox'), Inbox, firm.pendingActionsCount)}
             {renderFirmLink('/app/firm/members', t('firm.nav.members'), Users)}
@@ -421,44 +699,28 @@ export function AppSidebar() {
             {renderFirmLink('/app/firm/billing', t('firm.nav.billing'), CreditCard)}
             {renderFirmLink('/app/firm/settings', t('firm.nav.settings'), Settings)}
           </div>
+        ) : collapsed ? (
+          /* Collapsed workspace nav — icon rail, persisted order, no drag. */
+          <div className="space-y-1">
+            {orderedItems.map(renderCollapsedStandardLink)}
+          </div>
         ) : (
-        <div className="space-y-1">
-          {/* Dashboard, Leases */}
-          {topNavItems.map(renderNavItem)}
-
-          {/* Phase 10 — firm entry point (firm members only) */}
-          {firm.isFirmUser
-            ? renderFirmLink('/app/firm', t('firm.nav.firm'), Building2, firm.pendingActionsCount)
-            : null}
-
-          {/* Approvals — hidden for submitter-only users; badge unchanged */}
-          {showApprovals && !hideApprovalsForSubmitterOnly && (
-            <Link
-              to="/app/approvals"
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                location.pathname === '/app/approvals'
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
-              )}
-            >
-              <ClipboardCheck className="h-5 w-5" />
-              <span className="flex-1">Approvals</span>
-              {approvalBadge > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="text-[10px] h-5 min-w-[1.25rem] px-1.5 flex items-center justify-center"
-                >
-                  {approvalBadge}
-                </Badge>
-              )}
-            </Link>
-          )}
-
-          {/* Portfolio, Reports */}
-          {bottomNavItems.map(renderNavItem)}
-
-        </div>
+          /* Expanded workspace nav — drag-to-reorder. */
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={visibleKeys} strategy={verticalListSortingStrategy}>
+              <div className="space-y-1">
+                {orderedItems.map((item) => (
+                  <SortableNavItem key={item.key} id={item.key} gripLabel={t('nav.sidebar_reorder')}>
+                    {renderExpandedStandardLink(item)}
+                  </SortableNavItem>
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
       </nav>
 
@@ -468,37 +730,56 @@ export function AppSidebar() {
           /* The sidebar is dark navy in BOTH themes (--sidebar-background),
              so the pill uses a single translucent-amber treatment — a light
              bg-amber-50 would render as a glaring near-white block. */
-          <Link
-            to="/app/settings/account?tab=billing"
-            className="mb-2 flex items-center justify-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-400/20"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            {trialDaysLeft === 0
-              ? t('account.trial_pill_today')
-              : t('account.trial_pill', { count: trialDaysLeft })}
-          </Link>
+          collapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to="/app/settings/account?tab=billing"
+                  aria-label={trialPillText}
+                  className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-md border border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/20"
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">{trialPillText}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Link
+              to="/app/settings/account?tab=billing"
+              className="mb-2 flex items-center justify-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-400/20"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {trialPillText}
+            </Link>
+          )
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="w-full justify-start gap-3 px-3 h-auto py-2 text-sidebar-foreground hover:bg-sidebar-accent"
+              aria-label={collapsed ? displayName : undefined}
+              className={cn(
+                'h-auto text-sidebar-foreground hover:bg-sidebar-accent',
+                collapsed ? 'w-full justify-center px-0 py-2' : 'w-full justify-start gap-3 px-3 py-2',
+              )}
             >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
                   {safeText(displayUser.firstName)?.[0]}{safeText(displayUser.lastName)?.[0]}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex-1 text-left min-w-0">
-                <p className="text-sm font-medium truncate">
-                  {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
-                </p>
-                {/* Plan label, not workspace name — the switcher above already
-                    shows the workspace (Claude shows "Pro plan" here). */}
-                <p className="text-xs text-sidebar-foreground/60 truncate">
-                  {t('nav.plan_label', { plan: planLabel })}
-                </p>
-              </div>
+              {!collapsed && (
+                <div className="flex-1 text-left min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {safeText(displayUser.firstName)} {safeText(displayUser.lastName)}
+                  </p>
+                  {/* Plan label, not workspace name — the switcher above already
+                      shows the workspace (Claude shows "Pro plan" here). */}
+                  <p className="text-xs text-sidebar-foreground/60 truncate">
+                    {t('nav.plan_label', { plan: planLabel })}
+                  </p>
+                </div>
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="w-64">
