@@ -365,12 +365,12 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
       const finalStatus = outcome.finalStatus;
       const routingPath = outcome.routingPath;
 
-      // Apply the flip + notify the right approvers for the chosen path.
-      await supabase
-        .from('leases')
-        .update({ lifecycle_status: finalStatus, status_changed_at: new Date().toISOString() } as any)
-        .eq('id', lease.id);
-
+      // The lifecycle flip (draft → finalStatus) and its status_change audit
+      // row are applied SERVER-SIDE by resolve-approval-chain in the same call
+      // that resolved routing — the browser cannot write lifecycle_status (the
+      // governance trigger rejects it), and keeping the flip + log together on
+      // the server means the audit row can never assert a transition that
+      // didn't happen. Here we only notify the right approvers for the path.
       if (routingPath === 'legacy') {
         if (finalStatus === 'submitted' && approvalRequirements.requiresManagerApproval) {
           await notifyRoleHolders(
@@ -403,27 +403,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         );
       }
 
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user.id,
-        activity_type: 'status_change',
-        from_status: 'draft',
-        to_status: finalStatus,
-        details: {
-          triggered_by: 'request_submission',
-          routing_path: routingPath,
-          ...(routingPath === 'chain' && outcome.chainSuccess
-            ? {
-                policy_id: outcome.chainSuccess.policyId,
-                policy_version: outcome.chainSuccess.policyVersion,
-                policy_name: outcome.chainSuccess.policyName,
-                steps_created: outcome.chainSuccess.stepsCreated,
-              }
-            : {
-                auto_approved: finalStatus === 'approved',
-              }),
-        },
-      } as any);
+      // (status_change audit row for draft → finalStatus is written
+      // server-side by resolve-approval-chain — see note above.)
 
       await createLeaseNotification({
         leaseId: lease.id,

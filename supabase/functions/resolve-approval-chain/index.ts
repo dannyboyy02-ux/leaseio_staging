@@ -42,6 +42,10 @@ import {
   reconcileChainSteps,
   rollbackTargetForNewChain,
 } from "../_shared/approval_chain.ts";
+import {
+  getApprovalRequirements,
+  getInitialStatusAfterSubmission,
+} from "../_shared/approval_routing.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -255,7 +259,7 @@ serve(async (req) => {
   const { data: lease, error: leaseError } = await supabaseAdmin
     .from("leases")
     .select(
-      "id, workspace_id, asset_type, lease_type, requesting_department, region, monthly_payment, lifecycle_status",
+      "id, workspace_id, asset_type, lease_type, requesting_department, region, monthly_payment, lifecycle_status, calc_total_commitment, covenant_flagged",
     )
     .eq("id", leaseId)
     .maybeSingle();
@@ -272,7 +276,7 @@ serve(async (req) => {
 
   const { data: ownership } = await supabaseAdmin
     .from("workspaces")
-    .select("owner_id, separation_of_duties_default")
+    .select("owner_id, separation_of_duties_default, approval_threshold")
     .eq("id", workspaceId)
     .maybeSingle();
   const isOwner = (ownership as any)?.owner_id === user.id;
@@ -1024,10 +1028,49 @@ serve(async (req) => {
     .select("id", { count: "exact", head: true })
     .eq("lease_id", leaseId);
   if ((existingCount ?? 0) > 0) {
+    // Chain already exists. If a prior attempt wrote the chain but the lease
+    // never left draft (an old browser flip was rejected by the governance
+    // trigger or interrupted), complete the draft → concept_submitted flip
+    // server-side now so the lease is not stranded. `recovered` tells the
+    // caller whether THIS call advanced it (so it only notifies once).
+    let finalStatus = currentLifecycle;
+    let recovered = false;
+    if (currentLifecycle === "draft") {
+      const flipped = await updateLifecycle(leaseId, "concept_submitted");
+      if (flipped) {
+        finalStatus = "concept_submitted";
+        recovered = true;
+        await logStatusChange(leaseId, "draft", "concept_submitted", {
+          triggered_by: "request_submission",
+          recovered_existing_chain: true,
+        });
+      }
+    }
+    // First-step assignees from the existing chain (concept stage, required,
+    // lowest step_order) so the caller can notify on the recovery path.
+    const { data: existingChainRows } = await supabaseAdmin
+      .from("lease_approval_chain")
+      .select("approver_user_id, approver_role, step_order, stage, is_required")
+      .eq("lease_id", leaseId);
+    const conceptRows = ((existingChainRows ?? []) as Array<any>).filter(
+      (s) => s.stage === "concept" && s.is_required,
+    );
+    const firstOrder = conceptRows.length > 0
+      ? Math.min(...conceptRows.map((s) => s.step_order))
+      : null;
+    const firstStepAssignees = firstOrder == null
+      ? []
+      : conceptRows
+        .filter((s) => s.step_order === firstOrder)
+        .map((s) => ({ userId: s.approver_user_id ?? null, role: s.approver_role ?? null }));
+
     return jsonResponse(
       {
         ok: true,
         alreadyResolved: true,
+        recovered,
+        finalStatus,
+        firstStepAssignees,
         message: "Chain already exists for this lease",
       },
       200,
@@ -1051,12 +1094,59 @@ serve(async (req) => {
   }
 
   if (initialMatch.kind === "no_policies") {
+    // Legacy path: no approval policies configured. Compute the required
+    // approvals SERVER-SIDE — never trust a client-supplied target, or a
+    // submitter could pass 'approved' and self-approve — then apply the
+    // draft → X flip here so the browser never attempts the trigger-blocked
+    // lifecycle write. The caller still sends the approver notifications using
+    // the requirements we return (notifications are not a security boundary).
+    const [{ data: mgrRoles }, { data: finRoles }] = await Promise.all([
+      supabaseAdmin
+        .from("workspace_roles")
+        .select("user_id")
+        .eq("workspace_id", workspaceId)
+        .eq("role", "manager_approver"),
+      supabaseAdmin
+        .from("workspace_roles")
+        .select("user_id")
+        .eq("workspace_id", workspaceId)
+        .eq("role", "financial_approver"),
+    ]);
+    const requirements = getApprovalRequirements({
+      totalCashCommitment: Number((lease as any).calc_total_commitment ?? 0),
+      approvalThreshold: (ownership as any)?.approval_threshold ?? null,
+      hasManagerApprovers: ((mgrRoles ?? []) as unknown[]).length > 0,
+      hasFinancialApprovers: ((finRoles ?? []) as unknown[]).length > 0,
+      covenantFlagged: Boolean((lease as any).covenant_flagged),
+    });
+    const legacyStatus = getInitialStatusAfterSubmission(requirements);
+
+    let finalStatus = currentLifecycle;
+    if (currentLifecycle === "draft") {
+      const flipped = await updateLifecycle(leaseId, legacyStatus);
+      if (!flipped) {
+        return jsonResponse(
+          { ok: false, error: "Failed to update request status", reason: "invalid_lease" },
+          500,
+          origin,
+        );
+      }
+      finalStatus = legacyStatus;
+      await logStatusChange(leaseId, "draft", legacyStatus, {
+        triggered_by: "request_submission",
+        routing_path: "legacy",
+        auto_approved: legacyStatus === "approved",
+      });
+    }
+
     return jsonResponse(
       {
         ok: true,
         legacyFallback: true,
-        message:
-          "No approval policies configured; caller should use legacy notification path.",
+        finalStatus,
+        requiresManagerApproval: requirements.requiresManagerApproval,
+        requiresFinancialApproval: requirements.requiresFinancialApproval,
+        message: "No approval policies configured; legacy notification path.",
       },
       200,
       origin,
@@ -1246,6 +1336,25 @@ serve(async (req) => {
     policy_version: chosen.version,
   });
 
+  // Apply the draft → concept_submitted lifecycle flip SERVER-SIDE. The browser
+  // cannot do this (prevent_unauthorized_lease_workflow_edits rejects
+  // authenticated lifecycle_status writes); the caller used to attempt it and
+  // fail silently, stranding the lease in draft with a misleading "submitted"
+  // audit row. Guarded on draft so a re-resolution never clobbers an advanced
+  // lease.
+  let finalStatus = currentLifecycle;
+  if (currentLifecycle === "draft") {
+    const flipped = await updateLifecycle(leaseId, "concept_submitted");
+    if (flipped) {
+      finalStatus = "concept_submitted";
+      await logStatusChange(leaseId, "draft", "concept_submitted", {
+        triggered_by: "request_submission",
+        policy_id: chosen.id,
+        policy_version: chosen.version,
+      });
+    }
+  }
+
   const conceptSteps = policySteps.filter(
     (s) => s.stage === "concept" && s.is_required,
   );
@@ -1271,6 +1380,7 @@ serve(async (req) => {
       stepsCreated: rowsToInsert.length,
       firstStepAssignees,
       targetLifecycleStatus: "concept_submitted",
+      finalStatus,
     },
     200,
     origin,

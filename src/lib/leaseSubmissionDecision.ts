@@ -36,6 +36,12 @@ export type ChainLegacyFallback = {
   ok: true;
   legacyFallback: true;
   message: string;
+  // Phase: the edge function now applies the legacy flip server-side and
+  // returns the authoritative destination + the requirements it computed
+  // (so the caller notifies the right approvers without re-deriving them).
+  finalStatus?: string;
+  requiresManagerApproval?: boolean;
+  requiresFinancialApproval?: boolean;
 };
 
 export type ChainFailure = {
@@ -107,11 +113,13 @@ export function decideSubmissionOutcome(
     };
   }
 
-  // Workspace has no policies → legacy path.
+  // Workspace has no policies → legacy path. The edge function now applies the
+  // flip server-side and returns the authoritative finalStatus; prefer it and
+  // fall back to the locally-computed status for older edge deploys.
   if (chainResult.legacyFallback === true) {
     return {
       kind: 'proceed',
-      finalStatus: legacyInitialStatus,
+      finalStatus: chainResult.finalStatus ?? legacyInitialStatus,
       routingPath: 'legacy',
     };
   }

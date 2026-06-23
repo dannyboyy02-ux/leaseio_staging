@@ -82,7 +82,7 @@ export async function retryRequestRouting(
   // skipping the audit log. Intercept it and complete the routing from the
   // existing chain rows instead.
   if (chainResult && (chainResult as any).alreadyResolved === true) {
-    return completeExistingChainRouting(supabase, lease, workspaceId, userId);
+    return completeExistingChainRouting(supabase, lease, workspaceId, userId, chainResult);
   }
 
   const outcome = decideSubmissionOutcome(chainResult as ChainResult, legacyInitialStatus, chainError);
@@ -94,16 +94,10 @@ export async function retryRequestRouting(
   const routingPath = outcome.routingPath;
   const description = lease.request_title ?? 'commitment request';
 
-  // The flip must land before we notify/log — otherwise the audit row asserts a
-  // transition that didn't happen (integrity MEDIUM). Abort cleanly if it fails.
-  const { error: flipError } = await supabase
-    .from('leases')
-    .update({ lifecycle_status: finalStatus, status_changed_at: new Date().toISOString() } as any)
-    .eq('id', lease.id);
-  if (flipError) {
-    return { ok: false, errorMessage: 'Could not update the request status. Please try again.' };
-  }
-
+  // The lifecycle flip (draft → finalStatus) and its status_change audit row
+  // are applied SERVER-SIDE by resolve-approval-chain in the same call (the
+  // browser write is rejected by the governance trigger). Here we only notify
+  // the right approvers for the path.
   if (routingPath === 'legacy') {
     if (finalStatus === 'submitted' && approvalRequirements.requiresManagerApproval) {
       await notifyRoleHolders(supabase, lease.id, workspaceId, 'manager_approver', `New commitment request awaiting your review: ${description}`);
@@ -114,27 +108,8 @@ export async function retryRequestRouting(
     await notifyChainAssignees(supabase, lease.id, workspaceId, outcome.chainSuccess!.firstStepAssignees, `New commitment request requires your approval: ${description}`);
   }
 
-  await supabase.from('lease_activity_log').insert({
-    lease_id: lease.id,
-    user_id: userId,
-    activity_type: 'status_change',
-    from_status: 'draft',
-    to_status: finalStatus,
-    details: {
-      from_status: 'draft',
-      to_status: finalStatus,
-      triggered_by: 'routing_retry',
-      routing_path: routingPath,
-      ...(routingPath === 'chain' && outcome.chainSuccess
-        ? {
-            policy_id: outcome.chainSuccess.policyId,
-            policy_version: outcome.chainSuccess.policyVersion,
-            policy_name: outcome.chainSuccess.policyName,
-            steps_created: outcome.chainSuccess.stepsCreated,
-          }
-        : { auto_approved: finalStatus === 'approved' }),
-    },
-  } as any);
+  // status_change audit row is written server-side by resolve-approval-chain
+  // in the same call that performed the flip.
 
   await createLeaseNotification({
     leaseId: lease.id,
@@ -147,62 +122,32 @@ export async function retryRequestRouting(
 
 /**
  * Recovery for the idempotent-replay case: a chain already exists for this lease
- * (resolve-approval-chain returned `alreadyResolved`) but the lease is still in
- * 'draft' because the original flip never landed. We complete the chain routing
- * WITHOUT calling resolve again (it's a no-op now) and WITHOUT fabricating a
- * status — the chain's destination is deterministically 'concept_submitted', and
- * the first-step assignees are read straight from the existing chain rows,
- * mirroring resolve-approval-chain's own `firstStepAssignees` derivation (concept
- * stage, required steps, lowest step_order).
+ * (resolve-approval-chain returned `alreadyResolved`) but the lease may still be
+ * in 'draft' because an original browser flip was rejected by the governance
+ * trigger or interrupted. The edge function's idempotent branch now performs the
+ * draft → concept_submitted flip AND its status_change log SERVER-SIDE, and
+ * returns `recovered` (whether THIS call advanced the lease), `finalStatus`, and
+ * `firstStepAssignees`. So this helper only fires the approver notifications, and
+ * only when this call actually completed the routing — a repeated manual retry on
+ * an already-advanced lease is a clean no-op rather than a duplicate notification.
  */
 async function completeExistingChainRouting(
   supabase: SupabaseClient,
   lease: RetryRoutingLease,
   workspaceId: string,
-  userId: string,
+  _userId: string,
+  resolveResponse: any,
 ): Promise<RetryRoutingResult> {
-  // If a prior attempt already advanced the lease out of draft, the retry is a
-  // no-op success — just report the current status so the UI refreshes.
-  const { data: current } = await (supabase as any)
-    .from('leases')
-    .select('lifecycle_status')
-    .eq('id', lease.id)
-    .maybeSingle();
-  const currentStatus = current?.lifecycle_status as string | undefined;
-  if (currentStatus && currentStatus !== 'draft') {
-    return { ok: true, finalStatus: currentStatus };
+  const finalStatus = (resolveResponse?.finalStatus as string) ?? 'concept_submitted';
+
+  // Only notify if this call actually advanced the lease out of draft.
+  if (!resolveResponse?.recovered) {
+    return { ok: true, finalStatus };
   }
 
-  const { data: chainRows } = await (supabase as any)
-    .from('lease_approval_chain')
-    .select('approver_user_id, approver_role, step_order, stage, is_required')
-    .eq('lease_id', lease.id);
-
-  const conceptSteps = (chainRows || []).filter(
-    (s: any) => s.stage === 'concept' && s.is_required,
-  );
-  const firstOrder = conceptSteps.length > 0
-    ? Math.min(...conceptSteps.map((s: any) => s.step_order))
-    : null;
-  const firstStepAssignees = firstOrder == null
-    ? []
-    : conceptSteps
-      .filter((s: any) => s.step_order === firstOrder)
-      .map((s: any) => ({
-        userId: (s.approver_user_id ?? null) as string | null,
-        role: (s.approver_role ?? null) as string | null,
-      }));
-
-  const finalStatus = 'concept_submitted';
+  const firstStepAssignees =
+    (resolveResponse?.firstStepAssignees as { userId: string | null; role: string | null }[]) ?? [];
   const description = lease.request_title ?? 'commitment request';
-
-  const { error: flipError } = await supabase
-    .from('leases')
-    .update({ lifecycle_status: finalStatus, status_changed_at: new Date().toISOString() } as any)
-    .eq('id', lease.id);
-  if (flipError) {
-    return { ok: false, errorMessage: 'Could not update the request status. Please try again.' };
-  }
 
   await notifyChainAssignees(
     supabase,
@@ -211,21 +156,6 @@ async function completeExistingChainRouting(
     firstStepAssignees,
     `New commitment request requires your approval: ${description}`,
   );
-
-  await supabase.from('lease_activity_log').insert({
-    lease_id: lease.id,
-    user_id: userId,
-    activity_type: 'status_change',
-    from_status: 'draft',
-    to_status: finalStatus,
-    details: {
-      from_status: 'draft',
-      to_status: finalStatus,
-      triggered_by: 'routing_retry',
-      routing_path: 'chain',
-      already_resolved: true,
-    },
-  } as any);
 
   await createLeaseNotification({
     leaseId: lease.id,

@@ -18,6 +18,7 @@
 //   src/lib/approvalChainLogic.ts     ↔ supabase/functions/_shared/approval_chain.ts
 //   src/lib/leaseDocuments.ts         ↔ supabase/functions/_shared/lease_documents.ts
 //   src/lib/asc842Report.ts           ↔ supabase/functions/_shared/asc842_report.ts
+//   src/lib/approvalRouting.ts        ↔ supabase/functions/_shared/approval_routing.ts
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -46,6 +47,10 @@ const PAIRS = [
   {
     node: 'src/lib/firmAccess.ts',
     deno: 'supabase/functions/_shared/firm_access.ts',
+  },
+  {
+    node: 'src/lib/approvalRouting.ts',
+    deno: 'supabase/functions/_shared/approval_routing.ts',
   },
 ];
 
