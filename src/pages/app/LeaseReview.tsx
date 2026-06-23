@@ -233,7 +233,6 @@ export default function LeaseReview() {
   const [rentSchedule, setRentSchedule] = useState<RentScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [posting, setPosting] = useState(false);
   const [approving, setApproving] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -361,12 +360,6 @@ export default function LeaseReview() {
     });
   }, [lease?.extracted_json, allFieldIds]);
 
-  // Check if all low-confidence fields have been interacted with
-  const allLowConfFieldsInteracted = useMemo(() => {
-    if (lowConfidenceFields.length === 0) return true;
-    return lowConfidenceFields.every(field => interactedLowConfFields.has(field));
-  }, [lowConfidenceFields, interactedLowConfFields]);
-
   // Dirty signal — true when in-memory form differs from the last
   // persisted snapshot. Drives (a) the visible "Save draft" secondary
   // button so reviewers can't lose work to a navigate-away, and (b) a
@@ -437,7 +430,6 @@ export default function LeaseReview() {
   );
 
   // Check status states
-  const isReviewRequired = lifecycleStatusTyped != null && isEquivalent(lifecycleStatusTyped, 'under_review');
   const isPendingApproval = false;
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lifecycleStatus === 'active';
@@ -1705,65 +1697,6 @@ export default function LeaseReview() {
       toast.error("Save failed");
     } finally {
       setSaving(false);
-    }
-  };
-
-  // Post lease
-  const handlePostLease = async () => {
-    if (!allLowConfFieldsInteracted) {
-      toast.error("Please review all highlighted fields before posting");
-      return;
-    }
-
-    setPosting(true);
-    try {
-      // 1) Persist the reviewed fields (these columns are NOT trigger-guarded).
-      const updateData: Record<string, any> = {
-        landlord_name:          form.landlord_name          || null,
-        tenant_name:            form.tenant_name            || null,
-        vendor_name:            form.vendor_name            || null,
-        property_address:       form.property_address       || null,
-        asset_type:             form.asset_type             || null,
-        location:               form.location               || null,
-        building:               form.building               || null,
-        region:                 form.region                 || null,
-        lease_start:            form.lease_start            || null,
-        lease_end:              form.lease_end              || null,
-        rent_commencement_date: form.rent_commencement_date || null,
-        term_months:            form.term_months ? parseInt(form.term_months) || null : null,
-        base_rent_amount:       form.base_rent_amount       || null,
-        security_deposit:       form.security_deposit       || null,
-        renewal_options:        form.renewal_options        || null,
-        escalation_clauses:     form.escalation_clauses     || null,
-        termination_clauses:    form.termination_clauses    || null,
-        confirmed_sections: confirmedSections,
-        audit_log: JSON.parse(JSON.stringify(auditLog)),
-      };
-
-      const { error: saveError } = await supabase
-        .from("leases")
-        .update(updateData)
-        .eq("id", lease.id);
-      if (saveError) throw saveError;
-
-      // 2) Lock & activate SERVER-SIDE. The browser cannot write
-      //    lifecycle_status / model_locked (the governance trigger rejects it);
-      //    model_lock sets active + model_locked and writes the status_change
-      //    audit row under service role. This also puts the lease in the
-      //    locked-active state the unlock workflow expects.
-      const { data: lockData, error: lockError } = await supabase.functions.invoke('legacy-lease-action', {
-        body: { action: 'model_lock', leaseId: lease.id },
-      });
-      if (lockError) throw new Error(lockError.message ?? 'Activation failed');
-      if ((lockData as any)?.error) throw new Error((lockData as any).error);
-
-      toast.success("Lease posted successfully", { duration: 5000 });
-      navigate('/app/leases');
-    } catch (err: any) {
-      console.error('Error posting lease:', err);
-      toast.error(err?.message ?? "Failed to post lease");
-    } finally {
-      setPosting(false);
     }
   };
 
@@ -3675,46 +3608,12 @@ export default function LeaseReview() {
           </ResizablePanelGroup>
         </div>
 
-        {/* Sticky Post Lease Footer */}
-        {isReviewRequired && !isReadOnly && (
-          <div className="sticky bottom-0 border-t bg-background p-4 flex justify-between items-center shadow-lg">
-            <div className="flex items-center gap-4">
-              {lowConfidenceFields.length > 0 ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  <span>
-                    {allLowConfFieldsInteracted 
-                      ? "All fields reviewed" 
-                      : `${lowConfidenceFields.length - interactedLowConfFields.size} field(s) require attention`
-                    }
-                  </span>
-                </div>
-              ) : (
-                <span className="text-sm text-muted-foreground">Ready to post</span>
-              )}
-              {auditLog.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  {auditLog.length} change{auditLog.length !== 1 ? 's' : ''} tracked
-                </Badge>
-              )}
-              <Badge variant="outline" className="text-xs">
-                {confirmedSections.length}/{Object.keys(SECTION_CONFIG).length} sections reviewed
-              </Badge>
-            </div>
-            <Button 
-              disabled={!allLowConfFieldsInteracted || posting}
-              onClick={handlePostLease}
-              className="min-w-[140px]"
-            >
-              {posting ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <CheckCircle className="h-4 w-4 mr-2" />
-              )}
-              Post Lease
-            </Button>
-          </div>
-        )}
+        {/* The "Post Lease" sticky footer was removed 2026-06-23 (Cluster A #3):
+            it activated an under_review lease straight to 'active' — an INVALID
+            lifecycle transition (skips approved → executed) and a governance
+            bypass (it was silently rejected by the workflow trigger anyway).
+            under_review requests advance through the Approval Queue (linked in
+            the header); a reviewed executed lease activates via Lock & Activate. */}
       </div>
 
       {/* Rename Dialog */}
