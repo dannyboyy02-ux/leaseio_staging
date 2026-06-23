@@ -2606,3 +2606,16 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 - **Active-route highlight uses exact `pathname === href` match → no parent highlight on nested routes.** `src/components/layout/AppSidebar.tsx` (`isActive` in the link renderers). On `/app/leases/:id`, `/app/reports/disclosure`, `/app/reports/audit-log`, etc. the parent nav item shows no active state in either width — momentary "where am I?" disorientation, sharper in the collapsed rail where the label is also gone. **Fix:** use a route-prefix (`startsWith`) match for the parent item, guarded against false matches (e.g. `/app/leases` matching a hypothetical `/app/leasesX`) by requiring an exact match or a trailing `/`. Pre-existing; the collapsed rail makes the lost orientation more noticeable.
 
 **Where to look:** `src/components/layout/AppSidebar.tsx`; `src/locales/{en,es}/common.json` (`nav.*`).
+
+---
+
+### Item #149: Sidebar drag-reorder — accepted design decisions (WONTFIX, do not re-flag)
+
+> **Filed 2026-06-23** (branch `claude/relaxed-clarke-oksfz4`). Recorded so the collapse/resize/reorder feature's deliberate tradeoffs aren't re-surfaced as bugs by future polish/a11y reviews. Both were raised as **High** by `lease-product-polish` during the feature review and **explicitly accepted by the product owner**.
+
+**Status:** WONTFIX (conscious decisions, not gaps).
+
+- **Reorder is intentionally low-discoverability.** The drag grip in `src/components/layout/AppSidebar.tsx` (`SortableNavItem`) stays `opacity-0` until row hover/focus, and reorder is unavailable while the sidebar is collapsed. This makes nav-reorder a power-user/pointer feature most users won't find — accepted as designed. If you ever want to raise discoverability, the cheapest lever is a faint persistent grip (`opacity-30`); do that as a deliberate choice, not a "fix."
+- **No screen-reader a11y for reorder.** The dnd-kit `KeyboardSensor` is wired (baseline space-to-lift / arrow-to-move works), but no `accessibility.announcements` / `screenReaderInstructions` are provided and the grip's aria-label is the generic `nav.sidebar_reorder`. A keyboard/SR user gets no narration of the interaction or result. Accepted/skipped by the product owner. If revisited, add dnd-kit announcements + a descriptive grip label.
+
+**Where to look:** `src/components/layout/AppSidebar.tsx` (`SortableNavItem`, `useSensors`).

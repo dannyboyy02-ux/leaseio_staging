@@ -96,6 +96,9 @@ type StandardNavItem = {
 // A single draggable row: the nav link plus a hover/focus grip handle. The grip
 // is the drag activator (setActivatorNodeRef) so clicking the link still
 // navigates — only the grip (or keyboard on the grip) starts a reorder.
+// The grip stays hidden until row hover/focus by product decision (reorder is
+// an intentionally low-key power-user feature; KNOWN_ISSUES #149) — do not
+// promote it to always-visible without revisiting that call.
 function SortableNavItem({
   id,
   gripLabel,
@@ -307,6 +310,10 @@ export function AppSidebar() {
   const sensors = useSensors(
     // distance:6 lets a plain click through (no drag) while still arming a drag.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    // Baseline keyboard operability (space to lift, arrows to move). Screen-
+    // reader announcements/instructions are intentionally NOT wired — reorder
+    // is an accepted power-user/pointer feature (product decision 2026-06-23,
+    // KNOWN_ISSUES #149).
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
