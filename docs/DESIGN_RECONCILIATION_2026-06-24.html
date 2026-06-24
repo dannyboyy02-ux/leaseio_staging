@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LeaseIO — Design Reconciliation &amp; Implementation Plan</title>
+<style>
+  :root{
+    --navy:hsl(213 50% 23%);--navy2:hsl(213 45% 28%);--teal:hsl(168 76% 42%);--teal-d:hsl(168 76% 32%);
+    --ink:hsl(215 28% 14%);--muted:hsl(215 16% 46%);--line:hsl(214 22% 88%);--bg:hsl(210 24% 98%);
+    --card:#fff;--info:hsl(199 89% 48%);--warn:hsl(38 92% 50%);--ok:hsl(168 70% 36%);--danger:hsl(0 72% 51%);
+    --amber:hsl(38 92% 45%);--shadow:0 1px 2px rgb(16 24 40/.06),0 1px 3px rgb(16 24 40/.08);
+    --shadow-md:0 4px 6px -1px rgb(16 24 40/.07),0 2px 4px -2px rgb(16 24 40/.05);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);max-width:1240px;margin:0 auto;gap:0}
+  /* TOC */
+  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:24px 16px;border-right:1px solid var(--line);background:var(--navy);color:#dbe6f0}
+  nav.toc .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:18px;color:#fff;letter-spacing:-.02em;margin-bottom:4px}
+  nav.toc .brand .io{color:var(--teal)}
+  nav.toc .glyph{width:30px;height:30px;border-radius:7px;background:var(--teal);display:grid;place-items:center;color:#fff;font-size:15px;flex:none}
+  nav.toc .sub{font-size:11.5px;color:#8fa6bd;margin:0 0 18px;line-height:1.4}
+  nav.toc a{display:block;color:#c2d2e3;text-decoration:none;font-size:13px;padding:5px 9px;border-radius:6px;margin:1px 0}
+  nav.toc a:hover{background:var(--navy2);color:#fff}
+  nav.toc a.lvl2{padding-left:20px;font-size:12.3px;color:#9fb3c8}
+  nav.toc .grp{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#7d93aa;margin:16px 0 4px;padding:0 9px}
+  main{padding:40px 48px 120px;min-width:0}
+  h1{font-size:28px;letter-spacing:-.02em;margin:0 0 6px}
+  h2{font-size:21px;letter-spacing:-.01em;margin:46px 0 10px;padding-top:14px;border-top:2px solid var(--line)}
+  h3{font-size:16.5px;margin:28px 0 8px}
+  h4{font-size:14px;margin:18px 0 6px;color:var(--navy)}
+  p{margin:9px 0}
+  .lede{font-size:16px;color:#33415a}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.86em;background:hsl(213 30% 95%);padding:1px 5px;border-radius:4px;color:var(--navy)}
+  pre{background:hsl(215 28% 13%);color:#e6edf3;padding:16px 18px;border-radius:10px;overflow-x:auto;font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55}
+  pre .c{color:#7d8aa3}.pre .k{color:#79c0ff}
+  details{border:1px solid var(--line);border-radius:10px;margin:12px 0;background:var(--card);overflow:hidden}
+  details>summary{cursor:pointer;padding:11px 16px;font-weight:600;font-size:13.5px;background:hsl(210 30% 96%);list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸ ";color:var(--teal)}
+  details[open]>summary::before{content:"▾ "}
+  details .body{padding:4px 16px 14px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13px;background:var(--card);border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+  th{background:hsl(213 35% 96%);text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--line)}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+  .done{background:hsl(150 60% 92%);color:hsl(150 70% 24%)}
+  .partial{background:hsl(40 90% 90%);color:hsl(32 80% 32%)}
+  .gap{background:hsl(0 75% 94%);color:hsl(0 65% 38%)}
+  .dev{background:hsl(213 50% 93%);color:var(--navy)}
+  .na{background:hsl(214 16% 92%);color:var(--muted)}
+  .build{background:hsl(150 60% 92%);color:hsl(150 70% 24%)}
+  .degrade{background:hsl(40 90% 90%);color:hsl(32 80% 32%)}
+  .block{background:hsl(0 75% 94%);color:hsl(0 65% 38%)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);margin:14px 0}
+  .callout{border-left:4px solid var(--teal);background:hsl(168 60% 97%);padding:14px 18px;border-radius:0 10px 10px 0;margin:16px 0}
+  .callout.warn{border-color:var(--warn);background:hsl(38 90% 97%)}
+  .callout.strat{border-color:var(--navy);background:hsl(213 50% 97%)}
+  .callout h4{margin:0 0 6px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .muted{color:var(--muted)}
+  .tag{font-size:11px;font-weight:700;color:var(--teal-d);text-transform:uppercase;letter-spacing:.04em}
+  ul{margin:8px 0;padding-left:22px}li{margin:4px 0}
+  /* flow diagram */
+  .flow{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap;margin:14px 0}
+  .node{flex:1;min-width:130px;border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--card);font-size:12.5px;box-shadow:var(--shadow)}
+  .node .t{font-weight:700;font-size:12px;margin-bottom:3px;color:var(--navy)}
+  .node.accent{border-color:var(--teal);background:hsl(168 60% 97%)}
+  .node.warnode{border-color:var(--warn);background:hsl(38 90% 97%)}
+  .arrow{display:flex;align-items:center;color:var(--teal);font-size:20px;font-weight:700}
+  /* mockup */
+  .mock{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:18px;margin:16px 0;overflow:hidden}
+  .mkpi{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}
+  .mtile{background:#fff;border:1px solid var(--line);border-radius:11px;padding:13px 14px;box-shadow:var(--shadow)}
+  .mtile.sel{outline:2px solid hsl(213 70% 85%)}
+  .mtile .l{font-size:11px;color:var(--muted);line-height:1.25}
+  .mtile .v{font-size:21px;font-weight:800;letter-spacing:-.02em;margin:5px 0 2px}
+  .mtile .s{font-size:11px;color:var(--muted)}
+  .mrow{display:grid;grid-template-columns:1.7fr 1fr;gap:14px;margin-bottom:14px}
+  .mrow.b{grid-template-columns:1fr 1.4fr}
+  .mcard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow)}
+  .mcard .h{font-size:13.5px;font-weight:700}.mcard .hs{font-size:11.5px;color:var(--muted);margin-bottom:10px}
+  .bars{display:flex;align-items:flex-end;gap:12px;height:140px;padding-top:6px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end}
+  .bar .num{font-size:10px;font-weight:700;margin-bottom:4px}
+  .bar .col{width:100%;max-width:38px;background:var(--navy);border-radius:3px 3px 0 0}
+  .bar .hatch{width:100%;max-width:38px;background:repeating-linear-gradient(45deg,hsl(215 15% 70%/.25),hsl(215 15% 70%/.25) 4px,hsl(215 15% 70%/.08) 4px,hsl(215 15% 70%/.08) 8px);border:1px dashed hsl(215 15% 60%/.5);border-bottom:none;border-radius:3px 3px 0 0}
+  .bar .yr{font-size:10.5px;color:var(--muted);margin-top:6px}
+  .seg{display:flex;height:14px;border-radius:999px;overflow:hidden;margin-bottom:13px}
+  .leg{display:flex;align-items:center;gap:7px;font-size:12px;margin:6px 0}
+  .dot{width:9px;height:9px;border-radius:3px;flex:none}
+  .brow{margin-bottom:11px}
+  .brow .top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+  .brow .track{position:relative;height:9px;background:hsl(214 16% 91%);border-radius:999px}
+  .brow .fill{height:100%;border-radius:999px}
+  .brow .avg{position:absolute;top:-3px;width:2px;height:15px;background:var(--ink);opacity:.5}
+  .watch{display:flex;gap:11px;padding:11px;border-radius:10px;border:1px solid var(--line);margin-bottom:9px}
+  .watch .ic{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex:none;font-size:15px}
+  .watch .wt{font-size:13px;font-weight:700}.watch .wd{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+  .watch .wv{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .footnote{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-top:6px}
+  .legend-block{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+  .kbd{font-size:11px;background:#fff;border:1px solid var(--line);border-radius:5px;padding:1px 6px;box-shadow:0 1px 0 var(--line)}
+  .scoreline{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .score{flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff;box-shadow:var(--shadow)}
+  .score .big{font-size:24px;font-weight:800;letter-spacing:-.02em}
+  .score .lbl{font-size:11.5px;color:var(--muted)}
+  hr{border:none;border-top:1px solid var(--line);margin:30px 0}
+  .small{font-size:12.5px}
+  a.ext{color:var(--teal-d)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc">
+  <div class="brand"><span class="glyph">▤</span><span>Lease<span class="io">IO</span></span></div>
+  <p class="sub">Design Reconciliation &amp; Implementation Plan · 2026-06-24</p>
+  <a href="#summary">Executive Summary</a>
+  <div class="grp">Part A · Sidebar</div>
+  <a href="#a-status" class="lvl2">Status &amp; matrix</a>
+  <a href="#a-gap" class="lvl2">The one gap: persistence</a>
+  <a href="#a-flow" class="lvl2">Data flow + migration</a>
+  <a href="#a-cosmetic" class="lvl2">Cosmetic deviations</a>
+  <div class="grp">Part B · Portfolio</div>
+  <a href="#b-strategy" class="lvl2">Strategic reframe</a>
+  <a href="#b-delta" class="lvl2">Current vs redesign</a>
+  <a href="#b-data" class="lvl2">Data-readiness matrix</a>
+  <a href="#b-flow" class="lvl2">Data flow</a>
+  <a href="#b-mock" class="lvl2">Mockup</a>
+  <a href="#b-code" class="lvl2">Code snippets</a>
+  <a href="#b-voice" class="lvl2">Voice guardrail</a>
+  <div class="grp">Plan</div>
+  <a href="#plan">Implementation plan</a>
+  <a href="#decisions">Open decisions</a>
+</nav>
+
+<main>
+<h1>LeaseIO — Design Reconciliation &amp; Implementation Plan</h1>
+<p class="lede">Reconciling two Claude Design packages — the <strong>Sidebar</strong> (collapse / resize / reorder) and the <strong>Portfolio Intelligence</strong> dashboard — against the current <code>dannyboyy02-ux/leaseio_staging</code> repo, with the work that remains, data flows, mockups, and review-ready code.</p>
+
+<!-- ============ SUMMARY ============ -->
+<section id="summary">
+<h2>Executive summary</h2>
+<div class="scoreline">
+  <div class="score"><div class="big" style="color:var(--ok)">Shipped</div><div class="lbl">Sidebar — all 14 spec requirements functionally live in <strong>PR #72</strong> (merged to <code>main</code>)</div></div>
+  <div class="score"><div class="big" style="color:var(--amber)">1 gap</div><div class="lbl">Sidebar prefs persist to <strong>localStorage</strong>; spec wants <strong>per-user / cross-device</strong>. ~0.5–1 day.</div></div>
+  <div class="score"><div class="big" style="color:var(--ok)">~85%</div><div class="lbl">Portfolio Intelligence is buildable on <strong>existing data</strong>; 2 watchlist rules need an extraction tweak.</div></div>
+  <div class="score"><div class="big" style="color:var(--navy)">2 decisions</div><div class="lbl">Portfolio: replace-vs-augment the PV page, and the Export format.</div></div>
+</div>
+<ul>
+  <li><strong>Sidebar:</strong> Already done. PR #72 implements collapse (72px rail) / drag-resize (200–400px, default 256) / dnd-kit reorder, with tokens matching the spec <em>exactly</em>. The single substantive gap is that preferences live in <code>localStorage</code> (same-browser only) where the spec calls for them to follow the user across devices. Everything else is minor, defensible cosmetic deviation.</li>
+  <li><strong>Portfolio Intelligence:</strong> A bigger, more strategic piece — and it was <em>not</em> in the first bundle, which is why it wasn't in the earlier sidebar reconciliation. Critically, the redesign <strong>removes PV / discounted-liability math</strong> (which the current page is built on) in favour of contractual <strong>cash commitment</strong> — realigning the page with the product's "not an accounting tool" rule. The data to build it is overwhelmingly present (<code>square_footage</code> is even extracted &amp; validated today); only two Watchlist rules need richer extraction.</li>
+</ul>
+</section>
+
+<!-- ============ PART A ============ -->
+<h2 id="a-status">Part A · Sidebar — status &amp; reconciliation matrix</h2>
+<p>The sidebar package (<code>index.html</code>, <code>shell.jsx</code>, <code>views.jsx</code>, <code>README.md</code>) specifies 14 behaviors (R1–R14). All are functionally present in the merged code (<code>src/components/layout/AppSidebar.tsx</code>, <code>src/contexts/SidebarContext.tsx</code>, <code>src/lib/sidebarPrefs.ts</code>). Verified line-by-line against the repo (not from memory).</p>
+
+<table>
+<thead><tr><th style="width:42px">ID</th><th>Requirement</th><th style="width:96px">Status</th><th>Evidence / note</th></tr></thead>
+<tbody>
+<tr><td>R1</td><td>Collapse/expand via edge toggle; 72px icon rail</td><td><span class="pill done">done</span></td><td><code>AppSidebar:479,484-491</code>; <code>COLLAPSED_WIDTH=72</code></td></tr>
+<tr><td>R2</td><td>Expanded default 256, clamp 200–400</td><td><span class="pill done">done</span></td><td><code>sidebarPrefs:11-14,32-35</code> — exact</td></tr>
+<tr><td>R3</td><td>200ms width anim, off during drag, reduced-motion</td><td><span class="pill dev">deviates</span></td><td>200ms + resize-disable + <code>motion-reduce</code> ✓; easing is <code>ease-out</code> not <code>cubic-bezier(.4,0,.2,1)</code>. Cosmetic.</td></tr>
+<tr><td>R4</td><td>Edge toggle 24×24, top 76 / right −12, both states, no hamburger</td><td><span class="pill dev">deviates</span></td><td>Position/size/aria/no-hamburger ✓; <code>shadow-sm</code> vs <code>shadow-md</code>, hover <code>accent</code> vs <code>secondary</code>. Cosmetic.</td></tr>
+<tr><td>R5</td><td>Expanded-only resize handle, full pointer lifecycle, clamp</td><td><span class="pill dev">deviates</span></td><td>Behavior exact (clamp, body cursor/userSelect, teardown). Handle starts <code>top-104</code> (below toggle, deliberate) not <code>top:0</code>; +double-click reset.</td></tr>
+<tr><td>R6</td><td>dnd-kit reorder, persist, no-nav-on-drag</td><td><span class="pill dev">deviates</span></td><td>dnd-kit + persist + click-through ✓. Uses idiomatic <em>live-slide</em> (the spec's preferred lib) instead of a static inset insertion line; dragged opacity .9 vs .4.</td></tr>
+<tr><td>R7</td><td>Nav set + icons + active/hover + badges + tier pill</td><td><span class="pill dev">deviates</span></td><td>Order/icons/states/count-badge ✓. Business pill renders <code>bg-accent</code> (teal −10% L) vs spec <code>sidebar-primary</code>. Trivial.</td></tr>
+<tr><td>R8</td><td>Collapsed icon rail; count→8px dot; tooltips</td><td><span class="pill done">done</span></td><td><code>AppSidebar:399-426</code>; tooltip even restores the count</td></tr>
+<tr><td>R9</td><td>Logo row 64px, 36×36 glyph, "Lease<strong>IO</strong>"</td><td><span class="pill done">done</span></td><td><code>:525-540</code> (glyph is teal; spec copy says "navy" — confirm)</td></tr>
+<tr><td>R10</td><td>Workspace switcher; collapsed chip-only</td><td><span class="pill done">done</span></td><td><code>:543-567</code> — real <code>WorkspaceAvatar</code></td></tr>
+<tr><td>R11</td><td>User menu; collapsed avatar-only</td><td><span class="pill done">done</span></td><td><code>:735,763-790</code> + bonus trial pill</td></tr>
+<tr><td>R12</td><td>All 6 <code>--sidebar-*</code> tokens + primitives</td><td><span class="pill done">done</span></td><td><code>index.css:56-62</code> — <strong>match spec HSL values exactly</strong></td></tr>
+<tr><td>R13</td><td>Persist 3 prefs; <strong>production = per-user profile, cross-device</strong></td><td><span class="pill gap">partial → GAP</span></td><td>localStorage only. Defaults/clamp/validation all correct; cross-device unimplemented. <a href="#a-gap">See below.</a></td></tr>
+<tr><td>R14</td><td>Grip-vertical on hover</td><td><span class="pill dev">deviates</span></td><td>Present (drag activator). 16px@100% vs spec 14px@50%. Cosmetic.</td></tr>
+<tr><td>X1</td><td>Repo-only: <strong>Firm</strong> nav item (6th key, firm-members only)</td><td><span class="pill na">intentional</span></td><td>Product decision 2026-06-23 (Phase 10). Spec predates it. No action.</td></tr>
+<tr><td>X2</td><td>Repo-only: active-route highlight is exact-match</td><td><span class="pill partial">issue #148</span></td><td>Parent rows don't highlight on child routes (e.g. <code>/app/leases/:id</code>). Pre-existing; fix separately.</td></tr>
+<tr><td>X3</td><td>Repo-only: sidebar not responsive below <code>lg</code></td><td><span class="pill partial">issue #145</span></td><td>Out of this spec's scope (desktop design). Pre-existing High.</td></tr>
+</tbody>
+</table>
+
+<h3 id="a-gap">The one substantive gap — server-side, per-user persistence (R13)</h3>
+<p>The spec is explicit: <em>"in production, key them to the authenticated user's profile/preferences (server-side or per-user store) so they follow the user across devices, not just one browser."</em> Today all three prefs persist to three <code>localStorage</code> keys (<code>leaseio:sidebar:*</code>) — so they survive logout/login on the <em>same</em> browser, but a second device / incognito gets defaults.</p>
+<p>This is well-contained because the codebase already has the exact pattern to mirror: <code>AppContext.switchWorkspace()</code> and <code>FirmContext</code> write per-user state to <code>profiles</code> via a <strong>direct authenticated <code>UPDATE</code></strong> (<code>current_workspace_id</code>, <code>current_firm_id</code>). The post-#106-consolidation <code>profiles_update</code> RLS policy already scopes <code>UPDATE</code> to the caller's own row — <strong>so no new RLS, no edge function, no new table is needed.</strong></p>
+
+<h4 id="a-flow">Data flow — today vs proposed</h4>
+<p class="tag">Today (localStorage only)</p>
+<div class="flow">
+  <div class="node"><div class="t">User action</div>toggle / resize-end / reorder-drop</div>
+  <div class="arrow">→</div>
+  <div class="node">SidebarContext setter<br><span class="muted">clamp / validate</span></div>
+  <div class="arrow">→</div>
+  <div class="node warnode"><div class="t">localStorage</div>3 keys · same browser only</div>
+</div>
+<p class="tag">Proposed (cache-first, server source-of-truth)</p>
+<div class="flow">
+  <div class="node"><div class="t">User action</div></div>
+  <div class="arrow">→</div>
+  <div class="node">SidebarContext setter<br><span class="muted">clamp / validate</span></div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="t">localStorage</div><span class="muted">instant first-paint cache (unchanged)</span></div>
+  <div class="arrow">→</div>
+  <div class="node accent"><div class="t">debounced UPDATE</div><code>profiles.ui_preferences</code> · cross-device</div>
+</div>
+<p class="small muted">On load: synchronous localStorage initializer paints instantly (no flash) → when the profile resolves, a one-shot hydrate effect reconciles to the server value (server wins; if the server has none yet, it seeds once from localStorage). Every server value flows through the <em>same</em> <code>clampWidth</code>/<code>validateNavOrder</code> guards, so a malformed blob can't render badly.</p>
+
+<details>
+<summary>Migration — <code>profiles.ui_preferences</code> (idempotent, no RLS/trigger changes)</summary>
+<div class="body">
+<pre><span class="c">-- supabase/migrations/&lt;ts&gt;_profiles_ui_preferences.sql
+-- Per-user UI preference bag. Mirrors current_firm_id/current_workspace_id:
+-- user-owned, non-security, client-validated on read → no DB CHECK.</span>
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS ui_preferences jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+COMMENT ON COLUMN public.profiles.ui_preferences IS
+  'Per-user UI prefs, namespaced by feature. sidebar = { collapsed:bool, width:int(200-400), navOrder:string[] }.';
+
+<span class="c">-- NO new RLS policy: the consolidated profiles_update policy (20260623160000)
+-- already permits a user to UPDATE any column of their OWN row.
+-- After applying: regenerate src/integrations/supabase/types.ts.</span></pre>
+</div>
+</details>
+
+<details>
+<summary>SidebarContext — hydrate (server-wins + one-time seed) and debounced write</summary>
+<div class="body">
+<pre><span class="c">// Keep the synchronous localStorage initializers (no first-paint flash). Add:</span>
+const { user } = useApp();                 <span class="c">// SidebarProvider sits under AppProvider</span>
+const hydrated = useRef(false);
+const timer = useRef&lt;ReturnType&lt;typeof setTimeout&gt;&gt;();
+
+useEffect(() =&gt; {                          <span class="c">// reconcile to server once the profile arrives</span>
+  const s = user?.uiPreferences?.sidebar;
+  if (!user || hydrated.current) return;
+  hydrated.current = true;
+  if (s == null) { queueWrite(currentState()); return; }   <span class="c">// seed once from localStorage</span>
+  if (typeof s.collapsed === 'boolean') setCollapsedState(s.collapsed);
+  if (s.width != null) setWidthState(clampWidth(Number(s.width)));   <span class="c">// reuse guards</span>
+  setNavOrderState(validateNavOrder(s.navOrder));
+}, [user]);
+
+const queueWrite = useCallback((next) =&gt; {                 <span class="c">// debounced, atomic sub-key write</span>
+  if (!user?.id) return;                                   <span class="c">// logged-out → localStorage only</span>
+  clearTimeout(timer.current);
+  timer.current = setTimeout(() =&gt; {
+    void supabase.from('profiles')
+      .update({ ui_preferences: { ...(user.uiPreferences ?? {}), sidebar: next } })
+      .eq('id', user.id);                                  <span class="c">// RLS scopes to own row; fire-and-forget</span>
+  }, 600);
+}, [user]);
+<span class="c">// call queueWrite({collapsed,width,navOrder}) from toggleCollapsed/setWidth/setNavOrder
+// (after the existing localStorage persist). width writes on setWidth only — never previewWidth.
+// clear/flush timer on unmount + signOut.</span></pre>
+</div>
+</details>
+<p class="small"><strong>Touchpoints:</strong> the migration · regen <code>types.ts</code> · surface <code>ui_preferences</code> from the existing <code>fetchProfile</code> <code>select('*')</code> in <code>AppContext</code> · add <code>uiPreferences</code> to the <code>User</code> type · the hydrate/write in <code>SidebarContext</code> · note #106-closure in <code>KNOWN_ISSUES</code>/<code>CLAUDE.md</code>. <strong>Effort: ~0.5–1 day</strong> (most of it the test matrix: fresh user, existing-local user, cross-device override, logged-out, no-flash).</p>
+
+<h3 id="a-cosmetic">Cosmetic deviations — accept or tighten (your call)</h3>
+<p>None of these are functional gaps; the spec itself grants "wiggle room on the means." Tighten only the ones where brand-exactness matters:</p>
+<table>
+<thead><tr><th>Item</th><th>Repo</th><th>Spec</th><th>One-line fix if you want parity</th></tr></thead>
+<tbody>
+<tr><td>Anim easing (R3)</td><td><code>ease-out</code></td><td><code>cubic-bezier(.4,0,.2,1)</code></td><td><code>ease-[cubic-bezier(.4,0,.2,1)]</code></td></tr>
+<tr><td>Toggle (R4)</td><td><code>shadow-sm</code>, hover <code>accent</code></td><td><code>shadow-md</code>, hover <code>secondary</code></td><td>swap the two classes</td></tr>
+<tr><td>Business pill (R7)</td><td><code>bg-accent</code> (168 76% 32%)</td><td><code>sidebar-primary</code> (168 76% 42%)</td><td>change <code>business</code> badge variant bg</td></tr>
+<tr><td>Grip (R14)</td><td>16px @ 100% hover</td><td>14px @ 50%</td><td><code>h-3.5 w-3.5</code> + <code>group-hover:opacity-50</code></td></tr>
+<tr><td>Reorder (R6)</td><td>dnd-kit slide, opacity .9</td><td>inset 2px line, opacity .4</td><td>recommend <strong>keep</strong> (more modern; spec asked for dnd-kit)</td></tr>
+</tbody>
+</table>
+<p class="small muted"><strong>Recommendation:</strong> ship the persistence gap; treat the cosmetics as a single optional "pixel-parity" pass (≈1 hr). #148 (active-route) and #145 (mobile) are pre-existing and tracked separately — don't bundle.</p>
+
+<!-- ============ PART B ============ -->
+<h2 id="b-strategy">Part B · Portfolio Intelligence — the strategic reframe</h2>
+<div class="callout strat">
+<h4>This is a re-platforming of the page's premise, not a re-skin.</h4>
+<p>The design's first line: <em>"deliberately NOT lease accounting — no Right-of-Use / ASC-842, no discounted lease liability, no PV."</em> But today's Portfolio page is built <strong>entirely around <code>totalPVLiability</code></strong> — a discounted lease liability, the exact ASC-842-flavoured math <strong>Hard Rule #1</strong> says LeaseIO must never compute. The redesign swaps <em>discounted liability</em> → <em>contractual cash commitment</em> ("Remaining Commitment… do not PV it"), pulling the page back onto the product's stated positioning. Because of that, the new page most likely <strong>replaces</strong> the PV page rather than sitting beside it (see <a href="#decisions">Open decisions</a>).</p>
+</div>
+<p>The redesign is also strictly <strong>observational, never advisory</strong>: surface facts (rates, dates, escalations); no "renegotiate," no projected savings, no market comps. The $/sqft benchmark is the portfolio's <em>own</em> blended average — deliberately avoiding any external data that would need a licence or citation. This matches LeaseIO's "human-in-the-loop, not a compliance tool" rules cleanly.</p>
+
+<h3 id="b-delta">Current page vs the redesign</h3>
+<div class="grid2">
+<div class="card"><div class="tag">Today — <code>Portfolio.tsx</code> (354 lines, all inline)</div>
+<ul class="small">
+<li><strong>PV Liability</strong> (discounted) — the centrepiece</li>
+<li>Active Leases · Index-Based Leases · Data Quality KPIs</li>
+<li>Asset Mix / Escalation Mix (text+badge lists)</li>
+<li>Lease Register (flat list)</li>
+<li>Index-Lease Disclosure (CPI leases)</li>
+<li class="muted">No charts. No $/sqft. No department. No forecast. No watchlist. No export.</li>
+</ul></div>
+<div class="card"><div class="tag">Redesign — Portfolio Intelligence</div>
+<ul class="small">
+<li><strong>5 KPIs:</strong> Annual Occupancy Cost · Remaining Commitment · Blended $/sqft · Total Footprint · Avg Term Remaining (WALT)</li>
+<li><strong>Rent Commitment Forecast</strong> — the re-leasing "cliff" by year</li>
+<li><strong>Cost by Department</strong> — segmented bar</li>
+<li><strong>Cost per sqft by Location</strong> vs portfolio average</li>
+<li><strong>Lease Watchlist</strong> — deterministic factual flags w/ provenance</li>
+<li><strong>Export</strong> — XLSX/PDF portfolio summary</li>
+</ul></div>
+</div>
+<p class="small muted">Worth preserving from today under the new voice: the <strong>Index-Lease Disclosure</strong> (a neutral factual disclosure consistent with "observational"). Asset/Escalation mix and the PV KPI are superseded.</p>
+
+<h3 id="b-data">Data-readiness matrix — can we build each card on today's data?</h3>
+<p>The design gates itself on this (README: <em>"Before building UI, confirm the abstraction pipeline reliably captures these per-lease fields"</em>) and prescribes graceful degradation for missing fields. Verdict from the schema + extraction audit (evidence in <code>types.ts</code> leases Row + <code>process_lease/index.ts</code>):</p>
+<table>
+<thead><tr><th>Card / element</th><th>Required inputs</th><th>Status</th><th>Evidence / note</th></tr></thead>
+<tbody>
+<tr><td>KPI · Annual Occupancy Cost</td><td>annualized base rent, status</td><td><span class="pill build">buildable</span></td><td><code>current_monthly_rent</code> / <code>base_rent_amount</code>+<code>frequency</code> — extracted &amp; validated</td></tr>
+<tr><td>KPI · Remaining Commitment</td><td>rent + expiry + escalation</td><td><span class="pill build">buildable*</span></td><td>*flat <code>escalation_rate</code> (no multi-step schedule) — label the simplification</td></tr>
+<tr><td>KPI · Blended $/sqft</td><td>rent ÷ Σ sqft</td><td><span class="pill build">buildable</span></td><td><code>square_footage</code> (<code>:2737</code>) — <strong>extracted + <code>validateSquareFootage</code></strong></td></tr>
+<tr><td>KPI · Total Footprint · markets</td><td>Σ sqft, distinct market</td><td><span class="pill build">buildable</span></td><td><code>square_footage</code> + <code>region</code> (<code>:2723</code>)</td></tr>
+<tr><td>KPI · Avg Term Remaining (WALT)</td><td>expiry + rent</td><td><span class="pill build">buildable</span></td><td><code>lease_end</code>/<code>executed_expiry_date</code> + rent</td></tr>
+<tr><td>Rent Commitment Forecast</td><td>start/end + rent + escalation</td><td><span class="pill build">buildable*</span></td><td>*flat-rate escalation simplification, labelled</td></tr>
+<tr><td>Cost by Department</td><td>department + rent</td><td><span class="pill build">buildable</span></td><td><code>requesting_department</code> (<code>:2731</code>); null → "Unassigned"</td></tr>
+<tr><td>Cost per sqft by Location</td><td>sqft + rent + label</td><td><span class="pill build">buildable</span></td><td>exclude+count leases missing area (banner)</td></tr>
+<tr><td>Watchlist · earliest term expiry</td><td>expiry date</td><td><span class="pill build">buildable</span></td><td><code>lease_end</code> present</td></tr>
+<tr><td>Watchlist · highest cost/sqft</td><td>sqft + rent</td><td><span class="pill build">buildable</span></td><td>derived from above</td></tr>
+<tr><td>Watchlist · renewal notice deadline</td><td>structured notice <em>date</em></td><td><span class="pill block">needs extraction</span></td><td><code>renewal_options</code> is free-text "summary", not a date</td></tr>
+<tr><td>Watchlist · escalation cap expiring</td><td>cap end-date</td><td><span class="pill block">needs extraction</span></td><td>only <code>escalation_type</code>/<code>rate</code> exist (no cap)</td></tr>
+<tr><td>Export (XLSX/PDF)</td><td>all derived tables</td><td><span class="pill degrade">decision</span></td><td>buildable once cards exist; format = open decision</td></tr>
+</tbody>
+</table>
+
+<h4>Gating fields — the short list that matters</h4>
+<table>
+<thead><tr><th>Field</th><th>Status</th><th>Unlocks</th></tr></thead>
+<tbody>
+<tr><td><code>square_footage</code></td><td><span class="pill build">present + extracted</span></td><td>Blended $/sqft, Footprint, Cost-per-sqft, highest-$/sqft flag</td></tr>
+<tr><td><code>requesting_department</code></td><td><span class="pill build">present</span></td><td>Cost by Department</td></tr>
+<tr><td><code>region</code> / <code>location</code> / <code>property_address</code></td><td><span class="pill build">present + extracted</span></td><td>markets count, location labels</td></tr>
+<tr><td>rent + term dates + escalation rate</td><td><span class="pill build">present + extracted</span></td><td>all KPIs, forecast, expiry</td></tr>
+<tr><td>renewal <em>notice deadline</em> (date)</td><td><span class="pill block">prose only</span></td><td>renewal-notice watchlist rule</td></tr>
+<tr><td>escalation <em>cap / schedule</em></td><td><span class="pill block">absent</span></td><td>escalation-cap watchlist rule</td></tr>
+</tbody>
+</table>
+<div class="callout">
+<p><strong>Bottom line:</strong> all 5 KPIs, the forecast, both cost-composition cards, and 2 of 4 watchlist rules are buildable on today's data — with the spec's own "N leases missing X" banners filling gaps. The 2 remaining watchlist rules need a <strong>Tier-1 extraction enhancement</strong> (capture <code>renewalOptions.noticeDeadline</code> and an escalation <code>cap</code> as structured fields), <em>not</em> a schema change — the columns exist, they just hold summaries. Because the rules engine is declarative, those rules drop in later with zero rework.</p>
+</div>
+
+<h3 id="b-flow">Data flow — abstracted leases → cards</h3>
+<div class="flow">
+  <div class="node"><div class="t">leases (workspace)</div>abstracted rows · RLS-scoped · status filter</div>
+  <div class="arrow">→</div>
+  <div class="node accent"><div class="t">usePortfolioMetrics(leases)</div>pure selector — KPIs, forecast series, dept rollup, location rates</div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="t">buildWatchlist(leases, config)</div>declarative rules → Flag[]</div>
+  <div class="arrow">→</div>
+  <div class="node"><div class="t">Cards + Export</div>render · "View lease" deep-link · XLSX/PDF off the same derived data</div>
+</div>
+<p class="small muted">Client-side derive for typical portfolios (matches the prototype); promote to a <code>portfolio_summary</code> RPC only past a few hundred leases. Recompute on lease add/abstract/edit. Show a partial-data banner when material fields are missing.</p>
+
+<h3 id="b-mock">Mockup — faithful recreation (real tokens, representative data)</h3>
+<div class="mock">
+  <div class="mkpi">
+    <div class="mtile"><div class="l">Annual Occupancy Cost</div><div class="v">$1.21M</div><div class="s">across 5 leases</div></div>
+    <div class="mtile sel"><div class="l">Remaining Commitment</div><div class="v">$3.39M</div><div class="s">contracted through 2030</div></div>
+    <div class="mtile"><div class="l">Blended Cost</div><div class="v">$25.19</div><div class="s">per sqft / yr</div></div>
+    <div class="mtile"><div class="l">Total Footprint</div><div class="v">48,200</div><div class="s">sqft · 4 markets</div></div>
+    <div class="mtile"><div class="l">Avg Term Remaining</div><div class="v">2.8 yrs</div><div class="s">weighted by rent</div></div>
+  </div>
+  <div class="mrow">
+    <div class="mcard"><div class="h">Rent Commitment Forecast</div><div class="hs">Contractual obligations by year — the re-leasing cliff</div>
+      <div class="bars">
+        <div class="bar"><span class="num">$1.21M</span><div class="col" style="height:100%"></div><span class="yr">2026</span></div>
+        <div class="bar"><span class="num">$1.05M</span><div class="col" style="height:87%"></div><span class="yr">2027</span></div>
+        <div class="bar"><span class="num">$776K</span><div class="hatch" style="height:13%"></div><div class="col" style="height:64%;border-radius:0"></div><span class="yr">2028</span></div>
+        <div class="bar"><span class="num">$441K</span><div class="hatch" style="height:23%"></div><div class="col" style="height:36%;border-radius:0"></div><span class="yr">2029</span></div>
+        <div class="bar"><span class="num">$92K</span><div class="hatch" style="height:31%"></div><div class="col" style="height:8%;border-radius:0"></div><span class="yr">2030</span></div>
+        <div class="bar"><span class="num">—</span><div class="hatch" style="height:36%"></div><span class="yr">'31+</span></div>
+      </div>
+      <div class="legend-block">
+        <div class="leg"><span class="dot" style="background:var(--navy)"></span>Contracted rent (with escalations)</div>
+        <div class="leg"><span class="dot" style="background:hsl(215 15% 70%/.25);border:1px dashed hsl(215 15% 55%)"></span>Term ends (uncontracted)</div>
+      </div>
+    </div>
+    <div class="mcard"><div class="h">Cost by Department</div><div class="hs">Where the spend sits</div>
+      <div class="seg"><span style="width:35%;background:hsl(213 50% 23%)"></span><span style="width:27%;background:hsl(168 76% 32%)"></span><span style="width:26%;background:hsl(199 89% 48%)"></span><span style="width:12%;background:hsl(38 92% 50%)"></span></div>
+      <div class="leg"><span class="dot" style="background:hsl(213 50% 23%)"></span><span style="flex:1">Facilities</span><span class="muted">$420K/yr</span>&nbsp;<strong>35%</strong></div>
+      <div class="leg"><span class="dot" style="background:hsl(168 76% 32%)"></span><span style="flex:1">R&amp;D</span><span class="muted">$331K/yr</span>&nbsp;<strong>27%</strong></div>
+      <div class="leg"><span class="dot" style="background:hsl(199 89% 48%)"></span><span style="flex:1">Operations</span><span class="muted">$314K/yr</span>&nbsp;<strong>26%</strong></div>
+      <div class="leg"><span class="dot" style="background:hsl(38 92% 50%)"></span><span style="flex:1">Logistics</span><span class="muted">$149K/yr</span>&nbsp;<strong>12%</strong></div>
+    </div>
+  </div>
+  <div class="mrow b">
+    <div class="mcard"><div class="h">Cost per sqft by Location</div><div class="hs">Against the portfolio blended average</div>
+      <div class="brow"><div class="top"><span>Westfield Retail</span><span class="muted">$43.60/sqft · +73% vs avg</span></div><div class="track"><div class="fill" style="width:87%;background:var(--navy)"></div><div class="avg" style="left:50%"></div></div></div>
+      <div class="brow"><div class="top"><span>Riverside Lab</span><span class="muted">$36.80/sqft · +46% vs avg</span></div><div class="track"><div class="fill" style="width:74%;background:var(--navy)"></div><div class="avg" style="left:50%"></div></div></div>
+      <div class="brow"><div class="top"><span>Downtown HQ</span><span class="muted">$35.00/sqft · +39% vs avg</span></div><div class="track"><div class="fill" style="width:70%;background:var(--navy)"></div><div class="avg" style="left:50%"></div></div></div>
+      <div class="brow"><div class="top"><span>Midtown Office</span><span class="muted">$31.20/sqft · +24% vs avg</span></div><div class="track"><div class="fill" style="width:62%;background:var(--navy)"></div><div class="avg" style="left:50%"></div></div></div>
+      <div class="brow"><div class="top"><span>Phoenix Warehouse</span><span class="muted">$8.27/sqft · −67% vs avg</span></div><div class="track"><div class="fill" style="width:17%;background:var(--teal)"></div><div class="avg" style="left:50%"></div></div></div>
+      <div class="footnote"><span class="dot" style="background:var(--ink);opacity:.5;width:2px;height:12px;border-radius:0"></span>Portfolio blended average ($25.19/sqft)</div>
+    </div>
+    <div class="mcard"><div class="h">Lease Watchlist <span class="muted" style="font-weight:400">· 4 items</span></div><div class="hs">Flags surfaced from abstracted lease terms</div>
+      <div class="watch" style="background:hsl(38 92% 50%/.07)"><div class="ic" style="background:hsl(38 92% 50%/.14);color:var(--amber)">◷</div><div style="flex:1"><div class="wt">Midtown Office — renewal notice deadline approaching</div><div class="wd">Notice to renew due Aug 8, 2026 (47 days out); 3% escalation scheduled at renewal. · Operations</div></div><div><span class="wv" style="background:hsl(38 92% 50%/.14);color:var(--amber)">47 days</span></div></div>
+      <div class="watch" style="background:hsl(199 89% 48%/.06)"><div class="ic" style="background:hsl(199 89% 48%/.12);color:var(--info)">▦</div><div style="flex:1"><div class="wt">Phoenix Warehouse — earliest term expiry</div><div class="wd">Lease term ends Sep 30, 2026 — first in the portfolio to come up. · Logistics</div></div><div><span class="wv" style="background:hsl(199 89% 48%/.12);color:var(--info)">Sep 2026</span></div></div>
+      <div class="watch"><div class="ic" style="background:var(--bg);color:var(--muted)">↗</div><div style="flex:1"><div class="wt">Westfield Retail — highest cost per sqft</div><div class="wd">At $43.60/sqft, 73% above the $25.19 blended average. · Operations</div></div><div><span class="wv" style="background:var(--bg);color:var(--muted)">$43.60</span></div></div>
+    </div>
+  </div>
+  <div class="footnote">ⓘ Metrics computed from abstracted lease terms for this workspace. Figures are not financial advice.</div>
+</div>
+<p class="small muted">Layout: <code>p-6 space-y-6</code>; 5-col KPI grid; row 1 forecast (1.7fr) + dept (1fr); row 2 cost/sqft (1fr) + watchlist (1.4fr); provenance footer. KPI tiles reuse the existing <code>StatCard</code>; bars can be Recharts or CSS.</p>
+
+<h3 id="b-code">Code snippets for review</h3>
+<details open>
+<summary><code>portfolioIntelligence.ts</code> — pure selector (no PV, no discounting)</summary>
+<div class="body">
+<pre><span class="c">// Maps a leases row → the shape the cards consume. annualRent normalizes
+// base_rent_amount by base_rent_frequency (or current_monthly_rent * 12).</span>
+export interface PortfolioLease {
+  id: string; propertyName: string;
+  department: string | null;     <span class="c">// requesting_department → "Unassigned" if null</span>
+  region: string | null;         <span class="c">// market bucket</span>
+  squareFootage: number | null;  <span class="c">// extracted + validated</span>
+  annualRent: number | null;     <span class="c">// derived</span>
+  start: Date | null; end: Date | null;          <span class="c">// lease_start / lease_end|executed_expiry_date</span>
+  escalationRate: number;        <span class="c">// escalation_rate ?? 0 (flat — label it)</span>
+  status: string;
+}
+
+export function computeKpis(leases: PortfolioLease[]) {
+  const active = leases.filter(l =&gt; l.status === 'active' &amp;&amp; l.annualRent != null);
+  const annualOccupancyCost = sum(active, l =&gt; l.annualRent!);
+  const withArea = active.filter(l =&gt; l.squareFootage &amp;&amp; l.squareFootage &gt; 0);
+  const totalSqft = sum(withArea, l =&gt; l.squareFootage!);
+  return {
+    annualOccupancyCost,
+    remainingCommitment: sum(active, remainingContractedRent),   <span class="c">// today→end, w/ escalation; NOT PV'd</span>
+    blendedPerSqft: totalSqft ? sum(withArea, l =&gt; l.annualRent!) / totalSqft : null,
+    totalSqft, marketCount: new Set(active.map(l =&gt; l.region).filter(Boolean)).size,
+    walt: rentWeighted(active, l =&gt; yearsUntil(l.end)),          <span class="c">// Σ(yrs×rent)/Σrent</span>
+    missingArea: active.length - withArea.length,                <span class="c">// → "N leases missing area" banner</span>
+  };
+}</pre>
+</div>
+</details>
+<details>
+<summary><code>buildWatchlist()</code> — declarative rules engine (2 live, 2 pending extraction)</summary>
+<div class="body">
+<pre>export type Flag = {
+  leaseId: string; severity: 'warning'|'info'|'muted';
+  icon: string; title: string; description: string; value: string;
+  department: string | null; sourceField: string;   <span class="c">// provenance → "View lease" anchor</span>
+};
+
+const RULES: WatchRule[] = [
+  earliestTermExpiry,     <span class="c">// ✅ live — uses lease.end</span>
+  highestCostPerSqft,     <span class="c">// ✅ live — uses squareFootage + annualRent</span>
+  renewalNoticeDeadline,  <span class="c">// ⏳ pending — needs structured renewalOptions.noticeDeadline (today: free text)</span>
+  escalationCapExpiring,  <span class="c">// ⏳ pending — needs structured escalation cap end-date</span>
+];
+
+export function buildWatchlist(leases: PortfolioLease[], config: WatchConfig): Flag[] {
+  return RULES.flatMap(rule =&gt; rule(leases, config))
+    .sort(bySeverityThenDate)
+    .slice(0, config.cap ?? 8);          <span class="c">// "view all" beyond the cap</span>
+}
+<span class="c">// Adding a rule = adding one entry. Thresholds (noticeWindowDays, highCostFactor)
+// live in config so they're admin-tunable. Empty → "No flags — every lease term is clear."</span></pre>
+</div>
+</details>
+<details>
+<summary>Rent Commitment Forecast — year bucketing</summary>
+<div class="body">
+<pre><span class="c">// For each of the next ~5 years (+ '31+ tail):
+//  contracted = Σ rent payable that year (escalated), → 0 after each lease's end
+//  uncontracted = today's run-rate that is no longer under contract that year (labelled baseline)</span>
+function forecastByYear(leases: PortfolioLease[], horizon = 5) {
+  const years = range(thisYear(), thisYear() + horizon);
+  return years.map(yr =&gt; ({
+    yr,
+    contracted: sum(leases, l =&gt; rentInYear(l, yr)),        <span class="c">// escalated; 0 once yr &gt; l.end</span>
+    uncontracted: sum(leases, l =&gt; runRateRollingOff(l, yr)),
+  }));
+}</pre>
+</div>
+</details>
+
+<h3 id="b-voice">Voice guardrail — resolve one inconsistency in the design files</h3>
+<div class="callout warn">
+<p>The authoritative <code>README.md</code> is strict: <em>observational, never advisory; no "renegotiate," no projected savings; the $/sqft reference line is the portfolio's <strong>own</strong> blended average, no external market comps.</em> But <code>portfolio.jsx</code> carries stale framing — the function is named <code>Opportunities()</code> and its top comment mentions <em>"cost-vs-market benchmarking and savings opportunities."</em></p>
+<p><strong>Implement the README, not the JSX comments:</strong> name it <strong>Watchlist</strong>, keep every flag factual (dates/rates only), no market comps, keep the "Not financial advice" footer. Flagging so the stale wording isn't carried into production.</p>
+</div>
+
+<!-- ============ PLAN ============ -->
+<h2 id="plan">Implementation plan</h2>
+<h4>Sidebar (small)</h4>
+<ol>
+<li><strong>Persistence (the gap)</strong> — migration <code>profiles.ui_preferences</code> + regen types; hydrate/seed/debounced-write in <code>SidebarContext</code>; <code>uiPreferences</code> on <code>User</code>/<code>AppContext</code>. ~0.5–1 day incl. test matrix. <span class="muted">Route through lease-code-auditor + lease-security-scanner + lease-test-author per CLAUDE.md (security review is light — user-owned non-security state on a clean RLS policy).</span></li>
+<li><em>(Optional)</em> pixel-parity pass for the cosmetic deviations — ~1 hr.</li>
+</ol>
+<h4>Portfolio Intelligence (larger, phased)</h4>
+<ol>
+<li><strong>Decide replace-vs-augment + Export format</strong> (below) — unblocks the rest.</li>
+<li><strong>Pure derivation layer</strong> — <code>portfolioIntelligence.ts</code> (KPIs, forecast, dept rollup, location rates) with unit tests; <code>buildWatchlist()</code> with the 2 live rules. No UI yet — this is the testable core.</li>
+<li><strong>UI</strong> — recompose <code>Portfolio.tsx</code>: KPI strip (reuse <code>StatCard</code>) + 4 cards + provenance, behind the existing Business-tier gate + Vault read-only path; partial-data banners.</li>
+<li><strong>Extraction enhancement</strong> (parallel) — capture <code>renewalOptions.noticeDeadline</code> + escalation <code>cap</code> as structured fields in <code>process_lease</code>; then enable the 2 pending watchlist rules (config entries, no UI rework).</li>
+<li><strong>Export</strong> — generic table-gen off the derived data → chosen format; filter-aware; cover metadata + disclaimer.</li>
+</ol>
+<p class="small muted">Reviewer routing for Portfolio: integrity-reviewer (it's a reporting/data surface), product-polish + layout-design-reviewer (new page), security-scanner (workspace-scoped queries), test-author (derivations + degradation). Per CLAUDE.md, surface any Critical/High before fixing.</p>
+
+<!-- ============ DECISIONS ============ -->
+<h2 id="decisions">Open decisions (need product sign-off)</h2>
+<table>
+<thead><tr><th style="width:30px">#</th><th>Decision</th><th>Recommendation</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>Portfolio: replace or augment?</strong> The redesign removes PV; today's page <em>is</em> PV. Replace the page, or keep PV alongside?</td><td><strong>Replace</strong> — PV/discounted-liability conflicts with Hard Rule #1; the redesign is the on-strategy version. Preserve only the Index-Lease Disclosure under the new voice.</td></tr>
+<tr><td>2</td><td><strong>Export format</strong> (the designer's explicitly-flagged open item) — XLSX, PDF, both, +CSV?</td><td><strong>XLSX first</strong> (finance can pivot the underlying tables), PDF as a fast-follow for distribution. Build table-gen generically so format is swappable.</td></tr>
+<tr><td>3</td><td><strong>Watchlist extraction enhancement</strong> — invest now in structured renewal-notice + escalation-cap dates?</td><td>Ship the page with 2 live rules; schedule the extraction tweak as a parallel Tier-1 task so the other 2 rules light up without UI rework.</td></tr>
+<tr><td>4</td><td><strong>Sidebar persistence</strong> — build the <code>ui_preferences</code> cross-device sync, or accept localStorage?</td><td><strong>Build it</strong> — it's the one real spec gap, ~0.5–1 day, no new RLS/edge function, mirrors an existing pattern.</td></tr>
+<tr><td>5</td><td><strong>Sidebar pixel-parity</strong> — tighten the cosmetic deviations to match the spec exactly?</td><td>Optional. Recommend keeping the dnd-kit slide; do the rest as a 1-hr pass only if brand-exactness matters.</td></tr>
+</tbody>
+</table>
+
+<hr>
+<p class="small muted">Sources: sidebar reconciliation (line-by-line vs <code>AppSidebar.tsx</code> / <code>SidebarContext.tsx</code> / <code>sidebarPrefs.ts</code> / <code>index.css</code>, PR #72) · Portfolio design package (<code>README.md</code> + <code>portfolio.jsx</code>) · current <code>Portfolio.tsx</code> + <code>portfolioAnalytics.ts</code> · schema/extraction audit (<code>types.ts</code> leases Row + <code>process_lease/index.ts</code>). Status pills reflect verified <code>file:line</code> evidence, not recall.</p>
+</main>
+</div>
+</body>
+</html>
