@@ -91,6 +91,21 @@ export function isArchivedDisplay(lease: LeaseSortRow): boolean {
   return !!lease.archived;
 }
 
+/** Lifecycle states for which a lease is "live" and an expiry countdown is meaningful. */
+const EXPIRY_LIVE_STATES = ['active', 'executed', 'fully_executed'];
+
+/**
+ * True when the Days-to-Expiry countdown is a meaningful, actionable signal for
+ * this row — i.e. the lease is LIVE (not archived; lifecycle active/executed/
+ * fully_executed). For non-live rows (expired / rejected / cancelled / archived /
+ * chain_violation) the Status column already owns the state, so the expiry cell
+ * renders "—" instead — keeping the countdown from duplicating "Expired" or
+ * flashing a false red on a dead lease (KNOWN_ISSUES #154).
+ */
+export function isExpiryRelevant(lease: LeaseSortRow): boolean {
+  return !lease.archived && EXPIRY_LIVE_STATES.includes(lease.lifecycle_status ?? '');
+}
+
 /**
  * Build the Status-column sort key resolver. An archived lease shows ONLY the
  * "Archived" badge (its lifecycle is suppressed in the cell), so it must also

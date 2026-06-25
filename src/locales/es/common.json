@@ -623,6 +623,7 @@
     "export_success_one": "Se exportó {{count}} arrendamiento a CSV",
     "export_success_other": "Se exportaron {{count}} arrendamientos a CSV",
     "no_archived": "Sin arrendamientos archivados.",
+    "no_active": "Sin arrendamientos activos en esta vista.",
     "back_to_all": "Volver a todos los arrendamientos",
     "load_failed": "No se pudieron cargar los arrendamientos",
     "delete_action": "Eliminar permanentemente",

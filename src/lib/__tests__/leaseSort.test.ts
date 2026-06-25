@@ -5,6 +5,7 @@ import {
   getDaysUntilExpiration,
   statusText,
   isArchivedDisplay,
+  isExpiryRelevant,
   makeStatusSortKey,
   makeLeaseComparator,
   type LeaseSortRow,
@@ -193,5 +194,24 @@ describe('makeLeaseComparator — ascending/descending toggle on other fields', 
     const some = row({ square_footage: 500 });
     const sorted = sortRows([some, none], 'sqft', 'asc');
     expect(sorted).toEqual([none, some]);
+  });
+});
+
+describe('isExpiryRelevant', () => {
+  it('is true for live lifecycle states (active / executed / fully_executed)', () => {
+    expect(isExpiryRelevant(row({ lifecycle_status: 'active' }))).toBe(true);
+    expect(isExpiryRelevant(row({ lifecycle_status: 'executed' }))).toBe(true);
+    expect(isExpiryRelevant(row({ lifecycle_status: 'fully_executed' }))).toBe(true);
+  });
+
+  it('is false for terminal / non-live lifecycle states', () => {
+    for (const s of ['expired', 'rejected', 'cancelled', 'chain_violation', 'draft', null]) {
+      expect(isExpiryRelevant(row({ lifecycle_status: s }))).toBe(false);
+    }
+  });
+
+  it('is false for an archived lease regardless of lifecycle (Status owns the state)', () => {
+    expect(isExpiryRelevant(row({ lifecycle_status: 'active', archived: true }))).toBe(false);
+    expect(isExpiryRelevant(row({ lifecycle_status: 'executed', archived: true }))).toBe(false);
   });
 });

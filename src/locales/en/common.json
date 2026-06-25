@@ -623,6 +623,7 @@
     "export_success_one": "Exported {{count}} lease to CSV",
     "export_success_other": "Exported {{count}} leases to CSV",
     "no_archived": "No archived leases.",
+    "no_active": "No active leases in this view.",
     "back_to_all": "Back to all leases",
     "load_failed": "Failed to load leases",
     "delete_action": "Delete permanently",

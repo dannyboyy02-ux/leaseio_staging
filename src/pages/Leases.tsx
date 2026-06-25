@@ -47,6 +47,7 @@ import {
   getDaysUntilExpiration,
   statusText,
   isArchivedDisplay,
+  isExpiryRelevant,
   makeStatusSortKey,
   makeLeaseComparator,
 } from '@/lib/leaseSort';
@@ -376,7 +377,10 @@ export default function Leases() {
 
   const getExpirationBadge = (days: number | null) => {
     if (days === null) return <span className="text-muted-foreground">&mdash;</span>;
-    if (days < 0) return <Badge variant="destructive">{t('leases.expired')}</Badge>;
+    // Overdue (a still-live lease past its end date): show the signed day
+    // overage in red, NOT the word "Expired" — the Status column owns that word
+    // (this cell only renders for live leases via isExpiryRelevant). #154.
+    if (days < 0) return <Badge variant="destructive">{days}d</Badge>;
     if (days <= 30) return <Badge variant="destructive">{days}d</Badge>;
     if (days <= 60) return <Badge variant="warning">{days}d</Badge>;
     if (days <= 90) return <Badge variant="secondary">{days}d</Badge>;
@@ -519,18 +523,12 @@ export default function Leases() {
           <div className="flex h-[40vh] items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ) : leases.length === 0 ? (
-          scope === 'archived' ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <Archive className="h-10 w-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">{t('leases.no_archived')}</p>
-              <Button variant="outline" onClick={() => setScope('all')}>
-                {t('leases.back_to_all')}
-              </Button>
-            </div>
-          ) : (
-            <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
-          )
+        ) : leases.length === 0 && scope === 'all' ? (
+          // Only a truly-empty workspace (no portfolio leases at all) earns the
+          // marketing card. A scoped-empty Active/Archived slice is handled in
+          // the toolbar branch below so the scope control stays visible and the
+          // user is never walled off from leases they actually have. #154.
+          <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -593,6 +591,22 @@ export default function Leases() {
               </DropdownMenu>
             </div>
 
+            {leases.length === 0 ? (
+              // Scoped-empty: the Active/Archived slice is empty but the
+              // workspace isn't. The toolbar (incl. the scope Select) stays
+              // visible above; offer a one-click path back to everything. #154.
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                {scope === 'archived'
+                  ? <Archive className="h-10 w-10 text-muted-foreground" />
+                  : <Building2 className="h-10 w-10 text-muted-foreground" />}
+                <p className="text-sm text-muted-foreground">
+                  {scope === 'archived' ? t('leases.no_archived') : t('leases.no_active')}
+                </p>
+                <Button variant="outline" onClick={() => setScope('all')}>
+                  {t('leases.back_to_all')}
+                </Button>
+              </div>
+            ) : (
             <div className="overflow-x-auto rounded-lg border border-border bg-card">
               <Table className="min-w-[720px]">
                 <TableHeader>
@@ -672,6 +686,7 @@ export default function Leases() {
                               setSearchQuery('');
                               setTypeFilter('all');
                               setExpirationFilter('all');
+                              setScope('all');
                             }}
                           >
                             {t('leases.clear_filters')}
@@ -728,7 +743,11 @@ export default function Leases() {
                           <TableCell className="hidden sm:table-cell text-muted-foreground">
                             {formatDate(leaseEnd)}
                           </TableCell>
-                          <TableCell>{getExpirationBadge(daysUntil)}</TableCell>
+                          <TableCell>
+                            {isExpiryRelevant(lease)
+                              ? getExpirationBadge(daysUntil)
+                              : <span className="text-muted-foreground">&mdash;</span>}
+                          </TableCell>
                           <TableCell className="hidden lg:table-cell text-muted-foreground">
                             {formatSqFt(lease.square_footage)}
                           </TableCell>
@@ -794,6 +813,7 @@ export default function Leases() {
                 </TableBody>
               </Table>
             </div>
+            )}
           </>
         )}
       </PageLayout>
