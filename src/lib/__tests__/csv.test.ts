@@ -28,6 +28,10 @@ describe('escapeCsvCell — RFC-4180 quoting', () => {
   it('handles a formula prefix AND a comma together', () => {
     expect(escapeCsvCell('=a,b')).toBe('"\'=a,b"');
   });
+  it('neutralizes a leading tab or carriage return (both are formula vectors)', () => {
+    expect(escapeCsvCell('\tTAB')).toBe("'\tTAB");
+    expect(escapeCsvCell('\rCR')).toBe("'\rCR");
+  });
   it('passes through plain text + numbers; null/undefined -> empty', () => {
     expect(escapeCsvCell('plain')).toBe('plain');
     expect(escapeCsvCell(42)).toBe('42');
@@ -53,5 +57,29 @@ describe('rowsToCsv', () => {
   });
   it('returns empty string for no records', () => {
     expect(rowsToCsv([])).toBe('');
+  });
+
+  // Documented contract: the header is taken from the FIRST record's keys only.
+  // Keys that appear only in later records are DROPPED; keys missing from a
+  // later record render as empty cells. This is intentional for the Leases
+  // export (every row is built with an identical key set) — the test pins it so
+  // a future heterogeneous caller can't silently lose columns.
+  it('uses only the first record\'s keys: later-only keys are dropped, missing keys are empty', () => {
+    expect(rowsToCsv([{ A: 1, B: 2 }, { A: 3, C: 4 }])).toBe('A,B\n1,2\n3,');
+  });
+
+  it('escapes the HEADER cells too (formula prefix + comma quoting on a key)', () => {
+    // Key '=Rent,USD' → formula prefix then RFC-4180 quoting.
+    expect(rowsToCsv([{ '=Rent,USD': 100 }])).toBe('"\'=Rent,USD"\n100');
+  });
+
+  it('passes unicode through untouched (no spurious quoting on non-ASCII)', () => {
+    expect(rowsToCsv([{ City: 'Zürich', Note: 'café — naïve' }])).toBe(
+      'City,Note\nZürich,café — naïve',
+    );
+  });
+
+  it('renders boolean and zero-number cells (not treated as empty)', () => {
+    expect(rowsToCsv([{ A: false, B: 0, C: true }])).toBe('A,B,C\nfalse,0,true');
   });
 });
