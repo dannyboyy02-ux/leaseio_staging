@@ -134,6 +134,9 @@ export default function Leases() {
   );
   const [leases, setLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Per-workspace asset-type abbreviations (label -> abbr). Tolerant load: a
+  // pre-migration deploy (column absent) leaves this {} → built-in defaults.
+  const [assetAbbr, setAssetAbbr] = useState<Record<string, string>>({});
 
   // Approvals moved off this page — bounce any legacy ?view=approval deep-link
   // to the Approvals surface that now owns that lifecycle.
@@ -141,6 +144,24 @@ export default function Leases() {
     if (searchParams.get('view') === 'approval') navigate('/app/approvals', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!workspace?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await (supabase as any)
+        .from('workspaces')
+        .select('asset_type_abbreviations')
+        .eq('id', workspace.id)
+        .single();
+      if (cancelled || error || !data) return;
+      const abbr = data.asset_type_abbreviations;
+      if (abbr && typeof abbr === 'object' && !Array.isArray(abbr)) {
+        setAssetAbbr(abbr as Record<string, string>);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workspace?.id]);
 
   const expiryFilters = [
     { value: 'all', label: 'Expiry: all' },
@@ -635,7 +656,7 @@ export default function Leases() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Badge variant="outline" className="font-normal cursor-default tabular-nums">
-                                    {assetAbbreviation(lease.asset_type)}
+                                    {assetAbbreviation(lease.asset_type, assetAbbr)}
                                   </Badge>
                                 </TooltipTrigger>
                                 <TooltipContent>{prettyAssetType(lease.asset_type)}</TooltipContent>
