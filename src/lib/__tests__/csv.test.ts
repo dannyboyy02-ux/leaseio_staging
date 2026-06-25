@@ -29,8 +29,15 @@ describe('escapeCsvCell — RFC-4180 quoting', () => {
     expect(escapeCsvCell('=a,b')).toBe('"\'=a,b"');
   });
   it('neutralizes a leading tab or carriage return (both are formula vectors)', () => {
+    // Tab is a formula vector but NOT an RFC-4180 quote trigger → prefix only.
     expect(escapeCsvCell('\tTAB')).toBe("'\tTAB");
-    expect(escapeCsvCell('\rCR')).toBe("'\rCR");
+    // A leading CR gets the formula prefix AND RFC-4180 quoting (a bare \r can
+    // otherwise split a row), so the cell is wrapped in double-quotes.
+    expect(escapeCsvCell('\rCR')).toBe("\"'\rCR\"");
+  });
+  it('RFC-4180-quotes a cell with a bare mid-string carriage return', () => {
+    // No leading formula char → no prefix, but the embedded \r still forces quoting.
+    expect(escapeCsvCell('line1\rline2')).toBe('"line1\rline2"');
   });
   it('passes through plain text + numbers; null/undefined -> empty', () => {
     expect(escapeCsvCell('plain')).toBe('plain');

@@ -2637,3 +2637,13 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 - **Dept palette dark-mode contrast.** `DEPT_COLORS[0]` navy (`hsl(213 50% 23%)`) is low-contrast on dark cards. The cost-per-sqft + forecast collision was fixed via `--chart-*` tokens (PR #73), but the segmented dept bar still uses fixed hsl. Minor; bump the navy lightness or route through a token if it bothers in dark mode.
 
 **Related:** this rewrite fully **unanchors the #42 dead-PV cluster** — `src/lib/portfolioAnalytics.ts` is now imported only by the unmounted `FinancialSummary.tsx`, so closing #42 (delete `FinancialSummary.tsx`) also makes `portfolioAnalytics.ts` + its test deletable. Not bundled into PR #73 per the pre-existing-issues rule.
+
+---
+
+### Item #151: Leases redesign — Dashboard "Chain violation" drill-down lost its violations-only filter (LOW)
+
+> **Filed 2026-06-25** (branch `claude/relaxed-clarke-oksfz4`, Leases redesign Phase 1/2 reviewer gate). The Leases page replaced the legacy `?view=` query params (`active`/`approval`/`violations`) with a single `?status=` scope (`active`/`archived`/`all`). All stale links were repointed: `?view=active` → `?status=active`, `?view=approval` → `/app/approvals` (the page these leases moved to). **But `?view=violations`** (the `useNeedsAction` "Chain violation — retroactive approval required" flag, `src/hooks/useNeedsAction.ts:162`) had no equivalent — the redesigned Leases page has no violations-only filter.
+
+**Current behavior (acceptable, not broken):** the flag now points at `?status=active`. `chain_violation` ∈ `PORTFOLIO_STATUSES` and the `active` scope is `.in('lifecycle_status', PORTFOLIO_STATUSES).eq('archived', false)`, so the violation lease(s) ARE visible in the landing list — the user just lands on the full active list instead of a pre-filtered violations view, and must eyeball/search for the `chain_violation` status badge.
+
+**Fix options (deferred — needs a product call):** (a) add a `chain_violation` quick-filter chip to the Leases toolbar and deep-link to it; (b) keep the drill-down on the Dashboard's existing `EscalationReviewPanel`/violations surface instead of routing to Leases; (c) accept the degraded landing as-is. Low priority — the lease is reachable and the lease-detail page is the actual resolution surface (the retroactive-approval banner lives there, per the #A* / Phase-6 governance work).

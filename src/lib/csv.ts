@@ -18,7 +18,9 @@ export function escapeCsvCell(val: unknown): string {
   if (/^[=+\-@\t\r]/.test(str)) {
     str = `'${str}`;
   }
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+  // RFC-4180: quote any field containing a comma, double-quote, LF, or a bare
+  // CR (a lone \r without \n still needs quoting, else it can split a row).
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;

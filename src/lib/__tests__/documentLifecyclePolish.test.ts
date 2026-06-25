@@ -329,28 +329,49 @@ describe('record-login-event edge function', () => {
 // 7. Leases.tsx — archived visibility includes NULL-lifecycle rows
 // ---------------------------------------------------------------------------
 
-describe('Leases archived visibility', () => {
+describe('Leases scope-based visibility', () => {
   const source = readRepoFile('src/pages/Leases.tsx');
-  // The whole if/else, anchored on the query branch itself.
-  const block = sliceBetween(source, 'if (showArchived) {', 'const { data, error }');
+  // The Leases redesign replaced the showArchived boolean with a single
+  // StatusScope ('active' | 'archived' | 'all'). The fetch builds three
+  // disjoint query branches; this block lives between portfolioList and the
+  // awaited query. We slice it and assert each branch's filter shape (#91 +
+  // the redesign default-ALL behavior).
+  const block = sliceBetween(
+    source,
+    "const portfolioList = PORTFOLIO_STATUSES.join(',');",
+    'const { data, error } = await query;',
+  );
+  const activeIdx = block.indexOf("scope === 'active'");
+  const archivedIdx = block.indexOf("scope === 'archived'");
   const elseIdx = block.indexOf('} else {');
-  const archivedBranch = block.slice(0, elseIdx);
-  const defaultBranch = block.slice(elseIdx);
+  const activeBranch = block.slice(activeIdx, archivedIdx);
+  const archivedBranch = block.slice(archivedIdx, elseIdx);
+  const allBranch = block.slice(elseIdx);
 
-  it('showArchived branch shows ONLY archived leases and ORs in lifecycle_status.is.null', () => {
-    expect(elseIdx).toBeGreaterThan(0);
-    // #91: the archived view filters to archived rows only...
+  it('active scope filters to the portfolio statuses AND non-archived', () => {
+    expect(activeIdx).toBeGreaterThanOrEqual(0);
+    expect(activeBranch).toContain(".in('lifecycle_status', PORTFOLIO_STATUSES)");
+    expect(activeBranch).toContain(".eq('archived', false)");
+  });
+
+  it('archived scope shows ONLY archived rows and ORs in lifecycle_status.is.null (#91)', () => {
+    expect(archivedIdx).toBeGreaterThan(activeIdx);
+    // archived = true so the live portfolio is excluded...
     expect(archivedBranch).toContain(".eq('archived', true)");
-    // ...while still ORing in NULL lifecycle_status so archived failed/
-    // processing leases and amendments remain reachable to restore.
+    // ...while still ORing in NULL lifecycle_status so an archived failed/
+    // processing upload or amendment remains reachable here to restore.
     expect(archivedBranch).toContain('lifecycle_status.is.null');
     expect(archivedBranch).toContain('.or(');
     expect(archivedBranch).not.toContain(".eq('archived', false)");
   });
 
-  it('default (non-archived) branch keeps the archived filter', () => {
-    expect(defaultBranch).toContain(".eq('archived', false)");
-    expect(defaultBranch).toContain(".in('lifecycle_status', visibleLifecycleStatuses)");
+  it('default (ALL) scope unions the live portfolio with archived NULL-lifecycle rows', () => {
+    expect(elseIdx).toBeGreaterThan(archivedIdx);
+    // ALL is the new default: portfolio statuses (any archived flag) PLUS
+    // archived rows that never got a lifecycle_status. Non-archived drafts/
+    // failures stay out (they live in ImportHistory / processing).
+    expect(allBranch).toContain('lifecycle_status.in.(${portfolioList})');
+    expect(allBranch).toContain('and(archived.eq.true,lifecycle_status.is.null)');
   });
 });
 

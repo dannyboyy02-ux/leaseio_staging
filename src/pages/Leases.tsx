@@ -15,6 +15,7 @@ import {
   Tag,
   MoreHorizontal,
   Download,
+  ChevronRight,
 } from 'lucide-react';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
@@ -164,10 +165,10 @@ export default function Leases() {
   }, [workspace?.id]);
 
   const expiryFilters = [
-    { value: 'all', label: 'Expiry: all' },
-    { value: '30', label: 'Expiring ≤ 30 days' },
-    { value: '90', label: 'Expiring ≤ 90 days' },
-    { value: '120', label: 'Expiring 91–120 days' },
+    { value: 'all', label: t('leases.expiry_all') },
+    { value: '30', label: t('leases.expiring_le_30') },
+    { value: '90', label: t('leases.expiring_le_90') },
+    { value: '120', label: t('leases.expiring_91_120') },
   ];
 
   const fetchLeases = async () => {
@@ -212,7 +213,7 @@ export default function Leases() {
       setLeases((data || []) as unknown as LeaseRow[]);
     } catch (error) {
       console.error('Error fetching leases:', error);
-      toast.error('Failed to load leases', { id: 'lease-list' });
+      toast.error(t('leases.load_failed'), { id: 'lease-list' });
     } finally {
       setLoading(false);
     }
@@ -320,9 +321,9 @@ export default function Leases() {
 
   const getExpirationBadge = (days: number | null) => {
     if (days === null) return <span className="text-muted-foreground">&mdash;</span>;
-    if (days < 0) return <Badge variant="destructive">Expired</Badge>;
+    if (days < 0) return <Badge variant="destructive">{t('leases.expired')}</Badge>;
     if (days <= 30) return <Badge variant="destructive">{days}d</Badge>;
-    if (days <= 60) return <Badge className="bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-100">{days}d</Badge>;
+    if (days <= 60) return <Badge variant="warning">{days}d</Badge>;
     if (days <= 90) return <Badge variant="secondary">{days}d</Badge>;
     return <span className="text-sm text-muted-foreground">{days}d</span>;
   };
@@ -360,9 +361,9 @@ export default function Leases() {
     const total = leases.length;
     const active = activeLeases.length;
     if (totalMonthlyRent > 0) {
-      return `${formatCurrency(totalMonthlyRent)} / mo · ${active} active · ${total} total`;
+      return t('leases.subtitle_rent', { rent: formatCurrency(totalMonthlyRent), active, total });
     }
-    return `${total} ${total === 1 ? 'lease' : 'leases'}`;
+    return t('leases.subtitle_count', { count: total });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalMonthlyRent, activeLeases, leases]);
 
@@ -453,7 +454,7 @@ export default function Leases() {
   // Export the CURRENT filtered + sorted rows (WYSIWYG) as CSV.
   const handleExportCsv = () => {
     if (filteredAndSortedLeases.length === 0) {
-      toast.error('Nothing to export', { id: 'lease-export' });
+      toast.error(t('leases.export_empty'), { id: 'lease-export' });
       return;
     }
     const records = filteredAndSortedLeases.map((l) => ({
@@ -477,7 +478,7 @@ export default function Leases() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success(`Exported ${records.length} lease${records.length === 1 ? '' : 's'} to CSV`, { id: 'lease-export' });
+    toast.success(t('leases.export_success', { count: records.length }), { id: 'lease-export' });
   };
 
   return (
@@ -489,7 +490,7 @@ export default function Leases() {
           isReadOnly ? undefined : (
             <Button variant="accent" onClick={handleAddLease}>
               <Plus className="mr-2 h-4 w-4" />
-              Add Lease
+              {t('leases.add_lease')}
             </Button>
           )
         }
@@ -504,9 +505,9 @@ export default function Leases() {
           scope === 'archived' ? (
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
               <Archive className="h-10 w-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">No archived leases.</p>
+              <p className="text-sm text-muted-foreground">{t('leases.no_archived')}</p>
               <Button variant="outline" onClick={() => setScope('all')}>
-                Back to all leases
+                {t('leases.back_to_all')}
               </Button>
             </div>
           ) : (
@@ -518,7 +519,7 @@ export default function Leases() {
               <div className="relative w-full sm:flex-1 sm:min-w-[220px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search property, landlord, type, status…"
+                  placeholder={t('leases.search_placeholder')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -530,19 +531,19 @@ export default function Leases() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All leases</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
+                  <SelectItem value="all">{t('leases.all_leases')}</SelectItem>
+                  <SelectItem value="active">{t('leases.scope_active')}</SelectItem>
+                  <SelectItem value="archived">{t('leases.scope_archived')}</SelectItem>
                 </SelectContent>
               </Select>
               {/* Type filter — distinct asset types present in the list. */}
               {assetTypeOptions.length > 0 && (
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
                   <SelectTrigger className="w-full sm:w-[160px]">
-                    <SelectValue placeholder="Type: all" />
+                    <SelectValue placeholder={t('leases.type_all')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Type: all</SelectItem>
+                    <SelectItem value="all">{t('leases.type_all')}</SelectItem>
                     {assetTypeOptions.map((opt) => (
                       <SelectItem key={opt} value={opt}>{prettyAssetType(opt)}</SelectItem>
                     ))}
@@ -563,13 +564,13 @@ export default function Leases() {
               {/* Export — overflow (CSV now; Excel arrives with the library decision). */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label="Export leases" className="shrink-0">
+                  <Button variant="outline" size="icon" aria-label={t('leases.export')} className="shrink-0">
                     <Download className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleExportCsv}>CSV (.csv)</DropdownMenuItem>
-                  <DropdownMenuItem disabled className="opacity-60">Excel (.xlsx) — soon</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportCsv}>{t('leases.export_csv')}</DropdownMenuItem>
+                  <DropdownMenuItem disabled className="opacity-60">{t('leases.export_excel_soon')}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -581,60 +582,60 @@ export default function Leases() {
                     <TableHead>
                       <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('property')}>
                         <Building2 className="mr-2 h-4 w-4" />
-                        Property
+                        {t('leases.property')}
                         {getSortIcon('property')}
                       </Button>
                     </TableHead>
                     <TableHead className="hidden md:table-cell">
                       <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('asset_type')}>
                         <Tag className="mr-2 h-4 w-4" />
-                        Type
+                        {t('leases.type')}
                         {getSortIcon('asset_type')}
                       </Button>
                     </TableHead>
                     <TableHead className="hidden md:table-cell">
                       <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('landlord')}>
-                        Landlord
+                        {t('leases.landlord')}
                         {getSortIcon('landlord')}
                       </Button>
                     </TableHead>
                     <TableHead>
                       <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('monthly_rent')}>
-                        Monthly Rent
+                        {t('leases.monthly_rent')}
                         {getSortIcon('monthly_rent')}
                       </Button>
                     </TableHead>
                     <TableHead className="hidden sm:table-cell">
                       <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('lease_start')}>
                         <Calendar className="mr-2 h-4 w-4" />
-                        Start
+                        {t('leases.start')}
                         {getSortIcon('lease_start')}
                       </Button>
                     </TableHead>
                     <TableHead className="hidden sm:table-cell">
                       <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('lease_end')}>
                         <Calendar className="mr-2 h-4 w-4" />
-                        End
+                        {t('leases.end')}
                         {getSortIcon('lease_end')}
                       </Button>
                     </TableHead>
-                    <TableHead>Days to Expiry</TableHead>
+                    <TableHead>{t('leases.days_to_expiry')}</TableHead>
                     <TableHead className="hidden lg:table-cell">
                       <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('sqft')}>
                         <Ruler className="mr-2 h-4 w-4" />
-                        Sq Ft
+                        {t('leases.sqft')}
                         {getSortIcon('sqft')}
                       </Button>
                     </TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[1%] text-right"><span className="sr-only">Actions</span></TableHead>
+                    <TableHead>{t('leases.status')}</TableHead>
+                    <TableHead className="w-[1%] text-right"><span className="sr-only">{t('leases.actions')}</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAndSortedLeases.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
-                        No leases match your filters
+                        {t('leases.no_match')}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -691,32 +692,39 @@ export default function Leases() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          <TableCell className="text-right">
                             {/* Archive/Restore is admin/owner-only (#78 trigger
                                 enforces server-side); hidden on read-only Vault
                                 workspaces. "Delete permanently" arrives in Phase 3
-                                with its soft-delete + 14-day retention backend. */}
-                            {!isReadOnly && isAdmin && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon-sm" aria-label="Lease actions">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  {lease.archived ? (
-                                    <DropdownMenuItem onClick={() => handleRestore(lease)}>
-                                      <ArchiveRestore className="mr-2 h-4 w-4" />
-                                      {t('archive.unarchive')}
-                                    </DropdownMenuItem>
-                                  ) : (
-                                    <DropdownMenuItem onClick={() => handleArchiveClick(lease)}>
-                                      <Archive className="mr-2 h-4 w-4" />
-                                      {t('archive.archive')}
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                with its soft-delete + 14-day retention backend.
+                                Non-admins (and read-only Vault) get a muted chevron
+                                so the column isn't empty and the row reads as
+                                "click to open". */}
+                            {!isReadOnly && isAdmin ? (
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon-sm" aria-label={t('leases.row_actions')}>
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {lease.archived ? (
+                                      <DropdownMenuItem onClick={() => handleRestore(lease)}>
+                                        <ArchiveRestore className="mr-2 h-4 w-4" />
+                                        {t('archive.unarchive')}
+                                      </DropdownMenuItem>
+                                    ) : (
+                                      <DropdownMenuItem onClick={() => handleArchiveClick(lease)}>
+                                        <Archive className="mr-2 h-4 w-4" />
+                                        {t('archive.archive')}
+                                      </DropdownMenuItem>
+                                    )}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            ) : (
+                              <ChevronRight className="inline-block h-4 w-4 text-muted-foreground/50" aria-hidden="true" />
                             )}
                           </TableCell>
                         </TableRow>
