@@ -123,6 +123,18 @@ For tab strips specifically: prefer **short labels with full-text tooltips** + `
 - New copy added in English without a Spanish counterpart shows as a missing-translation warning to ES users.
 - Hardcoded English in a file that has i18n elsewhere is a half-finished feature.
 
+## 9. Data-table conventions — measure against Excel/Sheets/AG Grid, not intuition (a class we MISSED on the Leases table)
+
+Finance users live in spreadsheets and data grids; a table that ignores those learned conventions feels wrong even when it "works." When a change touches a tabular surface, check it against the established pattern BEFORE judging it by feel. The owner caught all of these on a table I'd just shipped:
+
+- **Resize gestures:** drag a column border to resize; **double-click a column border auto-fits THAT column to its content** (the universal Excel / AG Grid behavior). Never repurpose double-click for "reset all columns" — that violates muscle memory and reads as a bug.
+- **Column controls live in a menu, not the toolbar.** Auto-fit / reset / pin / hide belong in a per-column caret menu, a right-click context menu, or a "table settings" dropdown — tucked away, keeping the default toolbar clean. Reset is a safety net, not a standing toolbar button.
+- **Number alignment carries meaning.** Right-align numbers that represent *size/magnitude* (money, counts, percentages, square footage) so the eye can compare them; left-align text and *non-size* numbers (dates, IDs, zip, phone). Headers align to their column's content. A left-aligned currency column is a tell.
+- **Dates:** use the abbreviated-month medium format (`Mar 1, 2026`), never bare numeric (`03/01/26` is locale-ambiguous — month/day order differs by country), and **always** route through the project's canonical locale-aware formatter (`formatLocalizedDate` / `formatLocalizedCurrency` in `src/lib/dateFormatters.ts`). A hardcoded `date-fns`/`Intl` format string in a component silently breaks i18n — the surrounding currency will be localized while the dates are not.
+- **Name the tool any new table interaction mirrors** (Excel, Sheets, a known grid). If a tabular interaction mirrors *nothing* established, that's a flag to reconsider, not a feature to ship.
+
+The standing rule: before signing off on a table, open the same data in a spreadsheet in your head and ask "would a finance user expect this gesture/format/alignment?" If the answer isn't obviously yes, it's a finding.
+
 ## 9. Visual rendering sanity — what the pixels actually say
 
 This class is missed when reviewers read JSX and locale strings as two separate files instead of mentally rendering them together. The fix is to read the button as the user sees it — icon + space + label, end-to-end.

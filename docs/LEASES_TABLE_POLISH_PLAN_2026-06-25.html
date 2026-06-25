@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Leases Table — Polish & Convention Plan (2026-06-25)</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#13201b; --muted:#5b6b63; --line:#e3e8e5;
+    --brand:#0e9f6e; --brand-d:#0b7a54; --code:#0f1b17;
+    --p0:#dc2626; --p1:#d97706; --p2:#2563eb; --ok:#0e9f6e;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 96px}
+  header.hero{background:linear-gradient(135deg,#0e9f6e,#0b7a54);color:#fff;border-radius:18px;padding:34px 32px;margin-bottom:14px}
+  header.hero h1{margin:0 0 6px;font-size:27px;letter-spacing:-.4px}
+  header.hero p{margin:0;opacity:.92;font-size:15px}
+  .sub{color:var(--muted);font-size:13px;margin:10px 2px 30px}
+  h2{font-size:20px;margin:42px 0 6px;letter-spacing:-.3px}
+  h2 .num{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--brand);color:#fff;font-size:14px;margin-right:9px;vertical-align:2px}
+  h3{font-size:16px;margin:24px 0 8px}
+  p{margin:9px 0}
+  a{color:var(--brand-d)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0;box-shadow:0 1px 2px rgba(20,40,30,.04)}
+  .lead{font-size:15.5px;color:#26352e}
+  code,kbd{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;background:#eef2f0;padding:1.5px 6px;border-radius:6px;color:#0b3b2a}
+  pre{background:var(--code);color:#dbe7e0;border-radius:12px;padding:16px 18px;overflow:auto;font-size:12.5px;line-height:1.5;margin:12px 0}
+  pre .c{color:#7d9c8d}      /* comment */
+  pre .k{color:#8fd3ff}      /* keyword */
+  pre .s{color:#ffd9a0}      /* string */
+  pre .del{color:#ff9b9b}    /* removed */
+  pre .add{color:#a8f0c0}    /* added */
+  .pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;padding:3px 9px;border-radius:999px;color:#fff;vertical-align:2px}
+  .p0{background:var(--p0)} .p1{background:var(--p1)} .p2{background:var(--p2)} .ok{background:var(--ok)}
+  table.tbl{border-collapse:collapse;width:100%;font-size:13.5px;margin:6px 0}
+  table.tbl th,table.tbl td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+  table.tbl th{background:#f0f4f2;font-weight:600}
+  .right{text-align:right!important}
+  /* fake app table for mockups */
+  .mt{border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px;background:#fff}
+  .mt table{border-collapse:collapse;width:100%;table-layout:fixed}
+  .mt th{background:#f7faf8;color:#5b6b63;font-weight:600;text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);position:relative;font-size:12px}
+  .mt td{padding:9px 12px;border-bottom:1px solid #eef2f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mt tr:last-child td{border-bottom:0}
+  .mt .num{font-variant-numeric:tabular-nums}
+  .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:#e7f6ee;color:#0b7a54;font-weight:600}
+  .grip{position:absolute;right:0;top:0;height:100%;width:8px;display:flex;align-items:center;justify-content:center;cursor:col-resize}
+  .grip i{display:block;width:1px;height:50%;background:#cfd8d3}
+  .grip.hot i{height:100%;width:2px;background:var(--brand)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .two .lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:0 0 6px}
+  .bad{color:var(--p0)} .good{color:var(--ok)}
+  .flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0;font-size:12.5px}
+  .node{background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;text-align:center;min-width:96px}
+  .node.act{border-color:var(--brand);background:#eefaf4}
+  .node.store{border-style:dashed}
+  .arrow{color:var(--muted);font-weight:700}
+  ul.tight{margin:8px 0;padding-left:20px}
+  ul.tight li{margin:5px 0}
+  .callout{border-left:4px solid var(--brand);background:#eefaf4;border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0}
+  .callout.warn{border-color:var(--p1);background:#fff7ed}
+  .callout.q{border-color:var(--p2);background:#eff5ff}
+  .toc{columns:2;gap:24px;font-size:14px}
+  .toc a{display:block;padding:3px 0;text-decoration:none}
+  .menu{display:inline-block;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 6px 22px rgba(20,40,30,.12);font-size:13px;width:230px;overflow:hidden}
+  .menu .mi{padding:8px 13px;display:flex;gap:9px;align-items:center;border-bottom:1px solid #f0f3f1}
+  .menu .mi:last-child{border-bottom:0}
+  .menu .mi:hover{background:#f3f8f5}
+  .menu .ic{width:16px;color:var(--muted)}
+  .footnote{font-size:12px;color:var(--muted)}
+  hr{border:0;border-top:1px solid var(--line);margin:38px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Leases Table — Polish &amp; Convention Plan</h1>
+  <p>Auto-fit on double-click · column menu &amp; reset placement · localized dates · number alignment</p>
+</header>
+<div class="sub">Branch <code>claude/relaxed-clarke-oksfz4</code> · 2026-06-25 · status: <b>plan for your review</b> (nothing implemented yet)</div>
+
+<div class="card lead">
+  <b>You challenged four things; research says you were right on all of them</b> — and the table interactions
+  I built were measured against nothing. Below is what the conventions actually are (with sources), what the
+  current table does, exactly how I'd fix each, mockups, the data flow, and the code you'll want to eyeball.
+  At the end: the standing rule I'm adding to my own polish checklist so this class of miss stops happening.
+</div>
+
+<div class="card">
+  <b>Contents</b>
+  <div class="toc">
+    <a href="#verdict">1 · The verdict, at a glance</a>
+    <a href="#research">2 · What the conventions actually are</a>
+    <a href="#dates">3 · Fix: localized dates <span class="pill p0">P0</span></a>
+    <a href="#dblclick">4 · Fix: double-click = auto-fit <span class="pill p1">P1</span></a>
+    <a href="#menu">5 · Fix: column menu &amp; reset <span class="pill p2">P2</span></a>
+    <a href="#align">6 · Fix: number alignment <span class="pill p2">P2</span></a>
+    <a href="#flow">7 · Data flow</a>
+    <a href="#code">8 · Code to review</a>
+    <a href="#phases">9 · Rollout phases</a>
+    <a href="#rule">10 · The rule I'm writing for myself</a>
+    <a href="#decisions">11 · Decisions I need from you</a>
+  </div>
+</div>
+
+<!-- 1 -->
+<h2 id="verdict"><span class="num">1</span>The verdict, at a glance</h2>
+<table class="tbl">
+  <tr><th style="width:24%">Thing you flagged</th><th style="width:30%">Convention (sourced)</th><th style="width:30%">What the table does today</th><th>Call</th></tr>
+  <tr>
+    <td><b>Double-click a column edge</b></td>
+    <td>Auto-fit <i>that</i> column to its content (Excel / AG Grid).</td>
+    <td>Resets <b>all</b> columns to defaults → looks like "only the first column moved."</td>
+    <td><span class="pill p1">P1</span> wrong behavior</td>
+  </tr>
+  <tr>
+    <td><b>"Reset columns" button</b></td>
+    <td>Reset is a safety net <i>tucked into a settings / column menu</i>, not a toolbar button.</td>
+    <td>A persistent toolbar button (clutter; not where people look).</td>
+    <td><span class="pill p2">P2</span> wrong placement</td>
+  </tr>
+  <tr>
+    <td><b>Date format</b></td>
+    <td>Abbreviated month (<code>Mar 1, 2026</code>) is correct; <b>must be localized</b>.</td>
+    <td>Hardcoded English months — Spanish users see <code>Mar 1</code>, not <code>1 mar</code>. Bypasses the app's own date helper.</td>
+    <td><span class="pill p0">P0</span> i18n bug</td>
+  </tr>
+  <tr>
+    <td><b>(I found this) Alignment</b></td>
+    <td>Size numbers (money, sq ft) <b>right</b>-aligned; dates left.</td>
+    <td>Rent &amp; Sq Ft are left-aligned → ragged, hard to compare magnitudes.</td>
+    <td><span class="pill p2">P2</span> convention miss</td>
+  </tr>
+</table>
+
+<!-- 2 -->
+<h2 id="research"><span class="num">2</span>What the conventions actually are</h2>
+<div class="card">
+  <h3>Column resize &amp; auto-fit</h3>
+  <p>From AG Grid (which explicitly mirrors Excel): <i>"just like Excel, each column can be auto-resized by
+  <b>double-clicking the right side of the header</b> rather than dragging it… the grid will work out the best
+  width to fit the contents of the cells in the column."</i> Double-click = autosize-to-content is a learned,
+  cross-tool muscle memory. Reset-everything is not what that gesture means.</p>
+  <h3>Where reset / column controls live</h3>
+  <p>Enterprise-table guidance: give users a reset safety net, but <i>"controls … shouldn't feel overwhelming
+  and can be tucked into a simple 'table settings' dropdown or highlighted on hover while keeping the default
+  view clean."</i> Auto-fit / reset / pin / hide belong in a per-column menu or a table-settings menu — not as
+  standing toolbar buttons.</p>
+  <h3>Dates</h3>
+  <p><i>"Use the abbreviated name of the month, such as 17 Jan 2025… Avoid short numeric format dates as
+  different countries use different date orders."</i> So <code>Mar 1, 2026</code> is the <b>right</b> style — the
+  defect is that it isn't localized.</p>
+  <h3>Alignment</h3>
+  <p><i>"All numbers should be right-aligned … numeric data <b>related to size</b> (count, percent, money) should
+  be right-aligned to help users identify number size; numeric data <b>not</b> related to size (date, zip,
+  phone) should be left-aligned. Everything made of letters is left-aligned."</i></p>
+  <p class="footnote">Sources are linked in the chat message that accompanies this file.</p>
+</div>
+
+<!-- 3 -->
+<h2 id="dates"><span class="num">3</span>Fix: localized dates <span class="pill p0">P0</span></h2>
+<p>The table imports <code>date-fns</code> and rolls its own formatter, while currency one cell over goes
+through the canonical locale-aware helper. They disagree on language.</p>
+
+<div class="two">
+  <div>
+    <p class="lbl bad">Today — Spanish locale</p>
+    <div class="mt"><table>
+      <tr><th>Inquilino</th><th>Renta</th><th>Inicio</th><th>Fin</th></tr>
+      <tr><td>Acme RE Holdings</td><td class="num">$52,083</td><td>Mar 1, 2026</td><td>Feb 28, 2031</td></tr>
+    </table></div>
+    <p class="footnote bad">Months in English; only the money got localized.</p>
+  </div>
+  <div>
+    <p class="lbl good">After — Spanish locale</p>
+    <div class="mt"><table>
+      <tr><th>Inquilino</th><th>Renta</th><th>Inicio</th><th>Fin</th></tr>
+      <tr><td>Acme RE Holdings</td><td class="num">$52,083</td><td>1 mar 2026</td><td>28 feb 2031</td></tr>
+    </table></div>
+    <p class="footnote good">Locale-correct order &amp; month names, consistent with currency.</p>
+  </div>
+</div>
+
+<pre><span class="c">// src/pages/Leases.tsx — BEFORE</span>
+<span class="del">- import { format, parseISO } from 'date-fns';</span>
+<span class="del">- const formatDate = (dateStr: string | null) => {</span>
+<span class="del">-   if (!dateStr) return '—';</span>
+<span class="del">-   try { return format(parseISO(dateStr), 'MMM d, yyyy'); } catch { return dateStr; }</span>
+<span class="del">- };</span>
+
+<span class="c">// AFTER — reuse the canonical, locale-aware helper that already exists</span>
+<span class="add">+ import { formatLocalizedDate } from '@/lib/dateFormatters';</span>
+<span class="add">+ // `language` comes from useLanguage() (already in this component, used by formatCurrency)</span>
+<span class="add">+ const formatDate = (dateStr: string | null) =&gt; formatLocalizedDate(dateStr, language);</span></pre>
+<p><code>formatLocalizedDate</code> uses <code>Intl.DateTimeFormat(localeMap[language], { month:'short', day:'numeric', year:'numeric' })</code>
+and a timezone-safe local-date parse — so <code>en</code> still renders <code>Mar 1, 2026</code> and <code>es</code>
+renders <code>1 mar 2026</code>. One-line change, removes a now-unused import.</p>
+
+<!-- 4 -->
+<h2 id="dblclick"><span class="num">4</span>Fix: double-click = auto-fit that column <span class="pill p1">P1</span></h2>
+<p>Replace "double-click → reset everything" with "double-click the divider → size this column to its widest
+cell." The fit-to-100% model we already have means an auto-fit <i>grows this column and gives the space back
+proportionally from the others</i>, so the table still fits — no horizontal scroll.</p>
+
+<div class="card">
+  <p class="lbl">Interaction</p>
+  <div class="mt" style="max-width:560px"><table>
+    <tr>
+      <th style="width:46%">Property <span class="grip hot"><i></i></span></th>
+      <th style="width:30%">Landlord</th>
+      <th style="width:24%">Rent</th>
+    </tr>
+    <tr><td>1450 Mission St, Suite 200, San Francisco…</td><td>Five Degrees, LLC…</td><td class="num">$77,646</td></tr>
+  </table></div>
+  <p class="footnote">⟶ user <b>double-clicks the green divider</b> on Property ⟶ Property widens just enough to
+  show the full address; Landlord &amp; Rent give up a sliver each. Total stays 100%.</p>
+</div>
+
+<p><b>How "widest cell" is measured:</b> every header &amp; body cell for a column carries a <code>data-col</code>
+attribute; on double-click we read the cells' <code>scrollWidth</code> (the natural, un-truncated width),
+take the max, convert to a % of the table, and rebalance.</p>
+
+<pre><span class="c">// new pure helper in src/lib/leaseColumnPrefs.ts (unit-tested)</span>
+<span class="k">export function</span> autoFitColumn(
+  widths: ColumnWidths, key: LeaseColumnKey, targetPct: number,
+): ColumnWidths {
+  <span class="c">// clamp the target, then take the delta proportionally from the OTHER</span>
+  <span class="c">// resizable columns (never below MIN) so the total stays 100 → still fits.</span>
+  <span class="k">const</span> desired = clampPct(targetPct);
+  <span class="k">const</span> delta = desired - widths[key];
+  <span class="k">return</span> redistribute(widths, key, delta);   <span class="c">// shared with applyBoundaryResize</span>
+}
+
+<span class="c">// in Leases.tsx — measure the rendered column, then call the helper</span>
+<span class="k">const</span> autoFit = (key: LeaseColumnKey) =&gt; {
+  <span class="k">const</span> table = tableRef.current; <span class="k">if</span> (!table) <span class="k">return</span>;
+  <span class="k">const</span> cells = table.querySelectorAll&lt;HTMLElement&gt;(`[data-col="${key}"]`);
+  <span class="k">let</span> max = 0;
+  cells.forEach((el) =&gt; { max = Math.max(max, el.scrollWidth + CELL_PADDING_PX); });
+  <span class="k">const</span> targetPct = (max / table.offsetWidth) * 100;
+  setColumnWidths((w) =&gt; autoFitColumn(w, key, targetPct));
+};
+
+<span class="c">// the divider's handler swaps reset → auto-fit (the conventional gesture)</span>
+<span class="del">- onDoubleClick={resetColumnWidths}</span>
+<span class="add">+ onDoubleClick={() =&gt; autoFit(key)}</span></pre>
+
+<div class="callout warn">
+  <b>Honest tradeoff to pick (see §11):</b> our table promises "always fits," but auto-fit-to-content can ask for
+  more than the viewport (a very long address). Two options: <b>(A)</b> keep the fit promise — auto-fit grows the
+  column up to what's available, capping so the table never scrolls (recommended); or <b>(B)</b> match Excel
+  exactly — auto-fit to true content width even if it introduces a horizontal scroll. I recommend <b>A</b>
+  because "make it fit" was your original ask.
+</div>
+
+<!-- 5 -->
+<h2 id="menu"><span class="num">5</span>Fix: a column menu, and reset moves into it <span class="pill p2">P2</span></h2>
+<p>Drop the standing "Reset columns" toolbar button. Put the column controls where people look for them: a small
+caret on each header (and/or right-click), opening a tiny menu. This also <i>advertises</i> that columns are
+adjustable — solving the discoverability gap in one move.</p>
+
+<div class="card" style="display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap">
+  <div>
+    <p class="lbl">Per-column menu (caret / right-click)</p>
+    <div class="menu">
+      <div class="mi"><span class="ic">↔</span>Auto-fit this column</div>
+      <div class="mi"><span class="ic">⤢</span>Auto-fit all columns</div>
+      <div class="mi"><span class="ic">↕</span>Sort ascending</div>
+      <div class="mi"><span class="ic">↺</span>Reset columns to default</div>
+    </div>
+  </div>
+  <div style="flex:1;min-width:220px">
+    <p class="lbl">Why this shape</p>
+    <ul class="tight">
+      <li><b>Auto-fit this / all</b> — the discoverable version of the double-click gesture (and keyboard-reachable, which the drag handle is not).</li>
+      <li><b>Reset</b> — still here as the safety net, just not shouting from the toolbar.</li>
+      <li>Toolbar goes back to: search · scope · type · expiry · export. Cleaner default view.</li>
+    </ul>
+  </div>
+</div>
+<p class="footnote">Built on the existing <code>DropdownMenu</code> primitive (same one the row kebab and Export use),
+so no new dependency. Reset stays gated to "only when layout ≠ default."</p>
+
+<!-- 6 -->
+<h2 id="align"><span class="num">6</span>Fix: right-align size numbers <span class="pill p2">P2</span></h2>
+<div class="two">
+  <div>
+    <p class="lbl bad">Today — left-aligned</p>
+    <div class="mt"><table>
+      <tr><th>Rent</th><th>Sq Ft</th></tr>
+      <tr><td class="num">$1,250</td><td class="num">1,200 SF</td></tr>
+      <tr><td class="num">$77,646</td><td class="num">44,833 SF</td></tr>
+      <tr><td class="num">$520,000</td><td class="num">9,500 SF</td></tr>
+    </table></div>
+    <p class="footnote bad">Magnitudes don't line up; eye can't scan for "biggest."</p>
+  </div>
+  <div>
+    <p class="lbl good">After — right-aligned</p>
+    <div class="mt"><table>
+      <tr><th class="right">Rent</th><th class="right">Sq Ft</th></tr>
+      <tr><td class="num right">$1,250</td><td class="num right">1,200 SF</td></tr>
+      <tr><td class="num right">$77,646</td><td class="num right">44,833 SF</td></tr>
+      <tr><td class="num right">$520,000</td><td class="num right">9,500 SF</td></tr>
+    </table></div>
+    <p class="footnote good">Decimal/thousands align; "biggest" is obvious at a glance.</p>
+  </div>
+</div>
+<pre><span class="c">// renderSortHead() gains an `align` arg; cells get text-right.</span>
+<span class="add">+ {renderSortHead('monthly_rent', t('leases.monthly_rent'), null, 'lease_start', '', 'right')}</span>
+<span class="add">+ {renderSortHead('sqft', t('leases.sqft'), Ruler, 'status', 'hidden lg:table-cell', 'right')}</span>
+<span class="c">// body cells</span>
+<span class="del">- &lt;TableCell className="tabular-nums font-medium truncate"&gt;</span>
+<span class="add">+ &lt;TableCell className="tabular-nums font-medium truncate text-right"&gt;</span></pre>
+<p>Dates stay left-aligned (correct per convention). Days-to-Expiry is a badge, left as-is.</p>
+
+<!-- 7 -->
+<h2 id="flow"><span class="num">7</span>Data flow</h2>
+<p>One source of truth — a percentage-width map — drives the layout and is the only thing persisted. Three
+gestures mutate it; all keep the sum at 100 so the table always fits.</p>
+
+<div class="card">
+  <div class="flow">
+    <div class="node store">localStorage<br><span class="footnote">leaseio:leases:columnWidths</span></div>
+    <span class="arrow">⟷</span>
+    <div class="node">columnWidths&nbsp;state<br><span class="footnote">{property:18, …} = 100%</span></div>
+    <span class="arrow">→</span>
+    <div class="node">table-fixed<br><span class="footnote">&lt;th style="width:%"&gt;</span></div>
+  </div>
+  <div class="flow" style="margin-top:6px">
+    <div class="node act">drag divider<br><span class="footnote">applyBoundaryResize</span></div>
+    <div class="node act">dbl-click<br><span class="footnote">autoFitColumn (NEW)</span></div>
+    <div class="node act">menu → reset / fit-all<br><span class="footnote">DEFAULT_COLUMN_WIDTHS</span></div>
+    <span class="arrow">→</span>
+    <div class="node">setColumnWidths()</div>
+    <span class="arrow">→</span>
+    <div class="node store">persist (useEffect)</div>
+  </div>
+  <ul class="tight" style="margin-top:12px">
+    <li><b>Read</b> is synchronous in the <code>useState</code> initializer → no first-paint flash.</li>
+    <li><b>Every mutation</b> routes through pure, unit-tested helpers in <code>leaseColumnPrefs.ts</code>
+      (<code>applyBoundaryResize</code>, <code>autoFitColumn</code>, <code>resolveColumnWidths</code>) that all preserve sum = 100.</li>
+    <li><b>Auto-fit</b> is the only one that reads the DOM (cell <code>scrollWidth</code> via <code>data-col</code>); the math it feeds is still pure/testable.</li>
+  </ul>
+</div>
+
+<!-- 8 -->
+<h2 id="code"><span class="num">8</span>Code to review</h2>
+<p>The substantive new logic is small. The riskiest piece is the auto-fit measurement; here's the full shape so
+you can sanity-check it before I build.</p>
+<pre><span class="c">// leaseColumnPrefs.ts — factor the existing resize math into one `redistribute`,</span>
+<span class="c">// then auto-fit reuses it. (applyBoundaryResize already does the 2-column case.)</span>
+<span class="k">function</span> redistribute(w: ColumnWidths, key: LeaseColumnKey, delta: number): ColumnWidths {
+  <span class="c">// grow `key` by the *applied* delta; pull it back from the other resizable</span>
+  <span class="c">// columns in proportion to their current width, never below MIN_COLUMN_WIDTH.</span>
+  <span class="c">// returns a fresh map that still sums to 100.</span>
+}
+
+<span class="c">// Header &amp; body cells tag their column so auto-fit can measure them:</span>
+&lt;TableHead <span class="add">data-col={key}</span> …&gt; … &lt;/TableHead&gt;
+&lt;TableCell <span class="add">data-col="property"</span> …&gt;{getPropertyAddress(lease)}&lt;/TableCell&gt;</pre>
+<p class="footnote">Tests to add: <code>autoFitColumn</code> grows the target &amp; preserves sum; clamps at MIN; a
+no-op when already wide enough. Plus the date change is covered by switching to the already-tested
+<code>formatLocalizedDate</code>.</p>
+
+<!-- 9 -->
+<h2 id="phases"><span class="num">9</span>Rollout phases</h2>
+<table class="tbl">
+  <tr><th>Phase</th><th>Change</th><th>Risk</th><th>Tests</th></tr>
+  <tr><td><b>A</b> <span class="pill p0">P0</span></td><td>Localized dates (one-line swap to <code>formatLocalizedDate</code>)</td><td>Tiny</td><td>existing date-helper tests</td></tr>
+  <tr><td><b>B</b> <span class="pill p2">P2</span></td><td>Right-align Rent &amp; Sq Ft (header + cell)</td><td>Tiny</td><td>visual</td></tr>
+  <tr><td><b>C</b> <span class="pill p1">P1</span></td><td>Double-click → auto-fit; add <code>data-col</code> + <code>autoFitColumn</code></td><td>Medium (DOM measure)</td><td>new unit tests for the pure math</td></tr>
+  <tr><td><b>D</b> <span class="pill p2">P2</span></td><td>Column menu (caret/right-click); move Reset + Auto-fit-all into it; remove toolbar reset button</td><td>Low</td><td>visual + a11y</td></tr>
+  <tr><td colspan="4" class="footnote">A &amp; B are safe to ship immediately on your word; C &amp; D are the ones worth eyeballing on a preview.
+  Each phase = its own commit, routed through layout + polish + auditor + test-author before merge.</td></tr>
+</table>
+
+<!-- 10 -->
+<h2 id="rule"><span class="num">10</span>The rule I'm writing for myself</h2>
+<p>Why I missed these: I built bespoke table interactions and judged them against my own intuition instead of
+against the tools every finance user already has muscle memory for (Excel, Sheets, every data grid). I'm adding
+a <b>Data-table conventions</b> checklist to <code>.claude/agents/lease-product-polish.md</code> so any table
+change gets measured against the established pattern <i>first</i>:</p>
+<div class="card">
+  <ul class="tight">
+    <li><b>Resize:</b> drag a border to resize; <b>double-click a border auto-fits that column to content</b> (Excel/AG Grid). Never repurpose double-click for "reset all."</li>
+    <li><b>Column controls</b> (auto-fit, reset, pin, hide) live in a per-column or table-settings menu — <b>not</b> standing toolbar buttons. Reset is a safety net, kept quiet.</li>
+    <li><b>Alignment:</b> right-align size numbers (money, counts, %, sq ft); left-align text and non-size numbers (dates, IDs, zip, phone); headers align to their column's content.</li>
+    <li><b>Dates:</b> abbreviated-month medium format (<code>Mar 1, 2026</code>), never bare numeric (<code>03/01/26</code> is locale-ambiguous), and <b>always</b> through the canonical locale-aware formatter — never a hardcoded <code>date-fns</code> format string (it silently breaks i18n).</li>
+    <li><b>Before inventing a table interaction, name the tool it mirrors</b> (Excel / Sheets / a known grid). If it mirrors nothing, that's a flag, not a feature.</li>
+  </ul>
+</div>
+
+<!-- 11 -->
+<h2 id="decisions"><span class="num">11</span>Decisions I need from you</h2>
+<div class="callout q">
+  <b>1 · Auto-fit overflow.</b> When a column's content is wider than the viewport, should auto-fit
+  <b>(A)</b> grow only up to what fits, never scrolling <i>(recommended — honors "make it fit")</i>, or
+  <b>(B)</b> size to true content like Excel and allow a horizontal scroll?
+</div>
+<div class="callout q">
+  <b>2 · Column menu trigger.</b> A visible <b>caret on each header</b> (most discoverable), <b>right-click only</b>
+  (cleanest, less obvious), or <b>both</b>?
+</div>
+<div class="callout q">
+  <b>3 · Scope.</b> Ship <b>A + B now</b> (dates + alignment, both safe) and bring <b>C + D</b> (auto-fit + menu)
+  as a second reviewed PR? Or hold everything into one PR for a single review?
+</div>
+<p class="footnote">Tell me 1/2/3 and I'll implement against your answers, route the reviewers, and put it up for merge.</p>
+
+<hr>
+<p class="footnote">Generated for review · LeaseIO · Leases redesign · 2026-06-25. No code changed by this document.</p>
+
+</div>
+</body>
+</html>
