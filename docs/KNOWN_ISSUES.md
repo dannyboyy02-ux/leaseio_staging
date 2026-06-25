@@ -2647,3 +2647,15 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 **Current behavior (acceptable, not broken):** the flag now points at `?status=active`. `chain_violation` ∈ `PORTFOLIO_STATUSES` and the `active` scope is `.in('lifecycle_status', PORTFOLIO_STATUSES).eq('archived', false)`, so the violation lease(s) ARE visible in the landing list — the user just lands on the full active list instead of a pre-filtered violations view, and must eyeball/search for the `chain_violation` status badge.
 
 **Fix options (deferred — needs a product call):** (a) add a `chain_violation` quick-filter chip to the Leases toolbar and deep-link to it; (b) keep the drill-down on the Dashboard's existing `EscalationReviewPanel`/violations surface instead of routing to Leases; (c) accept the degraded landing as-is. Low priority — the lease is reachable and the lease-detail page is the actual resolution surface (the retroactive-approval banner lives there, per the #A* / Phase-6 governance work).
+
+---
+
+### Item #152: Leases redesign — deferred i18n LOWs (status-badge labels + ES singular subtitle)
+
+> **Filed 2026-06-25** (branch `claude/relaxed-clarke-oksfz4`, Leases redesign Phase 1/2 polish review). The Phase-1/2 i18n pass localized the Leases page chrome + the `EmptyLeaseState` card; these two remainders were deferred as pre-existing/broad.
+
+**MEDIUM (app-wide, pre-existing — NOT introduced by the redesign)**
+- **Lifecycle status-badge labels render English-only.** `LeaseStatusBadge`/`displayLabel()` (`src/components/leases/LeaseStatusBadge.tsx` + `LIFECYCLE_STATUS_CONFIG`) emit "Executed"/"Active"/"Expired"/etc. unconditionally, so an ES user sees a Spanish "Estado" header over English status pills — visible on the Leases table, Dashboard pipeline, and every lease-detail surface. Fix is a cross-surface localization of the status config (return a key per status; translate at render). Deferred — touches many surfaces, wants its own pass; out of scope for the Leases redesign.
+
+**LOW**
+- **ES subtitle has no singular agreement at n=1.** `leases.subtitle_rent` renders `"{{rent}} / mes · {{active}} activos · {{total}} total"`; at one active lease the ES reads "1 activos" (should be "activo"). i18next can't pluralize mid-string, so a correct fix means splitting into pluralized sub-keys or accepting the terse stat-chip convention (agreement often dropped in dashboard chips). Deferred as cosmetic.

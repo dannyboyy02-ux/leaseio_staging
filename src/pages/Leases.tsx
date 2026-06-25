@@ -570,7 +570,7 @@ export default function Leases() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={handleExportCsv}>{t('leases.export_csv')}</DropdownMenuItem>
-                  <DropdownMenuItem disabled className="opacity-60">{t('leases.export_excel_soon')}</DropdownMenuItem>
+                  <DropdownMenuItem disabled>{t('leases.export_excel_soon')}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -635,7 +635,20 @@ export default function Leases() {
                   {filteredAndSortedLeases.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
-                        {t('leases.no_match')}
+                        <div className="flex flex-col items-center gap-3">
+                          <span>{t('leases.no_match')}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSearchQuery('');
+                              setTypeFilter('all');
+                              setExpirationFilter('all');
+                            }}
+                          >
+                            {t('leases.clear_filters')}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -646,8 +659,17 @@ export default function Leases() {
                       return (
                         <TableRow
                           key={lease.id}
-                          className="cursor-pointer hover:bg-muted/50"
+                          className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                          role="link"
+                          tabIndex={0}
+                          aria-label={t('leases.open_lease', { property: getPropertyAddress(lease) })}
                           onClick={() => navigate(`/app/leases/${lease.id}`)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              navigate(`/app/leases/${lease.id}`);
+                            }
+                          }}
                         >
                           <TableCell className="font-medium">
                             <span className="truncate max-w-[240px] block">{getPropertyAddress(lease)}</span>
