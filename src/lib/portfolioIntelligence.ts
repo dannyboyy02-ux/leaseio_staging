@@ -41,6 +41,18 @@ export interface PortfolioLease {
   escalationRate: number;
   /** Raw escalation type (e.g. 'fixed', 'index'); informational. */
   escalationType: string | null;
+  /**
+   * Renewal-notice deadline (ISO) for the Watchlist's renewal-notice rule.
+   * NULL today — `renewal_options` is abstracted as prose, not a structured
+   * date. A Tier-1 extraction enhancement will populate this, lighting the rule
+   * up with no code change (the rule already reads this field).
+   */
+  renewalNoticeDeadline: string | null;
+  /**
+   * Escalation-cap end date (ISO) for the Watchlist's escalation-cap rule.
+   * NULL today — only escalation_type/rate are captured (no structured cap).
+   */
+  escalationCapEndDate: string | null;
 }
 
 export const UNASSIGNED = 'Unassigned';
@@ -55,12 +67,18 @@ export const FORECAST_HORIZON = 5;
 // Date helpers (UTC, mirrors leaseCalculations' parsing — no local-tz drift)
 // ---------------------------------------------------------------------------
 
-function parseIso(date: string | null): Date | null {
+export function parseIso(date: string | null): Date | null {
   if (!date) return null;
   const [y, m, d] = date.split('-').map(Number);
   if (!y || !m) return null;
   const dt = new Date(Date.UTC(y, m - 1, d || 1));
   return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+/** Days from `asOf` until an ISO date; null if unparseable. Negative = in the past. */
+export function daysUntil(asOf: Date, iso: string | null): number | null {
+  const d = parseIso(iso);
+  return d ? (d.getTime() - asOf.getTime()) / 86_400_000 : null;
 }
 
 /** Whole + fractional months from `from` to `to` (0 if `to` <= `from`). */
@@ -136,6 +154,10 @@ export function toPortfolioLease(row: RawLeaseRow, propertyName: string): Portfo
     escalationRate:
       row.escalation_type === 'index' ? 0 : Number(row.escalation_rate) || 0,
     escalationType: row.escalation_type ?? null,
+    // Structured critical dates the Watchlist needs. NULL today (the source
+    // terms are abstracted as prose); populated by a later extraction pass.
+    renewalNoticeDeadline: null,
+    escalationCapEndDate: null,
   };
 }
 

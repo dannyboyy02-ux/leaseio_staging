@@ -26,6 +26,8 @@ function lease(over: Partial<PortfolioLease>): PortfolioLease {
     endDate: over.endDate ?? null,
     escalationRate: over.escalationRate ?? 0,
     escalationType: over.escalationType ?? null,
+    renewalNoticeDeadline: over.renewalNoticeDeadline ?? null,
+    escalationCapEndDate: over.escalationCapEndDate ?? null,
     ...over,
   };
 }
