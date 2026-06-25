@@ -59,6 +59,17 @@ A "dead-end state" is a state the user can reach via a single click and CANNOT e
 
 **The discoverability test.** For every state-changing affordance you find: would a finance user who never reads documentation find the reverse affordance within 5 seconds? Ghost variants, tiny icon-only buttons, hover-only reveals, off-screen elements all FAIL this test even if they render.
 
+## 1b. Status coherence — one row, one status (a class we MISSED on the Leases table)
+
+A row that carries more than one orthogonal state axis — **lifecycle** (active/executed/expired/rejected/cancelled/…), **archived**, **soft-deleted**, **expiry countdown** — must resolve to ONE coherent status signal. Two badges in the same row that contradict OR redundantly repeat each other is a defect, and it is the screenshot-level kind the owner will catch first.
+
+- **Never stack contradictory badges.** An archived lease showing both "Active" *and* "Archived" is incoherent — archived is terminal-display and must REPLACE the lifecycle badge, not sit beside it. (This is the exact miss: shipped Leases table, 2026-06-25.)
+- **Never repeat the same status in two columns.** An expired lease that renders a red "Expired" in the Days-to-Expiry column *and* an "Expired" status badge reads as "which one do I believe?" Pick one column to own the word; the other shows the complementary datum (e.g. the numeric overage, or "—").
+- **A countdown/urgency cell is only meaningful for LIVE rows.** Suppress expiry chips ("120d", red "Expired") for archived / rejected / cancelled / soft-deleted leases — a false red on a dead lease erodes trust in the whole column.
+- **Sort keys must mirror the displayed status.** If archived rows display "Archived", they must SORT as "Archived" — never by a hidden lifecycle value the user can't see.
+
+**The walk:** enumerate every `lifecycle_status × {archived, expired, terminal-negative, soft-deleted}` combination and confirm each renders exactly one coherent status across ALL columns of the row — not just the happy "active, not archived" path. Build a small truth-table in your head (or on paper) before you sign off on a status column.
+
 ## 2. Hierarchy & one-gesture-per-state
 
 - Is there ONE primary action per screen state, or a row of equal-weight buttons?

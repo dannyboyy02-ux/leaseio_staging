@@ -2672,3 +2672,23 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 
 **LOW**
 - **Deleting an already-archived lease** uses generic dialog copy that doesn't acknowledge the archived state. The 14-day window still applies correctly; only the messaging could note it. Cosmetic.
+
+---
+
+### Item #154: Leases table — status-coherence + scope-blind-empty-state findings (polish surface sweep)
+
+> **Filed 2026-06-25** (branch `claude/relaxed-clarke-oksfz4`). Surfaced by `lease-product-polish`'s broad surface+state walk while fixing the archived double-badge (Active+Archived → Archived-only) + adding Status/Days-to-Expiry sort. The double-badge + sort fixes shipped; the items below are the OTHER findings on the same surface, NOT bundled into that fix per the pre-existing-issue rule. Severities are the agent's rating with my (operator) re-assessment noted.
+
+**HIGH (agent) → MEDIUM (my reassessment: redundant, not contradictory) — expired lease shows "Expired" twice.** `src/pages/Leases.tsx`: the Days-to-Expiry cell (`getExpirationBadge`, `days < 0` → red destructive "Expired") and the Status cell (`LeaseStatusBadge`, `expired`) both render "Expired" for a non-archived expired lease, in different colors. Same "two status" *felt* problem the owner caught, one column over — though the two AGREE (redundant) rather than contradict, so I down-rate it. Fix: when expired, let Status own the word and render the Days-to-Expiry cell as the numeric overage (e.g. "−42d") or "—".
+
+**HIGH (agent) → MEDIUM-HIGH (my reassessment) — scope-blind empty state.** `Leases.tsx` `leases.length === 0` branch only special-cases `scope === 'archived'`. With `scope = 'active'` (or `'all'`) and zero portfolio leases but archived/in-flight ones existing, the user gets the full marketing `EmptyLeaseState` ("Submit a request to get started") — a dead-end that ignores the leases they actually have, reachable in one click via the scope select, and the scope control itself isn't rendered in the empty branch. Fix: scoped empty state + a visible "Show all leases" reset, and keep the scope `Select` visible above any empty body.
+
+**MEDIUM — "Clear filters" doesn't reset scope.** The over-filtered "no match" → Clear-filters button resets search/type/expiry but NOT `scope`, so a user filtered into an empty Archived/Active scope stays at zero rows after clicking the button that promises a clean slate. Fix: also reset `scope` to `'all'` (or relabel).
+
+**MEDIUM — false expiry countdown on dead leases.** Days-to-Expiry renders a colored countdown / red "Expired" for `rejected` / `cancelled` / archived leases (which still carry a `lease_end`), implying a renewal action on a dead lease. Fix: suppress the expiry badge ("—") unless the lease is live (`active`/`executed`/`fully_executed`). (Overlaps the HIGH-#1 fix.)
+
+**MEDIUM — scope control hidden when list is empty.** The filter/search/export toolbar (including the scope `Select`) is hidden whenever `leases.length === 0`, removing the primary axis control exactly when the user needs it to change scope. Fix: keep the scope `Select` visible above the empty body.
+
+**LOW** — (a) property cell has no `title`/tooltip for long addresses (unlike the Type cell), and `max-w-[240px] truncate` can look odd under horizontal scroll on narrow viewports; (b) double horizontal-scroll container — the page wraps the table in `overflow-x-auto` while the `Table` component already wraps in `overflow-auto` (drop one); (c) keyboard pass on the kebab actions cell (confirm Tab-reachability + that Enter on the kebab doesn't bubble to the row's navigate handler).
+
+**Already filed elsewhere (re-surfaced, not duplicated here):** lifecycle status-badge labels English-only → #152; `ArchiveLeaseDialog` hardcoded English → #153. NOTE: the archived-badge fix localizes the "Archived" pill, which now *spotlights* #152 (an ES Status column shows "Archivado" beside English "Executed"/"Active").
