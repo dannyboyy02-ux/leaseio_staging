@@ -379,8 +379,19 @@ export default function Leases() {
     if (days === null) return <span className="text-muted-foreground">&mdash;</span>;
     // Overdue (a still-live lease past its end date): show the signed day
     // overage in red, NOT the word "Expired" — the Status column owns that word
-    // (this cell only renders for live leases via isExpiryRelevant). #154.
-    if (days < 0) return <Badge variant="destructive">{days}d</Badge>;
+    // (this cell only renders for live leases via isExpiryRelevant). A bare
+    // "-42d" beside a green "Active" reads as cryptic, so a tooltip spells it
+    // out. #154.
+    if (days < 0) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="destructive" className="cursor-default tabular-nums">{days}d</Badge>
+          </TooltipTrigger>
+          <TooltipContent>{t('leases.overdue_tooltip', { days: Math.abs(days) })}</TooltipContent>
+        </Tooltip>
+      );
+    }
     if (days <= 30) return <Badge variant="destructive">{days}d</Badge>;
     if (days <= 60) return <Badge variant="warning">{days}d</Badge>;
     if (days <= 90) return <Badge variant="secondary">{days}d</Badge>;

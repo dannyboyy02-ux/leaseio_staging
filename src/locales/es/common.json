@@ -624,6 +624,7 @@
     "export_success_other": "Se exportaron {{count}} arrendamientos a CSV",
     "no_archived": "Sin arrendamientos archivados.",
     "no_active": "Sin arrendamientos activos en esta vista.",
+    "overdue_tooltip": "{{days}} días después de la fecha de fin (en prórroga)",
     "back_to_all": "Volver a todos los arrendamientos",
     "load_failed": "No se pudieron cargar los arrendamientos",
     "delete_action": "Eliminar permanentemente",
