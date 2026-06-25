@@ -1,9 +1,33 @@
 # Leases Redesign — Deploy & Handoff (2026-06-25)
 
 Branch: `claude/relaxed-clarke-oksfz4`. This is the durable handoff for the
-Leases-page redesign (Phases 1–3). Everything below is **committed + pushed**;
-nothing is applied to staging or deployed yet — the apply/deploy steps are
-operator-gated and ordered (Section "Operator deploy sequence").
+Leases-page redesign (Phases 1–3).
+
+## STATUS (updated 2026-06-25, post-apply)
+
+**DONE on staging (`wwkwoxxcprnjjufkbzac`):**
+- ✅ All 3 migrations APPLIED + verified (asset_type_abbreviations, lease_retention_lifecycle, lease_retention_cron). Schema checks all pass: 4 retention columns, `leases_hide_soft_deleted` RESTRICTIVE policy, `enforce_lease_retention_columns` guard, `deleted_leases` table, 3 new activity types, `asset_type_abbreviations` column, cron job `process-lease-retention-daily` scheduled.
+- ✅ 3 NEW edge functions DEPLOYED (ACTIVE): `delete-lease` (v1, verify_jwt=true), `restore-lease` (v1, verify_jwt=true), `process-lease-retention` (v1, verify_jwt=false).
+- ✅ Security advisor re-run: only an intentional INFO ("RLS enabled, no policies" on the service-role-only `deleted_leases` forensic table — same posture as `deleted_workspaces`/`cancellation_notices`). No new warnings/errors.
+
+**REMAINING — the single ACTIVATION step (do together at frontend-deploy time):**
+The Delete button is not user-reachable until the frontend deploys, so no lease
+can be soft-deleted yet — which is exactly why the items below are safe to batch
+into one activation step rather than rush. There is never a window where Delete
+works but the counts are stale.
+1. **Redeploy the 3 TOUCHED existing functions** (their `.is('deleted_at', null)`
+   filters only matter once soft-deletes exist) — do via the Supabase CLI
+   (`supabase functions deploy <name>`) so `_shared` bundles deterministically;
+   NOT hand-bundled through MCP (the 2729-line `process_lease` is the extraction
+   pipeline — a transcription slip there breaks all uploads):
+   - `process_lease` (active-cap count + amendment-parent matcher — frees the slot)
+   - `ai-assistant` (Leo must not see a soft-deleted lease — Hard Rule #8)
+   - `vendor-health-check` (the `workspace_quotas` snapshot count)
+2. **Cron secret** (step 3 below) — set `LEASE_RETENTION_CRON_SECRET` + insert the
+   matching `private.cron_secrets` row. Until then the nightly purge 401s (nothing
+   is purged) — fail-closed and safe.
+3. **Frontend deploy** (Vercel) — carries the Leases UI + Delete dialog + Undo.
+4. (hygiene) Regenerate `src/integrations/supabase/types.ts` from the applied schema.
 
 ---
 
