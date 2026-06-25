@@ -126,7 +126,9 @@ CREATE TRIGGER enforce_lease_retention_columns
 -- durable row is the proof the lease existed, who deleted it, its state at
 -- deletion, and that the 14-day window elapsed. One row per lease — a retried
 -- partial purge RESUMES against the existing row (UNIQUE) instead of inserting a
--- contradictory duplicate. Mirrors deleted_workspaces.
+-- contradictory duplicate. Shaped like deleted_workspaces, but its ACCESS
+-- posture mirrors the stricter cancellation_notices (service-role-only, no
+-- member SELECT policy) — forensic data is not customer-readable.
 CREATE TABLE IF NOT EXISTS public.deleted_leases (
   id                         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   original_lease_id          uuid NOT NULL,
