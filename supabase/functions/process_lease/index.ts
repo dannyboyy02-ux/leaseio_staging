@@ -527,6 +527,7 @@ async function findParentLeaseCandidates(
     .eq('workspace_id', workspaceId)
     .or('lease_type.is.null,lease_type.eq.master')
     .eq('archived', false)
+    .is('deleted_at', null) // never offer a soft-deleted lease as an amendment parent (Phase 3)
     .neq('id', currentLeaseId)
     .limit(200);
 
@@ -1080,7 +1081,8 @@ async function checkProcessingQuota(
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId)
       .eq('lifecycle_status', 'active')
-      .eq('archived', false);
+      .eq('archived', false)
+      .is('deleted_at', null); // soft-deleted leases free their slot (Phase 3; service-role bypasses the hiding RLS)
     if (activeErr) {
       // Fail open for the ACTIVE metric only — a confirmed monthly breach must
       // still block. (Previously returned null here, leaking an over-monthly

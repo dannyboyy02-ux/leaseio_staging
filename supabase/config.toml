@@ -297,3 +297,18 @@ verify_jwt = true
 # them (the delivery backbone for the whole approval-notification system).
 [functions.dispatch-notifications]
 verify_jwt = false
+
+# Leases redesign Phase 3 — lease soft-delete (admin Delete) + restore.
+# Both are Bearer-JWT user actions; each does its own workspace admin/owner
+# check inside (service-role client) and writes a lease_activity_log row.
+[functions.delete-lease]
+verify_jwt = true
+
+[functions.restore-lease]
+verify_jwt = true
+
+# process-lease-retention is cron-only (x-cron-secret = LEASE_RETENTION_CRON_SECRET):
+# nightly hard-purge of leases past their 14-day retention window, with a
+# deleted_leases forensic row written first. Fail-closed if the secret is unset.
+[functions.process-lease-retention]
+verify_jwt = false

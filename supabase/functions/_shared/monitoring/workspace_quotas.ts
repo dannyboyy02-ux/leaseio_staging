@@ -76,21 +76,23 @@ export async function pollWorkspaceQuotas(
     const tier = (w.plan === 'business' ? 'business' : 'starter');
     const limits = TIER_LIMITS[tier];
 
-    // Active leases (lifecycle_status = 'active', not archived)
+    // Active leases (lifecycle_status = 'active', not archived, not soft-deleted)
     const { count: activeCount } = await supabaseAdmin
       .from('leases')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', w.id)
       .eq('lifecycle_status', 'active')
-      .eq('archived', false);
+      .eq('archived', false)
+      .is('deleted_at', null); // Phase 3: exclude soft-deleted (service-role bypasses the hiding RLS)
     const active = activeCount ?? 0;
 
-    // Archived leases
+    // Archived leases (a soft-deleted+archived lease is en route to purge — don't double-count it)
     const { count: archivedCount } = await supabaseAdmin
       .from('leases')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', w.id)
-      .eq('archived', true);
+      .eq('archived', true)
+      .is('deleted_at', null);
     const archived = archivedCount ?? 0;
 
     // Monthly extractions: count leases uploaded in last 30 days

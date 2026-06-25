@@ -19,6 +19,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { assetAbbreviation } from '@/lib/assetTypes';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -82,8 +83,29 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
 
   // Lease configuration state
   const [assetTypeConfig, setAssetTypeConfig] = useState<string[]>(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
+  // Label -> abbreviation map (e.g. { "Real Estate": "RE" }). Loaded tolerantly
+  // below so a pre-migration deploy (column absent) degrades to built-in defaults.
+  const [assetTypeAbbr, setAssetTypeAbbr] = useState<Record<string, string>>({});
   const [newAssetType, setNewAssetType] = useState('');
   const [isSavingAssetTypes, setIsSavingAssetTypes] = useState(false);
+
+  useEffect(() => {
+    if (!workspace?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await (supabase as any)
+        .from('workspaces')
+        .select('asset_type_abbreviations')
+        .eq('id', workspace.id)
+        .single();
+      if (cancelled || error || !data) return; // column may not exist yet → keep {}
+      const abbr = data.asset_type_abbreviations;
+      if (abbr && typeof abbr === 'object' && !Array.isArray(abbr)) {
+        setAssetTypeAbbr(abbr as Record<string, string>);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workspace?.id]);
 
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
   const [newDepartmentOption, setNewDepartmentOption] = useState('');
@@ -413,6 +435,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
 
   const handleRemoveAssetType = (type: string) => {
     setAssetTypeConfig(prev => prev.filter(t => t !== type));
+    setAssetTypeAbbr(prev => {
+      const next = { ...prev };
+      delete next[type];
+      return next;
+    });
   };
 
   const handleSaveAssetTypes = async () => {
@@ -421,7 +448,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     try {
       const { error } = await supabase
         .from('workspaces')
-        .update({ asset_type_config: assetTypeConfig } as any)
+        .update({ asset_type_config: assetTypeConfig, asset_type_abbreviations: assetTypeAbbr } as any)
         .eq('id', workspace.id);
       if (error) throw error;
       toast.success('Asset types saved');
@@ -778,6 +805,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       <CardDescription>
                         Configure the list of asset types available when classifying leases.
                         These are used by the AI during extraction to classify the asset.
+                        Set a short abbreviation (e.g. RE, EQP) to keep the Leases table tight —
+                        leave it blank to use the built-in default.
                       </CardDescription>
                     </div>
                   </div>
@@ -785,8 +814,21 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     {assetTypeConfig.map((type) => (
-                      <div key={type} className="flex items-center justify-between rounded-md border px-3 py-2">
-                        <span className="text-sm">{type}</span>
+                      <div key={type} className="flex items-center gap-2 rounded-md border px-3 py-2">
+                        <span className="flex-1 truncate text-sm">{type}</span>
+                        <Input
+                          value={assetTypeAbbr[type] ?? ''}
+                          onChange={(e) =>
+                            setAssetTypeAbbr((prev) => ({
+                              ...prev,
+                              [type]: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5),
+                            }))
+                          }
+                          placeholder={assetAbbreviation(type)}
+                          aria-label={`${type} abbreviation`}
+                          maxLength={5}
+                          className="h-7 w-20 text-center text-xs"
+                        />
                         <Button
                           variant="ghost"
                           size="icon"

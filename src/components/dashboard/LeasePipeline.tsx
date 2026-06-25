@@ -26,11 +26,11 @@ const formatCompactCurrency = (value: number, language: SupportedLocale): string
 const ACTIVE_LOOKBACK_DAYS = 90;
 
 const STAGES = [
-  { key: 'submitted',    label: 'Submitted',                            color: 'bg-blue-400',   href: '/app/leases?view=approval' },
-  { key: 'under_review', label: 'Under Review',                          color: 'bg-amber-400',  href: '/app/leases?view=approval' },
-  { key: 'approved',     label: 'Approved',                              color: 'bg-purple-400', href: '/app/leases?view=approval' },
-  { key: 'executed',     label: 'Executed',                              color: 'bg-indigo-400', href: '/app/leases?view=active' },
-  { key: 'active',       label: `Active (${ACTIVE_LOOKBACK_DAYS}d)`,    color: 'bg-green-500',  href: '/app/leases?view=active' },
+  { key: 'submitted',    label: 'Submitted',                            color: 'bg-blue-400',   href: '/app/approvals' },
+  { key: 'under_review', label: 'Under Review',                          color: 'bg-amber-400',  href: '/app/approvals' },
+  { key: 'approved',     label: 'Approved',                              color: 'bg-purple-400', href: '/app/approvals' },
+  { key: 'executed',     label: 'Executed',                              color: 'bg-indigo-400', href: '/app/leases?status=active' },
+  { key: 'active',       label: `Active (${ACTIVE_LOOKBACK_DAYS}d)`,    color: 'bg-green-500',  href: '/app/leases?status=active' },
 ] as const;
 
 interface StageData {

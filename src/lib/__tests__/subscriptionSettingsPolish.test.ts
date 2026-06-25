@@ -141,12 +141,20 @@ describe('locale parity (en/es)', () => {
   });
 
   it('no locale string claims a 14-day trial or "no credit card required"', () => {
-    const stale = /14[-\s]?d[ií]a|14[-\s]?day|no credit card|no requiere tarjeta/i;
+    // The trial is 7-day. Guard against a "14-day trial" claim and the
+    // "no credit card" claim — but scope the 14-day check to TRIAL context, so
+    // legitimate unrelated copy (e.g. the lease 14-day delete-retention window)
+    // doesn't false-positive. A bare "14 days" elsewhere is fine.
+    const noCard = /no credit card|no requiere tarjeta/i;
+    const fourteenDay = /14[-\s]?d[ií]a|14[-\s]?day/i;
+    const trialContext = /trial|prueba/i;
     for (const [name, tree] of [
       ['en', en],
       ['es', es],
     ] as const) {
-      const hits = flattenStrings(tree).filter(([, v]) => stale.test(v));
+      const hits = flattenStrings(tree).filter(
+        ([, v]) => noCard.test(v) || (fourteenDay.test(v) && trialContext.test(v)),
+      );
       expect(hits, `${name} locale contains stale trial copy`).toEqual([]);
     }
   });

@@ -119,7 +119,7 @@ export function useNeedsAction() {
         return now - new Date(l.status_changed_at).getTime() > fourteenDaysMs;
       }).length;
       if (stalledCount > 0) {
-        otherFlags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/leases?view=approval', icon: Clock });
+        otherFlags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/approvals', icon: Clock });
       }
 
       const noAbstractionCount = leases.filter((l) => {
@@ -133,7 +133,7 @@ export function useNeedsAction() {
         return inLifecycle && inStatus;
       }).length;
       if (noAbstractionCount > 0) {
-        otherFlags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/leases?view=approval', icon: FileSearch });
+        otherFlags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/approvals', icon: FileSearch });
       }
 
       // Phase 3: include chain executed equivalent (fully_executed).
@@ -143,7 +143,7 @@ export function useNeedsAction() {
           !l.executed_document_url
       ).length;
       if (noDocCount > 0) {
-        otherFlags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?view=active', icon: Upload });
+        otherFlags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?status=active', icon: Upload });
       }
 
       // Phase 6: chain_violation leases are leases whose policy-required
@@ -159,7 +159,10 @@ export function useNeedsAction() {
         otherFlags.unshift({
           label: 'Chain violation \u2014 retroactive approval required',
           count: chainViolationCount,
-          href: '/app/leases?view=violations',
+          // chain_violation \u2208 the Leases "active" scope; lands on the active
+          // list where the violation lease is visible. The old violations-only
+          // filter no longer exists post-redesign (KNOWN_ISSUES #151).
+          href: '/app/leases?status=active',
           icon: AlertOctagon,
         });
       }

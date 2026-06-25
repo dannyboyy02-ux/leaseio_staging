@@ -18,8 +18,26 @@ export function escapeCsvCell(val: unknown): string {
   if (/^[=+\-@\t\r]/.test(str)) {
     str = `'${str}`;
   }
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+  // RFC-4180: quote any field containing a comma, double-quote, LF, or a bare
+  // CR (a lone \r without \n still needs quoting, else it can split a row).
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
+}
+
+/**
+ * Build an RFC-4180 CSV string from an array of flat records. The first
+ * record's keys become the header row (column order = key order). Every cell is
+ * run through {@link escapeCsvCell} (formula-injection + delimiter safe).
+ * Returns '' for an empty array. Pure — caller handles the download.
+ */
+export function rowsToCsv(records: Array<Record<string, unknown>>): string {
+  if (records.length === 0) return '';
+  const headers = Object.keys(records[0]);
+  const lines = [headers.map(escapeCsvCell).join(',')];
+  for (const r of records) {
+    lines.push(headers.map((h) => escapeCsvCell(r[h])).join(','));
+  }
+  return lines.join('\n');
 }
