@@ -18,7 +18,7 @@ import {
   ChevronRight,
   Trash2,
 } from 'lucide-react';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -41,10 +41,19 @@ import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { rowsToCsv } from '@/lib/csv';
 import { prettyAssetType, assetAbbreviation } from '@/lib/assetTypes';
+import {
+  getPropertyAddress,
+  getLeaseEnd,
+  getDaysUntilExpiration,
+  statusText,
+  isArchivedDisplay,
+  isExpiryRelevant,
+  makeStatusSortKey,
+  makeLeaseComparator,
+} from '@/lib/leaseSort';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
-import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -81,7 +90,7 @@ interface LeaseRow {
   }[] | null;
 }
 
-type SortField = 'property' | 'asset_type' | 'landlord' | 'monthly_rent' | 'lease_start' | 'lease_end' | 'sqft';
+type SortField = 'property' | 'asset_type' | 'landlord' | 'monthly_rent' | 'lease_start' | 'lease_end' | 'sqft' | 'days_to_expiry' | 'status';
 type SortDirection = 'asc' | 'desc';
 // The Leases page is the lease PORTFOLIO (executed / active / expired). The
 // archive scope — not the workflow lifecycle — is the page's primary axis.
@@ -366,26 +375,23 @@ export default function Leases() {
     return sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
   };
 
-  const getPropertyAddress = (lease: LeaseRow): string => {
-    const json = lease.extracted_json as Record<string, unknown> | null;
-    return lease.request_title || lease.property_address || getExtractedFieldValue(json?.address) || lease.filename || '';
-  };
-
-  const getLeaseEnd = (lease: LeaseRow): string | null =>
-    lease.executed_expiry_date || lease.lease_end;
-
-  const getDaysUntilExpiration = (leaseEnd: string | null): number | null => {
-    if (!leaseEnd) return null;
-    try {
-      return differenceInDays(parseISO(leaseEnd), new Date());
-    } catch {
-      return null;
-    }
-  };
-
   const getExpirationBadge = (days: number | null) => {
     if (days === null) return <span className="text-muted-foreground">&mdash;</span>;
-    if (days < 0) return <Badge variant="destructive">{t('leases.expired')}</Badge>;
+    // Overdue (a still-live lease past its end date): show the signed day
+    // overage in red, NOT the word "Expired" — the Status column owns that word
+    // (this cell only renders for live leases via isExpiryRelevant). A bare
+    // "-42d" beside a green "Active" reads as cryptic, so a tooltip spells it
+    // out. #154.
+    if (days < 0) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="destructive" className="cursor-default tabular-nums">{days}d</Badge>
+          </TooltipTrigger>
+          <TooltipContent>{t('leases.overdue_tooltip', { days: Math.abs(days) })}</TooltipContent>
+        </Tooltip>
+      );
+    }
     if (days <= 30) return <Badge variant="destructive">{days}d</Badge>;
     if (days <= 60) return <Badge variant="warning">{days}d</Badge>;
     if (days <= 90) return <Badge variant="secondary">{days}d</Badge>;
@@ -403,9 +409,10 @@ export default function Leases() {
     }
   };
 
-  // Plain-text status for search + export (the visual badge is LeaseStatusBadge).
-  const statusText = (lease: LeaseRow): string =>
-    (lease.lifecycle_status || lease.status || '').replace(/_/g, ' ');
+  // Sort key for the Status column (pure helper in leaseSort.ts). An archived
+  // lease shows ONLY the "Archived" badge (lifecycle suppressed in the cell),
+  // so it must also sort as "Archived" — the i18n'd label is injected here.
+  const statusSortKey = makeStatusSortKey(t('archive.deleted_badge'));
 
   // Active = live portfolio (not archived). Drives the header rent total.
   const activeLeases = useMemo(
@@ -471,45 +478,7 @@ export default function Leases() {
       return matchesSearch && matchesType && matchesExpiration;
     });
 
-    result.sort((a, b) => {
-      let aVal: string | number = '';
-      let bVal: string | number = '';
-
-      switch (sortField) {
-        case 'property':
-          aVal = getPropertyAddress(a).toLowerCase();
-          bVal = getPropertyAddress(b).toLowerCase();
-          break;
-        case 'asset_type':
-          aVal = (a.asset_type || '').toLowerCase();
-          bVal = (b.asset_type || '').toLowerCase();
-          break;
-        case 'landlord':
-          aVal = (a.landlord_name || '').toLowerCase();
-          bVal = (b.landlord_name || '').toLowerCase();
-          break;
-        case 'monthly_rent':
-          aVal = getMonthlyRent(a);
-          bVal = getMonthlyRent(b);
-          break;
-        case 'lease_start':
-          aVal = a.lease_start || '';
-          bVal = b.lease_start || '';
-          break;
-        case 'lease_end':
-          aVal = getLeaseEnd(a) || '';
-          bVal = getLeaseEnd(b) || '';
-          break;
-        case 'sqft':
-          aVal = a.square_footage || 0;
-          bVal = b.square_footage || 0;
-          break;
-      }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
+    result.sort(makeLeaseComparator(sortField, sortDirection, statusSortKey));
 
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -565,18 +534,12 @@ export default function Leases() {
           <div className="flex h-[40vh] items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        ) : leases.length === 0 ? (
-          scope === 'archived' ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <Archive className="h-10 w-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">{t('leases.no_archived')}</p>
-              <Button variant="outline" onClick={() => setScope('all')}>
-                {t('leases.back_to_all')}
-              </Button>
-            </div>
-          ) : (
-            <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
-          )
+        ) : leases.length === 0 && scope === 'all' ? (
+          // Only a truly-empty workspace (no portfolio leases at all) earns the
+          // marketing card. A scoped-empty Active/Archived slice is handled in
+          // the toolbar branch below so the scope control stays visible and the
+          // user is never walled off from leases they actually have. #154.
+          <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -639,6 +602,22 @@ export default function Leases() {
               </DropdownMenu>
             </div>
 
+            {leases.length === 0 ? (
+              // Scoped-empty: the Active/Archived slice is empty but the
+              // workspace isn't. The toolbar (incl. the scope Select) stays
+              // visible above; offer a one-click path back to everything. #154.
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                {scope === 'archived'
+                  ? <Archive className="h-10 w-10 text-muted-foreground" />
+                  : <Building2 className="h-10 w-10 text-muted-foreground" />}
+                <p className="text-sm text-muted-foreground">
+                  {scope === 'archived' ? t('leases.no_archived') : t('leases.no_active')}
+                </p>
+                <Button variant="outline" onClick={() => setScope('all')}>
+                  {t('leases.back_to_all')}
+                </Button>
+              </div>
+            ) : (
             <div className="overflow-x-auto rounded-lg border border-border bg-card">
               <Table className="min-w-[720px]">
                 <TableHeader>
@@ -683,7 +662,12 @@ export default function Leases() {
                         {getSortIcon('lease_end')}
                       </Button>
                     </TableHead>
-                    <TableHead>{t('leases.days_to_expiry')}</TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('days_to_expiry')}>
+                        {t('leases.days_to_expiry')}
+                        {getSortIcon('days_to_expiry')}
+                      </Button>
+                    </TableHead>
                     <TableHead className="hidden lg:table-cell">
                       <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('sqft')}>
                         <Ruler className="mr-2 h-4 w-4" />
@@ -691,7 +675,12 @@ export default function Leases() {
                         {getSortIcon('sqft')}
                       </Button>
                     </TableHead>
-                    <TableHead>{t('leases.status')}</TableHead>
+                    <TableHead>
+                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('status')}>
+                        {t('leases.status')}
+                        {getSortIcon('status')}
+                      </Button>
+                    </TableHead>
                     <TableHead className="w-[1%] text-right"><span className="sr-only">{t('leases.actions')}</span></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -708,6 +697,7 @@ export default function Leases() {
                               setSearchQuery('');
                               setTypeFilter('all');
                               setExpirationFilter('all');
+                              setScope('all');
                             }}
                           >
                             {t('leases.clear_filters')}
@@ -764,19 +754,25 @@ export default function Leases() {
                           <TableCell className="hidden sm:table-cell text-muted-foreground">
                             {formatDate(leaseEnd)}
                           </TableCell>
-                          <TableCell>{getExpirationBadge(daysUntil)}</TableCell>
+                          <TableCell>
+                            {isExpiryRelevant(lease)
+                              ? getExpirationBadge(daysUntil)
+                              : <span className="text-muted-foreground">&mdash;</span>}
+                          </TableCell>
                           <TableCell className="hidden lg:table-cell text-muted-foreground">
                             {formatSqFt(lease.square_footage)}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-1.5">
+                            {/* Archived is a terminal display state: it REPLACES the
+                                lifecycle badge (showing both "Active" + "Archived" was
+                                contradictory). statusSortKey mirrors this exactly. */}
+                            {isArchivedDisplay(lease) ? (
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                {t('archive.deleted_badge')}
+                              </Badge>
+                            ) : (
                               <LeaseStatusBadge status={lease.lifecycle_status || lease.status} />
-                              {lease.archived && (
-                                <Badge variant="outline" className="text-xs text-muted-foreground">
-                                  {t('archive.deleted_badge')}
-                                </Badge>
-                              )}
-                            </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             {/* Archive/Restore is admin/owner-only (#78 trigger
@@ -828,6 +824,7 @@ export default function Leases() {
                 </TableBody>
               </Table>
             </div>
+            )}
           </>
         )}
       </PageLayout>
