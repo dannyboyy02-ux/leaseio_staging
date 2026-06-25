@@ -99,6 +99,8 @@
     <a href="#dblclick">4 · Fix: double-click = auto-fit <span class="pill p1">P1</span></a>
     <a href="#menu">5 · Fix: column menu &amp; reset <span class="pill p2">P2</span></a>
     <a href="#align">6 · Fix: number alignment <span class="pill p2">P2</span></a>
+    <a href="#round2" style="font-weight:700;color:var(--p0)">R2 · Rendered-state review (the geometry)</a>
+    <a href="#path">R2 · Recommended path (1 &amp; 2)</a>
     <a href="#flow">7 · Data flow</a>
     <a href="#code">8 · Code to review</a>
     <a href="#phases">9 · Rollout phases</a>
@@ -317,6 +319,76 @@ so no new dependency. Reset stays gated to "only when layout ≠ default."</p>
 <span class="add">+ &lt;TableCell className="tabular-nums font-medium truncate text-right"&gt;</span></pre>
 <p>Dates stay left-aligned (correct per convention). Days-to-Expiry is a badge, left as-is.</p>
 
+<!-- ROUND 2 -->
+<hr>
+<div class="card" style="border-left:4px solid var(--p0)">
+  <b>Round 2 — you pushed back, so I ran an exhaustive two-reviewer sweep of the whole <i>rendered</i> table</b>
+  (polish + layout, both with the new data-table rule). They converged on a single <b>root cause</b> and ~15
+  issues. Headline: <b>forcing all 10 columns to fit a ~974px table</b> shrinks every column below its content,
+  and <code>px-4</code> cell padding (32px × 10 cells = <b>320px of pure padding</b>) eats what's left — so dates,
+  Sq&nbsp;Ft and Status get 36–46px of usable space and clip, and the cells that forgot <code>overflow-hidden</code>
+  spill into their neighbor. That one decision spawns the SF redundancy's clip, the date clip, the icon-only
+  headers, <i>and</i> the Archived↔kebab overlap.
+</div>
+
+<h2 id="round2"><span class="num" style="background:var(--p0)">R2</span>The geometry behind every defect you saw</h2>
+<p>1280px laptop · 256px sidebar → table renders at ~974px, all 10 columns visible. Usable content per column =
+(its % × 974) − 32px of cell padding:</p>
+<table class="tbl">
+  <tr><th>Column</th><th>%</th><th>content px</th><th>needs</th><th>result</th></tr>
+  <tr><td>property</td><td>18</td><td>143</td><td>address</td><td class="good">ok (truncates + tooltip)</td></tr>
+  <tr><td>asset_type</td><td>7</td><td>36</td><td>"RE" badge</td><td>tight; header label gone</td></tr>
+  <tr><td>landlord</td><td>12</td><td>85</td><td>name</td><td class="good">ok (truncates)</td></tr>
+  <tr><td>monthly_rent</td><td>13</td><td>95</td><td>"$77,646"</td><td>fits, but left-aligned</td></tr>
+  <tr><td><b>lease_start</b></td><td>8</td><td><b>46</b></td><td>~78</td><td class="bad">CLIPS → "Mar 1, 2…"</td></tr>
+  <tr><td><b>lease_end</b></td><td>8</td><td><b>46</b></td><td>~78</td><td class="bad">CLIPS</td></tr>
+  <tr><td>days_to_expiry</td><td>9</td><td>56</td><td>badge</td><td class="good">ok</td></tr>
+  <tr><td><b>sqft</b></td><td>7</td><td><b>36</b></td><td>~62</td><td class="bad">CLIPS (+ redundant "SF")</td></tr>
+  <tr><td><b>status</b></td><td>13</td><td><b>95</b></td><td>~110</td><td class="bad">overflows → hits kebab</td></tr>
+  <tr><td><b>actions</b></td><td>5</td><td><b>17</b></td><td>32px kebab</td><td class="bad">OVERFLOWS into status</td></tr>
+</table>
+<p class="footnote">The columns that <b>must not</b> truncate (dates, money, status) are exactly the ones being
+starved, while chrome (icons, the "SF" suffix, padding) is protected. That's backwards.</p>
+
+<h2 id="findings2">Consolidated findings &amp; fixes</h2>
+<table class="tbl">
+  <tr><th style="width:8%"></th><th style="width:34%">Finding</th><th>Fix</th></tr>
+  <tr><td><span class="pill p0">CRIT</span></td><td><b>Cells don't clip</b> → wide content spills into the neighbor (Archived badge over the kebab). <code>&lt;td&gt;</code> is <code>overflow:visible</code> by default under table-fixed.</td><td>Make clipping the blanket default: <code>[&amp;_td]:overflow-hidden [&amp;_th]:overflow-hidden</code> on the table; inner <code>truncate</code> on text cells.</td></tr>
+  <tr><td><span class="pill p0">CRIT</span></td><td><b>Actions column 5% ≈ 17px</b> &lt; the 32px kebab → it overflows left into Status.</td><td>Pin Actions to a <b>fixed 56px</b> (it's non-resizable) + <code>px-2</code>; the 9 resizable columns share <code>100% − 56px</code>.</td></tr>
+  <tr><td><span class="pill p1">HIGH</span></td><td><b>Dates clip</b> to "Mar 1, 2…" (46px vs ~78px needed) — a truncated date is useless, no tooltip.</td><td>Widen dates 8→10%; add <code>title=</code>; route through <code>formatLocalizedDate</code> (also fixes i18n, §3).</td></tr>
+  <tr><td><span class="pill p1">HIGH</span></td><td><b>Header labels collapse to icon-only</b> — leading <code>Tag</code>/<code>Calendar</code>/<code>Ruler</code> eat ~24px, label truncates to zero.</td><td>Drop the decorative leading icons; keep only <code>Building2</code> on Property. Label + sort arrow only.</td></tr>
+  <tr><td><span class="pill p1">HIGH</span></td><td><b>"Sq. Ft." header + "44,833 SF" cell</b> — unit printed twice in the tightest column, which causes its clip.</td><td><code>formatSqFt</code> returns just <code>"44,833"</code>; header keeps the unit.</td></tr>
+  <tr><td><span class="pill p1">HIGH</span></td><td><b>Money &amp; Sq Ft left-aligned</b> — magnitude numbers should right-align (the "real finance tool" tell).</td><td><code>text-right tabular-nums</code> on Rent + Sq Ft cells <i>and</i> headers; dates stay left.</td></tr>
+  <tr><td><span class="pill p1">HIGH</span></td><td><b>Status pill overflows</b> — "Fully Executed"/"Archived" &gt; 95px.</td><td>Bump Status 13→15%; clip; confirm longest short-label fits.</td></tr>
+  <tr><td><span class="pill p1">HIGH</span></td><td><b>Two badge grammars</b> in Status — outline "Archived" vs soft lifecycle pills.</td><td>Render Archived through the same soft/muted pill system → one badge family.</td></tr>
+  <tr><td><span class="pill p2">MED</span></td><td>Cut per-cell padding <code>px-4→px-3</code> (recovers ~80–160px — the biggest single lever); row-height variance from pills vs text; Days-to-Expiry mixes 4 variants + bare text; "Reset columns" reflows the toolbar when it appears; "Clear filters" silently resets scope; Reset hidden below <code>lg</code> even when a saved layout applies.</td><td>Padding to <code>px-3</code>; pin row height; unify the expiry column treatment + <code>tabular-nums</code>; reserve the Reset slot (or move it to the card corner); make "Clear filters" honest about scope; show Reset whenever layout ≠ default.</td></tr>
+  <tr><td><span class="pill p2">LOW</span></td><td><code>tabular-nums</code> on the alpha asset badge; CSV exports ISO dates (defensible); expiry color has no legend; admin kebab vs non-admin chevron open-cue differs.</td><td>Drop the stray <code>tabular-nums</code>; leave CSV/ISO; optional expiry-legend tooltip.</td></tr>
+</table>
+
+<h2 id="path">Recommended path</h2>
+<div class="two">
+  <div class="card" style="border-top:3px solid var(--brand)">
+    <p class="lbl good">Path 1 — do now (kills the screenshot)</p>
+    <ul class="tight">
+      <li>Clip every cell (<code>overflow-hidden</code>) + inner truncate.</li>
+      <li>Padding <code>px-4 → px-3</code>; Actions → fixed 56px / <code>px-2</code>.</li>
+      <li>Re-budget freed space: dates →10%, status →15%, rent →14%.</li>
+      <li>Drop "SF" suffix; drop decorative header icons; right-align rent + sqft.</li>
+      <li>Unify the Status pill; localize dates; pin row height.</li>
+    </ul>
+    <p class="footnote good">One contained pass resolves both CRITICALs and 5 of 6 HIGHs — the entire screenshot.</p>
+  </div>
+  <div class="card" style="border-top:3px solid var(--p2)">
+    <p class="lbl" style="color:var(--p2)">Path 2 — the convention follow-up</p>
+    <ul class="tight">
+      <li>Ship a <b>readable default-visible subset</b> (Property · Rent · End/Expiry · Status · Actions).</li>
+      <li>Move the rest (Landlord, Type, Start, Sq Ft) into a <b>"Columns" show/hide menu</b> — persist visibility in <code>leaseColumnPrefs</code>.</li>
+      <li>Auto-fit / reset live in that menu; double-click a border auto-fits (§4); revealed columns horizontal-scroll.</li>
+    </ul>
+    <p class="footnote">This is what Excel/Sheets/AG&nbsp;Grid actually do — never shrink every column below its content. Heavier; do it once Path 1 lands and we see whether all 10 columns earn their place.</p>
+  </div>
+</div>
+
 <!-- 7 -->
 <h2 id="flow"><span class="num">7</span>Data flow</h2>
 <p>One source of truth — a percentage-width map — drives the layout and is the only thing persisted. Three
@@ -397,6 +469,13 @@ change gets measured against the established pattern <i>first</i>:</p>
 <!-- 11 -->
 <h2 id="decisions"><span class="num">11</span>Decisions I need from you</h2>
 <div class="callout q">
+  <b>0 · The big one — which path?</b> <b>(A)</b> <i>Path 1 now</i> — the contained pass (clip cells, cut padding,
+  fixed Actions column, re-budget widths, drop "SF"/header icons, right-align money, localized dates, unify Status
+  pill) that resolves both CRITICALs + 5 HIGHs and fixes everything in your screenshot; <b>(B)</b> Path 1 <i>and</i>
+  Path 2 (default-visible subset + a "Columns" menu) in sequence; or <b>(C)</b> jump straight to Path 2. My
+  recommendation: <b>A now, B's column-menu as the next PR</b> once we see the cleaned-up 10-column table.
+</div>
+<div class="callout q">
   <b>1 · Auto-fit overflow.</b> When a column's content is wider than the viewport, should auto-fit
   <b>(A)</b> grow only up to what fits, never scrolling <i>(recommended — honors "make it fit")</i>, or
   <b>(B)</b> size to true content like Excel and allow a horizontal scroll?
@@ -409,7 +488,8 @@ change gets measured against the established pattern <i>first</i>:</p>
   <b>3 · Scope.</b> Ship <b>A + B now</b> (dates + alignment, both safe) and bring <b>C + D</b> (auto-fit + menu)
   as a second reviewed PR? Or hold everything into one PR for a single review?
 </div>
-<p class="footnote">Tell me 1/2/3 and I'll implement against your answers, route the reviewers, and put it up for merge.</p>
+<p class="footnote">Tell me 0/1/2/3 and I'll implement against your answers, route the reviewers, and put it up for merge.
+A one-word "do Path 1" is enough to start.</p>
 
 <hr>
 <p class="footnote">Generated for review · LeaseIO · Leases redesign · 2026-06-25. No code changed by this document.</p>
