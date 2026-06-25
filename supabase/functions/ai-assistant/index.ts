@@ -322,6 +322,9 @@ serve((req) => {
         // either; only 'cancelled' actually exists. Kept the cancelled
         // exclusion (we don't want the AI to reason over cancelled leases).
         .not('lifecycle_status', 'in', '("cancelled")')
+        // Phase 3 / Hard Rule #8: Leo must never see a soft-deleted lease
+        // (service-role fetch bypasses the leases_hide_soft_deleted RLS).
+        .is('deleted_at', null)
         .limit(60);
 
       const leaseContext = buildLeaseContext(leases || [], workspace.name);
