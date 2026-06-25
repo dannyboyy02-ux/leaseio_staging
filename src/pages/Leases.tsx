@@ -37,11 +37,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { rowsToCsv } from '@/lib/csv';
+import { prettyAssetType, assetAbbreviation } from '@/lib/assetTypes';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
@@ -85,10 +87,6 @@ type StatusScope = 'all' | 'active' | 'archived';
 // Lifecycle states that belong to the portfolio surface. In-flight/approval
 // states are intentionally excluded — Approvals owns that lifecycle.
 const PORTFOLIO_STATUSES = ['executed', 'active', 'fully_executed', 'expired', 'chain_violation'];
-
-// snake_case asset_type → "Title Case" (matches ApprovalQueue / LeaseAudit).
-const prettyAssetType = (t: string | null | undefined): string =>
-  t ? t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '';
 
 export default function Leases() {
   const navigate = useNavigate();
@@ -634,7 +632,14 @@ export default function Leases() {
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
                             {lease.asset_type ? (
-                              <Badge variant="outline" className="font-normal">{prettyAssetType(lease.asset_type)}</Badge>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant="outline" className="font-normal cursor-default tabular-nums">
+                                    {assetAbbreviation(lease.asset_type)}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>{prettyAssetType(lease.asset_type)}</TooltipContent>
+                              </Tooltip>
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
