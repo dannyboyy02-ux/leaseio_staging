@@ -46,7 +46,22 @@ cp .env.example .env
 npm run dev
 ```
 
-The dev server runs at <http://localhost:5173>. Edge functions run against the linked Supabase project — local Docker is not required for normal development.
+The dev server runs at <http://localhost:8080> (port set in `vite.config.ts`). Edge functions run against the linked Supabase project — local Docker is not required for normal development.
+
+### Browser testing with Claude Code (local only)
+
+This repo ships a project-scoped `.mcp.json` that registers Microsoft's
+[Playwright MCP server](https://github.com/microsoft/playwright-mcp). When you
+run **Claude Code locally**, it can drive a real Chromium against the running
+dev server — e.g. *"open <http://localhost:8080>, collapse and resize the
+sidebar, and confirm the main content reflows."* Claude installs the browser on
+first use, and the first run prompts you to approve the server (a Claude Code
+security gate for project-scoped MCP servers).
+
+Start the dev server first (`npm run dev`), then ask Claude to navigate. This is
+a **local-only** capability: Claude Code on the web / remote cloud sessions
+can't launch a local browser, so the Playwright MCP server is inert there —
+those sessions stay on the Vitest suite + subagent reviewers.
 
 ## Quality gates
 

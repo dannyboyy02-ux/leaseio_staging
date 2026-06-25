@@ -1,12 +1,27 @@
+import { useMemo, type ComponentType, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Building2, ExternalLink, Landmark, Layers, Lock, PieChart, TrendingUp } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  ArrowUpRight,
+  BarChart3,
+  Calendar,
+  CalendarClock,
+  ExternalLink,
+  Flag,
+  Info,
+  Layers,
+  Lock,
+  Scale,
+  TrendingUp,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApp } from '@/contexts/AppContext';
@@ -15,115 +30,334 @@ import { isReadOnlyRetention } from '@/config/pricing';
 import { supabase } from '@/integrations/supabase/client';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
-import { computePortfolioMetrics } from '@/lib/portfolioAnalytics';
-import { getMonthlyRent } from '@/lib/leaseCalculations';
+import {
+  computeKpis,
+  costByDepartment,
+  costPerSqftByLocation,
+  rentCommitmentForecast,
+  toPortfolioLease,
+  type PortfolioLease,
+} from '@/lib/portfolioIntelligence';
+import { buildWatchlist, type Severity, type WatchFlag } from '@/lib/portfolioWatchlist';
+
+// NOTE: copy on this surface is English-hardcoded, matching the pre-existing
+// Portfolio page (the only localized piece is currency via formatCurrency).
+// Full i18n of the Portfolio surface (incl. the watchlist's generated factual
+// sentences) is tracked as a follow-up — see KNOWN_ISSUES.
+
+// Deterministic, brand-derived palette for Cost-by-Department segments; the
+// neutral grey is reserved for the "Other" / "Unassigned" buckets.
+const DEPT_COLORS = [
+  'hsl(213 50% 23%)', // navy
+  'hsl(168 76% 32%)', // teal
+  'hsl(199 89% 48%)', // sky / info
+  'hsl(38 92% 50%)', // amber / warning
+  'hsl(262 52% 50%)', // violet
+  'hsl(215 16% 47%)', // slate
+];
+const NEUTRAL = 'hsl(215 14% 60%)';
+const deptColor = (dept: string, i: number) =>
+  dept === 'Other' || dept === 'Unassigned' ? NEUTRAL : DEPT_COLORS[i % DEPT_COLORS.length];
+
+const compactCurrency = (n: number): string =>
+  n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `$${Math.round(n / 1_000)}K` : `$${Math.round(n)}`;
+
+// ---------------------------------------------------------------------------
+// Small presentational helpers
+// ---------------------------------------------------------------------------
+
+function KpiTile({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-xs leading-tight text-muted-foreground">{label}</p>
+        <p className="mt-1.5 font-display text-2xl font-bold tracking-tight">{value}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SectionCard({
+  title,
+  sub,
+  icon: Icon,
+  right,
+  children,
+}: {
+  title: string;
+  sub?: string;
+  icon: ComponentType<{ className?: string }>;
+  right?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="h-full">
+      <CardContent className="flex h-full flex-col p-5">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">{title}</p>
+              {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+            </div>
+          </div>
+          {right}
+        </div>
+        <div className="flex-1">{children}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cards
+// ---------------------------------------------------------------------------
+
+function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentForecast> }) {
+  const max = Math.max(...data.map((b) => b.contracted + b.uncontracted), 1);
+  return (
+    <div>
+      <div className="flex h-44 items-end gap-3 pt-2">
+        {data.map((b) => {
+          const ch = (b.contracted / max) * 100;
+          const uh = (b.uncontracted / max) * 100;
+          return (
+            <div key={b.label} className="flex h-full flex-1 flex-col items-center justify-end">
+              <span className="mb-1.5 text-[11px] font-semibold text-foreground">
+                {b.contracted > 0 ? compactCurrency(b.contracted) : '—'}
+              </span>
+              <div className="flex w-full max-w-[40px] flex-1 flex-col justify-end">
+                {uh > 0 && (
+                  <div
+                    title="Term ends (uncontracted)"
+                    className="rounded-t"
+                    style={{
+                      height: `${uh}%`,
+                      background:
+                        'repeating-linear-gradient(45deg, hsl(var(--muted-foreground) / 0.18), hsl(var(--muted-foreground) / 0.18) 4px, hsl(var(--muted-foreground) / 0.06) 4px, hsl(var(--muted-foreground) / 0.06) 8px)',
+                      border: '1px dashed hsl(var(--muted-foreground) / 0.4)',
+                      borderBottom: 'none',
+                    }}
+                  />
+                )}
+                <div
+                  style={{ height: `${ch}%`, borderRadius: uh > 0 ? 0 : '4px 4px 0 0', background: 'hsl(var(--chart-contracted))' }}
+                />
+              </div>
+              <span className="mt-2 text-[11px] text-muted-foreground">{b.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-4 border-t border-border pt-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm" style={{ background: 'hsl(var(--chart-contracted))' }} /> Contracted rent (with escalations)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="h-3 w-3 rounded-sm"
+            style={{ background: 'hsl(var(--muted-foreground) / 0.12)', border: '1px dashed hsl(var(--muted-foreground) / 0.5)' }}
+          />{' '}
+          Term ends (uncontracted)
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CostByDepartment({ data }: { data: ReturnType<typeof costByDepartment> }) {
+  return (
+    <div>
+      <div className="mb-4 flex h-4 overflow-hidden rounded-full">
+        {data.map((s, i) => (
+          <div key={s.department} title={`${s.department} · ${compactCurrency(s.annualCost)}`} style={{ width: `${s.pct}%`, background: deptColor(s.department, i) }} />
+        ))}
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {data.map((s, i) => (
+          <div key={s.department} className="flex items-center gap-2 text-[13px]">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: deptColor(s.department, i) }} />
+            <span className="flex-1 truncate">{s.department}</span>
+            <span className="text-muted-foreground">{compactCurrency(s.annualCost)}/yr</span>
+            <span className="w-10 text-right font-semibold">{Math.round(s.pct)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CostPerSqft({ data }: { data: ReturnType<typeof costPerSqftByLocation> }) {
+  const scaleMax = Math.max(...data.rows.map((r) => r.ratePerSqft), data.averageRatePerSqft ?? 0, 1) * 1.1;
+  return (
+    <div className="flex flex-col gap-3.5">
+      {data.rows.map((r) => (
+        <div key={r.id}>
+          <div className="mb-1.5 flex items-baseline justify-between gap-2">
+            <span className="truncate text-[13px] font-medium">{r.name}</span>
+            <span className="shrink-0 text-xs font-semibold text-muted-foreground">
+              ${r.ratePerSqft.toFixed(2)}/sqft · {r.deltaVsAvg > 0 ? '+' : ''}
+              {Math.round(r.deltaVsAvg * 100)}% vs avg
+            </span>
+          </div>
+          <div className="relative h-2.5 rounded-full bg-muted">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${(r.ratePerSqft / scaleMax) * 100}%`,
+                background: `hsl(var(${r.position === 'above' ? '--chart-rate-above' : '--chart-rate-below'}))`,
+              }}
+            />
+            {data.averageRatePerSqft != null && (
+              <div
+                title={`Portfolio average $${data.averageRatePerSqft.toFixed(2)}/sqft`}
+                className="absolute -top-0.5 h-3.5 w-0.5 bg-foreground/55"
+                style={{ left: `${(data.averageRatePerSqft / scaleMax) * 100}%` }}
+              />
+            )}
+          </div>
+        </div>
+      ))}
+      {data.averageRatePerSqft != null && (
+        <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="h-3 w-0.5 bg-foreground/55" /> Portfolio blended average (${data.averageRatePerSqft.toFixed(2)}/sqft)
+        </div>
+      )}
+      {data.excludedCount > 0 && (
+        <p className="text-xs text-muted-foreground">{data.excludedCount} lease{data.excludedCount === 1 ? '' : 's'} excluded (no square footage).</p>
+      )}
+    </div>
+  );
+}
+
+const WATCH_ICON: Record<string, ComponentType<{ className?: string }>> = {
+  'calendar-clock': CalendarClock,
+  calendar: Calendar,
+  'arrow-up-right': ArrowUpRight,
+  'trending-up': TrendingUp,
+};
+const WATCH_TONE: Record<Severity, { wrap: string; chip: string }> = {
+  warning: { wrap: 'bg-amber-50 dark:bg-amber-950/20', chip: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
+  info: { wrap: 'bg-sky-50 dark:bg-sky-950/20', chip: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300' },
+  muted: { wrap: 'bg-muted/50', chip: 'bg-muted text-muted-foreground' },
+};
+
+function Watchlist({ flags }: { flags: WatchFlag[] }) {
+  if (flags.length === 0) {
+    return <p className="py-6 text-center text-sm text-muted-foreground">No flags from the current critical-date checks.</p>;
+  }
+  return (
+    <div className="flex flex-col gap-2.5">
+      {flags.map((f) => {
+        const Icon = WATCH_ICON[f.icon] ?? Flag;
+        const tone = WATCH_TONE[f.severity];
+        return (
+          <div key={`${f.leaseId}-${f.sourceField}`} className={`flex gap-3 rounded-lg border border-border p-3.5 ${tone.wrap}`}>
+            <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${tone.chip}`}>
+              <Icon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2">
+                <span className="text-sm font-semibold">{f.title}</span>
+                {f.department && <span className="text-[11px] text-muted-foreground">· {f.department}</span>}
+              </div>
+              <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">{f.description}</p>
+            </div>
+            <div className="flex shrink-0 flex-col items-end justify-between gap-2">
+              <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone.chip}`}>{f.value}</span>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
+                <Link to={`/app/leases/${f.leaseId}`}>
+                  View lease <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function Portfolio() {
   const { language } = useLanguage();
   const { workspace, canAccessFeature } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
-  // KNOWN_ISSUES #46: Portfolio Intelligence is a Business-tier feature per the
-  // pricing model. Gate the page (matching the Reports / AI Assistant pattern)
-  // and skip the data fetch entirely for Starter workspaces. The AppSidebar nav
-  // item carries requiresBusiness:true so the route shows a lock for Starter.
-  // Vault retention views Portfolio read-only under the flatten rule.
+
+  // KNOWN_ISSUES #46: Portfolio is a Business-tier feature; gate + skip the
+  // fetch for Starter. Vault retention views it read-only under the flatten rule.
   const hasBusinessAccess = canAccessFeature('business') || isReadOnlyRetention(workspace?.plan);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['portfolio-page', workspace?.id],
+  const { data: rows, isLoading } = useQuery({
+    queryKey: ['portfolio-intelligence', workspace?.id],
     enabled: !!workspace?.id && hasBusinessAccess,
     queryFn: async () => {
-      const [{ data: leases, error }, { data: workspaceSettings, error: workspaceError }] = await Promise.all([
-        supabase
-          .from('leases')
-          // PostgREST type narrowing requires a literal string — see note in useNeedsAction.
-          .select('id, filename, request_title, asset_type, extracted_json, executed_monthly_payment, current_monthly_rent, monthly_payment, lease_start, lease_end, term_months, escalation_type, escalation_rate, calc_pv_liability, calc_total_commitment, landlord_name, property_address')
-          .eq('workspace_id', workspace!.id)
-          .eq('archived', false)
-          // Phase 3: include chain executed equivalent (active is identical).
-          .in('lifecycle_status', ['executed', 'active', 'fully_executed']),
-        supabase
-          .from('workspaces')
-          .select('discount_rate')
-          .eq('id', workspace!.id)
-          .single(),
-      ]);
-
+      const { data, error } = await supabase
+        .from('leases')
+        // PostgREST type narrowing requires a literal string.
+        .select(
+          // rent_schedules embed so getMonthlyRent resolves the CURRENT escalated
+          // step — matching the Dashboard/Leases totals (else the same KPI drifts).
+          'id, filename, request_title, extracted_json, property_address, landlord_name, requesting_department, region, location, square_footage, current_monthly_rent, monthly_payment, executed_monthly_payment, lease_start, lease_end, escalation_type, escalation_rate, rent_schedules(period_start, period_end, monthly_amount)',
+        )
+        .eq('workspace_id', workspace!.id)
+        .eq('archived', false)
+        .in('lifecycle_status', ['executed', 'active', 'fully_executed']);
       if (error) throw error;
-      if (workspaceError) throw workspaceError;
-
-      const activeLeases = leases || [];
-      const discountRate = (workspaceSettings as any)?.discount_rate ?? null;
-      const portfolio = computePortfolioMetrics(activeLeases as any[], { discountRate });
-
-      const annualObligation = activeLeases.reduce((sum, lease) => {
-        const monthly = getMonthlyRent(lease as any);
-        return sum + monthly * 12;
-      }, 0);
-
-      const assetBreakdown = Object.values(
-        activeLeases.reduce((acc, lease) => {
-          const key = lease.asset_type || 'unclassified';
-          const monthly = getMonthlyRent(lease as any);
-
-          acc[key] = acc[key] || { label: key, count: 0, annualObligation: 0 };
-          acc[key].count += 1;
-          acc[key].annualObligation += monthly * 12;
-          return acc;
-        }, {} as Record<string, { label: string; count: number; annualObligation: number }>),
-      ).sort((a, b) => b.annualObligation - a.annualObligation);
-
-      const escalationLabels = Object.entries(
-        activeLeases.reduce((acc, lease) => {
-          const key = lease.escalation_type || 'none';
-          acc[key] = (acc[key] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>),
-      )
-        .map(([type, count]) => ({ type, count }))
-        .sort((a, b) => b.count - a.count);
-
-      const indexLeaseNames = activeLeases
-        .filter((lease) => lease.escalation_type === 'index')
-        .map((lease) =>
-          getPropertyDisplayName(
-            lease.extracted_json as Record<string, unknown> | null,
-            lease.request_title || lease.filename,
-            'Property',
-          ),
-        );
-
-      return {
-        activeLeaseCount: activeLeases.length,
-        annualObligation,
-        discountRate,
-        portfolio,
-        assetBreakdown,
-        escalationBreakdown: escalationLabels,
-        indexLeaseNames,
-        leases: activeLeases,
-      };
+      return (data ?? []) as any[];
     },
   });
+
+  // `asOf` fixed per mount so every derived metric shares one clock.
+  const asOf = useMemo(() => new Date(), []);
+  const leases: PortfolioLease[] = useMemo(
+    () =>
+      (rows ?? []).map((row) =>
+        toPortfolioLease(row, getPropertyDisplayName(row.extracted_json, row.request_title || row.filename, 'Property')),
+      ),
+    [rows],
+  );
+
+  const kpis = useMemo(() => computeKpis(leases, asOf), [leases, asOf]);
+  const depts = useMemo(() => costByDepartment(leases), [leases]);
+  const locations = useMemo(() => costPerSqftByLocation(leases), [leases]);
+  const forecast = useMemo(() => rentCommitmentForecast(leases, asOf), [leases, asOf]);
+  const forecastHasData = useMemo(() => forecast.some((b) => b.contracted > 0 || b.uncontracted > 0), [forecast]);
+  const watchlist = useMemo(() => buildWatchlist(leases, { asOf }), [leases, asOf]);
+  const indexLeases = useMemo(() => leases.filter((l) => l.escalationType === 'index'), [leases]);
+
+  const headerSubtitle =
+    leases.length > 0
+      ? [
+          `${leases.length} lease${leases.length === 1 ? '' : 's'}`,
+          kpis.totalSquareFootage > 0 ? `${kpis.totalSquareFootage.toLocaleString()} sqft` : null,
+          `${kpis.marketCount} market${kpis.marketCount === 1 ? '' : 's'}`,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : 'Occupancy cost, commitment, and critical-date awareness';
 
   if (!hasBusinessAccess) {
     return (
       <AppLayout>
-        <AppHeader
-          title="Portfolio"
-          subtitle="Live portfolio metrics, lease liability disclosure, and concentration views"
-        />
+        <AppHeader title="Portfolio Intelligence" subtitle="Occupancy cost, commitment, and critical-date awareness" />
         <PageLayout width="wide">
           <Card variant="ghost" className="mx-auto max-w-2xl border-2 border-dashed border-border">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-6">
+              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
                 <Lock className="h-8 w-8 text-muted-foreground" />
               </div>
-              <Badge variant="business" className="mb-4">Business Plan</Badge>
-              <h3 className="text-lg font-semibold mb-2">Portfolio Intelligence is a Business-plan feature</h3>
-              <p className="text-sm text-muted-foreground max-w-md mb-6">
-                Upgrade to the Business plan to unlock portfolio-wide PV liability, asset and escalation
-                concentration, and the index-lease disclosure view.
+              <Badge variant="business" className="mb-4">
+                Business Plan
+              </Badge>
+              <h3 className="mb-2 text-lg font-semibold">Portfolio Intelligence is a Business-plan feature</h3>
+              <p className="mb-6 max-w-md text-sm text-muted-foreground">
+                Upgrade to Business to unlock portfolio occupancy cost, the rent-commitment forecast, cost composition,
+                and the lease watchlist.
               </p>
               <Button variant="accent" size="lg" asChild>
                 <Link to="/app/settings/account?tab=billing">Upgrade to Business</Link>
@@ -137,215 +371,123 @@ export default function Portfolio() {
 
   return (
     <AppLayout>
-      <AppHeader
-        title="Portfolio"
-        subtitle="Live portfolio metrics, lease liability disclosure, and concentration views"
-      />
-
+      <AppHeader title="Portfolio Intelligence" subtitle={headerSubtitle} />
       <PageLayout width="wide">
         {isLoading ? (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {[...Array(4)].map((_, i) => (
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+            {[...Array(5)].map((_, i) => (
               <Card key={i}>
-                <CardHeader>
-                  <Skeleton className="h-4 w-28" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-32" />
+                <CardContent className="p-4">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="mt-3 h-7 w-24" />
                 </CardContent>
               </Card>
             ))}
           </div>
-        ) : !data || data.activeLeaseCount === 0 ? (
+        ) : leases.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <Layers className="h-12 w-12 text-muted-foreground/40 mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                Portfolio intelligence appears after posting leases
-              </h3>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                Once leases are active, this page will summarize liability, escalation mix, and asset concentrations.
+              <Layers className="mb-4 h-12 w-12 text-muted-foreground/40" />
+              <h3 className="mb-2 text-lg font-semibold text-foreground">Portfolio intelligence appears after posting leases</h3>
+              <p className="max-w-sm text-sm text-muted-foreground">
+                Once leases are active, this page summarizes occupancy cost, the commitment forecast, cost composition,
+                and critical-date flags.
               </p>
             </CardContent>
           </Card>
         ) : (
           <>
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <Landmark className="h-4 w-4" />
-                    PV Liability
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold font-display">
-                    {formatCurrency(data.portfolio.totalPVLiability)}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {data.discountRate
-                      ? `Discounted at ${data.discountRate}%`
-                      : 'Set a workspace discount rate to populate PV'}
-                  </p>
-                </CardContent>
-              </Card>
+            {/* Partial-data banner — surfaces fields the abstraction didn't capture. */}
+            {(kpis.missingAreaCount > 0 || kpis.missingRentCount > 0 || kpis.missingEndDateCount > 0) && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  {kpis.missingAreaCount > 0 && `${kpis.missingAreaCount} of ${kpis.leaseCount} lease${kpis.leaseCount === 1 ? '' : 's'} missing square footage — excluded from $/sqft metrics. `}
+                  {kpis.missingRentCount > 0 && `${kpis.missingRentCount} missing rent — excluded from cost metrics. `}
+                  {kpis.missingEndDateCount > 0 && `${kpis.missingEndDateCount} missing term dates — excluded from the forecast and Avg Term Remaining.`}
+                </span>
+              </div>
+            )}
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Active Leases
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold font-display">{data.activeLeaseCount}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatCurrency(data.annualObligation)} annualized obligation
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    Index-Based Leases
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold font-display">{data.portfolio.indexBasedLeaseCount}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatCurrency(data.portfolio.indexBasedLeasePV)} baseline PV floor
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    Data Quality
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold font-display">{data.portfolio.excludedLeaseCount}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    excluded from PV because term data is incomplete
-                  </p>
-                </CardContent>
-              </Card>
+            {/* KPI strip */}
+            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+              <KpiTile label="Annual Occupancy Cost" value={formatCurrency(kpis.annualOccupancyCost)} sub={`across ${kpis.leaseCount} lease${kpis.leaseCount === 1 ? '' : 's'}`} />
+              <KpiTile
+                label="Remaining Commitment"
+                value={formatCurrency(kpis.remainingCommitment)}
+                sub={kpis.contractedThroughYear ? `undiscounted · through ${kpis.contractedThroughYear}` : 'undiscounted contracted cash'}
+              />
+              <KpiTile
+                label="Blended Cost"
+                value={kpis.blendedCostPerSqft != null ? `$${kpis.blendedCostPerSqft.toFixed(2)}` : '—'}
+                sub={kpis.blendedCostPerSqft != null ? 'per sqft / yr' : 'add square footage'}
+              />
+              <KpiTile label="Total Footprint" value={kpis.totalSquareFootage.toLocaleString()} sub={`sqft · ${kpis.marketCount} market${kpis.marketCount === 1 ? '' : 's'}`} />
+              <KpiTile label="Avg Term Remaining" value={`${kpis.avgTermRemainingYears.toFixed(1)} yrs`} sub="weighted by rent" />
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <PieChart className="h-4 w-4" />
-                    Asset Mix
-                  </CardTitle>
-                  <CardDescription>Annual obligation by asset type</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {data.assetBreakdown.map((entry) => (
-                    <div
-                      key={entry.label}
-                      className="flex items-center justify-between rounded-lg border border-border px-3 py-3"
-                    >
-                      <div>
-                        <p className="text-sm font-medium capitalize">{entry.label.replace('_', ' ')}</p>
-                        <p className="text-xs text-muted-foreground">{entry.count} lease{entry.count !== 1 ? 's' : ''}</p>
-                      </div>
-                      <p className="text-sm font-semibold">{formatCurrency(entry.annualObligation)}</p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <TrendingUp className="h-4 w-4" />
-                    Escalation Mix
-                  </CardTitle>
-                  <CardDescription>Current portfolio mix by escalation type</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {data.escalationBreakdown.map((entry) => (
-                    <div key={entry.type} className="flex items-center justify-between">
-                      <p className="text-sm capitalize">{entry.type.replace('_', ' ')}</p>
-                      <Badge variant="secondary">{entry.count}</Badge>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+            {/* Row 1 — forecast + composition */}
+            <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1.7fr_1fr]">
+              <SectionCard title="Rent Commitment Forecast" sub="Contractual obligations by year — see the re-leasing cliff coming" icon={BarChart3} right={<Badge variant="secondary">Next 5 yrs</Badge>}>
+                {forecastHasData ? (
+                  <CommitmentForecast data={forecast} />
+                ) : (
+                  <p className="py-6 text-center text-sm text-muted-foreground">Add lease end dates to see the commitment forecast.</p>
+                )}
+              </SectionCard>
+              <SectionCard title="Cost by Department" sub="Where the spend sits" icon={Layers}>
+                {depts.length > 0 ? <CostByDepartment data={depts} /> : <p className="text-sm text-muted-foreground">No cost data yet.</p>}
+              </SectionCard>
             </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Layers className="h-4 w-4" />
-                  Lease Register
-                </CardTitle>
-                <CardDescription>All active and executed leases included in portfolio calculations</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-border">
-                  {(data.leases as any[]).map((lease) => {
-                    const monthly = getMonthlyRent(lease);
-                    const displayName =
-                      lease.request_title ||
-                      lease.property_address ||
-                      lease.landlord_name ||
-                      lease.filename ||
-                      'Unnamed lease';
-                    const pvLiability = Number(lease.calc_pv_liability) || null;
-                    return (
-                      <div key={lease.id} className="flex items-center justify-between px-4 py-3 gap-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate">{displayName}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {lease.lease_start ? lease.lease_start.slice(0, 7) : '—'}
-                            {' → '}
-                            {lease.lease_end ? lease.lease_end.slice(0, 7) : '—'}
-                            {lease.escalation_type ? ` · ${lease.escalation_type}` : ''}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-sm font-semibold">{monthly ? formatCurrency(monthly) + '/mo' : '—'}</p>
-                          {pvLiability ? (
-                            <p className="text-xs text-muted-foreground">{formatCurrency(pvLiability)} PV</p>
-                          ) : null}
-                        </div>
-                        <Link to={`/app/leases/${lease.id}/review`} className="shrink-0 text-muted-foreground hover:text-foreground">
-                          <ExternalLink size={14} />
-                        </Link>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Row 2 — benchmark + watchlist */}
+            <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1fr_1.4fr]">
+              <SectionCard title="Cost per sqft by Location" sub="Against the portfolio blended average" icon={Scale}>
+                {locations.rows.length > 0 ? (
+                  <CostPerSqft data={locations} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">No leases with square footage yet.</p>
+                )}
+              </SectionCard>
+              <SectionCard title="Lease Watchlist" sub="Flags surfaced from abstracted lease terms" icon={Flag} right={watchlist.length > 0 ? <Badge variant="secondary">{watchlist.length} item{watchlist.length === 1 ? '' : 's'}</Badge> : undefined}>
+                <Watchlist flags={watchlist} />
+              </SectionCard>
+            </div>
 
-            {data.portfolio.indexBasedLeaseCount > 0 && (
+            {/* Index-Lease Disclosure — neutral factual disclosure (kept under the new voice). */}
+            {indexLeases.length > 0 && (
               <Card className="border-l-4 border-l-amber-400">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base text-amber-700 dark:text-amber-400">
+                <CardContent className="p-5">
+                  <div className="mb-1 flex items-center gap-2 text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="h-4 w-4" />
-                    Index-Lease Disclosure
-                  </CardTitle>
-                  <CardDescription>
-                    CPI and index-based leases are shown separately so the portfolio PV does not assume a future inflation curve.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {data.indexLeaseNames.map((name) => (
-                    <div key={name} className="rounded-md bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-sm">
-                      {name}
-                    </div>
-                  ))}
+                    <p className="text-sm font-semibold">Index-Lease Disclosure</p>
+                  </div>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    CPI / index-based leases escalate on an external index, so their future rent isn't fixed — shown
+                    separately and treated as flat in the forecast above.
+                  </p>
+                  <div className="space-y-2">
+                    {indexLeases.map((l) => (
+                      <Link
+                        key={l.id}
+                        to={`/app/leases/${l.id}`}
+                        aria-label={`View lease ${l.propertyName}`}
+                        className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-sm hover:bg-amber-100 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
+                      >
+                        <span className="truncate">{l.propertyName}</span>
+                        <ExternalLink size={14} className="shrink-0 text-muted-foreground" />
+                      </Link>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             )}
+
+            {/* Provenance */}
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Info className="h-3.5 w-3.5" />
+              Metrics computed from abstracted lease terms for this workspace. Figures are not financial advice.
+            </div>
           </>
         )}
       </PageLayout>

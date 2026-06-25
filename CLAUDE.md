@@ -111,7 +111,7 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 
 **Dashboard:** `src/pages/Dashboard.tsx` + `src/components/dashboard/{OnboardingChecklist,SummaryStrip,NeedsAction,LeasePipeline,UpcomingRisks,RecentActivity,PipelineByDepartment,IntakeTrend,UpcomingEvents,EscalationReviewPanel,PendingCounterSignatureCard}.tsx`
 
-**Portfolio:** `src/pages/app/Portfolio.tsx` + `src/lib/portfolioAnalytics.ts` (PV liability, asset/escalation mix, lease register, index-lease disclosure). Business-tier gated (#46 RESOLVED 2026-06-02); also opened read-only for Vault via `isReadOnlyRetention()` (V3).
+**Portfolio:** `src/pages/app/Portfolio.tsx` + `src/lib/portfolioIntelligence.ts` (KPIs, cost-by-department, cost-per-sqft, rent-commitment forecast — pure, **NO PV/ASC-842**) + `src/lib/portfolioWatchlist.ts` (deterministic factual flags). **Recomposed 2026-06-24** from the PV/liability page → occupancy-cost & commitment "Portfolio Intelligence" (PR #73; realigns with Hard Rule #1). Business-tier gated (#46 RESOLVED 2026-06-02); read-only for Vault via `isReadOnlyRetention()` (V3). NOTE: the old `src/lib/portfolioAnalytics.ts` (PV layer) is now anchored only by the unmounted `FinancialSummary.tsx` — dead per KNOWN_ISSUES #42.
 
 **Leases List:** `src/pages/Leases.tsx`, `src/components/leases/{EmptyLeaseState,ArchiveLeaseDialog,LeaseExports}.tsx` (list "Delete" is restorable ARCHIVE via `ArchiveLeaseDialog` since #79/#92; `DeleteLeaseDialog` is now only ImportHistory's hard-delete/import-rollback).
 
