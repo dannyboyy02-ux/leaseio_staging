@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
   Download,
   ChevronRight,
+  Trash2,
 } from 'lucide-react';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
@@ -27,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ArchiveLeaseDialog } from '@/components/leases/ArchiveLeaseDialog';
+import { DeleteLeaseWithRetentionDialog } from '@/components/leases/DeleteLeaseWithRetentionDialog';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
@@ -50,6 +52,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -101,7 +104,9 @@ export default function Leases() {
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const [searchParams] = useSearchParams();
   const quota = useWorkspaceQuota();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false); // ARCHIVE confirm dialog (legacy name)
+  const [retentionDeleteOpen, setRetentionDeleteOpen] = useState(false); // permanent-delete (14-day retention) dialog
+  const [deletePending, setDeletePending] = useState(false);
   const [addLeaseDialogOpen, setAddLeaseDialogOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -285,6 +290,39 @@ export default function Leases() {
     } catch (error) {
       console.error('Restore error:', error);
       toast.error(t('archive.failed'), { id: 'lease-action' });
+    }
+  };
+
+  const handleDeleteClick = (lease: LeaseRow) => {
+    setSelectedLease(lease);
+    setRetentionDeleteOpen(true);
+  };
+
+  // Phase 3 permanent delete: soft-delete via the service-role delete-lease
+  // edge function (14-day restore-on-request window, then the retention cron
+  // purges it). The lease vanishes from every surface immediately (hiding RLS).
+  // Toast shares the stable 'lease-action' id so it never stacks with
+  // archive/restore. Admin-only + always-available is enforced server-side too.
+  const handleDeleteConfirm = async () => {
+    if (!selectedLease || deletePending) return;
+    setDeletePending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-lease', {
+        body: { leaseId: selectedLease.id },
+      });
+      if (error || !(data as { ok?: boolean } | null)?.ok) {
+        throw error ?? new Error('delete-lease returned not-ok');
+      }
+      toast.success(t('leases.delete_success'), { id: 'lease-action' });
+      setRetentionDeleteOpen(false);
+      setSelectedLease(null);
+      await refreshProfile?.();
+      fetchLeases();
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error(t('leases.delete_failed'), { id: 'lease-action' });
+    } finally {
+      setDeletePending(false);
     }
   };
 
@@ -742,6 +780,14 @@ export default function Leases() {
                                         {t('archive.archive')}
                                       </DropdownMenuItem>
                                     )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => handleDeleteClick(lease)}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      {t('leases.delete_action')}
+                                    </DropdownMenuItem>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               </div>
@@ -778,6 +824,14 @@ export default function Leases() {
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleArchiveConfirm}
         leaseName={selectedLease?.filename || ''}
+      />
+
+      <DeleteLeaseWithRetentionDialog
+        open={retentionDeleteOpen}
+        onOpenChange={(o) => { if (!deletePending) setRetentionDeleteOpen(o); }}
+        onConfirm={handleDeleteConfirm}
+        leaseName={getPropertyAddress(selectedLease ?? ({} as LeaseRow)) || selectedLease?.filename || ''}
+        pending={deletePending}
       />
 
       <LeaseUploadModal
