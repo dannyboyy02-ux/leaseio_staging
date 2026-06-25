@@ -625,6 +625,7 @@
     "no_archived": "Sin arrendamientos archivados.",
     "no_active": "Sin arrendamientos activos en esta vista.",
     "overdue_tooltip": "{{days}} días después de la fecha de fin (en prórroga)",
+    "resize_column": "Arrastra para ajustar · doble clic para restablecer",
     "back_to_all": "Volver a todos los arrendamientos",
     "load_failed": "No se pudieron cargar los arrendamientos",
     "delete_action": "Eliminar permanentemente",
