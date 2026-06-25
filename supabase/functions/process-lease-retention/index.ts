@@ -27,8 +27,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 const BATCH = 50;
 
 // deno-lint-ignore no-explicit-any
-async function purgeLeaseStorage(admin: any, opts: { workspaceId: string | null; leaseId: string; uploaderPrefixes: string[] }): Promise<number> {
-  const { workspaceId, leaseId, uploaderPrefixes } = opts;
+async function purgeLeaseStorage(admin: any, opts: { workspaceId: string | null; leaseId: string; uploaderPrefixes: string[]; reportPaths: string[] }): Promise<number> {
+  const { workspaceId, leaseId, uploaderPrefixes, reportPaths } = opts;
   let purged = 0;
 
   async function removePrefix(bucket: string, prefix: string) {
@@ -54,11 +54,22 @@ async function purgeLeaseStorage(admin: any, opts: { workspaceId: string | null;
     await removePrefix("leases", prefix);
     await removePrefix("executed-leases", prefix);
   }
-  // Generated docs/reports live under {workspace_id}/{lease_id} — scope to THIS
-  // lease (never the whole workspace; other leases share the bucket).
+  // lease-documents live under {workspace_id}/{lease_id} — scope to THIS lease
+  // (never the whole workspace; sibling leases share the bucket).
   if (workspaceId) {
     await removePrefix("lease-documents", `${workspaceId}/${leaseId}`);
-    await removePrefix("lease-reports", `${workspaceId}/${leaseId}`);
+  }
+  // lease-reports are keyed by {workspace_id}/{report_id} (NOT lease_id), so a
+  // leaseId prefix would match nothing and orphan the report blobs. Remove the
+  // explicit pdf/json paths resolved from the lease_reports rows instead.
+  if (reportPaths.length > 0) {
+    try {
+      const { error: rmErr } = await admin.storage.from("lease-reports").remove(reportPaths);
+      if (rmErr) console.error(`[lease-retention] lease-reports remove error: ${rmErr.message}`);
+      else purged += reportPaths.length;
+    } catch (err) {
+      console.error("[lease-retention] lease-reports purge error:", (err as Error)?.message);
+    }
   }
   return purged;
 }
@@ -146,6 +157,19 @@ serve(async (req) => {
         uploaderPrefixes.add(`${lease.requestor_id}/${leaseId}`);
       }
 
+      // lease-reports blobs are keyed by report_id, so resolve their explicit
+      // storage paths from the lease_reports rows BEFORE the lease delete
+      // CASCADEs those rows away (else the blobs orphan in the bucket).
+      const { data: reportRows } = await admin
+        .from("lease_reports")
+        .select("pdf_storage_path, json_storage_path")
+        .eq("lease_id", leaseId);
+      const reportPaths: string[] = [];
+      for (const r of (reportRows ?? []) as Array<{ pdf_storage_path: string | null; json_storage_path: string | null }>) {
+        if (r.pdf_storage_path) reportPaths.push(r.pdf_storage_path);
+        if (r.json_storage_path) reportPaths.push(r.json_storage_path);
+      }
+
       // ── Forensic row FIRST (UNIQUE original_lease_id; resume on duplicate) ──
       const { error: forensicErr } = await admin.from("deleted_leases").insert({
         original_lease_id: leaseId,
@@ -198,6 +222,7 @@ serve(async (req) => {
         workspaceId: lease.workspace_id,
         leaseId,
         uploaderPrefixes: Array.from(uploaderPrefixes),
+        reportPaths,
       });
       if (storagePurged > 0) {
         await admin

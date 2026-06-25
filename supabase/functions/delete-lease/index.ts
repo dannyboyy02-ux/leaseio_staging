@@ -96,7 +96,7 @@ serve(async (req) => {
   // ── Load the lease (service-role: also sees already-soft-deleted rows) ──
   const { data: lease, error: leaseErr } = await admin
     .from("leases")
-    .select("id, workspace_id, lifecycle_status, model_locked, archived, deleted_at")
+    .select("id, workspace_id, lifecycle_status, model_locked, archived, deleted_at, purge_after")
     .eq("id", leaseId)
     .maybeSingle();
   if (leaseErr) {
@@ -119,13 +119,8 @@ serve(async (req) => {
 
   // ── Idempotent: already soft-deleted → return current window ────────────
   if (lease.deleted_at) {
-    const { data: existing } = await admin
-      .from("leases")
-      .select("deleted_at, purge_after")
-      .eq("id", leaseId)
-      .maybeSingle();
     return jsonResponse(
-      { ok: true, leaseId, alreadyDeleted: true, deletedAt: existing?.deleted_at, purgeAfter: existing?.purge_after },
+      { ok: true, leaseId, alreadyDeleted: true, deletedAt: lease.deleted_at, purgeAfter: lease.purge_after },
       200,
       origin,
     );
