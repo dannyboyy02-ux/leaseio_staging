@@ -15,14 +15,17 @@ The Delete button is not user-reachable until the frontend deploys, so no lease
 can be soft-deleted yet — which is exactly why the items below are safe to batch
 into one activation step rather than rush. There is never a window where Delete
 works but the counts are stale.
-1. **Redeploy the 3 TOUCHED existing functions** (their `.is('deleted_at', null)`
+1. **Redeploy the TOUCHED existing functions** (their `.is('deleted_at', null)`
    filters only matter once soft-deletes exist) — do via the Supabase CLI
    (`supabase functions deploy <name>`) so `_shared` bundles deterministically;
    NOT hand-bundled through MCP (the 2729-line `process_lease` is the extraction
    pipeline — a transcription slip there breaks all uploads):
-   - `process_lease` (active-cap count + amendment-parent matcher — frees the slot)
-   - `ai-assistant` (Leo must not see a soft-deleted lease — Hard Rule #8)
-   - `vendor-health-check` (the `workspace_quotas` snapshot count)
+   - `process_lease` (active-cap count + amendment-parent matcher — frees the slot) — **STILL OWED**
+   - `vendor-health-check` (the `workspace_quotas` snapshot count, cosmetic) — **STILL OWED**
+   - ~~`ai-assistant`~~ — ✅ **DONE 2026-06-25 via MCP** (version 30, ACTIVE, verify_jwt=true;
+     deployed bundle byte-verified against the repo — the Hard Rule #8 / Leo gap is closed).
+     The 5-file bundle (index + cors/workspace_live/lifecycle/ai_context leaves) was small
+     and clean enough to MCP-deploy safely; `process_lease` + `vendor-health-check` were not.
 2. **Cron secret** (step 3 below) — set `LEASE_RETENTION_CRON_SECRET` + insert the
    matching `private.cron_secrets` row. Until then the nightly purge 401s (nothing
    is purged) — fail-closed and safe.
@@ -78,10 +81,11 @@ unaddressed Critical/High). 1310 vitest tests pass; tsc clean.
    - `20260625120000_asset_type_abbreviations.sql` (Phase 2 — security-reviewed CLEAN)
    - `20260625130000_lease_retention_lifecycle.sql` (Phase 3 core — security+integrity CLEAN)
    - `20260625130100_lease_retention_cron.sql` (Phase 3 cron — see step 3 first)
-2. **Deploy the edge functions** (new + the three touched):
-   - new: `delete-lease`, `restore-lease`, `process-lease-retention`
-   - redeploy (now filtering `deleted_at`): `process_lease`, `ai-assistant`, and any
-     function bundling `_shared/monitoring/workspace_quotas.ts`
+2. **Deploy the edge functions** (new + the touched):
+   - new: `delete-lease`, `restore-lease`, `process-lease-retention` — ✅ deployed 2026-06-25
+   - redeploy (now filtering `deleted_at`): `process_lease` + `vendor-health-check`
+     (the `_shared/monitoring/workspace_quotas.ts` consumer) — **STILL OWED via CLI**.
+     `ai-assistant` ✅ already redeployed via MCP (v30) — do NOT redo it.
 3. **Set the cron secret (fail-closed until then):**
    - `supabase secrets set LEASE_RETENTION_CRON_SECRET=$(openssl rand -hex 32)`
    - `INSERT INTO private.cron_secrets (id, value) VALUES ('lease_retention', '<same value>')`
