@@ -41,19 +41,22 @@ export const MIN_COLUMN_WIDTH = 3;
 
 // Canonical column order + default proportions (sum = 100). STABLE keys (not
 // labels) so i18n / renames never invalidate a persisted layout.
+// Defaults re-budgeted to CONTENT (sum = 100). The columns that must never
+// truncate get the room: dates need ~"Mmm d, yyyy" (~73px at px-3), status
+// holds "Fully Executed"/"Archived" pills, actions must clear the 32px kebab.
+// Chrome (the dropped header icons, the removed "SF" suffix, px-3 padding) gave
+// the space back. See docs/LEASES_TABLE_POLISH_PLAN — Round 2 geometry.
 export const LEASE_COLUMNS: readonly LeaseColumnDef[] = [
-  { key: 'property', defaultWidth: 18, resizable: true },
-  { key: 'asset_type', defaultWidth: 7, resizable: true },
-  { key: 'landlord', defaultWidth: 12, resizable: true },
-  // monthly_rent + status hold non-truncatable finance content (a currency
-  // figure; a status pill), so they get a wider default than the chrome columns.
+  { key: 'property', defaultWidth: 15, resizable: true },
+  { key: 'asset_type', defaultWidth: 6, resizable: true },
+  { key: 'landlord', defaultWidth: 11, resizable: true },
   { key: 'monthly_rent', defaultWidth: 13, resizable: true },
-  { key: 'lease_start', defaultWidth: 8, resizable: true },
-  { key: 'lease_end', defaultWidth: 8, resizable: true },
-  { key: 'days_to_expiry', defaultWidth: 9, resizable: true },
+  { key: 'lease_start', defaultWidth: 10, resizable: true },
+  { key: 'lease_end', defaultWidth: 10, resizable: true },
+  { key: 'days_to_expiry', defaultWidth: 7, resizable: true },
   { key: 'sqft', defaultWidth: 7, resizable: true },
-  { key: 'status', defaultWidth: 13, resizable: true },
-  { key: 'actions', defaultWidth: 5, resizable: false },
+  { key: 'status', defaultWidth: 15, resizable: true },
+  { key: 'actions', defaultWidth: 6, resizable: false },
 ] as const;
 
 export type ColumnWidths = Record<LeaseColumnKey, number>;

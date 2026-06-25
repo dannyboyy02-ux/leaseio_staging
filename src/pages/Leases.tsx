@@ -9,17 +9,14 @@ import {
   ArrowDown,
   Archive,
   ArchiveRestore,
-  Calendar,
   Building2,
-  Ruler,
-  Tag,
   MoreHorizontal,
   Download,
   ChevronRight,
   Trash2,
   RotateCcw,
 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -38,7 +35,7 @@ import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
-import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
 import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { rowsToCsv } from '@/lib/csv';
 import { prettyAssetType, assetAbbreviation } from '@/lib/assetTypes';
@@ -464,9 +461,15 @@ export default function Leases() {
     Icon: ElementType | null,
     nextKey: LeaseColumnKey | null,
     responsiveClass = '',
+    align: 'left' | 'right' = 'left',
   ) => (
-    <TableHead className={cn('relative', responsiveClass)} style={{ width: `${columnWidths[key]}%` }}>
-      <Button variant="ghost" size="sm" className="-ml-3 h-8 max-w-full" onClick={() => handleSort(key)}>
+    <TableHead className={cn('relative', align === 'right' && 'text-right', responsiveClass)} style={{ width: `${columnWidths[key]}%` }}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn('h-8 max-w-full', align === 'right' ? '-mr-3 w-full justify-end' : '-ml-3')}
+        onClick={() => handleSort(key)}
+      >
         {Icon && <Icon className="mr-2 h-4 w-4 shrink-0" />}
         <span className="truncate">{label}</span>
         <span className="ml-1 shrink-0">{getSortIcon(key)}</span>
@@ -511,16 +514,14 @@ export default function Leases() {
     return <span className="text-sm text-muted-foreground">{days}d</span>;
   };
 
-  const formatSqFt = (sqft: number | null) => (sqft ? `${sqft.toLocaleString()} SF` : '—');
+  // No "SF" suffix — the "Sq. Ft." column header carries the unit (avoids the
+  // redundant double-unit and frees the tightest column's width). #154 round 2.
+  const formatSqFt = (sqft: number | null) => (sqft ? sqft.toLocaleString() : '—');
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '—';
-    try {
-      return format(parseISO(dateStr), 'MMM d, yyyy');
-    } catch {
-      return dateStr;
-    }
-  };
+  // Canonical locale-aware formatter (matches the currency formatter's locale)
+  // — fixes English-only months for es users and the date-only parse. "Mar 1,
+  // 2026" / "1 mar 2026".
+  const formatDate = (dateStr: string | null) => formatLocalizedDate(dateStr, language);
 
   // Sort key for the Status column (pure helper in leaseSort.ts). An archived
   // lease shows ONLY the "Archived" badge (lifecycle suppressed in the cell),
@@ -745,20 +746,29 @@ export default function Leases() {
               </div>
             ) : (
             <div className="rounded-lg border border-border bg-card">
-              <Table ref={tableRef} className="w-full min-w-[480px] table-fixed">
+              {/* table-fixed REQUIRES every cell to clip — a td is overflow:visible
+                  by default, so wide content (a status pill) would paint over its
+                  neighbor (the kebab). px-3 (vs px-4) gives ~80px back to content. */}
+              <Table
+                ref={tableRef}
+                className="w-full min-w-[480px] table-fixed [&_td]:overflow-hidden [&_th]:overflow-hidden [&_td]:px-3 [&_th]:px-3"
+              >
                 <TableHeader>
                   <TableRow>
                     {/* Sortable + resizable headers. Drag the divider on a
                         header's right edge (lg+) to rebalance two columns; the
                         total stays 100% so the table always fits. */}
+                    {/* Decorative leading icons removed (they ate the label width in
+                        tight columns → icon-only headers); only Property keeps one.
+                        Rent + Sq Ft right-align as size numbers. */}
                     {renderSortHead('property', t('leases.property'), Building2, 'asset_type')}
-                    {renderSortHead('asset_type', t('leases.type'), Tag, 'landlord', 'hidden md:table-cell')}
+                    {renderSortHead('asset_type', t('leases.type'), null, 'landlord', 'hidden md:table-cell')}
                     {renderSortHead('landlord', t('leases.landlord'), null, 'monthly_rent', 'hidden md:table-cell')}
-                    {renderSortHead('monthly_rent', t('leases.monthly_rent'), null, 'lease_start')}
-                    {renderSortHead('lease_start', t('leases.start'), Calendar, 'lease_end', 'hidden sm:table-cell')}
-                    {renderSortHead('lease_end', t('leases.end'), Calendar, 'days_to_expiry', 'hidden sm:table-cell')}
+                    {renderSortHead('monthly_rent', t('leases.monthly_rent'), null, 'lease_start', '', 'right')}
+                    {renderSortHead('lease_start', t('leases.start'), null, 'lease_end', 'hidden sm:table-cell')}
+                    {renderSortHead('lease_end', t('leases.end'), null, 'days_to_expiry', 'hidden sm:table-cell')}
                     {renderSortHead('days_to_expiry', t('leases.days_to_expiry'), null, 'sqft')}
-                    {renderSortHead('sqft', t('leases.sqft'), Ruler, 'status', 'hidden lg:table-cell')}
+                    {renderSortHead('sqft', t('leases.sqft'), null, 'status', 'hidden lg:table-cell', 'right')}
                     {renderSortHead('status', t('leases.status'), null, null)}
                     <TableHead style={{ width: `${columnWidths.actions}%` }} className="text-right">
                       <span className="sr-only">{t('leases.actions')}</span>
@@ -794,7 +804,7 @@ export default function Leases() {
                       return (
                         <TableRow
                           key={lease.id}
-                          className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                          className="h-14 cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                           role="link"
                           tabIndex={0}
                           aria-label={t('leases.open_lease', { property: getPropertyAddress(lease) })}
@@ -827,15 +837,15 @@ export default function Leases() {
                             <span className="block truncate" title={lease.landlord_name || undefined}>{lease.landlord_name || '—'}</span>
                           </TableCell>
                           <TableCell
-                            className="tabular-nums font-medium truncate"
+                            className="tabular-nums font-medium truncate text-right"
                             title={monthlyRent > 0 ? formatCurrency(monthlyRent) : undefined}
                           >
                             {monthlyRent > 0 ? formatCurrency(monthlyRent) : '—'}
                           </TableCell>
-                          <TableCell className="hidden truncate sm:table-cell text-muted-foreground">
+                          <TableCell className="hidden truncate sm:table-cell text-muted-foreground" title={formatDate(lease.lease_start)}>
                             {formatDate(lease.lease_start)}
                           </TableCell>
-                          <TableCell className="hidden truncate sm:table-cell text-muted-foreground">
+                          <TableCell className="hidden truncate sm:table-cell text-muted-foreground" title={formatDate(leaseEnd)}>
                             {formatDate(leaseEnd)}
                           </TableCell>
                           <TableCell>
@@ -843,7 +853,10 @@ export default function Leases() {
                               ? getExpirationBadge(daysUntil)
                               : <span className="text-muted-foreground">&mdash;</span>}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-muted-foreground">
+                          <TableCell
+                            className="hidden truncate text-right tabular-nums text-muted-foreground lg:table-cell"
+                            title={lease.square_footage ? `${lease.square_footage.toLocaleString()} sq ft` : undefined}
+                          >
                             {formatSqFt(lease.square_footage)}
                           </TableCell>
                           <TableCell>
@@ -851,7 +864,9 @@ export default function Leases() {
                                 lifecycle badge (showing both "Active" + "Archived" was
                                 contradictory). statusSortKey mirrors this exactly. */}
                             {isArchivedDisplay(lease) ? (
-                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                              // Soft/muted pill so the Status column is ONE badge family
+                              // (was an outline badge clashing with the soft lifecycle pills).
+                              <Badge className="border-0 bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                                 {t('archive.deleted_badge')}
                               </Badge>
                             ) : (
