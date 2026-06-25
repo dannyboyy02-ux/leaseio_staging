@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, type ElementType, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Plus,
@@ -17,6 +17,7 @@ import {
   Download,
   ChevronRight,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
@@ -51,6 +52,16 @@ import {
   makeStatusSortKey,
   makeLeaseComparator,
 } from '@/lib/leaseSort';
+import { cn } from '@/lib/utils';
+import {
+  LEASE_COLUMN_WIDTHS_KEY,
+  DEFAULT_COLUMN_WIDTHS,
+  parseStoredColumnWidths,
+  serializeColumnWidths,
+  applyBoundaryResize,
+  type LeaseColumnKey,
+  type ColumnWidths,
+} from '@/lib/leaseColumnPrefs';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
@@ -139,6 +150,18 @@ export default function Leases() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('lease_end');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  // Resizable, persisted column widths (percentages that sum to 100 — with the
+  // table-fixed layout the table always fits its container). Read synchronously
+  // so the first paint uses the saved layout, not a flash of the defaults.
+  const [columnWidths, setColumnWidths] = useState<ColumnWidths>(() => {
+    if (typeof window === 'undefined') return { ...DEFAULT_COLUMN_WIDTHS };
+    try {
+      return parseStoredColumnWidths(window.localStorage.getItem(LEASE_COLUMN_WIDTHS_KEY));
+    } catch {
+      return { ...DEFAULT_COLUMN_WIDTHS };
+    }
+  });
+  const tableRef = useRef<HTMLTableElement>(null);
   // Single scope control (replaces the Active/Approval tabs + the "Show
   // archived" toggle). Default ALL = active + archived together. Honors a
   // ?status= deep-link.
@@ -375,6 +398,96 @@ export default function Leases() {
     return sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />;
   };
 
+  // Persist column widths whenever they change (resize / reset).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LEASE_COLUMN_WIDTHS_KEY, serializeColumnWidths(columnWidths));
+    } catch {
+      /* localStorage unavailable (private mode / quota) — non-fatal */
+    }
+  }, [columnWidths]);
+
+  const resetColumnWidths = () => setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS });
+  // True when the layout matches defaults — gates the visible "Reset columns"
+  // recovery affordance (the one escape from a dragged-too-far column).
+  const widthsAreDefault = useMemo(
+    () =>
+      (Object.keys(DEFAULT_COLUMN_WIDTHS) as LeaseColumnKey[]).every(
+        (k) => columnWidths[k] === DEFAULT_COLUMN_WIDTHS[k],
+      ),
+    [columnWidths],
+  );
+
+  // Drag the boundary between two adjacent columns: the left grows by the same
+  // amount the right shrinks, so the total stays 100 and the table keeps
+  // fitting. Pointer-driven; the handle only renders on lg+ where the full
+  // column set is visible (so the boundary pairing is exact).
+  const startColumnResize = (
+    leftKey: LeaseColumnKey,
+    rightKey: LeaseColumnKey,
+    e: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const tableWidth = tableRef.current?.offsetWidth ?? 0;
+    if (!tableWidth) return;
+    const startX = e.clientX;
+    const startWidths = columnWidths;
+    // Lock the resize cursor + suppress text selection for the whole drag, so a
+    // fast pointer that outruns the 2px handle still reads as "grabbed".
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: PointerEvent) => {
+      const deltaPct = ((ev.clientX - startX) / tableWidth) * 100;
+      setColumnWidths(applyBoundaryResize(startWidths, leftKey, rightKey, deltaPct));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  // One sortable + resizable header cell. `key` doubles as the sort field and
+  // the width key; `nextKey` is the resizable column to the right (the divider
+  // drag partner) or null for the last resizable column.
+  const renderSortHead = (
+    key: SortField,
+    label: string,
+    Icon: ElementType | null,
+    nextKey: LeaseColumnKey | null,
+    responsiveClass = '',
+  ) => (
+    <TableHead className={cn('relative', responsiveClass)} style={{ width: `${columnWidths[key]}%` }}>
+      <Button variant="ghost" size="sm" className="-ml-3 h-8 max-w-full" onClick={() => handleSort(key)}>
+        {Icon && <Icon className="mr-2 h-4 w-4 shrink-0" />}
+        <span className="truncate">{label}</span>
+        <span className="ml-1 shrink-0">{getSortIcon(key)}</span>
+      </Button>
+      {nextKey && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t('leases.resize_column')}
+          title={t('leases.resize_column')}
+          onPointerDown={(e) => startColumnResize(key, nextKey, e)}
+          onDoubleClick={resetColumnWidths}
+          className="group absolute right-0 top-0 z-10 hidden h-full w-2 cursor-col-resize touch-none select-none lg:flex lg:items-center lg:justify-center"
+        >
+          {/* Faint persistent rule so columns read as draggable; brightens on hover. */}
+          <span className="h-1/2 w-px bg-border transition-all group-hover:h-full group-hover:w-0.5 group-hover:bg-primary" />
+        </div>
+      )}
+    </TableHead>
+  );
+
   const getExpirationBadge = (days: number | null) => {
     if (days === null) return <span className="text-muted-foreground">&mdash;</span>;
     // Overdue (a still-live lease past its end date): show the signed day
@@ -588,6 +701,19 @@ export default function Leases() {
                   ))}
                 </SelectContent>
               </Select>
+              {/* Reset columns — shown only when the layout differs from default;
+                  the one visible recovery from a dragged-too-far column. */}
+              {!widthsAreDefault && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetColumnWidths}
+                  className="hidden shrink-0 lg:inline-flex"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  {t('leases.reset_columns')}
+                </Button>
+              )}
               {/* Export — overflow (CSV now; Excel arrives with the library decision). */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -618,70 +744,25 @@ export default function Leases() {
                 </Button>
               </div>
             ) : (
-            <div className="overflow-x-auto rounded-lg border border-border bg-card">
-              <Table className="min-w-[720px]">
+            <div className="rounded-lg border border-border bg-card">
+              <Table ref={tableRef} className="w-full min-w-[480px] table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('property')}>
-                        <Building2 className="mr-2 h-4 w-4" />
-                        {t('leases.property')}
-                        {getSortIcon('property')}
-                      </Button>
+                    {/* Sortable + resizable headers. Drag the divider on a
+                        header's right edge (lg+) to rebalance two columns; the
+                        total stays 100% so the table always fits. */}
+                    {renderSortHead('property', t('leases.property'), Building2, 'asset_type')}
+                    {renderSortHead('asset_type', t('leases.type'), Tag, 'landlord', 'hidden md:table-cell')}
+                    {renderSortHead('landlord', t('leases.landlord'), null, 'monthly_rent', 'hidden md:table-cell')}
+                    {renderSortHead('monthly_rent', t('leases.monthly_rent'), null, 'lease_start')}
+                    {renderSortHead('lease_start', t('leases.start'), Calendar, 'lease_end', 'hidden sm:table-cell')}
+                    {renderSortHead('lease_end', t('leases.end'), Calendar, 'days_to_expiry', 'hidden sm:table-cell')}
+                    {renderSortHead('days_to_expiry', t('leases.days_to_expiry'), null, 'sqft')}
+                    {renderSortHead('sqft', t('leases.sqft'), Ruler, 'status', 'hidden lg:table-cell')}
+                    {renderSortHead('status', t('leases.status'), null, null)}
+                    <TableHead style={{ width: `${columnWidths.actions}%` }} className="text-right">
+                      <span className="sr-only">{t('leases.actions')}</span>
                     </TableHead>
-                    <TableHead className="hidden md:table-cell">
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('asset_type')}>
-                        <Tag className="mr-2 h-4 w-4" />
-                        {t('leases.type')}
-                        {getSortIcon('asset_type')}
-                      </Button>
-                    </TableHead>
-                    <TableHead className="hidden md:table-cell">
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('landlord')}>
-                        {t('leases.landlord')}
-                        {getSortIcon('landlord')}
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('monthly_rent')}>
-                        {t('leases.monthly_rent')}
-                        {getSortIcon('monthly_rent')}
-                      </Button>
-                    </TableHead>
-                    <TableHead className="hidden sm:table-cell">
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('lease_start')}>
-                        <Calendar className="mr-2 h-4 w-4" />
-                        {t('leases.start')}
-                        {getSortIcon('lease_start')}
-                      </Button>
-                    </TableHead>
-                    <TableHead className="hidden sm:table-cell">
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('lease_end')}>
-                        <Calendar className="mr-2 h-4 w-4" />
-                        {t('leases.end')}
-                        {getSortIcon('lease_end')}
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('days_to_expiry')}>
-                        {t('leases.days_to_expiry')}
-                        {getSortIcon('days_to_expiry')}
-                      </Button>
-                    </TableHead>
-                    <TableHead className="hidden lg:table-cell">
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('sqft')}>
-                        <Ruler className="mr-2 h-4 w-4" />
-                        {t('leases.sqft')}
-                        {getSortIcon('sqft')}
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('status')}>
-                        {t('leases.status')}
-                        {getSortIcon('status')}
-                      </Button>
-                    </TableHead>
-                    <TableHead className="w-[1%] text-right"><span className="sr-only">{t('leases.actions')}</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -726,7 +807,7 @@ export default function Leases() {
                           }}
                         >
                           <TableCell className="font-medium">
-                            <span className="truncate max-w-[240px] block">{getPropertyAddress(lease)}</span>
+                            <span className="block truncate" title={getPropertyAddress(lease)}>{getPropertyAddress(lease)}</span>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
                             {lease.asset_type ? (
@@ -743,15 +824,18 @@ export default function Leases() {
                             )}
                           </TableCell>
                           <TableCell className="hidden md:table-cell text-muted-foreground">
-                            {lease.landlord_name || '—'}
+                            <span className="block truncate" title={lease.landlord_name || undefined}>{lease.landlord_name || '—'}</span>
                           </TableCell>
-                          <TableCell className="tabular-nums font-medium">
+                          <TableCell
+                            className="tabular-nums font-medium truncate"
+                            title={monthlyRent > 0 ? formatCurrency(monthlyRent) : undefined}
+                          >
                             {monthlyRent > 0 ? formatCurrency(monthlyRent) : '—'}
                           </TableCell>
-                          <TableCell className="hidden sm:table-cell text-muted-foreground">
+                          <TableCell className="hidden truncate sm:table-cell text-muted-foreground">
                             {formatDate(lease.lease_start)}
                           </TableCell>
-                          <TableCell className="hidden sm:table-cell text-muted-foreground">
+                          <TableCell className="hidden truncate sm:table-cell text-muted-foreground">
                             {formatDate(leaseEnd)}
                           </TableCell>
                           <TableCell>
@@ -771,7 +855,7 @@ export default function Leases() {
                                 {t('archive.deleted_badge')}
                               </Badge>
                             ) : (
-                              <LeaseStatusBadge status={lease.lifecycle_status || lease.status} />
+                              <LeaseStatusBadge status={lease.lifecycle_status || lease.status} appearance="soft" size="sm" />
                             )}
                           </TableCell>
                           <TableCell className="text-right">
