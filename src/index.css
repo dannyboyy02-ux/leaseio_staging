@@ -63,6 +63,13 @@
     --sidebar-ring: 168 76% 42%;
     --sidebar-muted: 213 35% 35%;
 
+    /* Portfolio Intelligence chart roles — theme-stable so the cost-per-sqft
+       above/below pair stays distinct in BOTH themes (do NOT reuse --primary,
+       which flips navy↔teal between light and dark). */
+    --chart-contracted: 213 50% 30%;
+    --chart-rate-above: 224 64% 48%;
+    --chart-rate-below: 168 70% 40%;
+
     /* Custom Tokens */
     --gradient-primary: linear-gradient(135deg, hsl(213 50% 23%), hsl(213 50% 30%));
     --gradient-accent: linear-gradient(135deg, hsl(168 76% 32%), hsl(168 76% 42%));
@@ -128,6 +135,11 @@
     --sidebar-border: 215 25% 16%;
     --sidebar-ring: 168 76% 42%;
     --sidebar-muted: 215 20% 25%;
+
+    /* Chart roles — lighter in dark for contrast on dark cards; stay distinct. */
+    --chart-contracted: 213 55% 64%;
+    --chart-rate-above: 224 70% 70%;
+    --chart-rate-below: 168 62% 54%;
   }
 }
 

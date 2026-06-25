@@ -124,7 +124,7 @@ function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentFo
           const uh = (b.uncontracted / max) * 100;
           return (
             <div key={b.label} className="flex h-full flex-1 flex-col items-center justify-end">
-              <span className="mb-1.5 text-[10px] font-semibold text-foreground">
+              <span className="mb-1.5 text-[11px] font-semibold text-foreground">
                 {b.contracted > 0 ? compactCurrency(b.contracted) : '—'}
               </span>
               <div className="flex w-full max-w-[40px] flex-1 flex-col justify-end">
@@ -142,18 +142,17 @@ function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentFo
                   />
                 )}
                 <div
-                  className="bg-primary"
-                  style={{ height: `${ch}%`, borderRadius: uh > 0 ? 0 : '4px 4px 0 0' }}
+                  style={{ height: `${ch}%`, borderRadius: uh > 0 ? 0 : '4px 4px 0 0', background: 'hsl(var(--chart-contracted))' }}
                 />
               </div>
-              <span className="mt-2 text-[10.5px] text-muted-foreground">{b.label}</span>
+              <span className="mt-2 text-[11px] text-muted-foreground">{b.label}</span>
             </div>
           );
         })}
       </div>
       <div className="mt-4 flex flex-wrap gap-4 border-t border-border pt-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm bg-primary" /> Contracted rent (with escalations)
+          <span className="h-3 w-3 rounded-sm" style={{ background: 'hsl(var(--chart-contracted))' }} /> Contracted rent (with escalations)
         </span>
         <span className="flex items-center gap-1.5">
           <span
@@ -204,8 +203,11 @@ function CostPerSqft({ data }: { data: ReturnType<typeof costPerSqftByLocation> 
           </div>
           <div className="relative h-2.5 rounded-full bg-muted">
             <div
-              className={`h-full rounded-full ${r.position === 'above' ? 'bg-primary' : 'bg-[hsl(168_76%_42%)]'}`}
-              style={{ width: `${(r.ratePerSqft / scaleMax) * 100}%` }}
+              className="h-full rounded-full"
+              style={{
+                width: `${(r.ratePerSqft / scaleMax) * 100}%`,
+                background: `hsl(var(${r.position === 'above' ? '--chart-rate-above' : '--chart-rate-below'}))`,
+              }}
             />
             {data.averageRatePerSqft != null && (
               <div
@@ -243,7 +245,7 @@ const WATCH_TONE: Record<Severity, { wrap: string; chip: string }> = {
 
 function Watchlist({ flags }: { flags: WatchFlag[] }) {
   if (flags.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted-foreground">No flags — every lease term is clear.</p>;
+    return <p className="py-6 text-center text-sm text-muted-foreground">No flags from the current critical-date checks.</p>;
   }
   return (
     <div className="flex flex-col gap-2.5">
@@ -265,7 +267,7 @@ function Watchlist({ flags }: { flags: WatchFlag[] }) {
             <div className="flex shrink-0 flex-col items-end justify-between gap-2">
               <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone.chip}`}>{f.value}</span>
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
-                <Link to={`/app/leases/${f.leaseId}/review`}>
+                <Link to={`/app/leases/${f.leaseId}`}>
                   View lease <ArrowRight className="ml-1 h-3.5 w-3.5" />
                 </Link>
               </Button>
@@ -298,7 +300,9 @@ export default function Portfolio() {
         .from('leases')
         // PostgREST type narrowing requires a literal string.
         .select(
-          'id, filename, request_title, extracted_json, property_address, landlord_name, requesting_department, region, location, square_footage, current_monthly_rent, monthly_payment, executed_monthly_payment, lease_start, lease_end, escalation_type, escalation_rate',
+          // rent_schedules embed so getMonthlyRent resolves the CURRENT escalated
+          // step — matching the Dashboard/Leases totals (else the same KPI drifts).
+          'id, filename, request_title, extracted_json, property_address, landlord_name, requesting_department, region, location, square_footage, current_monthly_rent, monthly_payment, executed_monthly_payment, lease_start, lease_end, escalation_type, escalation_rate, rent_schedules(period_start, period_end, monthly_amount)',
         )
         .eq('workspace_id', workspace!.id)
         .eq('archived', false)
@@ -322,12 +326,19 @@ export default function Portfolio() {
   const depts = useMemo(() => costByDepartment(leases), [leases]);
   const locations = useMemo(() => costPerSqftByLocation(leases), [leases]);
   const forecast = useMemo(() => rentCommitmentForecast(leases, asOf), [leases, asOf]);
+  const forecastHasData = useMemo(() => forecast.some((b) => b.contracted > 0 || b.uncontracted > 0), [forecast]);
   const watchlist = useMemo(() => buildWatchlist(leases, { asOf }), [leases, asOf]);
   const indexLeases = useMemo(() => leases.filter((l) => l.escalationType === 'index'), [leases]);
 
   const headerSubtitle =
     leases.length > 0
-      ? `${leases.length} lease${leases.length === 1 ? '' : 's'} · ${kpis.totalSquareFootage.toLocaleString()} sqft · ${kpis.marketCount} market${kpis.marketCount === 1 ? '' : 's'}`
+      ? [
+          `${leases.length} lease${leases.length === 1 ? '' : 's'}`,
+          kpis.totalSquareFootage > 0 ? `${kpis.totalSquareFootage.toLocaleString()} sqft` : null,
+          `${kpis.marketCount} market${kpis.marketCount === 1 ? '' : 's'}`,
+        ]
+          .filter(Boolean)
+          .join(' · ')
       : 'Occupancy cost, commitment, and critical-date awareness';
 
   if (!hasBusinessAccess) {
@@ -363,7 +374,7 @@ export default function Portfolio() {
       <AppHeader title="Portfolio Intelligence" subtitle={headerSubtitle} />
       <PageLayout width="wide">
         {isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
             {[...Array(5)].map((_, i) => (
               <Card key={i}>
                 <CardContent className="p-4">
@@ -387,33 +398,42 @@ export default function Portfolio() {
         ) : (
           <>
             {/* Partial-data banner — surfaces fields the abstraction didn't capture. */}
-            {(kpis.missingAreaCount > 0 || kpis.missingRentCount > 0) && (
+            {(kpis.missingAreaCount > 0 || kpis.missingRentCount > 0 || kpis.missingEndDateCount > 0) && (
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
                 <Info className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
                   {kpis.missingAreaCount > 0 && `${kpis.missingAreaCount} of ${kpis.leaseCount} lease${kpis.leaseCount === 1 ? '' : 's'} missing square footage — excluded from $/sqft metrics. `}
-                  {kpis.missingRentCount > 0 && `${kpis.missingRentCount} missing rent — excluded from cost metrics.`}
+                  {kpis.missingRentCount > 0 && `${kpis.missingRentCount} missing rent — excluded from cost metrics. `}
+                  {kpis.missingEndDateCount > 0 && `${kpis.missingEndDateCount} missing term dates — excluded from the forecast and Avg Term Remaining.`}
                 </span>
               </div>
             )}
 
             {/* KPI strip */}
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
               <KpiTile label="Annual Occupancy Cost" value={formatCurrency(kpis.annualOccupancyCost)} sub={`across ${kpis.leaseCount} lease${kpis.leaseCount === 1 ? '' : 's'}`} />
               <KpiTile
                 label="Remaining Commitment"
                 value={formatCurrency(kpis.remainingCommitment)}
-                sub={kpis.contractedThroughYear ? `contracted through ${kpis.contractedThroughYear}` : 'contracted cash'}
+                sub={kpis.contractedThroughYear ? `undiscounted · through ${kpis.contractedThroughYear}` : 'undiscounted contracted cash'}
               />
-              <KpiTile label="Blended Cost" value={kpis.blendedCostPerSqft != null ? `$${kpis.blendedCostPerSqft.toFixed(2)}` : '—'} sub="per sqft / yr" />
+              <KpiTile
+                label="Blended Cost"
+                value={kpis.blendedCostPerSqft != null ? `$${kpis.blendedCostPerSqft.toFixed(2)}` : '—'}
+                sub={kpis.blendedCostPerSqft != null ? 'per sqft / yr' : 'add square footage'}
+              />
               <KpiTile label="Total Footprint" value={kpis.totalSquareFootage.toLocaleString()} sub={`sqft · ${kpis.marketCount} market${kpis.marketCount === 1 ? '' : 's'}`} />
               <KpiTile label="Avg Term Remaining" value={`${kpis.avgTermRemainingYears.toFixed(1)} yrs`} sub="weighted by rent" />
             </div>
 
             {/* Row 1 — forecast + composition */}
-            <div className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
+            <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1.7fr_1fr]">
               <SectionCard title="Rent Commitment Forecast" sub="Contractual obligations by year — see the re-leasing cliff coming" icon={BarChart3} right={<Badge variant="secondary">Next 5 yrs</Badge>}>
-                <CommitmentForecast data={forecast} />
+                {forecastHasData ? (
+                  <CommitmentForecast data={forecast} />
+                ) : (
+                  <p className="py-6 text-center text-sm text-muted-foreground">Add lease end dates to see the commitment forecast.</p>
+                )}
               </SectionCard>
               <SectionCard title="Cost by Department" sub="Where the spend sits" icon={Layers}>
                 {depts.length > 0 ? <CostByDepartment data={depts} /> : <p className="text-sm text-muted-foreground">No cost data yet.</p>}
@@ -421,7 +441,7 @@ export default function Portfolio() {
             </div>
 
             {/* Row 2 — benchmark + watchlist */}
-            <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
+            <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1fr_1.4fr]">
               <SectionCard title="Cost per sqft by Location" sub="Against the portfolio blended average" icon={Scale}>
                 {locations.rows.length > 0 ? (
                   <CostPerSqft data={locations} />
@@ -448,12 +468,15 @@ export default function Portfolio() {
                   </p>
                   <div className="space-y-2">
                     {indexLeases.map((l) => (
-                      <div key={l.id} className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-sm dark:bg-amber-950/20">
+                      <Link
+                        key={l.id}
+                        to={`/app/leases/${l.id}`}
+                        aria-label={`View lease ${l.propertyName}`}
+                        className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-sm hover:bg-amber-100 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
+                      >
                         <span className="truncate">{l.propertyName}</span>
-                        <Link to={`/app/leases/${l.id}/review`} className="shrink-0 text-muted-foreground hover:text-foreground">
-                          <ExternalLink size={14} />
-                        </Link>
-                      </div>
+                        <ExternalLink size={14} className="shrink-0 text-muted-foreground" />
+                      </Link>
                     ))}
                   </div>
                 </CardContent>

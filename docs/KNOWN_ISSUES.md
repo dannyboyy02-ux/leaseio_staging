@@ -2619,3 +2619,21 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 - **No screen-reader a11y for reorder.** The dnd-kit `KeyboardSensor` is wired (baseline space-to-lift / arrow-to-move works), but no `accessibility.announcements` / `screenReaderInstructions` are provided and the grip's aria-label is the generic `nav.sidebar_reorder`. A keyboard/SR user gets no narration of the interaction or result. Accepted/skipped by the product owner. If revisited, add dnd-kit announcements + a descriptive grip label.
 
 **Where to look:** `src/components/layout/AppSidebar.tsx` (`SortableNavItem`, `useSensors`).
+
+---
+
+### Item #150: Portfolio Intelligence — deferred follow-ups from the build review (PR #73)
+
+> **Filed 2026-06-24** (branch `claude/relaxed-clarke-oksfz4`). The Portfolio page was recomposed from the PV/liability view into the occupancy-cost & commitment "Portfolio Intelligence" surface (`src/lib/portfolioIntelligence.ts` + `portfolioWatchlist.ts` + `src/pages/app/Portfolio.tsx`). The 5 reviewer-surfaced **High** findings were fixed in PR #73; these are the **deferred** items, recorded so they aren't re-discovered cold.
+
+**MEDIUM**
+- **Forecast tail bucket counts only one year, not "and beyond."** `rentCommitmentForecast` (`portfolioIntelligence.ts`) walks the window to `tailYear+1`, so the `"{year}+"` bar represents a single year — a lease running to 2050 contributes the same 12 months to the tail as a 2032 lease. The `+` label implies an aggregate. Fix options: (a) fold all months ≥ tailYear into the tail for *contracted* (true aggregate) while capping *uncontracted* to one representative year (run-rate doesn't aggregate across years), or (b) relabel the bucket as the single year. Deferred — both options have honesty tradeoffs; needs a product call on the tail's meaning.
+- **Layout: no shared stat-tile / card-padding drift.** Portfolio's `KpiTile` duplicates the Dashboard `SummaryStrip` stat treatment (different type scale, lacks `tabular-nums`), and the page mixes `p-4`/`p-5` card paddings. The clean fix is extracting a shared `StatTile` primitive + a `warning` Card variant (the Index-Lease Disclosure hand-rolls `border-l-amber-400` instead of a `--warning`-tokened variant). Deferred — cross-page refactor, wants its own pass.
+
+**LOW**
+- **Full i18n of the Portfolio surface.** Copy is English-hardcoded (matching the *prior* Portfolio page — not new drift; only `formatCurrency` is localized). Includes the watchlist's generated factual sentences in `portfolioWatchlist.ts`, which would need the engine to return structured params + a UI-side translator. Deferred.
+- **Header `Export` action not built.** The design's top-right Export (XLSX/PDF portfolio summary) is the one open *product decision* (format/scope). `AppHeader` already supports an `actions` slot; wire it when the format is decided. Deferred (KNOWN_ISSUES — open product decision).
+- **Watchlist `sourceField` provenance not wired to a deep-link anchor.** Each flag carries `sourceField` (provenance), but the "View lease" link goes to the lease detail without scrolling to the cited clause. Either thread `sourceField` into the link as an anchor the LeaseReview page consumes, or drop the "deep-link anchor" phrasing from the JSDoc. Deferred.
+- **Dept palette dark-mode contrast.** `DEPT_COLORS[0]` navy (`hsl(213 50% 23%)`) is low-contrast on dark cards. The cost-per-sqft + forecast collision was fixed via `--chart-*` tokens (PR #73), but the segmented dept bar still uses fixed hsl. Minor; bump the navy lightness or route through a token if it bothers in dark mode.
+
+**Related:** this rewrite fully **unanchors the #42 dead-PV cluster** — `src/lib/portfolioAnalytics.ts` is now imported only by the unmounted `FinancialSummary.tsx`, so closing #42 (delete `FinancialSummary.tsx`) also makes `portfolioAnalytics.ts` + its test deletable. Not bundled into PR #73 per the pre-existing-issues rule.

@@ -104,6 +104,11 @@ describe('remainingContractedRent (escalation)', () => {
     const l = lease({ baseMonthlyRent: 1000, currentMonthlyRent: 1000, startDate: '2020-01-01', endDate: '2025-01-01' });
     expect(remainingContractedRent(l, ASOF)).toBe(0);
   });
+  it('books the current partial month for a near-expiry lease (H2 fix — was rounding to $0)', () => {
+    // asOf 2026-01-01; lease ends 2026-01-20 (~19 days left) → still books the month.
+    const l = lease({ baseMonthlyRent: 3000, currentMonthlyRent: 3000, startDate: '2024-01-01', endDate: '2026-01-20' });
+    expect(remainingContractedRent(l, ASOF)).toBe(3000);
+  });
 });
 
 describe('costByDepartment', () => {
@@ -197,24 +202,23 @@ describe('lease with no end date (open-ended term)', () => {
     expect(remainingContractedRent(noEnd, ASOF)).toBe(0);
   });
 
-  it('contributes 0 years to WALT and is excluded from contracted-through year', () => {
+  it('contributes 0 to WALT/commitment, no contracted-through year, and is counted as missing-dates', () => {
     const k = computeKpis([noEnd], ASOF);
     expect(k.avgTermRemainingYears).toBe(0);
     expect(k.contractedThroughYear).toBeNull();
     expect(k.remainingCommitment).toBe(0);
+    expect(k.missingEndDateCount).toBe(1);
   });
 
   it(
-    // KNOWN DIVERGENCE (reported, not a fix): the forecast treats a null end as
-    // "under contract forever" so it fills every bar incl. the tail — while the
-    // commitment KPI and WALT count it as 0. This test pins the divergence so it
-    // cannot drift silently; if the two surfaces are ever reconciled, update here.
-    'IS counted as contracted across the whole forecast horizon (diverges from the KPI)',
+    // H3 fix: a null end date is "unknown horizon" → EXCLUDED from the forecast,
+    // matching the commitment KPI + WALT. No bar treats it as contracted-forever.
+    'is EXCLUDED from the forecast too (reconciled with the KPI)',
     () => {
       const f = rentCommitmentForecast([noEnd], ASOF, 5);
-      expect(f.every((b) => b.contracted === 12000)).toBe(true);
+      expect(f.every((b) => b.contracted === 0)).toBe(true);
       expect(f.every((b) => b.uncontracted === 0)).toBe(true);
-      expect(f[f.length - 1].isTail).toBe(true); // including the tail bucket
+      expect(f[f.length - 1].isTail).toBe(true);
     },
   );
 });

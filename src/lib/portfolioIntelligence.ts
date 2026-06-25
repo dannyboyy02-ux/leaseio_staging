@@ -182,6 +182,8 @@ export interface PortfolioKpis {
   missingAreaCount: number;
   /** Leases excluded from cost (no resolvable rent). */
   missingRentCount: number;
+  /** Rented leases with no parseable end date — excluded from term/forecast metrics. */
+  missingEndDateCount: number;
 }
 
 /** Remaining contracted cash for one lease from `asOf` to `endDate`, escalated. */
@@ -190,8 +192,10 @@ export function remainingContractedRent(lease: PortfolioLease, asOf: Date): numb
   const end = parseIso(lease.endDate);
   if (!end || end <= asOf || lease.baseMonthlyRent <= 0) return 0;
   const anchor = start ?? asOf; // escalation indexes from start when known
-  const firstMonth = Math.ceil(monthsBetween(anchor, asOf)); // months already elapsed
-  const lastMonth = Math.floor(monthsBetween(anchor, end));
+  // Include the current partial month (floor) and the final partial month
+  // (ceil); otherwise a near-expiry lease's remaining cash rounds toward zero.
+  const firstMonth = Math.floor(monthsBetween(anchor, asOf));
+  const lastMonth = Math.ceil(monthsBetween(anchor, end));
   let total = 0;
   for (let m = firstMonth; m < lastMonth; m++) {
     total += escalatedMonthly(lease.baseMonthlyRent, lease.escalationRate, m);
@@ -229,6 +233,7 @@ export function computeKpis(leases: PortfolioLease[], asOf: Date): PortfolioKpis
     avgTermRemainingYears: weightTotal > 0 ? weighted / weightTotal : 0,
     missingAreaCount: rented.filter((l) => !hasArea(l)).length,
     missingRentCount: leases.filter((l) => !hasRent(l)).length,
+    missingEndDateCount: rented.filter((l) => !parseIso(l.endDate)).length,
   };
 }
 
@@ -357,15 +362,19 @@ export function rentCommitmentForecast(
 
   // Walk each lease month-by-month across the horizon window.
   const windowEnd = new Date(Date.UTC(tailYear + 1, 0, 1)); // include the tail year fully
-  for (const l of leases.filter(hasRent)) {
+  // Exclude leases with no end date (unknown horizon) — same convention as the
+  // commitment + WALT metrics — so an open-ended lease can't read as
+  // "contracted forever" in the chart while contributing $0 to Remaining Commitment.
+  for (const l of leases.filter((x) => hasRent(x) && parseIso(x.endDate))) {
     const start = parseIso(l.startDate);
-    const end = parseIso(l.endDate);
+    const end = parseIso(l.endDate)!;
     const anchor = start ?? asOf;
-    const cursor = new Date(Date.UTC(startYear, asOf.getUTCMonth(), 1));
+    // Full calendar-year buckets (start at Jan 1) so no bar is a partial year.
+    const cursor = new Date(Date.UTC(startYear, 0, 1));
     const monthlyRunRate = l.currentMonthlyRent;
     while (cursor < windowEnd) {
       const bucket = bucketFor(cursor.getUTCFullYear());
-      const underContract = !end || cursor < end;
+      const underContract = cursor < end;
       if (underContract) {
         const mFromStart = Math.floor(monthsBetween(anchor, cursor));
         bucket.contracted += escalatedMonthly(l.baseMonthlyRent, l.escalationRate, mFromStart);
