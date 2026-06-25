@@ -114,3 +114,119 @@ describe('buildWatchlist — expiry window + cap', () => {
     expect(buildWatchlist([], { asOf: ASOF })).toEqual([]);
   });
 });
+
+// ===========================================================================
+// Gap-closing coverage (added by lease-test-author) — boundary conditions and
+// the renewal-notice dormant rule lighting up. Each pins CURRENT behavior.
+// ===========================================================================
+
+describe('renewal-notice dormant rule lights up', () => {
+  it('fires when renewalNoticeDeadline is present and inside the notice window', () => {
+    const l = wlease({
+      id: 'rn', propertyName: 'Harbor', department: 'Finance',
+      currentMonthlyRent: 1000, endDate: '2028-01-01',
+      renewalNoticeDeadline: '2026-03-01', // 59 days out, < default 90d window
+    });
+    const f = buildWatchlist([l], { asOf: ASOF }).find((x) => x.sourceField === 'renewalOptions');
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe('warning');
+    expect(f!.value).toBe('59 days');
+    expect(f!.icon).toBe('calendar-clock');
+    expect(f!.department).toBe('Finance');
+    expect(f!.date).toBe('2026-03-01');
+  });
+
+  it('stays silent when the deadline is already in the past (days < 0)', () => {
+    const l = wlease({ id: 'past', currentMonthlyRent: 1000, endDate: '2028-01-01', renewalNoticeDeadline: '2025-12-01' });
+    expect(buildWatchlist([l], { asOf: ASOF }).some((f) => f.sourceField === 'renewalOptions')).toBe(false);
+  });
+
+  it('stays silent when the deadline is beyond the notice window', () => {
+    // 2026-06-01 is ~151 days out, > default 90d
+    const l = wlease({ id: 'far', currentMonthlyRent: 1000, endDate: '2028-01-01', renewalNoticeDeadline: '2026-06-01' });
+    expect(buildWatchlist([l], { asOf: ASOF }).some((f) => f.sourceField === 'renewalOptions')).toBe(false);
+  });
+
+  it('honors a widened noticeWindowDays config', () => {
+    const l = wlease({ id: 'wide', currentMonthlyRent: 1000, endDate: '2028-01-01', renewalNoticeDeadline: '2026-06-01' });
+    const f = buildWatchlist([l], { asOf: ASOF, noticeWindowDays: 200 }).find((x) => x.sourceField === 'renewalOptions');
+    expect(f).toBeDefined();
+  });
+});
+
+describe('highCostFactor threshold boundary', () => {
+  // Two leases at $24 and $12 → avg = (96000+72000)/(4000+10000)... use a clean setup:
+  // A: 1000 sqft @ 2000/mo = 24000/yr → $24/sqft. B: 1000 sqft @ 1000/mo = 12000/yr → $12/sqft.
+  // avg = 36000/2000 = $18/sqft. top = $24. ratio = 24/18 = 1.333…
+  const A = wlease({ id: 'A', propertyName: 'A', squareFootage: 1000, currentMonthlyRent: 2000, endDate: '2028-01-01' });
+  const B = wlease({ id: 'B', propertyName: 'B', squareFootage: 1000, currentMonthlyRent: 1000, endDate: '2028-01-01' });
+
+  it('fires when top rate is just OVER avg × factor', () => {
+    const f = buildWatchlist([A, B], { asOf: ASOF, highCostFactor: 1.3 }).filter((x) => x.sourceField === 'squareFootage');
+    expect(f).toHaveLength(1);
+    expect(f[0].leaseId).toBe('A');
+  });
+
+  it('stays silent when factor sits at or above the top ratio (strict > on the threshold)', () => {
+    // ratio is exactly 24/18 = 1.3333…; factor 1.3334 puts the threshold above top → silent
+    const f = buildWatchlist([A, B], { asOf: ASOF, highCostFactor: 1.3334 }).filter((x) => x.sourceField === 'squareFootage');
+    expect(f).toHaveLength(0);
+  });
+
+  it('stays silent when every lease shares the SAME rate (top == avg, not strictly above)', () => {
+    const same1 = wlease({ id: 's1', squareFootage: 1000, currentMonthlyRent: 1000, endDate: '2028-01-01' });
+    const same2 = wlease({ id: 's2', squareFootage: 1000, currentMonthlyRent: 1000, endDate: '2028-01-01' });
+    const f = buildWatchlist([same1, same2], { asOf: ASOF }).filter((x) => x.sourceField === 'squareFootage');
+    expect(f).toHaveLength(0); // top.ratePerSqft <= avg × 1 → no flag
+  });
+});
+
+describe('expiry-window boundary (exactly at the window edge)', () => {
+  it('INCLUDES a lease ending exactly at the window edge (<= is inclusive)', () => {
+    // 180 days after 2026-01-01 is 2026-06-30 exactly.
+    const atEdge = wlease({ id: 'edge', currentMonthlyRent: 100, endDate: '2026-06-30' });
+    const justPast = wlease({ id: 'past', currentMonthlyRent: 100, endDate: '2026-07-01' }); // 181 days
+    const earliest = wlease({ id: 'early', currentMonthlyRent: 100, endDate: '2026-02-01' });
+    const flags = buildWatchlist([atEdge, justPast, earliest], { asOf: ASOF }).filter((f) => f.sourceField === 'expirationDate');
+    expect(flags.map((f) => f.leaseId).sort()).toEqual(['early', 'edge']); // 'past' excluded; 'early' is also the soonest
+  });
+
+  it('a lease ending the day after the window is excluded unless it is the soonest', () => {
+    const justPast = wlease({ id: 'past', currentMonthlyRent: 100, endDate: '2026-07-01' });
+    // alone, it IS the soonest → still flagged (the soonest is always shown)
+    const lone = buildWatchlist([justPast], { asOf: ASOF }).filter((f) => f.sourceField === 'expirationDate');
+    expect(lone.map((f) => f.leaseId)).toEqual(['past']);
+    expect(lone[0].title).toContain('earliest');
+  });
+});
+
+describe('severity + date sort stability', () => {
+  it('orders warning < info < muted regardless of dates', () => {
+    const l = wlease({
+      id: 'multi', propertyName: 'Multi', squareFootage: 1000, currentMonthlyRent: 5000, // high $/sqft → muted
+      endDate: '2026-09-01',                  // info (expiry)
+      renewalNoticeDeadline: '2026-02-15',    // warning (renewal)
+    });
+    const other = wlease({ id: 'other', squareFootage: 1000, currentMonthlyRent: 100, endDate: '2030-01-01' });
+    const sev = buildWatchlist([l, other], { asOf: ASOF }).map((f) => f.severity);
+    // severities must be non-decreasing in rank
+    const rank = { warning: 0, info: 1, muted: 2 } as const;
+    for (let i = 1; i < sev.length; i++) {
+      expect(rank[sev[i]]).toBeGreaterThanOrEqual(rank[sev[i - 1]]);
+    }
+  });
+
+  it('within the same severity, sorts by soonest date first', () => {
+    const sooner = wlease({ id: 'sooner', currentMonthlyRent: 100, endDate: '2026-02-01' });
+    const later = wlease({ id: 'later', currentMonthlyRent: 100, endDate: '2026-05-01' }); // within 180d window
+    const flags = buildWatchlist([later, sooner], { asOf: ASOF }).filter((f) => f.sourceField === 'expirationDate');
+    expect(flags.map((f) => f.leaseId)).toEqual(['sooner', 'later']); // input order reversed → sort must reorder
+  });
+
+  it('keeps input order for two flags with identical severity AND date (stable sort)', () => {
+    const a = wlease({ id: 'a', currentMonthlyRent: 100, endDate: '2026-03-01' });
+    const b = wlease({ id: 'b', currentMonthlyRent: 100, endDate: '2026-03-01' });
+    const flags = buildWatchlist([a, b], { asOf: ASOF }).filter((f) => f.sourceField === 'expirationDate');
+    expect(flags.map((f) => f.leaseId)).toEqual(['a', 'b']);
+  });
+});
