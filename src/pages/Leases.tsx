@@ -306,14 +306,20 @@ export default function Leases() {
   const handleDeleteConfirm = async () => {
     if (!selectedLease || deletePending) return;
     setDeletePending(true);
+    const leaseId = selectedLease.id; // capture before we clear selection (for Undo)
     try {
       const { data, error } = await supabase.functions.invoke('delete-lease', {
-        body: { leaseId: selectedLease.id },
+        body: { leaseId },
       });
       if (error || !(data as { ok?: boolean } | null)?.ok) {
         throw error ?? new Error('delete-lease returned not-ok');
       }
-      toast.success(t('leases.delete_success'), { id: 'lease-action' });
+      // Misclick safety: an Undo on the success toast restores the lease in the
+      // 14-day window (calls restore-lease, which the soft-delete left ready).
+      toast.success(t('leases.delete_success'), {
+        id: 'lease-action',
+        action: { label: t('common.undo'), onClick: () => handleUndoDelete(leaseId) },
+      });
       setRetentionDeleteOpen(false);
       setSelectedLease(null);
       await refreshProfile?.();
@@ -323,6 +329,26 @@ export default function Leases() {
       toast.error(t('leases.delete_failed'), { id: 'lease-action' });
     } finally {
       setDeletePending(false);
+    }
+  };
+
+  // Undo a just-deleted lease (the soft-delete is restorable for 14 days). Also
+  // the in-product restore path for an accidental delete; ops can restore later
+  // via the same restore-lease function. Shares the 'lease-action' toast id.
+  const handleUndoDelete = async (leaseId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('restore-lease', {
+        body: { leaseId },
+      });
+      if (error || !(data as { ok?: boolean } | null)?.ok) {
+        throw error ?? new Error('restore-lease returned not-ok');
+      }
+      toast.success(t('archive.unarchived_toast'), { id: 'lease-action' });
+      await refreshProfile?.();
+      fetchLeases();
+    } catch (error) {
+      console.error('Undo delete error:', error);
+      toast.error(t('leases.delete_undo_failed'), { id: 'lease-action' });
     }
   };
 
@@ -823,7 +849,7 @@ export default function Leases() {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleArchiveConfirm}
-        leaseName={selectedLease?.filename || ''}
+        leaseName={getPropertyAddress(selectedLease ?? ({} as LeaseRow)) || selectedLease?.filename || ''}
       />
 
       <DeleteLeaseWithRetentionDialog

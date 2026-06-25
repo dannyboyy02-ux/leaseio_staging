@@ -2659,3 +2659,16 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 
 **LOW**
 - **ES subtitle has no singular agreement at n=1.** `leases.subtitle_rent` renders `"{{rent}} / mes · {{active}} activos · {{total}} total"`; at one active lease the ES reads "1 activos" (should be "activo"). i18next can't pluralize mid-string, so a correct fix means splitting into pluralized sub-keys or accepting the terse stat-chip convention (agreement often dropped in dashboard chips). Deferred as cosmetic.
+
+---
+
+### Item #153: Leases Phase 3 (soft-delete) — deferred follow-ups from the build review
+
+> **Filed 2026-06-25** (branch `claude/relaxed-clarke-oksfz4`, Leases redesign Phase 3 polish review). The admin "Delete permanently" (soft-delete + 14-day retention + restore + purge cron) shipped; these are the reviewer-surfaced follow-ups deliberately deferred so they aren't re-discovered cold.
+
+**MEDIUM**
+- **`ArchiveLeaseDialog` is hardcoded English while the new `DeleteLeaseWithRetentionDialog` is i18n'd.** Both now sit in the same Leases kebab, so an ES user opening it sees a translated Delete dialog beside an English Archive dialog ("Archive Lease", body, "Cancel"/"Archive" buttons) — a newly-conspicuous (but pre-existing, #79) locale gap. Fix: move the Archive dialog's strings into `archive.*` keys (en+es) mirroring the delete dialog. Note the existing `archive.confirm_archive_title`/`confirm_archive_desc` keys already exist and could be reused. NOT bundled into Phase 3b per the pre-existing-issue rule.
+- **No "Recently deleted" admin view for restore beyond the same-session Undo.** Phase 3b adds an Undo action on the delete success toast (immediate misclick safety) + ops-assisted restore via the `restore-lease` function. But a soft-deleted lease is hidden from every authenticated read (the `leases_hide_soft_deleted` RLS), so an admin who dismissed the toast has no in-product way to see/restore a lease deleted earlier in the window — they must contact support. Fix options: (a) a 4th Status-filter scope "Recently deleted" backed by a service-role list-deleted-leases function (RLS hides them from a normal client query, so it needs a service-role endpoint), with a per-row Restore; (b) accept ops-assisted restore for non-immediate recoveries. Needs a product call on whether self-serve late restore is wanted. The backend (`restore-lease`) is already built and ready either way.
+
+**LOW**
+- **Deleting an already-archived lease** uses generic dialog copy that doesn't acknowledge the archived state. The 14-day window still applies correctly; only the messaging could note it. Cosmetic.

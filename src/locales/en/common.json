@@ -256,7 +256,7 @@
     "audit_warning": "Saved, but the action could not be recorded in the audit trail.",
     "deleted_badge": "Archived",
     "deleted_banner": "This lease is archived. It no longer counts toward your active leases and is hidden from the Leases list unless \"Show archived\" is on.",
-    "list_archived_toast": "Lease archived — restore it from the lease's detail page",
+    "list_archived_toast": "Lease archived. Set Status: Archived to find and restore it.",
     "list_archive_failed": "Failed to archive lease"
   },
   "documents": {
@@ -629,8 +629,9 @@
     "delete_title": "Delete this lease?",
     "delete_desc": "Delete \"{{name}}\"? It's removed from your workspace right away and kept recoverable for 14 days — contact support to restore it within that window. After 14 days it's permanently erased, along with its history and documents. Unlike archiving, this can't be undone once the window passes.",
     "delete_confirm": "Delete lease",
-    "delete_success": "Lease deleted — recoverable for 14 days",
+    "delete_success": "Lease deleted. Recoverable for 14 days.",
     "delete_failed": "Couldn't delete the lease. Please try again.",
+    "delete_undo_failed": "Couldn't restore the lease. Contact support to recover it.",
     "row_actions": "Lease actions",
     "open_lease": "Open lease: {{property}}",
     "clear_filters": "Clear filters",
@@ -1232,6 +1233,7 @@
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",
+    "undo": "Undo",
     "more_actions": "More actions",
     "save": "Save",
     "edit": "Edit",
