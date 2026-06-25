@@ -7,12 +7,14 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Eye,
   Archive,
   ArchiveRestore,
   Calendar,
   Building2,
   Ruler,
+  Tag,
+  MoreHorizontal,
+  Download,
 } from 'lucide-react';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { toast } from 'sonner';
@@ -34,14 +36,19 @@ import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { getMonthlyRent } from '@/lib/leaseCalculations';
+import { rowsToCsv } from '@/lib/csv';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface LeaseRow {
   id: string;
@@ -50,6 +57,8 @@ interface LeaseRow {
   lifecycle_status: string | null;
   request_title: string | null;
   landlord_name: string | null;
+  asset_type: string | null;
+  property_address: string | null;
   lease_start: string | null;
   lease_end: string | null;
   executed_expiry_date: string | null;
@@ -66,23 +75,20 @@ interface LeaseRow {
   }[] | null;
 }
 
-type SortField = 'property' | 'landlord' | 'monthly_rent' | 'lease_start' | 'lease_end' | 'sqft';
+type SortField = 'property' | 'asset_type' | 'landlord' | 'monthly_rent' | 'lease_start' | 'lease_end' | 'sqft';
 type SortDirection = 'asc' | 'desc';
-type LeaseView = 'active' | 'approval';
+// The Leases page is the lease PORTFOLIO (executed / active / expired). The
+// archive scope — not the workflow lifecycle — is the page's primary axis.
+// In-flight (approval) leases live on the Approvals page (see redirect below).
+type StatusScope = 'all' | 'active' | 'archived';
 
-// Statuses that represent in-flight (awaiting action) leases.
-// Phase 3 (KNOWN_ISSUES.md item #7): extended in place with chain
-// vocabulary equivalents of awaiting_concept_approval, in_concept_review,
-// and post_concept_pre_signator groups (plus the chain-only signator
-// stages). Consolidation to a STATE_GROUPS-derived helper is filed for a
-// future refactor.
-const IN_FLIGHT_STATUSES = new Set([
-  // Legacy
-  'submitted', 'under_review', 'approved',
-  // Chain
-  'concept_submitted', 'concept_under_review', 'in_negotiation',
-  'final_review', 'pending_counter_signature',
-]);
+// Lifecycle states that belong to the portfolio surface. In-flight/approval
+// states are intentionally excluded — Approvals owns that lifecycle.
+const PORTFOLIO_STATUSES = ['executed', 'active', 'fully_executed', 'expired', 'chain_violation'];
+
+// snake_case asset_type → "Title Case" (matches ApprovalQueue / LeaseAudit).
+const prettyAssetType = (t: string | null | undefined): string =>
+  t ? t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '';
 
 export default function Leases() {
   const navigate = useNavigate();
@@ -92,9 +98,7 @@ export default function Leases() {
   // #136/#137: hide intake/archive affordances for ANY read-only workspace —
   // Vault OR a cancellation-grace/soft-deleted one (the server also blocks).
   const isReadOnly = isWorkspaceReadOnly(workspace);
-  // Archive is admin/owner-only (server-enforced by the #78 trigger); the
-  // list "Delete" action uses restorable-archive semantics, matching the
-  // detail page (#79) — true hard-delete is not offered from the list.
+  // Archive is admin/owner-only (server-enforced by the #78 trigger).
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const [searchParams] = useSearchParams();
   const quota = useWorkspaceQuota();
@@ -119,19 +123,31 @@ export default function Leases() {
   const [expirationFilter, setExpirationFilter] = useState<'all' | '30' | '90' | '120'>(
     (['30', '90', '120'].includes(searchParams.get('expiring') ?? '') ? searchParams.get('expiring') : 'all') as 'all' | '30' | '90' | '120'
   );
+  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('lease_end');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [leaseView, setLeaseView] = useState<LeaseView>(
-    searchParams.get('view') === 'approval' ? 'approval' : 'active'
+  // Single scope control (replaces the Active/Approval tabs + the "Show
+  // archived" toggle). Default ALL = active + archived together. Honors a
+  // ?status= deep-link.
+  const [scope, setScope] = useState<StatusScope>(
+    (['active', 'archived', 'all'].includes(searchParams.get('status') ?? '')
+      ? searchParams.get('status')
+      : 'all') as StatusScope,
   );
   const [leases, setLeases] = useState<LeaseRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showArchived, setShowArchived] = useState(false);
 
-  const expirationFilters = [
-    { value: 'all', label: 'All leases' },
-    { value: '30', label: 'Expiring in 30 days' },
-    { value: '90', label: 'Expiring in 90 days' },
+  // Approvals moved off this page — bounce any legacy ?view=approval deep-link
+  // to the Approvals surface that now owns that lifecycle.
+  useEffect(() => {
+    if (searchParams.get('view') === 'approval') navigate('/app/approvals', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const expiryFilters = [
+    { value: 'all', label: 'Expiry: all' },
+    { value: '30', label: 'Expiring ≤ 30 days' },
+    { value: '90', label: 'Expiring ≤ 90 days' },
     { value: '120', label: 'Expiring 91–120 days' },
   ];
 
@@ -139,43 +155,36 @@ export default function Leases() {
     if (!workspace?.id) return;
     try {
       // Workspace scoping is mandatory: a user who is a member of multiple
-      // workspaces would otherwise see every workspace's leases mixed
-      // together (RLS allows them all; UI must scope to the active one).
-      const visibleLifecycleStatuses = [
-        // Legacy
-        'submitted', 'under_review', 'approved', 'executed', 'active', 'expired',
-        // Chain
-        'concept_submitted', 'concept_under_review', 'in_negotiation',
-        'final_review', 'pending_counter_signature', 'fully_executed',
-        // Phase 6: leases in chain_violation must remain visible in the
-        // listing — the violation banner on the detail page is the
-        // resolution surface, but the user has to reach the lease first.
-        'chain_violation',
-      ];
-
+      // workspaces would otherwise see every workspace's leases mixed together
+      // (RLS allows them all; UI must scope to the active one).
       let query = (supabase as any)
         .from('leases')
         .select(
-          'id, filename, status, lifecycle_status, request_title, landlord_name, ' +
-          'lease_start, lease_end, executed_expiry_date, square_footage, ' +
+          'id, filename, status, lifecycle_status, request_title, landlord_name, asset_type, ' +
+          'property_address, lease_start, lease_end, executed_expiry_date, square_footage, ' +
           'executed_monthly_payment, current_monthly_rent, monthly_payment, extracted_json, archived, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
         .eq('workspace_id', workspace.id)
         .order('lease_end', { ascending: true });
 
-      if (showArchived) {
-        // Archived view shows ONLY archived leases (#91 — was showing all),
-        // including those with NULL lifecycle_status (failed/processing
-        // uploads and amendments never get one) so an archived failed
-        // amendment is still reachable here to restore.
+      const portfolioList = PORTFOLIO_STATUSES.join(',');
+      if (scope === 'active') {
+        query = query.in('lifecycle_status', PORTFOLIO_STATUSES).eq('archived', false);
+      } else if (scope === 'archived') {
+        // Archived-only, including NULL-lifecycle rows (failed/processing uploads
+        // and amendments never get one) so an archived failed item is still
+        // reachable here to restore (#91).
         query = query
           .eq('archived', true)
-          .or(
-            `lifecycle_status.in.(${visibleLifecycleStatuses.join(',')}),lifecycle_status.is.null`,
-          );
+          .or(`lifecycle_status.in.(${portfolioList}),lifecycle_status.is.null`);
       } else {
-        query = query.in('lifecycle_status', visibleLifecycleStatuses).eq('archived', false);
+        // ALL: active portfolio (any archived flag) + archived failed/NULL rows.
+        // Non-archived drafts/failures stay out of the portfolio list (they live
+        // in ImportHistory / processing).
+        query = query.or(
+          `lifecycle_status.in.(${portfolioList}),and(archived.eq.true,lifecycle_status.is.null)`,
+        );
       }
 
       const { data, error } = await query;
@@ -184,7 +193,7 @@ export default function Leases() {
       setLeases((data || []) as unknown as LeaseRow[]);
     } catch (error) {
       console.error('Error fetching leases:', error);
-      toast.error('Failed to load leases');
+      toast.error('Failed to load leases', { id: 'lease-list' });
     } finally {
       setLoading(false);
     }
@@ -192,21 +201,21 @@ export default function Leases() {
 
   useEffect(() => {
     fetchLeases();
-    // re-fetch when the archived toggle flips OR the active workspace
-    // switches — without the workspace dep, switching workspaces would
-    // leave the previous workspace's leases on screen.
+    // re-fetch when the scope filter changes OR the active workspace switches —
+    // without the workspace dep, switching workspaces would leave the previous
+    // workspace's leases on screen.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showArchived, workspace?.id]);
+  }, [scope, workspace?.id]);
 
   const handleArchiveClick = (lease: LeaseRow) => {
     setSelectedLease(lease);
     setDeleteDialogOpen(true);
   };
 
-  // #79: the list action is restorable ARCHIVE, not hard-delete — the same
-  // semantics as the detail page, so "Delete" never means two things. Sets
+  // #79: the list action is restorable ARCHIVE, not hard-delete. Sets
   // archived=true; the #78 trigger stamps archived_by/archived_at server-side
   // (the client values here are overridden) and enforces admin/owner.
+  // Toasts carry a stable id so rapid actions replace rather than stack.
   const handleArchiveConfirm = async () => {
     if (!selectedLease) return;
     try {
@@ -222,14 +231,14 @@ export default function Leases() {
         details: {},
       } as any);
       if (auditError) console.error('Archive audit insert failed:', auditError.message);
-      toast.success(t('archive.list_archived_toast'));
+      toast.success(t('archive.list_archived_toast'), { id: 'lease-action' });
       setDeleteDialogOpen(false);
       setSelectedLease(null);
       await refreshProfile?.();
       fetchLeases();
     } catch (error) {
       console.error('Archive error:', error);
-      toast.error(t('archive.list_archive_failed'));
+      toast.error(t('archive.list_archive_failed'), { id: 'lease-action' });
     }
   };
 
@@ -250,12 +259,12 @@ export default function Leases() {
         details: {},
       } as any);
       if (auditError) console.error('Restore audit insert failed:', auditError.message);
-      toast.success(t('archive.unarchived_toast'));
+      toast.success(t('archive.unarchived_toast'), { id: 'lease-action' });
       await refreshProfile?.();
       fetchLeases();
     } catch (error) {
       console.error('Restore error:', error);
-      toast.error(t('archive.failed'));
+      toast.error(t('archive.failed'), { id: 'lease-action' });
     }
   };
 
@@ -275,7 +284,7 @@ export default function Leases() {
 
   const getPropertyAddress = (lease: LeaseRow): string => {
     const json = lease.extracted_json as Record<string, unknown> | null;
-    return lease.request_title || getExtractedFieldValue(json?.address) || lease.filename || '';
+    return lease.request_title || lease.property_address || getExtractedFieldValue(json?.address) || lease.filename || '';
   };
 
   const getLeaseEnd = (lease: LeaseRow): string | null =>
@@ -310,19 +319,16 @@ export default function Leases() {
     }
   };
 
-  // Phase 3: extend with chain executed equivalent (fully_executed). 'active'
-  // is identical in both vocabularies.
+  // Plain-text status for search + export (the visual badge is LeaseStatusBadge).
+  const statusText = (lease: LeaseRow): string =>
+    (lease.lifecycle_status || lease.status || '').replace(/_/g, ' ');
+
+  // Active = live portfolio (not archived). Drives the header rent total.
   const activeLeases = useMemo(
     () => leases.filter((l) =>
-      l.lifecycle_status === 'active' ||
-      l.lifecycle_status === 'executed' ||
-      l.lifecycle_status === 'fully_executed'
+      !l.archived &&
+      (l.lifecycle_status === 'active' || l.lifecycle_status === 'executed' || l.lifecycle_status === 'fully_executed'),
     ),
-    [leases],
-  );
-
-  const inApprovalLeases = useMemo(
-    () => leases.filter((l) => IN_FLIGHT_STATUSES.has(l.lifecycle_status || '')),
     [leases],
   );
 
@@ -332,21 +338,40 @@ export default function Leases() {
   );
 
   const headerSubtitle = useMemo(() => {
+    const total = leases.length;
+    const active = activeLeases.length;
     if (totalMonthlyRent > 0) {
-      const count = activeLeases.length;
-      return `${formatCurrency(totalMonthlyRent)} / mo · ${count} ${count === 1 ? 'lease' : 'leases'}`;
+      return `${formatCurrency(totalMonthlyRent)} / mo · ${active} active · ${total} total`;
     }
-    return `${leases.length} ${leases.length === 1 ? 'lease' : 'leases'}`;
+    return `${total} ${total === 1 ? 'lease' : 'leases'}`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalMonthlyRent, activeLeases, leases]);
 
+  // Distinct asset types present in the loaded set — drives the Type filter
+  // without a second fetch (workspace-configured shorthands arrive in Phase 2).
+  const assetTypeOptions = useMemo(
+    () => Array.from(new Set(leases.map((l) => l.asset_type).filter((x): x is string => !!x))).sort(),
+    [leases],
+  );
+
   const filteredAndSortedLeases = useMemo(() => {
-    const sourceLeases = leaseView === 'active' ? activeLeases : inApprovalLeases;
-    const result = sourceLeases.filter((lease) => {
-      const searchLower = searchQuery.toLowerCase();
-      const matchesSearch =
-        !searchQuery ||
-        getPropertyAddress(lease).toLowerCase().includes(searchLower) ||
-        lease.landlord_name?.toLowerCase().includes(searchLower);
+    const searchLower = searchQuery.trim().toLowerCase();
+    const result = leases.filter((lease) => {
+      // Search across ANY visible attribute (property, type, landlord, status,
+      // dates, sq ft, rent) — one lowercased haystack.
+      const haystack = [
+        getPropertyAddress(lease),
+        prettyAssetType(lease.asset_type),
+        lease.landlord_name,
+        statusText(lease),
+        formatDate(lease.lease_start),
+        formatDate(getLeaseEnd(lease)),
+        lease.square_footage ? `${lease.square_footage} sf` : '',
+        getMonthlyRent(lease) ? formatCurrency(getMonthlyRent(lease)) : '',
+      ].filter(Boolean).join(' ').toLowerCase();
+      const matchesSearch = !searchLower || haystack.includes(searchLower);
+
+      const matchesType = typeFilter === 'all' || lease.asset_type === typeFilter;
 
       let matchesExpiration = true;
       if (expirationFilter !== 'all') {
@@ -359,7 +384,7 @@ export default function Leases() {
         }
       }
 
-      return matchesSearch && matchesExpiration;
+      return matchesSearch && matchesType && matchesExpiration;
     });
 
     result.sort((a, b) => {
@@ -370,6 +395,10 @@ export default function Leases() {
         case 'property':
           aVal = getPropertyAddress(a).toLowerCase();
           bVal = getPropertyAddress(b).toLowerCase();
+          break;
+        case 'asset_type':
+          aVal = (a.asset_type || '').toLowerCase();
+          bVal = (b.asset_type || '').toLowerCase();
           break;
         case 'landlord':
           aVal = (a.landlord_name || '').toLowerCase();
@@ -399,7 +428,38 @@ export default function Leases() {
     });
 
     return result;
-  }, [activeLeases, expirationFilter, inApprovalLeases, leaseView, searchQuery, sortField, sortDirection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leases, expirationFilter, typeFilter, searchQuery, sortField, sortDirection]);
+
+  // Export the CURRENT filtered + sorted rows (WYSIWYG) as CSV.
+  const handleExportCsv = () => {
+    if (filteredAndSortedLeases.length === 0) {
+      toast.error('Nothing to export', { id: 'lease-export' });
+      return;
+    }
+    const records = filteredAndSortedLeases.map((l) => ({
+      Property: getPropertyAddress(l),
+      Type: prettyAssetType(l.asset_type),
+      Landlord: l.landlord_name ?? '',
+      'Monthly Rent': getMonthlyRent(l) || '',
+      Start: l.lease_start ?? '',
+      End: getLeaseEnd(l) ?? '',
+      'Sq Ft': l.square_footage ?? '',
+      Status: statusText(l),
+      Archived: l.archived ? 'yes' : 'no',
+    }));
+    const csv = rowsToCsv(records);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `leases-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${records.length} lease${records.length === 1 ? '' : 's'} to CSV`, { id: 'lease-export' });
+  };
 
   return (
     <AppLayout>
@@ -422,12 +482,12 @@ export default function Leases() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : leases.length === 0 ? (
-          showArchived ? (
+          scope === 'archived' ? (
             <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
               <Archive className="h-10 w-10 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">No archived leases.</p>
-              <Button variant="outline" onClick={() => setShowArchived(false)}>
-                Back to active leases
+              <Button variant="outline" onClick={() => setScope('all')}>
+                Back to all leases
               </Button>
             </div>
           ) : (
@@ -435,48 +495,68 @@ export default function Leases() {
           )
         ) : (
           <>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Tabs value={leaseView} onValueChange={(value) => setLeaseView(value as LeaseView)}>
-                <TabsList>
-                  <TabsTrigger value="active">
-                    Active Portfolio ({activeLeases.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="approval">
-                    In Approval ({inApprovalLeases.length})
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <div className="relative w-full sm:w-[320px]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="relative w-full sm:flex-1 sm:min-w-[220px]">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by property or landlord..."
+                  placeholder="Search property, landlord, type, status…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
               </div>
-              <Select value={expirationFilter} onValueChange={(v) => setExpirationFilter(v as typeof expirationFilter)}>
-                <SelectTrigger className="w-full sm:w-[200px]">
+              {/* Status — the single scope control (Active / Archived / All). */}
+              <Select value={scope} onValueChange={(v) => setScope(v as StatusScope)}>
+                <SelectTrigger className="w-full sm:w-[150px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {expirationFilters.map((filter) => (
+                  <SelectItem value="all">All leases</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+              {/* Type filter — distinct asset types present in the list. */}
+              {assetTypeOptions.length > 0 && (
+                <Select value={typeFilter} onValueChange={setTypeFilter}>
+                  <SelectTrigger className="w-full sm:w-[160px]">
+                    <SelectValue placeholder="Type: all" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Type: all</SelectItem>
+                    {assetTypeOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>{prettyAssetType(opt)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {/* Expiry — distinct from Status; keeps the Dashboard ?expiring= deep-link. */}
+              <Select value={expirationFilter} onValueChange={(v) => setExpirationFilter(v as typeof expirationFilter)}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {expiryFilters.map((filter) => (
                     <SelectItem key={filter.value} value={filter.value}>{filter.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <Button
-                variant={showArchived ? 'secondary' : 'outline'}
-                size="default"
-                onClick={() => setShowArchived((v) => !v)}
-                className="w-full sm:w-auto"
-              >
-                {showArchived ? 'Hide archived' : 'Show archived'}
-              </Button>
+              {/* Export — overflow (CSV now; Excel arrives with the library decision). */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="Export leases" className="shrink-0">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleExportCsv}>CSV (.csv)</DropdownMenuItem>
+                  <DropdownMenuItem disabled className="opacity-60">Excel (.xlsx) — soon</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-border bg-card">
-              <Table className="min-w-[640px]">
+              <Table className="min-w-[720px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>
@@ -484,6 +564,13 @@ export default function Leases() {
                         <Building2 className="mr-2 h-4 w-4" />
                         Property
                         {getSortIcon('property')}
+                      </Button>
+                    </TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <Button variant="ghost" size="sm" className="-ml-3 h-8" onClick={() => handleSort('asset_type')}>
+                        <Tag className="mr-2 h-4 w-4" />
+                        Type
+                        {getSortIcon('asset_type')}
                       </Button>
                     </TableHead>
                     <TableHead className="hidden md:table-cell">
@@ -521,13 +608,13 @@ export default function Leases() {
                       </Button>
                     </TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="w-[1%] text-right"><span className="sr-only">Actions</span></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAndSortedLeases.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                         No leases match your filters
                       </TableCell>
                     </TableRow>
@@ -544,6 +631,13 @@ export default function Leases() {
                         >
                           <TableCell className="font-medium">
                             <span className="truncate max-w-[240px] block">{getPropertyAddress(lease)}</span>
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            {lease.asset_type ? (
+                              <Badge variant="outline" className="font-normal">{prettyAssetType(lease.asset_type)}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell className="hidden md:table-cell text-muted-foreground">
                             {lease.landlord_name || '—'}
@@ -571,54 +665,33 @@ export default function Leases() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right">
-                            <div
-                              className="flex items-center justify-end gap-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => navigate(`/app/leases/${lease.id}`)}
-                                  >
-                                    <Eye className="h-4 w-4" />
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            {/* Archive/Restore is admin/owner-only (#78 trigger
+                                enforces server-side); hidden on read-only Vault
+                                workspaces. "Delete permanently" arrives in Phase 3
+                                with its soft-delete + 14-day retention backend. */}
+                            {!isReadOnly && isAdmin && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon-sm" aria-label="Lease actions">
+                                    <MoreHorizontal className="h-4 w-4" />
                                   </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>View details</TooltipContent>
-                              </Tooltip>
-                              {/* Restorable archive (#79), admin/owner-only
-                                  (#78 trigger enforces server-side). Hidden on
-                                  read-only Vault workspaces. */}
-                              {!isReadOnly && isAdmin && (lease.archived ? (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() => handleRestore(lease)}
-                                    >
-                                      <ArchiveRestore className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>{t('archive.unarchive')}</TooltipContent>
-                                </Tooltip>
-                              ) : (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon-sm"
-                                      onClick={() => handleArchiveClick(lease)}
-                                    >
-                                      <Archive className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>{t('archive.archive')}</TooltipContent>
-                                </Tooltip>
-                              ))}
-                            </div>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {lease.archived ? (
+                                    <DropdownMenuItem onClick={() => handleRestore(lease)}>
+                                      <ArchiveRestore className="mr-2 h-4 w-4" />
+                                      {t('archive.unarchive')}
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem onClick={() => handleArchiveClick(lease)}>
+                                      <Archive className="mr-2 h-4 w-4" />
+                                      {t('archive.archive')}
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                           </TableCell>
                         </TableRow>
                       );

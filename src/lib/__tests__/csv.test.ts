@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escapeCsvCell } from '../csv';
+import { escapeCsvCell, rowsToCsv } from '../csv';
 
 // KNOWN_ISSUES #118 (R1) — CSV formula injection + RFC-4180 quoting.
 describe('escapeCsvCell — formula-injection neutralization', () => {
@@ -33,5 +33,25 @@ describe('escapeCsvCell — RFC-4180 quoting', () => {
     expect(escapeCsvCell(42)).toBe('42');
     expect(escapeCsvCell(null)).toBe('');
     expect(escapeCsvCell(undefined)).toBe('');
+  });
+});
+
+describe('rowsToCsv', () => {
+  it('uses the first record\'s keys as the header row, preserving key order', () => {
+    const csv = rowsToCsv([{ Property: 'HQ', Rent: 1000 }]);
+    expect(csv.split('\n')[0]).toBe('Property,Rent');
+  });
+  it('emits one line per record, every cell escaped', () => {
+    const csv = rowsToCsv([
+      { Property: 'Acme, Inc', Type: 'Real Estate' },
+      { Property: '=cmd', Type: 'Equipment' },
+    ]);
+    expect(csv).toBe('Property,Type\n"Acme, Inc",Real Estate\n\'=cmd,Equipment');
+  });
+  it('renders null/undefined cells as empty', () => {
+    expect(rowsToCsv([{ A: null, B: undefined, C: 0 }])).toBe('A,B,C\n,,0');
+  });
+  it('returns empty string for no records', () => {
+    expect(rowsToCsv([])).toBe('');
   });
 });

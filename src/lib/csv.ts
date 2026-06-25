@@ -23,3 +23,19 @@ export function escapeCsvCell(val: unknown): string {
   }
   return str;
 }
+
+/**
+ * Build an RFC-4180 CSV string from an array of flat records. The first
+ * record's keys become the header row (column order = key order). Every cell is
+ * run through {@link escapeCsvCell} (formula-injection + delimiter safe).
+ * Returns '' for an empty array. Pure — caller handles the download.
+ */
+export function rowsToCsv(records: Array<Record<string, unknown>>): string {
+  if (records.length === 0) return '';
+  const headers = Object.keys(records[0]);
+  const lines = [headers.map(escapeCsvCell).join(',')];
+  for (const r of records) {
+    lines.push(headers.map((h) => escapeCsvCell(r[h])).join(','));
+  }
+  return lines.join('\n');
+}
