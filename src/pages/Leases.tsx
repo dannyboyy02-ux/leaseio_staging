@@ -17,6 +17,7 @@ import {
   Download,
   ChevronRight,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
@@ -407,6 +408,15 @@ export default function Leases() {
   }, [columnWidths]);
 
   const resetColumnWidths = () => setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS });
+  // True when the layout matches defaults — gates the visible "Reset columns"
+  // recovery affordance (the one escape from a dragged-too-far column).
+  const widthsAreDefault = useMemo(
+    () =>
+      (Object.keys(DEFAULT_COLUMN_WIDTHS) as LeaseColumnKey[]).every(
+        (k) => columnWidths[k] === DEFAULT_COLUMN_WIDTHS[k],
+      ),
+    [columnWidths],
+  );
 
   // Drag the boundary between two adjacent columns: the left grows by the same
   // amount the right shrinks, so the total stays 100 and the table keeps
@@ -423,6 +433,12 @@ export default function Leases() {
     if (!tableWidth) return;
     const startX = e.clientX;
     const startWidths = columnWidths;
+    // Lock the resize cursor + suppress text selection for the whole drag, so a
+    // fast pointer that outruns the 2px handle still reads as "grabbed".
+    const prevCursor = document.body.style.cursor;
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
     const onMove = (ev: PointerEvent) => {
       const deltaPct = ((ev.clientX - startX) / tableWidth) * 100;
       setColumnWidths(applyBoundaryResize(startWidths, leftKey, rightKey, deltaPct));
@@ -430,9 +446,13 @@ export default function Leases() {
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevUserSelect;
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   // One sortable + resizable header cell. `key` doubles as the sort field and
@@ -459,8 +479,11 @@ export default function Leases() {
           title={t('leases.resize_column')}
           onPointerDown={(e) => startColumnResize(key, nextKey, e)}
           onDoubleClick={resetColumnWidths}
-          className="absolute right-0 top-0 z-10 hidden h-full w-2 cursor-col-resize touch-none select-none hover:bg-primary/20 lg:block"
-        />
+          className="group absolute right-0 top-0 z-10 hidden h-full w-2 cursor-col-resize touch-none select-none lg:flex lg:items-center lg:justify-center"
+        >
+          {/* Faint persistent rule so columns read as draggable; brightens on hover. */}
+          <span className="h-1/2 w-px bg-border transition-all group-hover:h-full group-hover:w-0.5 group-hover:bg-primary" />
+        </div>
       )}
     </TableHead>
   );
@@ -678,6 +701,19 @@ export default function Leases() {
                   ))}
                 </SelectContent>
               </Select>
+              {/* Reset columns — shown only when the layout differs from default;
+                  the one visible recovery from a dragged-too-far column. */}
+              {!widthsAreDefault && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetColumnWidths}
+                  className="hidden shrink-0 lg:inline-flex"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  {t('leases.reset_columns')}
+                </Button>
+              )}
               {/* Export — overflow (CSV now; Excel arrives with the library decision). */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -709,7 +745,7 @@ export default function Leases() {
               </div>
             ) : (
             <div className="rounded-lg border border-border bg-card">
-              <Table ref={tableRef} className="w-full min-w-[640px] table-fixed">
+              <Table ref={tableRef} className="w-full min-w-[480px] table-fixed">
                 <TableHeader>
                   <TableRow>
                     {/* Sortable + resizable headers. Drag the divider on a
@@ -790,7 +826,10 @@ export default function Leases() {
                           <TableCell className="hidden md:table-cell text-muted-foreground">
                             <span className="block truncate" title={lease.landlord_name || undefined}>{lease.landlord_name || '—'}</span>
                           </TableCell>
-                          <TableCell className="tabular-nums font-medium truncate">
+                          <TableCell
+                            className="tabular-nums font-medium truncate"
+                            title={monthlyRent > 0 ? formatCurrency(monthlyRent) : undefined}
+                          >
                             {monthlyRent > 0 ? formatCurrency(monthlyRent) : '—'}
                           </TableCell>
                           <TableCell className="hidden truncate sm:table-cell text-muted-foreground">
@@ -816,7 +855,7 @@ export default function Leases() {
                                 {t('archive.deleted_badge')}
                               </Badge>
                             ) : (
-                              <LeaseStatusBadge status={lease.lifecycle_status || lease.status} />
+                              <LeaseStatusBadge status={lease.lifecycle_status || lease.status} appearance="soft" size="sm" />
                             )}
                           </TableCell>
                           <TableCell className="text-right">

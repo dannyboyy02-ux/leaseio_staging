@@ -91,23 +91,23 @@ describe('parse / serialize', () => {
 describe('applyBoundaryResize', () => {
   it('grows the left column and shrinks the right by the same amount (total preserved)', () => {
     const next = applyBoundaryResize(DEFAULT_COLUMN_WIDTHS, 'property', 'asset_type', 3);
-    expect(next.property).toBe(23);
-    expect(next.asset_type).toBe(5);
+    expect(next.property).toBe(DEFAULT_COLUMN_WIDTHS.property + 3);
+    expect(next.asset_type).toBe(DEFAULT_COLUMN_WIDTHS.asset_type - 3);
     expect(sum(next)).toBe(100);
   });
 
   it('clamps the delta so neither column drops below the minimum', () => {
-    // asset_type default 8 can only give up 3 before hitting MIN (5)
+    // asset_type can only give up (default - MIN) before hitting the floor.
     const next = applyBoundaryResize(DEFAULT_COLUMN_WIDTHS, 'property', 'asset_type', 50);
     expect(next.asset_type).toBe(MIN_COLUMN_WIDTH);
-    expect(next.property).toBe(20 + (8 - MIN_COLUMN_WIDTH));
+    expect(next.property).toBe(DEFAULT_COLUMN_WIDTHS.property + (DEFAULT_COLUMN_WIDTHS.asset_type - MIN_COLUMN_WIDTH));
     expect(sum(next)).toBe(100);
   });
 
   it('supports shrinking the left column (negative delta)', () => {
     const next = applyBoundaryResize(DEFAULT_COLUMN_WIDTHS, 'property', 'asset_type', -3);
-    expect(next.property).toBe(17);
-    expect(next.asset_type).toBe(11);
+    expect(next.property).toBe(DEFAULT_COLUMN_WIDTHS.property - 3);
+    expect(next.asset_type).toBe(DEFAULT_COLUMN_WIDTHS.asset_type + 3);
     expect(sum(next)).toBe(100);
   });
 

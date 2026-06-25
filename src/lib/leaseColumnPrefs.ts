@@ -42,16 +42,18 @@ export const MIN_COLUMN_WIDTH = 3;
 // Canonical column order + default proportions (sum = 100). STABLE keys (not
 // labels) so i18n / renames never invalidate a persisted layout.
 export const LEASE_COLUMNS: readonly LeaseColumnDef[] = [
-  { key: 'property', defaultWidth: 20, resizable: true },
-  { key: 'asset_type', defaultWidth: 8, resizable: true },
-  { key: 'landlord', defaultWidth: 14, resizable: true },
-  { key: 'monthly_rent', defaultWidth: 11, resizable: true },
-  { key: 'lease_start', defaultWidth: 9, resizable: true },
-  { key: 'lease_end', defaultWidth: 9, resizable: true },
-  { key: 'days_to_expiry', defaultWidth: 8, resizable: true },
+  { key: 'property', defaultWidth: 18, resizable: true },
+  { key: 'asset_type', defaultWidth: 7, resizable: true },
+  { key: 'landlord', defaultWidth: 12, resizable: true },
+  // monthly_rent + status hold non-truncatable finance content (a currency
+  // figure; a status pill), so they get a wider default than the chrome columns.
+  { key: 'monthly_rent', defaultWidth: 13, resizable: true },
+  { key: 'lease_start', defaultWidth: 8, resizable: true },
+  { key: 'lease_end', defaultWidth: 8, resizable: true },
+  { key: 'days_to_expiry', defaultWidth: 9, resizable: true },
   { key: 'sqft', defaultWidth: 7, resizable: true },
-  { key: 'status', defaultWidth: 10, resizable: true },
-  { key: 'actions', defaultWidth: 4, resizable: false },
+  { key: 'status', defaultWidth: 13, resizable: true },
+  { key: 'actions', defaultWidth: 5, resizable: false },
 ] as const;
 
 export type ColumnWidths = Record<LeaseColumnKey, number>;
