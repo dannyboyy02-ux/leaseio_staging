@@ -69,7 +69,8 @@
   <b>▶ Phase 1 — SHIPPED 2026-06-26</b> (branch <code>claude/relaxed-clarke-oksfz4</code>, commits <code>86927d4</code> + <code>57deb2c</code>; 4 reviewers + 2 re-reviewers, all green; typecheck + 1357 tests pass).
   <ul class="tight" style="margin-bottom:0">
     <li><b>Done:</b> cross-lease state bleed (<code>key={leaseId}</code>), Rent/Options <i>field</i> unlock carve-out, the source-verify gesture (now a single muted "View in document" affordance, gated on <code>sourceViewable</code> so it never dead-ends on locked/Vault leases), <code>CLAUDE.md:106</code>, plus the mediums (lifted the staged-edits card above the tab strip; muted the affordance palette). The rent-<i>schedule</i> table was deliberately kept locked during unlock — an integrity HIGH the review caught (its writes aren't change-set-staged).</li>
-    <li><b>Deferred to their own PRs (your call):</b> #3/#4 layout (scroll shell + responsive split — needs preview verification at desktop/tablet) and #5 in-app nav guard (needs a <code>BrowserRouter</code>→data-router migration). Phases 2–4 below remain open.</li>
+    <li><b>#3/#4 layout — SHIPPED 2026-06-26</b> (commit <code>82ea506</code>, reviewer-gated): responsive single-column below <code>lg</code> (PDF moves to the Documents tab) + single-scroll column with a sticky tab strip. <b>Implemented headless — pending a Vercel preview pass</b> at desktop/tablet/mobile widths. Pre-existing <code>h-screen</code>-below-banners clip filed as KNOWN_ISSUES #157.</li>
+    <li><b>Still deferred (your call):</b> #5 in-app nav guard (needs a <code>BrowserRouter</code>→data-router migration). Phases 2–4 below remain open.</li>
     <li><b>Decided:</b> KEEP the one-click "Mark all required reviewed" (positive customer experience).</li>
   </ul>
 </div>
