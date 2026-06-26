@@ -215,8 +215,42 @@ serve(async (req) => {
       })
       .select("id")
       .single();
-    if (error || !data) throw new Error(error?.message || "Failed to create change set");
+    if (error || !data) {
+      // Race loser: a concurrent unlock created the lease's one open change set
+      // between our SELECT above and this INSERT. The partial unique index
+      // lease_change_sets_one_open_per_lease (migration 20260626150000) rejects
+      // the duplicate with 23505 — re-select the winner and treat it as a reuse,
+      // so both callers converge on the same change set instead of erroring (so
+      // the frontend always resolves exactly one open set for the lease).
+      if ((error as any)?.code === "23505") {
+        const { data: raced } = await supabaseAdmin
+          .from("lease_change_sets")
+          .select("id")
+          .eq("lease_id", leaseId)
+          .in("status", ["draft", "pending_approval"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (raced && (raced as any).id) return { id: (raced as any).id, created: false };
+      }
+      throw new Error(error?.message || "Failed to create change set");
+    }
     return { id: (data as any).id, created: true };
+  }
+
+  // Gap-2 guard (KNOWN_ISSUES #158): a lease that already has a change set
+  // awaiting approval must not be unlocked again — reusing the pending set would
+  // leave the lease model_locked=false but not editable (the frontend requires
+  // status==='draft'), and stack a second edit session on an undecided one.
+  async function hasPendingChangeSet(leaseId: string): Promise<boolean> {
+    const { data } = await supabaseAdmin
+      .from("lease_change_sets")
+      .select("id")
+      .eq("lease_id", leaseId)
+      .eq("status", "pending_approval")
+      .limit(1)
+      .maybeSingle();
+    return !!(data && (data as any).id);
   }
 
   try {
@@ -279,6 +313,9 @@ serve(async (req) => {
       if (leaseError || !lease) return jsonResponse({ error: "Lease not found" }, 404, origin);
       if (!(lease as any).model_locked || (lease as any).lifecycle_status !== "active") {
         return jsonResponse({ error: "Lease is not locked and active" }, 422, origin);
+      }
+      if (await hasPendingChangeSet((unlockRequest as any).lease_id)) {
+        return jsonResponse({ error: "This lease already has changes pending approval. Those must be approved or rejected before it can be unlocked again." }, 409, origin);
       }
 
       const { id: changeSetId, created: changeSetCreated } = await createDraftChangeSet({
@@ -357,6 +394,9 @@ serve(async (req) => {
       }
       if (!(lease as any).model_locked || (lease as any).lifecycle_status !== "active") {
         return jsonResponse({ error: "Lease is not locked and active" }, 422, origin);
+      }
+      if (await hasPendingChangeSet(leaseId)) {
+        return jsonResponse({ error: "This lease already has changes pending approval. Those must be approved or rejected before it can be unlocked again." }, 409, origin);
       }
 
       const { id: changeSetId, created: changeSetCreated } = await createDraftChangeSet({
