@@ -41,19 +41,24 @@ export const MIN_COLUMN_WIDTH = 3;
 
 // Canonical column order + default proportions (sum = 100). STABLE keys (not
 // labels) so i18n / renames never invalidate a persisted layout.
+// Defaults re-budgeted to CONTENT (sum = 100). The columns that must never
+// truncate get the room: dates need ~"Mmm d, yyyy" (~73px at px-3), status
+// holds "Fully Executed"/"Archived" pills, actions must clear the 32px kebab.
+// Chrome (the dropped header icons, the removed "SF" suffix, px-3 padding) gave
+// the space back. See docs/LEASES_TABLE_POLISH_PLAN — Round 2 geometry.
 export const LEASE_COLUMNS: readonly LeaseColumnDef[] = [
-  { key: 'property', defaultWidth: 18, resizable: true },
-  { key: 'asset_type', defaultWidth: 7, resizable: true },
-  { key: 'landlord', defaultWidth: 12, resizable: true },
-  // monthly_rent + status hold non-truncatable finance content (a currency
-  // figure; a status pill), so they get a wider default than the chrome columns.
+  { key: 'property', defaultWidth: 14, resizable: true },
+  { key: 'asset_type', defaultWidth: 6, resizable: true },
+  { key: 'landlord', defaultWidth: 11, resizable: true },
   { key: 'monthly_rent', defaultWidth: 13, resizable: true },
-  { key: 'lease_start', defaultWidth: 8, resizable: true },
-  { key: 'lease_end', defaultWidth: 8, resizable: true },
-  { key: 'days_to_expiry', defaultWidth: 9, resizable: true },
+  { key: 'lease_start', defaultWidth: 11, resizable: true },
+  { key: 'lease_end', defaultWidth: 11, resizable: true },
+  { key: 'days_to_expiry', defaultWidth: 8, resizable: true },
   { key: 'sqft', defaultWidth: 7, resizable: true },
+  // status carries slack (short-label pills ~95px); the points went to the
+  // dates + the overdue day-count badge so neither clips at default width.
   { key: 'status', defaultWidth: 13, resizable: true },
-  { key: 'actions', defaultWidth: 5, resizable: false },
+  { key: 'actions', defaultWidth: 6, resizable: false },
 ] as const;
 
 export type ColumnWidths = Record<LeaseColumnKey, number>;
@@ -142,4 +147,106 @@ export function applyBoundaryResize(
   const d = Math.min(Math.max(deltaPct, MIN_COLUMN_WIDTH - left), right - MIN_COLUMN_WIDTH);
   if (d === 0) return widths;
   return { ...widths, [leftKey]: round1(left + d), [rightKey]: round1(right - d) };
+}
+
+// ── Column visibility (the "Columns" show/hide menu) ───────────────────────
+
+export const LEASE_HIDDEN_COLS_KEY = 'leaseio:leases:hiddenColumns';
+
+/** Columns the user may show/hide. The rest (property, monthly_rent, status,
+ *  actions) are the always-visible finance spine of the row. */
+export const HIDEABLE_COLUMNS: readonly LeaseColumnKey[] = [
+  'asset_type',
+  'landlord',
+  'lease_start',
+  'lease_end',
+  'days_to_expiry',
+  'sqft',
+];
+
+/** Parse a stored hidden-columns JSON array → canonical-ordered hideable keys. */
+export function parseStoredHidden(raw: string | null): LeaseColumnKey[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return HIDEABLE_COLUMNS.filter((k) => arr.includes(k));
+  } catch {
+    return [];
+  }
+}
+
+export function serializeHidden(hidden: readonly LeaseColumnKey[]): string {
+  return JSON.stringify(HIDEABLE_COLUMNS.filter((k) => hidden.includes(k)));
+}
+
+/** Toggle a hideable column's visibility, returning the new hidden list. A
+ *  non-hideable key is ignored (those columns can't be hidden). */
+export function toggleHidden(
+  hidden: readonly LeaseColumnKey[],
+  key: LeaseColumnKey,
+): LeaseColumnKey[] {
+  if (!HIDEABLE_COLUMNS.includes(key)) return [...hidden];
+  const set = new Set(hidden);
+  if (set.has(key)) set.delete(key);
+  else set.add(key);
+  return HIDEABLE_COLUMNS.filter((k) => set.has(k));
+}
+
+/** Adjacent pairs of VISIBLE resizable columns — the resize-handle partners.
+ *  Recomputed from the hidden set so a hidden column never breaks a pairing
+ *  (the handle on a column's right edge drives it + its next VISIBLE neighbor). */
+export function visibleResizeBoundaries(
+  hidden: readonly LeaseColumnKey[],
+): Array<{ left: LeaseColumnKey; right: LeaseColumnKey }> {
+  const h = new Set(hidden);
+  const vis = LEASE_COLUMNS.filter((c) => c.resizable && !h.has(c.key)).map((c) => c.key);
+  return vis.slice(0, -1).map((left, i) => ({ left, right: vis[i + 1] }));
+}
+
+// ── Auto-fit (double-click a column border) ────────────────────────────────
+
+/**
+ * Auto-fit `key` to a target width (% of the table), redistributing the delta
+ * across the OTHER resizable columns so the total stays 100 (the table keeps
+ * fitting — overflow option A). Growth is bounded by the others' collective
+ * slack above MIN_COLUMN_WIDTH; the column never drops below MIN itself.
+ */
+export function autoFitColumn(
+  widths: ColumnWidths,
+  key: LeaseColumnKey,
+  targetPct: number,
+): ColumnWidths {
+  if (!Number.isFinite(targetPct)) return widths;
+  const col = LEASE_COLUMNS.find((c) => c.key === key);
+  if (!col || !col.resizable) return widths;
+  return redistribute(widths, key, Math.max(MIN_COLUMN_WIDTH, targetPct) - widths[key]);
+}
+
+/** Apply `delta` to `key` and take it (proportionally, clamped at MIN) from the
+ *  other resizable columns, preserving the sum. Shared by auto-fit. */
+function redistribute(widths: ColumnWidths, key: LeaseColumnKey, delta: number): ColumnWidths {
+  if (!Number.isFinite(delta)) return widths;
+  const others = LEASE_COLUMNS.filter((c) => c.resizable && c.key !== key).map((c) => c.key);
+  let d = delta;
+  if (d > 0) {
+    const slack = others.reduce((s, k) => s + Math.max(0, widths[k] - MIN_COLUMN_WIDTH), 0);
+    d = Math.min(d, slack); // can't take more than the others can give up
+  } else {
+    d = Math.max(d, MIN_COLUMN_WIDTH - widths[key]); // key can't go below MIN
+  }
+  if (Math.abs(d) < 0.05) return widths;
+  const result: ColumnWidths = { ...widths, [key]: round1(widths[key] + d) };
+  if (d > 0) {
+    const slackTotal = others.reduce((s, k) => s + Math.max(0, widths[k] - MIN_COLUMN_WIDTH), 0) || 1;
+    for (const k of others) {
+      result[k] = round1(widths[k] - (Math.max(0, widths[k] - MIN_COLUMN_WIDTH) / slackTotal) * d);
+    }
+  } else {
+    const total = others.reduce((s, k) => s + widths[k], 0) || 1;
+    for (const k of others) {
+      result[k] = round1(widths[k] + (widths[k] / total) * -d);
+    }
+  }
+  return normalizeTo100(result);
 }

@@ -9,17 +9,15 @@ import {
   ArrowDown,
   Archive,
   ArchiveRestore,
-  Calendar,
   Building2,
-  Ruler,
-  Tag,
   MoreHorizontal,
   Download,
   ChevronRight,
   Trash2,
   RotateCcw,
+  Columns3,
 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -38,7 +36,7 @@ import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
-import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate, formatLocalizedNumber } from '@/lib/dateFormatters';
 import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { rowsToCsv } from '@/lib/csv';
 import { prettyAssetType, assetAbbreviation } from '@/lib/assetTypes';
@@ -59,6 +57,13 @@ import {
   parseStoredColumnWidths,
   serializeColumnWidths,
   applyBoundaryResize,
+  LEASE_HIDDEN_COLS_KEY,
+  HIDEABLE_COLUMNS,
+  parseStoredHidden,
+  serializeHidden,
+  toggleHidden,
+  visibleResizeBoundaries,
+  autoFitColumn,
   type LeaseColumnKey,
   type ColumnWidths,
 } from '@/lib/leaseColumnPrefs';
@@ -70,8 +75,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -162,6 +169,15 @@ export default function Leases() {
     }
   });
   const tableRef = useRef<HTMLTableElement>(null);
+  // User-hidden columns (the "Columns" menu). Read synchronously like the widths.
+  const [hiddenColumns, setHiddenColumns] = useState<LeaseColumnKey[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      return parseStoredHidden(window.localStorage.getItem(LEASE_HIDDEN_COLS_KEY));
+    } catch {
+      return [];
+    }
+  });
   // Single scope control (replaces the Active/Approval tabs + the "Show
   // archived" toggle). Default ALL = active + archived together. Honors a
   // ?status= deep-link.
@@ -407,6 +423,55 @@ export default function Leases() {
     }
   }, [columnWidths]);
 
+  // Persist hidden columns.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LEASE_HIDDEN_COLS_KEY, serializeHidden(hiddenColumns));
+    } catch {
+      /* non-fatal */
+    }
+  }, [hiddenColumns]);
+
+  const colVisible = (key: LeaseColumnKey) => !hiddenColumns.includes(key);
+
+  // Resize-handle partners recomputed from visibility, so a hidden column never
+  // breaks a pairing (the handle drives a column + its next VISIBLE neighbor).
+  const resizeBoundaries = useMemo(() => visibleResizeBoundaries(hiddenColumns), [hiddenColumns]);
+  const nextResizable = (key: LeaseColumnKey): LeaseColumnKey | null =>
+    resizeBoundaries.find((b) => b.left === key)?.right ?? null;
+
+  // i18n label for a hideable column key (the Columns menu).
+  const columnLabel = (key: LeaseColumnKey): string => {
+    const labels: Partial<Record<LeaseColumnKey, string>> = {
+      asset_type: t('leases.type'),
+      landlord: t('leases.landlord'),
+      lease_start: t('leases.start'),
+      lease_end: t('leases.end'),
+      days_to_expiry: t('leases.days_to_expiry'),
+      sqft: t('leases.sqft'),
+    };
+    return labels[key] ?? key;
+  };
+
+  // Double-click a column border → auto-fit THAT column to its widest cell
+  // (Excel/Sheets convention), redistributing so the table still fits.
+  const autoFit = (key: LeaseColumnKey) => {
+    const table = tableRef.current;
+    if (!table) return;
+    const cells = table.querySelectorAll<HTMLElement>(`[data-col="${key}"]`);
+    if (!cells.length) return;
+    let max = 0;
+    cells.forEach((cell) => {
+      const inner = cell.firstElementChild as HTMLElement | null;
+      max = Math.max(max, inner ? inner.scrollWidth : cell.scrollWidth);
+    });
+    const CELL_PADDING_PX = 24; // px-3 both sides
+    // Cap the target so auto-fitting a very long value (a 60-char address) can't
+    // pull every other column down toward the floor and crush them.
+    const targetPct = Math.min(40, ((max + CELL_PADDING_PX) / (table.offsetWidth || 1)) * 100);
+    setColumnWidths((w) => autoFitColumn(w, key, targetPct));
+  };
+
   const resetColumnWidths = () => setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS });
   // True when the layout matches defaults — gates the visible "Reset columns"
   // recovery affordance (the one escape from a dragged-too-far column).
@@ -464,9 +529,15 @@ export default function Leases() {
     Icon: ElementType | null,
     nextKey: LeaseColumnKey | null,
     responsiveClass = '',
+    align: 'left' | 'right' = 'left',
   ) => (
-    <TableHead className={cn('relative', responsiveClass)} style={{ width: `${columnWidths[key]}%` }}>
-      <Button variant="ghost" size="sm" className="-ml-3 h-8 max-w-full" onClick={() => handleSort(key)}>
+    <TableHead data-col={key} className={cn('relative', align === 'right' && 'text-right', responsiveClass)} style={{ width: `${columnWidths[key]}%` }}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn('h-8 max-w-full', align === 'right' ? '-mr-3 w-full justify-end' : '-ml-3')}
+        onClick={() => handleSort(key)}
+      >
         {Icon && <Icon className="mr-2 h-4 w-4 shrink-0" />}
         <span className="truncate">{label}</span>
         <span className="ml-1 shrink-0">{getSortIcon(key)}</span>
@@ -478,7 +549,7 @@ export default function Leases() {
           aria-label={t('leases.resize_column')}
           title={t('leases.resize_column')}
           onPointerDown={(e) => startColumnResize(key, nextKey, e)}
-          onDoubleClick={resetColumnWidths}
+          onDoubleClick={() => autoFit(key)}
           className="group absolute right-0 top-0 z-10 hidden h-full w-2 cursor-col-resize touch-none select-none lg:flex lg:items-center lg:justify-center"
         >
           {/* Faint persistent rule so columns read as draggable; brightens on hover. */}
@@ -511,16 +582,15 @@ export default function Leases() {
     return <span className="text-sm text-muted-foreground">{days}d</span>;
   };
 
-  const formatSqFt = (sqft: number | null) => (sqft ? `${sqft.toLocaleString()} SF` : '—');
+  // No "SF" suffix — the "Sq. Ft." column header carries the unit (avoids the
+  // redundant double-unit and frees the tightest column's width). #154 round 2.
+  // Locale-aware grouping so es groups 44.833 to match the currency beside it.
+  const formatSqFt = (sqft: number | null) => formatLocalizedNumber(sqft, language);
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return '—';
-    try {
-      return format(parseISO(dateStr), 'MMM d, yyyy');
-    } catch {
-      return dateStr;
-    }
-  };
+  // Canonical locale-aware formatter (matches the currency formatter's locale)
+  // — fixes English-only months for es users and the date-only parse. "Mar 1,
+  // 2026" / "1 mar 2026".
+  const formatDate = (dateStr: string | null) => formatLocalizedDate(dateStr, language);
 
   // Sort key for the Status column (pure helper in leaseSort.ts). An archived
   // lease shows ONLY the "Archived" badge (lifecycle suppressed in the cell),
@@ -701,19 +771,47 @@ export default function Leases() {
                   ))}
                 </SelectContent>
               </Select>
-              {/* Reset columns — shown only when the layout differs from default;
-                  the one visible recovery from a dragged-too-far column. */}
-              {!widthsAreDefault && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={resetColumnWidths}
-                  className="hidden shrink-0 lg:inline-flex"
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  {t('leases.reset_columns')}
-                </Button>
-              )}
+              {/* Columns menu — show/hide + reset. The conventional home for
+                  table chrome (keeps the toolbar to data filters); also the
+                  discoverable recovery from a dragged-too-far column. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  {/* Labeled (not icon-only) so it's discoverable and distinct from
+                      the icon-only Export button beside it. */}
+                  <Button variant="outline" size="sm" className="shrink-0" title={t('leases.columns_menu')}>
+                    <Columns3 className="h-4 w-4 lg:mr-2" />
+                    <span className="hidden lg:inline">{t('leases.columns_menu')}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>{t('leases.show_columns')}</DropdownMenuLabel>
+                  {HIDEABLE_COLUMNS.map((key) => (
+                    <DropdownMenuCheckboxItem
+                      key={key}
+                      checked={colVisible(key)}
+                      onSelect={(e) => e.preventDefault()}
+                      onCheckedChange={() => setHiddenColumns((h) => toggleHidden(h, key))}
+                    >
+                      {columnLabel(key)}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={widthsAreDefault && hiddenColumns.length === 0}
+                    onClick={() => {
+                      resetColumnWidths();
+                      setHiddenColumns([]);
+                    }}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    {t('leases.reset_columns')}
+                  </DropdownMenuItem>
+                  {/* Announce the auto-fit gesture where users actually look (the
+                      divider hover-tooltip alone is undiscoverable). */}
+                  <DropdownMenuSeparator />
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">{t('leases.autofit_hint')}</p>
+                </DropdownMenuContent>
+              </DropdownMenu>
               {/* Export — overflow (CSV now; Excel arrives with the library decision). */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -745,21 +843,30 @@ export default function Leases() {
               </div>
             ) : (
             <div className="rounded-lg border border-border bg-card">
-              <Table ref={tableRef} className="w-full min-w-[480px] table-fixed">
+              {/* table-fixed REQUIRES every cell to clip — a td is overflow:visible
+                  by default, so wide content (a status pill) would paint over its
+                  neighbor (the kebab). px-3 (vs px-4) gives ~80px back to content. */}
+              <Table
+                ref={tableRef}
+                className="w-full min-w-[480px] table-fixed [&_td]:overflow-hidden [&_th]:overflow-hidden [&_td]:px-3 [&_th]:px-3"
+              >
                 <TableHeader>
                   <TableRow>
                     {/* Sortable + resizable headers. Drag the divider on a
                         header's right edge (lg+) to rebalance two columns; the
                         total stays 100% so the table always fits. */}
-                    {renderSortHead('property', t('leases.property'), Building2, 'asset_type')}
-                    {renderSortHead('asset_type', t('leases.type'), Tag, 'landlord', 'hidden md:table-cell')}
-                    {renderSortHead('landlord', t('leases.landlord'), null, 'monthly_rent', 'hidden md:table-cell')}
-                    {renderSortHead('monthly_rent', t('leases.monthly_rent'), null, 'lease_start')}
-                    {renderSortHead('lease_start', t('leases.start'), Calendar, 'lease_end', 'hidden sm:table-cell')}
-                    {renderSortHead('lease_end', t('leases.end'), Calendar, 'days_to_expiry', 'hidden sm:table-cell')}
-                    {renderSortHead('days_to_expiry', t('leases.days_to_expiry'), null, 'sqft')}
-                    {renderSortHead('sqft', t('leases.sqft'), Ruler, 'status', 'hidden lg:table-cell')}
-                    {renderSortHead('status', t('leases.status'), null, null)}
+                    {/* Decorative leading icons removed (they ate the label width in
+                        tight columns → icon-only headers); only Property keeps one.
+                        Rent + Sq Ft right-align as size numbers. */}
+                    {renderSortHead('property', t('leases.property'), Building2, nextResizable('property'))}
+                    {colVisible('asset_type') && renderSortHead('asset_type', t('leases.type'), null, nextResizable('asset_type'), 'hidden md:table-cell')}
+                    {colVisible('landlord') && renderSortHead('landlord', t('leases.landlord'), null, nextResizable('landlord'), 'hidden md:table-cell')}
+                    {renderSortHead('monthly_rent', t('leases.monthly_rent'), null, nextResizable('monthly_rent'), '', 'right')}
+                    {colVisible('lease_start') && renderSortHead('lease_start', t('leases.start'), null, nextResizable('lease_start'), 'hidden sm:table-cell')}
+                    {colVisible('lease_end') && renderSortHead('lease_end', t('leases.end'), null, nextResizable('lease_end'), 'hidden sm:table-cell')}
+                    {colVisible('days_to_expiry') && renderSortHead('days_to_expiry', t('leases.days_to_expiry'), null, nextResizable('days_to_expiry'))}
+                    {colVisible('sqft') && renderSortHead('sqft', t('leases.sqft'), null, nextResizable('sqft'), 'hidden lg:table-cell', 'right')}
+                    {renderSortHead('status', t('leases.status'), null, nextResizable('status'))}
                     <TableHead style={{ width: `${columnWidths.actions}%` }} className="text-right">
                       <span className="sr-only">{t('leases.actions')}</span>
                     </TableHead>
@@ -794,7 +901,7 @@ export default function Leases() {
                       return (
                         <TableRow
                           key={lease.id}
-                          className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                          className="h-14 cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                           role="link"
                           tabIndex={0}
                           aria-label={t('leases.open_lease', { property: getPropertyAddress(lease) })}
@@ -806,59 +913,78 @@ export default function Leases() {
                             }
                           }}
                         >
-                          <TableCell className="font-medium">
+                          <TableCell data-col="property" className="font-medium">
                             <span className="block truncate" title={getPropertyAddress(lease)}>{getPropertyAddress(lease)}</span>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            {lease.asset_type ? (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Badge variant="outline" className="font-normal cursor-default tabular-nums">
-                                    {assetAbbreviation(lease.asset_type, assetAbbr)}
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>{prettyAssetType(lease.asset_type)}</TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-muted-foreground">
-                            <span className="block truncate" title={lease.landlord_name || undefined}>{lease.landlord_name || '—'}</span>
-                          </TableCell>
+                          {colVisible('asset_type') && (
+                            <TableCell data-col="asset_type" className="hidden md:table-cell">
+                              {lease.asset_type ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="outline" className="cursor-default font-normal">
+                                      {assetAbbreviation(lease.asset_type, assetAbbr)}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>{prettyAssetType(lease.asset_type)}</TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          )}
+                          {colVisible('landlord') && (
+                            <TableCell data-col="landlord" className="hidden md:table-cell text-muted-foreground">
+                              <span className="block truncate" title={lease.landlord_name || undefined}>{lease.landlord_name || '—'}</span>
+                            </TableCell>
+                          )}
                           <TableCell
-                            className="tabular-nums font-medium truncate"
+                            data-col="monthly_rent"
+                            className="tabular-nums font-medium truncate text-right"
                             title={monthlyRent > 0 ? formatCurrency(monthlyRent) : undefined}
                           >
                             {monthlyRent > 0 ? formatCurrency(monthlyRent) : '—'}
                           </TableCell>
-                          <TableCell className="hidden truncate sm:table-cell text-muted-foreground">
-                            {formatDate(lease.lease_start)}
-                          </TableCell>
-                          <TableCell className="hidden truncate sm:table-cell text-muted-foreground">
-                            {formatDate(leaseEnd)}
-                          </TableCell>
-                          <TableCell>
-                            {isExpiryRelevant(lease)
-                              ? getExpirationBadge(daysUntil)
-                              : <span className="text-muted-foreground">&mdash;</span>}
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell text-muted-foreground">
-                            {formatSqFt(lease.square_footage)}
-                          </TableCell>
-                          <TableCell>
+                          {colVisible('lease_start') && (
+                            <TableCell data-col="lease_start" className="hidden truncate sm:table-cell text-muted-foreground" title={formatDate(lease.lease_start)}>
+                              {formatDate(lease.lease_start)}
+                            </TableCell>
+                          )}
+                          {colVisible('lease_end') && (
+                            <TableCell data-col="lease_end" className="hidden truncate sm:table-cell text-muted-foreground" title={formatDate(leaseEnd)}>
+                              {formatDate(leaseEnd)}
+                            </TableCell>
+                          )}
+                          {colVisible('days_to_expiry') && (
+                            <TableCell data-col="days_to_expiry">
+                              {isExpiryRelevant(lease)
+                                ? getExpirationBadge(daysUntil)
+                                : <span className="text-muted-foreground">&mdash;</span>}
+                            </TableCell>
+                          )}
+                          {colVisible('sqft') && (
+                            <TableCell
+                              data-col="sqft"
+                              className="hidden truncate text-right tabular-nums text-muted-foreground lg:table-cell"
+                              title={lease.square_footage ? `${formatLocalizedNumber(lease.square_footage, language)} sq ft` : undefined}
+                            >
+                              {formatSqFt(lease.square_footage)}
+                            </TableCell>
+                          )}
+                          <TableCell data-col="status">
                             {/* Archived is a terminal display state: it REPLACES the
                                 lifecycle badge (showing both "Active" + "Archived" was
                                 contradictory). statusSortKey mirrors this exactly. */}
                             {isArchivedDisplay(lease) ? (
-                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                              // Soft/muted pill so the Status column is ONE badge family
+                              // (was an outline badge clashing with the soft lifecycle pills).
+                              <Badge className="border-0 bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                                 {t('archive.deleted_badge')}
                               </Badge>
                             ) : (
                               <LeaseStatusBadge status={lease.lifecycle_status || lease.status} appearance="soft" size="sm" />
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell data-col="actions" className="text-right">
                             {/* Archive/Restore is admin/owner-only (#78 trigger
                                 enforces server-side); hidden on read-only Vault
                                 workspaces. "Delete permanently" arrives in Phase 3

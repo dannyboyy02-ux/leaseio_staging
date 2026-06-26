@@ -9,7 +9,14 @@ import {
   parseStoredColumnWidths,
   serializeColumnWidths,
   applyBoundaryResize,
+  HIDEABLE_COLUMNS,
+  parseStoredHidden,
+  serializeHidden,
+  toggleHidden,
+  visibleResizeBoundaries,
+  autoFitColumn,
   type ColumnWidths,
+  type LeaseColumnKey,
 } from '@/lib/leaseColumnPrefs';
 
 const sum = (w: ColumnWidths) => Object.values(w).reduce((a, b) => a + b, 0);
@@ -114,5 +121,67 @@ describe('applyBoundaryResize', () => {
   it('is a no-op for equal keys or a non-finite delta', () => {
     expect(applyBoundaryResize(DEFAULT_COLUMN_WIDTHS, 'property', 'property', 5)).toBe(DEFAULT_COLUMN_WIDTHS);
     expect(applyBoundaryResize(DEFAULT_COLUMN_WIDTHS, 'property', 'asset_type', Number.NaN)).toBe(DEFAULT_COLUMN_WIDTHS);
+  });
+});
+
+describe('column visibility', () => {
+  it('toggleHidden adds/removes a hideable column and keeps canonical order', () => {
+    const a = toggleHidden([], 'landlord');
+    expect(a).toEqual(['landlord']);
+    const b = toggleHidden(a, 'asset_type');
+    expect(b).toEqual(['asset_type', 'landlord']); // canonical order, not insertion order
+    expect(toggleHidden(b, 'landlord')).toEqual(['asset_type']);
+  });
+
+  it('toggleHidden ignores always-visible columns', () => {
+    expect(toggleHidden([], 'property')).toEqual([]);
+    expect(toggleHidden([], 'status')).toEqual([]);
+    expect(toggleHidden([], 'actions')).toEqual([]);
+  });
+
+  it('parse/serialize round-trips and drops non-hideable / malformed entries', () => {
+    expect(parseStoredHidden(serializeHidden(['landlord', 'sqft']))).toEqual(['landlord', 'sqft']);
+    expect(parseStoredHidden(null)).toEqual([]);
+    expect(parseStoredHidden('{bad')).toEqual([]);
+    expect(parseStoredHidden(JSON.stringify(['property', 'landlord', 'bogus']))).toEqual(['landlord']);
+  });
+
+  it('visibleResizeBoundaries pairs adjacent VISIBLE resizable columns', () => {
+    const none = visibleResizeBoundaries([]);
+    expect(none[0]).toEqual({ left: 'property', right: 'asset_type' });
+    // hide asset_type → property now pairs with landlord (the next visible resizable)
+    const hid = visibleResizeBoundaries(['asset_type']);
+    expect(hid[0]).toEqual({ left: 'property', right: 'landlord' });
+    expect(hid.every((b) => b.left !== 'asset_type' && b.right !== 'asset_type')).toBe(true);
+    // boundaries never include the non-resizable actions column
+    expect(none.every((b) => b.left !== 'actions' && b.right !== 'actions')).toBe(true);
+  });
+});
+
+describe('autoFitColumn', () => {
+  it('grows a column toward its target and preserves the total (still fits)', () => {
+    const next = autoFitColumn(DEFAULT_COLUMN_WIDTHS, 'property', 30);
+    expect(next.property).toBeGreaterThan(DEFAULT_COLUMN_WIDTHS.property);
+    expect(next.property).toBeLessThanOrEqual(30);
+    expect(sum(next)).toBeCloseTo(100, 0);
+  });
+
+  it('shrinks a column toward a smaller target', () => {
+    const next = autoFitColumn(DEFAULT_COLUMN_WIDTHS, 'status', 8);
+    expect(next.status).toBeLessThan(DEFAULT_COLUMN_WIDTHS.status);
+    expect(sum(next)).toBeCloseTo(100, 0);
+  });
+
+  it('never pushes any column below the minimum', () => {
+    const next = autoFitColumn(DEFAULT_COLUMN_WIDTHS, 'property', 95);
+    for (const c of LEASE_COLUMNS) {
+      expect(next[c.key as LeaseColumnKey]).toBeGreaterThanOrEqual(MIN_COLUMN_WIDTH);
+    }
+    expect(sum(next)).toBeCloseTo(100, 0);
+  });
+
+  it('is a no-op for a non-resizable column or non-finite target', () => {
+    expect(autoFitColumn(DEFAULT_COLUMN_WIDTHS, 'actions', 20)).toBe(DEFAULT_COLUMN_WIDTHS);
+    expect(autoFitColumn(DEFAULT_COLUMN_WIDTHS, 'property', Number.NaN)).toBe(DEFAULT_COLUMN_WIDTHS);
   });
 });
