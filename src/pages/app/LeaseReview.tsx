@@ -1124,7 +1124,7 @@ export default function LeaseReview() {
         });
         if (error) throw new Error(error.message ?? 'Lock failed');
         if ((data as any)?.error) throw new Error((data as any).error);
-        toast.success('Lease re-locked (no changes to submit)');
+        toast.success('Lease locked (no changes to submit)');
         refetchLease();
       } catch (err: any) {
         toast.error(`Failed to lock: ${err?.message ?? 'unknown error'}`);
@@ -1618,7 +1618,7 @@ export default function LeaseReview() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       setCancelChangeSetDialogOpen(false);
-      toast.success('Changes discarded. Lease re-locked.');
+      toast.success('Changes discarded. Lease locked.');
       refetchLease();
     } catch (err) {
       console.error('Error canceling change set:', err);
@@ -1899,7 +1899,7 @@ export default function LeaseReview() {
    */
   const handleSubmitChanges = useCallback(async (mode: 'approver' | 'self_approve' = 'approver', requestedApproverId: string | null = null) => {
     if (!lease || !user || !activeChangeSet?.id) return;
-    if (stagedItemCount === 0) { toast.error('No staged changes to submit'); return; }
+    if (stagedItemCount === 0) { toast.error('No changes to submit'); return; }
     setSubmittingChanges(true);
     try {
       const { data, error } = await supabase.functions.invoke('lease-governance-action', {
@@ -1915,7 +1915,7 @@ export default function LeaseReview() {
       if (mode === 'self_approve') {
         toast.success('Changes applied — self-approved by admin role');
       } else {
-        toast.success('Changes submitted for approval — lease re-locked');
+        toast.success('Changes submitted for approval — lease locked');
       }
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       refetchLease();
@@ -2791,7 +2791,7 @@ export default function LeaseReview() {
     }
     if (canShowLock) {
       return {
-        label: 'Lock lease',
+        label: 'Lock',
         icon: Lock,
         onClick: () => setLockConfirmDialogOpen(true),
         loading: submittingChanges,
@@ -2896,7 +2896,7 @@ export default function LeaseReview() {
               {isUnlockedDraft && (
                 <Badge className="shrink-0 bg-amber-100 text-amber-800 border border-amber-300 text-xs dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
                   <Unlock size={11} className="mr-1" />
-                  Editing — {stagedItemCount} staged
+                  {stagedItemCount > 0 ? `Editing — ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}` : 'Editing'}
                 </Badge>
               )}
               {isApproved && (
@@ -2909,7 +2909,7 @@ export default function LeaseReview() {
           }
           actions={
             isUnlockedDraft ? (
-              /* Unlocked-for-editing draft. Primary exit: "Lock & submit" — opens
+              /* Unlocked-for-editing draft. Primary exit: "Submit for approval" — opens
                  the finalize dialog (submit_change_set / self-approve / empty-draft
                  re-lock, all attributable) AND first flushes any dirty-but-unblurred
                  edit into the change set so a just-typed value can't be dropped.
@@ -2924,13 +2924,11 @@ export default function LeaseReview() {
                   onClick={async () => { await flushStagedEdits(); setLockConfirmDialogOpen(true); }}
                   disabled={submittingChanges || saving}
                   title={stagedItemCount > 0
-                    ? 'Re-lock the lease and route your staged edits for approval'
-                    : 'Re-lock this lease (no staged changes)'}
+                    ? 'Submit your changes for approval — the lease stays locked'
+                    : 'Lock this lease (no changes to submit)'}
                 >
                   {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
-                  {stagedItemCount > 0
-                    ? `Lock & submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}`
-                    : 'Re-lock'}
+                  {stagedItemCount > 0 ? 'Submit for approval' : 'Lock'}
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -2945,7 +2943,7 @@ export default function LeaseReview() {
                       className="text-destructive focus:text-destructive"
                     >
                       <X className="h-4 w-4 mr-2" />
-                      Discard edits & re-lock
+                      Cancel
                     </DropdownMenuItem>
                     {(userRole === 'admin' || userRole === 'owner') && (
                       <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
@@ -3258,7 +3256,7 @@ export default function LeaseReview() {
                     </Badge>
                   )}
                   {/* Staged-edits status — lifted here from the General tab so
-                      the "changes are staged for approval" context is identical
+                      the "changes need approval" context is identical
                       on every editable tab (Rent/Options included), not just
                       General. activeChangeSet only exists for an executed/active
                       lease in a governed edit session, so this stays hidden in
@@ -3268,13 +3266,13 @@ export default function LeaseReview() {
                       <CardContent className="py-3 px-4">
                         <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
                           {activeChangeSet.status === 'draft'
-                            ? 'Unlocked for editing — changes are staged'
-                            : 'Changes pending approval'}
+                            ? 'Editing — changes need approval'
+                            : 'Pending approval'}
                         </p>
                         <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
                           {activeChangeSet.status === 'draft'
-                            ? `Edits are staged for approval — ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} pending.`
-                            : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
+                            ? 'Your changes need approval before they apply to the lease.'
+                            : 'Your proposed changes are with your financial approver. The lease stays locked until they decide.'}
                         </p>
                       </CardContent>
                     </Card>
@@ -3413,8 +3411,8 @@ export default function LeaseReview() {
                               <Card className="shadow-none border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
                                   <div>
-                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock for editing</p>
-                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking enables staged editing — proposed changes require financial approval before taking effect.</p>
+                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock to edit</p>
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking lets you propose changes — they need financial approval before they take effect.</p>
                                   </div>
                                   <Button
                                     variant="outline"
@@ -3715,9 +3713,9 @@ export default function LeaseReview() {
       <Dialog open={cancelChangeSetDialogOpen} onOpenChange={setCancelChangeSetDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Discard edits?</DialogTitle>
+            <DialogTitle>Discard your changes?</DialogTitle>
             <DialogDescription>
-              Your staged edits will be discarded and the lease will re-lock to its prior state. This can't be undone.
+              Your changes will be discarded and the lease will return to its locked state. This can't be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -3730,7 +3728,7 @@ export default function LeaseReview() {
               disabled={cancelingChangeSet}
             >
               {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Discard & re-lock
+              Discard changes
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3772,16 +3770,16 @@ export default function LeaseReview() {
                   <DialogTitle className="flex items-center gap-2">
                     <Lock className="h-5 w-5 text-success" />
                     {isReLock
-                      ? `Lock and submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}`
+                      ? `Submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''} for approval`
                       : isEmptyDraftRelock
-                        ? 'Re-lock this lease'
+                        ? 'Lock this lease'
                         : 'Lock & activate this lease'}
                   </DialogTitle>
                   <DialogDescription>
                     {isReLock
                       ? adminCanSelfApprove
-                        ? 'As an admin you can apply your changes immediately, or route them through another admin for approval. Either way the lease re-locks.'
-                        : 'Your staged changes will be submitted for financial approval. The lease re-locks immediately. Approved changes apply to the live record; rejected ones are reverted.'
+                        ? 'As an admin you can apply your changes immediately, or route them through another admin for approval. Either way the lease stays locked.'
+                        : 'Your changes will be submitted for financial approval. The lease stays locked while it\'s reviewed. Approved changes apply to the live record; rejected ones are dropped.'
                       : isEmptyDraftRelock
                         ? 'You unlocked this lease but didn\'t make any edits. Locking now will discard the empty edit session and return the lease to its prior locked state.'
                         : 'This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.'}
@@ -3798,7 +3796,7 @@ export default function LeaseReview() {
                 {adminCanSelfApprove && (
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
                     <p><strong className="text-foreground">Apply</strong> — changes take effect immediately. Recorded as self-approved by admin role.</p>
-                    <p><strong className="text-foreground">Request Approval</strong> — another admin reviews. Lease re-locks while pending.</p>
+                    <p><strong className="text-foreground">Request Approval</strong> — another admin reviews. Lease stays locked while pending.</p>
                   </div>
                 )}
                 {/* Approver picker for the Request Approval flow. Always shown
@@ -3885,7 +3883,7 @@ export default function LeaseReview() {
                         : undefined}
                     >
                       {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-                      {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Re-lock' : 'Lock & Activate'}
+                      {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Lock' : 'Lock & Activate'}
                     </Button>
                   )}
                 </DialogFooter>
