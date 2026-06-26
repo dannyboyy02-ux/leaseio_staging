@@ -50,7 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsWideViewport } from "@/hooks/use-wide-viewport";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -209,6 +209,9 @@ export default function LeaseReview() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, userRole, userFunctionalRoles, workspace } = useApp();
+  // Drives the responsive layout: the side-by-side PDF/form split only renders
+  // on wide viewports; below `lg` the workbench is a single full-width column.
+  const isWide = useIsWideViewport();
   // Vault (read-only retention) workspaces are view + export only. The server
   // already blocks every write (V1 RLS + config guard); this flag suppresses
   // the mutating UI affordances so a read-only owner sees a clean read-only
@@ -442,7 +445,13 @@ export default function LeaseReview() {
 
   // Show PDF panel alongside tabs when lease is still editable/in-review.
   // Hide it (full-width tabs) when the lease is active and fully locked.
-  const showPdfPanel = lifecycleStatus !== 'active' || !lease?.model_locked;
+  // The left PDF panel renders only when the lease is editable/in-review AND the
+  // viewport is wide enough for a readable two-column split. Below `lg` (or when
+  // the lease is locked), this is false → single full-width column, and the
+  // source PDF is reached via the Documents tab. Gating here cascades to the
+  // panel render, sizing, the collapse control, jumpToPage, and the per-field
+  // "View in document" affordance (so it never dead-ends without a panel).
+  const showPdfPanel = (lifecycleStatus !== 'active' || !lease?.model_locked) && isWide;
 
   // Approval gate: every AI-extracted section must be marked reviewed.
   // No more field-level "verified" carve-out — sections are the unit of
@@ -3103,7 +3112,12 @@ export default function LeaseReview() {
 
             {/* Right Panel: Tabbed Review */}
             <ResizablePanel defaultSize={showPdfPanel ? 50 : 100} minSize={30}>
-              <div className="flex h-full flex-col bg-background">
+              {/* The whole right column scrolls as one (banners + tab content),
+                  so a tall banner stack scrolls away instead of crushing the
+                  form to a sliver, and the wheel works anywhere over the column
+                  — not only over a nested inner scroll pane. The tab strip stays
+                  pinned via `sticky` below. */}
+              <div className="flex h-full flex-col bg-background overflow-y-auto">
 
                 {/* Global banners */}
                 <div className="px-4 pt-3 space-y-2">
@@ -3267,13 +3281,13 @@ export default function LeaseReview() {
                   )}
                 </div>
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col px-4 pt-2">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col px-4 pt-2">
                   {/* Tabs use shortened labels so the row fits the right
                       panel even at 50% split (with PDF visible). Full
                       labels surface as tooltips. overflow-x-auto is the
                       safety net for very narrow viewports — tabs scroll
                       horizontally rather than disappearing off the edge. */}
-                  <TabsList className="shrink-0 justify-start overflow-x-auto max-w-full">
+                  <TabsList className="sticky top-0 z-10 w-full shrink-0 justify-start overflow-x-auto border-b border-border bg-background">
                     <TabsTrigger value="general" title="General Information">General</TabsTrigger>
                     <TabsTrigger value="vendor" title="Vendor / Counterparty">Vendor</TabsTrigger>
                     <TabsTrigger value="rent" title="Rent">Rent</TabsTrigger>
@@ -3283,8 +3297,7 @@ export default function LeaseReview() {
                     <TabsTrigger value="asc842" title="ASC 842 Inputs">ASC 842</TabsTrigger>
                   </TabsList>
 
-                  <ScrollArea className="flex-1 h-full">
-                    <div className="py-4 space-y-4 max-w-2xl mx-auto pb-24">
+                  <div className={cn("py-4 space-y-4 mx-auto pb-24", showPdfPanel ? "max-w-2xl" : "max-w-3xl")}>
 
                       {/* General Information */}
                       <TabsContent value="general" className="mt-0 space-y-4">
@@ -3553,6 +3566,7 @@ export default function LeaseReview() {
                         <RisksSection
                           risks={risks}
                           onJumpToPage={jumpToPage}
+                          sourceViewable={showPdfPanel}
                           leaseId={isReadOnly ? undefined : lease?.id}
                           onRisksChanged={async () => {
                             const { data } = await supabase
@@ -3660,8 +3674,7 @@ export default function LeaseReview() {
                         )}
                       </TabsContent>
 
-                    </div>
-                  </ScrollArea>
+                  </div>
                 </Tabs>
 
               </div>

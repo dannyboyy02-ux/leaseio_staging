@@ -466,13 +466,16 @@ interface Risk {
 interface RisksSectionProps {
   risks: Risk[];
   onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
+  /** When false, hide the "(Page N)" citation jump — it dead-ends when no PDF
+   *  panel is shown (locked/Vault leases, or narrow viewports). Defaults true. */
+  sourceViewable?: boolean;
   /** Lease the risks belong to. Required to dismiss; if omitted, dismiss UI is hidden. */
   leaseId?: string;
   /** Called after a successful dismiss so the parent can re-fetch risks. */
   onRisksChanged?: () => void;
 }
 
-export function RisksSection({ risks, onJumpToPage, leaseId, onRisksChanged }: RisksSectionProps) {
+export function RisksSection({ risks, onJumpToPage, sourceViewable = true, leaseId, onRisksChanged }: RisksSectionProps) {
   const [dismissTarget, setDismissTarget] = useState<Risk | null>(null);
   const [dismissReason, setDismissReason] = useState<string>('');
   const [dismissing, setDismissing] = useState<boolean>(false);
@@ -604,7 +607,7 @@ export function RisksSection({ risks, onJumpToPage, leaseId, onRisksChanged }: R
               {risk.citation_snippet && (
                 <div className="text-xs bg-muted/50 p-2 rounded italic">
                   "{risk.citation_snippet}"
-                  {risk.citation_page && (
+                  {sourceViewable && risk.citation_page && (
                     <Button
                       variant="link"
                       size="sm"

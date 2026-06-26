@@ -2720,3 +2720,17 @@ Also noted (LOW, optional): the four bare-text cells (`monthly_rent`/`lease_star
 **Fix (when scoped):** one i18n sweep over `LeaseReviewSections.tsx` — move all field-chrome copy into `common.json` (en + es), polish-review the Spanish. Bundle with #68/#152 if a dedicated i18n pass is scheduled rather than fixing piecemeal.
 
 **Where to look:** `src/components/leases/LeaseReviewSections.tsx` (placeholders, empty caption, the `sourceViewable` affordance + tooltip).
+
+---
+
+### Item #157: Lease Review — `h-screen` workbench shell is clipped below in-flow banners (HIGH, pre-existing)
+
+> **Filed 2026-06-26** (branch `claude/relaxed-clarke-oksfz4`, surfaced by the layout-design review of the #3/#4 responsive work). **Pre-existing** — NOT introduced by the responsive change; but that change advertises "the panes are bounded by `h-screen`", so it's the right moment to fix.
+
+**Symptom:** `LeaseReview.tsx` mounts its root as `<div className="flex flex-col h-screen max-h-screen overflow-hidden ...">` (100vh), but `AppLayout`'s `<main>` is `min-h-screen` and renders `CancellationBanner` / `VaultBanner` / `QuotaWarningBanner` **above** `children` as in-flow `border-b` blocks (none are `position:fixed`). When any banner shows, the page is `bannerHeight + 100vh` tall, so the workbench root's `h-screen` claims a full 100vh and its **bottom edge — the resize handle + the lower portion of both PDF/form panes — lands `bannerHeight`px below the viewport bottom**, with no page-level scroll to reach it (root is `overflow-hidden`). The inner `overflow-y-auto` column still scrolls its own content, but the panel bottom / PDF page is clipped off-screen.
+
+**Who it hits:** `QuotaWarningBanner` shows for a workspace near its abstraction cap (an engaged paying customer); `VaultBanner` shows for every Vault owner. Exactly the users who should NOT see a clipped workbench.
+
+**Root-cause hypothesis / fix (when scoped):** the workbench root should consume *remaining* space below the banners, not a fixed 100vh — e.g. make `AppLayout`'s `<main>` an `h-screen` flex column and give the routed children `flex-1 min-h-0`, OR change the LeaseReview root from `h-screen` to `h-full`/`flex-1 min-h-0` inside a height-bounded parent. Verify with a banner visible at 1280×720.
+
+**Where to look:** `src/components/layout/AppLayout.tsx` (the `min-h-screen <main>` + banner stack), `src/pages/app/LeaseReview.tsx:~2877` (the `h-screen max-h-screen overflow-hidden` root).
