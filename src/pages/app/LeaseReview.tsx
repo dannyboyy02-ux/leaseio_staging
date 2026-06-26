@@ -2796,6 +2796,7 @@ export default function LeaseReview() {
         onClick: () => setLockConfirmDialogOpen(true),
         loading: submittingChanges,
         variant: 'success',
+        tooltip: 'Lock and activate this lease — this is irreversible',
       };
     }
     if (isApproved && !lease.model_locked) {

@@ -919,7 +919,7 @@ export default function ApprovalQueue() {
       if ((data as any)?.error) throw new Error((data as any).error);
 
       toast.success(unlockActType === 'approve'
-        ? 'Unlock approved - lease is now unlocked for staged editing'
+        ? 'Unlock approved — the lease is now unlocked for editing'
         : 'Unlock request rejected');
       setUnlockActTarget(null);
       setUnlockActType(null);
@@ -1503,7 +1503,7 @@ export default function ApprovalQueue() {
             </DialogTitle>
             <DialogDescription>
               {unlockActType === 'approve'
-                ? `Approving will unlock "${unlockActTarget?.leaseName}" for staged editing. Changes will require financial approval before taking effect.`
+                ? `Approving will unlock "${unlockActTarget?.leaseName}" for editing. Changes will need financial approval before they take effect.`
                 : `Denying will keep "${unlockActTarget?.leaseName}" locked. The submitter will see the denied status.`}
             </DialogDescription>
           </DialogHeader>
@@ -1538,8 +1538,8 @@ export default function ApprovalQueue() {
             </DialogTitle>
             <DialogDescription>
               {changeSetActType === 'approve'
-                ? `Approving will apply ${changeSetActTarget?.items.length ?? 0} field change(s) to "${changeSetActTarget?.leaseName}" and re-lock it.`
-                : `Rejecting returns the change set to the submitter for revision. The lease stays unlocked.`}
+                ? `Approving will apply ${changeSetActTarget?.items.length ?? 0} field change(s) to "${changeSetActTarget?.leaseName}". The lease stays locked.`
+                : `Rejecting discards the proposed changes — the lease keeps its current terms and stays locked.`}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
