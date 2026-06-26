@@ -47,15 +47,17 @@ export const MIN_COLUMN_WIDTH = 3;
 // Chrome (the dropped header icons, the removed "SF" suffix, px-3 padding) gave
 // the space back. See docs/LEASES_TABLE_POLISH_PLAN — Round 2 geometry.
 export const LEASE_COLUMNS: readonly LeaseColumnDef[] = [
-  { key: 'property', defaultWidth: 15, resizable: true },
+  { key: 'property', defaultWidth: 14, resizable: true },
   { key: 'asset_type', defaultWidth: 6, resizable: true },
   { key: 'landlord', defaultWidth: 11, resizable: true },
   { key: 'monthly_rent', defaultWidth: 13, resizable: true },
-  { key: 'lease_start', defaultWidth: 10, resizable: true },
-  { key: 'lease_end', defaultWidth: 10, resizable: true },
-  { key: 'days_to_expiry', defaultWidth: 7, resizable: true },
+  { key: 'lease_start', defaultWidth: 11, resizable: true },
+  { key: 'lease_end', defaultWidth: 11, resizable: true },
+  { key: 'days_to_expiry', defaultWidth: 8, resizable: true },
   { key: 'sqft', defaultWidth: 7, resizable: true },
-  { key: 'status', defaultWidth: 15, resizable: true },
+  // status carries slack (short-label pills ~95px); the points went to the
+  // dates + the overdue day-count badge so neither clips at default width.
+  { key: 'status', defaultWidth: 13, resizable: true },
   { key: 'actions', defaultWidth: 6, resizable: false },
 ] as const;
 

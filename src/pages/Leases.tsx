@@ -35,7 +35,7 @@ import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { supabase } from '@/integrations/supabase/client';
-import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate, formatLocalizedNumber } from '@/lib/dateFormatters';
 import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { rowsToCsv } from '@/lib/csv';
 import { prettyAssetType, assetAbbreviation } from '@/lib/assetTypes';
@@ -516,7 +516,8 @@ export default function Leases() {
 
   // No "SF" suffix — the "Sq. Ft." column header carries the unit (avoids the
   // redundant double-unit and frees the tightest column's width). #154 round 2.
-  const formatSqFt = (sqft: number | null) => (sqft ? sqft.toLocaleString() : '—');
+  // Locale-aware grouping so es groups 44.833 to match the currency beside it.
+  const formatSqFt = (sqft: number | null) => formatLocalizedNumber(sqft, language);
 
   // Canonical locale-aware formatter (matches the currency formatter's locale)
   // — fixes English-only months for es users and the date-only parse. "Mar 1,
@@ -855,7 +856,7 @@ export default function Leases() {
                           </TableCell>
                           <TableCell
                             className="hidden truncate text-right tabular-nums text-muted-foreground lg:table-cell"
-                            title={lease.square_footage ? `${lease.square_footage.toLocaleString()} sq ft` : undefined}
+                            title={lease.square_footage ? `${formatLocalizedNumber(lease.square_footage, language)} sq ft` : undefined}
                           >
                             {formatSqFt(lease.square_footage)}
                           </TableCell>
