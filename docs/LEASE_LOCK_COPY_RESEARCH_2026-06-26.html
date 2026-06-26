@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lease Lock / Unlock — Copy &amp; Terminology (research-grounded)</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#13201b; --muted:#5b6b63; --line:#e3e8e5;
+    --brand:#0e9f6e; --brand-d:#0b7a54; --bad:#b91c1c; --warn:#d97706; --ok:#0e9f6e; --blue:#2563eb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 24px 96px}
+  header.hero{background:linear-gradient(135deg,#0e9f6e,#0b7a54);color:#fff;border-radius:18px;padding:32px}
+  header.hero h1{margin:0 0 6px;font-size:25px;letter-spacing:-.4px}
+  header.hero p{margin:0;opacity:.93}
+  .sub{color:var(--muted);font-size:13px;margin:10px 2px 26px}
+  h2{font-size:20px;margin:38px 0 6px;letter-spacing:-.3px}
+  h3{font-size:15px;margin:20px 0 6px}
+  p{margin:9px 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 2px rgba(20,40,30,.04)}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:#eef2f0;padding:1.5px 6px;border-radius:6px;color:#0b3b2a}
+  table.tbl{border-collapse:collapse;width:100%;font-size:13px;margin:10px 0}
+  table.tbl th,table.tbl td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  table.tbl th{background:#f0f4f2;font-weight:600}
+  .now{color:#7a2020}.mid{color:#8a5a12}.star{color:#0b6b48;font-weight:600}
+  .verdict{display:inline-block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;padding:2px 9px;border-radius:999px;color:#fff;white-space:nowrap}
+  .v-keep{background:var(--ok)}.v-fix{background:var(--bad)}.v-soft{background:var(--warn)}
+  ul.tight{margin:8px 0;padding-left:20px}ul.tight li{margin:6px 0}
+  .callout{border-left:4px solid var(--brand);background:#eefaf4;border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0}
+  .callout.warn{border-color:var(--warn);background:#fff7ed}
+  .src{font-size:12px;color:var(--muted)}
+  .src a{color:var(--brand-d)}
+  hr{border:0;border-top:1px solid var(--line);margin:30px 0}
+  .mock{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:10px 0;font-size:13px}
+  .mock .row{padding:12px 14px;border-bottom:1px solid var(--line)}
+  .mock .row:last-child{border-bottom:0}
+  .mbadge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
+  .mblue{background:#eaf1ff;color:#1e40af}.mgrey{background:#eef2f0;color:#475569}
+  .btn{display:inline-block;font-size:12px;font-weight:600;padding:5px 11px;border-radius:7px;border:1px solid var(--line)}
+  .btn-p{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .pill{display:inline-block;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:2px 7px;border-radius:999px;color:#fff}
+  .p-keep{background:var(--ok)}.p-cut{background:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Lease Lock / Unlock — copy &amp; terminology</h1>
+  <p>Research-grounded answer to two questions: is the <b>lock/unlock/re-lock</b> metaphor right, and what would a 5-star version say?</p>
+</header>
+<div class="sub">2026-06-26 · grounded in Salesforce approval-process docs, finance maker-checker patterns, Google Docs, NN/g microcopy guidance, and lease-administration practice · <b>recommendation, nothing changed yet</b></div>
+
+<div class="callout">
+  <b>The one-line verdict.</b> The research says your instinct is <i>half</i> right. <b>"Locked / Unlocked" as a <u>state</u> is correct — keep it</b> (it's the literal enterprise standard). What's wrong is using <b>the lock as a <u>verb</u></b> ("Re-lock" to finish) and the word <b>"staged"</b> — both describe the <i>plumbing</i>, not what the user is trying to do. A 5-star version keeps the Locked/Unlocked state and renames the <i>actions</i> to the user's intent: <b>Submit for approval</b>, not <b>Re-lock</b>.
+</div>
+
+<h2>What the research says</h2>
+
+<div class="card">
+  <h3>1 · "Locked" for an approved record is the enterprise standard — not jargon <span class="verdict v-keep">keep</span></h3>
+  <p>Salesforce — the reference point for B2B approval UX — <b>locks a record when it's submitted for approval and after final approval</b>, and calls the feature exactly that: <i>"record locking."</i> So a finance user who has seen any approval tool already reads "Locked" as "this is the official, protected record." Your <code>Locked</code> / <code>Unlocked</code> state vocabulary is right and worth keeping.</p>
+  <p class="src">Salesforce Help — <a href="https://help.salesforce.com/s/articleView?id=platform.automate_automated_approvals_concept_record_locking.htm&language=en_US&type=5">Record Locking in Flow Approval Processes</a>, <a href="https://help.salesforce.com/s/articleView?id=sf.approvals_create_recordeditability.htm&language=en_US&type=5">Specify Who Can Edit Locked Records</a></p>
+</div>
+
+<div class="card">
+  <h3>2 · But the lock is a <i>consequence</i> of submitting — never the action itself <span class="verdict v-fix">fix</span></h3>
+  <p>In Salesforce the user's action is <b>"Submit for Approval"</b>; the record <i>becomes</i> locked automatically. Nobody clicks "re-lock." Your flow inverts this — the button to finish editing is <code>Re-lock</code>, which names the side-effect (the record locks) instead of the goal (the changes go for approval). NN/g's rule for command naming: a button should state <b>the outcome the user wants, in their words</b> — "Submit" alone is too vague; "Submit your order" is right. By that test <code>Re-lock</code> fails and <b><code>Submit for approval</code></b> wins. (Your confirm dialog <i>already</i> says "Submit for approval" — the trigger just doesn't match it.)</p>
+  <p class="src">NN/g — <a href="https://www.nngroup.com/articles/ui-copy/">UI Copy: Guidelines for Command Names</a>, <a href="https://www.nngroup.com/articles/ux-writing-study-guide/">UX Writing study guide</a> (avoid jargon &amp; branded/internal terms; label commands with verbs describing the result; unclear UI text drives ~50% of user errors)</p>
+</div>
+
+<div class="card">
+  <h3>3 · The finance world already has a word for this — "pending approval" (maker-checker) <span class="verdict v-keep">adopt</span></h3>
+  <p>This whole flow <i>is</i> the <b>maker-checker / four-eyes</b> pattern: one person proposes a change, another approves, and it doesn't take effect until then. Across finance tools the universal status label is <b>"Pending Approval"</b>, and the change itself is a <b>"proposed change."</b> That's the vocabulary to lean on — it's what your buyer's accounting tools already use.</p>
+  <p class="src">Maker-checker / 4-eyes — <a href="https://aspireapp.com/hk/blog/maker-checker-process">Aspire</a>, <a href="https://www.wallex.asia/en-sg/resources/articles/the-maker-checker-process">Wallex</a>, <a href="https://www.volopay.com/expense-management/maker-checker-workflow-for-expense-approvals/">Volopay</a> (status: "pending approval"; "the operation doesn't execute when the maker submits it; it sits pending until the checker approves")</p>
+</div>
+
+<div class="card">
+  <h3>4 · "Staged" is borrowed developer jargon — cut it <span class="verdict v-fix">cut</span></h3>
+  <p>"Staged" comes from Git's <i>staging area</i>. It's invisible to engineers and opaque to everyone else. NN/g is explicit: <b>avoid technical jargon and internal terminology; use plain language</b> — it "creates barriers that slow users." The nearest plain-English idea your user already knows is Google Docs <b>"Suggesting" mode</b>: you <i>propose</i> changes, someone <i>accepts or rejects</i> them. So: <code>staged</code> → <b>"proposed changes" / "changes that need approval."</b></p>
+  <p class="src">NN/g — <a href="https://www.nngroup.com/articles/3-cs-microcopy/">The 3 C's of Microcopy</a>; Google Docs — <a href="https://support.google.com/docs/answer/6033474">Suggest edits</a> (propose changes; owner accepts/rejects)</p>
+</div>
+
+<div class="card">
+  <h3>5 · In lease-land, an approved-then-changed term is a "correction / amendment" with an audit trail — the approval framing is domain-correct</h3>
+  <p>Lease administration treats any change to an executed lease as a <b>correction or amendment that must be approved, versioned, and audit-logged</b>. So routing edits through approval isn't an odd software constraint to apologize for — it's exactly what a finance team expects. The copy can say so plainly and even sound <i>more</i> trustworthy for it.</p>
+  <p class="src">Lease admin — <a href="https://ileasepro.com/blog/lease-modification-documentation/">iLeasePro</a>, <a href="https://www.occupier.com/blog/lease-audit-trail/">Occupier — building a lease audit trail</a></p>
+</div>
+
+<h2>My first pass vs. the 5-star bar</h2>
+<p>You asked me to hold my earlier "de-jargon" pass up against a true 5-star version. The gap: <b>my first pass only swapped the words; it left the lock-as-verb metaphor intact.</b> The 5-star version, grounded above, fixes <i>both</i> the words and the action model.</p>
+
+<table class="tbl">
+  <tr><th style="width:20%">Surface</th><th style="width:26%" class="now">Current</th><th style="width:26%" class="mid">My first pass (de-jargon only)</th><th style="width:28%" class="star">5-star (research-grounded)</th></tr>
+  <tr>
+    <td><b>State</b> (badge)</td>
+    <td class="now">Locked / Unlocked</td>
+    <td class="mid">Locked / Unlocked</td>
+    <td class="star">Locked / Unlocked <span class="pill p-keep">keep</span></td>
+  </tr>
+  <tr>
+    <td><b>Open for editing</b></td>
+    <td class="now">Unlock</td>
+    <td class="mid">Unlock</td>
+    <td class="star">Unlock to edit <span class="src">(keeps lock-honesty, adds intent)</span></td>
+  </tr>
+  <tr>
+    <td><b>Finish — with changes</b></td>
+    <td class="now">Re-lock → <i>(dialog)</i> Submit for approval</td>
+    <td class="mid">Re-lock → Submit for approval</td>
+    <td class="star">Submit for approval <span class="pill p-cut">drop "re-lock"</span><br><span class="src">re-lock is the explained consequence, not the verb</span></td>
+  </tr>
+  <tr>
+    <td><b>Finish — no changes</b></td>
+    <td class="now">Re-lock</td>
+    <td class="mid">Re-lock</td>
+    <td class="star">Lock lease <span class="src">(just re-protect; matches the initial "Lock lease")</span></td>
+  </tr>
+  <tr>
+    <td><b>Abandon</b></td>
+    <td class="now">Discard edits &amp; re-lock</td>
+    <td class="mid">Discard edits</td>
+    <td class="star">Discard changes</td>
+  </tr>
+  <tr>
+    <td><b>Status card — editing</b></td>
+    <td class="now">Unlocked for editing — changes are staged · <i>Edits are staged for approval — 3 fields pending.</i></td>
+    <td class="mid">Unlocked for editing · <i>3 fields edited — your changes need approval before they apply.</i></td>
+    <td class="star"><b>Editing — changes need approval</b> · <i>3 changes proposed. They won't apply to the lease until an approver reviews them.</i></td>
+  </tr>
+  <tr>
+    <td><b>Status card — submitted</b></td>
+    <td class="now">Changes pending approval · <i>…awaiting financial approver review.</i></td>
+    <td class="mid">(kept)</td>
+    <td class="star"><b>Pending approval</b> · <i>3 proposed changes are with your financial approver. The lease stays locked until they decide.</i></td>
+  </tr>
+  <tr>
+    <td><b>Unlock explainer</b></td>
+    <td class="now">Unlocking enables staged editing — proposed changes require financial approval before taking effect.</td>
+    <td class="mid">Unlocking lets you propose changes — they need financial approval before they take effect.</td>
+    <td class="star">This lease is locked. You can propose changes — they go to your financial approver before they apply to the live record.</td>
+  </tr>
+  <tr>
+    <td><b>Re-lock tooltips</b></td>
+    <td class="now">Re-lock the lease and route your staged edits for approval / Re-lock this lease (no staged changes)</td>
+    <td class="mid">Re-lock and submit your changes for approval / Re-lock this lease (no changes to submit)</td>
+    <td class="star">Submit your 3 changes for approval (the lease stays locked) / Lock this lease (no changes to submit)</td>
+  </tr>
+  <tr>
+    <td><b>Submit dialog body</b></td>
+    <td class="now">Your staged changes will be submitted for financial approval. The lease re-locks immediately…</td>
+    <td class="mid">Your changes will be submitted for financial approval. The lease re-locks immediately…</td>
+    <td class="star">Your 3 proposed changes go to your financial approver. The lease stays locked meanwhile; approved changes apply to the live record, rejected ones are dropped.</td>
+  </tr>
+  <tr>
+    <td><b>Empty-submit toast</b></td>
+    <td class="now">No staged changes to submit</td>
+    <td class="mid">No changes to submit</td>
+    <td class="star">No changes to submit</td>
+  </tr>
+</table>
+
+<h2>Before / after — the moment after "Unlock"</h2>
+<div style="display:flex;gap:16px;flex-wrap:wrap">
+  <div style="flex:1;min-width:280px">
+    <div class="src" style="margin-bottom:4px">Now</div>
+    <div class="mock">
+      <div class="row"><span class="mbadge mblue">Unlocked for editing — changes are staged</span></div>
+      <div class="row"><span class="src">Edits are staged for approval — 3 fields pending.</span></div>
+      <div class="row" style="text-align:right"><span class="btn">Discard edits &amp; re-lock</span> &nbsp; <span class="btn btn-p">Lock &amp; submit</span></div>
+    </div>
+  </div>
+  <div style="flex:1;min-width:280px">
+    <div class="star" style="margin-bottom:4px;font-size:13px">5-star</div>
+    <div class="mock">
+      <div class="row"><span class="mbadge mgrey">🔓 Editing · Locked record</span> &nbsp;<b style="font-size:12px">Changes need approval</b></div>
+      <div class="row"><span class="src">3 changes proposed — they won't apply to the lease until an approver reviews them.</span></div>
+      <div class="row" style="text-align:right"><span class="btn">Discard changes</span> &nbsp; <span class="btn btn-p">Submit for approval</span></div>
+    </div>
+  </div>
+</div>
+
+<hr>
+<h2>Recommendation</h2>
+<div class="card">
+  <ul class="tight">
+    <li><b>Keep</b> <code>Locked</code> / <code>Unlocked</code> as the record <b>state</b> — it's the enterprise standard and signals "official, protected record."</li>
+    <li><b>Stop using the lock as a verb to finish.</b> The primary action is <b>"Submit for approval"</b> (it already is in your confirm dialog — just rename the trigger to match). The re-lock becomes a one-line explained consequence ("the lease stays locked while it's reviewed"). For the no-changes case, "Lock lease."</li>
+    <li><b>Delete "staged" everywhere</b> → "proposed changes" / "changes need approval" / "pending approval" — the maker-checker words your buyer already knows.</li>
+    <li><b>Lead with intent, explain the rule once.</b> "Unlock to edit" to open; a single calm sentence that changes need approval; never make the user decode the mechanism.</li>
+  </ul>
+  <p class="src">This is copy + a few button labels only — no logic changes. If you greenlight it I'll apply the 5-star column, run it through the product-polish reviewer, and (separately) file the Spanish translations against the existing i18n debt (#156), since these strings are hardcoded English today.</p>
+</div>
+
+<p class="src">Sources: Salesforce Help (record locking in approval processes) · Aspire / Wallex / Volopay (maker-checker, "pending approval") · Google Docs Help (Suggesting mode) · Nielsen Norman Group (UI command naming; 3 C's of microcopy; UX-writing study guide — avoid jargon, label by outcome) · iLeasePro / Occupier (lease modification &amp; audit-trail practice). Generated 2026-06-26 · no code changed.</p>
+</div>
+</body>
+</html>
