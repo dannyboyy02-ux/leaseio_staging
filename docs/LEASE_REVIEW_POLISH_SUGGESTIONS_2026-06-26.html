@@ -65,6 +65,15 @@
   </div>
 </div>
 
+<div class="callout" style="border-color:#0e9f6e;background:#eefaf4">
+  <b>▶ Phase 1 — SHIPPED 2026-06-26</b> (branch <code>claude/relaxed-clarke-oksfz4</code>, commits <code>86927d4</code> + <code>57deb2c</code>; 4 reviewers + 2 re-reviewers, all green; typecheck + 1357 tests pass).
+  <ul class="tight" style="margin-bottom:0">
+    <li><b>Done:</b> cross-lease state bleed (<code>key={leaseId}</code>), Rent/Options <i>field</i> unlock carve-out, the source-verify gesture (now a single muted "View in document" affordance, gated on <code>sourceViewable</code> so it never dead-ends on locked/Vault leases), <code>CLAUDE.md:106</code>, plus the mediums (lifted the staged-edits card above the tab strip; muted the affordance palette). The rent-<i>schedule</i> table was deliberately kept locked during unlock — an integrity HIGH the review caught (its writes aren't change-set-staged).</li>
+    <li><b>Deferred to their own PRs (your call):</b> #3/#4 layout (scroll shell + responsive split — needs preview verification at desktop/tablet) and #5 in-app nav guard (needs a <code>BrowserRouter</code>→data-router migration). Phases 2–4 below remain open.</li>
+    <li><b>Decided:</b> KEEP the one-click "Mark all required reviewed" (positive customer experience).</li>
+  </ul>
+</div>
+
 <div class="callout warn">
   <b>Headline — 4 CRITICALs, two of them defeat the product's core promise:</b>
   <ul class="tight" style="margin-bottom:0">
