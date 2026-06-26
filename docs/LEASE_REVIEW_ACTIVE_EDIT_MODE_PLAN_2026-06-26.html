@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lease Review — Active-Edit Mode Coherence Plan (2026-06-26)</title>
+<style>
+  :root{
+    --ink:#1c1917; --muted:#78716c; --line:#e7e5e4; --bg:#fafaf9; --card:#fff;
+    --accent:#CC785C; --green:#16a34a; --amber:#d97706; --red:#dc2626; --blue:#2563eb;
+    --code-bg:#1c1917; --code-ink:#e7e5e4;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--bg); margin:0; line-height:1.6; font-size:15px;}
+  .wrap{max-width:980px; margin:0 auto; padding:40px 24px 120px;}
+  header.doc{border-bottom:2px solid var(--ink); padding-bottom:20px; margin-bottom:8px;}
+  header.doc h1{font-size:30px; margin:0 0 6px; letter-spacing:-0.02em;}
+  header.doc .meta{color:var(--muted); font-size:13px;}
+  header.doc .meta b{color:var(--ink);}
+  h2{font-size:22px; margin:48px 0 12px; padding-top:14px; border-top:1px solid var(--line); letter-spacing:-0.01em;}
+  h3{font-size:17px; margin:28px 0 8px;}
+  h4{font-size:14px; margin:18px 0 6px; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted);}
+  p{margin:10px 0;}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace; font-size:12.5px;
+    background:#f5f5f4; border:1px solid var(--line); border-radius:5px; padding:1px 5px; color:#9a3412;}
+  pre{background:var(--code-bg); color:var(--code-ink); border-radius:var(--radius); padding:16px 18px;
+    overflow-x:auto; font-size:12.5px; line-height:1.5; margin:14px 0;}
+  pre code{background:none; border:none; padding:0; color:inherit; font-size:12.5px;}
+  pre .c{color:#a8a29e;} pre .k{color:#f0ab9a;} pre .s{color:#bbf7d0;} pre .a{color:#fcd9a8;}
+  ul,ol{margin:10px 0; padding-left:24px;} li{margin:5px 0;}
+  .toc{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px 24px; margin:24px 0;}
+  .toc ol{columns:2; column-gap:36px;} .toc a{color:var(--blue); text-decoration:none;} .toc a:hover{text-decoration:underline;}
+  .callout{border-left:4px solid var(--accent); background:#fdf6f3; padding:14px 18px; border-radius:0 8px 8px 0; margin:18px 0;}
+  .callout.warn{border-color:var(--amber); background:#fffbeb;}
+  .callout.good{border-color:var(--green); background:#f0fdf4;}
+  .callout.info{border-color:var(--blue); background:#eff6ff;}
+  table{border-collapse:collapse; width:100%; margin:16px 0; font-size:13.5px;}
+  th,td{border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top;}
+  th{background:#f5f5f4; font-weight:650;}
+  .pill{display:inline-block; font-size:11px; font-weight:650; padding:2px 8px; border-radius:999px; white-space:nowrap;}
+  .pill.crit{background:#fef2f2; color:#991b1b; border:1px solid #fecaca;}
+  .pill.high{background:#fff7ed; color:#9a3412; border:1px solid #fed7aa;}
+  .pill.med{background:#f5f5f4; color:#57534e; border:1px solid var(--line);}
+  .pill.scope{background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;}
+  .pill.decided{background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe;}
+
+  /* ---- Mockup chrome ---- */
+  .mock{border:1px solid var(--line); border-radius:12px; overflow:hidden; margin:16px 0; background:var(--card); box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .mock .bar{display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fafaf9; flex-wrap:wrap;}
+  .mock .title{font-weight:650; font-size:15px;}
+  .mock .body{padding:14px;}
+  .badge{display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:2px 8px; border-radius:6px; border:1px solid;}
+  .badge.active{background:#ecfdf5; color:#065f46; border-color:#a7f3d0;}
+  .badge.editing{background:#fffbeb; color:#92400e; border-color:#fde68a;}
+  .badge.approved{background:#16a34a; color:#fff; border-color:#16a34a;}
+  .badge.pending{background:#eff6ff; color:#1e40af; border-color:#bfdbfe;}
+  .btn{display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; padding:6px 14px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:default;}
+  .btn.primary{background:var(--green); color:#fff; border-color:var(--green);}
+  .btn.ghost{background:#fff; color:var(--ink);}
+  .btn.danger{color:var(--red); border-color:#fecaca;}
+  .strip{display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; margin:10px 0; font-size:13px;}
+  .strip.green{background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46;}
+  .strip.neutral{background:#f5f5f4; border:1px solid var(--line); color:#57534e;}
+  .strip.rejected{background:#fef2f2; border:1px solid #fecaca; color:#991b1b;}
+  .field{margin:12px 0;}
+  .field .lbl{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); display:block; margin-bottom:3px;}
+  .field .lbl.calm{font-size:12.5px; font-weight:600; text-transform:none; letter-spacing:0; color:#44403c;}
+  .field input{width:100%; font-size:13.5px; padding:7px 10px; border-radius:7px; border:1px solid var(--line); background:#fff;}
+  .field input.alarm-red{border:2px solid #f87171;}
+  .field input.alarm-amber{border:2px solid #fbbf24;}
+  .field .accent{border-left:3px solid #fbbf24; padding-left:9px;}
+  .src{font-size:10px; color:var(--accent); font-weight:600;}
+  .src.calm{color:var(--muted); opacity:.0;}
+  .val{font-size:14px; font-weight:500; color:#1c1917;}
+  .empty-cap{font-size:10px; color:var(--muted); font-style:italic; margin-top:3px;}
+  .flow{display:flex; flex-direction:column; gap:0; margin:18px 0; font-size:13px;}
+  .flow .node{border:1px solid var(--line); border-radius:8px; padding:10px 14px; background:#fff;}
+  .flow .arrow{align-self:center; color:var(--muted); font-size:18px; line-height:1; padding:3px 0;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px;} @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .lbl-before{font-size:11px; font-weight:700; color:var(--red); text-transform:uppercase; letter-spacing:.05em;}
+  .lbl-after{font-size:11px; font-weight:700; color:var(--green); text-transform:uppercase; letter-spacing:.05em;}
+  .src-list{font-size:12.5px; color:var(--muted);}
+  .src-list a{color:var(--blue);}
+  .filechip{font-family:"SF Mono",monospace; font-size:11.5px; background:#f5f5f4; border:1px solid var(--line); border-radius:5px; padding:1px 6px; color:#44403c;}
+  hr{border:none; border-top:1px dashed var(--line); margin:28px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>Lease Review — Active-Edit Mode Coherence</h1>
+  <div class="meta">
+    Implementation plan &nbsp;·&nbsp; <b>2026-06-26</b> &nbsp;·&nbsp; branch <b>claude/relaxed-clarke-oksfz4</b><br>
+    Scope: fix the incoherent workbench shown when an <b>active</b> lease is <b>unlocked for a governed edit</b>.
+    Source: two-lane reviewer sweep (lease-product-polish + lease-layout-design-reviewer) on the rendered screen,
+    plus market research for the post-submit / post-rejection destination (H7).
+  </div>
+</header>
+
+<div class="callout info">
+  <b>How to read this.</b> §1 is the one-sentence root cause. §3 is the scope table (what's in, decided, deferred).
+  §4 shows before/after mockups. §5 is the per-fix detail (current → target, code, files). §6 is the H7 research + recommendation.
+  §7 is the H6 decision. §8 sequences the work. Nothing here is implemented yet — this is for your review.
+</div>
+
+<div class="toc">
+  <ol>
+    <li><a href="#root">The one root cause</a></li>
+    <li><a href="#unchanged">What we are NOT changing</a></li>
+    <li><a href="#scope">Scope table (findings → fixes)</a></li>
+    <li><a href="#mockups">Mockups: before / after</a></li>
+    <li><a href="#detail">Per-fix detail + code</a></li>
+    <li><a href="#h7">H7: post-submit / rejection destination (research)</a></li>
+    <li><a href="#h6">H6 decision: the "Cancel" exit</a></li>
+    <li><a href="#phasing">Phasing &amp; sequencing</a></li>
+    <li><a href="#testing">Test plan &amp; reviewer routing</a></li>
+    <li><a href="#asks">What I need from you</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="root">1 · The one root cause</h2>
+<p>
+  Every defect on that screen traces to a single structural fact:
+</p>
+<div class="callout">
+  <b>An <i>active</i> lease in a governed edit session is rendered with the <i>first-time-intake-review</i> chrome.</b>
+  When you click <b>Unlock</b>, <code>model_locked</code> flips to <code>false</code>; the locked read-view early-return
+  (<span class="filechip">LeaseReview.tsx:2728</span>) is skipped; and the whole finalized record falls through to the
+  extraction-review workbench — green "approve to advance" strip, red/amber alarm borders, per-row "View in document",
+  "not extracted" captions, per-tab "Reviewed" pills, and a red "Cancel". None of that is true for a live lease whose only
+  pending task is "change a value and submit it for approval."
+</div>
+<p>
+  The fix is therefore <b>not</b> a new page — it's teaching the existing workbench that
+  <code>lifecycle_status === 'active' &amp;&amp; isUnlockedDraft</code> is a <b>distinct, calm mode</b>, and routing every
+  review-only signal through that gate. The two surfaces that already speak the right language
+  (the amber "Editing — N changes" chip and the "Submit for approval" button) become the <i>whole</i> story;
+  everything else gets quieted.
+</p>
+
+<!-- ============================================================ -->
+<h2 id="unchanged">2 · What we are NOT changing</h2>
+<ul>
+  <li><b>Locked active read view.</b> <code>model_locked === true &amp;&amp; active</code> already early-returns to
+    <span class="filechip">LockedLeaseDetail</span> (LeaseReview.tsx:2728-2729) — the calm "on file" record. That path stays;
+    it's the baseline the unlocked-edit state should feel like.</li>
+  <li><b>First-time intake review.</b> A brand-new extraction <i>should</i> show confidence borders, source links, and the
+    review/approve funnel — that's the human auditing the AI. We only suppress those signals <i>once the lease is active</i>.</li>
+  <li><b>The governance model.</b> One open change set per lease, maker-checker submit → approve/reject, server-side
+    lifecycle writes — all unchanged. This is purely the presentation + post-action navigation layer.</li>
+  <li><b>The concurrency guard</b> (#158, partial unique index + 409s) shipped already; untouched here.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="scope">3 · Scope table — findings → fixes</h2>
+<table>
+  <thead><tr><th>ID</th><th>Finding</th><th>File:line</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><span class="pill crit">C1</span></td>
+      <td>Status strip says "Ready to approve / Approve to advance" on a live lease; strip is blind to lifecycle + change-set.</td>
+      <td>LeaseReviewStatusStrip.tsx:125-141 · LeaseReview.tsx:3050-3064</td>
+      <td><span class="pill scope">in scope</span></td></tr>
+    <tr><td><span class="pill crit">C2</span></td>
+      <td>Confidence <i>borders</i> (alarm red/amber boxes) not gated; record reads as "errors / unverified".</td>
+      <td>LeaseReviewSections.tsx:175-184</td>
+      <td><span class="pill scope">in scope</span></td></tr>
+    <tr><td><span class="pill high">H1</span></td>
+      <td>"View in document" repeats on every field → orange wallpaper competing with green/red.</td>
+      <td>LeaseReviewSections.tsx:258-268</td>
+      <td><span class="pill scope">in scope</span></td></tr>
+    <tr><td><span class="pill high">H2</span></td>
+      <td>"Field is empty — not extracted…" caption + "No X extracted" placeholders = AI-failure apology on a trusted record.</td>
+      <td>LeaseReviewSections.tsx:443-447, 285/411/432</td>
+      <td><span class="pill scope">in scope</span></td></tr>
+    <tr><td><span class="pill high">H3</span></td>
+      <td>Per-tab "Reviewed ✓ ✗" pill re-asks section sign-off on a live lease; third competing green CTA.</td>
+      <td>LeaseReview.tsx:2819-2864</td>
+      <td><span class="pill scope">in scope</span></td></tr>
+    <tr><td><span class="pill high">H4</span></td>
+      <td>Badge cluster stacks "Active + 🔓 Editing + Approved" — three orthogonal status signals.</td>
+      <td>LeaseReview.tsx:2891-2907</td>
+      <td><span class="pill scope">in scope</span></td></tr>
+    <tr><td><span class="pill high">H5</span></td>
+      <td>Primary content uses 10px uppercase-muted "fine print" labels.</td>
+      <td>LeaseReviewSections.tsx:246</td>
+      <td><span class="pill scope">in scope</span></td></tr>
+    <tr><td><span class="pill high">H6</span></td>
+      <td>Red "Cancel" in the ⋯ menu next to "Archive" reads as "cancel the lease".</td>
+      <td>LeaseReview.tsx:2940-2947</td>
+      <td><span class="pill decided">decided → §7</span></td></tr>
+    <tr><td><span class="pill high">H7</span></td>
+      <td>No verdict surface after a second user approves/rejects; submitter stranded.</td>
+      <td>(new) verdict banner + post-action redirect</td>
+      <td><span class="pill decided">researched → §6</span></td></tr>
+    <tr><td><span class="pill med">H8</span></td>
+      <td>Ragged left edge: strip <code>mx-6</code> vs content <code>px-6</code> vs header <code>px-4 sm:px-6</code>.</td>
+      <td>StatusStrip:198 · LeaseReview:3067 · AppHeader:34</td>
+      <td><span class="pill scope">in scope (cheap)</span></td></tr>
+    <tr><td><span class="pill med">M*</span></td>
+      <td>7-tab crowding · concentric card borders · content max-w jump · 9px badge type · "Initializing Cockpit…" · card-header drift.</td>
+      <td>various</td>
+      <td><span class="pill med">phase 3 polish</span></td></tr>
+  </tbody>
+</table>
+<div class="callout good">
+  <b>Reconciliation (verify-don't-recall):</b> on a truly <code>active</code> lease the % confidence <i>badge</i> is already
+  suppressed via <code>hideConfidence</code> (passed at LeaseReview.tsx:3311+). What is NOT gated is the <b>border color</b>
+  (C2) and the <b>source link</b> (H1). My earlier "% badges everywhere" claim was wrong — corrected here.
+</div>
+
+<!-- ============================================================ -->
+<h2 id="mockups">4 · Mockups — before / after</h2>
+
+<h3>4.1 — The unlocked-active workbench header + strip</h3>
+<div class="grid2">
+  <div>
+    <div class="lbl-before">▼ BEFORE (today)</div>
+    <div class="mock">
+      <div class="bar">
+        <span class="title">Acme HQ Lease</span>
+        <span class="badge active">Active</span>
+        <span class="badge editing">🔓 Editing — 2 changes</span>
+        <span class="badge approved">✓ Approved</span>
+        <span style="flex:1"></span>
+        <span class="btn primary">🔒 Submit for approval</span>
+        <span class="btn">⋯</span>
+      </div>
+      <div class="body">
+        <div class="strip green">✓ &nbsp;<b>Ready to approve</b> — All required sections reviewed. Approve to advance the lease.</div>
+        <div class="field">
+          <span class="lbl">Monthly Rent &nbsp;<span class="src">✦ View in document</span></span>
+          <input class="alarm-red" value="$ 12,500" />
+        </div>
+        <div class="field">
+          <span class="lbl">Lease End &nbsp;<span class="src">✦ View in document</span></span>
+          <input class="alarm-amber" value="2029-03-31" />
+          <div class="empty-cap">— second-guesses a value you already trust —</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="lbl-after">▼ AFTER (target)</div>
+    <div class="mock">
+      <div class="bar">
+        <span class="title">Acme HQ Lease</span>
+        <span class="badge editing">🔓 Editing — 2 changes</span>
+        <span style="flex:1"></span>
+        <span class="btn ghost">Cancel</span>
+        <span class="btn primary">Submit for approval</span>
+        <span class="btn">⋯</span>
+      </div>
+      <div class="body">
+        <div class="strip neutral">✎ &nbsp;<b>2 changes staged</b> — submit for approval to apply them. The lease stays live until an approver accepts.</div>
+        <div class="field">
+          <span class="lbl calm">Monthly Rent</span>
+          <input value="$ 12,500" />
+        </div>
+        <div class="field">
+          <span class="lbl calm">Lease End</span>
+          <div class="accent"><input value="2029-03-31" style="border:1px solid var(--line)"/></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<p style="font-size:13px; color:var(--muted)">
+  After: one state badge (Editing), neutral strip in the change-set's own vocabulary, no alarm borders, no per-row source
+  wallpaper (confidence becomes a quiet left-accent only where it matters), no apology caption, a visible non-destructive
+  <b>Cancel</b> next to Submit.
+</p>
+
+<h3>4.2 — Rejection verdict banner (H7)</h3>
+<div class="mock">
+  <div class="bar"><span class="title">Acme HQ Lease</span><span class="badge active">Active</span></div>
+  <div class="body">
+    <div class="strip rejected">
+      ⚠ &nbsp;<b>Your proposed changes were declined</b> by Dana Ruiz on Jun 26. &nbsp;
+      Reason: <i>"Rent figure doesn't match the executed amendment."</i> &nbsp; The lease keeps its current terms.
+      &nbsp;<span class="btn ghost" style="margin-left:6px">Revise &amp; resubmit</span>
+      <span class="btn ghost">Dismiss</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="detail">5 · Per-fix detail + code</h2>
+
+<h3>C1 · Make the status strip lifecycle- and change-set-aware</h3>
+<p><b>Current:</b> <code>deriveState()</code> branches only on <code>isProcessing / canApprove / isApproved / modelLocked</code>.
+  On an unlocked active lease <code>modelLocked === false</code> → it falls into the first-time <code>'ready'</code> branch and
+  renders "Ready to approve — Approve to advance." It has no idea the lease is already <code>active</code> or that we're in an
+  edit session.</p>
+<p><b>Target:</b> pass <code>lifecycleStatus</code> + <code>isUnlockedDraft</code> + <code>stagedItemCount</code> into the strip.
+  Add an edit-session branch <i>above</i> the approval branches; suppress the approval/lock language entirely when the lease is
+  already active.</p>
+<pre><code><span class="c">// LeaseReviewStatusStrip.tsx — new props</span>
+<span class="k">interface</span> Props {
+  <span class="c">/* …existing… */</span>
+  lifecycleStatus?: <span class="s">string</span>;          <span class="c">// 'active' | 'executed' | …</span>
+  isUnlockedDraft?: <span class="s">boolean</span>;          <span class="c">// active lease unlocked into a draft change set</span>
+  stagedItemCount?: <span class="s">number</span>;
+}
+
+<span class="c">// deriveState() — insert BEFORE the canApprove / isApproved branches:</span>
+<span class="k">if</span> (isUnlockedDraft) {
+  <span class="k">return</span> stagedItemCount &amp;&amp; stagedItemCount &gt; <span class="a">0</span>
+    ? { tone: <span class="s">'info'</span>, label: t(<span class="s">'strip.staged_label'</span>, { count: stagedItemCount }),
+        detail: t(<span class="s">'strip.staged_detail'</span>) }                          <span class="c">// "Submit for approval to apply them…"</span>
+    : { tone: <span class="s">'info'</span>, label: t(<span class="s">'strip.editing_label'</span>),
+        detail: t(<span class="s">'strip.editing_detail'</span>) };                        <span class="c">// "Make your edits, then submit or cancel."</span>
+}
+<span class="c">// An already-active lease never shows the first-time approve/advance funnel:</span>
+<span class="k">if</span> (lifecycleStatus === <span class="s">'active'</span>) <span class="k">return</span> { tone: <span class="s">'success'</span>, … };  <span class="c">// → suppressed by the existing null-on-success guard</span></code></pre>
+<p><b>Why this also fixes the "two engines disagree" problem:</b> the header <code>primaryAction</code> is already
+  change-set-aware (returns <code>null</code> for <code>isUnlockedDraft</code>, letting the inline Submit/Cancel bar take over —
+  LeaseReview.tsx:2768). Once the strip is change-set-aware too, both surfaces read from the same state and stop contradicting.</p>
+<p><b>Files:</b> <span class="filechip">LeaseReviewStatusStrip.tsx</span>, <span class="filechip">LeaseReview.tsx</span> (props at :3050), locale keys in <span class="filechip">en/common.json</span> + <span class="filechip">es/common.json</span>.</p>
+
+<h3>C2 · Gate the confidence borders on an active lease</h3>
+<p><b>Current:</b> <code>getFieldBorderClass()</code> returns <code>border-red-400 border-2</code> / <code>border-amber-400 border-2</code>
+  purely from the confidence score — never checks <code>hideConfidence</code>. So an active lease still paints alarm boxes.</p>
+<pre><code><span class="c">// LeaseReviewSections.tsx:175 — honor hideConfidence, and downgrade alarm→accent</span>
+<span class="k">const</span> getFieldBorderClass = (fieldId: <span class="s">string</span>) =&gt; {
+  <span class="k">if</span> (hideConfidence) <span class="k">return</span> <span class="s">''</span>;                         <span class="c">// active lease: no confidence chrome at all</span>
+  <span class="k">const</span> fieldConf = getFieldConfidence(extractedJson, fieldId);
+  <span class="k">if</span> (fieldConf !== <span class="k">null</span> &amp;&amp; fieldConf &lt; <span class="a">0.70</span>) <span class="k">return</span> <span class="s">'border-l-2 border-l-red-400'</span>;   <span class="c">// margin marker, not a boxed error</span>
+  <span class="k">if</span> (fieldConf !== <span class="k">null</span> &amp;&amp; fieldConf &lt; <span class="a">0.80</span>) <span class="k">return</span> <span class="s">'border-l-2 border-l-amber-400'</span>;
+  <span class="k">return</span> <span class="s">''</span>;
+};</code></pre>
+<p>Two wins in one: active leases lose the alarm entirely; first-time review keeps the signal but as a calm left-accent bar
+  instead of a full red box. <b>File:</b> <span class="filechip">LeaseReviewSections.tsx</span>.</p>
+
+<h3>H1 · One source affordance, on demand — not one per row</h3>
+<p><b>Target:</b> reveal "View in document" on row hover/focus, and drop it entirely when <code>hideConfidence</code> (active).
+  This removes ~20 stacked orange links per screen.</p>
+<pre><code><span class="c">// LeaseReviewSections.tsx:258 — gate + reveal-on-interaction</span>
+{sourceViewable &amp;&amp; !hideConfidence &amp;&amp; isAIExtracted &amp;&amp; fieldPage &amp;&amp; (
+  &lt;button …
+    className=<span class="s">"… opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"</span>&gt;
+    &lt;Sparkles … /&gt; View in document
+  &lt;/button&gt;
+)}
+<span class="c">// add `group` to the row wrapper at :244 — &lt;div key={field.id} className="group"&gt;</span></code></pre>
+<p><b>File:</b> <span class="filechip">LeaseReviewSections.tsx</span>. (Also pass <code>hideConfidence</code> down to <code>RisksSection</code> for parity.)</p>
+
+<h3>H2 · Neutral empty-state copy on an active lease</h3>
+<pre><code><span class="c">// LeaseReviewSections.tsx:443 — drop the apology when confidence is hidden</span>
+{!value &amp;&amp; field.type !== <span class="s">'term'</span> &amp;&amp; !hideConfidence &amp;&amp; (
+  &lt;p className=<span class="s">"text-[10px] text-muted-foreground mt-1 italic"</span>&gt;
+    {t(<span class="s">'review.field_empty_hint'</span>)}
+  &lt;/p&gt;
+)}
+<span class="c">// placeholders at :285/411/432 → neutral when active:</span>
+placeholder={hideConfidence ? t(<span class="s">'review.not_specified'</span>) : <span class="s">`No ${field.label.toLowerCase()} extracted`</span>}</code></pre>
+<p><b>Files:</b> <span class="filechip">LeaseReviewSections.tsx</span> + locales.</p>
+
+<h3>H3 · Hide the per-tab "Reviewed" footer during an edit session</h3>
+<pre><code><span class="c">// LeaseReview.tsx:2820 — extend the existing guard</span>
+<span class="k">const</span> renderTabFooter = (tabKey) =&gt; {
+  <span class="k">if</span> (lease?.model_locked || isReadOnly || isUnlockedDraft) <span class="k">return</span> <span class="k">null</span>;  <span class="c">// + isUnlockedDraft</span>
+  …
+};</code></pre>
+<p>Section re-attestation belongs to first-time review, not a live-lease edit. Submit becomes the sole hero gesture.
+  <b>File:</b> <span class="filechip">LeaseReview.tsx</span>.</p>
+
+<h3>H4 · One state badge at a time</h3>
+<pre><code><span class="c">// LeaseReview.tsx:2891 — suppress lifecycle + Approved badges while editing</span>
+{lease.lifecycle_status &amp;&amp; !isUnlockedDraft &amp;&amp; (
+  &lt;LifecycleStatusBadge status={lease.lifecycle_status} /&gt;
+)}
+{isUnlockedDraft &amp;&amp; ( <span class="c">/* amber "Editing — N changes" — the single salient state */</span> … )}
+{isApproved &amp;&amp; !isPosted &amp;&amp; ( <span class="c">/* "Approved" only pre-activation; redundant with "Active" after */</span> … )}</code></pre>
+<p>While editing: show only "🔓 Editing — N changes" (the lease IS active; editing is the salient fact). Never render
+  Active + Approved together. <b>File:</b> <span class="filechip">LeaseReview.tsx</span>.</p>
+
+<h3>H5 · Fix the typographic ramp for field labels</h3>
+<pre><code><span class="c">// LeaseReviewSections.tsx:246 — out of the "fine print" tier</span>
+<span class="c">// before: text-[10px] uppercase font-bold text-muted-foreground</span>
+<span class="c">// after:  text-xs   font-medium  text-foreground/90  (no uppercase)</span></code></pre>
+<p>One ramp across the workbench: section title <code>text-sm font-semibold</code> · field label <code>text-xs font-medium</code> ·
+  value <code>text-sm</code>. <b>File:</b> <span class="filechip">LeaseReviewSections.tsx</span> (apply the same to the inline parent-lease / change-set cards for consistency).</p>
+
+<h3>H8 · One page gutter (cheap)</h3>
+<p>Give the strip <code>px-4 sm:px-6</code> and drop <code>mx-6</code> so header + strip + content share one left edge at every
+  width. <b>Files:</b> <span class="filechip">LeaseReviewStatusStrip.tsx:198</span>, verify against <span class="filechip">AppHeader.tsx:34</span>.</p>
+
+<!-- ============================================================ -->
+<h2 id="h7">6 · H7 — where the user goes after submit / rejection (researched)</h2>
+
+<p>You asked me to research this rather than decide it for you. The key realization from the research: <b>"submission" and
+  "rejection" are different kinds of event and can't share one redirect.</b> Submission is <i>synchronous</i> (the user is right
+  there, having just clicked Submit). Rejection is <i>asynchronous</i> (a different person acts minutes or hours later — the
+  submitter isn't on the page, so there's nothing to redirect). They need different treatments.</p>
+
+<h3>6.1 — After the submitter clicks "Submit for approval" (synchronous)</h3>
+<div class="flow">
+  <div class="node"><b>User clicks Submit for approval</b> → <code>submit_change_set</code> (re-locks lease, change set → <code>pending_approval</code>)</div>
+  <div class="arrow">↓</div>
+  <div class="node"><b>Success toast:</b> "Changes submitted to {approver} for approval. You'll be notified when they decide."</div>
+  <div class="arrow">↓</div>
+  <div class="node"><b>Redirect to the list the user came from</b> — Leases by default, Dashboard if that's the referrer.</div>
+</div>
+<p><b>Recommendation: return to the list they came from, defaulting to <span class="filechip">/app/leases</span>, not the Dashboard.</b>
+  The SaaS convention for finishing work on one record is "back to the list you came from," supported by breadcrumbs — not a
+  jump to a generic dashboard. The Dashboard is an overview/landing surface; after a focused edit the user's mental context is
+  "the portfolio I was working through," which is the Leases list. Implementation is referrer-aware so we honor where they
+  actually started:</p>
+<pre><code><span class="c">// after a successful submit_change_set:</span>
+<span class="k">const</span> from = (location.state <span class="k">as</span> any)?.from;            <span class="c">// set when navigating into the lease</span>
+toast.success(t(<span class="s">'review.submitted_for_approval'</span>, { approver }));
+navigate(from === <span class="s">'dashboard'</span> ? <span class="s">'/app/dashboard'</span> : <span class="s">'/app/leases'</span>);</code></pre>
+<div class="callout good">
+  <b>Why not stay on the page?</b> Post-submit the lease re-locks — staying drops the user on a now-read-only form with no task
+  left (the original strand). Redirecting also matches the Post-Redirect-Get pattern, which research shows cuts accidental
+  re-submits dramatically. If they navigate back to the lease, it now shows a <b>"Changes pending approval"</b> state (with an
+  optional future "Withdraw" affordance — Salesforce-style recall, noted as an enhancement, not in this scope).
+</div>
+
+<h3>6.2 — When the change is rejected (asynchronous)</h3>
+<p>A redirect can't fire for an event the user isn't present for. The researched pattern is <b>notify + show the verdict on
+  return</b>:</p>
+<div class="flow">
+  <div class="node"><b>Approver rejects</b> on the Approval Queue → <code>reject_change_set</code> (terminal; lease stays locked with current terms)</div>
+  <div class="arrow">↓</div>
+  <div class="node"><b>Notify the submitter</b> — in-app notification (+ email) carrying the <b>rejection reason</b></div>
+  <div class="arrow">↓</div>
+  <div class="node"><b>When the submitter next opens the lease</b> → red verdict banner (mock §4.2): who declined, when, the reason,
+    and "the lease keeps its current terms" — with <b>Revise &amp; resubmit</b> / <b>Dismiss</b></div>
+</div>
+<p>Research is emphatic that the <b>reason must reach the submitter</b>, and that "rejected" must be visually distinct from
+  "approved." The verdict reads the terminal <code>rejected</code> change set (<code>status='rejected'</code> + reviewer note)
+  and renders it; "Revise &amp; resubmit" opens a fresh draft pre-seeded with the declined values so the user isn't retyping.</p>
+
+<h3>6.3 — For the approver after they act (Approval Queue)</h3>
+<p>Distinct from the submitter: after an approver approves/rejects a queue item, the convention is <b>return to the queue</b>
+  (the list of pending approvals) with a confirmation toast — so they can process the next one, email-triage style — not the
+  Dashboard. If they acted from the lease page itself, return them to wherever they came from (queue or Leases).</p>
+
+<table>
+  <thead><tr><th>Actor &amp; event</th><th>Destination</th><th>Confirmation</th></tr></thead>
+  <tbody>
+    <tr><td>Submitter — after Submit</td><td><b>Back to list</b> (Leases default · Dashboard if referrer)</td><td>Toast: "Submitted to {approver}…"</td></tr>
+    <tr><td>Submitter — change rejected</td><td><b>No redirect</b> — notification + verdict banner on next visit</td><td>In-app + email w/ reason; banner w/ Revise/Dismiss</td></tr>
+    <tr><td>Approver — after Approve/Reject</td><td><b>Back to Approval Queue</b></td><td>Toast: "Approved / Declined {lease}"</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <b>Your "Dashboard or Leases" steer:</b> I'm recommending <b>Leases</b> as the default for the submitter-after-submit case
+  (with referrer-awareness so the Dashboard is honored when that's the origin), because the research consistently favors
+  "back to the list you came from." If you'd rather always land on the Dashboard's Needs-Action surface, say so and I'll flip
+  the default — it's a one-line change.
+</div>
+
+<h4>Sources</h4>
+<p class="src-list">
+  Maker-checker post-submit / pending tracking: <a href="https://webkul.com/blog/user-guide-unopim-maker-checker-workflow/">Webkul UnoPim</a>,
+  <a href="https://help.moengage.com/hc/en-us/articles/360021206931-Campaign-Approval-Workflow">MoEngage</a>,
+  <a href="https://www.uxpin.com/studio/blog/complex-approvals-app-design/">UXPin — Complex Approvals</a>,
+  <a href="https://www.jotform.com/answers/3420745-approval-workflow-outcome-redirect-to-custom-page">Jotform redirect-after-outcome</a>.
+  Redirect vs stay (PRG): <a href="https://www.gravityforms.com/blog/form-submission-redirect/">Gravity Forms</a>,
+  <a href="https://paperform.co/help/articles/success-pages-and-redirects/">Paperform</a>,
+  <a href="https://ventureharbour.com/form-design-best-practices/">Venture Harbour</a>.
+  Rejection notice + reason: <a href="https://help.xtontech.com/content/administrators-and-power-users/workflow/approving-and-rejecting-requests.htm">Xton</a>,
+  <a href="https://help.salesforce.com/s/articleView?id=platform.approvals_step_rejection.htm">Salesforce — rejection behavior</a>,
+  <a href="https://success.mitratech.com/TeamConnect/Enterprise_User_Guide/Workflow_Processes/05_Approving_Rejecting_and_Reviewing_Requests">Mitratech</a>.
+  "Back to the list you came from": <a href="https://www.merveilleux.design/en/blog/article/comprehensive-guide-for-saas-products-on-ux-navigation-types">Merveilleux — SaaS nav</a>,
+  <a href="https://www.eleken.co/blog-posts/ux-navigation-design">Eleken</a>,
+  <a href="https://www.pencilandpaper.io/articles/ux-pattern-analysis-navigation">Pencil &amp; Paper</a>.
+  Recall/revise/resubmit: <a href="https://help.salesforce.com/s/articleView?id=platform.approvals_users_recall.htm">Salesforce — recall</a>.
+</p>
+
+<!-- ============================================================ -->
+<h2 id="h6">7 · H6 decision — the "Cancel" exit</h2>
+<p>You deferred this to me. Here's the call and the reasoning.</p>
+<p><b>Keep the word "Cancel"</b> (you chose it deliberately over "Discard changes"). The misread isn't the word — it's the
+  <i>treatment</i>: it's rendered <code>text-destructive</code> (red) and buried as the first ⋯-menu item directly above
+  "Archive", so it reads as "cancel <i>the lease</i>." Two changes fix that without re-litigating the label:</p>
+<ol>
+  <li><b>Strip the destructive-red.</b> Reserve red for genuinely destructive/terminal actions (Archive, delete). Cancelling an
+    edit session is non-destructive — it just discards unsaved staged edits and re-locks; the lease is untouched.</li>
+  <li><b>Surface it as a visible inline secondary</b> next to "Submit for approval" at <code>sm</code>+ widths (see mock §4.1),
+    instead of hiding the escape hatch in an overflow menu. Below <code>sm</code> it collapses into the ⋯ menu as a
+    <i>neutral</i> (not red) item — honoring the original responsive concern (LeaseReview.tsx:2916) that the bar mustn't
+    overflow off-screen.</li>
+  <li><b>Tighten the confirm dialog copy</b> so the scope is unmistakable: <i>"Discard your unsaved changes? The lease keeps its
+    current terms — nothing is submitted."</i></li>
+</ol>
+<pre><code><span class="c">// LeaseReview.tsx:2920 — inline non-destructive Cancel at sm+, neutral in ⋯ below sm</span>
+&lt;Button size=<span class="s">"sm"</span> variant=<span class="s">"outline"</span> className=<span class="s">"hidden sm:inline-flex"</span>
+  onClick={() =&gt; setCancelChangeSetDialogOpen(<span class="k">true</span>)} disabled={cancelingChangeSet}&gt;
+  Cancel
+&lt;/Button&gt;
+<span class="c">// …Submit button… then ⋯ menu — the menu item loses text-destructive and only shows below sm:</span>
+&lt;DropdownMenuItem className=<span class="s">"sm:hidden"</span> onClick={() =&gt; setCancelChangeSetDialogOpen(<span class="k">true</span>)}&gt;
+  &lt;X className=<span class="s">"h-4 w-4 mr-2"</span> /&gt; Cancel
+&lt;/DropdownMenuItem&gt;</code></pre>
+<p><b>File:</b> <span class="filechip">LeaseReview.tsx</span> + the cancel-dialog copy (+ locales). You said you want to "see how
+  this shakes out" — the mock in §4.1 is the shape; I'll preview it before committing.</p>
+
+<!-- ============================================================ -->
+<h2 id="phasing">8 · Phasing &amp; sequencing</h2>
+<table>
+  <thead><tr><th>Phase</th><th>Contents</th><th>Why grouped</th></tr></thead>
+  <tbody>
+    <tr><td><b>Phase A — Mode coherence</b><br><span class="pill scope">core</span></td>
+      <td>C1, C2, H1, H2, H3, H4, H5, H6, H8. All gated on the same <code>isUnlockedDraft</code> / <code>hideConfidence</code> /
+        <code>lifecycleStatus==='active'</code> conditions.</td>
+      <td>One conceptual change ("active edit is a calm mode"), one set of gates, one preview to verify. Pure presentation —
+        no schema, no edge functions.</td></tr>
+    <tr><td><b>Phase B — Post-action flow</b><br><span class="pill decided">H7</span></td>
+      <td>Submit → toast + redirect-to-list; rejection → submitter notification + verdict banner with Revise/Dismiss; approver →
+        back to queue.</td>
+      <td>Touches navigation + a notification write + reading the terminal <code>rejected</code> change set. Larger blast radius
+        (integrity + security review); kept separate from the cosmetic phase.</td></tr>
+    <tr><td><b>Phase C — Layout polish</b><br><span class="pill med">later</span></td>
+      <td>Mediums: tab crowding, concentric card borders, content max-w jump, 9px badge type, "Initializing Cockpit…" copy,
+        card-header drift.</td>
+      <td>Independent, low-risk, can land anytime; not blocking the felt-experience fix.</td></tr>
+  </tbody>
+</table>
+<p><b>Recommended order:</b> Phase A first (it resolves everything visible in your screenshot and is preview-verifiable in one
+  pass), then Phase B (the dead-end flow), then Phase C.</p>
+
+<!-- ============================================================ -->
+<h2 id="testing">9 · Test plan &amp; reviewer routing</h2>
+<h4>State walk to verify (the discipline I skipped before)</h4>
+<ul>
+  <li>Active + locked → <code>LockedLeaseDetail</code> (unchanged; spot-check it doesn't inherit alarm borders).</li>
+  <li>Active + unlocked, 0 staged → strip "Make your edits…", no alarm, no Reviewed pills, one Editing badge.</li>
+  <li>Active + unlocked, N staged → strip "N changes staged — submit for approval", Submit + Cancel visible.</li>
+  <li>Submitted → pending → redirected to list; lease shows "Changes pending approval" on return.</li>
+  <li>Rejected → submitter notified; verdict banner on return with reason + Revise/Dismiss.</li>
+  <li>First-time intake (NOT active) → confidence accents + source links + Reviewed funnel all still present (no regression).</li>
+  <li>Narrow viewport (&lt;640px) → Cancel collapses into a neutral ⋯ item; gutters align.</li>
+</ul>
+<h4>Automated</h4>
+<ul>
+  <li>Unit: <code>deriveState()</code> returns the edit-session / active branches for the new inputs (extend
+    <span class="filechip">LeaseReviewStatusStrip</span> tests).</li>
+  <li>Unit: <code>getFieldBorderClass</code> returns <code>''</code> when <code>hideConfidence</code>.</li>
+  <li>Existing <span class="filechip">unlockedDraftActionBar.test.ts</span> updated for the inline Cancel.</li>
+</ul>
+<h4>Reviewer routing (mandatory before "complete")</h4>
+<ul>
+  <li><b>Phase A:</b> lease-product-polish + lease-layout-design-reviewer (the surfaces that changed) + auditor + security + test-author.</li>
+  <li><b>Phase B:</b> add lease-repository-integrity-reviewer (notification write, reading the rejected change set, attribution)
+    — this is a data/audit path.</li>
+  <li>Surface every Critical/High back to you with my true-vs-false read <i>before</i> any fix.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="asks">10 · What I need from you</h2>
+<ol>
+  <li><b>Green-light Phase A</b> (the mode-coherence fix, C1/C2/H1–H6/H8) to implement + preview, or tell me which items to hold.</li>
+  <li><b>H7 default destination:</b> OK to default the submitter-after-submit redirect to <b>Leases</b> (referrer-aware), per the
+    research? Or do you want it to always land on the <b>Dashboard</b>?</li>
+  <li><b>H7 scope:</b> is the rejection <b>verdict banner + submitter notification</b> in scope for Phase B now, or do you want
+    just the submit-side redirect first and the rejection surface as a follow-up?</li>
+  <li><b>Screenshot check:</b> did the field rows in your shot show colored <i>percentages</i>, or just colored <i>borders</i>?
+    If percentages, the lease was in needs-review (not active) and I'll widen C2's gate accordingly.</li>
+</ol>
+
+<p style="margin-top:40px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--line); padding-top:14px">
+  Generated for review. No code changed yet. Reviewer findings (lease-product-polish, lease-layout-design-reviewer) are the
+  source for the C/H items; H7 destinations are grounded in the sources listed in §6.
+</p>
+
+</div>
+</body>
+</html>
