@@ -35,6 +35,7 @@
   .callout{border-left:4px solid var(--brand);background:#eefaf4;border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0}
   .callout.warn{border-color:var(--high);background:#fff7ed}
   .conv{display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:6px}
+  .newf{display:inline-block;background:#0e9f6e;color:#fff;font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;border-radius:6px;padding:1px 7px;margin-left:6px}
   .footnote{font-size:12px;color:var(--muted)}
   hr{border:0;border-top:1px solid var(--line);margin:34px 0}
   .legend span{margin-right:14px;font-size:12px}
@@ -47,7 +48,7 @@
   <h1>Lease Review — Polish &amp; Refinement Suggestions</h1>
   <p>Four-lane review of the confirmation workbench (polish · layout · repository-integrity · code-auditor), state-walked, not diffed.</p>
 </header>
-<div class="sub">Surface: <code>src/pages/app/LeaseReview.tsx</code> (~3,900 lines) + cluster · 2026-06-26 · <b>suggestions only — nothing changed</b></div>
+<div class="sub">Surface: <code>src/pages/app/LeaseReview.tsx</code> (~3,900 lines) + cluster · 2026-06-26 · <b>suggestions only — nothing changed</b> · <span class="newf">+ felt-journey 2nd pass</span></div>
 
 <div class="card">
   <b>What this is.</b> Same treatment we just gave the Leases table: I ran the whole Lease Review workbench through four
@@ -70,7 +71,12 @@
     <li><b>You can approve a lease you never reviewed.</b> Confirmation state bleeds between leases (no per-lease reset), so opening a confirmed lease then navigating to an unreviewed one shows it "Ready to Approve."</li>
     <li><b>Unlocking to edit rent/options strands you read-only</b> — the two fields people most often unlock for stay locked.</li>
     <li><b>The workbench can't scroll</b> on a normal laptop (fixed-height shell + triple-nested scroll), and <b>the PDF/form split never goes responsive</b> — two cramped half-panes on a tablet.</li>
+    <li><b>Two more from a deeper felt-journey pass:</b> unsaved edits vanish when you click the sidebar (no in-app nav guard — <code>beforeunload</code> only catches browser close), and the "show me where in the lease this came from" source-verify gesture is a 12px unlabeled sparkle almost nobody will discover.</li>
   </ul>
+</div>
+
+<div class="callout">
+  <b>What's already strong — don't touch.</b> The deeper pass also confirmed the floor is high in places: the status strip is genuinely well-built — live progress (<i>"X of 7 confirmed"</i>), it <b>names the remaining sections</b> inline, offers a bulk "mark all" action, and the primary button intelligently flips to "Review N flagged fields." The "what do I do next?" question is largely answered. PDF source-linking exists (just under-surfaced — A-row below) and a dirty-state Save guard exists (just incomplete for in-app nav — A-row below). Everything below is polish on a solid base, not a rebuild.
 </div>
 
 <!-- STREAM A -->
@@ -93,6 +99,26 @@
     <td><b>Split-pane never goes responsive.</b> At ≤1024px the 50/50 split gives ~360px each — PDF unreadable, form crushed, no vertical stack.</td>
     <td class="loc">ResizablePanelGroup ~:3060</td>
     <td>Below <code>lg</code>, single-column form with the PDF in its Documents tab (the fallback already exists) — gate the panel group on a width media query.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Unsaved edits vanish on in-app navigation.</b> The dirty-state guard is <code>beforeunload</code>-only — it catches browser close/refresh but NOT react-router nav. Edit fields, click "Portfolio"/"Leases"/back → silent data loss, no warning. <span class="newf">2nd pass</span></td>
+    <td class="loc">:380 (no useBlocker)</td>
+    <td>Add react-router <code>useBlocker</code>; reuse the existing "Discard edits?" <code>AlertDialog</code> already built for in-page discard.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>The PDF source-verify gesture is nearly invisible.</b> Per-field "see exactly where in the lease this came from" is a 12px unlabeled sparkle inside the input, discoverable only by hovering for a tooltip — reads as decoration, not an action. The single most trust-building gesture in an AI-extraction product. <span class="newf">2nd pass</span></td>
+    <td class="loc">LeaseReviewSections.tsx:241-260</td>
+    <td>Make it a labeled affordance ("View source") visible on row hover, and/or a one-time coachmark on the first lease.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>One-click "Mark all required reviewed" is in tension with the attestation promise</b> — lets a user rubber-stamp all 7 tabs without opening any, compounding the cross-lease-bleed CRITICAL. A speed feature that can become a rubber stamp. <span class="newf">2nd pass</span> <span class="footnote">(product call — flagging, not auto-fixing)</span></td>
+    <td class="loc">:1477</td>
+    <td>Keep for speed but gate on flagged/low-confidence fields being visited first, or reframe as "Mark remaining reviewed" once flagged are cleared.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>No "done!" moment after approval.</b> Locking shows a bare toast, refetches, and the page silently morphs into the locked layout (a layout swap) — anticlimactic and slightly disorienting, with no onward path. <span class="newf">2nd pass</span></td>
+    <td class="loc">:1138</td>
+    <td>Brief success state + a clear next-step CTA ("View in portfolio" / "Upload another"); smooth the layout transition.</td></tr>
+  <tr><td><span class="pill c-low">LOW</span></td>
+    <td><b>No first-run orientation.</b> A first-time user lands on a dense 7-tab workbench (tiny all-caps labels) with no "here's how review works." The strip carries them, but the critical first lease deserves more. <span class="newf">2nd pass</span></td>
+    <td class="loc">first-visit only</td>
+    <td>Optional one-time coachmark: sparkle = verify source → confirm each tab → approve.</td></tr>
   <tr><td><span class="pill c-high">HIGH</span></td>
     <td><b>"Cancel Request" uses native <code>window.confirm</code></b> for an irreversible action ("can't resubmit") — weakest possible confirmation, while reversible "Discard edits" correctly uses a styled dialog.</td>
     <td class="loc">:2141</td>
@@ -239,8 +265,8 @@
 <h2>Recommended sequence</h2>
 <div class="card">
   <ul class="tight">
-    <li><b>Phase 1 — Stop the bleeding (Stream A CRITICALs + the cheap doc fix).</b> <code>key={leaseId}</code> (kills the approve-unreviewed defect), the Rent/Options unlock carve-out, drop the fixed-height shell, responsive split-pane, and fix <code>CLAUDE.md:106</code>. These are the "obvious in a screenshot / breaks the flow" tier — and four of them are small.</li>
-    <li><b>Phase 2 — Felt-flow HIGH/MED (rest of Stream A).</b> <code>window.confirm</code> → AlertDialog, the fabricated-Failed timeout, the 7-tab scroll cue, the rent-table overflow wrapper, localized dates/currency, amendment-truncation tooltip.</li>
+    <li><b>Phase 1 — Stop the bleeding (Stream A CRITICALs + the two felt-journey HIGHs + the cheap doc fix).</b> <code>key={leaseId}</code> (kills the approve-unreviewed defect), the Rent/Options unlock carve-out, drop the fixed-height shell, responsive split-pane, <b>the in-app nav guard</b> (lost edits) and <b>making the source-verify sparkle discoverable</b> (both small, both first-session), and fix <code>CLAUDE.md:106</code>. The "obvious in a screenshot / breaks the flow / loses my work" tier.</li>
+    <li><b>Phase 2 — Felt-flow HIGH/MED (rest of Stream A).</b> <code>window.confirm</code> → AlertDialog, the fabricated-Failed timeout, the 7-tab scroll cue, the rent-table overflow wrapper, localized dates/currency, amendment-truncation tooltip, <b>the post-approval "done" moment</b>, and the optional first-run coachmark.</li>
     <li><b>Phase 3 — Design-system pass (Stream B + Stream D cleanup).</b> Adopt <code>PageLayout</code>, unify locked-vs-editable, consolidate banners/badges/type-scale/greens, delete the dead code. One coherent "make it feel designed" sweep.</li>
     <li><b>Phase 4 — Integrity/governance (Stream C), separately.</b> Server-side approval gate, the audit rows for un-approve + rent-schedule edits, the rent coercion. These need edge-function work + your call on scope; they're not UI and shouldn't ride a styling PR.</li>
   </ul>
@@ -248,7 +274,7 @@
 </div>
 
 <div class="callout">
-  <b>My recommendation:</b> greenlight <b>Phase 1</b> now (the two attestation/edit CRITICALs + the scroll/responsive CRITICALs are the ones a buyer hits immediately), then we sequence 2–4. Tell me which streams/phases you want and I'll implement against your call, reviewer-gated, and put it up — exactly the cadence we used on the table.
+  <b>My recommendation:</b> greenlight <b>Phase 1</b> now (the two attestation/edit CRITICALs + the scroll/responsive CRITICALs + the two felt-journey HIGHs are the ones a buyer hits in the first session), then we sequence 2–4. <b>One item needs your decision, not a fix:</b> the one-click "Mark all required reviewed" (Stream A, MED) trades attestation rigor for speed — tell me <i>keep / gate / reframe</i>. Tell me which streams/phases you want and I'll implement against your call, reviewer-gated, and put it up — exactly the cadence we used on the table.
 </div>
 
 <p class="footnote">No code changed by this document. Generated 2026-06-26 · LeaseIO · Lease Review review.</p>
