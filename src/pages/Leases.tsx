@@ -466,7 +466,9 @@ export default function Leases() {
       max = Math.max(max, inner ? inner.scrollWidth : cell.scrollWidth);
     });
     const CELL_PADDING_PX = 24; // px-3 both sides
-    const targetPct = ((max + CELL_PADDING_PX) / (table.offsetWidth || 1)) * 100;
+    // Cap the target so auto-fitting a very long value (a 60-char address) can't
+    // pull every other column down toward the floor and crush them.
+    const targetPct = Math.min(40, ((max + CELL_PADDING_PX) / (table.offsetWidth || 1)) * 100);
     setColumnWidths((w) => autoFitColumn(w, key, targetPct));
   };
 
@@ -774,11 +776,14 @@ export default function Leases() {
                   discoverable recovery from a dragged-too-far column. */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label={t('leases.columns_menu')} className="shrink-0">
-                    <Columns3 className="h-4 w-4" />
+                  {/* Labeled (not icon-only) so it's discoverable and distinct from
+                      the icon-only Export button beside it. */}
+                  <Button variant="outline" size="sm" className="shrink-0" title={t('leases.columns_menu')}>
+                    <Columns3 className="h-4 w-4 lg:mr-2" />
+                    <span className="hidden lg:inline">{t('leases.columns_menu')}</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>{t('leases.show_columns')}</DropdownMenuLabel>
                   {HIDEABLE_COLUMNS.map((key) => (
                     <DropdownMenuCheckboxItem
@@ -801,6 +806,10 @@ export default function Leases() {
                     <RotateCcw className="mr-2 h-4 w-4" />
                     {t('leases.reset_columns')}
                   </DropdownMenuItem>
+                  {/* Announce the auto-fit gesture where users actually look (the
+                      divider hover-tooltip alone is undiscoverable). */}
+                  <DropdownMenuSeparator />
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">{t('leases.autofit_hint')}</p>
                 </DropdownMenuContent>
               </DropdownMenu>
               {/* Export — overflow (CSV now; Excel arrives with the library decision). */}
