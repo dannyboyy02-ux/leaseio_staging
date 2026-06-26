@@ -2737,16 +2737,30 @@ Also noted (LOW, optional): the four bare-text cells (`monthly_rent`/`lease_star
 
 ---
 
-### Item #158: Change-set concurrency — no DB guard for "one open change set per lease" + unlock-while-pending (MEDIUM, pre-existing)
+### Item #158: Change-set concurrency — no DB guard for "one open change set per lease" + unlock-while-pending — RESOLVED 2026-06-26
 
-> **Filed 2026-06-26** — surfaced while answering an owner question about what happens when two users edit/submit the same locked lease. Pre-existing; the change-set/unlock model in `lease-governance-action`. NOT a copy issue.
+> **Filed + RESOLVED 2026-06-26** (branch `claude/changeset-concurrency-guard`, its own PR). The change-set/unlock model in `lease-governance-action`.
 
-**Design intent (works in the happy path):** the system supports **one open change set per lease at a time**, serialized two ways — (a) you can only `direct_unlock` a lease that is `model_locked` (`index.ts:358`), and (b) `createDraftChangeSet` *reuses* any existing `draft`-or-`pending_approval` change set instead of creating a second (`index.ts:187-205`). Approval is **whole-change-set, all-or-nothing** (`approve_change_set` applies every item; there is no per-field or per-user accept/reject). So the approver never sees "user 1's vs user 2's competing values to choose between" — that model does not exist.
+**Design intent (works in the happy path):** one open change set per lease at a time, serialized by (a) only a `model_locked` lease can be unlocked and (b) `createDraftChangeSet` *reuses* any existing `draft`/`pending_approval` set. Approval is **whole-change-set, all-or-nothing** — there is no per-field or per-user accept/reject, and the approver never sees "user 1 vs user 2 competing values."
 
-**Gap 1 — duplicate drafts under a race (the code comment admits the failure mode):** `createDraftChangeSet`'s "reuse" is a read-then-insert with **no DB unique constraint** (only the non-unique `idx_lease_change_sets_lease_id`). Two concurrent unlock calls can each read "no existing" and both insert → two `draft` change sets for one lease. The frontend then does `maybeSingle()`, which **returns null on multiple matches and silently disables editing** (per the comment at `index.ts:188-190`). So the race doesn't corrupt data, but it bricks the edit UI for that lease until one draft is cleared.
+**Gap 1 (resolved):** `createDraftChangeSet`'s reuse was a read-then-insert with **no DB unique constraint**, so two concurrent unlocks could both insert → two open change sets for one lease (the frontend then resolves "the lease's open set" expecting exactly one). **Fix:** partial unique index `lease_change_sets_one_open_per_lease ON lease_change_sets (lease_id) WHERE status IN ('draft','pending_approval')` (migration `20260626150000`) makes it a DB invariant; `createDraftChangeSet` now catches the 23505 the losing concurrent insert receives and re-selects the winner (reuse).
 
-**Gap 2 — unlock-while-pending yields an inconsistent state:** `direct_unlock` guards only on `model_locked && lifecycle_status==='active'` (`index.ts:358`) — it does **not** check for an existing `pending_approval` change set. While CS1 is pending approval (lease `model_locked=true`), a second admin's Unlock passes the guard, `createDraftChangeSet` *reuses* the pending CS1 (returns `created=false`), and the lease is set `model_locked=false`. Result: the lease is **unlocked but not editable** (the frontend's `isUnlockedForEditing` requires `activeChangeSet.status==='draft'`, but CS1 is `pending_approval`), and a pending change set now sits on an unlocked lease. The "Admin: Unlock to edit" card (`LeaseReview.tsx:~3412`) is gated on `model_locked && !pendingUnlockRequest` but does NOT check for a pending change SET, so it's offered in exactly this state.
+**Gap 2 (resolved):** `direct_unlock` guarded only on `model_locked && active` — it did not reject when a `pending_approval` change set already existed, so a second admin's unlock reused the pending set and left the lease `model_locked=false` but not editable. **Fix:** `hasPendingChangeSet()` + a 409 guard in `direct_unlock` and `approve_unlock_request`.
 
-**Fix (when scoped):** add a partial UNIQUE index `ON lease_change_sets (lease_id) WHERE status IN ('draft','pending_approval')` (closes Gap 1 at the DB; the insert in `createDraftChangeSet` then fails closed and should be caught/retried-as-reuse). For Gap 2, have `direct_unlock`/`approve_unlock_request` reject (409) when a `pending_approval` change set already exists for the lease, and hide the unlock affordance while a change set is pending. Until then, the practical exposure is small (needs two admins acting within the approval window), but it's a real "edit silently disabled" / "lease unlocked while pending" hole.
+**As-built:** migration applied to staging (verified zero pre-existing duplicates first; index confirmed). No in-migration dedupe because `prevent_change_set_field_tampering` blocks `status` writes from the migration role by design — duplicates (if ever) must be cleared via the service-role function before the index can build. Security + integrity reviewed clean.
 
-**Where to look:** `supabase/functions/lease-governance-action/index.ts` (`createDraftChangeSet` 176-220; `direct_unlock` 343-405; `submit_change_set` re-lock 728-736; `approve/reject` 407-490), `src/pages/app/LeaseReview.tsx` (unlock card gating ~3412; `isUnlockedForEditing` ~444), `supabase/migrations/20260516120000_baseline_schema.sql:2655` (the non-unique lease_id index).
+**Where:** `supabase/functions/lease-governance-action/index.ts` (`createDraftChangeSet`, `hasPendingChangeSet`, `direct_unlock`, `approve_unlock_request`), `supabase/migrations/20260626150000_changeset_one_open_per_lease.sql`.
+
+---
+
+### Item #159: `lease_change_sets` INSERT RLS is open to any workspace member — bypasses createDraftChangeSet (MEDIUM, pre-existing)
+
+> **Filed 2026-06-26** — surfaced by the integrity review of the #158 concurrency fix. Pre-existing; NOT introduced by #158 (which actually *hardens* the worst symptom).
+
+**Symptom:** the baseline RLS policy "workspace members can create change sets" (`supabase/migrations/20260516120000_baseline_schema.sql:4534`) is `FOR INSERT WITH CHECK` open to **any** authenticated workspace member, and `prevent_change_set_field_tampering` is `BEFORE UPDATE` only (it does not gate INSERT). So a member can PostgREST-insert a `draft` change set **directly**, bypassing the `createDraftChangeSet` edge path — which emits **no `change_set_created` audit row** and (post-#158) gets a raw 23505 instead of the graceful reuse if it collides with an existing open set. Weakens "every change is attributable."
+
+**Mitigated, not closed, by #158:** the new partial unique index now blocks a *second* open set at the DB layer regardless of writer (the edge-function-only guard never could) — so the duplicate-draft hole is closed, but the un-audited direct INSERT path remains.
+
+**Stub remediation (own PR):** restrict the change-set INSERT policy to `service_role` only (forcing all creation through `createDraftChangeSet`, matching the status-write posture), OR add a `BEFORE INSERT` audit/guard trigger that stamps the creation event. Sweep `lease_change_set_items` INSERT policy in the same pass.
+
+**Where:** `supabase/migrations/20260516120000_baseline_schema.sql:4534` (INSERT policy), `supabase/functions/lease-governance-action/index.ts` (`createDraftChangeSet` — the intended sole creator).
