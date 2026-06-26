@@ -103,7 +103,7 @@ Use this to scope file reads. Do NOT read files outside the relevant group unles
 
 **AI Extraction Pipeline:** `supabase/functions/process_lease/index.ts` (primary, two-pass), `supabase/functions/retry_lease/index.ts`
 
-**Lease Review & Confirmation:** `src/pages/app/LeaseReview.tsx` (primary workbench), `src/components/leases/{ExecutedTermsReview,LeaseReviewSections,NeedsReviewBanner,RentScheduleTable,VarianceReport,FailedLeaseBanner,LeaseStatusBadge}.tsx`, `src/components/lifecycle/LifecycleStatusBadge.tsx`
+**Lease Review & Confirmation:** `src/pages/app/LeaseReview.tsx` (primary workbench), `src/components/leases/{LeaseReviewSections,NeedsReviewBanner,RentScheduleTable,FailedLeaseBanner,LeaseStatusBadge}.tsx`, `src/components/lifecycle/LifecycleStatusBadge.tsx` (ExecutedTermsReview + VarianceReport were deleted 2026-06-04)
 
 **Amendments:** `src/components/leases/{AmendmentChanges,AmendmentsList,UploadAmendmentDialog,UploadExecutedDocumentDialog}.tsx`
 

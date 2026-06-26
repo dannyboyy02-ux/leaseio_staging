@@ -3243,6 +3243,28 @@ export default function LeaseReview() {
                       {lowConfidenceFields.length} fields need attention
                     </Badge>
                   )}
+                  {/* Staged-edits status — lifted here from the General tab so
+                      the "changes are staged for approval" context is identical
+                      on every editable tab (Rent/Options included), not just
+                      General. activeChangeSet only exists for an executed/active
+                      lease in a governed edit session, so this stays hidden in
+                      normal intake/review. */}
+                  {!lease.model_locked && activeChangeSet && (
+                    <Card className="shadow-none border border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
+                      <CardContent className="py-3 px-4">
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                          {activeChangeSet.status === 'draft'
+                            ? 'Unlocked for editing — changes are staged'
+                            : 'Changes pending approval'}
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                          {activeChangeSet.status === 'draft'
+                            ? `Edits are staged for approval — ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} pending.`
+                            : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col px-4 pt-2">
@@ -3281,6 +3303,7 @@ export default function LeaseReview() {
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
+                            sourceViewable={showPdfPanel}
                             onJumpToPage={jumpToPage}
                           />
                         ))}
@@ -3420,25 +3443,7 @@ export default function LeaseReview() {
                                   )}
                                 </CardContent>
                               </Card>
-                            )}
-                            {!lease.model_locked && activeChangeSet && (
-                              <Card className="shadow-none border border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
-                                <CardContent className="py-3 px-4">
-                                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
-                                    {activeChangeSet.status === 'draft'
-                                      ? 'Unlocked for editing — changes are staged'
-                                      : 'Changes pending approval'}
-                                  </p>
-                                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                                    {activeChangeSet.status === 'draft'
-                                      ? `Edits are staged for approval — ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} pending.`
-                                      : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
-                                  </p>
-                                  {/* "Lock & submit" (and Discard, in the ⋯ menu) live in the header actions slot above. */}
-                                </CardContent>
-                              </Card>
-                            )}
-                          </>
+                            )}                          </>
                         )}
                         {renderTabFooter('general')}
                       </TabsContent>
@@ -3457,6 +3462,7 @@ export default function LeaseReview() {
                           onFieldFocus={handleFieldFocus}
                           onFieldBlur={trackFieldCorrection}
                           onFieldStaged={stageFieldImmediate}
+                          sourceViewable={showPdfPanel}
                           onJumpToPage={jumpToPage}
                         />
                         {renderTabFooter('vendor')}
@@ -3471,16 +3477,25 @@ export default function LeaseReview() {
                             form={form}
                             extractedJson={extractedJson}
                             confidenceScores={confidenceScores}
-                            isLocked={isLocked}
+                            isLocked={isLocked && !isUnlockedForEditing}
                             isModelLocked={!!lease?.model_locked}
                             hideConfidence={lifecycleStatus === 'active'}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
+                            sourceViewable={showPdfPanel}
                             onJumpToPage={jumpToPage}
                           />
                         ))}
+                        {/* H1 (integrity): the schedule table is intentionally
+                            NOT carved out for unlock-for-editing. handleScheduleChange
+                            writes rent_schedules directly (no change-set staging,
+                            no audit row), so editing it in a governed unlock
+                            session would produce an un-attributed rent change the
+                            approver never sees. The rent FIELDS above stage through
+                            the change set; hand-editing the schedule on a posted
+                            lease must wait for governed routing (Stream C). */}
                         <RentScheduleTable
                           className="shadow-none"
                           rentSchedule={rentSchedule}
@@ -3503,13 +3518,14 @@ export default function LeaseReview() {
                             form={form}
                             extractedJson={extractedJson}
                             confidenceScores={confidenceScores}
-                            isLocked={isLocked}
+                            isLocked={isLocked && !isUnlockedForEditing}
                             isModelLocked={!!lease?.model_locked}
                             hideConfidence={lifecycleStatus === 'active'}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
+                            sourceViewable={showPdfPanel}
                             onJumpToPage={jumpToPage}
                           />
                         ))}

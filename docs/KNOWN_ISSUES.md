@@ -2708,3 +2708,15 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 **MEDIUM/LOW — user-hidden and responsive-`hidden` are two independent truths.** A column can be `colVisible` (checkbox ticked) yet `display:none` from its responsive class (e.g. `sqft` is `hidden lg:table-cell`). At `md`/`sm` the Columns menu shows a *checked* box for a column that doesn't render → "is it broken?" + the freed-space redistribution is computed over a different set than the menu implies. Fix: make `colVisible` the single source (fold the responsive breakpoints into it, or disable/annotate menu items whose column is breakpoint-hidden at the current width). Deferred with the renormalization above.
 
 Also noted (LOW, optional): the four bare-text cells (`monthly_rent`/`lease_start`/`lease_end`/`sqft`) have no `firstElementChild`, so double-click auto-fit on them falls back to `cell.scrollWidth` (current width) instead of intrinsic content width — graceful (the header measurement still contributes via `Math.max`), just less precise than the element-wrapped columns. Wrap their content in a `block truncate` span to make auto-fit uniform.
+
+---
+
+### Item #156: Lease Review — `LeaseReviewSections.tsx` field UI is hardcoded English (LOW, pre-existing)
+
+> **Filed 2026-06-26** (branch `claude/relaxed-clarke-oksfz4`, Lease Review Phase-1 polish). **Pre-existing** i18n debt surfaced by the product-polish review; the Phase-1 "View in document" affordance joins it but did not introduce the gap. Same class as #68 (intake buttons) and #152 (status-badge labels).
+
+**Symptom:** `SectionCard` never routes copy through `t()` — the field placeholders (`No <label> extracted`, `No asset type specified`), the empty-field caption (`Field is empty — not extracted or not present in document`), and the new `View in document` verify affordance + its `See where the AI found this — page N` tooltip are raw English. A Spanish-language reviewer sees English field chrome on the confirmation workbench while the surrounding app is translated.
+
+**Fix (when scoped):** one i18n sweep over `LeaseReviewSections.tsx` — move all field-chrome copy into `common.json` (en + es), polish-review the Spanish. Bundle with #68/#152 if a dedicated i18n pass is scheduled rather than fixing piecemeal.
+
+**Where to look:** `src/components/leases/LeaseReviewSections.tsx` (placeholders, empty caption, the `sourceViewable` affordance + tooltip).
