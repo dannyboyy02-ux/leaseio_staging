@@ -3443,7 +3443,8 @@ export default function LeaseReview() {
                                   )}
                                 </CardContent>
                               </Card>
-                            )}                          </>
+                            )}
+                          </>
                         )}
                         {renderTabFooter('general')}
                       </TabsContent>

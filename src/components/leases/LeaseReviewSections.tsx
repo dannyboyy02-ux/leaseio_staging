@@ -241,7 +241,7 @@ export function SectionCard({
           // Auto-resize ref for textareas (plain function, no hook needed)
 
           return (
-            <div key={field.id} className="group">
+            <div key={field.id}>
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />
