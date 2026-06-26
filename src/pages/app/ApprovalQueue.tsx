@@ -1538,7 +1538,7 @@ export default function ApprovalQueue() {
             </DialogTitle>
             <DialogDescription>
               {changeSetActType === 'approve'
-                ? `Approving will apply ${changeSetActTarget?.items.length ?? 0} field change(s) to "${changeSetActTarget?.leaseName}". The lease stays locked.`
+                ? `Approving will apply ${changeSetActTarget?.items.length ?? 0} field change(s) to "${changeSetActTarget?.leaseName}".`
                 : `Rejecting discards the proposed changes — the lease keeps its current terms and stays locked.`}
             </DialogDescription>
           </DialogHeader>

@@ -2791,12 +2791,11 @@ export default function LeaseReview() {
     }
     if (canShowLock) {
       return {
-        label: 'Lock',
+        label: lifecycleStatus === 'executed' ? 'Activate' : 'Lock',
         icon: Lock,
         onClick: () => setLockConfirmDialogOpen(true),
         loading: submittingChanges,
         variant: 'success',
-        tooltip: 'Lock and activate this lease — this is irreversible',
       };
     }
     if (isApproved && !lease.model_locked) {
@@ -2925,7 +2924,7 @@ export default function LeaseReview() {
                   onClick={async () => { await flushStagedEdits(); setLockConfirmDialogOpen(true); }}
                   disabled={submittingChanges || saving}
                   title={stagedItemCount > 0
-                    ? 'Submit your changes for approval — the lease stays locked'
+                    ? 'Submit your changes for approval'
                     : 'Lock this lease (no changes to submit)'}
                 >
                   {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
@@ -3273,7 +3272,7 @@ export default function LeaseReview() {
                         <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
                           {activeChangeSet.status === 'draft'
                             ? 'Your changes need approval before they apply to the lease.'
-                            : 'Your proposed changes are with your financial approver. The lease stays locked until they decide.'}
+                            : 'Your proposed changes are with your financial approver.'}
                         </p>
                       </CardContent>
                     </Card>
@@ -3686,7 +3685,7 @@ export default function LeaseReview() {
             lifecycle transition (skips approved → executed) and a governance
             bypass (it was silently rejected by the workflow trigger anyway).
             under_review requests advance through the Approval Queue (linked in
-            the header); a reviewed executed lease activates via Lock & Activate. */}
+            the header); a reviewed executed lease activates via Activate. */}
       </div>
 
       {/* Rename Dialog */}
@@ -3774,13 +3773,13 @@ export default function LeaseReview() {
                       ? `Submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''} for approval`
                       : isEmptyDraftRelock
                         ? 'Lock this lease'
-                        : 'Lock & activate this lease'}
+                        : lifecycleStatus === 'executed' ? 'Activate this lease?' : 'Lock this lease'}
                   </DialogTitle>
                   <DialogDescription>
                     {isReLock
                       ? adminCanSelfApprove
-                        ? 'As an admin you can apply your changes immediately, or route them through another admin for approval. Either way the lease stays locked.'
-                        : 'Your changes will be submitted for financial approval. The lease stays locked while it\'s reviewed. Approved changes apply to the live record; rejected ones are dropped.'
+                        ? 'As an admin you can apply your changes immediately, or route them through another admin for approval.'
+                        : 'Your changes will be submitted for financial approval. Approved changes apply to the live record; rejected ones are dropped.'
                       : isEmptyDraftRelock
                         ? 'You unlocked this lease but didn\'t make any edits. Locking now will discard the empty edit session and return the lease to its prior locked state.'
                         : 'This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.'}
@@ -3797,7 +3796,7 @@ export default function LeaseReview() {
                 {adminCanSelfApprove && (
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
                     <p><strong className="text-foreground">Apply</strong> — changes take effect immediately. Recorded as self-approved by admin role.</p>
-                    <p><strong className="text-foreground">Request Approval</strong> — another admin reviews. Lease stays locked while pending.</p>
+                    <p><strong className="text-foreground">Request Approval</strong> — another admin reviews.</p>
                   </div>
                 )}
                 {/* Approver picker for the Request Approval flow. Always shown
@@ -3884,7 +3883,7 @@ export default function LeaseReview() {
                         : undefined}
                     >
                       {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-                      {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Lock' : 'Lock & Activate'}
+                      {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Lock' : (lifecycleStatus === 'executed' ? 'Activate' : 'Lock')}
                     </Button>
                   )}
                 </DialogFooter>
