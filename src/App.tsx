@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
 import { FirmProvider } from "@/contexts/FirmContext";
@@ -42,6 +42,18 @@ const Reports = lazy(() => import("./pages/Reports"));
 const Onboarding = lazy(() => import("./pages/app/Onboarding"));
 const LeaseReview = lazy(() => import("./pages/app/LeaseReview"));
 const LeaseReportDetail = lazy(() => import("./pages/app/LeaseReportDetail"));
+
+// Remount the lease workbench whenever the lease changes. Without a key,
+// per-lease review state (confirmed sections, audit log, flagged-field
+// interactions) lives on the reused component instance and can bleed from a
+// confirmed lease into an unreviewed one — showing it "Ready to Approve"
+// before anyone has looked at it. Keying on leaseId forces a fresh mount per
+// lease so all such state resets. Navigating between a lease's two routes
+// (/review vs base) keeps the same key, so no spurious remount there.
+function KeyedLeaseReview() {
+  const { leaseId } = useParams();
+  return <LeaseReview key={leaseId} />;
+}
 const PortfolioReportsAdmin = lazy(() => import("./pages/app/PortfolioReportsAdmin"));
 const DisclosureReportLibrary = lazy(() => import("./pages/app/DisclosureReportLibrary"));
 const SignatorReview = lazy(() => import("./pages/app/SignatorReview"));
@@ -179,7 +191,7 @@ const App = () => (
                   path="/app/leases/:leaseId"
                   element={
                     <ProtectedRoute>
-                      <LeaseReview />
+                      <KeyedLeaseReview />
                     </ProtectedRoute>
                   }
                 />
@@ -188,7 +200,7 @@ const App = () => (
                   path="/app/leases/:leaseId/review"
                   element={
                     <ProtectedRoute>
-                      <LeaseReview />
+                      <KeyedLeaseReview />
                     </ProtectedRoute>
                   }
                 />

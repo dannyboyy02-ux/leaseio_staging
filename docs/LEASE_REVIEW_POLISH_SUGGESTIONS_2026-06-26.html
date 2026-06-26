@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lease Review — Polish &amp; Refinement Suggestions (2026-06-26)</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#13201b; --muted:#5b6b63; --line:#e3e8e5;
+    --brand:#0e9f6e; --brand-d:#0b7a54;
+    --crit:#b91c1c; --high:#d97706; --med:#2563eb; --low:#6b7280; --ok:#0e9f6e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:40px 24px 96px}
+  header.hero{background:linear-gradient(135deg,#0e9f6e,#0b7a54);color:#fff;border-radius:18px;padding:32px}
+  header.hero h1{margin:0 0 6px;font-size:26px;letter-spacing:-.4px}
+  header.hero p{margin:0;opacity:.93}
+  .sub{color:var(--muted);font-size:13px;margin:10px 2px 26px}
+  h2{font-size:20px;margin:40px 0 4px;letter-spacing:-.3px}
+  h2 .tag{font-size:12px;font-weight:600;color:#fff;border-radius:7px;padding:3px 8px;margin-right:9px;vertical-align:3px}
+  .ta{background:#b91c1c}.tb{background:#2563eb}.tc{background:#7c3aed}.td{background:#5b6b63}
+  h3{font-size:15px;margin:22px 0 6px}
+  p{margin:9px 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 2px rgba(20,40,30,.04)}
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:#eef2f0;padding:1.5px 6px;border-radius:6px;color:#0b3b2a}
+  .pill{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:2px 7px;border-radius:999px;color:#fff;white-space:nowrap}
+  .c-crit{background:var(--crit)}.c-high{background:var(--high)}.c-med{background:var(--med)}.c-low{background:var(--low)}
+  table.tbl{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
+  table.tbl th,table.tbl td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  table.tbl th{background:#f0f4f2;font-weight:600}
+  table.tbl td:first-child{white-space:nowrap}
+  .loc{font-family:"SF Mono",ui-monospace,monospace;font-size:11.5px;color:#0b3b2a;white-space:nowrap}
+  ul.tight{margin:8px 0;padding-left:20px}ul.tight li{margin:5px 0}
+  .callout{border-left:4px solid var(--brand);background:#eefaf4;border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0}
+  .callout.warn{border-color:var(--high);background:#fff7ed}
+  .conv{display:inline-block;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:6px}
+  .newf{display:inline-block;background:#0e9f6e;color:#fff;font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;border-radius:6px;padding:1px 7px;margin-left:6px}
+  .footnote{font-size:12px;color:var(--muted)}
+  hr{border:0;border-top:1px solid var(--line);margin:34px 0}
+  .legend span{margin-right:14px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>Lease Review — Polish &amp; Refinement Suggestions</h1>
+  <p>Four-lane review of the confirmation workbench (polish · layout · repository-integrity · code-auditor), state-walked, not diffed.</p>
+</header>
+<div class="sub">Surface: <code>src/pages/app/LeaseReview.tsx</code> (~3,900 lines) + cluster · 2026-06-26 · <b>suggestions only — nothing changed</b> · <span class="newf">+ felt-journey 2nd pass</span></div>
+
+<div class="card">
+  <b>What this is.</b> Same treatment we just gave the Leases table: I ran the whole Lease Review workbench through four
+  independent reviewers, each told to walk every lifecycle state (processing → failed → needs-review → per-tab confirm →
+  approve → lock → unlock/change-set → read-only → amendment) and measure against the conventions — not just look at a diff.
+  Findings are grouped into <b>four streams</b> so you can triage each on its own. <b>Nothing is implemented</b>; this is for your
+  fix / defer / dismiss decisions.
+  <div class="legend" style="margin-top:10px">
+    <span><span class="pill c-crit">CRIT</span> blocks/defeats a core flow</span>
+    <span><span class="pill c-high">HIGH</span></span>
+    <span><span class="pill c-med">MED</span></span>
+    <span><span class="pill c-low">LOW</span></span>
+    <span><span class="conv">convergent</span> = multiple reviewers found it</span>
+  </div>
+</div>
+
+<div class="callout" style="border-color:#0e9f6e;background:#eefaf4">
+  <b>▶ Phase 1 — SHIPPED 2026-06-26</b> (branch <code>claude/relaxed-clarke-oksfz4</code>, commits <code>86927d4</code> + <code>57deb2c</code>; 4 reviewers + 2 re-reviewers, all green; typecheck + 1357 tests pass).
+  <ul class="tight" style="margin-bottom:0">
+    <li><b>Done:</b> cross-lease state bleed (<code>key={leaseId}</code>), Rent/Options <i>field</i> unlock carve-out, the source-verify gesture (now a single muted "View in document" affordance, gated on <code>sourceViewable</code> so it never dead-ends on locked/Vault leases), <code>CLAUDE.md:106</code>, plus the mediums (lifted the staged-edits card above the tab strip; muted the affordance palette). The rent-<i>schedule</i> table was deliberately kept locked during unlock — an integrity HIGH the review caught (its writes aren't change-set-staged).</li>
+    <li><b>#3/#4 layout — SHIPPED 2026-06-26</b> (commit <code>82ea506</code>, reviewer-gated): responsive single-column below <code>lg</code> (PDF moves to the Documents tab) + single-scroll column with a sticky tab strip. <b>Implemented headless — pending a Vercel preview pass</b> at desktop/tablet/mobile widths. Pre-existing <code>h-screen</code>-below-banners clip filed as KNOWN_ISSUES #157.</li>
+    <li><b>Still deferred (your call):</b> #5 in-app nav guard (needs a <code>BrowserRouter</code>→data-router migration). Phases 2–4 below remain open.</li>
+    <li><b>Decided:</b> KEEP the one-click "Mark all required reviewed" (positive customer experience).</li>
+  </ul>
+</div>
+
+<div class="callout warn">
+  <b>Headline — 4 CRITICALs, two of them defeat the product's core promise:</b>
+  <ul class="tight" style="margin-bottom:0">
+    <li><b>You can approve a lease you never reviewed.</b> Confirmation state bleeds between leases (no per-lease reset), so opening a confirmed lease then navigating to an unreviewed one shows it "Ready to Approve."</li>
+    <li><b>Unlocking to edit rent/options strands you read-only</b> — the two fields people most often unlock for stay locked.</li>
+    <li><b>The workbench can't scroll</b> on a normal laptop (fixed-height shell + triple-nested scroll), and <b>the PDF/form split never goes responsive</b> — two cramped half-panes on a tablet.</li>
+    <li><b>Two more from a deeper felt-journey pass:</b> unsaved edits vanish when you click the sidebar (no in-app nav guard — <code>beforeunload</code> only catches browser close), and the "show me where in the lease this came from" source-verify gesture is a 12px unlabeled sparkle almost nobody will discover.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <b>What's already strong — don't touch.</b> The deeper pass also confirmed the floor is high in places: the status strip is genuinely well-built — live progress (<i>"X of 7 confirmed"</i>), it <b>names the remaining sections</b> inline, offers a bulk "mark all" action, and the primary button intelligently flips to "Review N flagged fields." The "what do I do next?" question is largely answered. PDF source-linking exists (just under-surfaced — A-row below) and a dirty-state Save guard exists (just incomplete for in-app nav — A-row below). Everything below is polish on a solid base, not a rebuild.
+</div>
+
+<!-- STREAM A -->
+<h2><span class="tag ta">A</span>UX-blocking &amp; felt-flow <span class="footnote" style="font-weight:400">— fix these first; they break or confuse the core review flow</span></h2>
+<table class="tbl">
+  <tr><th>Sev</th><th>Finding</th><th>Location</th><th>Suggested fix</th></tr>
+  <tr><td><span class="pill c-crit">CRIT</span></td>
+    <td><b>Cross-lease state bleed.</b> <code>confirmedSections</code>/<code>auditLog</code>/<code>interactedLowConfFields</code> aren't reset when navigating between leases on the reused component instance → an unreviewed lease shows fully confirmed + "Ready to Approve." Defeats the attestation gate. <span class="conv">polish + auditor</span></td>
+    <td class="loc">LeaseReview.tsx:875-880</td>
+    <td>Add <code>key={leaseId}</code> to the route element (cleanest), or unconditionally reset all three in <code>init()</code>.</td></tr>
+  <tr><td><span class="pill c-crit">CRIT</span></td>
+    <td><b>Rent &amp; Options fields stay locked when unlocked-for-editing.</b> General/Vendor pass <code>isLocked &amp;&amp; !isUnlockedForEditing</code>; Rent/Options pass only <code>isLocked</code> → admin unlocks to change rent/escalation, finds it read-only, no explanation.</td>
+    <td class="loc">:3474, :3506</td>
+    <td>Match General/Vendor: <code>isLocked &amp;&amp; !isUnlockedForEditing</code> on both (and the schedule sub-table).</td></tr>
+  <tr><td><span class="pill c-crit">CRIT</span></td>
+    <td><b>Fixed-height shell breaks scrolling.</b> <code>h-screen max-h-screen overflow-hidden</code> + 3 nested scroll containers → the wheel does nothing unless the cursor is over the inner pane; banners crush the form to a sliver.</td>
+    <td class="loc">:2868</td>
+    <td>Drop the fixed-height shell; let the page scroll naturally; keep the PDF pane sticky if desired.</td></tr>
+  <tr><td><span class="pill c-crit">CRIT</span></td>
+    <td><b>Split-pane never goes responsive.</b> At ≤1024px the 50/50 split gives ~360px each — PDF unreadable, form crushed, no vertical stack.</td>
+    <td class="loc">ResizablePanelGroup ~:3060</td>
+    <td>Below <code>lg</code>, single-column form with the PDF in its Documents tab (the fallback already exists) — gate the panel group on a width media query.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Unsaved edits vanish on in-app navigation.</b> The dirty-state guard is <code>beforeunload</code>-only — it catches browser close/refresh but NOT react-router nav. Edit fields, click "Portfolio"/"Leases"/back → silent data loss, no warning. <span class="newf">2nd pass</span></td>
+    <td class="loc">:380 (no useBlocker)</td>
+    <td>Add react-router <code>useBlocker</code>; reuse the existing "Discard edits?" <code>AlertDialog</code> already built for in-page discard.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>The PDF source-verify gesture is nearly invisible.</b> Per-field "see exactly where in the lease this came from" is a 12px unlabeled sparkle inside the input, discoverable only by hovering for a tooltip — reads as decoration, not an action. The single most trust-building gesture in an AI-extraction product. <span class="newf">2nd pass</span></td>
+    <td class="loc">LeaseReviewSections.tsx:241-260</td>
+    <td>Make it a labeled affordance ("View source") visible on row hover, and/or a one-time coachmark on the first lease.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>One-click "Mark all required reviewed" is in tension with the attestation promise</b> — lets a user rubber-stamp all 7 tabs without opening any, compounding the cross-lease-bleed CRITICAL. A speed feature that can become a rubber stamp. <span class="newf">2nd pass</span> <span class="footnote">(product call — flagging, not auto-fixing)</span></td>
+    <td class="loc">:1477</td>
+    <td>Keep for speed but gate on flagged/low-confidence fields being visited first, or reframe as "Mark remaining reviewed" once flagged are cleared.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>No "done!" moment after approval.</b> Locking shows a bare toast, refetches, and the page silently morphs into the locked layout (a layout swap) — anticlimactic and slightly disorienting, with no onward path. <span class="newf">2nd pass</span></td>
+    <td class="loc">:1138</td>
+    <td>Brief success state + a clear next-step CTA ("View in portfolio" / "Upload another"); smooth the layout transition.</td></tr>
+  <tr><td><span class="pill c-low">LOW</span></td>
+    <td><b>No first-run orientation.</b> A first-time user lands on a dense 7-tab workbench (tiny all-caps labels) with no "here's how review works." The strip carries them, but the critical first lease deserves more. <span class="newf">2nd pass</span></td>
+    <td class="loc">first-visit only</td>
+    <td>Optional one-time coachmark: sparkle = verify source → confirm each tab → approve.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>"Cancel Request" uses native <code>window.confirm</code></b> for an irreversible action ("can't resubmit") — weakest possible confirmation, while reversible "Discard edits" correctly uses a styled dialog.</td>
+    <td class="loc">:2141</td>
+    <td>Use the app's <code>AlertDialog</code> with a destructive confirm + restated consequence.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>The 3-minute client timeout fabricates a "Failed" state</b> — a large doc still extracting server-side is force-failed; user may re-upload (double AI spend) or cancel a good run.</td>
+    <td class="loc">:978-986</td>
+    <td>On client timeout, stop polling and show "still working — check back" rather than writing <code>status='Failed'</code>; let the server own the terminal verdict.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>7-tab strip has no scroll cue.</b> At 50% split (PDF open) the last tabs (Documents, ASC 842 — a headline feature) clip off the right edge with no fade/chevron; users never discover them. <span class="conv">polish + layout</span></td>
+    <td class="loc">:3254</td>
+    <td>Right-edge fade mask or scroll chevrons; or collapse low-traffic tabs into a "More ▾" at narrow widths.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Rent-schedule table has no overflow wrapper.</b> 5 columns (+ wide edit-mode inputs ~600px) inside a ~360-640px panel overflow with no scroll container; the page <code>overflow-hidden</code> can clip the save/cancel buttons. <span class="conv">layout + integrity</span></td>
+    <td class="loc">RentScheduleTable.tsx:200</td>
+    <td>Wrap <code>&lt;Table&gt;</code> in <code>overflow-x-auto</code> + <code>min-w</code>; adopt the Leases-table responsive column pattern; stack the edit row.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Dates render in raw English</b> via <code>date-fns format('MMM d, yyyy')</code> beside localized currency — half-localized rows for es users. Parent rent also hardcodes <code>"$"</code> + <code>toLocaleString</code> (so a free-text <code>base_rent_amount</code> shows "$two months rent"). <span class="conv">polish + layout + auditor</span></td>
+    <td class="loc">:2488, :2497, :3315, :3321; AmendmentsList:188</td>
+    <td>Route dates through <code>formatLocalizedDate(v, language)</code> and the parent rent through <code>formatLocalizedCurrency</code> (same fix family we just applied to the table).</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td>Disabled <b>"Pending Review" header button is visually dominant</b> while dead, competing with the status-strip CTA that's the real next gesture.</td>
+    <td class="loc">:2767-2782</td>
+    <td>De-emphasize the disabled header button so the actionable strip CTA wins the eye.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>Amendment changes truncate to 50 chars</b> with no tooltip/expand — the one surface whose whole job is "see exactly what changed."</td>
+    <td class="loc">AmendmentChanges.tsx:63-66</td>
+    <td>Add <code>title={value}</code> at minimum; render clause-length fields in full (<code>whitespace-pre-wrap</code>) in an aligned old|new grid.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>Rent-schedule empty state</b> hides the Generate CTA when <code>!canGenerate</code> with no statement of which field (base rent / start date) is missing.</td>
+    <td class="loc">RentScheduleTable.tsx:324-342</td>
+    <td>"Add a base rent and lease start date to generate a schedule," pointing at the fields.</td></tr>
+  <tr><td><span class="pill c-low">LOW</span></td>
+    <td>"Initializing Cockpit…" dev-jargon on load; "Lock lease"/"Lock &amp; Activate"/"locked and activated" name one action three ways; repeated "Field is empty…" caption stacks noise; mixed empty tokens (<code>—</code> vs <code>N/A</code>).</td>
+    <td class="loc">:1965, :1138/:3858, Sections:457</td>
+    <td>Plain "Loading lease…"; one verb phrase; show the empty caption on focus only; standardize on <code>—</code>.</td></tr>
+</table>
+
+<!-- STREAM B -->
+<h2><span class="tag tb">B</span>Consistency &amp; design-system <span class="footnote" style="font-weight:400">— the "feels hand-rolled" debt; one pass fixes most</span></h2>
+<table class="tbl">
+  <tr><th>Sev</th><th>Finding</th><th>Location</th><th>Suggested fix</th></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Locked vs editable view = two different products.</b> Same URL: different header component, <b>7 tabs → 8</b> (+Obligations, reordered), fixed-height split → normal scroll, <code>max-w-2xl → max-w-6xl</code>. Activating a lease looks like a layout swap.</td>
+    <td class="loc">LeaseReview vs LockedLeaseDetail.tsx</td>
+    <td>Unify on one header, one tab set/order, one content width so lock/unlock is continuous.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Four container widths, <code>PageLayout</code> primitive never adopted.</b> Walking one lease through its lifecycle, the column width jumps 3×; the repo's own width-drift-killing primitive is unused here.</td>
+    <td class="loc">intake/failed/terminal/locked branches</td>
+    <td>Wrap non-split states in <code>&lt;PageLayout width="wide"&gt;</code>; the split workbench opts into <code>width="full"</code> explicitly.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Form column pinned to <code>max-w-2xl</code> even when the PDF is collapsed</b> — collapsing the PDF to get room just adds ~250px dead gutters while the rent table chokes at 672px.</td>
+    <td class="loc">:3265</td>
+    <td>Make the form max-width responsive to whether the PDF is shown; let tables break out of the prose column.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>Banner stack mixes two visual languages</b> — hand-rolled <code>rounded-lg border bg-*-50</code> divs (purple/blue/amber) next to shadcn <code>&lt;Alert&gt;</code>; up to 5 stack at once with different paddings/icon sizes.</td>
+    <td class="loc">:3109-3245</td>
+    <td>Route all through shadcn <code>&lt;Alert variant&gt;</code> — one banner component.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>One-off micro-typography:</b> confidence badges + labels use <code>text-[9px]/[10px]/[11px]</code> (off-scale, below comfortable legibility) — a noisy 4-tier type stack per field.</td>
+    <td class="loc">LeaseReviewSections.tsx:67-88, 265</td>
+    <td>Collapse to scale steps (<code>text-xs</code>); one reusable <code>ConfidenceBadge</code> size.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>Native <code>&lt;select&gt;</code>/<code>&lt;input list&gt;</code> in the intake-stage editor</b> sit beside shadcn <code>Select</code>/<code>Input</code> — OS chrome vs design-system controls on the same card; grids are hard <code>grid-cols-2</code> with no <code>sm:</code> step (cramped, label-wrapping on tablet).</td>
+    <td class="loc">:2265-2324</td>
+    <td>Use shadcn <code>Select</code>/combobox; <code>grid-cols-1 sm:grid-cols-2</code>.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>Money shown at 3 visual weights</b> with <code>tabular-nums</code> missing on the field/impact displays; <b>two greens</b> for the primary action (header <code>bg-green-600</code> vs dialog <code>bg-success</code>); header CTA hand-concats className instead of a Button variant. <span class="conv">layout</span></td>
+    <td class="loc">RentSchedule:178, :2521; :2962/:3807</td>
+    <td>One numeric ramp + <code>tabular-nums</code> everywhere money appears; add a <code>success</code> Button variant; stop hand-styling the primary.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>Rent-schedule numeric column shifts between view and edit</b> (edit cell lacks <code>text-right</code>; Calendar icon present in view, absent in edit → left edge jumps).</td>
+    <td class="loc">RentScheduleTable.tsx:239-247, 275</td>
+    <td>Hold the right edge across modes; reserve the icon width.</td></tr>
+  <tr><td><span class="pill c-low">LOW</span></td>
+    <td>Amendment diff is ragged inline text (not an aligned old|new grid); orphaned "N fields need attention" bare badge; sparkles-icon padding gap on short read-only values; 3 accent colors for "current/upcoming rent"; tab-strip wrapper class drift between the two views.</td>
+    <td class="loc">AmendmentChanges:93; :3240; Sections:255; RentSchedule:191</td>
+    <td>Minor consolidations; batch with the design-system pass.</td></tr>
+</table>
+
+<!-- STREAM C -->
+<h2><span class="tag tc">C</span>Integrity &amp; governance <span class="footnote" style="font-weight:400">— NOT styling; these need server-side fixes. Surfacing per the Critical/High rule for your decision.</span></h2>
+<p class="footnote">The server-side change-set / unlock governance was judged <b>genuinely strong</b> (service-role-gated, dual-audited, attributable). The gaps are in the <b>legacy client-side</b> approve/lock path and rent-schedule writes.</p>
+<table class="tbl">
+  <tr><th>Sev</th><th>Finding</th><th>Location</th><th>Suggested fix</th></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Approval gate is client-side only.</b> Approval is stored by spreading <code>_approval</code> into <code>extracted_json</code> via a browser UPDATE; that column isn't covered by the workflow guard trigger, and the "all sections reviewed" gate is UI-only. A workspace member could PATCH <code>_approval={approved:true}</code> past section review, and the attribution log row is best-effort.</td>
+    <td class="loc">:1704-1786 (+ guard scope)</td>
+    <td>Move legacy approval through a service-role edge fn (mirror <code>legacy-lease-action</code>) that re-validates <code>confirmed_sections ⊇ required</code> server-side and writes the audit row in the same call.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Un-marking a confirmed tab silently un-approves with NO audit row.</b> Approve attempts a log row; the reversal writes none → an approval state change with zero actor/timestamp.</td>
+    <td class="loc">:1383-1443</td>
+    <td>Write a <code>lease_activity_log</code> row (actor + from→to) in the same operation. (Filed as DF4-Low; re-triage to High — it's an un-attributed approval reversal.)</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b>Rent-schedule edits/deletes/inserts write to the DB with no audit entry or attribution</b> — the rent schedule is the source of truth for current rent + feeds reporting; a bulk <code>delete().in(ids)</code> destroys periods with no record of who/when/from→to.</td>
+    <td class="loc">RentScheduleTable.tsx:98-121 → :1512-1539</td>
+    <td>Emit a <code>lease_activity_log</code> row per mutation (field, old→new, actor); route through change-set governance when locked.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b><code>current_monthly_rent</code> silently coerced</b> (strips non-numeric) while <code>base_rent_amount</code> stores verbatim — faithful-storage asymmetry on a money field ("$2,500/mo" → 2500; es "2.500,00" mis-stores).</td>
+    <td class="loc">:1642, :1727</td>
+    <td>Store the raw confirmed string, or validate-and-reject at entry rather than coerce at write.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>"Lock lease" offered in a state the server 409s</b> (button shown for <code>active</code>; <code>model_lock</code> requires <code>executed</code>) → opaque "Failed to lock" with no path forward.</td>
+    <td class="loc">:2738 vs legacy-lease-action:260</td>
+    <td>Tighten the gate to <code>executed</code>, or have the server accept active+unlocked and surface the precise reason.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>Report-attribute edits log a generic <code>comment</code></b> with no field names / from→to — a real data change with no per-field provenance.</td>
+    <td class="loc">:601-662</td>
+    <td>Capture changed fields with old→new in <code>details</code>, or route through <code>field_corrections</code>.</td></tr>
+  <tr><td><span class="pill c-low">LOW</span></td>
+    <td>Doc-upload / re-abstraction / processing-cancel write client-side rows with self-asserted <code>user_id</code> and file state-changing actions under <code>comment</code>. Pre-filed: DF3 (no optimistic-concurrency guard → last-writer-wins), DF5, DF6, #71, E6 (amendment diff compares only ~12 fields — clauses + rent schedule not compared).</td>
+    <td class="loc">:719-814, :1820</td>
+    <td>First-class activity types + server-side writes for status-mutating ones; the pre-filed items are tracked.</td></tr>
+</table>
+
+<!-- STREAM D -->
+<h2><span class="tag td">D</span>Dead code &amp; doc rot <span class="footnote" style="font-weight:400">— remove to stop the next contributor chasing ghosts</span></h2>
+<table class="tbl">
+  <tr><th>Sev</th><th>Finding</th><th>Location</th><th>Suggested fix</th></tr>
+  <tr><td><span class="pill c-crit">CRIT</span></td>
+    <td><b><code>NeedsReviewBanner</code> is permanently dead</b> — gated on <code>needsReviewStatus(lifecycle_status)</code> which only matches values that aren't valid <code>lifecycle_status</code> (the KNOWN_ISSUES #6 class). The banner can never render; the component is effectively orphaned.</td>
+    <td class="loc">:3151</td>
+    <td>Gate on the AI <code>status</code> column if a real "needs review" value exists (mirror <code>isFailedStatus(lease?.status)</code>), else delete the branch + import + component.</td></tr>
+  <tr><td><span class="pill c-high">HIGH</span></td>
+    <td><b><code>const isPendingApproval = false;</code></b> (literal) makes a whole feature path dead: <code>NudgeApproverButton</code> never renders, the strip's "awaiting approval" state + its 2 locale keys (both locales) are unreachable, and the term is a no-op in <code>isLocked</code>.</td>
+    <td class="loc">:433 (+ :2982, :3047, Strip:143)</td>
+    <td>Decide intent: delete the constant + 4 consumers + 2 locale keys + the Nudge import, OR wire it to a real predicate.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b>~90 lines of dead section-level confirmation machinery</b> (superseded by the tab-level path): <code>requiredSectionTitles</code>/<code>remainingSectionTitles</code>/<code>confirmedSectionCount</code>, <code>handleConfirmSection</code>, <code>handleConfirmAndAdvance</code>, <code>nextUnconfirmedAfter</code>, <code>handleSectionAdvance</code>, <code>SECTION_TO_TAB</code> — zero readers.</td>
+    <td class="loc">:1261-1473, :181</td>
+    <td>Delete after confirming <code>renderTabFooter</code> is the sole confirmation surface.</td></tr>
+  <tr><td><span class="pill c-med">MED</span></td>
+    <td><b><code>CLAUDE.md:106</code> is stale</b> — the file map lists <code>ExecutedTermsReview</code> and <code>VarianceReport</code>, both <b>deleted 2026-06-04</b>. All four reviewers tripped on this. <span class="conv">all 4</span></td>
+    <td class="loc">CLAUDE.md:106</td>
+    <td>Remove the two deleted components from the cluster list (a quick doc-discipline fix, can do now).</td></tr>
+  <tr><td><span class="pill c-low">LOW</span></td>
+    <td><code>lease: any</code> drives 72 <code>as any</code> casts (no compile-time check on column reads — future-drift risk, none phantom today); redundant <code>lifecycleStatusTyped</code>/<code>lifecycle</code> coercions.</td>
+    <td class="loc">:228; :425/:2038</td>
+    <td>Type <code>lease</code> as the generated Row type; reuse one lifecycle coercion. Non-urgent.</td></tr>
+</table>
+
+<!-- SEQUENCING -->
+<hr>
+<h2>Recommended sequence</h2>
+<div class="card">
+  <ul class="tight">
+    <li><b>Phase 1 — Stop the bleeding (Stream A CRITICALs + the two felt-journey HIGHs + the cheap doc fix).</b> <code>key={leaseId}</code> (kills the approve-unreviewed defect), the Rent/Options unlock carve-out, drop the fixed-height shell, responsive split-pane, <b>the in-app nav guard</b> (lost edits) and <b>making the source-verify sparkle discoverable</b> (both small, both first-session), and fix <code>CLAUDE.md:106</code>. The "obvious in a screenshot / breaks the flow / loses my work" tier.</li>
+    <li><b>Phase 2 — Felt-flow HIGH/MED (rest of Stream A).</b> <code>window.confirm</code> → AlertDialog, the fabricated-Failed timeout, the 7-tab scroll cue, the rent-table overflow wrapper, localized dates/currency, amendment-truncation tooltip, <b>the post-approval "done" moment</b>, and the optional first-run coachmark.</li>
+    <li><b>Phase 3 — Design-system pass (Stream B + Stream D cleanup).</b> Adopt <code>PageLayout</code>, unify locked-vs-editable, consolidate banners/badges/type-scale/greens, delete the dead code. One coherent "make it feel designed" sweep.</li>
+    <li><b>Phase 4 — Integrity/governance (Stream C), separately.</b> Server-side approval gate, the audit rows for un-approve + rent-schedule edits, the rent coercion. These need edge-function work + your call on scope; they're not UI and shouldn't ride a styling PR.</li>
+  </ul>
+  <p class="footnote">Each phase = its own reviewed PR, routed through the same reviewers, same as the table work.</p>
+</div>
+
+<div class="callout">
+  <b>My recommendation:</b> greenlight <b>Phase 1</b> now (the two attestation/edit CRITICALs + the scroll/responsive CRITICALs + the two felt-journey HIGHs are the ones a buyer hits in the first session), then we sequence 2–4. <b>One item needs your decision, not a fix:</b> the one-click "Mark all required reviewed" (Stream A, MED) trades attestation rigor for speed — tell me <i>keep / gate / reframe</i>. Tell me which streams/phases you want and I'll implement against your call, reviewer-gated, and put it up — exactly the cadence we used on the table.
+</div>
+
+<p class="footnote">No code changed by this document. Generated 2026-06-26 · LeaseIO · Lease Review review.</p>
+</div>
+</body>
+</html>

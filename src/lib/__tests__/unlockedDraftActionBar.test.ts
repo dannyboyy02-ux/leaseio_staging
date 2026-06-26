@@ -13,8 +13,9 @@ const readRepoFile = (path: string) => readFileSync(join(root, path), 'utf8');
  * the finalize/re-lock dialog (`setLockConfirmDialogOpen(true)`), so the user
  * was stranded — edits staged forever, lease stayed unlocked, no submit path.
  *
- * The fix wires a primary "Lock & submit changes" / "Re-lock" button into that
- * exact branch.
+ * The fix wires a primary "Submit for approval" / "Lock" button into that
+ * exact branch. (Copy was de-jargoned 2026-06-26: "Lock & submit"/"Re-lock"
+ * → "Submit for approval"/"Lock"; the button + wiring are unchanged.)
  *
  * Why this is a NARROWED-WINDOW static test (per CLAUDE.md gotcha): the file
  * also contains an UNREACHABLE `setLockConfirmDialogOpen(true)` at the
@@ -58,11 +59,12 @@ describe('unlocked-draft action bar — finalize/re-lock affordance', () => {
     expect(unlockedDraftBlock).not.toContain('onClick: () => setLockConfirmDialogOpen(true)');
   });
 
-  it('labels the button as a submit/re-lock primary action so it is not removed silently', () => {
+  it('labels the button as a submit/lock primary action so it is not removed silently', () => {
     // Guards against the button being gutted to a no-op or relabeled away from
-    // its submit semantics while keeping the onClick.
-    expect(unlockedDraftBlock).toContain('Lock & submit');
-    expect(unlockedDraftBlock).toContain('Re-lock');
+    // its submit semantics while keeping the onClick. Quoted to match the label
+    // literals (not the <Lock> icon or setLockConfirmDialogOpen identifiers).
+    expect(unlockedDraftBlock).toContain("'Submit for approval'");
+    expect(unlockedDraftBlock).toContain("'Lock'");
   });
 
   it('confirms the unreachable builder call site still exists OUTSIDE the branch (so the narrowing is load-bearing)', () => {

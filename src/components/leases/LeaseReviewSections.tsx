@@ -134,6 +134,10 @@ interface SectionCardProps {
    */
   onFieldStaged?: (fieldId: string, newValue: string) => void;
   onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
+  /** When false, hide the per-field "View in document" affordance — the
+   *  source jump dead-ends when no PDF panel is shown (locked/Vault leases),
+   *  so don't offer a verify gesture that can't deliver. Defaults to true. */
+  sourceViewable?: boolean;
   /** When true, suppress the per-field confidence badge. Set after a lease
    *  has been initially activated — confidence is a review-time signal, not
    *  relevant once the lease is in production use. */
@@ -153,6 +157,7 @@ export function SectionCard({
   onFieldBlur,
   onFieldStaged,
   onJumpToPage,
+  sourceViewable = true,
   hideConfidence = false,
 }: SectionCardProps) {
   const { language } = useLanguage();
@@ -235,38 +240,32 @@ export function SectionCard({
 
           // Auto-resize ref for textareas (plain function, no hook needed)
 
-          // Sparkles affordance — rendered inside the input on the right.
-          // Anthropic/Claude brand orange (#CC785C). Click jumps to + highlights
-          // the source phrase in the PDF.
-          const sparklesAffordance =
-            isAIExtracted && fieldPage ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  locateInPdf();
-                }}
-                onMouseDown={(e) => e.preventDefault()}
-                title={`AI extracted (page ${fieldPage}) — click to highlight source`}
-                className={cn(
-                  "absolute z-20 inline-flex items-center justify-center h-5 w-5 rounded-full",
-                  "bg-[#CC785C]/10 text-[#CC785C] hover:bg-[#CC785C]/20 transition-colors",
-                  field.type === 'textarea' ? 'right-2 top-2' : 'right-2 top-1/2 -translate-y-1/2'
-                )}
-              >
-                <Sparkles size={12} className="fill-[#CC785C]" />
-              </button>
-            ) : null;
-
           return (
-            <div key={field.id} className="group">
+            <div key={field.id}>
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />
                   {field.label}
                   {!isModelLocked && !hideConfidence && <ConfidenceBadge confidence={fieldConfidence} />}
                 </Label>
+                {/* The single "verify against the source document" affordance —
+                    the trust gesture of an AI-extraction product. Muted text so
+                    it doesn't compete with the green/amber/red confidence
+                    palette; the orange sparkle icon alone carries the AI cue.
+                    Always shown (so it's touch-reachable too) but only when a
+                    source PDF is actually viewable — otherwise the jump
+                    dead-ends on locked/Vault leases that show no PDF panel. */}
+                {sourceViewable && isAIExtracted && fieldPage && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); locateInPdf(); }}
+                    title={`See where the AI found this — page ${fieldPage}`}
+                    className="inline-flex items-center gap-1 shrink-0 text-[10px] font-medium text-muted-foreground rounded px-1 py-0.5 transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#CC785C]"
+                  >
+                    <Sparkles size={11} className="fill-[#CC785C] text-[#CC785C]" />
+                    View in document
+                  </button>
+                )}
               </div>
 
               {/* Textarea (auto-resize) */}
@@ -286,12 +285,10 @@ export function SectionCard({
                     placeholder={`No ${field.label.toLowerCase()} extracted`}
                     className={cn(
                       "text-sm resize-none overflow-hidden min-h-[60px]",
-                      sparklesAffordance && "pr-10",
                       getFieldBorderClass(field.id),
                       isReadOnly && "bg-muted/30"
                     )}
                   />
-                  {sparklesAffordance}
                 </div>
               )}
 
@@ -312,7 +309,7 @@ export function SectionCard({
                       onFieldStaged?.(field.id, v);
                     }}
                   >
-                    <SelectTrigger className={cn("text-sm", sparklesAffordance && "pr-10", getFieldBorderClass(field.id))}>
+                    <SelectTrigger className={cn("text-sm", getFieldBorderClass(field.id))}>
                       <SelectValue placeholder="Select asset type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -321,7 +318,6 @@ export function SectionCard({
                       ))}
                     </SelectContent>
                   </Select>
-                  {sparklesAffordance}
                 </div>
               )}
 
@@ -338,13 +334,11 @@ export function SectionCard({
                     placeholder="No asset type specified"
                     className={cn(
                       "text-sm",
-                      sparklesAffordance && "pr-10",
                       getFieldBorderClass(field.id),
                       isReadOnly && "bg-muted/30",
                       !value && "text-muted-foreground italic"
                     )}
                   />
-                  {sparklesAffordance}
                 </div>
               )}
 
@@ -365,12 +359,10 @@ export function SectionCard({
                       placeholder="—"
                       className={cn(
                         "text-sm",
-                        sparklesAffordance && "pr-10",
                         getFieldBorderClass(field.id),
                         isReadOnly && "bg-muted/30"
                       )}
                     />
-                    {sparklesAffordance}
                   </div>
                   <div className="flex rounded-md border overflow-hidden text-xs shrink-0">
                     <button
@@ -398,7 +390,6 @@ export function SectionCard({
                 isReadOnly ? (
                   <div className={cn(
                     "relative text-sm px-3 py-2 rounded-md border bg-muted/30",
-                    sparklesAffordance && "pr-10",
                     getFieldBorderClass(field.id)
                   )}>
                     {value
@@ -407,7 +398,6 @@ export function SectionCard({
                         : formatLocalizedNumber(Number(value), language)
                       : <span className="text-muted-foreground italic">—</span>
                     }
-                    {sparklesAffordance}
                   </div>
                 ) : (
                   <div className="relative">
@@ -421,12 +411,10 @@ export function SectionCard({
                       placeholder={`No ${field.label.toLowerCase()} extracted`}
                       className={cn(
                         "text-sm",
-                        sparklesAffordance && "pr-10",
                         getFieldBorderClass(field.id),
                         !value && "text-muted-foreground italic"
                       )}
                     />
-                    {sparklesAffordance}
                   </div>
                 )
               )}
@@ -444,13 +432,11 @@ export function SectionCard({
                     placeholder={`No ${field.label.toLowerCase()} extracted`}
                     className={cn(
                       "text-sm",
-                      sparklesAffordance && "pr-10",
                       getFieldBorderClass(field.id),
                       isReadOnly && "bg-muted/30",
                       !value && "text-muted-foreground italic"
                     )}
                   />
-                  {sparklesAffordance}
                 </div>
               )}
 
@@ -480,13 +466,16 @@ interface Risk {
 interface RisksSectionProps {
   risks: Risk[];
   onJumpToPage: (page?: number, sourceText?: string, value?: string) => void;
+  /** When false, hide the "(Page N)" citation jump — it dead-ends when no PDF
+   *  panel is shown (locked/Vault leases, or narrow viewports). Defaults true. */
+  sourceViewable?: boolean;
   /** Lease the risks belong to. Required to dismiss; if omitted, dismiss UI is hidden. */
   leaseId?: string;
   /** Called after a successful dismiss so the parent can re-fetch risks. */
   onRisksChanged?: () => void;
 }
 
-export function RisksSection({ risks, onJumpToPage, leaseId, onRisksChanged }: RisksSectionProps) {
+export function RisksSection({ risks, onJumpToPage, sourceViewable = true, leaseId, onRisksChanged }: RisksSectionProps) {
   const [dismissTarget, setDismissTarget] = useState<Risk | null>(null);
   const [dismissReason, setDismissReason] = useState<string>('');
   const [dismissing, setDismissing] = useState<boolean>(false);
@@ -618,7 +607,7 @@ export function RisksSection({ risks, onJumpToPage, leaseId, onRisksChanged }: R
               {risk.citation_snippet && (
                 <div className="text-xs bg-muted/50 p-2 rounded italic">
                   "{risk.citation_snippet}"
-                  {risk.citation_page && (
+                  {sourceViewable && risk.citation_page && (
                     <Button
                       variant="link"
                       size="sm"

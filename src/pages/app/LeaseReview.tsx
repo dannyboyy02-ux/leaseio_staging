@@ -50,7 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsWideViewport } from "@/hooks/use-wide-viewport";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -209,6 +209,9 @@ export default function LeaseReview() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, userRole, userFunctionalRoles, workspace } = useApp();
+  // Drives the responsive layout: the side-by-side PDF/form split only renders
+  // on wide viewports; below `lg` the workbench is a single full-width column.
+  const isWide = useIsWideViewport();
   // Vault (read-only retention) workspaces are view + export only. The server
   // already blocks every write (V1 RLS + config guard); this flag suppresses
   // the mutating UI affordances so a read-only owner sees a clean read-only
@@ -442,7 +445,13 @@ export default function LeaseReview() {
 
   // Show PDF panel alongside tabs when lease is still editable/in-review.
   // Hide it (full-width tabs) when the lease is active and fully locked.
-  const showPdfPanel = lifecycleStatus !== 'active' || !lease?.model_locked;
+  // The left PDF panel renders only when the lease is editable/in-review AND the
+  // viewport is wide enough for a readable two-column split. Below `lg` (or when
+  // the lease is locked), this is false → single full-width column, and the
+  // source PDF is reached via the Documents tab. Gating here cascades to the
+  // panel render, sizing, the collapse control, jumpToPage, and the per-field
+  // "View in document" affordance (so it never dead-ends without a panel).
+  const showPdfPanel = (lifecycleStatus !== 'active' || !lease?.model_locked) && isWide;
 
   // Approval gate: every AI-extracted section must be marked reviewed.
   // No more field-level "verified" carve-out — sections are the unit of
@@ -1115,7 +1124,7 @@ export default function LeaseReview() {
         });
         if (error) throw new Error(error.message ?? 'Lock failed');
         if ((data as any)?.error) throw new Error((data as any).error);
-        toast.success('Lease re-locked (no changes to submit)');
+        toast.success('Lease locked (no changes to submit)');
         refetchLease();
       } catch (err: any) {
         toast.error(`Failed to lock: ${err?.message ?? 'unknown error'}`);
@@ -1609,7 +1618,7 @@ export default function LeaseReview() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       setCancelChangeSetDialogOpen(false);
-      toast.success('Changes discarded. Lease re-locked.');
+      toast.success('Changes discarded. Lease locked.');
       refetchLease();
     } catch (err) {
       console.error('Error canceling change set:', err);
@@ -1890,7 +1899,7 @@ export default function LeaseReview() {
    */
   const handleSubmitChanges = useCallback(async (mode: 'approver' | 'self_approve' = 'approver', requestedApproverId: string | null = null) => {
     if (!lease || !user || !activeChangeSet?.id) return;
-    if (stagedItemCount === 0) { toast.error('No staged changes to submit'); return; }
+    if (stagedItemCount === 0) { toast.error('No changes to submit'); return; }
     setSubmittingChanges(true);
     try {
       const { data, error } = await supabase.functions.invoke('lease-governance-action', {
@@ -1906,7 +1915,7 @@ export default function LeaseReview() {
       if (mode === 'self_approve') {
         toast.success('Changes applied — self-approved by admin role');
       } else {
-        toast.success('Changes submitted for approval — lease re-locked');
+        toast.success('Changes submitted for approval — lease locked');
       }
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       refetchLease();
@@ -2782,7 +2791,7 @@ export default function LeaseReview() {
     }
     if (canShowLock) {
       return {
-        label: 'Lock lease',
+        label: lifecycleStatus === 'executed' ? 'Activate' : 'Lock',
         icon: Lock,
         onClick: () => setLockConfirmDialogOpen(true),
         loading: submittingChanges,
@@ -2887,7 +2896,7 @@ export default function LeaseReview() {
               {isUnlockedDraft && (
                 <Badge className="shrink-0 bg-amber-100 text-amber-800 border border-amber-300 text-xs dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
                   <Unlock size={11} className="mr-1" />
-                  Editing — {stagedItemCount} staged
+                  {stagedItemCount > 0 ? `Editing — ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}` : 'Editing'}
                 </Badge>
               )}
               {isApproved && (
@@ -2900,7 +2909,7 @@ export default function LeaseReview() {
           }
           actions={
             isUnlockedDraft ? (
-              /* Unlocked-for-editing draft. Primary exit: "Lock & submit" — opens
+              /* Unlocked-for-editing draft. Primary exit: "Submit for approval" — opens
                  the finalize dialog (submit_change_set / self-approve / empty-draft
                  re-lock, all attributable) AND first flushes any dirty-but-unblurred
                  edit into the change set so a just-typed value can't be dropped.
@@ -2915,13 +2924,11 @@ export default function LeaseReview() {
                   onClick={async () => { await flushStagedEdits(); setLockConfirmDialogOpen(true); }}
                   disabled={submittingChanges || saving}
                   title={stagedItemCount > 0
-                    ? 'Re-lock the lease and route your staged edits for approval'
-                    : 'Re-lock this lease (no staged changes)'}
+                    ? 'Submit your changes for approval'
+                    : 'Lock this lease (no changes to submit)'}
                 >
                   {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
-                  {stagedItemCount > 0
-                    ? `Lock & submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}`
-                    : 'Re-lock'}
+                  {stagedItemCount > 0 ? 'Submit for approval' : 'Lock'}
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -2936,7 +2943,7 @@ export default function LeaseReview() {
                       className="text-destructive focus:text-destructive"
                     >
                       <X className="h-4 w-4 mr-2" />
-                      Discard edits & re-lock
+                      Cancel
                     </DropdownMenuItem>
                     {(userRole === 'admin' || userRole === 'owner') && (
                       <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
@@ -3103,7 +3110,12 @@ export default function LeaseReview() {
 
             {/* Right Panel: Tabbed Review */}
             <ResizablePanel defaultSize={showPdfPanel ? 50 : 100} minSize={30}>
-              <div className="flex h-full flex-col bg-background">
+              {/* The whole right column scrolls as one (banners + tab content),
+                  so a tall banner stack scrolls away instead of crushing the
+                  form to a sliver, and the wheel works anywhere over the column
+                  — not only over a nested inner scroll pane. The tab strip stays
+                  pinned via `sticky` below. */}
+              <div className="flex h-full flex-col bg-background overflow-y-auto">
 
                 {/* Global banners */}
                 <div className="px-4 pt-3 space-y-2">
@@ -3243,15 +3255,37 @@ export default function LeaseReview() {
                       {lowConfidenceFields.length} fields need attention
                     </Badge>
                   )}
+                  {/* Staged-edits status — lifted here from the General tab so
+                      the "changes need approval" context is identical
+                      on every editable tab (Rent/Options included), not just
+                      General. activeChangeSet only exists for an executed/active
+                      lease in a governed edit session, so this stays hidden in
+                      normal intake/review. */}
+                  {!lease.model_locked && activeChangeSet && (
+                    <Card className="shadow-none border border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
+                      <CardContent className="py-3 px-4">
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                          {activeChangeSet.status === 'draft'
+                            ? 'Editing — changes need approval'
+                            : 'Pending approval'}
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                          {activeChangeSet.status === 'draft'
+                            ? 'Your changes need approval before they apply to the lease.'
+                            : 'Your proposed changes are with your financial approver.'}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
 
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col px-4 pt-2">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col px-4 pt-2">
                   {/* Tabs use shortened labels so the row fits the right
                       panel even at 50% split (with PDF visible). Full
                       labels surface as tooltips. overflow-x-auto is the
                       safety net for very narrow viewports — tabs scroll
                       horizontally rather than disappearing off the edge. */}
-                  <TabsList className="shrink-0 justify-start overflow-x-auto max-w-full">
+                  <TabsList className="sticky top-0 z-10 w-full shrink-0 justify-start overflow-x-auto border-b border-border bg-background">
                     <TabsTrigger value="general" title="General Information">General</TabsTrigger>
                     <TabsTrigger value="vendor" title="Vendor / Counterparty">Vendor</TabsTrigger>
                     <TabsTrigger value="rent" title="Rent">Rent</TabsTrigger>
@@ -3261,8 +3295,7 @@ export default function LeaseReview() {
                     <TabsTrigger value="asc842" title="ASC 842 Inputs">ASC 842</TabsTrigger>
                   </TabsList>
 
-                  <ScrollArea className="flex-1 h-full">
-                    <div className="py-4 space-y-4 max-w-2xl mx-auto pb-24">
+                  <div className={cn("py-4 space-y-4 mx-auto pb-24", showPdfPanel ? "max-w-2xl" : "max-w-3xl")}>
 
                       {/* General Information */}
                       <TabsContent value="general" className="mt-0 space-y-4">
@@ -3281,6 +3314,7 @@ export default function LeaseReview() {
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
+                            sourceViewable={showPdfPanel}
                             onJumpToPage={jumpToPage}
                           />
                         ))}
@@ -3377,8 +3411,8 @@ export default function LeaseReview() {
                               <Card className="shadow-none border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
                                   <div>
-                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock for editing</p>
-                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking enables staged editing — proposed changes require financial approval before taking effect.</p>
+                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock to edit</p>
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking lets you propose changes — they need financial approval before they take effect.</p>
                                   </div>
                                   <Button
                                     variant="outline"
@@ -3421,23 +3455,6 @@ export default function LeaseReview() {
                                 </CardContent>
                               </Card>
                             )}
-                            {!lease.model_locked && activeChangeSet && (
-                              <Card className="shadow-none border border-blue-300 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800">
-                                <CardContent className="py-3 px-4">
-                                  <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
-                                    {activeChangeSet.status === 'draft'
-                                      ? 'Unlocked for editing — changes are staged'
-                                      : 'Changes pending approval'}
-                                  </p>
-                                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                                    {activeChangeSet.status === 'draft'
-                                      ? `Edits are staged for approval — ${stagedItemCount} field${stagedItemCount !== 1 ? 's' : ''} pending.`
-                                      : 'Your proposed changes have been submitted and are awaiting financial approver review.'}
-                                  </p>
-                                  {/* "Lock & submit" (and Discard, in the ⋯ menu) live in the header actions slot above. */}
-                                </CardContent>
-                              </Card>
-                            )}
                           </>
                         )}
                         {renderTabFooter('general')}
@@ -3457,6 +3474,7 @@ export default function LeaseReview() {
                           onFieldFocus={handleFieldFocus}
                           onFieldBlur={trackFieldCorrection}
                           onFieldStaged={stageFieldImmediate}
+                          sourceViewable={showPdfPanel}
                           onJumpToPage={jumpToPage}
                         />
                         {renderTabFooter('vendor')}
@@ -3471,16 +3489,25 @@ export default function LeaseReview() {
                             form={form}
                             extractedJson={extractedJson}
                             confidenceScores={confidenceScores}
-                            isLocked={isLocked}
+                            isLocked={isLocked && !isUnlockedForEditing}
                             isModelLocked={!!lease?.model_locked}
                             hideConfidence={lifecycleStatus === 'active'}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
+                            sourceViewable={showPdfPanel}
                             onJumpToPage={jumpToPage}
                           />
                         ))}
+                        {/* H1 (integrity): the schedule table is intentionally
+                            NOT carved out for unlock-for-editing. handleScheduleChange
+                            writes rent_schedules directly (no change-set staging,
+                            no audit row), so editing it in a governed unlock
+                            session would produce an un-attributed rent change the
+                            approver never sees. The rent FIELDS above stage through
+                            the change set; hand-editing the schedule on a posted
+                            lease must wait for governed routing (Stream C). */}
                         <RentScheduleTable
                           className="shadow-none"
                           rentSchedule={rentSchedule}
@@ -3503,13 +3530,14 @@ export default function LeaseReview() {
                             form={form}
                             extractedJson={extractedJson}
                             confidenceScores={confidenceScores}
-                            isLocked={isLocked}
+                            isLocked={isLocked && !isUnlockedForEditing}
                             isModelLocked={!!lease?.model_locked}
                             hideConfidence={lifecycleStatus === 'active'}
                             onFieldChange={handleFieldChange}
                             onFieldFocus={handleFieldFocus}
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
+                            sourceViewable={showPdfPanel}
                             onJumpToPage={jumpToPage}
                           />
                         ))}
@@ -3536,6 +3564,7 @@ export default function LeaseReview() {
                         <RisksSection
                           risks={risks}
                           onJumpToPage={jumpToPage}
+                          sourceViewable={showPdfPanel}
                           leaseId={isReadOnly ? undefined : lease?.id}
                           onRisksChanged={async () => {
                             const { data } = await supabase
@@ -3643,8 +3672,7 @@ export default function LeaseReview() {
                         )}
                       </TabsContent>
 
-                    </div>
-                  </ScrollArea>
+                  </div>
                 </Tabs>
 
               </div>
@@ -3657,7 +3685,7 @@ export default function LeaseReview() {
             lifecycle transition (skips approved → executed) and a governance
             bypass (it was silently rejected by the workflow trigger anyway).
             under_review requests advance through the Approval Queue (linked in
-            the header); a reviewed executed lease activates via Lock & Activate. */}
+            the header); a reviewed executed lease activates via Activate. */}
       </div>
 
       {/* Rename Dialog */}
@@ -3685,9 +3713,9 @@ export default function LeaseReview() {
       <Dialog open={cancelChangeSetDialogOpen} onOpenChange={setCancelChangeSetDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Discard edits?</DialogTitle>
+            <DialogTitle>Discard your changes?</DialogTitle>
             <DialogDescription>
-              Your staged edits will be discarded and the lease will re-lock to its prior state. This can't be undone.
+              Your changes will be discarded and the lease will return to its locked state. This can't be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -3700,7 +3728,7 @@ export default function LeaseReview() {
               disabled={cancelingChangeSet}
             >
               {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Discard & re-lock
+              Discard changes
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3742,16 +3770,16 @@ export default function LeaseReview() {
                   <DialogTitle className="flex items-center gap-2">
                     <Lock className="h-5 w-5 text-success" />
                     {isReLock
-                      ? `Lock and submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}`
+                      ? `Submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''} for approval`
                       : isEmptyDraftRelock
-                        ? 'Re-lock this lease'
-                        : 'Lock & activate this lease'}
+                        ? 'Lock this lease'
+                        : lifecycleStatus === 'executed' ? 'Activate this lease?' : 'Lock this lease'}
                   </DialogTitle>
                   <DialogDescription>
                     {isReLock
                       ? adminCanSelfApprove
-                        ? 'As an admin you can apply your changes immediately, or route them through another admin for approval. Either way the lease re-locks.'
-                        : 'Your staged changes will be submitted for financial approval. The lease re-locks immediately. Approved changes apply to the live record; rejected ones are reverted.'
+                        ? 'As an admin you can apply your changes immediately, or route them through another admin for approval.'
+                        : 'Your changes will be submitted for financial approval. Approved changes apply to the live record; rejected ones are dropped.'
                       : isEmptyDraftRelock
                         ? 'You unlocked this lease but didn\'t make any edits. Locking now will discard the empty edit session and return the lease to its prior locked state.'
                         : 'This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.'}
@@ -3768,7 +3796,7 @@ export default function LeaseReview() {
                 {adminCanSelfApprove && (
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
                     <p><strong className="text-foreground">Apply</strong> — changes take effect immediately. Recorded as self-approved by admin role.</p>
-                    <p><strong className="text-foreground">Request Approval</strong> — another admin reviews. Lease re-locks while pending.</p>
+                    <p><strong className="text-foreground">Request Approval</strong> — another admin reviews.</p>
                   </div>
                 )}
                 {/* Approver picker for the Request Approval flow. Always shown
@@ -3855,7 +3883,7 @@ export default function LeaseReview() {
                         : undefined}
                     >
                       {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-                      {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Re-lock' : 'Lock & Activate'}
+                      {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Lock' : (lifecycleStatus === 'executed' ? 'Activate' : 'Lock')}
                     </Button>
                   )}
                 </DialogFooter>
