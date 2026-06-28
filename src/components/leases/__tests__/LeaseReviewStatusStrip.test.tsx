@@ -63,7 +63,7 @@ const READY_BASE = {
   confirmedSectionCount: 4,
   totalRequiredSections: 4,
   remainingSectionTitles: [] as string[],
-  requiredSectionTitles: ['Parties', 'Dates', 'Rent', 'Term'],
+  requiredSectionTitles: ['Parties', 'Dates', 'Rent', 'Term'] as string[],
   onConfirmAllRequired: () => {},
 } as const;
 
