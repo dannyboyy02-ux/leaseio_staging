@@ -75,4 +75,34 @@ describe('unlocked-draft action bar — finalize/re-lock affordance', () => {
     expect(total).toBe(2);
     expect(source).toContain('onClick: () => setLockConfirmDialogOpen(true)');
   });
+
+  // Phase A — active-edit mode coherence: an inline, NON-destructive "Cancel"
+  // secondary now sits next to Submit in the unlocked-draft bar. It is the only
+  // non-Archive exit from an edit session (discard unsaved staged edits + re-lock,
+  // lease itself untouched). Pin that it lives INSIDE the branch and is wired to
+  // the change-set cancel dialog — not Archive, and not the lock/submit dialog —
+  // so the edit-session exit can't silently regress into a dead-end again.
+  it('exposes an inline Cancel that discards the change set (not Archive, not the submit dialog)', () => {
+    // The cancel affordance is wired to the change-set cancel dialog...
+    expect(unlockedDraftBlock).toMatch(/onClick=\{[^}]*setCancelChangeSetDialogOpen\(true\)/);
+    // ...and is labeled "Cancel" (de-jargoned secondary, not "Discard"/"Archive").
+    expect(unlockedDraftBlock).toContain('Cancel');
+    // It must NOT route the edit-session exit through the lock/submit dialog — that
+    // path is the Submit primary, a different gesture.
+    expect(unlockedDraftBlock).not.toMatch(/onClick=\{[^}]*setCancelChangeSetDialogOpen[^}]*setLockConfirmDialogOpen/);
+  });
+
+  it('renders Cancel as a neutral (outline) secondary, not a destructive button', () => {
+    // The Cancel is intentionally non-destructive (cancelling touches only the
+    // unsaved change set, never the lease). Guard that it stays a neutral
+    // outline button so it doesn't get restyled into a red "delete the lease"
+    // affordance. Slice to the Cancel button element to keep the assertion local.
+    const cancelStart = unlockedDraftBlock.indexOf('setCancelChangeSetDialogOpen(true)');
+    expect(cancelStart, 'Cancel onClick must exist in the unlocked-draft branch').toBeGreaterThan(-1);
+    // Walk back to the opening <Button of the Cancel control.
+    const buttonOpen = unlockedDraftBlock.lastIndexOf('<Button', cancelStart);
+    const cancelButton = unlockedDraftBlock.slice(buttonOpen, cancelStart);
+    expect(cancelButton).toContain('variant="outline"');
+    expect(cancelButton).not.toContain('variant="destructive"');
+  });
 });
