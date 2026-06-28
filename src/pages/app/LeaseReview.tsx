@@ -3084,9 +3084,9 @@ export default function LeaseReview() {
                   <div className="flex h-full flex-col bg-muted/50 relative">
                     <div className="p-2 border-b flex justify-between bg-background items-center">
                       <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight">
-                        Source Document
+                        Lease
                       </span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }} title="Collapse source document" aria-label="Collapse source document">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }} title="Hide lease" aria-label="Hide lease">
                         <ChevronLeft size={16} />
                       </Button>
                     </div>
@@ -3125,10 +3125,10 @@ export default function LeaseReview() {
                       size="sm"
                       className="gap-1.5"
                       onClick={() => { pdfPanelRef.current?.expand(); setIsPdfCollapsed(false); }}
-                      title="Re-open the source document panel"
+                      title="Show the lease document"
                     >
                       <ChevronRight size={14} />
-                      Show source document
+                      Show lease
                     </Button>
                   )}
                   {/* Archived ("deleted") state banner — without it the page
@@ -3295,7 +3295,12 @@ export default function LeaseReview() {
                     <TabsTrigger value="asc842" title="ASC 842 Inputs">ASC 842</TabsTrigger>
                   </TabsList>
 
-                  <div className={cn("py-4 space-y-4 mx-auto pb-24", showPdfPanel ? "max-w-2xl" : "max-w-3xl")}>
+                  {/* Form column. With the lease panel open the column centers in the
+                      ~half-width split; with it hidden, anchor LEFT (no mx-auto) at a
+                      comfortable width so the fields use the space instead of floating
+                      bunched in the middle of a full-width panel. px-4 matches the
+                      banner gutter above. */}
+                  <div className={cn("py-4 space-y-4 pb-24 px-4", showPdfPanel ? "max-w-2xl mx-auto" : "max-w-4xl")}>
 
                       {/* General Information */}
                       <TabsContent value="general" className="mt-0 space-y-4">
