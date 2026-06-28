@@ -5,7 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, X, Plus } from 'lucide-react';
+import { ChevronDown, X, Plus, AlertTriangle } from 'lucide-react';
 import { AddRiskDialog, type PendingCitation } from '@/components/leases/AddRiskDialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,6 +32,7 @@ import { LabelValueGrid, type LabelValueRow } from './LabelValueGrid';
 import { VendorCard } from './VendorCard';
 import { CriticalDatesStrip } from './CriticalDatesStrip';
 import { ObligationsTab } from './ObligationsTab';
+import { shouldShowRejectionBanner } from './rejectionBanner';
 import { ArchiveButton } from '@/components/leases/ArchiveButton';
 
 import { RentScheduleTable, type RentScheduleEntry } from '@/components/leases/RentScheduleTable';
@@ -230,6 +231,13 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
   const [dismissReason, setDismissReason] = useState<string>('');
   const [dismissing, setDismissing] = useState<boolean>(false);
   const [addRiskOpen, setAddRiskOpen] = useState<boolean>(false);
+  // H7 verdict surface: the submitter's most-recent change set, IF it was
+  // rejected. After a reject the change set goes terminal and the lease stays
+  // locked at its prior terms, so there's no other signal that the submitter's
+  // proposed edits were declined — this banner is it.
+  const [rejectedChangeSet, setRejectedChangeSet] = useState<
+    { id: string; review_note: string | null; reviewed_at: string | null } | null
+  >(null);
 
   const refetchRisks = useCallback(async () => {
     if (!lease?.id) return;
@@ -315,6 +323,56 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       cancelled = true;
     };
   }, [lease?.id]);
+
+  // Fetch the most-recent terminal change set and surface a verdict banner ONLY
+  // when (a) it was rejected, (b) the current user is the one who submitted it,
+  // and (c) they haven't dismissed it. Gating on submitted_by keeps "your
+  // changes were declined" private to the submitter; the localStorage dismiss
+  // keyed on the change-set id stops it showing forever. A fresh edit creates a
+  // new change set (new id), so a later approval/rejection naturally supersedes.
+  useEffect(() => {
+    if (!lease?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData?.user?.id ?? null;
+        if (!uid || cancelled) return;
+        const { data } = await (supabase as any)
+          .from('lease_change_sets')
+          .select('id, status, submitted_by, review_note, reviewed_at')
+          .eq('lease_id', lease.id)
+          .in('status', ['rejected', 'approved'])
+          .order('reviewed_at', { ascending: false, nullsFirst: false })
+          .limit(1);
+        if (cancelled) return;
+        const top = Array.isArray(data) && data.length > 0 ? data[0] : null;
+        let dismissed = false;
+        try {
+          dismissed = !!(top && localStorage.getItem(`leaseio:cs-reject-dismissed:${top.id}`));
+        } catch { /* localStorage unavailable — treat as not dismissed */ }
+        setRejectedChangeSet(
+          shouldShowRejectionBanner(top, uid, dismissed)
+            ? { id: top.id, review_note: top.review_note ?? null, reviewed_at: top.reviewed_at ?? null }
+            : null,
+        );
+      } catch (err) {
+        console.error('[LockedLeaseDetail] rejected change-set fetch error:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lease?.id]);
+
+  const dismissRejection = useCallback(() => {
+    if (rejectedChangeSet) {
+      try {
+        localStorage.setItem(`leaseio:cs-reject-dismissed:${rejectedChangeSet.id}`, '1');
+      } catch { /* ignore */ }
+    }
+    setRejectedChangeSet(null);
+  }, [rejectedChangeSet]);
 
   const handleRequestUnlock = useCallback(async () => {
     if (!lease) return;
@@ -482,6 +540,45 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
         <CriticalDatesStrip lease={lease} />
 
         <div className="max-w-6xl mx-auto px-6 py-6">
+          {rejectedChangeSet && (
+            <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 flex items-start gap-3 dark:border-red-900 dark:bg-red-950/20">
+              <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5 dark:text-red-400" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-red-900 dark:text-red-200">
+                  Your proposed changes were declined
+                  {rejectedChangeSet.reviewed_at ? ` on ${fmtDate(rejectedChangeSet.reviewed_at)}` : ''}.
+                </p>
+                {rejectedChangeSet.review_note && (
+                  <p className="text-sm text-red-800/90 mt-0.5 whitespace-pre-line dark:text-red-300/90">
+                    Reason: {rejectedChangeSet.review_note}
+                  </p>
+                )}
+                <p className="text-xs text-red-700/80 mt-1 dark:text-red-300/70">
+                  The lease keeps its current terms — nothing was changed.
+                </p>
+                <div className="flex items-center gap-2 mt-2.5">
+                  {!readOnly && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs border-red-300 text-red-800 hover:bg-red-100 dark:border-red-800 dark:text-red-200"
+                      onClick={() => { dismissRejection(); isAdmin ? handleAdminUnlock() : handleRequestUnlock(); }}
+                    >
+                      {isAdmin ? 'Revise & resubmit' : 'Request to revise'}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs text-red-700 hover:bg-red-100 dark:text-red-300"
+                    onClick={dismissRejection}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
             <TabsList className="mb-4 justify-start overflow-x-auto">
               <TabsTrigger value="general">{t('locked_lease.tabs.general')}</TabsTrigger>

@@ -1912,20 +1912,27 @@ export default function LeaseReview() {
       });
       if (error) throw new Error(error.message ?? 'Submit failed');
       if ((data as any)?.error) throw new Error((data as any).error);
-      if (mode === 'self_approve') {
-        toast.success('Changes applied — self-approved by admin role');
-      } else {
-        toast.success('Changes submitted for approval — lease locked');
-      }
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
-      refetchLease();
+      if (mode === 'self_approve') {
+        // Applied immediately — stay on the (now re-locked) lease so the admin
+        // sees the result in place.
+        toast.success('Changes applied — self-approved by admin role');
+        refetchLease();
+      } else {
+        // Submitted for a second-party review: the lease re-locks and there's
+        // nothing left to do here. Don't strand the submitter on a now-locked
+        // form — confirm + return them to the Leases list (H7 / Phase B). They
+        // get an in-app notification when the approver decides.
+        toast.success('Your changes were submitted for approval. You’ll be notified when they’re reviewed.');
+        navigate('/app/leases');
+      }
     } catch (err: any) {
       console.error('Error submitting changes:', err);
       toast.error(`Failed to submit changes: ${err?.message ?? 'unknown error'}`);
     } finally {
       setSubmittingChanges(false);
     }
-  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease, queryClient]);
+  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease, queryClient, navigate]);
 
   const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
   const handleRequestUnlock = useCallback(async () => {

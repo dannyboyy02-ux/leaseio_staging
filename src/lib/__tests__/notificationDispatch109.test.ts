@@ -47,6 +47,25 @@ describe('_shared/notify_dispatch.ts — idempotent, failure-recorded delivery',
     expect(src).toContain('case "voluntary_delegation_received":');
     expect(src).toContain('case "stuck_chain_detected":');
   });
+
+  // Phase B: a rejected governed change set notifies the SUBMITTER. Its copy
+  // must report the decline outcome, not fall through to the generic
+  // "notify_*" → "awaiting your approval" approver prompt. copyForType is a
+  // module-private Deno function (not exported, imports Deno-only deps), so
+  // this is a static guard scoped to the case block — same convention as the
+  // copy assertions above. The narrowed window avoids false positives from
+  // the generic fallback string elsewhere in the switch.
+  it('gives notify_change_set_rejected the decline copy, NOT the generic approval-prompt fallback', () => {
+    const caseStart = src.indexOf('case "notify_change_set_rejected":');
+    expect(caseStart).toBeGreaterThan(-1);
+    // Window = this case's return line only (up to the next case/blank line).
+    const block = src.slice(caseStart, src.indexOf('\n', src.indexOf('return', caseStart)) + 1);
+    expect(block).toContain('Your proposed lease changes were declined'); // subject
+    expect(block).toContain('Your proposed changes were declined'); // heading
+    // It must NOT resolve to the generic approver fallback.
+    expect(block).not.toContain('A lease is awaiting your approval');
+    expect(block).not.toContain('A lease needs your approval');
+  });
 });
 
 describe('dispatch-notifications cron', () => {

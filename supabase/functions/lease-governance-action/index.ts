@@ -256,7 +256,10 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const action = body?.action as string | undefined;
-    const note = typeof body?.note === "string" ? body.note.trim() || null : null;
+    // Bound the note: it's persisted (review_note) and interpolated into the
+    // submitter notification + email. Cap server-side so an arbitrarily long
+    // note can't bloat those surfaces (defense-in-depth; security review LOW).
+    const note = typeof body?.note === "string" ? body.note.trim().slice(0, 2000) || null : null;
 
     if (action === "approve_unlock_request" || action === "reject_unlock_request") {
       const unlockRequestId = body?.unlockRequestId as string | undefined;
@@ -450,7 +453,7 @@ serve(async (req) => {
 
       const { data: changeSet, error: changeSetError } = await supabaseAdmin
         .from("lease_change_sets")
-        .select("id, lease_id, workspace_id, status")
+        .select("id, lease_id, workspace_id, status, submitted_by")
         .eq("id", changeSetId)
         .maybeSingle();
       if (changeSetError || !changeSet) return jsonResponse({ error: "Change set not found" }, 404, origin);
@@ -488,6 +491,44 @@ serve(async (req) => {
           related_change_set_id: changeSetId,
           rejection_reason: note,
         });
+
+        // Notify the submitter their proposed changes were declined. Without
+        // this the change set goes terminal silently — the submitter is never
+        // told and the lease just stays locked at its prior terms (the H7
+        // "silent dead-end"). Routed through the fanout_recipient_notifications
+        // trigger: a lease_activity_log comment row carrying a recipient_ids
+        // ARRAY fans out to one public.notifications row per recipient (in-app
+        // rail). Best-effort — never blocks the rejection. Skip self-rejection.
+        const submitterId = (changeSet as any).submitted_by as string | null;
+        if (submitterId && submitterId !== user.id) {
+          const { data: leaseRow } = await supabaseAdmin
+            .from("leases")
+            .select("request_title, property_address, filename")
+            .eq("id", (changeSet as any).lease_id)
+            .maybeSingle();
+          const leaseName =
+            (leaseRow as any)?.request_title ||
+            (leaseRow as any)?.property_address ||
+            (leaseRow as any)?.filename ||
+            "your lease";
+          await supabaseAdmin
+            .from("lease_activity_log")
+            .insert({
+              lease_id: (changeSet as any).lease_id,
+              user_id: null,
+              activity_type: "comment",
+              details: {
+                notification_type: "notify_change_set_rejected",
+                recipient_ids: [submitterId],
+                message: note
+                  ? `Your proposed changes to "${leaseName}" were declined. Reason: ${note}`
+                  : `Your proposed changes to "${leaseName}" were declined.`,
+              },
+            })
+            .then(({ error: nErr }) => {
+              if (nErr) console.error("[lease-governance-action] reject notify error:", nErr.message);
+            });
+        }
         return jsonResponse({ ok: true }, 200, origin);
       }
 

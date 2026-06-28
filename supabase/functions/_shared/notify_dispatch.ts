@@ -46,6 +46,8 @@ function copyForType(type: string | undefined): { subject: string; heading: stri
       return { subject: "Your lease was returned for revision", heading: "Your lease was returned for revision" };
     case "notify_submitter_rejected":
       return { subject: "Your lease request was rejected", heading: "Your lease request was rejected" };
+    case "notify_change_set_rejected":
+      return { subject: "Your proposed lease changes were declined", heading: "Your proposed changes were declined" };
 
     // Counter-signature chase
     case "counter_signature_reminder":

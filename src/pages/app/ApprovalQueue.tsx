@@ -1546,7 +1546,7 @@ export default function ApprovalQueue() {
             <Label htmlFor="cs-note" className="text-sm font-medium">
               Note {changeSetActType === 'approve' ? <span className="text-muted-foreground">(optional)</span> : <span className="text-destructive">*</span>}
             </Label>
-            <Textarea id="cs-note" className="mt-2" rows={3} placeholder="Reason or feedback..."
+            <Textarea id="cs-note" className="mt-2" rows={3} maxLength={2000} placeholder="Reason or feedback..."
               value={governanceNote} onChange={(e) => setGovernanceNote(e.target.value)} />
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
