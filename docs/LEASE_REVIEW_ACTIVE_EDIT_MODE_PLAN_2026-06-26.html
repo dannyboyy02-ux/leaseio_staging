@@ -200,6 +200,16 @@
       <td>Ragged left edge: strip <code>mx-6</code> vs content <code>px-6</code> vs header <code>px-4 sm:px-6</code>.</td>
       <td>StatusStrip:198 · LeaseReview:3067 · AppHeader:34</td>
       <td><span class="pill scope">in scope (cheap)</span></td></tr>
+    <tr><td><span class="pill high">H9</span></td>
+      <td><b>Owner-caught (2026-06-28).</b> Form column <code>mx-auto</code>-centered with a max-width, so with the lease panel
+        hidden the fields float bunched dead-center in a full-width panel. Hiding the panel doesn't help — <code>mx-auto</code>
+        keeps it floating. (Mis-filed as a Phase-C medium; it's glaring.)</td>
+      <td>LeaseReview.tsx:3298</td>
+      <td><span class="pill decided">FIXED 6654f43</span></td></tr>
+    <tr><td><span class="pill high">H10</span></td>
+      <td><b>Owner-caught (2026-06-28).</b> "Source Document" / "Show source document" is jargon — it's the lease.</td>
+      <td>LeaseReview.tsx:3087/3089/3128/3131</td>
+      <td><span class="pill decided">FIXED 6654f43 → "Lease" / "Show lease" / "Hide lease"</span></td></tr>
     <tr><td><span class="pill med">M*</span></td>
       <td>7-tab crowding · concentric card borders · content max-w jump · 9px badge type · "Initializing Cockpit…" · card-header drift.</td>
       <td>various</td>
@@ -562,9 +572,16 @@ navigate(from === <span class="s">'dashboard'</span> ? <span class="s">'/app/das
     research? Or do you want it to always land on the <b>Dashboard</b>?</li>
   <li><b>H7 scope:</b> is the rejection <b>verdict banner + submitter notification</b> in scope for Phase B now, or do you want
     just the submit-side redirect first and the rejection surface as a follow-up?</li>
-  <li><b>Screenshot check:</b> did the field rows in your shot show colored <i>percentages</i>, or just colored <i>borders</i>?
-    If percentages, the lease was in needs-review (not active) and I'll widen C2's gate accordingly.</li>
+  <li><b>Screenshot check — ANSWERED (2026-06-28):</b> the live shot showed colored <i>borders</i> + "View in document" links but
+    <b>no percentage badges</b> → confirmed active-unlocked state; C2's border-gating is the correct fix.</li>
 </ol>
+<div class="callout warn">
+  <b>Update 2026-06-28.</b> Owner reviewing the live preview caught two surface defects not prioritized above; both fixed in
+  <span class="filechip">6654f43</span> ahead of the Phase-A batch: <b>H9</b> (form column un-bunched — left-anchored when the
+  lease panel is hidden) and <b>H10</b> ("Source Document" → "Lease"/"Show lease"/"Hide lease"). The lesson reinforced: the
+  centering was mis-filed as a "later" medium when it was a glaring, first-glance defect — Phase A should be verified on the
+  rendered preview, not the diff.
+</div>
 
 <p style="margin-top:40px; color:var(--muted); font-size:12.5px; border-top:1px solid var(--line); padding-top:14px">
   Generated for review. No code changed yet. Reviewer findings (lease-product-polish, lease-layout-design-reviewer) are the
