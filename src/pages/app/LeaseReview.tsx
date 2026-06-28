@@ -3311,12 +3311,16 @@ export default function LeaseReview() {
                     <TabsTrigger value="asc842" title="ASC 842 Inputs">ASC 842</TabsTrigger>
                   </TabsList>
 
-                  {/* Form column. With the lease panel open the column centers in the
-                      ~half-width split; with it hidden, anchor LEFT (no mx-auto) at a
-                      comfortable width so the fields use the space instead of floating
-                      bunched in the middle of a full-width panel. px-4 matches the
-                      banner gutter above. */}
-                  <div className={cn("py-4 space-y-4 pb-24 px-4", showPdfPanel ? "max-w-2xl mx-auto" : "max-w-4xl")}>
+                  {/* Form column. Gate on whether the lease panel is actually
+                      VISIBLE — i.e. rendered AND not collapsed. When visible (the
+                      half-width split) the column centers in its half. When the
+                      panel is hidden OR collapsed-to-a-sliver, the right side goes
+                      full-width, so anchor the column LEFT (no mx-auto) at a
+                      comfortable reading width instead of floating it bunched in the
+                      middle. Keying on showPdfPanel alone missed the collapse case
+                      (the panel stays "shown" but the form still had room). px-4
+                      matches the banner gutter above. */}
+                  <div className={cn("py-4 space-y-4 pb-24 px-4", (showPdfPanel && !isPdfCollapsed) ? "max-w-2xl mx-auto" : "max-w-3xl")}>
 
                       {/* General Information */}
                       <TabsContent value="general" className="mt-0 space-y-4">
@@ -3357,21 +3361,21 @@ export default function LeaseReview() {
                               <CollapsibleContent>
                                 <CardContent className="pt-0 pb-4 grid grid-cols-2 gap-4 text-sm">
                                   <div>
-                                    <Label className="text-[10px] uppercase text-blue-600">Landlord</Label>
+                                    <Label className="text-xs font-medium text-blue-700/90">Landlord</Label>
                                     <p className="font-medium">{parentLease.landlord_name || 'N/A'}</p>
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] uppercase text-blue-600">Tenant</Label>
+                                    <Label className="text-xs font-medium text-blue-700/90">Tenant</Label>
                                     <p className="font-medium">{parentLease.tenant_name || 'N/A'}</p>
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] uppercase text-blue-600">Monthly Rent</Label>
+                                    <Label className="text-xs font-medium text-blue-700/90">Monthly Rent</Label>
                                     <p className="font-medium">
                                       ${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount || 'N/A'}
                                     </p>
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] uppercase text-blue-600">Lease End</Label>
+                                    <Label className="text-xs font-medium text-blue-700/90">Lease End</Label>
                                     <p className="font-medium">
                                       {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}
                                     </p>
@@ -3734,9 +3738,11 @@ export default function LeaseReview() {
       <Dialog open={cancelChangeSetDialogOpen} onOpenChange={setCancelChangeSetDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Discard your changes?</DialogTitle>
+            <DialogTitle>{stagedItemCount > 0 ? 'Discard your changes?' : 'Stop editing?'}</DialogTitle>
             <DialogDescription>
-              Your unsaved changes are discarded and the lease keeps its current terms — nothing is submitted. This can't be undone.
+              {stagedItemCount > 0
+                ? "Your unsaved changes are discarded and the lease keeps its current terms — nothing is submitted. This can't be undone."
+                : 'The lease stays exactly as it is — you haven’t made any changes to discard.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -3744,12 +3750,12 @@ export default function LeaseReview() {
               Keep editing
             </Button>
             <Button
-              variant="destructive"
+              variant={stagedItemCount > 0 ? 'destructive' : 'default'}
               onClick={handleCancelChangeSet}
               disabled={cancelingChangeSet}
             >
               {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Discard changes
+              {stagedItemCount > 0 ? 'Discard changes' : 'Stop editing'}
             </Button>
           </DialogFooter>
         </DialogContent>
