@@ -222,6 +222,24 @@
   (C2) and the <b>source link</b> (H1). My earlier "% badges everywhere" claim was wrong — corrected here.
 </div>
 
+<div class="callout good">
+  <b>Phase A — AS BUILT (2026-06-28).</b> Implemented in <span class="filechip">c9b142c</span> (source), tests
+  <span class="filechip">473216e</span> + <span class="filechip">f01e5d0</span> (build-fix), reviewer follow-ups
+  <span class="filechip">19550e0</span>. All of C1, C2, H1–H10 shipped. Reviewer pass (polish · layout · auditor · security ·
+  test-author): security clean; auditor caught a build-breaking <code>as const</code> readonly fixture (fixed); polish + layout
+  produced the follow-ups below. Decisions taken: <b>kept "Cancel"</b> (owner's explicit choice; mitigated via clearer confirm
+  dialog), <b>low-risk single-column width</b> over the 2-col grid (deferred, opt-in). Post-build state verified: tsc exit 0,
+  vite build green, 14 strip/action-bar tests pass.
+  <ul style="margin:8px 0 0">
+    <li><b>L1</b> — form width now keys on panel <i>visible</i> (rendered AND not collapsed); the collapse case (the owner's
+      actual complaint) is fixed; left-anchored <code>max-w-3xl</code> when hidden/collapsed.</li>
+    <li><b>P2</b> — discard dialog no longer claims "changes discarded" with zero staged ("Stop editing?" + non-destructive).</li>
+    <li><b>L2</b> — parent-lease comparison card labels moved onto the unified <code>text-xs</code> tier.</li>
+    <li><b>Deferred:</b> 2-column field grid (opt-in after preview); L4 rounded-corner accent seam (cosmetic); P4 verified
+      non-reachable (unlock-for-edit only exists for <code>active</code> leases). Phase B (H7 navigation) unstarted.</li>
+  </ul>
+</div>
+
 <!-- ============================================================ -->
 <h2 id="mockups">4 · Mockups — before / after</h2>
 
