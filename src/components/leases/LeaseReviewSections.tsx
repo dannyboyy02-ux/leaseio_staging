@@ -173,12 +173,18 @@ export function SectionCard({
   const Icon = section.icon;
 
   const getFieldBorderClass = (fieldId: string) => {
+    // Confidence is a first-time-review signal. Once a lease is active
+    // (hideConfidence), drop it entirely — boxing a live, already-confirmed
+    // record's fields in red/amber reads as "errors / unverified". During
+    // review, mark low confidence with a quiet LEFT accent bar, not a full
+    // alarm box, so the value stays the hero.
+    if (hideConfidence) return '';
     const fieldConf = getFieldConfidence(extractedJson, fieldId);
     if (fieldConf !== null && fieldConf < 0.70) {
-      return 'border-red-400 border-2';
+      return 'border-l-2 border-l-red-400';
     }
     if (fieldConf !== null && fieldConf < 0.80) {
-      return 'border-amber-400 border-2';
+      return 'border-l-2 border-l-amber-400';
     }
     return '';
   };
@@ -241,9 +247,9 @@ export function SectionCard({
           // Auto-resize ref for textareas (plain function, no hook needed)
 
           return (
-            <div key={field.id}>
+            <div key={field.id} className="group">
               <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
+                <Label className="text-xs font-medium text-foreground/90 flex items-center gap-2">
                   <FieldIcon size={12} />
                   {field.label}
                   {!isModelLocked && !hideConfidence && <ConfidenceBadge confidence={fieldConfidence} />}
@@ -252,10 +258,12 @@ export function SectionCard({
                     the trust gesture of an AI-extraction product. Muted text so
                     it doesn't compete with the green/amber/red confidence
                     palette; the orange sparkle icon alone carries the AI cue.
-                    Always shown (so it's touch-reachable too) but only when a
-                    source PDF is actually viewable — otherwise the jump
-                    dead-ends on locked/Vault leases that show no PDF panel. */}
-                {sourceViewable && isAIExtracted && fieldPage && (
+                    Shown during first-time review (so it's touch-reachable too)
+                    only when a source PDF is actually viewable. Suppressed once
+                    the lease is active (hideConfidence) — the value is trusted
+                    and ~20 repeated source links per screen become wallpaper;
+                    the source still lives in the Documents tab. */}
+                {sourceViewable && !hideConfidence && isAIExtracted && fieldPage && (
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); locateInPdf(); }}
@@ -282,7 +290,7 @@ export function SectionCard({
                     onFocus={handleFieldFocus}
                     onBlur={() => onFieldBlur(field.id)}
                     disabled={isReadOnly}
-                    placeholder={`No ${field.label.toLowerCase()} extracted`}
+                    placeholder={hideConfidence ? 'Not specified' : `No ${field.label.toLowerCase()} extracted`}
                     className={cn(
                       "text-sm resize-none overflow-hidden min-h-[60px]",
                       getFieldBorderClass(field.id),
@@ -331,7 +339,7 @@ export function SectionCard({
                     onFocus={handleFieldFocus}
                     onBlur={() => onFieldBlur(field.id)}
                     disabled={isReadOnly}
-                    placeholder="No asset type specified"
+                    placeholder={hideConfidence ? 'Not specified' : 'No asset type specified'}
                     className={cn(
                       "text-sm",
                       getFieldBorderClass(field.id),
@@ -408,7 +416,7 @@ export function SectionCard({
                       onFocus={handleFieldFocus}
                       onBlur={() => onFieldBlur(field.id)}
                       disabled={false}
-                      placeholder={`No ${field.label.toLowerCase()} extracted`}
+                      placeholder={hideConfidence ? 'Not specified' : `No ${field.label.toLowerCase()} extracted`}
                       className={cn(
                         "text-sm",
                         getFieldBorderClass(field.id),
@@ -429,7 +437,7 @@ export function SectionCard({
                     onFocus={handleFieldFocus}
                     onBlur={() => onFieldBlur(field.id)}
                     disabled={isReadOnly}
-                    placeholder={`No ${field.label.toLowerCase()} extracted`}
+                    placeholder={hideConfidence ? 'Not specified' : `No ${field.label.toLowerCase()} extracted`}
                     className={cn(
                       "text-sm",
                       getFieldBorderClass(field.id),
@@ -440,7 +448,11 @@ export function SectionCard({
                 </div>
               )}
 
-              {!value && field.type !== 'term' && (
+              {/* The extraction-failure hint is a first-time-review aid. On an
+                  active lease (hideConfidence) it's noise — there's no document
+                  to re-extract from here, and the empty value already reads as
+                  "not specified". */}
+              {!value && field.type !== 'term' && !hideConfidence && (
                 <p className="text-[10px] text-muted-foreground mt-1 italic">
                   Field is empty — not extracted or not present in document
                 </p>

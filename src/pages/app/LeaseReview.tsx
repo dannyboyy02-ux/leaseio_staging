@@ -2817,7 +2817,10 @@ export default function LeaseReview() {
   // approve action lives at the top of the page header — we
   // deliberately don't duplicate it here.
   const renderTabFooter = (tabKey: string) => {
-    if (lease?.model_locked || isReadOnly) return null;
+    // Section re-attestation belongs to first-time review only. On an active
+    // lease unlocked for a governed edit, the gesture is "submit your change",
+    // not "re-confirm every section" — so suppress the Reviewed footer there.
+    if (lease?.model_locked || isReadOnly || isUnlockedDraft) return null;
     const confirmed = isTabConfirmed(tabKey);
     const nextTab = REVIEW_TABS.find(
       (t) => t.key !== tabKey && !t.sections.every((s) => confirmedSections.includes(s)),
@@ -2888,7 +2891,11 @@ export default function LeaseReview() {
                   <Pencil size={13} />
                 </button>
               )}
-              {lease.lifecycle_status && (
+              {/* One state badge at a time. While editing an active lease, the
+                  salient state is "Editing" — suppress the lifecycle ("Active")
+                  and "Approved" badges so the title row shows a single,
+                  non-contradictory signal. */}
+              {lease.lifecycle_status && !isUnlockedDraft && (
                 <span className="shrink-0">
                   <LifecycleStatusBadge status={lease.lifecycle_status as any} />
                 </span>
@@ -2899,7 +2906,9 @@ export default function LeaseReview() {
                   {stagedItemCount > 0 ? `Editing — ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}` : 'Editing'}
                 </Badge>
               )}
-              {isApproved && (
+              {/* "Approved" is redundant with the "Active" lifecycle badge once a
+                  lease is live; only show it pre-activation. */}
+              {isApproved && !isPosted && (
                 <Badge className="shrink-0 bg-green-600 text-white text-xs">
                   <CheckCircle size={12} className="mr-1" />
                   Approved
@@ -2913,11 +2922,23 @@ export default function LeaseReview() {
                  the finalize dialog (submit_change_set / self-approve / empty-draft
                  re-lock, all attributable) AND first flushes any dirty-but-unblurred
                  edit into the change set so a just-typed value can't be dropped.
-                 Discard / Archive live in the ⋯ menu so the bar can't overflow
-                 off-screen and re-hide the exit at narrow widths. Edits auto-stage
-                 on blur — there is intentionally NO separate direct-write "Save"
-                 here (it bypassed the change-set audit chain). */
+                 "Cancel" sits inline next to Submit as a NON-destructive secondary:
+                 cancelling discards unsaved staged edits and re-locks, the lease
+                 itself is untouched — so it's neutral (not red) and never adjacent
+                 to Archive in a menu (which read as "cancel the lease"). Archive
+                 stays in the ⋯ menu, rendered only for admins/owners. Edits
+                 auto-stage on blur — there is intentionally NO separate direct-write
+                 "Save" here (it bypassed the change-set audit chain). */
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCancelChangeSetDialogOpen(true)}
+                  disabled={cancelingChangeSet}
+                  title="Discard unsaved changes and keep the lease as it is"
+                >
+                  Cancel
+                </Button>
                 <Button
                   size="sm"
                   className="bg-green-600 hover:bg-green-700 text-white font-semibold shadow-sm"
@@ -2930,29 +2951,21 @@ export default function LeaseReview() {
                   {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
                   {stagedItemCount > 0 ? 'Submit for approval' : 'Lock'}
                 </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" aria-label="More actions">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
-                    <DropdownMenuItem
-                      onClick={() => setCancelChangeSetDialogOpen(true)}
-                      disabled={cancelingChangeSet}
-                      className="text-destructive focus:text-destructive"
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      Cancel
-                    </DropdownMenuItem>
-                    {(userRole === 'admin' || userRole === 'owner') && (
+                {(userRole === 'admin' || userRole === 'owner') && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" aria-label="More actions">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
                       <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
                         <Archive className="h-4 w-4 mr-2" />
                         {lease.archived ? t('archive.unarchive') : t('archive.archive')}
                       </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-2">
@@ -3061,10 +3074,13 @@ export default function LeaseReview() {
             remainingSectionTitles={remainingTabTitles}
             requiredSectionTitles={REVIEW_TABS.map((t) => t.title)}
             onConfirmAllRequired={handleConfirmAllRequired}
+            lifecycleStatus={lifecycleStatus}
+            isUnlockedDraft={isUnlockedDraft}
+            stagedItemCount={stagedItemCount}
           />
         )}
 
-        <div className="flex-1 px-6 overflow-hidden">
+        <div className="flex-1 px-4 sm:px-6 overflow-hidden">
           <ResizablePanelGroup
             direction="horizontal"
             className="h-full rounded-xl border bg-background shadow-sm overflow-hidden"
@@ -3720,7 +3736,7 @@ export default function LeaseReview() {
           <DialogHeader>
             <DialogTitle>Discard your changes?</DialogTitle>
             <DialogDescription>
-              Your changes will be discarded and the lease will return to its locked state. This can't be undone.
+              Your unsaved changes are discarded and the lease keeps its current terms — nothing is submitted. This can't be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

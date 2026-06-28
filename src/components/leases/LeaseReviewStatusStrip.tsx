@@ -10,7 +10,7 @@
 // the header toolbar, but this strip's job is to remove the "what do I
 // do next?" question entirely.
 
-import { AlertTriangle, CheckCircle2, Lock, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Lock, Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -36,6 +36,16 @@ interface Props {
   requiredSectionTitles?: string[];
   /** Bulk action: mark every required section reviewed in one click. */
   onConfirmAllRequired?: () => void;
+  /** Lease lifecycle status. An already-`active` lease has advanced past the
+   *  first-time approval funnel — the strip must never show "approve to
+   *  advance" for it. */
+  lifecycleStatus?: string;
+  /** True when an active lease is unlocked into a draft change set (governed
+   *  edit session). The strip then speaks the edit-session language, not the
+   *  first-time review/approve language. */
+  isUnlockedDraft?: boolean;
+  /** Number of staged edits in the open change set (drives editing vs staged). */
+  stagedItemCount?: number;
 }
 
 type Tone = 'info' | 'attention' | 'ready' | 'success';
@@ -44,6 +54,8 @@ interface DerivedState {
   tone: Tone;
   label: string;
   detail: string;
+  /** Optional icon override (else the tone's default icon is used). */
+  icon?: typeof AlertTriangle;
   cta?: { label: string; onClick: () => void };
 }
 
@@ -80,6 +92,9 @@ function deriveState(props: Props, t: (key: string, opts?: Record<string, unknow
     remainingSectionTitles,
     requiredSectionTitles,
     onConfirmAllRequired,
+    lifecycleStatus,
+    isUnlockedDraft,
+    stagedItemCount,
   } = props;
 
   if (isProcessing) {
@@ -88,6 +103,23 @@ function deriveState(props: Props, t: (key: string, opts?: Record<string, unknow
       label: t('strip.extracting_label'),
       detail: t('strip.extracting_detail'),
     };
+  }
+
+  // Governed edit session on an active lease. This takes priority over the
+  // whole first-time review/approve funnel below — an active lease has already
+  // advanced, so it must never see "flagged fields", "X of Y sections", or
+  // "approve to advance". Its only next gesture is submit (or cancel).
+  if (isUnlockedDraft) {
+    return (stagedItemCount ?? 0) > 0
+      ? { tone: 'info', icon: Pencil, label: t('strip.staged_label'), detail: t('strip.staged_detail') }
+      : { tone: 'info', icon: Pencil, label: t('strip.editing_label'), detail: t('strip.editing_detail') };
+  }
+
+  // Any other already-active state has no first-time-approval decision to make.
+  // Fall through to the terminal "success" tone, which the render-level guard
+  // suppresses entirely (the lifecycle badge already carries the state).
+  if (lifecycleStatus === 'active') {
+    return { tone: 'success', label: t('strip.final_label'), detail: t('strip.final_detail') };
   }
 
   if (unreviewedLowConfCount > 0) {
@@ -190,12 +222,12 @@ export function LeaseReviewStatusStrip(props: Props) {
   }
 
   const styles = TONE_STYLES[state.tone];
-  const Icon = styles.icon;
+  const Icon = state.icon ?? styles.icon;
   const iconClasses = state.tone === 'info' && props.isProcessing ? 'h-4 w-4 animate-spin' : 'h-4 w-4';
 
   return (
     <div
-      className={`flex items-start justify-between gap-4 border rounded-lg px-4 py-2.5 mx-6 mt-3 ${styles.container}`}
+      className={`flex items-start justify-between gap-4 border rounded-lg px-4 py-2.5 mx-4 sm:mx-6 mt-3 ${styles.container}`}
       role="status"
     >
       <div className="flex items-start gap-3 min-w-0 flex-1 flex-wrap">
