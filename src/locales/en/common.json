@@ -163,6 +163,7 @@
     }
   },
   "lease_review": {
+    "submitted_for_approval_toast": "Your changes were submitted for approval. You’ll be notified when they’re reviewed.",
     "strip": {
       "extracting_label": "Extracting",
       "extracting_detail": "Reading the document. Fields will populate when extraction completes.",
@@ -1287,6 +1288,17 @@
       "unlock_failed": "Failed to unlock lease",
       "unlock_denied": "Unlock request denied",
       "unlock_deny_failed": "Failed to deny unlock request"
+    },
+    "verdict": {
+      "declined": "Your proposed changes were declined.",
+      "declined_on": "Your proposed changes were declined on {{date}}.",
+      "reason": "Reason: {{note}}",
+      "keeps_terms": "The lease keeps its current terms — nothing was changed.",
+      "revise": "Revise & resubmit",
+      "request_revise": "Request to revise",
+      "dismiss": "Dismiss",
+      "pending_title": "Your changes are awaiting approval",
+      "pending_detail": "You’ll be notified when they’re reviewed."
     },
     "property": {
       "section_title": "Property",

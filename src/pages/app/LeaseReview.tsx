@@ -1914,25 +1914,23 @@ export default function LeaseReview() {
       if ((data as any)?.error) throw new Error((data as any).error);
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       if (mode === 'self_approve') {
-        // Applied immediately — stay on the (now re-locked) lease so the admin
-        // sees the result in place.
         toast.success('Changes applied — self-approved by admin role');
-        refetchLease();
       } else {
-        // Submitted for a second-party review: the lease re-locks and there's
-        // nothing left to do here. Don't strand the submitter on a now-locked
-        // form — confirm + return them to the Leases list (H7 / Phase B). They
-        // get an in-app notification when the approver decides.
-        toast.success('Your changes were submitted for approval. You’ll be notified when they’re reviewed.');
-        navigate('/app/leases');
+        // Submitted for a second-party review: the lease re-locks. Stay on it —
+        // it re-renders as LockedLeaseDetail, which shows a persistent "changes
+        // pending approval" banner. A durable on-lease cue beats bouncing the
+        // submitter to a cueless Leases list where their lease looks settled
+        // (H7 / Phase B polish). They're also notified when the approver decides.
+        toast.success(t('lease_review.submitted_for_approval_toast'));
       }
+      refetchLease();
     } catch (err: any) {
       console.error('Error submitting changes:', err);
       toast.error(`Failed to submit changes: ${err?.message ?? 'unknown error'}`);
     } finally {
       setSubmittingChanges(false);
     }
-  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease, queryClient, navigate]);
+  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease, queryClient, t]);
 
   const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
   const handleRequestUnlock = useCallback(async () => {

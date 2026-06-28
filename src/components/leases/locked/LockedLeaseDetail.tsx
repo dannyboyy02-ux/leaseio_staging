@@ -5,7 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, X, Plus, AlertTriangle } from 'lucide-react';
+import { ChevronDown, X, Plus, AlertTriangle, Clock } from 'lucide-react';
 import { AddRiskDialog, type PendingCitation } from '@/components/leases/AddRiskDialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -238,6 +238,10 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
   const [rejectedChangeSet, setRejectedChangeSet] = useState<
     { id: string; review_note: string | null; reviewed_at: string | null } | null
   >(null);
+  // H7 post-submit cue: true when the submitter's most-recent change set is
+  // still awaiting a second-party decision. Keeps the submitter oriented on the
+  // (re-locked) lease instead of bouncing them to a cueless list.
+  const [changeSetPending, setChangeSetPending] = useState<boolean>(false);
 
   const refetchRisks = useCallback(async () => {
     if (!lease?.id) return;
@@ -340,10 +344,10 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
         if (!uid || cancelled) return;
         const { data } = await (supabase as any)
           .from('lease_change_sets')
-          .select('id, status, submitted_by, review_note, reviewed_at')
+          .select('id, status, submitted_by, review_note, reviewed_at, created_at')
           .eq('lease_id', lease.id)
-          .in('status', ['rejected', 'approved'])
-          .order('reviewed_at', { ascending: false, nullsFirst: false })
+          .in('status', ['pending_approval', 'rejected', 'approved'])
+          .order('created_at', { ascending: false })
           .limit(1);
         if (cancelled) return;
         const top = Array.isArray(data) && data.length > 0 ? data[0] : null;
@@ -356,8 +360,11 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
             ? { id: top.id, review_note: top.review_note ?? null, reviewed_at: top.reviewed_at ?? null }
             : null,
         );
+        // Pending banner: the submitter's latest change set is still awaiting a
+        // second-party decision. Private to the submitter (gate on submitted_by).
+        setChangeSetPending(!!(top && top.status === 'pending_approval' && top.submitted_by === uid));
       } catch (err) {
-        console.error('[LockedLeaseDetail] rejected change-set fetch error:', err);
+        console.error('[LockedLeaseDetail] change-set status fetch error:', err);
       }
     })();
     return () => {
@@ -541,41 +548,55 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
 
         <div className="max-w-6xl mx-auto px-6 py-6">
           {rejectedChangeSet && (
-            <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 flex items-start gap-3 dark:border-red-900 dark:bg-red-950/20">
-              <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5 dark:text-red-400" />
+            <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-3 dark:border-amber-900 dark:bg-amber-950/20">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-red-900 dark:text-red-200">
-                  Your proposed changes were declined
-                  {rejectedChangeSet.reviewed_at ? ` on ${fmtDate(rejectedChangeSet.reviewed_at)}` : ''}.
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                  {rejectedChangeSet.reviewed_at
+                    ? t('locked_lease.verdict.declined_on', { date: fmtDate(rejectedChangeSet.reviewed_at) })
+                    : t('locked_lease.verdict.declined')}
                 </p>
                 {rejectedChangeSet.review_note && (
-                  <p className="text-sm text-red-800/90 mt-0.5 whitespace-pre-line dark:text-red-300/90">
-                    Reason: {rejectedChangeSet.review_note}
+                  <p className="text-sm text-amber-800/90 mt-0.5 whitespace-pre-line dark:text-amber-300/90">
+                    {t('locked_lease.verdict.reason', { note: rejectedChangeSet.review_note })}
                   </p>
                 )}
-                <p className="text-xs text-red-700/80 mt-1 dark:text-red-300/70">
-                  The lease keeps its current terms — nothing was changed.
+                <p className="text-xs text-amber-700/80 mt-1 dark:text-amber-300/70">
+                  {t('locked_lease.verdict.keeps_terms')}
                 </p>
                 <div className="flex items-center gap-2 mt-2.5">
                   {!readOnly && (
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs border-red-300 text-red-800 hover:bg-red-100 dark:border-red-800 dark:text-red-200"
+                      className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-200"
                       onClick={() => { dismissRejection(); isAdmin ? handleAdminUnlock() : handleRequestUnlock(); }}
                     >
-                      {isAdmin ? 'Revise & resubmit' : 'Request to revise'}
+                      {isAdmin ? t('locked_lease.verdict.revise') : t('locked_lease.verdict.request_revise')}
                     </Button>
                   )}
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 text-xs text-red-700 hover:bg-red-100 dark:text-red-300"
+                    className="h-7 text-xs text-amber-700 hover:bg-amber-100 dark:text-amber-300"
                     onClick={dismissRejection}
                   >
-                    Dismiss
+                    {t('locked_lease.verdict.dismiss')}
                   </Button>
                 </div>
+              </div>
+            </div>
+          )}
+          {changeSetPending && !rejectedChangeSet && (
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 flex items-start gap-3 dark:border-blue-900 dark:bg-blue-950/20">
+              <Clock className="h-5 w-5 text-blue-600 shrink-0 mt-0.5 dark:text-blue-400" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                  {t('locked_lease.verdict.pending_title')}
+                </p>
+                <p className="text-xs text-blue-700/80 mt-0.5 dark:text-blue-300/70">
+                  {t('locked_lease.verdict.pending_detail')}
+                </p>
               </div>
             </div>
           )}

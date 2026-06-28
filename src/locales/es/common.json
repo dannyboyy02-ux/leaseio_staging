@@ -163,6 +163,7 @@
     }
   },
   "lease_review": {
+    "submitted_for_approval_toast": "Tus cambios se enviaron para aprobación. Se te notificará cuando se revisen.",
     "strip": {
       "extracting_label": "Extrayendo",
       "extracting_detail": "Leyendo el documento. Los campos se completarán cuando finalice la extracción.",
@@ -1287,6 +1288,17 @@
       "unlock_failed": "No se pudo desbloquear el arrendamiento",
       "unlock_denied": "Solicitud de desbloqueo rechazada",
       "unlock_deny_failed": "No se pudo rechazar la solicitud de desbloqueo"
+    },
+    "verdict": {
+      "declined": "Tus cambios propuestos fueron rechazados.",
+      "declined_on": "Tus cambios propuestos fueron rechazados el {{date}}.",
+      "reason": "Motivo: {{note}}",
+      "keeps_terms": "El arrendamiento conserva sus términos actuales — no se cambió nada.",
+      "revise": "Revisar y reenviar",
+      "request_revise": "Solicitar revisión",
+      "dismiss": "Descartar",
+      "pending_title": "Tus cambios están pendientes de aprobación",
+      "pending_detail": "Se te notificará cuando se revisen."
     },
     "property": {
       "section_title": "Propiedad",
