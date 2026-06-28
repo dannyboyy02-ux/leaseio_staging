@@ -236,7 +236,29 @@
     <li><b>P2</b> — discard dialog no longer claims "changes discarded" with zero staged ("Stop editing?" + non-destructive).</li>
     <li><b>L2</b> — parent-lease comparison card labels moved onto the unified <code>text-xs</code> tier.</li>
     <li><b>Deferred:</b> 2-column field grid (opt-in after preview); L4 rounded-corner accent seam (cosmetic); P4 verified
-      non-reachable (unlock-for-edit only exists for <code>active</code> leases). Phase B (H7 navigation) unstarted.</li>
+      non-reachable (unlock-for-edit only exists for <code>active</code> leases).</li>
+  </ul>
+</div>
+
+<div class="callout good">
+  <b>Phase B (H7) — AS BUILT (2026-06-28).</b> Implemented in <span class="filechip">d7c2437</span> (core) +
+  <span class="filechip">68e422a</span> (polish). The submitter is no longer silently stranded on a rejected change set.
+  <ul style="margin:8px 0 0">
+    <li><b>Notification (server):</b> the <code>reject_change_set</code> branch of <code>lease-governance-action</code> fans an
+      in-app + email verdict to the submitter (via the <code>fanout_recipient_notifications</code> trigger +
+      <code>dispatch-notifications</code> cron); added the <code>notify_change_set_rejected</code> email-copy case so the subject
+      reads "declined", not "awaiting approval". Note capped to 2000 chars.</li>
+    <li><b>Verdict banner:</b> <code>LockedLeaseDetail</code> shows an amber "your proposed changes were declined — reason — the
+      lease keeps its current terms" banner (submitter-gated, dismissible) and a blue "changes awaiting approval" pending banner.
+      Gating logic extracted to the unit-tested <code>shouldShowRejectionBanner</code> helper.</li>
+    <li><b>Post-submit:</b> the submitter stays on the (re-locked) lease with the pending banner rather than redirecting to a
+      cueless list. Approver-after-decision already returns to the queue (no change needed).</li>
+    <li><b>Reviewers:</b> integrity + security clean (no Critical/High); auditor typecheck 0; polish HIGHs (pending cue + i18n)
+      and LOW (amber) addressed. All strings i18n'd (en/es).</li>
+    <li><b>⚠ DEPLOY PENDING (activation step):</b> the two edge functions <code>lease-governance-action</code> +
+      <code>dispatch-notifications</code> must be redeployed for the notification/email half to fire. The frontend banners work on
+      the preview without it (they read existing change-set columns). Email is NOT out of scope after all — the
+      <code>dispatch-notifications</code> cron auto-emails these rows.</li>
   </ul>
 </div>
 
