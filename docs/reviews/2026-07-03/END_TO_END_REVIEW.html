@@ -467,7 +467,7 @@
 
   <h3>Send-backs, rejections, and nudges — the full contract</h3>
   <ul>
-    <li><strong>Every gate offers three actions:</strong> <em>Approve</em> · <em>Send back</em> (requires a note; returns the request to the requestor in an editable state with an explicit <b>Revise &amp; resubmit</b> button — the resolver’s existing <code>forceConceptReactivation</code> mode does the chain reset) · <em>Decline</em> (terminal, reason required, requestor notified; one click duplicates the data into a fresh request so nothing is retyped).</li>
+    <li><strong>Every gate offers three actions:</strong> <em>Approve</em> · <em>Send back</em> (requires a note; returns the request to the requestor in an editable state whose primary button simply reads <b>Submit</b> — the resolver’s existing <code>forceConceptReactivation</code> mode does the chain reset) · <em>Decline</em> (terminal, reason required, requestor notified; one click duplicates the data into a fresh request so nothing is retyped).</li>
     <li><strong>Every transition notifies someone by name.</strong> The full matrix is in <a href="#notifications">§ Notification matrix</a> — no state change is silent, ever.</li>
     <li><strong>Nudges:</strong> the already-built manual nudge (24-hour cooldown, server-enforced) surfaces on the requestor’s tracker and each queue card; the already-typed automatic day-2/5/10 reminders get their cron wired; stuck chains (7 days) escalate to admins via the Exceptions dashboard, which finally gets a nav entry.</li>
   </ul>
@@ -520,7 +520,7 @@
 
       <!-- send-back edges -->
       <path d="M188 102 C188 66, 70 66, 55 100" class="svg-edge-back" marker-end="url(#arrb)"/>
-      <text x="120" y="60" text-anchor="middle" class="svg-t-sm">send back + note → revise &amp; resubmit</text>
+      <text x="120" y="60" text-anchor="middle" class="svg-t-sm">send back + note → revise, Submit again</text>
       <path d="M488 150 C488 192, 350 192, 340 152" class="svg-edge-back" marker-end="url(#arrb)"/>
       <text x="416" y="204" text-anchor="middle" class="svg-t-sm">quote declined → source again</text>
       <path d="M793 150 C793 236, 648 236, 640 152" class="svg-edge-back" marker-end="url(#arrb)"/>
@@ -583,7 +583,7 @@
         </div>
         <div>
           <span class="m-btn primary">Post to portfolio</span>
-          <span class="m-btn">Save &amp; finish later</span>
+          <span class="m-btn">Save Draft</span>
         </div>
       </div>
       <div class="m-card" style="margin-top:14px; background:var(--surface-2); border-style:dashed">
@@ -734,7 +734,7 @@
     <ul>
       <li><b>Unblock the negotiation panel:</b> chain states stop matching the intake early-return; DocumentsPanel, escalate, and advance become reachable. One targeted change unblocks the back half of the flow. <span class="fp">LeaseReview.tsx:429-433 · lifecycleStates.ts:66</span></li>
       <li><b>Wire the signature gate:</b> queue rows for signator steps navigate to SignatorReview (replacing the always-failing inline Approve); <code>advance-to-final-review</code> re-creates the signator row after a send-back; notification deep-links carry the URL.</li>
-      <li><b>Fix every backward arrow:</b> requestor-facing <b>Revise &amp; resubmit</b> after send-back (resolver’s existing <code>forceConceptReactivation</code> mode); fresh signator rows on re-advance; a served-side exit for <code>chain_violation</code>; frontier gating in <code>act-on-chain-step</code> so steps can’t be acted out of order (the predicate is already written and tested — it’s just unused).</li>
+      <li><b>Fix every backward arrow:</b> requestor can revise and <b>Submit</b> again after a send-back (resolver’s existing <code>forceConceptReactivation</code> mode); fresh signator rows on re-advance; a served-side exit for <code>chain_violation</code>; frontier gating in <code>act-on-chain-step</code> so steps can’t be acted out of order (the predicate is already written and tested — it’s just unused).</li>
       <li><b>End the silence:</b> add <code>recipient_ids</code> to the four submitter notification writers; notify <code>nextAssignees</code> server-side on every advance; notify the requestor at every gate outcome.</li>
       <li><b>Close the executed dead-end:</b> counter-signature upload triggers <code>process_lease</code> executed-mode abstraction; Activate works from <code>fully_executed</code>. Resolves KNOWN_ISSUES #94.</li>
       <li><b>Resurrect the nudge:</b> delete the hardcoded <code>false</code>; mount the button on the tracker and queue cards; schedule the day-2/5/10 reminder cron.</li>
@@ -896,7 +896,7 @@ two matches tied on
       <tr><td>Quote approved / declined</td><td>Requestor</td><td class="no">No gate exists</td><td>outcome + reason + next step</td></tr>
       <tr><td>Sent to signature</td><td>Manager step, then CFO; <b>Finance watchers</b></td><td class="half">Role-holders only — a role no UI can assign</td><td>direct assignee + finance CC on entry</td></tr>
       <tr><td>Next sequential approver’s turn</td><td>That approver</td><td class="no">Computed, then discarded</td><td>server-side notify on every advance</td></tr>
-      <tr><td>Any reject / send-back</td><td>Requestor</td><td class="no">Rows written without recipients → never delivered</td><td>outcome + note + Revise &amp; resubmit link</td></tr>
+      <tr><td>Any reject / send-back</td><td>Requestor</td><td class="no">Rows written without recipients → never delivered</td><td>outcome + note + link to revise and Submit</td></tr>
       <tr><td>Signature complete → counter-signature</td><td>Execution owner</td><td class="half">Panel exists; reminders built, cron never scheduled</td><td>assignment notice + scheduled reminder cadence</td></tr>
       <tr><td>Executed doc abstracted, ready for review</td><td>Reviewer / finance</td><td class="no">Abstraction never triggers</td><td>“Extraction ready — review 12 fields”</td></tr>
       <tr><td>Extraction failed / stuck</td><td>Uploader; admin at 7 days</td><td class="half">Banner only; reclaim cron unscheduled</td><td>notification + working reclaim sweep</td></tr>
