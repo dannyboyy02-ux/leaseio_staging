@@ -923,18 +923,17 @@ two matches tied on
 <section id="operator" class="toc-anchor">
   <div class="eyebrow">Operations</div>
   <h2>Operator backlog — finished code waiting on you (or on ops access)</h2>
-  <p>Everything here is already written, reviewed, and inert. None of it is engineering work; all of it is switch-flipping with verification. This list consolidates four documents’ worth of scattered STOPs.</p>
+  <p><b>Updated 2026-07-04 against the live system</b> — several items this review took from the deploy docs turned out to be already done (the docs were stale). Live verification found: 11 crons scheduled and returning 200s, approval e-mails delivering, the <code>resolve-approval-chain</code> redeploy (#84/#111) complete with the Phase-7 backfill applied and verified, and the #18 storage policy fixed live (out-of-band — repo/docs drift to be captured by a build session). The three never-scheduled crons (<code>sweep-pending-workspaces</code>, <code>firm-billing-reconcile</code>, <code>vault-renewal-reminder</code>) were scheduled fail-closed on 2026-07-04 (migration <code>20260704120000</code>) and await only their secrets.</p>
+  <p><b>What actually remains is below — and every step is written out click-by-click in <code>docs/ops/OPERATOR_BACKLOG_RUNBOOK_2026-07-04.md</code></b> (~40 min at the desk + a ~15 min go-live block).</p>
   <div class="tbl-wrap"><table>
-    <thead><tr><th>#</th><th>Action</th><th>What is broken until it runs</th></tr></thead>
+    <thead><tr><th>#</th><th>Action (runbook step)</th><th>What is broken until it runs</th></tr></thead>
     <tbody>
-      <tr><td class="num">1</td><td>Redeploy <code>resolve-approval-chain</code>, <code>act-on-chain-step</code>, <code>escalate-to-concept-approver</code> (#84/#111), then <code>process_lease</code>, <code>retry_lease</code>, <code>vendor-health-check</code> (soft-delete/B1)</td><td>Deployed resolver may predate the server-side lifecycle flip — new submissions could strand in draft; deployed cap-counting includes soft-deleted leases</td></tr>
-      <tr><td class="num">2</td><td>Set cron secrets: <code>RECLAIM_STUCK_EXTRACTIONS…</code>, <code>LEASE_RETENTION…</code>, <code>NOTIFICATION_DISPATCH…</code>, <code>FIRM_BILLING…</code></td><td>Zombie “Processing” leases never reclaimed; 14-day purge inert; <b>no approval email ever sends</b>; firm billing drift unreconciled</td></tr>
-      <tr><td class="num">3</td><td>Schedule the missing crons and re-add their schedules to the <em>active</em> migration set (they live only in <code>_archive</code>): counter-signature reminders, delegate timers, stuck-chain detection, reroute pollers, <code>sweep-pending-workspaces</code></td><td>Reminders, delegation timeouts, stuck detection, auto-reroute, and abandoned-workspace cleanup all silently off — and a replayed environment loses them entirely</td></tr>
-      <tr><td class="num">4</td><td>Stripe STOP 3: live-mode webhook endpoint + signing secret</td><td>Live-mode payments don’t update entitlements</td></tr>
-      <tr><td class="num">5</td><td>Stripe STOP 7: annual Price IDs (<code>STRIPE_PRICE_*_ANNUAL</code>)</td><td>Annual checkout 503s (<code>annual_not_configured</code>)</td></tr>
-      <tr><td class="num">6</td><td>Stripe STOP 10: Vault product/price + cron secret + reminder schedule</td><td>Every Vault conversion path 503s</td></tr>
-      <tr><td class="num">7</td><td>Pack Price IDs (<code>STRIPE_PRICE_PACK_10/20/50</code>)</td><td>Document-pack purchases fail closed</td></tr>
-      <tr><td class="num">8</td><td>Apply the #18 storage-policy migration</td><td>Every report PDF upload fails for every user</td></tr>
+      <tr><td class="num">1</td><td>Redeploy <code>process_lease</code> + <code>vendor-health-check</code> (+ <code>retry_lease</code> belt-and-braces) — repo changed after their last deploys</td><td>Deployed cap-counting still includes soft-deleted leases; vendor health checks run month-old code</td></tr>
+      <tr><td class="num">2</td><td>Arm the three new crons: set <code>SWEEP_PENDING_WORKSPACES / FIRM_BILLING / VAULT_RENEWAL _CRON_SECRET</code> + insert into <code>private.cron_secrets</code></td><td>Abandoned-workspace cleanup, firm billing drift repair, and Vault renewal reminders 401 harmlessly</td></tr>
+      <tr><td class="num">3</td><td>Stripe STOP 7: annual Price IDs (<code>STRIPE_PRICE_*_ANNUAL</code>)</td><td>Annual checkout 503s (<code>annual_not_configured</code>)</td></tr>
+      <tr><td class="num">4</td><td>Pack Price IDs (<code>STRIPE_PRICE_PACK_10/20/50</code>)</td><td>Document-pack purchases fail closed</td></tr>
+      <tr><td class="num">5</td><td>Stripe STOP 10: Vault product + $249/yr price</td><td>Every Vault conversion path 503s (its reminder cron is already armed-ready)</td></tr>
+      <tr><td class="num">6</td><td>Go-live block — Stripe STOP 3: live-mode webhook (5 events incl. <code>payment_intent.succeeded</code>) + live-mode duplicates of every Price + full secret swap</td><td>Live-mode payments don’t update entitlements; single-lease credits charge without granting</td></tr>
     </tbody>
   </table></div>
 </section>
