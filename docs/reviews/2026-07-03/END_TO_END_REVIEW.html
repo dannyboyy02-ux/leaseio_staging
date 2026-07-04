@@ -715,6 +715,12 @@
   </div>
   <p class="fig-cap">Phases 2 and 3 overlap deliberately (backend vs settings surface). Phase 6 is a starting point, not an ending — its items continue as routine work.</p>
 
+  <div class="callout">
+    <div class="c-title">Definition of done — how every phase exits</div>
+    <p>No phase is “done” on green tests alone. Each one exits through, in order: <b>① a rendered walkthrough</b> of the affected user journeys — the app run against staging and clicked through as the real personas (requestor, approver, CFO, firm admin), with screenshots attached to the phase summary; <b>② the polish and layout review lanes</b> on every touched surface, covering copy (labels like “Save Draft”, not “Save &amp; finish later”), empty states, error states, and i18n coverage — not just the diff, the whole screen; <b>③ the standing reviewer sweep</b> (code auditor, security scanner, integrity reviewer, test author) with Critical/High findings surfaced before any fix; and <b>④ docs reconciled in the same commit.</b></p>
+    <p>Two known blind spots from this review are folded into gate ①: workspace-switching state isolation (React Query cache bleed between workspaces) is exercised in every multi-workspace walkthrough, and the firm journey (create firm → invite member → open child workspace → switch back) is the mandatory exit test for the firm items in Phase 6.</p>
+  </div>
+
   <div class="phase p0" id="phase-0">
     <h3>Phase 0 — Stop the bleeding <span class="sev sev-crit">Critical</span></h3>
     <div class="p-meta">Week 1 · ~5 days · deploys + migrations + two edge-function rebuilds</div>
