@@ -721,6 +721,11 @@
     <p>Two known blind spots from this review are folded into gate ①: workspace-switching state isolation (React Query cache bleed between workspaces) is exercised in every multi-workspace walkthrough, and the firm journey (create firm → invite member → open child workspace → switch back) is the mandatory exit test for the firm items in Phase 6.</p>
   </div>
 
+  <div class="callout">
+    <div class="c-title">Execution notes — for the next session’s model (Opus 4.8 / Sonnet)</div>
+    <p>This plan is written to be model-agnostic: every item carries file:line anchors, each area has a full evidence report in <code>docs/reviews/2026-07-03/</code>, and the definition-of-done above is the exit gate regardless of which model executes. Required reading order per phase: <code>CLAUDE.md</code> → this document’s phase card → the relevant per-area report(s). The <code>peak-operating-protocol</code> skill is installed at <code>.claude/skills/peak-operating-protocol/</code> and applies to every phase; its routing maps cleanly onto this plan — Phase 0 (payments, migrations, production data) is its “irreversible actions” row (strongest model, full protocol, verify before claiming), well-specified wiring items may run on Sonnet, and final verification of anything consequential is never delegated down-tier.</p>
+  </div>
+
   <div class="phase p0" id="phase-0">
     <h3>Phase 0 — Stop the bleeding <span class="sev sev-crit">Critical</span></h3>
     <div class="p-meta">Week 1 · ~5 days · deploys + migrations + two edge-function rebuilds</div>
@@ -779,6 +784,7 @@
       <li><b><code>direct_poster</code> functional role + <code>post_direct</code> server action</b> (Mockup 2): post-to-portfolio vs submit-for-approval entering at the signature stage.</li>
       <li><b>Unify the retry pipeline with <code>process_lease</code></b> (retry = same pipeline, retry flag): restores Hard Rule 3, quota gating, classification, confidence rows, and stops stranding recovered leases.</li>
       <li><b>Truth &amp; safety details:</b> duplicate-document hash check; async progress for the 30–150 s extraction wait; write (or retire) <code>executed_document_url</code> so the permanent false “document missing” flag dies; amendment dialog stops collecting a dead “Approver Email”; ImportHistory gets a nav entry.</li>
+      <li><b>Onboarding import (added 2026-07-04):</b> a bulk-import wizard for new customers bringing an existing portfolio — multi-file upload → queued batch abstraction (async, quota-aware, priced by the already-defined Onboarding Packs) → the same pending-review queue → bulk post. Replaces the placebo “Historical Portfolio Loader” toggle with the feature it advertises. <span class="fp">WorkspaceSettings.tsx backdoor_enabled (currently controls nothing) · pricing.ts Onboarding Packs</span></li>
     </ul>
   </div>
 
@@ -800,7 +806,7 @@
       <li><b>Persona-aware dashboard:</b> “Needs your action” filtered to the viewer’s actual assignments; signature-stage leases visible in the pipeline; the Needs-Action tile links somewhere that can display the items it counts.</li>
       <li><b>i18n sweep:</b> half the app’s core surfaces are hardcoded English despite perfect locale-file parity — Spanish users deserve the product the locale files promise.</li>
       <li><b>Mobile:</b> the shell is unusable below ~640 px (KNOWN_ISSUES #145) — responsive sidebar collapse.</li>
-      <li><b>Reports:</b> wire the dead Export/download buttons; restore the single-lease report entry point; exclude soft-deleted leases from disclosure reports; resolve the ASC-842 naming decision (see <a href="#decisions">Decisions</a>).</li>
+      <li><b>ASC data entry + reporting redesign (per resolved Decision 2):</b> replace every LeaseIO-computed accounting output with user-entered ASC fields (classification, discount rate, ROU/liability figures from their accounting tool — stored with attribution, reported verbatim); ground-up UX redesign of the reports/disclosure section; wire the dead Export/download buttons; restore the single-lease report entry point; exclude soft-deleted leases; amend PRODUCT_STRATEGY.md + CLAUDE.md to the repository-not-calculator ruling in the same change.</li>
       <li><b>Firm follow-ons:</b> add-second-child UI, firm-role effective access actually enforced, released-child downgrade path, invitation-accept refresh bug.</li>
       <li><b>Landing funnel:</b> the lease-audit lead magnet is auth-walled for the cold visitors it exists to catch; login drops the preserved redirect. Fix both; remove the Terms claim about accounting-system integrations that don’t exist.</li>
       <li><b>Docs reconciliation:</b> CLAUDE.md and KNOWN_ISSUES carry a dozen verified false claims (firm checkout “deferred” though shipped; #109/#114/#123 stamped resolved though the user-facing symptom persists; architecture doc promising exits that don’t exist). Docs get corrected in the same commits as the fixes — per the house rule that stale docs are how sessions mislead each other.</li>
@@ -934,35 +940,37 @@ two matches tied on
 
 <section id="decisions" class="toc-anchor">
   <div class="eyebrow">Your call</div>
-  <h2>Six decisions I need from you</h2>
+  <h2>Six decisions — all resolved 2026-07-04</h2>
+  <p>All six were decided per the recommendation. Decision 2 was refined by the owner beyond the recommendation; its resolution below is the binding version, and it exposed a genuine contradiction between the two source-of-truth documents.</p>
 
   <div class="decision">
-    <div class="d-q">1 · Starter monetization — enforce it?</div>
+    <div class="d-q">1 · Starter monetization — enforce it? <span class="sev sev-good">Resolved — recommended</span></div>
     <p>Today the default signup path never touches Stripe: no card, no trial clock, nothing server-side ever blocks a never-paying workspace, and the landing page’s “7-day free trial” is not implemented anywhere. </p>
     <p class="d-rec">Recommend: checkout with 7-day trial at onboarding (card up front), grace-lock after — matches the landing copy you already published.</p>
   </div>
   <div class="decision">
-    <div class="d-q">2 · The ASC 842 report vs. Hard Rule #1</div>
-    <p>CLAUDE.md’s first hard rule says LeaseIO is never a compliance tool — yet Phase 8 shipped a user-facing “ASC 842 Disclosure Report” with PV-of-liability, straight-line expense, and the five classification tests. Either the rule bends (amend PRODUCT_STRATEGY with rationale) or the report gets reframed as the “Lease Audit Package” — chain history, attestations, overrides — with the accounting math removed.</p>
-    <p class="d-rec">Recommend: reframe as Lease Audit Package; keep the audit/attestation content, drop the accounting outputs. It’s the positioning you sell.</p>
+    <div class="d-q">2 · The ASC 842 report vs. Hard Rule #1 <span class="sev sev-good">Resolved — refined by owner</span></div>
+    <p><b>Root cause surfaced during resolution:</b> the two source-of-truth documents contradict each other. CLAUDE.md Hard Rule #1 says “never add ASC 842 compliance features”; PRODUCT_STRATEGY.md (line 13) says LeaseIO “produces verified ASC 842 reports.” Phase 8 built to the strategy doc — which is how the calculation engine got shipped against the hard rule.</p>
+    <p><b>Owner’s ruling (2026-07-04):</b> LeaseIO is the <em>repository</em> for ASC 842 information, never the calculator. Users enter their own ASC figures per lease — classification, discount rate, and the ROU-asset/liability numbers produced by their accounting tool — and LeaseIO stores them with attribution and reports them verbatim alongside the lease record, documents, and audit trail. Every LeaseIO-computed accounting output (PV of liability, straight-line expense, the five classification tests) comes out of the user-facing product. The section also gets a ground-up UX redesign — the owner’s verdict on the current one: not clean, simple, or easy to navigate. Both source documents are amended to this ruling in the same change, per the schema-and-docs discipline.</p>
+    <p class="d-rec">Scope: Phase 6 → “ASC data entry + reporting redesign” (promoted from a polish bullet to a named work item).</p>
   </div>
   <div class="decision">
-    <div class="d-q">3 · Retire the legacy approval path for new workspaces?</div>
+    <div class="d-q">3 · Retire the legacy approval path for new workspaces? <span class="sev sev-good">Resolved — recommended</span></div>
     <p>Once every new workspace is seeded with a default policy, the legacy threshold/roles path becomes unreachable for them, and the three-way config confusion collapses. Existing legacy-routed leases finish on the old path; no data migration.</p>
     <p class="d-rec">Recommend: yes — seed + retire for new, grandfather in-flight.</p>
   </div>
   <div class="decision">
-    <div class="d-q">4 · Quote gate default — on or off?</div>
+    <div class="d-q">4 · Quote gate default — on or off? <span class="sev sev-good">Resolved — recommended</span></div>
     <p>Gate 2 is the piece of your ideal flow that adds a genuinely new interruption. As a template toggle it can default on (your described flow) or off (lighter default, teams opt in).</p>
     <p class="d-rec">Recommend: on in the “Manager approves, CFO signs” template, off in “Manager only.”</p>
   </div>
   <div class="decision">
-    <div class="d-q">5 · Departments: free text or picklist?</div>
+    <div class="d-q">5 · Departments: free text or picklist? <span class="sev sev-good">Resolved — recommended</span></div>
     <p>Approval rules can match on department, but the request form collects free text — “Ops” ≠ “Operations”, so department-scoped rules silently misroute. The workspace already has a <code>department_options</code> config column that the form ignores.</p>
     <p class="d-rec">Recommend: picklist from workspace settings, seeded at creation.</p>
   </div>
   <div class="decision">
-    <div class="d-q">6 · Rejection semantics — terminal or revisable?</div>
+    <div class="d-q">6 · Rejection semantics — terminal or revisable? <span class="sev sev-good">Resolved — recommended</span></div>
     <p>The architecture doc promises a revise loop after rejection; the code makes rejection hard-terminal. Two coherent options: keep rejection terminal (with reason + one-click “duplicate into a new request”), or add a revisable rejected state.</p>
     <p class="d-rec">Recommend: keep terminal + duplicate — simpler mental model, preserves the audit trail, and “Send back” already covers the fix-and-return case.</p>
   </div>
