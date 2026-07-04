@@ -77,52 +77,76 @@ SELECT status_code, count(*) FROM net._http_response GROUP BY 1;
 
 You want 200s and no new 401s. (401s here mean one side of a secret pair is missing or mismatched.)
 
-### Step 3 — Stripe: annual prices (STOP 7) · ~10 min · test mode
+### Before Step 3 — one-time Stripe orientation (read this once; ~3 min)
 
-1. Stripe Dashboard (**test mode**) → **Products** → **Starter** (`prod_TlQhMebFLbmsbR`) → **Add price** → recurring, **$2,390 / year** → save → copy the `price_…` ID.
-2. Same on **Business** (`prod_TlQhRntCDhkxfK`) → **$4,790 / year** → copy the ID.
-3. Terminal:
+Steps 3–6 all happen on **Stripe's website control panel, called the "Dashboard."** (Navigation labels below verified against Stripe's current documentation, 2026-07-04. Stripe occasionally renames buttons; the anchor check in item 3 below is what tells you you're in the right place regardless.)
+
+1. **Get there:** open a browser → **https://dashboard.stripe.com** → sign in with your existing Stripe account. That's the whole answer to "where do I go" — everything Stripe-side happens on this one site.
+2. **Know which universe you're in.** Every Stripe account has two parallel worlds with separate data: a practice world (fake cards, no real money — called **Test mode** or a **Sandbox** depending on account vintage) and the real world (**Live mode**). LeaseIO's staging backend points at the practice world. How to switch, depending on what your account shows:
+   - **Classic accounts:** a **"Test mode" toggle** near the top of the page — the page gets an orange banner/badge when it's on. Turn it ON.
+   - **Newer accounts:** no toggle; instead click your **business name (top-left account picker)** → **Switch to sandbox** (or **Sandboxes → Open**). An orange banner says you're in the sandbox.
+3. **The right-place check (do this before anything else):** in the left sidebar click **Product catalog** — if you don't see it directly, it's under **More ▾**; or just paste `https://dashboard.stripe.com/test/products` into the address bar. **You are in the right place when the list already shows two products named "Starter" and "Business."** Those were created during earlier setup. If you don't see them, you're in the wrong mode/sandbox — go back to item 2 and switch until you do.
+4. **"Terminal" means** the Terminal app on your Mac (the same one you've deployed from). Always start with:
    ```bash
-   npx supabase secrets set STRIPE_PRICE_STARTER_ANNUAL='price_…'
-   npx supabase secrets set STRIPE_PRICE_BUSINESS_ANNUAL='price_…'
+   cd ~/Projects/leaseio_staging
+   ```
+5. **Price IDs:** every price you create gets an ID that looks like `price_1Abc…`. You'll copy five of them across Steps 3–5 — keep a Notes window open and label each one as you go.
+
+### Step 3 — Annual prices on Starter and Business (STOP 7) · ~10 min · practice mode
+
+1. In **Product catalog**, click the product named **Starter** — its detail page opens.
+2. Find the **Pricing** section → click **+ Add another price**.
+3. In the price form: type **2390.00** (USD) as the amount → make sure the pricing type is **Recurring** (not One-off) → set **Billing period: Yearly** → leave everything else as-is → click **Add price** (some accounts label it **Create price**).
+4. The new **$2,390.00 / year** row now appears in the Pricing table. Click that row — the price's detail opens and its ID (starts with `price_`) is shown at the top with a **copy icon**. Click to copy. (Shortcut on some accounts: the **⋯** menu at the right edge of the row → **Copy price ID**.)
+5. Paste it into your Notes, labeled "Starter annual."
+6. Go back to **Product catalog** → click **Business** → repeat items 2–5 with amount **4790.00 / Yearly**. Label it "Business annual."
+7. Terminal (paste your two IDs inside the quotes):
+   ```bash
+   npx supabase secrets set STRIPE_PRICE_STARTER_ANNUAL='price_…starter-annual…'
+   npx supabase secrets set STRIPE_PRICE_BUSINESS_ANNUAL='price_…business-annual…'
    npx supabase functions deploy create-checkout
    ```
 
-**Verify:** in the app, Billing → toggle Annual → checkout opens at $2,390 (Starter) instead of the "annual isn't configured" toast.
+**Verify:** in the LeaseIO app → Settings → Billing → switch the interval to **Annual** → the checkout should open at **$2,390/yr** for Starter instead of showing the "annual isn't configured" message.
 
-### Step 4 — Stripe: document-pack prices · ~10 min · test mode
+### Step 4 — Document-pack prices · ~10 min · practice mode
 
-1. **Products** → **Add product** → name `LeaseIO Document Pack` (one product carrying three prices is fine — the code identifies packs by Price ID, not Product).
-2. Add three **recurring monthly** prices: **$90**, **$160**, **$350**. Copy each `price_…` ID.
-3. Terminal:
+1. **Product catalog** → click **+ Add product** (top-right).
+2. Name: `LeaseIO Document Pack`. Skip image and description. (One product holding all three prices is fine — the code identifies packs by price ID, not by product.)
+3. In the same form's price area: amount **90.00**, **Recurring**, **Billing period: Monthly** → save the product (**Add product**).
+4. The product page opens. In **Pricing** → **+ Add another price** → **160.00 / Recurring / Monthly** → **Add price**. Then once more: **350.00 / Recurring / Monthly**.
+5. Copy all three price IDs (same method as Step 3, item 4) and label them: $90 → pack 10 · $160 → pack 20 · $350 → pack 50.
+6. Terminal:
    ```bash
-   npx supabase secrets set STRIPE_PRICE_PACK_10='price_…'   # $90
-   npx supabase secrets set STRIPE_PRICE_PACK_20='price_…'   # $160
-   npx supabase secrets set STRIPE_PRICE_PACK_50='price_…'   # $350
+   npx supabase secrets set STRIPE_PRICE_PACK_10='price_…the-$90-one…'
+   npx supabase secrets set STRIPE_PRICE_PACK_20='price_…the-$160-one…'
+   npx supabase secrets set STRIPE_PRICE_PACK_50='price_…the-$350-one…'
    npx supabase functions deploy manage-document-pack
    ```
 
-**Verify:** on a workspace at its lease cap, the limit dialog's "Add a pack" path opens checkout at $90 instead of failing with `pack_not_configured`.
+**Verify:** on a workspace at its lease cap, the limit dialog's "Add a pack" option opens a **$90/mo** checkout instead of failing with `pack_not_configured`.
 
-### Step 5 — Stripe: Vault product (STOP 10) · ~5 min · test mode
+### Step 5 — Vault product (STOP 10) · ~5 min · practice mode
 
-1. **Products** → **Add product** → name `Vault` (new product, separate from Starter/Business).
-2. Add a **recurring yearly** price: **$249 / year** → copy the ID.
-3. Terminal:
+1. **Product catalog** → **+ Add product** → name: `Vault` (a brand-new product — do NOT add this price to Starter or Business).
+2. Price in the same form: **249.00**, **Recurring**, **Billing period: Yearly** → **Add product**.
+3. Open the new product → click the $249/year price row → copy its ID.
+4. Terminal:
    ```bash
-   npx supabase secrets set STRIPE_PRICE_VAULT_ANNUAL='price_…'
+   npx supabase secrets set STRIPE_PRICE_VAULT_ANNUAL='price_…vault…'
    npx supabase functions deploy create-checkout
    npx supabase functions deploy stripe-webhook
    ```
-4. The renewal-reminder cron is already scheduled (Step 2 armed it) — nothing more to wire.
+5. The renewal-reminder cron is already scheduled and armed (Steps you did earlier) — nothing more to wire.
 
-**Verify:** cancel-dialog "Switch to Vault" on a test workspace opens a $249/yr checkout; on completion the workspace shows `plan='vault'`, read-only, data viewable + exportable.
+**Verify:** on a test workspace, the cancel dialog's "Switch to Vault" opens a **$249/yr** checkout; on completion the workspace shows plan **Vault**, read-only, with all data viewable and exportable.
 
 ### Step 6 — GO-LIVE BLOCK (STOP 3 + live-mode duplicates) · ~15 min · do this only when flipping to real customers
 
-Stripe test and live modes are **separate universes** — every Product, Price, webhook endpoint, and secret above exists per-mode. At go-live:
+Stripe's practice and live modes are **separate universes** — every Product, Price, webhook endpoint, and secret above exists per-mode. At go-live:
 
-1. Toggle Stripe to **Live mode** → **Developers → Webhooks → Add endpoint**:
+0. **Shortcut for the products:** you do NOT have to rebuild Steps 3–5 by hand. Open each product's detail page in practice mode and click **Copy to live mode** (upper-right) — Stripe copies the product *and its prices* into the live world. Then open each product in **Live mode** and copy the **live** price IDs (they are different IDs from the practice ones).
+1. Switch the Dashboard to **Live mode** (toggle off Test mode / leave the sandbox) → **Developers → Webhooks → Add endpoint**:
    - URL: `https://wwkwoxxcprnjjufkbzac.supabase.co/functions/v1/stripe-webhook`
    - Events — exactly these five: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `payment_intent.succeeded` (the last one is what grants single-lease credits — without it customers are charged and never credited, silently).
    - Copy the endpoint's **signing secret** (`whsec_…`).
