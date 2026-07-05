@@ -52,7 +52,7 @@ export const PLANS: Record<SubscriptionPlan, PlanConfig> = {
     name: 'Starter',
     nameKey: 'plan.starter',
     descriptionKey: 'plan.description.starter',
-    price: { monthly: 249, annual: 2390 },
+    price: { monthly: 299, annual: 2870 },
     maxUsers: 3,
     maxActiveLeases: 15,
     maxArchivedLeases: 50,

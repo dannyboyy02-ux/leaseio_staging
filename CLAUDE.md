@@ -22,7 +22,7 @@ LeaseIO is **NOT** a lease accounting tool. It does not calculate ROU assets, ge
 - **Backend:** Supabase (Postgres, Auth, Storage, Edge Functions)
 - **Deployment:** Vercel with CI/CD from GitHub
 - **AI Engine:** Anthropic Claude (all three tiers — see AI Architecture below)
-- **Billing:** Stripe (starter/business at $249/$499, monthly+annual, 7-day trial)
+- **Billing:** Stripe (starter/business at $299/$499, monthly+annual, 7-day trial; Starter ratified at $299 by the owner 2026-07-04 — matches the Stripe price behind the hardcoded monthly Price ID)
 - **i18n:** i18next with English + Spanish locales (both locale files updated together)
 - **State:** TanStack React Query + React Context (AppContext, AuthContext, LanguageContext)
 
@@ -80,7 +80,7 @@ Canonical helpers: `src/lib/lifecycleStates.ts` (+ Deno mirror); pure chain logi
 
 | | Starter | Business |
 |---|---|---|
-| **Price** | $249/month | $499/month |
+| **Price** | $299/month | $499/month |
 | **Monthly Abstractions Included** | 15 | 50 |
 | **Users** | 3 | Unlimited |
 | **Lease Request Workflow / Upload + AI Abstraction / Dashboard + Audit Trail** | Yes | Yes |

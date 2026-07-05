@@ -96,8 +96,8 @@ Steps 3–6 all happen on **Stripe's website control panel, called the "Dashboar
 
 1. In **Product catalog**, click the product named **Starter** — its detail page opens.
 2. Find the **Pricing** section → click **+ Add another price**.
-3. In the price form: type **2390.00** (USD) as the amount → make sure the pricing type is **Recurring** (not One-off) → set **Billing period: Yearly** → leave everything else as-is → click **Add price** (some accounts label it **Create price**).
-4. The new **$2,390.00 / year** row now appears in the Pricing table. Click that row — the price's detail opens and its ID (starts with `price_`) is shown at the top with a **copy icon**. Click to copy. (Shortcut on some accounts: the **⋯** menu at the right edge of the row → **Copy price ID**.)
+3. In the price form: type **2870.00** (USD) as the amount — this is $299 × 12 with the standing 20% annual discount, matching the owner-ratified $299/mo Starter price → make sure the pricing type is **Recurring** (not One-off) → set **Billing period: Yearly** → leave everything else as-is → click **Add price** (some accounts label it **Create price**).
+4. The new **$2,870.00 / year** row now appears in the Pricing table. Click that row — the price's detail opens and its ID (starts with `price_`) is shown at the top with a **copy icon**. Click to copy. (Shortcut on some accounts: the **⋯** menu at the right edge of the row → **Copy price ID**.)
 5. Paste it into your Notes, labeled "Starter annual."
 6. Go back to **Product catalog** → click **Business** → repeat items 2–5 with amount **4790.00 / Yearly**. Label it "Business annual."
 7. Terminal (paste your two IDs inside the quotes):
@@ -107,7 +107,7 @@ Steps 3–6 all happen on **Stripe's website control panel, called the "Dashboar
    npx supabase functions deploy create-checkout
    ```
 
-**Verify:** in the LeaseIO app → Settings → Billing → switch the interval to **Annual** → the checkout should open at **$2,390/yr** for Starter instead of showing the "annual isn't configured" message.
+**Verify:** in the LeaseIO app → Settings → Billing → switch the interval to **Annual** → the checkout should open at **$2,870/yr** for Starter instead of showing the "annual isn't configured" message.
 
 ### Step 4 — Document-pack prices · ~10 min · practice mode
 
