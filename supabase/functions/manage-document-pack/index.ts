@@ -80,7 +80,7 @@ async function canManageBilling(
 // Resolve the workspace's Stripe customer (prefer the stored id) and default card.
 async function resolveCard(
   stripe: Stripe,
-  supabaseAdmin: ReturnType<typeof createClient>,
+  _supabaseAdmin: ReturnType<typeof createClient>,
   ws: WorkspaceRow,
   userEmail: string | undefined,
 ): Promise<
