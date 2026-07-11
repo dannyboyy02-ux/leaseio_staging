@@ -40,11 +40,11 @@ The review plan's operator table — and `DEPLOY_RUNBOOK_2026-06-18.md`, `LEASES
 > - The two **monthly** IDs go to Claude (they're hardcoded in `create-checkout`/`stripe-webhook` and must be repointed — paste them into the chat).
 > - The two **annual** IDs go into secrets (R4).
 >
-> **R3 — Webhook inside this sandbox** (webhooks don't carry over between environments):
-> 1. Still inside the sandbox: **Developers** (bottom-left) → **Webhooks** → **Add endpoint**.
-> 2. URL: `https://wwkwoxxcprnjjufkbzac.supabase.co/functions/v1/stripe-webhook`
-> 3. Events — exactly these five: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `payment_intent.succeeded`.
-> 4. Copy the endpoint's **Signing secret** (`whsec_…`).
+> **R3 — Webhook inside this sandbox** (webhooks don't carry over between environments). Newer Stripe calls these **"Event destinations,"** found under **Workbench → Webhooks** (or **Developers → Webhooks**). As of 2026-07-11 the destination **already exists** — `leaseio-sandbox-supabase`, Active, pointing at the stripe-webhook URL — so DON'T click "Add destination"; open the existing one and finish it:
+> 1. Click the blue destination name **`leaseio-sandbox-supabase`** (or the **⋯** at the row's right end) to open its detail page.
+> 2. Confirm it listens to exactly these **five** events (it showed "4 events" — the missing one is almost certainly the last): `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `payment_intent.succeeded`. If one's missing → **Update details / Edit destination** (button or ⋯ menu) → add it → save.
+> 3. On the detail page, reveal and copy the **Signing secret** (`whsec_…`) — that's the R4 value.
+> 4. (Only if no destination exists — e.g. in a fresh sandbox: **Add destination** → URL `https://wwkwoxxcprnjjufkbzac.supabase.co/functions/v1/stripe-webhook` → the five events above → create → copy the signing secret.)
 >
 > **R4 — Point the backend at this sandbox.** In the sandbox: **Developers → API keys** → reveal and copy the **Secret key** (`sk_test_…` — each sandbox has its own). Then in Terminal:
 > ```bash
@@ -91,21 +91,23 @@ Generate three secrets (run three times, keep the outputs):
 openssl rand -hex 32
 ```
 
+> ⚠️ **PASTE THE BARE VALUE — do NOT include the `< >` angle brackets.** Below, `PASTE_HEX_1` is a stand-in for the 64-character output of `openssl` (letters a–f and digits only, e.g. `4f3c9a1b…d2`). A correct stored secret is exactly **64 characters**; if it's 66 and starts with `<`, the brackets got pasted in — regenerate. (This bit the first setup on 2026-07-11.)
+
 Function side:
 
 ```bash
-npx supabase secrets set SWEEP_PENDING_WORKSPACES_CRON_SECRET='<hex-1>'
-npx supabase secrets set FIRM_BILLING_CRON_SECRET='<hex-2>'
-npx supabase secrets set VAULT_RENEWAL_CRON_SECRET='<hex-3>'
+npx supabase secrets set SWEEP_PENDING_WORKSPACES_CRON_SECRET='PASTE_HEX_1'
+npx supabase secrets set FIRM_BILLING_CRON_SECRET='PASTE_HEX_2'
+npx supabase secrets set VAULT_RENEWAL_CRON_SECRET='PASTE_HEX_3'
 ```
 
-Database side — Dashboard → SQL Editor, paste with the same values:
+Database side — Dashboard → SQL Editor, paste the **same** three bare values:
 
 ```sql
 INSERT INTO private.cron_secrets (id, value) VALUES
-  ('sweep_pending_workspaces', '<hex-1>'),
-  ('firm_billing',             '<hex-2>'),
-  ('vault_renewal',            '<hex-3>')
+  ('sweep_pending_workspaces', 'PASTE_HEX_1'),
+  ('firm_billing',             'PASTE_HEX_2'),
+  ('vault_renewal',            'PASTE_HEX_3')
 ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value;
 ```
 
