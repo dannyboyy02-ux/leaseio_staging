@@ -31,7 +31,6 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { enforceWorkspaceRateLimit } from "../_shared/audit.ts";
-import { describePaymentMethod } from "../_shared/payment_method.ts";
 import {
   BUSINESS_MONTHLY_PRICE_ID,
   BUSINESS_MONTHLY_PRICE_USD,
@@ -85,12 +84,19 @@ async function resolveCustomerAndCard(
   if (!customerId) return { ok: false, reason: "no_customer" };
 
   // Default payment method: prefer invoice_settings.default_payment_method,
-  // fall back to the first attached method of ANY type. The explicit id is
-  // load-bearing — a charge with no PM resolved would fail. Do NOT filter
-  // type:'card': a customer who paid through Stripe Link / Apple Pay / ACH has
-  // a non-'card' PaymentMethod, and filtering it out rejected them here with
-  // `no_card_on_file` — blocking $499 workspace creation for a paying customer
-  // (billing incident 2026-07-11).
+  // fall back to the first attached CARD. This flow is deliberately card-only:
+  // the $499 add-workspace charge is confirmed client-side with Stripe.js
+  // `confirmCardPayment` (NewWorkspaceDialog), which cannot complete a
+  // non-'card' method (Stripe Link / ACH). Accepting a non-card method here
+  // would let the caller past the eligibility gate and then fail at
+  // confirmation AFTER a pending workspace + PaymentIntent were created and
+  // must be rolled back (PR #81 review). So we filter type:'card' and reject
+  // non-card early with `no_card_on_file` — the honest, no-orphan behavior.
+  // (The read-only Billing tab / get-billing-summary is the surface that DOES
+  // show every method type via describePaymentMethod — see KNOWN_ISSUES
+  // 2026-07-11. Supporting non-card methods for the add-workspace charge is a
+  // tracked enhancement, not a same-PR change: it needs a type-branched
+  // Stripe.js confirmation flow.)
   const customer = await stripe.customers.retrieve(customerId);
   let pmId: string | null = null;
   if (customer && !("deleted" in customer && customer.deleted)) {
@@ -98,23 +104,18 @@ async function resolveCustomerAndCard(
     pmId = typeof dpm === "string" ? dpm : dpm?.id ?? null;
   }
   if (!pmId) {
-    const pms = await stripe.paymentMethods.list({ customer: customerId, limit: 1 });
+    const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
     pmId = pms.data[0]?.id ?? null;
   }
   if (!pmId) return { ok: false, reason: "no_card_on_file" };
 
   const pm = await stripe.paymentMethods.retrieve(pmId);
-  const desc = describePaymentMethod(pm as unknown as Parameters<typeof describePaymentMethod>[0]);
   return {
     ok: true,
     customerId,
     pmId,
-    // For a card these are brand/last4; for Link/wallet they degrade to the
-    // method label (e.g. brand 'link', last4 null) so the preview modal can
-    // still render honest consent copy instead of failing.
-    cardLast4: desc?.last4 ?? null,
-    cardBrand: desc?.brand ?? null,
-    cardLabel: desc?.label ?? null,
+    cardLast4: pm.card?.last4 ?? null,
+    cardBrand: pm.card?.brand ?? null,
   };
 }
 
