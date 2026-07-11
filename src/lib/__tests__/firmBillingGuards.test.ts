@@ -15,7 +15,7 @@ const fn = (name: string) => readFileSync(join(root, `supabase/functions/${name}
 describe('#103 — firm-bound workspaces are rejected from workspace-scoped billing', () => {
   it('create-checkout selects firm_id and rejects firm-bound with reason firm_managed', () => {
     const src = fn('create-checkout');
-    expect(src).toMatch(/\.select\("id, owner_id, firm_id"\)/);
+    expect(src).toMatch(/\.select\("id, owner_id, firm_id, stripe_customer_id, stripe_subscription_id"\)/);
     expect(src).toContain('workspace as { firm_id: string | null }).firm_id');
     expect(src).toContain('reason: "firm_managed"');
   });

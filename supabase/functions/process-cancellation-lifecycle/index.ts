@@ -344,20 +344,66 @@ serve(async (req) => {
         continue;
       }
 
+      // STRIPE-TRUTH race guard (money-path audit 2026-07-11): the DB check
+      // above reads the webhook MIRROR, which lags Stripe by delivery latency
+      // — a customer whose renewal checkout completed seconds ago still looks
+      // canceled here, and the old flow would cancel their brand-new paid sub
+      // and destroy their data. Ask Stripe directly for any entitled sub
+      // tagged to this workspace before any destruction; if one exists, heal
+      // instead of purging (the webhook will finish the entitlement write).
+      // Fail CLOSED on any Stripe error — never destroy on unconfirmed truth.
+      if (!stripe) {
+        console.error("[cancellation-lifecycle] STRIPE_SECRET_KEY not set — purge deferred:", ws.id);
+        continue;
+      }
+      if (ws.stripe_customer_id) {
+        try {
+          const liveSubs = await stripe.subscriptions.list({
+            customer: ws.stripe_customer_id,
+            status: "all",
+            limit: 100,
+          });
+          // PLAN/VAULT subs only (integrity review 2026-07-11): a document-pack
+          // sub also carries metadata.workspace_id and — because packs are only
+          // canceled AT purge — is routinely still 'active' on purge day.
+          // Matching it would heal every pack-holding workspace out of the
+          // deletion pipeline forever while the pack keeps billing. Packs and
+          // firm subs are NOT plan entitlement.
+          const entitledLive = (liveSubs.data as Array<{
+            metadata?: Record<string, string | undefined>;
+            status: string;
+          }>).some(
+            (s) =>
+              s.metadata?.workspace_id === ws.id &&
+              !s.metadata?.addon_type &&
+              !s.metadata?.firm_id &&
+              (s.status === "active" || s.status === "trialing"),
+          );
+          if (entitledLive) {
+            console.warn(
+              "[cancellation-lifecycle] purge candidate has a LIVE entitled sub at Stripe (webhook lagging) — healing instead of purging:",
+              ws.id,
+            );
+            await healRenewed(ws.id);
+            continue;
+          }
+        } catch (err) {
+          console.error("[cancellation-lifecycle] stripe entitlement re-check failed — purge deferred:", ws.id, (err as Error)?.message);
+          continue;
+        }
+      }
+
       // Cancel every surviving Stripe subscription tagged to this workspace
       // (document packs are independent subscriptions — without this they
       // bill forever against a deleted workspace; security review HIGH).
       let stripeCanceled: string[] = [];
-      if (stripe && ws.stripe_customer_id) {
+      if (ws.stripe_customer_id) {
         try {
           stripeCanceled = await cancelWorkspaceSubscriptions(stripe, ws.stripe_customer_id, ws.id);
         } catch (err) {
           console.error("[cancellation-lifecycle] stripe cleanup failed — purge deferred:", ws.id, (err as Error)?.message);
           continue; // never purge while billing cleanup is unconfirmed
         }
-      } else if (!stripe) {
-        console.error("[cancellation-lifecycle] STRIPE_SECRET_KEY not set — purge deferred:", ws.id);
-        continue;
       }
 
       const [{ count: leaseCount }, { count: memberCount }, { data: noticeRows }] = await Promise.all([
@@ -403,6 +449,15 @@ serve(async (req) => {
           purge_after: ws.purge_after,
           stripe_subscriptions_canceled: stripeCanceled,
           notices: noticeRows ?? [],
+          // Lease inventory BEFORE destruction (integrity review 2026-07-11):
+          // if a concurrent heal wins after the lease rows are deleted (the
+          // CRITICAL half-dead branch below), this is the only record of which
+          // leases existed and whose storage prefixes hold their files.
+          leases: (leaseRows ?? []).map((l: { id: string; user_id: string | null; requestor_id: string | null }) => ({
+            id: l.id,
+            user_id: l.user_id,
+            requestor_id: l.requestor_id,
+          })),
         },
       });
       if (forensicErr && !/duplicate|unique/i.test(forensicErr.message)) {
@@ -416,13 +471,30 @@ serve(async (req) => {
         continue;
       }
       // Conditional: a concurrent webhook heal (lifecycle nulled) wins.
-      const { error: wsErr } = await supabaseAdmin
+      // .select() so a ZERO-ROW match (heal landed between the lease delete
+      // and here) is DETECTED — PostgREST reports no error for it. On zero
+      // rows the workspace survives, so the storage purge must NOT run
+      // (audit 2026-07-11: it previously ran unconditionally, orphaning a
+      // healed workspace's documents).
+      const { data: deletedWs, error: wsErr } = await supabaseAdmin
         .from("workspaces")
         .delete()
         .eq("id", ws.id)
-        .not("soft_deleted_at", "is", null);
+        .not("soft_deleted_at", "is", null)
+        .select("id");
       if (wsErr) {
         console.error("[cancellation-lifecycle] workspace delete failed:", ws.id, wsErr.message);
+        continue;
+      }
+      if (!deletedWs || deletedWs.length === 0) {
+        // A heal won the race after the lease rows were already removed —
+        // half-dead state: workspace lives, its leases are gone (forensic row
+        // + deleted_workspaces.details preserve what existed). Log CRITICAL
+        // for ops follow-up and leave storage intact.
+        console.error(
+          "[cancellation-lifecycle] CRITICAL: workspace healed mid-purge after lease rows were deleted — storage left intact, ops follow-up required:",
+          ws.id,
+        );
         continue;
       }
 

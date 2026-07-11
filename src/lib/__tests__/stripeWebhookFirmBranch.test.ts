@@ -37,10 +37,13 @@ describe('stripe-webhook firm-tier branch', () => {
     expect(second).toContain('if (isFirmSubscription(subscription)) {');
   });
 
-  it('cancellation clears the subscription id and audits firm_billing_subscription_canceled', () => {
-    const del = section(src, 'eventType === "customer.subscription.deleted"', 'return;');
+  it('cancellation clears the subscription id (current sub only) and audits firm_billing_subscription_canceled', () => {
+    // 2026-07-11 hardening: a stale-deleted guard now precedes the clear, so
+    // the window runs to the audit type (the first `return;` is the guard's).
+    const del = section(src, 'eventType === "customer.subscription.deleted"', '"firm_billing_subscription_canceled"');
+    expect(del).toContain('storedSubId !== subscription.id'); // stale guard
     expect(del).toContain('stripe_subscription_id: null');
-    expect(del).toContain('"firm_billing_subscription_canceled"');
+    expect(del).toContain('if (clearErr) throw new Error'); // loud on DB rejection
   });
 
   it('created/updated records the sub, propagates business to children, and audits start/updated', () => {

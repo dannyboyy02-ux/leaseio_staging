@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { describePaymentMethod } from "../_shared/payment_method.ts";
+import { resolvePeriodEndIso } from "../_shared/stripe_subscription.ts";
 
 // Read-only billing summary for the in-app Billing tab: the saved card
 // (brand + last4 only — never the full PAN or a PaymentMethod secret) and the
@@ -157,12 +158,12 @@ serve(async (req) => {
       if (subscriptionId) {
         try {
           const sub = await stripe.subscriptions.retrieve(subscriptionId);
-          const periodEnd = (sub as unknown as { current_period_end?: number }).current_period_end;
           subscription = {
             status: sub.status,
             cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
-            currentPeriodEnd:
-              typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null,
+            // Items-aware read — Basil removed top-level current_period_end
+            // (_shared/stripe_subscription.ts).
+            currentPeriodEnd: resolvePeriodEndIso(sub),
           };
         } catch (subErr) {
           console.error(

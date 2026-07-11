@@ -187,16 +187,23 @@ serve(async (req) => {
           wsRow.subscription_status === "incomplete_expired")
       ) {
         try {
+          // Basil (2025-03-31+) removed invoice.payment_intent — the invoice's
+          // confirmation_secret carries the same client_secret for the
+          // default_incomplete confirm flow (money-path audit 2026-07-11).
           const sub = await stripe.subscriptions.retrieve(wsRow.stripe_subscription_id, {
-            expand: ["latest_invoice.payment_intent"],
+            expand: ["latest_invoice.confirmation_secret"],
           });
-          const latestInvoice = sub.latest_invoice as Stripe.Invoice | null;
-          const pi = (latestInvoice?.payment_intent ?? null) as Stripe.PaymentIntent | null;
-          if (pi?.client_secret && pi.status !== "succeeded" && pi.status !== "canceled") {
+          const latestInvoice = sub.latest_invoice as unknown as
+            | { status?: string | null; confirmation_secret?: { client_secret?: string | null } | null }
+            | null;
+          const clientSecret = latestInvoice?.confirmation_secret?.client_secret ?? null;
+          // An open (unpaid, uncollected) invoice is the resumable state; a
+          // paid or void invoice means there is nothing left to confirm.
+          if (clientSecret && latestInvoice?.status === "open") {
             resume = {
               workspaceId: wsRow.id,
               name: wsRow.name,
-              clientSecret: pi.client_secret,
+              clientSecret,
             };
           }
         } catch (e) {
@@ -410,18 +417,18 @@ serve(async (req) => {
         default_payment_method: card.pmId,
         payment_behavior: "default_incomplete",
         payment_settings: { save_default_payment_method: "on_subscription" },
-        expand: ["latest_invoice.payment_intent"],
+        // Basil (2025-03-31+) removed invoice.payment_intent; the invoice's
+        // confirmation_secret carries the same client_secret for the
+        // default_incomplete confirm flow (money-path audit 2026-07-11).
+        expand: ["latest_invoice.confirmation_secret"],
         metadata: { workspace_id: workspaceId, plan_id: "business", billing_interval: "monthly" },
       },
       { idempotencyKey: `ws_create_${idempotencyKey}` },
     );
 
-    // In the basil API version `payment_intent` is not declared on Stripe.Invoice;
-    // the expand populates it at runtime. Cast through unknown to read it safely.
     const invoice = subscription.latest_invoice as unknown as
-      { payment_intent?: Stripe.PaymentIntent | null } | null;
-    const pi = invoice?.payment_intent ?? null;
-    const clientSecret = pi?.client_secret ?? null;
+      { status?: string | null; confirmation_secret?: { client_secret?: string | null } | null } | null;
+    const clientSecret = invoice?.confirmation_secret?.client_secret ?? null;
 
     return jsonResponse(
       {
@@ -429,7 +436,10 @@ serve(async (req) => {
         workspaceId,
         status: "pending",
         clientSecret,
-        paymentIntentStatus: pi?.status ?? null,
+        // Basil: no expandable PI here; default_incomplete always requires the
+        // client-side confirm when a secret is present.
+        paymentIntentStatus: clientSecret ? "requires_confirmation" : null,
+        invoiceStatus: invoice?.status ?? null,
       },
       200,
       origin,

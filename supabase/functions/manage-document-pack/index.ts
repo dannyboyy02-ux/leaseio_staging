@@ -31,6 +31,7 @@ import {
   SINGLE_LEASE_PRICE_CENTS,
   packPriceId,
 } from "../_shared/document_packs.ts";
+import { resolvePeriodEndIso } from "../_shared/stripe_subscription.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -133,14 +134,15 @@ async function listActivePacks(stripe: Stripe, customerId: string, workspaceId: 
         s.metadata?.workspace_id === workspaceId &&
         (s.status === "active" || s.status === "trialing")
       ) {
-        const periodEnd = (s as unknown as { current_period_end?: number }).current_period_end;
         packs.push({
           subscriptionId: s.id,
           packId: s.metadata?.pack_id ?? "",
           size: Number.parseInt(s.metadata?.pack_size ?? "0", 10) || 0,
           status: s.status,
           cancelAtPeriodEnd: Boolean(s.cancel_at_period_end),
-          currentPeriodEnd: typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null,
+          // Items-aware read — Basil removed top-level current_period_end
+          // (_shared/stripe_subscription.ts).
+          currentPeriodEnd: resolvePeriodEndIso(s),
         });
       }
     }
@@ -361,13 +363,14 @@ serve(async (req) => {
       return jsonResponse({ ok: false, reason: "forbidden" }, 403, origin);
     }
     const updated = await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
-    const periodEnd = (updated as unknown as { current_period_end?: number }).current_period_end;
     return jsonResponse(
       {
         ok: true,
         subscriptionId,
         cancelAtPeriodEnd: true,
-        currentPeriodEnd: typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null,
+        // Items-aware read — Basil removed top-level current_period_end
+        // (_shared/stripe_subscription.ts).
+        currentPeriodEnd: resolvePeriodEndIso(updated),
       },
       200,
       origin,
@@ -432,7 +435,13 @@ serve(async (req) => {
         default_payment_method: card.pmId,
         payment_behavior: "default_incomplete",
         payment_settings: { save_default_payment_method: "on_subscription" },
-        expand: ["latest_invoice.payment_intent"],
+        // Basil (2025-03-31+) removed invoice.payment_intent; the documented
+        // replacement for the default_incomplete flow is the invoice's
+        // confirmation_secret (same client_secret the PI would have carried —
+        // stripe.confirmCardPayment works unchanged client-side). The old
+        // expand path was never driven live and would fail under the pinned
+        // API version (money-path audit 2026-07-11).
+        expand: ["latest_invoice.confirmation_secret"],
         metadata: {
           workspace_id: workspaceId,
           addon_type: ADDON_TYPE_DOCUMENT_PACK,
@@ -444,8 +453,8 @@ serve(async (req) => {
     );
 
     const invoice = subscription.latest_invoice as unknown as
-      { payment_intent?: Stripe.PaymentIntent | null } | null;
-    const pi = invoice?.payment_intent ?? null;
+      { status?: string | null; confirmation_secret?: { client_secret?: string | null } | null } | null;
+    const clientSecret = invoice?.confirmation_secret?.client_secret ?? null;
 
     return jsonResponse(
       {
@@ -453,8 +462,11 @@ serve(async (req) => {
         subscriptionId: subscription.id,
         packId: pack.id,
         size: pack.size,
-        clientSecret: pi?.client_secret ?? null,
-        paymentIntentStatus: pi?.status ?? null,
+        clientSecret,
+        // Basil: the PI object is no longer expandable here; the invoice
+        // status ('open' until the payment confirms) is the client's signal.
+        paymentIntentStatus: clientSecret ? "requires_confirmation" : null,
+        invoiceStatus: invoice?.status ?? null,
       },
       200,
       origin,
