@@ -737,6 +737,7 @@
       <li><b>Stop double-billing on plan switch:</b> cancel the previous plan subscription when checkout completes. <span class="fp">create-checkout/index.ts:187-217 · stripe-webhook/index.ts:321-355</span></li>
       <li><b>Apply the #18 storage-RLS fix</b> (written six weeks ago, never applied) so report PDFs can upload at all; revoke public summary tokens on lease deletion. <span class="fp">20260516120001_storage_policies.sql:83-94</span></li>
       <li><b>Fix the Stripe Basil API bug:</b> <code>subscription.current_period_end</code> no longer exists at the pinned API version — read it from items. Renewal dates are silently wrong. <span class="fp">stripe-webhook/index.ts:97-130</span></li>
+      <li><b>Enforce price parity, Stripe ↔ config (owner 2026-07-11):</b> the displayed amount and the charged amount must never silently diverge (the $249-vs-$299 incident). Add a CI guardrail that reads each hardcoded Stripe price ID's <code>unit_amount</code> and fails the build if it ≠ <code>pricing.ts</code>. Follow-up option: generate the <code>pricing.ts</code> amounts from Stripe at build time so the number is single-sourced from Stripe — but keep entitlements (caps, quotas, feature flags) in code, and never add a live client-side Stripe fetch to the public pricing page. <span class="fp">src/config/pricing.ts · create-checkout/stripe-webhook price IDs</span></li>
     </ul>
   </div>
 
