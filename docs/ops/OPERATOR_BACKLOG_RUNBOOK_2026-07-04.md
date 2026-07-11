@@ -25,6 +25,46 @@ The review plan's operator table — and `DEPLOY_RUNBOOK_2026-06-18.md`, `LEASES
 
 ## Part 2 — Your checklist
 
+> ### ⚑ UPDATE 2026-07-11 — YOU ARE HERE
+>
+> **Done and verified live:** Step 2 is complete (all three cron secrets present in `private.cron_secrets`, response log shows 200s and zero 401s — the cron layer is fully armed). Step 1 assumed done; re-running its three deploy commands is harmless if unsure.
+>
+> **Where you are:** mid-Step 3 — but in a **new Stripe sandbox** ("LeaseIO sandbox") with **newly created products** (Starter `prod_UpI3AgvCxw1ZYY`, Business `prod_UpI5w6gn9xEJr1`, created Jul 5). The app's code still points at the ORIGINAL products/prices, and sandboxes have their own API keys and webhooks. Owner decision 2026-07-11: **Starter is $299/mo (final)** — the $2,870/yr annual you already created is correct; the $249/mo monthly is the one to replace. **Follow the reconciliation below instead of the original Steps 3 items 1–5**, then continue with Steps 4–5 as written (inside this same sandbox).
+>
+> **R1 — Fix Starter monthly (in the sandbox):**
+> 1. Starter → Pricing → **+ Add another price** → **299.00 / Recurring / Monthly** → Add price.
+> 2. On the new $299 row: **⋯ → Set as default price**.
+> 3. On the old $249 row: **⋯ → Archive price** (possible only after step 2, since a default price can't be archived).
+>
+> **R2 — Collect SIX price IDs into Notes** (click each price row, copy the `price_…` ID, or ⋯ → Copy price ID): Starter **$299/mo**, Starter **$2,870/yr**, Business **$499/mo**, Business **$4,790/yr** — plus, after you do Steps 4–5, the pack and Vault IDs.
+> - The two **monthly** IDs go to Claude (they're hardcoded in `create-checkout`/`stripe-webhook` and must be repointed — paste them into the chat).
+> - The two **annual** IDs go into secrets (R4).
+>
+> **R3 — Webhook inside this sandbox** (webhooks don't carry over between environments):
+> 1. Still inside the sandbox: **Developers** (bottom-left) → **Webhooks** → **Add endpoint**.
+> 2. URL: `https://wwkwoxxcprnjjufkbzac.supabase.co/functions/v1/stripe-webhook`
+> 3. Events — exactly these five: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `payment_intent.succeeded`.
+> 4. Copy the endpoint's **Signing secret** (`whsec_…`).
+>
+> **R4 — Point the backend at this sandbox.** In the sandbox: **Developers → API keys** → reveal and copy the **Secret key** (`sk_test_…` — each sandbox has its own). Then in Terminal:
+> ```bash
+> cd ~/Projects/leaseio_staging
+> npx supabase secrets set STRIPE_SECRET_KEY='sk_test_…sandbox…'
+> npx supabase secrets set STRIPE_WEBHOOK_SECRET='whsec_…from R3…'
+> npx supabase secrets set STRIPE_PRICE_STARTER_ANNUAL='price_…2870…'
+> npx supabase secrets set STRIPE_PRICE_BUSINESS_ANNUAL='price_…4790…'
+> ```
+>
+> **R5 — Repoint + deploy.** Paste the two monthly price IDs to Claude → Claude updates the hardcoded IDs and pushes → then:
+> ```bash
+> git checkout main && git pull
+> npx supabase functions deploy create-checkout
+> npx supabase functions deploy stripe-webhook
+> ```
+> (If the pricing/ID commit is still on the review branch rather than main, Claude will tell you which branch to pull.)
+>
+> **R6 — Continue:** Step 4 (packs) and Step 5 (Vault) exactly as written below, creating everything **inside this same sandbox**; their secrets + `manage-document-pack` deploy as written. Then the Step 7 sweep. Note for go-live later: Step 6's "Copy to live mode" shortcut copies from a sandbox to live the same way.
+
 ### Step 1 — Redeploy the two stale functions (+1 for safety) · ~3 min
 
 The repo copies changed after the last deploys: `process_lease` (repo 06-25 — the soft-delete filters — vs deployed 06-23) and `vendor-health-check` (repo 06-16 vs deployed 05-16). `retry_lease` was committed and deployed the same day (06-23) so it's ambiguous — redeploying is free and idempotent.
