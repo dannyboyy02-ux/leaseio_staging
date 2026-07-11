@@ -316,7 +316,7 @@ describe('create-checkout Vault wiring (static source)', () => {
   it('no trial on the vault branch — trial_period_days only on the non-vault path', () => {
     const block = window(src, 'subscription_data: {', 'metadata: {');
     // The spread is empty for vault, trial only for real plans.
-    expect(block).toContain('...(isVault ? {} : { trial_period_days: TRIAL_PERIOD_DAYS })');
+    expect(block).toContain('...(isVault || !trialEligible ? {} : { trial_period_days: TRIAL_PERIOD_DAYS })');
   });
 });
 

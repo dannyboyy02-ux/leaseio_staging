@@ -114,7 +114,7 @@ serve(async (req) => {
 
     const { data: workspace, error: workspaceError } = await supabaseAdmin
       .from("workspaces")
-      .select("id, owner_id, firm_id")
+      .select("id, owner_id, firm_id, stripe_customer_id, stripe_subscription_id")
       .eq("id", workspaceId)
       .maybeSingle();
 
@@ -172,15 +172,32 @@ serve(async (req) => {
       apiVersion: "2025-08-27.basil",
     });
 
-    // Check if a Stripe customer record exists for this user. Trial
-    // eligibility is per-customer in Stripe — if the customer has had
-    // a prior subscription on this Price, the trial may not apply.
-    // Stripe handles that natively; trial_period_days is best-effort.
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId;
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
+    // Resolve the Stripe customer: prefer the WORKSPACE's stored customer id
+    // (written by the webhook — keeps every sub for this workspace on one
+    // customer, which the billing summary, portal, and displaced-sub cancel
+    // all rely on). Fall back to an email match only for a first-ever
+    // checkout (email is not unique in Stripe — the #61-class caveat — so it
+    // is a fallback, never preferred).
+    const storedCustomerId =
+      (workspace as { stripe_customer_id?: string | null }).stripe_customer_id ?? null;
+    let customerId = storedCustomerId ?? undefined;
+    if (!customerId) {
+      const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+      if (customers.data.length > 0) {
+        customerId = customers.data[0].id;
+      }
     }
+
+    // Trial eligibility (money-path audit 2026-07-11): the 7-day trial is for
+    // a workspace's FIRST-EVER subscription only. Stripe does NOT dedupe
+    // trial_period_days (the prior comment claiming it "handles that natively"
+    // was wrong) — unconditional trials meant (a) cancel→re-subscribe granted
+    // a fresh free week every time, and (b) a paying Starter customer's
+    // upgrade checkout started a free-trialing Business sub. Any prior billing
+    // relationship (stored customer or sub pointer) disqualifies the trial.
+    const trialEligible =
+      !storedCustomerId &&
+      !(workspace as { stripe_subscription_id?: string | null }).stripe_subscription_id;
 
     const origin = req.headers.get("origin") || "http://localhost:5173";
 
@@ -205,9 +222,10 @@ serve(async (req) => {
         billing_interval: billingInterval,
       },
       subscription_data: {
-        // No trial on a Vault conversion — it's a paid retention purchase
-        // that takes effect immediately, not a new-customer trial.
-        ...(isVault ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
+        // No trial on a Vault conversion (paid retention purchase, effective
+        // immediately) and none unless this is the workspace's first-ever
+        // subscription (see trialEligible above).
+        ...(isVault || !trialEligible ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
         metadata: {
           workspace_id: workspaceId,
           plan_id: planId,

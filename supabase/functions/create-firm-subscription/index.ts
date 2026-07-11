@@ -95,10 +95,28 @@ serve(async (req) => {
     const liveStatuses = ["active", "trialing", "past_due", "incomplete", "unpaid"];
     const dupe = existingSubs.data.find((s) => s.metadata?.firm_id === firmId && liveStatuses.includes(s.status));
     if (dupe) {
-      const full = await stripe.subscriptions.retrieve(dupe.id, { expand: ["latest_invoice.payment_intent"] });
-      const inv = full.latest_invoice as unknown as { payment_intent?: Stripe.PaymentIntent | null } | null;
-      const pi = inv?.payment_intent ?? null;
-      return json({ ok: true, status: "pending", existing: true, clientSecret: pi?.client_secret ?? null, paymentIntentStatus: pi?.status ?? null }, 200);
+      // Basil (2025-03-31+) removed invoice.payment_intent — the invoice's
+      // confirmation_secret carries the same client_secret for the
+      // default_incomplete confirm flow (money-path audit 2026-07-11).
+      const full = await stripe.subscriptions.retrieve(dupe.id, { expand: ["latest_invoice.confirmation_secret"] });
+      const inv = full.latest_invoice as unknown as
+        { status?: string | null; confirmation_secret?: { client_secret?: string | null } | null } | null;
+      // Only an OPEN (unpaid) invoice is confirmable — handing out a paid
+      // invoice's secret would make the client attempt a confirm Stripe
+      // rejects (integrity review 2026-07-11). A paid dupe = already live
+      // (webhook-lag window); report already_subscribed instead.
+      if (inv?.status !== "open") {
+        return json({ ok: true, status: "already_subscribed" }, 200);
+      }
+      const clientSecret = inv?.confirmation_secret?.client_secret ?? null;
+      return json({
+        ok: true,
+        status: "pending",
+        existing: true,
+        clientSecret,
+        paymentIntentStatus: clientSecret ? "requires_confirmation" : null,
+        invoiceStatus: inv?.status ?? null,
+      }, 200);
     }
 
     const subscription = await stripe.subscriptions.create(
@@ -108,7 +126,9 @@ serve(async (req) => {
         default_payment_method: pmId,
         payment_behavior: "default_incomplete",
         payment_settings: { save_default_payment_method: "on_subscription" },
-        expand: ["latest_invoice.payment_intent"],
+        // Basil (2025-03-31+): confirmation_secret replaces the removed
+        // invoice.payment_intent expand (money-path audit 2026-07-11).
+        expand: ["latest_invoice.confirmation_secret"],
         metadata: { firm_id: firmId, plan_id: "business", billing_interval: "monthly" },
       },
       { idempotencyKey: `firm_sub_${firmId}_${idempotencyKey}` },
@@ -119,9 +139,17 @@ serve(async (req) => {
     // confirmation, to avoid recording an unpaid sub as active).
     await supabaseAdmin.from("firms").update({ stripe_customer_id: customerId }).eq("id", firmId);
 
-    const invoice = subscription.latest_invoice as unknown as { payment_intent?: Stripe.PaymentIntent | null } | null;
-    const pi = invoice?.payment_intent ?? null;
-    return json({ ok: true, status: "pending", quantity, clientSecret: pi?.client_secret ?? null, paymentIntentStatus: pi?.status ?? null }, 200);
+    const invoice = subscription.latest_invoice as unknown as
+      { status?: string | null; confirmation_secret?: { client_secret?: string | null } | null } | null;
+    const clientSecret = invoice?.confirmation_secret?.client_secret ?? null;
+    return json({
+      ok: true,
+      status: "pending",
+      quantity,
+      clientSecret,
+      paymentIntentStatus: clientSecret ? "requires_confirmation" : null,
+      invoiceStatus: invoice?.status ?? null,
+    }, 200);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[create-firm-subscription] error:", msg);

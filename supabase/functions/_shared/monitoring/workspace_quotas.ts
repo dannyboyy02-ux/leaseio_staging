@@ -57,7 +57,7 @@ export async function pollWorkspaceQuotas(
 ): Promise<WorkspaceQuotaSnapshot[]> {
   const { data: workspaces, error: wsErr } = await supabaseAdmin
     .from('workspaces')
-    .select('id, plan')
+    .select('id, plan, document_limit, addon_document_capacity')
     .limit(1000);
 
   if (wsErr || !workspaces) {
@@ -68,13 +68,31 @@ export async function pollWorkspaceQuotas(
   const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const out: WorkspaceQuotaSnapshot[] = [];
 
-  for (const w of workspaces as Array<{ id: string; plan: string | null }>) {
+  for (const w of workspaces as Array<{
+    id: string;
+    plan: string | null;
+    document_limit: number | null;
+    addon_document_capacity: number | null;
+  }>) {
     // Vault workspaces have no quotas by definition (read-only retention —
     // zero intake); snapshotting them against starter limits manufactures
     // false over-quota signals (integrity review 2026-06-13).
     if (w.plan === 'vault') continue;
     const tier = (w.plan === 'business' ? 'business' : 'starter');
     const limits = TIER_LIMITS[tier];
+
+    // Effective lease capacity = the workspace's own document_limit (webhook-
+    // written; already plan-correct) + active document-pack capacity. Packs
+    // raise BOTH the active-lease cap AND the monthly-abstraction allowance
+    // (pricing model). Snapshotting against the bare TIER_LIMITS ignored both
+    // columns, so a Starter workspace with a 20-pack (real cap 35) hit "133%
+    // used — critical" at 20 extractions while genuinely at 57%, and the
+    // non-dismissible banner pushed a paying customer to buy MORE capacity
+    // (money-path audit 2026-07-11). TIER_LIMITS stays the fallback when the
+    // columns are null, and still governs archived/member metrics.
+    const addon = w.addon_document_capacity ?? 0;
+    const effectiveLeaseCap = (w.document_limit ?? limits.active_leases) + addon;
+    const effectiveExtractionCap = (w.document_limit ?? limits.monthly_extractions) + addon;
 
     // Active leases (lifecycle_status = 'active', not archived, not soft-deleted)
     const { count: activeCount } = await supabaseAdmin
@@ -125,10 +143,11 @@ export async function pollWorkspaceQuotas(
       workspace_id: w.id,
       metric: 'active_leases',
       current_value: active,
-      limit_value: limits.active_leases,
-      pct_of_limit: pctOf(active, limits.active_leases),
+      limit_value: effectiveLeaseCap,
+      pct_of_limit: pctOf(active, effectiveLeaseCap),
       tier,
       category: 'soft_quota',
+      ...(addon > 0 ? { metadata: { addon_document_capacity: addon } } : {}),
     });
 
     out.push({
@@ -145,11 +164,15 @@ export async function pollWorkspaceQuotas(
       workspace_id: w.id,
       metric: 'monthly_extractions',
       current_value: extractions,
-      limit_value: limits.monthly_extractions,
-      pct_of_limit: pctOf(extractions, limits.monthly_extractions),
+      limit_value: effectiveExtractionCap,
+      pct_of_limit: pctOf(extractions, effectiveExtractionCap),
       tier,
       category: 'soft_quota',
-      metadata: { window: '30d', proxy: 'leases_with_extracted_json' },
+      metadata: {
+        window: '30d',
+        proxy: 'leases_with_extracted_json',
+        ...(addon > 0 ? { addon_document_capacity: addon } : {}),
+      },
     });
 
     // Members metric only when the tier has a finite cap

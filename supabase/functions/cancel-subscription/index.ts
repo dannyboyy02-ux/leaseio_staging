@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { resolvePeriodEndIso } from "../_shared/stripe_subscription.ts";
 
 // In-app subscription cancel / resume for the workspace plan subscription.
 //
@@ -123,9 +124,9 @@ serve(async (req) => {
       const updated = await stripe.subscriptions.update(subscriptionId, {
         cancel_at_period_end: !resume,
       });
-      const periodEnd = (updated as unknown as { current_period_end?: number }).current_period_end;
-      const currentPeriodEnd =
-        typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null;
+      // Items-aware read — Basil removed top-level current_period_end
+      // (_shared/stripe_subscription.ts).
+      const currentPeriodEnd = resolvePeriodEndIso(updated);
 
       // Audit — best-effort, never fail the user's action on an audit hiccup
       // (the Stripe mutation already committed; failing here would show "failed"

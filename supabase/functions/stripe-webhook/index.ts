@@ -8,6 +8,7 @@ import {
   SINGLE_LEASE_PRICE_CENTS,
 } from "../_shared/document_packs.ts";
 import { GRACE_DAYS } from "../_shared/cancellation_lifecycle.ts";
+import { resolvePeriodEndIso, resolvePeriodEndSeconds } from "../_shared/stripe_subscription.ts";
 
 const PRICE_IDS: Record<string, string> = {
   starter: "price_1TpdTdHbcO8VqfxHIvhLsvN9",
@@ -95,8 +96,10 @@ function resolveCustomerId(subscription: Stripe.Subscription): string | null {
 }
 
 function resolvePeriodEnd(subscription: Stripe.Subscription): string | null {
-  const periodEnd = (subscription as any).current_period_end;
-  return typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null;
+  // Basil moved current_period_end to subscription ITEMS — the old top-level
+  // read returned undefined on every event and NULLed subscription_period_end
+  // workspace-wide (incident 2026-07-11; see _shared/stripe_subscription.ts).
+  return resolvePeriodEndIso(subscription);
 }
 
 serve(async (req) => {
@@ -173,11 +176,32 @@ serve(async (req) => {
     // One lookup serves the C1 + C2 guards and the plan-change audit row.
     const { data: wsRow } = await supabaseAdmin
       .from("workspaces")
-      .select("plan, stripe_subscription_id")
+      .select("plan, stripe_subscription_id, firm_id")
       .eq("id", workspaceId)
       .maybeSingle();
-    const priorState = wsRow as { plan?: string | null; stripe_subscription_id?: string | null } | null;
+    const priorState = wsRow as {
+      plan?: string | null;
+      stripe_subscription_id?: string | null;
+      firm_id?: string | null;
+    } | null;
     const storedSubId = priorState?.stripe_subscription_id;
+
+    // Firm-bound early-exit (audit 2026-07-11): a firm-bound workspace's plan
+    // is owned by the FIRM subscription; a lingering standalone plan sub's
+    // events must not write here. Without this, any event resolving to
+    // plan='starter' (every non-entitled event floors to starter) hits the
+    // prevent_independent_plan_change trigger → UPDATE rejected → 500 → Stripe
+    // retries for ~72h (a permanent monthly retry storm), and a `deleted`
+    // event would try to stamp the cancellation lifecycle on a firm-paid
+    // child. The lingering standalone sub itself is tracked in KNOWN_ISSUES
+    // (bind-time cancellation policy).
+    if (priorState?.firm_id) {
+      console.warn(
+        "[stripe-webhook] ignoring standalone plan-sub event for firm-bound workspace",
+        workspaceId, "sub:", subscription.id,
+      );
+      return;
+    }
 
     // C1 guard (security + integrity review 2026-06-12): Stripe does not
     // guarantee event ordering and redelivers for days. A NON-entitled
@@ -234,8 +258,11 @@ serve(async (req) => {
       lifecycle.soft_deleted_at = null;
       lifecycle.purge_after = null;
     } else if (subscription.status === "canceled") {
+      // ended_at is still top-level under Basil; the period-end fallback must
+      // go through the items-aware resolver (top-level read is dead — see
+      // _shared/stripe_subscription.ts).
       const endedAtSec = (subscription as any).ended_at ??
-        (subscription as any).current_period_end;
+        resolvePeriodEndSeconds(subscription);
       const canceledAt = typeof endedAtSec === "number"
         ? new Date(endedAtSec * 1000)
         : new Date();
@@ -305,6 +332,62 @@ serve(async (req) => {
         console.error(
           "[stripe-webhook] plan_changed audit insert failed (entitlement write already committed):",
           auditErr instanceof Error ? auditErr.message : auditErr,
+        );
+      }
+    }
+
+    // Displaced-plan-sub cancellation (ratified end-to-end review, billing §2;
+    // implemented 2026-07-11 money-path audit): a checkout-consented plan
+    // switch (workspaceIdOverride set) re-points the workspace at the NEW sub,
+    // but Stripe still bills the OLD one — Starter→Business upgrades charged
+    // $299 + $499/mo indefinitely, and a Vault reactivation kept the $249/yr
+    // Vault sub renewing. Cancel the displaced sub immediately: the customer
+    // explicitly bought its replacement (no refund of the already-paid period;
+    // billing simply stops going forward). Guards: only a real plan sub
+    // belonging to THIS workspace (never a pack/firm sub or another
+    // workspace's sub via a corrupted pointer), only when non-terminal.
+    // Best-effort by design — the entitlement write above already committed,
+    // and a retried event re-reads storedSubId as the NEW id (so no re-attempt);
+    // a failure here is logged + audited for ops follow-up.
+    if (entitled && workspaceIdOverride && storedSubId && storedSubId !== subscription.id) {
+      try {
+        const oldSub = await stripe.subscriptions.retrieve(storedSubId);
+        const oldIsPlanSub =
+          oldSub.metadata?.addon_type !== ADDON_TYPE_DOCUMENT_PACK &&
+          !oldSub.metadata?.firm_id &&
+          oldSub.metadata?.workspace_id === workspaceId;
+        const terminal = ["canceled", "incomplete_expired"].includes(oldSub.status);
+        if (oldIsPlanSub && !terminal) {
+          await stripe.subscriptions.cancel(storedSubId);
+          console.log(
+            "[stripe-webhook] canceled displaced plan subscription",
+            storedSubId, "replaced by", subscription.id,
+          );
+          const { error: auditErr } = await supabaseAdmin.from("workspace_activity_log").insert({
+            workspace_id: workspaceId,
+            user_id: null,
+            event_type: "displaced_subscription_canceled",
+            details: {
+              canceled_subscription_id: storedSubId,
+              replaced_by_subscription_id: subscription.id,
+              // Forfeited horizon on record (integrity review 2026-07-11): an
+              // ANNUAL sub displaced mid-term forfeits its prepaid remainder
+              // (no refund per the ratified policy) — the audit row must make
+              // that defensible without a Stripe lookup.
+              old_status: oldSub.status,
+              old_period_end: resolvePeriodEndIso(oldSub),
+              source: "stripe_webhook",
+            },
+          });
+          if (auditErr) {
+            console.error("[stripe-webhook] displaced-cancel audit insert rejected:", auditErr.message);
+          }
+        }
+      } catch (cancelErr) {
+        console.error(
+          "[stripe-webhook] FAILED to cancel displaced plan subscription — OLD SUB MAY STILL BE BILLING:",
+          storedSubId,
+          cancelErr instanceof Error ? cancelErr.message : cancelErr,
         );
       }
     }
@@ -676,36 +759,88 @@ serve(async (req) => {
       return;
     }
     const status = subscription.status;
+    const storedSubId = (firm as { stripe_subscription_id?: string | null }).stripe_subscription_id ?? null;
 
     if (eventType === "customer.subscription.deleted") {
+      // Stale-deleted guard (the C1 lesson applied to firms, audit 2026-07-11):
+      // only the CURRENT sub's deletion may clear the pointer. A late/redelivered
+      // `deleted` for an OLD sub arriving after the firm re-subscribed would
+      // otherwise null the live sub id, and the reconcile cron (which selects
+      // firms with a non-null sub id) would silently stop billing-syncing binds
+      // and releases until the next monthly event healed it.
+      if (storedSubId && storedSubId !== subscription.id) {
+        console.warn(
+          "[stripe-webhook] ignoring deleted event for stale firm subscription",
+          subscription.id, "current:", storedSubId,
+        );
+        return;
+      }
       // Cancellation: record it; clear the subscription id. Children remain
       // 'business' for a 30-day grace (P9 records; grace cleanup is P11+).
-      await supabaseAdmin.from("firms")
+      // Billing-critical write: fail LOUD on DB rejection so Stripe retries
+      // (supabase-js returns { error } — it does not throw; audit 2026-07-11).
+      const { error: clearErr } = await supabaseAdmin.from("firms")
         .update({ stripe_subscription_id: null, updated_at: new Date().toISOString() })
         .eq("id", firmId);
-      await supabaseAdmin.from("firm_activity_log").insert({
+      if (clearErr) throw new Error(`Failed to clear firm subscription pointer: ${clearErr.message}`);
+      const { error: auditErr } = await supabaseAdmin.from("firm_activity_log").insert({
         firm_id: firmId, user_id: null,
         activity_type: "firm_billing_subscription_canceled",
         details: { subscription_id: subscription.id, status },
       });
+      if (auditErr) console.error("[stripe-webhook] firm cancel audit insert rejected:", auditErr.message);
       return;
     }
 
-    // created / updated / checkout-completed: record sub + customer, propagate
-    // 'business' to all children (idempotent — they are already business from
-    // binding; confirms it for a freshly-subscribed firm).
-    await supabaseAdmin.from("firms")
+    // ENTITLEMENT GATE (Critical, audit 2026-07-11): create-firm-subscription
+    // uses payment_behavior 'default_incomplete', so `customer.subscription.created`
+    // fires with status 'incomplete' BEFORE the user completes 3DS. Recording
+    // that sub id marked the firm subscribed pre-payment — blocking every retry
+    // path (create-firm-subscription and create-firm-checkout both short-circuit
+    // on the DB pointer) and propagating free 'business' with zero revenue —
+    // exactly what the writer's own design comment says this branch must avoid.
+    // Only a PAID sub (active/trialing) may become the firm's subscription.
+    // Dunning on the STORED sub (past_due/unpaid) keeps the pointer — the sub
+    // is recoverable and its eventual `deleted` clears it above.
+    const entitled = status === "active" || status === "trialing";
+    if (!entitled) {
+      // Dunning on the CURRENT stored sub is audit-relevant (the firm's
+      // billing history must show past_due/unpaid transitions) — record it
+      // without touching the pointer or children. Events for any OTHER sub
+      // (e.g. an abandoned incomplete) are pure no-ops.
+      if (storedSubId && storedSubId === subscription.id) {
+        const { error: dunErr } = await supabaseAdmin.from("firm_activity_log").insert({
+          firm_id: firmId, user_id: null,
+          activity_type: "firm_billing_subscription_updated",
+          details: { subscription_id: subscription.id, status, non_entitled: true },
+        });
+        if (dunErr) console.error("[stripe-webhook] firm dunning audit insert rejected:", dunErr.message);
+      }
+      console.warn(
+        "[stripe-webhook] ignoring non-entitled firm subscription event",
+        subscription.id, "status:", status,
+      );
+      return;
+    }
+
+    // entitled create / update / checkout-completed: record sub + customer,
+    // propagate 'business' to all children (idempotent — they are already
+    // business from binding; confirms it for a freshly-subscribed firm).
+    const { error: firmErr } = await supabaseAdmin.from("firms")
       .update({
         stripe_subscription_id: subscription.id,
         stripe_customer_id: resolveCustomerId(subscription),
         updated_at: new Date().toISOString(),
       })
       .eq("id", firmId);
+    if (firmErr) throw new Error(`Failed to record firm subscription: ${firmErr.message}`);
 
-    await supabaseAdmin.from("workspaces").update({ plan: "business" }).eq("firm_id", firmId);
+    const { error: childErr } = await supabaseAdmin
+      .from("workspaces").update({ plan: "business" }).eq("firm_id", firmId);
+    if (childErr) throw new Error(`Failed to propagate firm plan to children: ${childErr.message}`);
 
-    const isNew = !(firm as { stripe_subscription_id?: string | null }).stripe_subscription_id;
-    await supabaseAdmin.from("firm_activity_log").insert({
+    const isNew = !storedSubId;
+    const { error: auditErr } = await supabaseAdmin.from("firm_activity_log").insert({
       firm_id: firmId, user_id: null,
       activity_type: isNew ? "firm_billing_subscription_started" : "firm_billing_subscription_updated",
       details: {
@@ -714,6 +849,7 @@ serve(async (req) => {
         billing_summary_mode: (firm as { billing_summary_mode?: string }).billing_summary_mode,
       },
     });
+    if (auditErr) console.error("[stripe-webhook] firm audit insert rejected:", auditErr.message);
   }
 
   try {
@@ -759,7 +895,26 @@ serve(async (req) => {
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
+        let subscription = event.data.object as Stripe.Subscription;
+        // Stale-payload guard (audit 2026-07-11): Stripe retries events for up
+        // to ~72h and does not guarantee ordering, and C1/C2 only compare
+        // subscription IDs — a retried entitled `updated` payload landing
+        // after the SAME sub's `deleted` would resurrect a canceled workspace
+        // (nulling canceled_at/grace and restoring the plan) with no later
+        // event to correct it. Applying the CURRENT retrieved state instead of
+        // the event payload makes any late/duplicate delivery converge on
+        // Stripe's truth — the pattern the checkout branch already uses. Falls
+        // back to the payload if the retrieve fails (best-effort, matches
+        // prior behavior).
+        try {
+          subscription = (await stripe.subscriptions.retrieve(subscription.id)) as Stripe.Subscription;
+        } catch (retrieveErr) {
+          console.warn(
+            "[stripe-webhook] subscription retrieve failed; applying event payload",
+            subscription.id,
+            retrieveErr instanceof Error ? retrieveErr.message : retrieveErr,
+          );
+        }
         if (isFirmSubscription(subscription)) {
           await applyFirmSubscription(subscription, event.type);
         } else if (isDocumentPack(subscription)) {
