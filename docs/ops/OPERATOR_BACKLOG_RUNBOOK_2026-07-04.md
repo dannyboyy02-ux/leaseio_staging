@@ -29,6 +29,8 @@ The review plan's operator table — and `DEPLOY_RUNBOOK_2026-06-18.md`, `LEASES
 >
 > **Done and verified live:** Step 2 is complete (all three cron secrets present in `private.cron_secrets`, response log shows 200s and zero 401s — the cron layer is fully armed). Step 1 assumed done; re-running its three deploy commands is harmless if unsure.
 >
+> **Cron-secret bracket note (verified 2026-07-11, decided: LEAVE AS-IS):** the three new secrets were stored with literal `<>` brackets (66 chars vs the correct 64) on BOTH the function env and the DB ledger. Because both sides carry the *same* bracketed value they match, and the sweep cron has returned HTTP 200 every hour with zero 401s over 24h — so they work and do NOT need regenerating. ⚠️ Do NOT strip the brackets from only one side; that would diverge the pair and silently 401 the cron. If ever cleaning cosmetically, change function env AND DB ledger in the same pass to identical bare-hex values.
+>
 > **Where you are:** mid-Step 3 — but in a **new Stripe sandbox** ("LeaseIO sandbox") with **newly created products** (Starter `prod_UpI3AgvCxw1ZYY`, Business `prod_UpI5w6gn9xEJr1`, created Jul 5). The app's code still points at the ORIGINAL products/prices, and sandboxes have their own API keys and webhooks. Owner decision 2026-07-11: **Starter is $299/mo (final)** — the $2,870/yr annual you already created is correct; the $249/mo monthly is the one to replace. **Follow the reconciliation below instead of the original Steps 3 items 1–5**, then continue with Steps 4–5 as written (inside this same sandbox).
 >
 > **R1 — Fix Starter monthly (in the sandbox):**
