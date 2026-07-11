@@ -176,6 +176,11 @@ verify_jwt = true
 [functions.get-billing-summary]
 verify_jwt = true
 
+# In-app cancel/resume of the plan subscription — Bearer JWT + workspace
+# owner/admin check + firm_managed reject. In-code auth mirrors customer-portal.
+[functions.cancel-subscription]
+verify_jwt = true
+
 # Phase 9 firm-layer (service-role; per-function caller authz). Bearer JWT.
 # create-firm: ops-admin only. add-firm-member: owner-only mints admins.
 # bind/release: caller must own the workspace (+ firm for bind).

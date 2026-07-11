@@ -73,8 +73,9 @@ describe('get-billing-summary (edge fn) — owner-OR-admin gating', () => {
     const block = section(fnSrc, 'const { data: workspace', 'let canManageBilling');
     expect(block).toContain('.from("workspaces")');
     expect(block).toContain('.eq("id", workspaceId)');
-    // Only the columns the function needs — owner_id + the customer pointer.
-    expect(block).toContain('"id, owner_id, stripe_customer_id"');
+    // Only the columns the function needs — owner_id + the customer/subscription
+    // pointers (subscription id drives the scheduled-cancel signal).
+    expect(block).toContain('"id, owner_id, stripe_customer_id, stripe_subscription_id"');
     expect(block).toMatch(/reason:\s*"not_found"/);
     expect(block).toContain('404');
   });
@@ -146,10 +147,27 @@ describe('get-billing-summary (edge fn) — customer resolution & shape', () => 
     // "number" would appear in `exp_month`/`exp_year` substrings? No — those are
     // "exp_month"/"exp_year". Assert no bare PAN field name.
     expect(pmSrc).not.toMatch(/\bpm\.card\?\.number\b/);
-    // The success response returns only card + invoices — never the raw
-    // PaymentMethod id used internally to resolve the method.
-    const responseLine = section(fnSrc, 'return json({ ok: true, card, invoices }', '200);');
+    // The success response returns only card + invoices + subscription — never
+    // the raw PaymentMethod id used internally to resolve the method.
+    const responseLine = section(fnSrc, 'return json({ ok: true, card, invoices, subscription }', '200);');
     expect(responseLine).not.toContain('pmId');
+  });
+
+  it('returns the subscription scheduled-cancel signal (cancelAtPeriodEnd) without a schema migration', () => {
+    // Stripe leaves status='active' after a cancel is scheduled, so the Billing
+    // tab needs cancel_at_period_end from a live retrieve to distinguish
+    // "auto-renews" from "scheduled to cancel". Sourced here, not a mirrored
+    // column, so no webhook/entitlement-guard change (incident 2026-07-11 #2).
+    const block = section(fnSrc, 'let subscription:', 'return json({ ok: true, card, invoices, subscription }');
+    expect(block).toContain('stripe_subscription_id');
+    expect(block).toContain('stripe.subscriptions.retrieve(subscriptionId)');
+    expect(block).toContain('cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end)');
+    expect(block).toContain('currentPeriodEnd');
+    // A failed subscription retrieve must NOT fail the whole summary (card +
+    // invoices still render) — it's wrapped in its own try/catch.
+    expect(block).toContain('non-fatal');
+    // The select must actually fetch the subscription id.
+    expect(fnSrc).toContain('"id, owner_id, stripe_customer_id, stripe_subscription_id"');
   });
 
   it('Stripe failures map to 502 (reason:"stripe_error"), not a thrown 500', () => {

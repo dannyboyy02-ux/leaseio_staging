@@ -33,10 +33,21 @@ export interface BillingInvoice {
   invoicePdf: string | null;
 }
 
+export interface BillingSubscription {
+  status: string; // Stripe sub status: active | trialing | past_due | ...
+  // Stripe leaves status='active' after a cancel is *scheduled*, so this flag
+  // is the only way to tell "auto-renews" from "cancels at period end". The
+  // Billing tab reads it to swap the renewal line for a "Scheduled to cancel"
+  // line + a Resume button.
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: string | null; // ISO; the renew-or-cancel date
+}
+
 export interface BillingSummary {
   ok: true;
   card: BillingCard | null;
   invoices: BillingInvoice[];
+  subscription?: BillingSubscription | null;
   reason?: 'no_customer';
 }
 

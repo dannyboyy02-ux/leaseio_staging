@@ -220,13 +220,17 @@ describe('AccountSettings subscription tab', () => {
     expect(cancelSection).not.toContain('handleManagePayment');
   });
 
-  it('cancel confirmation dialog shows the period-end date when known and routes to the portal only on confirm', () => {
+  it('cancel confirmation dialog shows the period-end date when known and cancels IN-APP on confirm (no portal bounce)', () => {
+    // 2026-07-11: the CTA used to bounce to the Stripe portal (double-cancel);
+    // it now cancels in-app via handleSetCancellation(false) — the ONE
+    // confirmation. preventDefault keeps the dialog open during the request.
     const dialog = sliceBetween(source, 'open={confirmCancelOpen}', '</AlertDialog>');
     expect(dialog).toContain("t('account.cancel_confirm')");
     expect(dialog).toContain("t('account.cancel_confirm_desc_date', { date: formattedPeriodEnd })");
     expect(dialog).toContain("t('account.cancel_confirm_desc')"); // fallback when no period end
     expect(dialog).toContain("t('account.keep_subscription')");
-    expect(dialog).toContain('handleManagePayment();');
+    expect(dialog).toContain('handleSetCancellation(false)');
+    expect(dialog).not.toContain('handleManagePayment();'); // no portal round-trip anymore
   });
 
   it('downgrade routes through the adjust-plan picker to a confirmation dialog that spells out feature loss before the portal', () => {
@@ -244,21 +248,33 @@ describe('AccountSettings subscription tab', () => {
     expect(dialog).toContain('handleManagePayment();');
   });
 
-  it('renewal date renders only for an active subscription with a valid period end', () => {
-    // Guarded on subscription state + parsed date — never on plan tier, and
-    // never on the old fabricated renewalDate.
+  it('renewal line renders for an active sub, but a SCHEDULED CANCEL wins over it', () => {
+    // 2026-07-11: a scheduled cancel (billingSummary.subscription.cancelAtPeriodEnd)
+    // must replace "Auto renews on {date}" with "Scheduled to cancel on {date}" —
+    // otherwise the header lies (Stripe keeps status='active' after a cancel).
     const renewal = sliceBetween(
       source,
-      "workspace.subscriptionStatus === 'active' && formattedPeriodEnd &&",
+      "scheduledCancel && scheduledCancelDate ?",
       '</p>',
     );
-    expect(renewal).toContain("t('account.auto_renews_on', { date: formattedPeriodEnd })");
+    expect(renewal).toContain("t('account.scheduled_cancel_on', { date: scheduledCancelDate })");
+    // The auto-renews line is the ELSE branch, and it is only ASSERTED when the
+    // cancel flag is actually known (billingSummary.subscription present) — a
+    // viewer who can't see the flag gets no line, never a possibly-false
+    // "Auto-renews" (integrity review 2026-07-11).
+    const renewElse = sliceBetween(
+      source,
+      'billingSummary?.subscription &&',
+      '</p>',
+    );
+    expect(renewElse).toContain("workspace.subscriptionStatus === 'active'");
+    expect(renewElse).toContain("t('account.auto_renews_on', { date: formattedPeriodEnd })");
 
-    // formattedPeriodEnd is derived through a NaN guard so "Invalid Date"
-    // can never render.
-    const derivation = sliceBetween(source, 'const periodEndMs', 'const trialDaysLeft');
-    expect(derivation).toContain('Number.isFinite(periodEndMs)');
-    expect(derivation).toContain(': null');
+    // formattedPeriodEnd is derived through the shared formatLongDate NaN guard
+    // so "Invalid Date" can never render.
+    const derivation = sliceBetween(source, 'const formatLongDate', 'return new Date(ms)');
+    expect(derivation).toContain('Number.isFinite(ms)');
+    expect(derivation).toContain('return null');
   });
 
   it('usage meter guards against division by zero and counts pack capacity (moved to UsageContent 2026-06-12)', () => {
