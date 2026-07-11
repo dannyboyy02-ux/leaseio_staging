@@ -9,13 +9,18 @@ export type { SubscriptionPlan };
 export type BillingInterval = 'monthly' | 'annual';
 
 // Read-only billing summary returned by the `get-billing-summary` edge function
-// (saved card + recent invoices for the in-app Billing tab). Card carries brand
-// + last4 only — never a full PAN or PaymentMethod secret.
+// (saved payment method + recent invoices for the in-app Billing tab). Carries
+// brand + last4 only — never a full PAN or PaymentMethod secret. `type`/`label`
+// let the tab render non-card methods (Stripe Link, Apple Pay, ACH) instead of
+// silently showing "no payment method" (billing incident 2026-07-11).
 export interface BillingCard {
+  type?: string;
   brand: string | null;
   last4: string | null;
   expMonth: number | null;
   expYear: number | null;
+  walletLabel?: string | null;
+  label?: string;
 }
 
 export interface BillingInvoice {

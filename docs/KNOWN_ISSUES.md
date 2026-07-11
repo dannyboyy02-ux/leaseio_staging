@@ -5,6 +5,20 @@ list and reference it in the commit message.
 
 ---
 
+## Billing tab + create-workspace dropped non-card payment methods (Stripe Link) — RESOLVED 2026-07-11
+
+**Severity:** High (functional, not just cosmetic). **Found:** live operator test, not the audit.
+
+**Symptom:** After a successful Stripe Checkout paid via **Stripe Link** (Checkout's default wallet), the in-app Billing tab showed "No payment method on file yet" for a paying customer, and `create-workspace` would have rejected a Link-paying owner with `no_card_on_file` — blocking $499 additional-workspace creation.
+
+**Root cause:** both `get-billing-summary` and `create-workspace/resolveCustomerAndCard` resolved the saved method with `stripe.paymentMethods.list({ type: "card" })` and read `pm.card`. A Link (or Apple/Google Pay / ACH) method has a **non-`card`** PaymentMethod type, so the filter silently dropped it. The customer's `invoice_settings.default_payment_method` is also empty because Checkout sets the method on the *subscription*, not the customer default — so both lookup paths missed it.
+
+**Fix:** shared type-exhaustive mapper `describePaymentMethod()` (`src/lib/paymentMethodDisplay.ts` + Deno mirror `supabase/functions/_shared/payment_method.ts`) handles card / link / us_bank_account / any future type, and NEVER returns null for a present method. Both edge functions drop the `type:"card"` filter and map through it; the Billing tab renders card ("Visa •••• 4242") or a labeled wallet ("Stripe Link (email)"). Regression tests: `paymentMethodDisplay.test.ts` (8) + updated `billingSummaryGating.test.ts`. Operator step: redeploy `get-billing-summary` + `create-workspace`; the frontend label ships with the next Vercel build.
+
+**Why the audit missed it (process note):** the review read the billing code but never drove a live payment, so the `type:"card"` assumption wasn't exercised. This is exactly what the plan's Definition-of-Done "rendered persona walkthrough" gate exists to catch — reinforced: **any billing/payment surface must be exercised with a real Stripe test transaction, including a Link/wallet method, before it's called done.**
+
+---
+
 ## Cluster A — core request-workflow transitions blocked by the governance trigger (filed + partly resolved 2026-06-23)
 
 Surfaced by a live health audit (the core Path-1 submission was silently failing in production). Root cause: the `prevent_unauthorized_lease_workflow_edits` BEFORE-UPDATE trigger on `leases` `RAISE EXCEPTION`s on any `authenticated`/browser UPDATE that changes `lifecycle_status` (or approval/lock columns), but several client paths still did exactly that direct write — silently rejected, leaving leases stranded and, worse, writing `status_change` audit rows asserting transitions that never happened.

@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { describePaymentMethod } from "../_shared/payment_method.ts";
 
 // Read-only billing summary for the in-app Billing tab: the saved card
 // (brand + last4 only — never the full PAN or a PaymentMethod secret) and the
@@ -97,8 +98,13 @@ serve(async (req) => {
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     try {
-      // Card: prefer the customer's default PM, fall back to the first attached
-      // card. Mirrors resolveCustomerAndCard() in create-workspace.
+      // Saved payment method: prefer the customer's default PM, else the first
+      // attached method of ANY type. Do NOT filter type:'card' — Checkout via
+      // Stripe Link / Apple Pay / Google Pay / ACH saves a non-'card'
+      // PaymentMethod, and filtering it out showed "no payment method on file"
+      // for a paying customer (billing incident 2026-07-11). describePaymentMethod
+      // maps every type to a labeled descriptor. Mirrors resolveCustomerAndCard()
+      // in create-workspace.
       const customer = await stripe.customers.retrieve(customerId);
       let pmId: string | null = null;
       if (customer && !("deleted" in customer && customer.deleted)) {
@@ -108,25 +114,14 @@ serve(async (req) => {
       if (!pmId) {
         const pms = await stripe.paymentMethods.list({
           customer: customerId,
-          type: "card",
           limit: 1,
         });
         pmId = pms.data[0]?.id ?? null;
       }
-      let card: {
-        brand: string | null;
-        last4: string | null;
-        expMonth: number | null;
-        expYear: number | null;
-      } | null = null;
+      let card = null;
       if (pmId) {
         const pm = await stripe.paymentMethods.retrieve(pmId);
-        card = {
-          brand: pm.card?.brand ?? null,
-          last4: pm.card?.last4 ?? null,
-          expMonth: pm.card?.exp_month ?? null,
-          expYear: pm.card?.exp_year ?? null,
-        };
+        card = describePaymentMethod(pm as unknown as Parameters<typeof describePaymentMethod>[0]);
       }
 
       const invoiceList = await stripe.invoices.list({

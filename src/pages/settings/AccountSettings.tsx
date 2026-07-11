@@ -1152,7 +1152,7 @@ export default function AccountSettings() {
                 {isAdminUser && !billingSummaryLoading && (
                   <Button variant="outline" size="sm" onClick={handleManagePayment} disabled={isManagingPayment}>
                     {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    {billingSummary?.card?.last4
+                    {billingSummary?.card
                       ? t('account.payment_update')
                       : t('account.payment_add')}
                   </Button>
@@ -1167,13 +1167,19 @@ export default function AccountSettings() {
                   <p className="text-sm text-muted-foreground">{t('account.billing_summary_error')}</p>
                   <Button variant="ghost" size="sm" onClick={retryBillingSummary}>{t('account.retry')}</Button>
                 </div>
-              ) : billingSummary?.card?.last4 ? (
+              ) : billingSummary?.card ? (
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-12 rounded border border-border bg-muted flex items-center justify-center">
                     <CreditCard className="h-4 w-4 text-muted-foreground" />
                   </div>
+                  {/* Card → "Visa •••• 4242"; a wallet/bank method (Stripe Link,
+                      Apple Pay, ACH) has no last4 → render its label so a paying
+                      customer never sees a blank "no payment method" line
+                      (incident 2026-07-11). */}
                   <span className="text-sm text-foreground capitalize">
-                    {billingSummary.card.brand} •••• {billingSummary.card.last4}
+                    {billingSummary.card.last4
+                      ? `${billingSummary.card.brand ?? ''} •••• ${billingSummary.card.last4}`
+                      : (billingSummary.card.label ?? t('account.payment_none'))}
                   </span>
                 </div>
               ) : (
