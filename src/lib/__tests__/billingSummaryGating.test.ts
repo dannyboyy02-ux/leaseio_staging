@@ -34,6 +34,7 @@ function section(src: string, start: string, end: string): string {
 
 const fnSrc = read('supabase/functions/get-billing-summary/index.ts');
 const acctSrc = read('src/pages/settings/AccountSettings.tsx');
+const pmSrc = read('supabase/functions/_shared/payment_method.ts');
 
 // ─────────────────────────────────────────────────────────────────────────
 // get-billing-summary — auth & request validation
@@ -72,8 +73,9 @@ describe('get-billing-summary (edge fn) — owner-OR-admin gating', () => {
     const block = section(fnSrc, 'const { data: workspace', 'let canManageBilling');
     expect(block).toContain('.from("workspaces")');
     expect(block).toContain('.eq("id", workspaceId)');
-    // Only the columns the function needs — owner_id + the customer pointer.
-    expect(block).toContain('"id, owner_id, stripe_customer_id"');
+    // Only the columns the function needs — owner_id + the customer/subscription
+    // pointers (subscription id drives the scheduled-cancel signal).
+    expect(block).toContain('"id, owner_id, stripe_customer_id, stripe_subscription_id"');
     expect(block).toMatch(/reason:\s*"not_found"/);
     expect(block).toContain('404');
   });
@@ -123,21 +125,49 @@ describe('get-billing-summary (edge fn) — customer resolution & shape', () => 
     expect(block).toContain('200');
   });
 
-  it('exposes ONLY card brand/last4/exp — never a full PAN or a PaymentMethod secret', () => {
-    const block = section(fnSrc, 'card = {', '};');
-    expect(block).toContain('brand: pm.card?.brand');
-    expect(block).toContain('last4: pm.card?.last4');
-    expect(block).toContain('expMonth: pm.card?.exp_month');
-    expect(block).toContain('expYear: pm.card?.exp_year');
-    // The shape is exactly those four fields — nothing that could leak the
-    // number, fingerprint, or a re-usable PM/secret reference.
-    expect(block).not.toContain('number');
-    expect(block).not.toContain('fingerprint');
-    expect(block).not.toContain('client_secret');
-    // The success response returns only card + invoices — never the raw
-    // PaymentMethod id used internally to resolve the card.
-    const responseLine = section(fnSrc, 'return json({ ok: true, card, invoices }', '200);');
+  it('does not filter type:"card" — a non-card method (Stripe Link/ACH) is not dropped (incident 2026-07-11)', () => {
+    // The regression: paymentMethods.list({ type: "card" }) silently dropped a
+    // Link/wallet method, so a paying customer saw "no payment method on file".
+    // The list call must carry NO type filter, and the PM must be mapped through
+    // the type-exhaustive describePaymentMethod helper.
+    const block = section(fnSrc, 'const pms = await stripe.paymentMethods.list(', ');');
+    expect(block).not.toContain('type: "card"');
+    expect(block).not.toContain("type: 'card'");
+    expect(fnSrc).toContain('describePaymentMethod(');
+    expect(fnSrc).toContain('import { describePaymentMethod }');
+  });
+
+  it('describePaymentMethod exposes ONLY safe fields — never a full PAN or a PaymentMethod secret', () => {
+    // Card exposure now lives in the shared helper; assert the whole helper
+    // never references the number, fingerprint, or a re-usable secret.
+    expect(pmSrc).toContain('last4');
+    expect(pmSrc).toContain('brand');
+    expect(pmSrc).not.toContain('fingerprint');
+    expect(pmSrc).not.toContain('client_secret');
+    // "number" would appear in `exp_month`/`exp_year` substrings? No — those are
+    // "exp_month"/"exp_year". Assert no bare PAN field name.
+    expect(pmSrc).not.toMatch(/\bpm\.card\?\.number\b/);
+    // The success response returns only card + invoices + subscription — never
+    // the raw PaymentMethod id used internally to resolve the method.
+    const responseLine = section(fnSrc, 'return json({ ok: true, card, invoices, subscription }', '200);');
     expect(responseLine).not.toContain('pmId');
+  });
+
+  it('returns the subscription scheduled-cancel signal (cancelAtPeriodEnd) without a schema migration', () => {
+    // Stripe leaves status='active' after a cancel is scheduled, so the Billing
+    // tab needs cancel_at_period_end from a live retrieve to distinguish
+    // "auto-renews" from "scheduled to cancel". Sourced here, not a mirrored
+    // column, so no webhook/entitlement-guard change (incident 2026-07-11 #2).
+    const block = section(fnSrc, 'let subscription:', 'return json({ ok: true, card, invoices, subscription }');
+    expect(block).toContain('stripe_subscription_id');
+    expect(block).toContain('stripe.subscriptions.retrieve(subscriptionId)');
+    expect(block).toContain('cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end)');
+    expect(block).toContain('currentPeriodEnd');
+    // A failed subscription retrieve must NOT fail the whole summary (card +
+    // invoices still render) — it's wrapped in its own try/catch.
+    expect(block).toContain('non-fatal');
+    // The select must actually fetch the subscription id.
+    expect(fnSrc).toContain('"id, owner_id, stripe_customer_id, stripe_subscription_id"');
   });
 
   it('Stripe failures map to 502 (reason:"stripe_error"), not a thrown 500', () => {

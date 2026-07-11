@@ -108,7 +108,9 @@ serve(async (req) => {
 
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${origin}/app/settings/account?tab=billing`,
+      // ?portal=return lets the Billing tab acknowledge the round-trip (toast +
+      // refresh + re-fetch the saved card) instead of returning in silence.
+      return_url: `${origin}/app/settings/account?tab=billing&portal=return`,
     });
 
     return new Response(JSON.stringify({ url: portalSession.url }), {

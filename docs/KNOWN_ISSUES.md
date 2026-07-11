@@ -5,6 +5,51 @@ list and reference it in the commit message.
 
 ---
 
+## Billing tab + create-workspace dropped non-card payment methods (Stripe Link) — RESOLVED 2026-07-11
+
+**Severity:** High (functional, not just cosmetic). **Found:** live operator test, not the audit.
+
+**Symptom:** After a successful Stripe Checkout paid via **Stripe Link** (Checkout's default wallet), the in-app Billing tab showed "No payment method on file yet" for a paying customer, and `create-workspace` would have rejected a Link-paying owner with `no_card_on_file` — blocking $499 additional-workspace creation.
+
+**Root cause:** both `get-billing-summary` and `create-workspace/resolveCustomerAndCard` resolved the saved method with `stripe.paymentMethods.list({ type: "card" })` and read `pm.card`. A Link (or Apple/Google Pay / ACH) method has a **non-`card`** PaymentMethod type, so the filter silently dropped it. The customer's `invoice_settings.default_payment_method` is also empty because Checkout sets the method on the *subscription*, not the customer default — so both lookup paths missed it.
+
+**Fix:** shared type-exhaustive mapper `describePaymentMethod()` (`src/lib/paymentMethodDisplay.ts` + Deno mirror `supabase/functions/_shared/payment_method.ts`) handles card / link / us_bank_account / any future type, and NEVER returns null for a present method. `get-billing-summary` (the DISPLAY surface, the actual symptom) drops the `type:"card"` filter and maps through it; the Billing tab renders card ("Visa •••• 4242") or a labeled wallet ("Stripe Link (email)"). Regression tests: `paymentMethodDisplay.test.ts` (8) + updated `billingSummaryGating.test.ts`. Operator step: redeploy `get-billing-summary`; the frontend label ships with the next Vercel build.
+
+**Scoping correction (PR #81 review, Codex):** `create-workspace`'s `resolveCustomerAndCard` was initially broadened too, but that flow's $499 charge is confirmed client-side with Stripe.js `confirmCardPayment` (card-only). Accepting a non-card method there let the caller past eligibility and then fail after a pending workspace + PaymentIntent were created and rolled back. So `create-workspace` **stays card-only** (filters `type:"card"`, rejects non-card early with `no_card_on_file` — no orphan) — only `get-billing-summary` is broadened.
+
+### Enhancement (open) — non-card methods in the $499 add-workspace charge
+
+A Business owner whose only saved method is Stripe Link / ACH cannot create additional workspaces (`no_card_on_file`) — same as before the fix, so not a regression, but a real limitation now that Checkout defaults to Link. Requires branching the client confirmation (`NewWorkspaceDialog`) by method type to the matching Stripe.js flow instead of `confirmCardPayment`. Not bundled into PR #81.
+
+**Why the audit missed it (process note):** the review read the billing code but never drove a live payment, so the `type:"card"` assumption wasn't exercised. This is exactly what the plan's Definition-of-Done "rendered persona walkthrough" gate exists to catch — reinforced: **any billing/payment surface must be exercised with a real Stripe test transaction, including a Link/wallet method, before it's called done.**
+
+---
+
+## Subscription cancel: double-cancel + silent return + false "auto-renews" — RESOLVED 2026-07-11
+
+**Severity:** High (felt-experience + a factual-lie in the UI). **Found:** owner report ("they land where they still have to click cancel… no notice informing them they canceled") → full billing/payment surface audit (self + lease-product-polish).
+
+**Symptoms (one broken journey, several defects):**
+1. **Double-cancel.** The in-app "Cancel subscription?" confirm dialog didn't cancel — its CTA called `handleManagePayment()` (opened the Stripe billing portal), where the user had to find and confirm "Cancel plan" a *second* time + answer Stripe's survey.
+2. **Silent return.** The portal `return_url` carried no marker; the only return handler keyed off `checkout=` (set solely by `create-checkout`), so every portal round-trip (cancel / downgrade / update-card) ended with no toast, no refresh — an updated card even kept showing the old brand/last4.
+3. **False "Auto-renews on {date}".** Stripe leaves `subscription.status='active'` for up to a month after a cancel is *scheduled* (`cancel_at_period_end=true`). The workspace never tracked that flag, so the plan header kept saying "Auto renews" — a lie — with no way to undo in-app.
+4. **Swallowed server errors.** `supabase.functions.invoke` collapses any non-2xx into a generic `Error` ("Edge Function returned a non-2xx status code") and nulls `data`, so `no_customer` / `firm_managed` / `annual_not_configured` never reached the user (e.g. "Add payment method" on a no-customer workspace → 409 → generic toast).
+
+**Fix (reuses the in-app pattern packs + firm billing already ship; NO schema/webhook change):**
+- **NEW `supabase/functions/cancel-subscription/index.ts`** — owner/admin-gated, workspace-scoped, firm-bound rejected (`firm_managed` 403) before any Stripe call, no-sub → 409. Flips `cancel_at_period_end` (`resume:false`→true schedule / `resume:true`→false undo — never an immediate cancel; access kept to period end). Audits `subscription_cancel_scheduled` / `subscription_cancel_reverted` to `workspace_activity_log` (free-text `event_type`, no migration). Auth boundary is an exact peer of `customer-portal`.
+- **`get-billing-summary`** now selects `stripe_subscription_id` and returns a `subscription {status, cancelAtPeriodEnd, currentPeriodEnd}` block (one extra Stripe GET, wrapped non-fatal). Sourced live rather than mirrored to a workspace column — keeps the scheduled-cancel signal on the one surface that needs it (the Billing tab) with no webhook/entitlement-guard change.
+- **AccountSettings Billing tab** — the confirm dialog's CTA now cancels in-app (`handleSetCancellation(false)`, `preventDefault` keeps it open during the request); the plan header shows **"Scheduled to cancel on {date}" + a Resume button** (`handleSetCancellation(true)`) instead of the false renew line; the cancel section hides once scheduled (never Cancel + Resume at once). `?portal=return` on the portal URL now triggers refresh + billing-summary re-fetch + a neutral toast. `extractFnReason()` + `mapCheckoutError/mapPortalError/mapSubError` surface the real server reason. Bare "Cancel" button relabeled "Cancel subscription".
+- **Tests:** new `cancelSubscription.test.ts` (auth/gating/cancel-vs-resume/audit), extended `billingSummaryGating.test.ts` (subscription block) + `subscriptionSettingsPolish.test.ts` (in-app cancel + scheduled-cancel-wins). Full suite green (1379).
+- **Operator deploy:** deploy `cancel-subscription`; redeploy `get-billing-summary` + `customer-portal`; frontend ships with the next Vercel build.
+
+### Deferred (own beat — cosmetic/consistency, filed not fixed)
+- **[MEDIUM] Downgrade still uses the Stripe portal** (`handleAdjustPlanSelect` → confirm → `handleManagePayment`), while an *upgrade* is a clean in-app checkout. Asymmetric, and depends on the portal being configured with both prices. Follow-up: in-app downgrade via `stripe.subscriptions.update` to the Starter price with proration (reuse the cancel-subscription shape). The new `?portal=return` handler at least gives it feedback now.
+- **[MEDIUM] Payment-CTA label drift** — trial banner "Add or update payment method" vs Payment section "Add/Update" vs past-due "Update Payment Method": one destination (portal), several labels. And a *trialing* admin sees two buttons to the same portal (banner + Payment section). Standardize to one verb per intent; drop the trial-banner button in favor of pointing at the Payment section.
+- **[LOW] Scheduled-cancel visibility for non-admins** — non-admins don't fetch `get-billing-summary`, so they can't see the `cancelAtPeriodEnd` flag. Rather than assert a possibly-false "Auto-renews", the plan header now **suppresses the renewal line entirely when the flag is unknown** (integrity review 2026-07-11 — the "Auto-renews" line is gated on `billingSummary?.subscription` being present, so only an admin whose summary loaded ever sees it; the honest-silence fix). Residual edge (accepted): a *second* admin who opened the Billing tab before the cancel was scheduled keeps a cached summary (the per-workspace `billingSummaryFetchedFor` guard) and sees "Auto-renews" until a manual refresh — the admin who performed the cancel force-refetches and sees the truth immediately. A persisted `cancel_at_period_end` column (webhook-mirrored) would close the residual app-wide if ever needed.
+- **[LOW] Cancellation reason (WHY) not captured** on the `subscription_cancel_scheduled` audit row (integrity review) — a subscription cancel is a self-attributed owner/admin decision (WHO/WHEN/WHAT are recorded), so not an integrity requirement; a future churn-analytics pass could accept a free-text reason in the request body.
+
+---
+
 ## Cluster A — core request-workflow transitions blocked by the governance trigger (filed + partly resolved 2026-06-23)
 
 Surfaced by a live health audit (the core Path-1 submission was silently failing in production). Root cause: the `prevent_unauthorized_lease_workflow_edits` BEFORE-UPDATE trigger on `leases` `RAISE EXCEPTION`s on any `authenticated`/browser UPDATE that changes `lifecycle_status` (or approval/lock columns), but several client paths still did exactly that direct write — silently rejected, leaving leases stranded and, worse, writing `status_change` audit rows asserting transitions that never happened.

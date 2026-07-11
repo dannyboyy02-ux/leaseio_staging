@@ -84,8 +84,19 @@ async function resolveCustomerAndCard(
   if (!customerId) return { ok: false, reason: "no_customer" };
 
   // Default payment method: prefer invoice_settings.default_payment_method,
-  // fall back to the first attached card. The explicit id is load-bearing —
-  // a charge with no PM resolved would fail.
+  // fall back to the first attached CARD. This flow is deliberately card-only:
+  // the $499 add-workspace charge is confirmed client-side with Stripe.js
+  // `confirmCardPayment` (NewWorkspaceDialog), which cannot complete a
+  // non-'card' method (Stripe Link / ACH). Accepting a non-card method here
+  // would let the caller past the eligibility gate and then fail at
+  // confirmation AFTER a pending workspace + PaymentIntent were created and
+  // must be rolled back (PR #81 review). So we filter type:'card' and reject
+  // non-card early with `no_card_on_file` — the honest, no-orphan behavior.
+  // (The read-only Billing tab / get-billing-summary is the surface that DOES
+  // show every method type via describePaymentMethod — see KNOWN_ISSUES
+  // 2026-07-11. Supporting non-card methods for the add-workspace charge is a
+  // tracked enhancement, not a same-PR change: it needs a type-branched
+  // Stripe.js confirmation flow.)
   const customer = await stripe.customers.retrieve(customerId);
   let pmId: string | null = null;
   if (customer && !("deleted" in customer && customer.deleted)) {

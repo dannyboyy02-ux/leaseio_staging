@@ -3,6 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { describePaymentMethod } from "../_shared/payment_method.ts";
 
 // Read-only billing summary for the in-app Billing tab: the saved card
 // (brand + last4 only — never the full PAN or a PaymentMethod secret) and the
@@ -11,9 +12,16 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 // data + reason:"no_customer" (a fresh trial legitimately has none — the
 // Payment/Invoices sections render an empty state, not an error).
 //
-// COST BOUND: three cheap Stripe GETs + one invoices.list(limit:12). The
+// COST BOUND: up to four cheap Stripe GETs + one invoices.list(limit:12). The
 // frontend MUST call this once on Billing-tab open (admin-gated), never on a
 // render path — do not move the invoke() into a component body.
+//
+// The `subscription` block (status + cancelAtPeriodEnd + currentPeriodEnd) is
+// what lets the Billing tab tell "auto-renews" from "scheduled to cancel":
+// Stripe leaves status='active' after a cancel is scheduled, so the persisted
+// workspace.subscription_status can't distinguish the two. Sourcing the flag
+// here (rather than a mirrored column + webhook change) keeps the scheduled-
+// cancel signal on the one surface that needs it with no schema migration.
 
 const INVOICE_LIMIT = 12;
 
@@ -58,7 +66,7 @@ serve(async (req) => {
 
     const { data: workspace, error: wsErr } = await supabaseAdmin
       .from("workspaces")
-      .select("id, owner_id, stripe_customer_id")
+      .select("id, owner_id, stripe_customer_id, stripe_subscription_id")
       .eq("id", workspaceId)
       .maybeSingle();
     if (wsErr || !workspace) {
@@ -91,14 +99,19 @@ serve(async (req) => {
     const customerId = (workspace as any).stripe_customer_id as string | null;
     if (!customerId) {
       // No subscription yet (e.g. a fresh trial) — not an error.
-      return json({ ok: true, card: null, invoices: [], reason: "no_customer" }, 200);
+      return json({ ok: true, card: null, invoices: [], subscription: null, reason: "no_customer" }, 200);
     }
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     try {
-      // Card: prefer the customer's default PM, fall back to the first attached
-      // card. Mirrors resolveCustomerAndCard() in create-workspace.
+      // Saved payment method: prefer the customer's default PM, else the first
+      // attached method of ANY type. Do NOT filter type:'card' — Checkout via
+      // Stripe Link / Apple Pay / Google Pay / ACH saves a non-'card'
+      // PaymentMethod, and filtering it out showed "no payment method on file"
+      // for a paying customer (billing incident 2026-07-11). describePaymentMethod
+      // maps every type to a labeled descriptor. Mirrors resolveCustomerAndCard()
+      // in create-workspace.
       const customer = await stripe.customers.retrieve(customerId);
       let pmId: string | null = null;
       if (customer && !("deleted" in customer && customer.deleted)) {
@@ -108,25 +121,14 @@ serve(async (req) => {
       if (!pmId) {
         const pms = await stripe.paymentMethods.list({
           customer: customerId,
-          type: "card",
           limit: 1,
         });
         pmId = pms.data[0]?.id ?? null;
       }
-      let card: {
-        brand: string | null;
-        last4: string | null;
-        expMonth: number | null;
-        expYear: number | null;
-      } | null = null;
+      let card = null;
       if (pmId) {
         const pm = await stripe.paymentMethods.retrieve(pmId);
-        card = {
-          brand: pm.card?.brand ?? null,
-          last4: pm.card?.last4 ?? null,
-          expMonth: pm.card?.exp_month ?? null,
-          expYear: pm.card?.exp_year ?? null,
-        };
+        card = describePaymentMethod(pm as unknown as Parameters<typeof describePaymentMethod>[0]);
       }
 
       const invoiceList = await stripe.invoices.list({
@@ -143,7 +145,34 @@ serve(async (req) => {
         invoicePdf: i.invoice_pdf ?? null,
       }));
 
-      return json({ ok: true, card, invoices }, 200);
+      // Subscription state — the scheduled-cancel signal (see header note).
+      // Best-effort: a missing/inaccessible sub id must not fail the whole
+      // summary (card + invoices still render). Null when there is no sub.
+      let subscription: {
+        status: string;
+        cancelAtPeriodEnd: boolean;
+        currentPeriodEnd: string | null;
+      } | null = null;
+      const subscriptionId = (workspace as any).stripe_subscription_id as string | null;
+      if (subscriptionId) {
+        try {
+          const sub = await stripe.subscriptions.retrieve(subscriptionId);
+          const periodEnd = (sub as unknown as { current_period_end?: number }).current_period_end;
+          subscription = {
+            status: sub.status,
+            cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+            currentPeriodEnd:
+              typeof periodEnd === "number" ? new Date(periodEnd * 1000).toISOString() : null,
+          };
+        } catch (subErr) {
+          console.error(
+            "[GET-BILLING-SUMMARY] subscription retrieve failed (non-fatal):",
+            subErr instanceof Error ? subErr.message : subErr,
+          );
+        }
+      }
+
+      return json({ ok: true, card, invoices, subscription }, 200);
     } catch (stripeErr) {
       const msg = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
       console.error("[GET-BILLING-SUMMARY] Stripe error:", msg);

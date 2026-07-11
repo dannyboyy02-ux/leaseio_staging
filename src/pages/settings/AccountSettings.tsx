@@ -52,6 +52,25 @@ const timezones = [
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
 ];
 
+/**
+ * supabase.functions.invoke collapses any non-2xx response into a
+ * FunctionsHttpError (a plain Error whose .message is the generic
+ * "Edge Function returned a non-2xx status code") and nulls `data` — so the
+ * server's structured `{ reason }` is ONLY reachable via the error's Response
+ * body. Without this, every thoughtful server message (no_customer,
+ * firm_managed, annual_not_configured, …) is invisible to the user. Mirrors
+ * the pattern already used in CancellationBanner.tsx.
+ */
+async function extractFnReason(error: unknown): Promise<string | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = await (error as any)?.context?.json?.();
+    return (body?.reason as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function AccountSettings() {
   const { user, workspace, userRole, refreshProfile, isLoading } = useApp();
   // Firm-bound: plan, payment, and capacity are all managed at the firm level;
@@ -112,11 +131,26 @@ export default function AccountSettings() {
     if (d < 30) return `${d}d ago`;
     return new Date(iso).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', { month: 'short', day: 'numeric' });
   };
+
+  // Long date ("July 30, 2026") for billing period-end lines + toasts. Guards
+  // an invalid/missing date so the UI never renders "Invalid Date".
+  const formatLongDate = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const ms = new Date(iso).getTime();
+    if (!Number.isFinite(ms)) return null;
+    return new Date(ms).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoggingOutOthers, setIsLoggingOutOthers] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null);
   const [isManagingPayment, setIsManagingPayment] = useState(false);
+  // In-app cancel/resume of the plan subscription (replaces the portal bounce).
+  const [subActionBusy, setSubActionBusy] = useState(false);
   const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<string | null>(null);
   const [confirmDowngradePlan, setConfirmDowngradePlan] = useState<string | null>(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
@@ -176,6 +210,23 @@ export default function AccountSettings() {
       // cleanup below). Without this the success branch re-fired in a loop.
       const next = new URLSearchParams(searchParams);
       next.delete('checkout');
+      navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
+    }
+
+    // Return from the Stripe billing portal (payment-method / invoices). The
+    // portal round-trip used to terminate in silence — no toast, no refresh, so
+    // an updated card still showed the old brand/last4. customer-portal now
+    // stamps ?portal=return; on detecting it we refresh the profile + force the
+    // billing-summary to re-fetch (resetting the per-workspace ref makes the
+    // fetch effect re-run) and confirm with a neutral toast.
+    if (searchParams.get('portal') === 'return') {
+      toast.info(t('account.portal_return'));
+      refreshProfile();
+      billingSummaryFetchedFor.current = null;
+      setBillingSummary(null);
+      setBillingRetry((n) => n + 1);
+      const next = new URLSearchParams(searchParams);
+      next.delete('portal');
       navigate({ search: next.toString() ? `?${next.toString()}` : '' }, { replace: true });
     }
 
@@ -420,7 +471,12 @@ export default function AccountSettings() {
         body: { planId, workspaceId: workspace.id, billingInterval },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Surface the server's real reason instead of the generic
+        // "Edge Function returned a non-2xx status code" (see extractFnReason).
+        const reason = await extractFnReason(error);
+        throw new Error(mapCheckoutError(reason));
+      }
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
         // Same-tab redirect — Stripe round-trips back via the success/cancel
@@ -435,6 +491,49 @@ export default function AccountSettings() {
       toast.error(msg);
     } finally {
       setIsUpgrading(null);
+    }
+  };
+
+  // Map a server `reason` to friendly, localized copy. Falls back to the
+  // generic failure string for unknown reasons / network errors.
+  const mapCheckoutError = (reason: string | null): string => {
+    switch (reason) {
+      case 'annual_not_configured':
+        return t('account.err_annual_not_configured');
+      case 'vault_not_configured':
+        return t('account.err_vault_not_configured');
+      case 'vault_owner_only':
+        return t('account.err_vault_owner_only');
+      case 'firm_managed':
+        return t('account.err_firm_managed');
+      default:
+        return t('account.checkout_failed');
+    }
+  };
+
+  const mapPortalError = (reason: string | null): string => {
+    switch (reason) {
+      case 'no_customer':
+        return t('account.err_no_customer');
+      case 'firm_managed':
+        return t('account.err_firm_managed');
+      case 'not_authorized':
+        return t('account.err_not_authorized');
+      default:
+        return t('account.portal_failed');
+    }
+  };
+
+  const mapSubError = (reason: string | null): string => {
+    switch (reason) {
+      case 'no_subscription':
+        return t('account.err_no_subscription');
+      case 'firm_managed':
+        return t('account.err_firm_managed');
+      case 'not_authorized':
+        return t('account.err_not_authorized');
+      default:
+        return t('account.cancel_failed');
     }
   };
 
@@ -473,7 +572,10 @@ export default function AccountSettings() {
         body: { workspaceId: workspace.id },
       });
 
-      if (error) throw error;
+      if (error) {
+        const reason = await extractFnReason(error);
+        throw new Error(mapPortalError(reason));
+      }
       if (data?.error) throw new Error(data.error);
       if (data?.url) {
         // Same-tab redirect (see proceedWithCheckout) — avoids popup blockers.
@@ -488,6 +590,56 @@ export default function AccountSettings() {
     }
   };
 
+  // In-app cancel / resume of the plan subscription. Replaces the old
+  // "confirm dialog → Stripe portal → cancel AGAIN" double-cancel: the confirm
+  // dialog's CTA now calls this directly (resume=false), and the scheduled-
+  // cancel header's Resume button calls it with resume=true. Mirrors the
+  // in-app pattern document packs + firm billing already use. On success we
+  // refresh the workspace (status) AND the billing summary (the cancelAtPeriodEnd
+  // signal the header reads) so the UI reflects the change immediately.
+  const handleSetCancellation = async (resume: boolean) => {
+    if (!workspace?.id) {
+      toast.error(t('account.portal_no_workspace'));
+      return;
+    }
+    setSubActionBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('cancel-subscription', {
+        body: { workspaceId: workspace.id, resume },
+      });
+      if (error) {
+        const reason = await extractFnReason(error);
+        throw new Error(mapSubError(reason));
+      }
+      if (data?.error) throw new Error(data.error);
+
+      setConfirmCancelOpen(false);
+      await refreshProfile();
+      // Force the billing-summary (scheduled-cancel signal) to re-fetch.
+      billingSummaryFetchedFor.current = null;
+      setBillingSummary(null);
+      setBillingRetry((n) => n + 1);
+
+      const date = formatLongDate(
+        (data?.currentPeriodEnd as string | undefined) ?? workspace.subscriptionPeriodEnd,
+      );
+      toast.success(
+        resume
+          ? date
+            ? t('account.resume_success_date', { date })
+            : t('account.resume_success')
+          : date
+            ? t('account.cancel_success_date', { date })
+            : t('account.cancel_success'),
+      );
+    } catch (err) {
+      console.error('Error changing subscription cancellation:', err);
+      toast.error(err instanceof Error ? err.message : t('account.cancel_failed'));
+    } finally {
+      setSubActionBusy(false);
+    }
+  };
+
   const currentPlan = normalizePlanId(workspace?.plan);
 
   const isAdminUser = userRole === 'admin' || userRole === 'owner';
@@ -495,17 +647,19 @@ export default function AccountSettings() {
   // Real billing dates come from subscription_period_end (mirrored from
   // Stripe by the webhook). Null until first checkout; guard every render
   // on validity so the UI never shows "Invalid Date".
-  const periodEndMs = workspace?.subscriptionPeriodEnd
-    ? new Date(workspace.subscriptionPeriodEnd).getTime()
-    : NaN;
-  const formattedPeriodEnd = Number.isFinite(periodEndMs)
-    ? new Date(periodEndMs).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    : null;
+  const formattedPeriodEnd = formatLongDate(workspace?.subscriptionPeriodEnd);
   const trialDaysLeft = trialDaysRemaining(workspace?.subscriptionPeriodEnd);
+
+  // Scheduled-cancel signal — sourced from get-billing-summary (Stripe leaves
+  // status='active' after a cancel is scheduled, so the persisted
+  // subscription_status can't distinguish it). When set, the plan header shows
+  // "Scheduled to cancel on {date}" + a Resume button instead of "Auto-renews".
+  const scheduledCancel = Boolean(billingSummary?.subscription?.cancelAtPeriodEnd);
+  const scheduledCancelDate = scheduledCancel
+    ? formatLongDate(
+        billingSummary?.subscription?.currentPeriodEnd ?? workspace?.subscriptionPeriodEnd,
+      )
+    : null;
 
   // Invoice formatting for the Billing tab's Invoices table.
   const localeTag = language === 'es' ? 'es-419' : 'en-US';
@@ -1106,13 +1260,26 @@ export default function AccountSettings() {
                     <div>
                       <p className="text-base font-semibold text-foreground">{t(PLANS[currentPlan].nameKey)}</p>
                       <p className="text-sm text-muted-foreground mt-0.5">{t(`account.plan_benefit_${currentPlan}`)}</p>
-                      {/* Renewal shown for ANY active paid subscription (paid
-                          Starter renews too); guarded on state + a valid date. */}
-                      {workspace.subscriptionStatus === 'active' && formattedPeriodEnd && (
+                      {/* Scheduled-cancel wins over the renewal line: once a
+                          cancel is scheduled Stripe keeps status='active', so
+                          without this the header would falsely read "Auto-renews".
+                          We only ASSERT renewal when the cancel flag is actually
+                          known (billingSummary.subscription is present — i.e. an
+                          admin whose summary loaded). A viewer who can't see the
+                          flag (non-admin, or a transient retrieve failure) gets
+                          NO line rather than a possibly-false "Auto-renews"
+                          (integrity review 2026-07-11). Paid Starter renews too. */}
+                      {scheduledCancel && scheduledCancelDate ? (
+                        <p className="text-sm text-amber-600 dark:text-amber-500 mt-0.5 font-medium">
+                          {t('account.scheduled_cancel_on', { date: scheduledCancelDate })}
+                        </p>
+                      ) : billingSummary?.subscription &&
+                        workspace.subscriptionStatus === 'active' &&
+                        formattedPeriodEnd ? (
                         <p className="text-sm text-muted-foreground mt-0.5">
                           {t('account.auto_renews_on', { date: formattedPeriodEnd })}
                         </p>
-                      )}
+                      ) : null}
                       <button
                         type="button"
                         className="text-xs text-primary hover:underline mt-1"
@@ -1122,12 +1289,20 @@ export default function AccountSettings() {
                       </button>
                     </div>
                   </div>
-                  {firmBound ? null : isAdminUser ? (
+                  {firmBound ? null : !isAdminUser ? (
+                    <p className="text-xs text-muted-foreground shrink-0">{t('account.plan_changes_admin_only')}</p>
+                  ) : scheduledCancel ? (
+                    /* Reverse the scheduled cancel in-app — same edge fn,
+                       resume=true. Prevents the "can't undo without the portal"
+                       dead-end. */
+                    <Button size="sm" onClick={() => handleSetCancellation(true)} disabled={subActionBusy}>
+                      {subActionBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      {t('account.resume_subscription')}
+                    </Button>
+                  ) : (
                     <Button variant="outline" size="sm" onClick={() => setPlanPickerOpen(true)}>
                       {t('account.adjust_plan')}
                     </Button>
-                  ) : (
-                    <p className="text-xs text-muted-foreground shrink-0">{t('account.plan_changes_admin_only')}</p>
                   )}
                 </div>
               </section>
@@ -1152,7 +1327,7 @@ export default function AccountSettings() {
                 {isAdminUser && !billingSummaryLoading && (
                   <Button variant="outline" size="sm" onClick={handleManagePayment} disabled={isManagingPayment}>
                     {isManagingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    {billingSummary?.card?.last4
+                    {billingSummary?.card
                       ? t('account.payment_update')
                       : t('account.payment_add')}
                   </Button>
@@ -1167,13 +1342,19 @@ export default function AccountSettings() {
                   <p className="text-sm text-muted-foreground">{t('account.billing_summary_error')}</p>
                   <Button variant="ghost" size="sm" onClick={retryBillingSummary}>{t('account.retry')}</Button>
                 </div>
-              ) : billingSummary?.card?.last4 ? (
+              ) : billingSummary?.card ? (
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-12 rounded border border-border bg-muted flex items-center justify-center">
                     <CreditCard className="h-4 w-4 text-muted-foreground" />
                   </div>
+                  {/* Card → "Visa •••• 4242"; a wallet/bank method (Stripe Link,
+                      Apple Pay, ACH) has no last4 → render its label so a paying
+                      customer never sees a blank "no payment method" line
+                      (incident 2026-07-11). */}
                   <span className="text-sm text-foreground capitalize">
-                    {billingSummary.card.brand} •••• {billingSummary.card.last4}
+                    {billingSummary.card.last4
+                      ? `${billingSummary.card.brand ?? ''} •••• ${billingSummary.card.last4}`
+                      : (billingSummary.card.label ?? t('account.payment_none'))}
                   </span>
                 </div>
               ) : (
@@ -1261,12 +1442,16 @@ export default function AccountSettings() {
             )}
 
             {/* Cancel subscription — any active/paid subscription (paid Starter
-                included), admin-only. Excluded on Vault: it's a read-only
-                retention offramp ("nothing is deleted"), so a delete-everything
-                cancel CTA under the Reactivate header would contradict the tier;
-                Vault renewal/cancellation lives in the Stripe portal. */}
+                included), admin-only. Hidden once a cancel is already scheduled
+                (the plan header then shows the Resume affordance instead — never
+                offer Cancel and Resume at once). Excluded on Vault: it's a
+                read-only retention offramp ("nothing is deleted"), so a
+                delete-everything cancel CTA under the Reactivate header would
+                contradict the tier; Vault renewal/cancellation lives in the
+                Stripe portal. */}
             {!firmBound &&
               currentPlan !== 'vault' &&
+              !scheduledCancel &&
               ['active', 'trialing', 'past_due'].includes(workspace.subscriptionStatus ?? '') &&
               isAdminUser && (
                 <section>
@@ -1278,7 +1463,7 @@ export default function AccountSettings() {
                       className="text-destructive border-destructive/40 hover:text-destructive hover:bg-destructive/10"
                       onClick={() => setConfirmCancelOpen(true)}
                     >
-                      {t('common.cancel')}
+                      {t('account.cancel_subscription')}
                     </Button>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1 max-w-prose">{t('account.cancel_warning')}</p>
@@ -1529,17 +1714,21 @@ export default function AccountSettings() {
             </div>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('account.keep_subscription')}</AlertDialogCancel>
-            {/* CTA names the actual action — clicking opens the Stripe
-                portal; it does NOT itself cancel (mirrors the downgrade
-                dialog's honesty; H3 2026-06-12). */}
+            <AlertDialogCancel disabled={subActionBusy}>{t('account.keep_subscription')}</AlertDialogCancel>
+            {/* This CTA now CANCELS in-app (cancel-subscription edge fn, sets
+                cancel_at_period_end) — no more portal round-trip / double
+                confirm. preventDefault keeps the dialog open while the request
+                is in flight (spinner) and on error; handleSetCancellation closes
+                it on success. */}
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                setConfirmCancelOpen(false);
-                handleManagePayment();
+              disabled={subActionBusy}
+              onClick={(e) => {
+                e.preventDefault();
+                handleSetCancellation(false);
               }}
             >
+              {subActionBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               {t('account.cancel_confirm_cta')}
             </AlertDialogAction>
           </AlertDialogFooter>

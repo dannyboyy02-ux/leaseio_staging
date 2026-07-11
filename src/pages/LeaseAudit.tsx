@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency, formatLocalizedDate, type SupportedLocale } from '@/lib/dateFormatters';
+import { PLANS } from '@/config/pricing';
 
 const MAX_DOCS = 5;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -508,7 +509,10 @@ function ResultsStep({
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button size="lg" variant="secondary" asChild>
               <Link to="/signup?plan=starter">
-                Start with Starter — $249/mo
+                {/* Derive from PLANS so this CTA can never drift from the
+                    canonical Starter price (price-parity guardrail — the $249
+                    hardcode here contradicted the $299 checkout, PR #81). */}
+                Start with Starter — ${PLANS.starter.price.monthly}/mo
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>

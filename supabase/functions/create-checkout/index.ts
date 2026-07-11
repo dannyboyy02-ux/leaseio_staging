@@ -18,11 +18,11 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 // don't get charged at the monthly rate while expecting annual.
 const PRICE_IDS = {
   starter: {
-    monthly: "price_1SntpyH03PByDjY31dGmC0E2",
+    monthly: "price_1TpdTdHbcO8VqfxHIvhLsvN9",
     annual: Deno.env.get("STRIPE_PRICE_STARTER_ANNUAL") ?? null,
   },
   business: {
-    monthly: "price_1SntqQH03PByDjY3MrvOjOsu",
+    monthly: "price_1TpdVWHbcO8VqfxHKTN0lyOf",
     annual: Deno.env.get("STRIPE_PRICE_BUSINESS_ANNUAL") ?? null,
   },
   // Vault retention tier (VAULT_TIER_SPEC.md V3 conversion). Yearly-only,

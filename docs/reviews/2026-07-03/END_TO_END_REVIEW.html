@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>LeaseIO — End-to-End Review &amp; Implementation Plan</title>
+<style>
+  :root {
+    --bg: #fafbfa;
+    --surface: #ffffff;
+    --surface-2: #f1f4f3;
+    --ink: #1a2430;
+    --ink-2: #45535e;
+    --muted: #67747f;
+    --line: #e2e7e5;
+    --line-strong: #c8d1ce;
+    --brand: #16304f;
+    --brand-fill: #1d3a5f;
+    --brand-on: #f4f8fc;
+    --accent: #0f8b78;
+    --accent-ink: #0a6355;
+    --accent-soft: #e2f2ee;
+    --crit: #a5160f;      --crit-bg: #fbeae8;
+    --high: #a34d04;      --high-bg: #fdf0e2;
+    --med:  #8a6a00;      --med-bg:  #faf3d9;
+    --low:  #5b6873;      --low-bg:  #edf1f2;
+    --good: #0e7a4d;      --good-bg: #e4f3ea;
+    --code-bg: #122334;
+    --code-ink: #d6e2ec;
+    --code-dim: #7e93a5;
+    --code-hl: #ffd7d2;
+    --code-hl-bg: rgba(213, 84, 62, .22);
+    --shadow: 0 1px 2px rgba(22, 48, 79, .06), 0 4px 14px rgba(22, 48, 79, .05);
+    --font-body: Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+    --font-ui: "Avenir Next", "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1722; --surface: #151f2c; --surface-2: #1b2735;
+      --ink: #e7edf2; --ink-2: #b4bfc9; --muted: #8794a1;
+      --line: #26333f; --line-strong: #37475a;
+      --brand: #9fc0e4; --brand-fill: #1d3a5f; --brand-on: #eaf2fa;
+      --accent: #2fbfa7; --accent-ink: #49d3ba; --accent-soft: #123a34;
+      --crit: #ff8177; --crit-bg: #3a1512;
+      --high: #f0a05c; --high-bg: #38220e;
+      --med:  #d9bc4f; --med-bg:  #322a0d;
+      --low:  #9fadb8; --low-bg:  #222d36;
+      --good: #52c98a; --good-bg: #0f3122;
+      --code-bg: #0c1a28; --code-ink: #d6e2ec;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #fafbfa; --surface: #ffffff; --surface-2: #f1f4f3;
+    --ink: #1a2430; --ink-2: #45535e; --muted: #67747f;
+    --line: #e2e7e5; --line-strong: #c8d1ce;
+    --brand: #16304f; --brand-fill: #1d3a5f; --brand-on: #f4f8fc;
+    --accent: #0f8b78; --accent-ink: #0a6355; --accent-soft: #e2f2ee;
+    --crit: #a5160f; --crit-bg: #fbeae8;
+    --high: #a34d04; --high-bg: #fdf0e2;
+    --med:  #8a6a00; --med-bg:  #faf3d9;
+    --low:  #5b6873; --low-bg:  #edf1f2;
+    --good: #0e7a4d; --good-bg: #e4f3ea;
+    --code-bg: #122334; --code-ink: #d6e2ec;
+    --shadow: 0 1px 2px rgba(22,48,79,.06), 0 4px 14px rgba(22,48,79,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1722; --surface: #151f2c; --surface-2: #1b2735;
+    --ink: #e7edf2; --ink-2: #b4bfc9; --muted: #8794a1;
+    --line: #26333f; --line-strong: #37475a;
+    --brand: #9fc0e4; --brand-fill: #1d3a5f; --brand-on: #eaf2fa;
+    --accent: #2fbfa7; --accent-ink: #49d3ba; --accent-soft: #123a34;
+    --crit: #ff8177; --crit-bg: #3a1512;
+    --high: #f0a05c; --high-bg: #38220e;
+    --med:  #d9bc4f; --med-bg:  #322a0d;
+    --low:  #9fadb8; --low-bg:  #222d36;
+    --good: #52c98a; --good-bg: #0f3122;
+    --code-bg: #0c1a28; --code-ink: #d6e2ec;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--font-body); font-size: 17px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:hover { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  .shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 40px; max-width: 1180px; margin: 0 auto; padding: 0 28px 120px; }
+  @media (max-width: 1023px) { .shell { grid-template-columns: minmax(0, 1fr); } .toc { display: none; } }
+
+  /* ── TOC rail ── */
+  .toc { position: sticky; top: 24px; align-self: start; font-family: var(--font-ui); font-size: 12.5px; padding-top: 46px; }
+  .toc .toc-head { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .toc a { display: block; color: var(--ink-2); text-decoration: none; padding: 4px 10px; border-left: 2px solid var(--line); line-height: 1.4; }
+  .toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  .toc a.toc-sub { padding-left: 22px; color: var(--muted); }
+
+  main { min-width: 0; }
+
+  /* ── header ── */
+  .doc-head { padding: 52px 0 20px; border-bottom: 1px solid var(--line-strong); margin-bottom: 40px; }
+  .doc-kicker { font-family: var(--font-ui); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent-ink); font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: var(--font-ui); font-weight: 700; font-size: clamp(28px, 4vw, 40px); line-height: 1.12; letter-spacing: -.015em; margin: 0 0 14px; color: var(--ink); text-wrap: balance; }
+  .doc-sub { font-size: 18px; color: var(--ink-2); max-width: 62ch; margin: 0 0 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; font-family: var(--font-ui); font-size: 12px; }
+  .meta-chip { border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 11px; color: var(--ink-2); background: var(--surface); }
+  .meta-chip b { color: var(--ink); font-weight: 600; }
+
+  /* ── sections ── */
+  section { margin: 56px 0 0; }
+  .eyebrow { font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 6px; }
+  h2 { font-family: var(--font-ui); font-size: 26px; font-weight: 700; letter-spacing: -.012em; line-height: 1.2; margin: 0 0 14px; text-wrap: balance; }
+  h3 { font-family: var(--font-ui); font-size: 18.5px; font-weight: 650; margin: 34px 0 10px; letter-spacing: -.008em; }
+  h4 { font-family: var(--font-ui); font-size: 15px; font-weight: 650; margin: 24px 0 8px; }
+  p { margin: 0 0 14px; max-width: 70ch; }
+  ul, ol { margin: 0 0 16px; padding-left: 24px; max-width: 68ch; }
+  li { margin-bottom: 6px; }
+  li::marker { color: var(--accent-ink); }
+  strong { color: var(--ink); }
+  .lead { font-size: 18.5px; color: var(--ink-2); }
+
+  /* ── verdict banner ── */
+  .verdict { background: var(--brand-fill); color: var(--brand-on); border-radius: 14px; padding: 26px 30px; margin: 26px 0; box-shadow: var(--shadow); }
+  .verdict h3 { color: #fff; margin: 0 0 8px; font-size: 21px; }
+  .verdict p { color: #ccdaea; max-width: none; margin-bottom: 8px; }
+  .verdict p:last-child { margin-bottom: 0; }
+  .verdict b { color: #fff; }
+  .verdict .v-accent { color: #63d6c0; }
+
+  /* ── stat tiles ── */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 22px 0; font-family: var(--font-ui); }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 14px; box-shadow: var(--shadow); }
+  .tile .t-num { font-size: 30px; font-weight: 700; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .tile .t-label { font-size: 12px; color: var(--muted); margin-top: 7px; line-height: 1.35; }
+  .tile.t-crit .t-num { color: var(--crit); }
+  .tile.t-high .t-num { color: var(--high); }
+  .tile.t-good .t-num { color: var(--good); }
+  .tile.t-brand .t-num { color: var(--accent-ink); }
+
+  /* ── severity chips ── */
+  .sev { font-family: var(--font-ui); display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; border-radius: 5px; padding: 2px 8px; vertical-align: 1px; white-space: nowrap; }
+  .sev-crit { color: var(--crit); background: var(--crit-bg); }
+  .sev-high { color: var(--high); background: var(--high-bg); }
+  .sev-med  { color: var(--med);  background: var(--med-bg); }
+  .sev-low  { color: var(--low);  background: var(--low-bg); }
+  .sev-good { color: var(--good); background: var(--good-bg); }
+  .sev-info { color: var(--accent-ink); background: var(--accent-soft); }
+
+  /* ── tables ── */
+  .tbl-wrap { overflow-x: auto; margin: 18px 0 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-family: var(--font-ui); font-size: 13.5px; line-height: 1.5; }
+  th { text-align: left; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 650; padding: 12px 14px 9px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+  tr:last-child td { border-bottom: none; }
+  td b, td strong { color: var(--ink); font-weight: 600; }
+  .num { font-variant-numeric: tabular-nums; }
+  .ok { color: var(--good); font-weight: 700; }
+  .no { color: var(--crit); font-weight: 700; }
+  .half { color: var(--high); font-weight: 700; }
+
+  /* ── code ── */
+  .code { background: var(--code-bg); color: var(--code-ink); border-radius: 12px; padding: 16px 18px; overflow-x: auto; white-space: pre; font-family: var(--font-mono); font-size: 12.75px; line-height: 1.62; margin: 14px 0 8px; }
+  .code .dim { color: var(--code-dim); }
+  .code .hl { background: var(--code-hl-bg); color: var(--code-hl); border-radius: 3px; padding: 0 3px; }
+  .code-cap { font-family: var(--font-ui); font-size: 12px; color: var(--muted); margin: 0 0 18px; }
+  .code-cap code, p code, li code, td code { font-family: var(--font-mono); font-size: .86em; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--ink-2); white-space: nowrap; }
+  .file-tag { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-ink); background: var(--accent-soft); border-radius: 5px; padding: 2px 8px; display: inline-block; margin-bottom: 6px; }
+
+  /* ── callouts ── */
+  .callout { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 12px 12px 0; padding: 14px 20px; margin: 20px 0; box-shadow: var(--shadow); }
+  .callout.warn { border-left-color: var(--high); }
+  .callout.danger { border-left-color: var(--crit); }
+  .callout p { margin-bottom: 6px; } .callout p:last-child { margin-bottom: 0; }
+  .callout .c-title { font-family: var(--font-ui); font-weight: 700; font-size: 13.5px; letter-spacing: .02em; margin-bottom: 4px; }
+
+  /* ── finding cards ── */
+  .finding { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px 12px; margin: 12px 0; box-shadow: var(--shadow); }
+  .finding .f-head { font-family: var(--font-ui); font-weight: 650; font-size: 14.5px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .finding p { font-size: 15px; margin: 8px 0 6px; max-width: none; color: var(--ink-2); }
+  .finding .f-ev { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+  /* ── mockups ── */
+  .mock { border: 1px solid var(--line-strong); border-radius: 14px; overflow: hidden; margin: 20px 0 6px; background: var(--surface); box-shadow: var(--shadow); font-family: var(--font-ui); }
+  .mock-bar { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border-bottom: 1px solid var(--line); padding: 8px 14px; }
+  .mock-bar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+  .mock-bar .m-title { font-size: 11px; color: var(--muted); margin-left: 8px; letter-spacing: .04em; }
+  .mock-body { padding: 22px 24px; font-size: 13.5px; color: var(--ink-2); }
+  .mock-cap { font-family: var(--font-ui); font-size: 12.5px; color: var(--muted); margin: 8px 0 26px; max-width: 70ch; }
+  .m-h { font-size: 16px; font-weight: 700; color: var(--ink); margin: 0 0 4px; }
+  .m-sub { font-size: 12.5px; color: var(--muted); margin: 0 0 16px; }
+  .m-btn { display: inline-block; font-size: 12.5px; font-weight: 650; border-radius: 8px; padding: 7px 14px; border: 1px solid var(--line-strong); color: var(--ink-2); background: var(--surface); margin-right: 8px; }
+  .m-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .m-btn.ghost-danger { color: var(--crit); border-color: var(--crit-bg); }
+  .m-card { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; background: var(--surface); }
+  .m-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .m-note { font-size: 11.5px; color: var(--muted); }
+  .m-input { border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 11px; font-size: 12.5px; color: var(--muted); background: var(--surface); display: inline-block; min-width: 130px; }
+  .m-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+  .m-toggle .tg { width: 30px; height: 17px; border-radius: 999px; background: var(--accent); position: relative; flex-shrink: 0; }
+  .m-toggle .tg::after { content: ""; position: absolute; right: 2px; top: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; }
+  .m-toggle .tg.off { background: var(--line-strong); } .m-toggle .tg.off::after { right: auto; left: 2px; }
+  .m-chip { display: inline-block; font-size: 10.5px; font-weight: 650; border-radius: 999px; padding: 2px 9px; background: var(--accent-soft); color: var(--accent-ink); margin: 0 4px 4px 0; }
+  .m-chip.plain { background: var(--surface-2); color: var(--ink-2); }
+
+  /* stepper */
+  .stepper { display: flex; align-items: flex-start; gap: 0; margin: 18px 0 8px; }
+  .step { flex: 1; text-align: center; position: relative; min-width: 90px; }
+  .step::before { content: ""; position: absolute; top: 13px; left: -50%; width: 100%; height: 2px; background: var(--line-strong); z-index: 0; }
+  .step:first-child::before { display: none; }
+  .step.done::before, .step.current::before { background: var(--accent); }
+  .step .s-dot { width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 8px; position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--surface); border: 2px solid var(--line-strong); color: var(--muted); }
+  .step.done .s-dot { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .step.current .s-dot { border-color: var(--accent); color: var(--accent-ink); }
+  .step .s-name { font-size: 11.5px; font-weight: 650; color: var(--ink-2); }
+  .step .s-det { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .step.current .s-name { color: var(--accent-ink); }
+
+  /* ── diagrams ── */
+  .fig { margin: 24px 0 8px; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 18px 12px; }
+  .fig svg { display: block; margin: 0 auto; max-width: 100%; height: auto; min-width: 720px; }
+  .fig-cap { font-family: var(--font-ui); font-size: 12.5px; color: var(--muted); margin: 8px 2px 26px; max-width: 74ch; }
+  .svg-box { fill: var(--surface-2); stroke: var(--line-strong); }
+  .svg-box-strong { fill: var(--brand-fill); stroke: none; }
+  .svg-box-accent { fill: var(--accent); stroke: none; }
+  .svg-box-ghost { fill: none; stroke: var(--line-strong); stroke-dasharray: 5 4; }
+  .svg-t { font-family: var(--font-ui); font-size: 12px; fill: var(--ink); font-weight: 600; }
+  .svg-t-on { font-family: var(--font-ui); font-size: 12px; fill: #f4f8fc; font-weight: 600; }
+  .svg-t-sm { font-family: var(--font-ui); font-size: 10px; fill: var(--muted); }
+  .svg-t-crit { font-family: var(--font-ui); font-size: 10.5px; font-weight: 700; fill: var(--crit); }
+  .svg-t-accent { font-family: var(--font-ui); font-size: 10.5px; font-weight: 700; fill: var(--accent-ink); }
+  .svg-edge { stroke: var(--line-strong); stroke-width: 1.6; fill: none; }
+  .svg-edge-accent { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+  .svg-edge-back { stroke: var(--high); stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+  .svg-break { fill: var(--crit-bg); stroke: var(--crit); stroke-width: 1.6; }
+
+  /* ── timeline ── */
+  .gantt { font-family: var(--font-ui); margin: 20px 0 6px; }
+  .g-grid { display: grid; grid-template-columns: 210px repeat(8, 1fr); gap: 4px 0; align-items: center; min-width: 660px; }
+  .g-head { font-size: 10.5px; color: var(--muted); text-align: center; padding-bottom: 6px; letter-spacing: .05em; }
+  .g-label { font-size: 12.5px; font-weight: 650; color: var(--ink-2); padding-right: 14px; line-height: 1.3; }
+  .g-label small { display: block; font-weight: 400; color: var(--muted); font-size: 10.5px; }
+  .g-track { grid-column: span 8; display: grid; grid-template-columns: repeat(8, 1fr); height: 22px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+  .g-bar { background: var(--accent); border-radius: 6px; height: 100%; opacity: .92; border-right: 2px solid var(--bg); }
+  .g-bar.b0 { background: var(--crit); }
+  .g-row { display: contents; }
+  .gantt-wrap { overflow-x: auto; }
+
+  /* phase cards */
+  .phase { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; padding: 20px 24px 14px; margin: 18px 0; box-shadow: var(--shadow); }
+  .phase.p0 { border-left-color: var(--crit); }
+  .phase h3 { margin: 0 0 2px; font-size: 17px; }
+  .phase .p-meta { font-family: var(--font-ui); font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .phase ul { font-size: 15px; max-width: none; }
+  .phase li { margin-bottom: 8px; color: var(--ink-2); }
+  .phase li .fp { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+
+  .decision { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin: 12px 0; box-shadow: var(--shadow); }
+  .decision .d-q { font-family: var(--font-ui); font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  .decision p { font-size: 15px; margin-bottom: 6px; max-width: none; }
+  .decision .d-rec { font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--accent-ink); letter-spacing: .04em; text-transform: uppercase; }
+
+  .footer-note { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); font-family: var(--font-ui); font-size: 12.5px; color: var(--muted); }
+  .toc-anchor { scroll-margin-top: 24px; }
+</style>
+
+<div class="shell">
+<nav class="toc" aria-label="Contents">
+  <div class="toc-head">Contents</div>
+  <a href="#verdict">The verdict</a>
+  <a href="#findings">What the review found</a>
+  <a href="#your-flow">Your flow, mapped to the code</a>
+  <a href="#pushback">The pushback: three gates</a>
+  <a href="#direct-add">Path 2: direct add</a>
+  <a href="#setup">Approval setup, simplified</a>
+  <a href="#workspaces">Workspaces &amp; templating</a>
+  <a href="#settings">Settings architecture</a>
+  <a href="#plan">Implementation plan</a>
+  <a class="toc-sub" href="#phase-0">Phase 0 — Safety &amp; money</a>
+  <a class="toc-sub" href="#phase-1">Phase 1 — Path 1 completable</a>
+  <a class="toc-sub" href="#phase-2">Phase 2 — Your flow</a>
+  <a class="toc-sub" href="#phase-3">Phase 3 — Setup simplicity</a>
+  <a class="toc-sub" href="#phase-4">Phase 4 — Direct add</a>
+  <a class="toc-sub" href="#phase-5">Phase 5 — Settings &amp; roles</a>
+  <a class="toc-sub" href="#phase-6">Phase 6 — Trust &amp; polish</a>
+  <a href="#snippets">Code worth your review</a>
+  <a href="#notifications">Notification matrix</a>
+  <a href="#operator">Operator backlog</a>
+  <a href="#decisions">Decisions I need</a>
+  <a href="#appendix">Appendix: scorecard</a>
+</nav>
+
+<main>
+<header class="doc-head">
+  <div class="doc-kicker">LeaseIO · Full product review · 2026-07-03</div>
+  <h1>End-to-End Review &amp; Implementation Plan</h1>
+  <p class="doc-sub">Every page, edge function, migration, and flow in the repo was read and verified against the code — no assumptions. This document is the findings, the architecture verdict, and the plan to get LeaseIO to a product a warehouse manager, a finance lead, and a CFO can actually complete a lease through.</p>
+  <div class="meta-row">
+    <span class="meta-chip"><b>41</b> review agents</span>
+    <span class="meta-chip"><b>2,623</b> file inspections</span>
+    <span class="meta-chip"><b>123</b> Critical/High claims independently re-verified · <b>113 confirmed</b></span>
+    <span class="meta-chip">branch <b>claude/leaseio-end-to-end-review-163v6w</b></span>
+  </div>
+</header>
+
+<section id="verdict" class="toc-anchor">
+  <div class="eyebrow">The verdict</div>
+  <h2>Fix the repo. Do not start from scratch.</h2>
+  <p class="lead">All 17 subsystem reviews reached the same verdict independently: <strong>fix in place</strong>. Not one recommended a rebuild — and after verifying their evidence, I agree.</p>
+
+  <div class="verdict">
+    <h3>Why this is a wiring problem, not a foundation problem</h3>
+    <p>The hard parts of LeaseIO are <b>done and done well</b>: the policy resolver and approval-chain engine, the row-level-security fabric, the governance triggers that make locked leases immutable, the audit-trail convention, the Stripe webhook defenses, and the two-pass AI extraction pipeline. <span class="v-accent">1,357 of 1,357 tests pass.</span> A rebuild would throw away the most expensive, most correct 70% of the product.</p>
+    <p>What is broken is the <b>last mile</b>: at least fifteen fully-built features are dead because one wire was never connected — a signature page no link points to, a nudge button behind a hardcoded <b>false</b>, notifications written without recipients so they never send, a negotiation panel unreachable because of one wrong early-return. And every <b>backward</b> arrow (send-backs, rejections) strands the lease permanently. The fix is weeks of disciplined wiring — not a rewrite.</p>
+  </div>
+
+  <div class="tiles">
+    <div class="tile t-crit"><div class="t-num">19</div><div class="t-label">Critical findings <span class="sev sev-crit">Critical</span></div></div>
+    <div class="tile t-high"><div class="t-num">132</div><div class="t-label">High findings <span class="sev sev-high">High</span></div></div>
+    <div class="tile"><div class="t-num">318</div><div class="t-label">Medium + Low findings</div></div>
+    <div class="tile t-good"><div class="t-num">17/17</div><div class="t-label">areas voted “fix, don’t rebuild”</div></div>
+    <div class="tile t-brand"><div class="t-num">1,357</div><div class="t-label">tests passing (typecheck + CI green)</div></div>
+  </div>
+
+  <p>One nuance to the verdict: two things do deserve a <em>redesign inside the repo</em> rather than a patch — the <a href="#setup">approval setup experience</a> (rebuilt as templates over the existing engine) and the <a href="#settings">role model presented in Settings</a> (three overlapping systems consolidated into one screen). Both reuse the existing schema and engine; neither requires starting over.</p>
+</section>
+
+<section id="findings" class="toc-anchor">
+  <div class="eyebrow">Findings</div>
+  <h2>What the review found — six patterns</h2>
+  <p>Individual findings are cataloged in the <a href="#appendix">appendix scorecard</a> and the per-area reports. Almost everything falls into six patterns. Understanding them matters more than any single bug, because each pattern has one cure.</p>
+
+  <h3>1 · Built, but never wired in</h3>
+  <p>The single biggest source of “Claude left me incomplete work.” These features are <em>finished</em> server-side — some for months — and unreachable in the product:</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Feature</th><th>State of the backend</th><th>The one missing wire</th></tr></thead>
+    <tbody>
+      <tr><td><b>Nudge system</b></td><td class="ok">Complete</td><td>Button’s only mount gated on <code>const isPendingApproval = false;</code> — <code>LeaseReview.tsx:436</code></td></tr>
+      <tr><td><b>CFO signature page</b> (SignatorReview: checklist + attestation)</td><td class="ok">Complete, routed</td><td>Zero inbound links anywhere; queue’s inline Approve always 400s (no attestation field)</td></tr>
+      <tr><td><b>Negotiation documents panel</b> (upload / escalate / advance)</td><td class="ok">Complete</td><td><code>in_negotiation</code> renders the intake early-return; panel never mounts — <code>LeaseReview.tsx:429-433</code></td></tr>
+      <tr><td><b>Requestor outcome notifications</b></td><td class="ok">Dispatcher + templates work</td><td>Rows written without <code>recipient_ids</code>; dispatcher skips them forever</td></tr>
+      <tr><td><b>Admin override / rescue</b> (AdminOverrideModal)</td><td class="ok">Complete</td><td>Component imported by no page</td></tr>
+      <tr><td><b>Out-of-office delegation UI</b></td><td class="ok">Cron + tables live</td><td>Component imported by no page (“feature removed” comment in AccountSettings)</td></tr>
+      <tr><td><b>Exceptions + reroute-audit dashboards</b></td><td class="ok">Routed pages</td><td>No navigation entry; sweep cron never scheduled — permanently empty</td></tr>
+      <tr><td><b>Notifications center</b> (/app/notifications)</td><td class="ok">Fan-out trigger works</td><td>Header bell removed; no sidebar entry; no unread indicator</td></tr>
+      <tr><td><b>Alert rules engine</b> (renewal alerts)</td><td class="ok">Cron + RLS complete</td><td>No UI creates a rule; nothing seeded — zero alerts ever fire</td></tr>
+      <tr><td><b>Firm join-requests, firm access mapping</b></td><td class="ok">Edge fns + helpers complete</td><td>Zero UI callers; <code>firmAccess.ts</code> has no runtime call sites</td></tr>
+      <tr><td><b>AI abstraction of the executed request-path lease</b></td><td class="ok">Executed mode exists in <code>process_lease</code></td><td>Nothing invokes it after counter-signature (<code>record-counter-signature</code> claims “extraction flow takes over” — nothing does)</td></tr>
+      <tr><td><b>Single-lease disclosure report generation</b></td><td class="ok">667-line edge fn</td><td>“Generate report” button was removed in a redesign; only “Regenerate” on an existing report remains</td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>Cure:</strong> a “wiring” phase (Phases 1–2 below) that connects existing machinery before building anything new — the highest-leverage work in the whole plan.</p>
+
+  <h3>2 · Every backward arrow is broken</h3>
+  <p>You asked me to “handle the rejections or send backs.” Today, nobody can: a concept send-back supersedes every pending step and leaves <em>zero</em> pending rows with no resubmit mechanism (the dialog tells the approver “the submitter must resubmit” — no such flow exists). A signator send-back can never be recovered because re-advancing only re-stamps existing pending rows and none survive. <code>rejected</code> is a hard-terminal state though the architecture doc promises a revise loop. <code>chain_violation</code>’s only exit button fires a browser write the governance trigger always rejects. <strong>Every one of these strands the lease permanently.</strong></p>
+
+  <h3>3 · The product is silent</h3>
+  <p>Approvals move, and nobody is told. The requestor is never notified of <em>any</em> outcome — not approval (“go get a quote”), not rejection, not send-back. The next sequential approver is never notified. The signature notification goes to a role nobody can hold. The unlock/change-set loop writes audit rows only. The one page that would show all of this (<code>/app/notifications</code>) is unreachable from navigation.</p>
+
+  <h3>4 · Two of everything</h3>
+  <p>Two approval systems (legacy threshold/roles + policy chains) with three rival config surfaces and undocumented precedence; two role systems (membership roles vs functional roles) colliding on one screen; five extraction pipelines (primary, retry, executed, amendment, audit-session) where retry diverges so badly it strands recovered leases outside the portfolio; two state vocabularies (legacy + chain) that the UI keeps confusing — the root cause of the negotiation-panel blocker is precisely an equivalence mapping between the two.</p>
+
+  <h3>5 · Money and data-safety bugs</h3>
+  <p>A short list of genuinely severe, verified issues that outrank everything else: <strong>account deletion destroys other tenants’ lease records</strong> (deletes by uploader ID across workspaces) and <strong>cancels zero Stripe subscriptions</strong> (deleted customers billed forever); <strong>plan switching double-bills</strong> (old subscription never cancelled); <strong>Starter is free forever</strong> on its default path (no checkout, no trial clock, no enforcement — the landing page’s “7-day free trial” is not implemented); <strong>unlimited free workspaces</strong> via a wide-open INSERT policy (each resets the AI quota); report PDF uploads blocked for everyone by a mis-bound storage RLS policy (filed as #18 six weeks ago, fix written, never applied).</p>
+
+  <h3>6 · Code-complete but never deployed</h3>
+  <p>A two-week-old queue of finished, reviewed work is inert because operator steps never ran: four edge-function redeploys (including the resolver — meaning <strong>Path-1 submission may be broken in production right now</strong>), four cron secrets, at least five never-scheduled crons (counter-signature reminders, delegate timers, stuck-chain detection, retention purge, notification e-mail dispatch), and the Stripe STOPs (live webhook, annual prices, Vault product, pack prices). Full checklist in <a href="#operator">Operator backlog</a>.</p>
+</section>
+<section id="your-flow" class="toc-anchor">
+  <div class="eyebrow">Path 1 · Gap analysis</div>
+  <h2>Your ideal flow, mapped step-by-step onto the code</h2>
+  <p>You described an eight-step cycle. Here is exactly how much of it exists, verified in code. The surprise is how much of it is <em>already built</em> — and how consistently the last connection is missing.</p>
+
+  <div class="tbl-wrap"><table>
+    <thead><tr><th style="width:34%">Your step</th><th>Built?</th><th>What the code does today</th></tr></thead>
+    <tbody>
+      <tr><td><b>1 · Warehouse/ops submits a request through a portal</b></td><td class="ok">Yes</td><td>Request form with live financial-impact preview → inserts as <code>draft</code> → server resolves the approval chain. Genuinely good. Two lies to fix: the route preview reads the <em>legacy</em> model even when policies will route it, and fields say “AI will extract from document” on a path that never runs AI.</td></tr>
+      <tr><td><b>2 · Manager gives initial approval</b></td><td class="ok">Yes</td><td>Concept stage. Manager is notified, sees the request in the Approvals queue, one-click approve with comment support. Works.</td></tr>
+      <tr><td><b>3 · Requestor is told “approved — go seek a quote”</b></td><td class="no">No</td><td>No notification of any kind is written on concept approval. The requestor’s page keeps saying “pending manager review.” They find out by refreshing, or never.</td></tr>
+      <tr><td><b>4 · Quote goes back to manager; accept or deny</b></td><td class="no">No</td><td>No quote concept exists — no <code>quote</code> document type, no approval gate. Everything after concept approval collapses into one self-driven “negotiation” loop that only the submitter advances.</td></tr>
+      <tr><td><b>5 · Requestor submits the vendor’s lease contract</b></td><td class="half">Built, unreachable</td><td>A full negotiation Documents panel exists (versioned uploads: LOI, draft, redline, counter, final) — but <code>in_negotiation</code> renders the intake screen instead, so the panel <em>never mounts</em>. One wrong early-return blocks the entire back half of your flow.</td></tr>
+      <tr><td><b>6 · Manager approves contract, pushes to CFO</b></td><td class="half">Partial</td><td>“Send to signature” exists (<code>advance-to-final-review</code>) but is submitter-initiated with no manager gate — and it lives inside the unreachable panel above.</td></tr>
+      <tr><td><b>7 · CFO signs; Finance sees it simultaneously</b></td><td class="half">Built, orphaned</td><td>A dedicated signature page exists — checklist, intent-to-bind attestation, exactly right — with <strong>zero links pointing to it</strong>. The queue’s inline Approve always fails (server demands an attestation the queue never sends). Finance gets nothing at this stage.</td></tr>
+      <tr><td><b>8 · Executed lease → abstraction → repository</b></td><td class="no">Dead end</td><td>Counter-signature upload flips the lease to <code>fully_executed</code>… and stops. Nothing invokes AI abstraction; no code path reaches <code>active</code>. The confirm dialog claims “the extraction flow takes over” — nothing does.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Where the flow dies today</h3>
+  <div class="fig">
+    <svg viewBox="0 0 980 240" width="980" height="240" role="img" aria-label="Current Path-1 pipeline with seven breakpoints marked">
+      <!-- lane: states -->
+      <rect x="12"  y="92" width="96"  height="42" rx="9" class="svg-box"/>
+      <text x="60"  y="117" text-anchor="middle" class="svg-t">Request</text>
+      <rect x="148" y="92" width="120" height="42" rx="9" class="svg-box"/>
+      <text x="208" y="110" text-anchor="middle" class="svg-t">Manager</text>
+      <text x="208" y="124" text-anchor="middle" class="svg-t-sm">concept approval</text>
+      <rect x="308" y="92" width="130" height="42" rx="9" class="svg-box"/>
+      <text x="373" y="110" text-anchor="middle" class="svg-t">Negotiation</text>
+      <text x="373" y="124" text-anchor="middle" class="svg-t-sm">quotes · contract docs</text>
+      <rect x="478" y="92" width="118" height="42" rx="9" class="svg-box"/>
+      <text x="537" y="110" text-anchor="middle" class="svg-t">Signature</text>
+      <text x="537" y="124" text-anchor="middle" class="svg-t-sm">CFO attestation</text>
+      <rect x="636" y="92" width="128" height="42" rx="9" class="svg-box"/>
+      <text x="700" y="110" text-anchor="middle" class="svg-t">Executed</text>
+      <text x="700" y="124" text-anchor="middle" class="svg-t-sm">counter-signed</text>
+      <rect x="804" y="92" width="76" height="42" rx="9" class="svg-box-ghost"/>
+      <text x="842" y="110" text-anchor="middle" class="svg-t" opacity=".55">AI</text>
+      <text x="842" y="124" text-anchor="middle" class="svg-t-sm">abstraction</text>
+      <rect x="908" y="92" width="62" height="42" rx="9" class="svg-box-ghost"/>
+      <text x="939" y="117" text-anchor="middle" class="svg-t" opacity=".55">Active</text>
+      <!-- edges -->
+      <path d="M108 113 H146" class="svg-edge" marker-end="url(#arr)"/>
+      <path d="M268 113 H306" class="svg-edge" marker-end="url(#arr)"/>
+      <path d="M438 113 H476" class="svg-edge" marker-end="url(#arr)"/>
+      <path d="M596 113 H634" class="svg-edge" marker-end="url(#arr)"/>
+      <path d="M764 113 H802" class="svg-edge" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+      <path d="M880 113 H906" class="svg-edge" marker-end="url(#arr)" stroke-dasharray="5 4"/>
+      <defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--line-strong)"/></marker></defs>
+      <!-- breakpoints above -->
+      <g>
+        <circle cx="60"  cy="62" r="11" class="svg-break"/><text x="60"  y="66" text-anchor="middle" class="svg-t-crit">1</text>
+        <text x="60" y="40" text-anchor="middle" class="svg-t-sm">preview lies · false AI copy</text>
+        <circle cx="288" cy="62" r="11" class="svg-break"/><text x="288" y="66" text-anchor="middle" class="svg-t-crit">2</text>
+        <text x="288" y="40" text-anchor="middle" class="svg-t-sm">requestor never notified</text>
+        <circle cx="373" cy="170" r="11" class="svg-break"/><text x="373" y="174" text-anchor="middle" class="svg-t-crit">3</text>
+        <text x="373" y="196" text-anchor="middle" class="svg-t-sm">documents panel unreachable</text>
+        <text x="373" y="210" text-anchor="middle" class="svg-t-sm">no quote gate exists</text>
+        <circle cx="458" cy="62" r="11" class="svg-break"/><text x="458" y="66" text-anchor="middle" class="svg-t-crit">4</text>
+        <text x="458" y="40" text-anchor="middle" class="svg-t-sm">send-backs strand forever</text>
+        <circle cx="537" cy="170" r="11" class="svg-break"/><text x="537" y="174" text-anchor="middle" class="svg-t-crit">5</text>
+        <text x="537" y="196" text-anchor="middle" class="svg-t-sm">signature page orphaned;</text>
+        <text x="537" y="210" text-anchor="middle" class="svg-t-sm">queue approve always fails</text>
+        <circle cx="616" cy="62" r="11" class="svg-break"/><text x="616" y="66" text-anchor="middle" class="svg-t-crit">6</text>
+        <text x="616" y="40" text-anchor="middle" class="svg-t-sm">no finance visibility</text>
+        <circle cx="784" cy="170" r="11" class="svg-break"/><text x="784" y="174" text-anchor="middle" class="svg-t-crit">7</text>
+        <text x="784" y="196" text-anchor="middle" class="svg-t-sm">no abstraction trigger ·</text>
+        <text x="784" y="210" text-anchor="middle" class="svg-t-sm">no path to Active</text>
+      </g>
+    </svg>
+  </div>
+  <p class="fig-cap"><b>Fig. 1 — Where Path 1 dies today.</b> Dashed boxes and arrows are stages the architecture documents promise but no code path reaches. A lease that enters your ideal cycle today cannot come out the other side through the UI — it stalls at breakpoint 3 at the latest, and even a hand-driven lease dead-ends at 7.</p>
+</section>
+
+<section id="pushback" class="toc-anchor">
+  <div class="eyebrow">Path 1 · Proposal</div>
+  <h2>The pushback: three gates, not six touchpoints</h2>
+  <p class="lead">You said it yourself: “this will lose interest fast if it is overcomplicated.” Your described cycle interrupts the manager four separate times (request, quote, contract, pre-CFO) plus the CFO plus finance. I recommend collapsing it to <strong>three named gates</strong> that preserve every control point you asked for.</p>
+
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Gate</th><th>Question it answers</th><th>Who acts</th><th>How it maps to your steps</th></tr></thead>
+    <tbody>
+      <tr><td><b>Gate 1 · Request</b></td><td>“Should we shop for this at all?”</td><td>Manager</td><td>Your steps 1–3. Already built; needs the “approved — go get quotes” notification and guidance.</td></tr>
+      <tr><td><b>Gate 2 · Quote</b></td><td>“Can we commit at this price?”</td><td>Manager</td><td>Your step 4. The one genuinely new gate: a <code>quote</code> document type + a lightweight approval checkpoint. Toggleable per approval template — small equipment leases can skip it.</td></tr>
+      <tr><td><b>Gate 3 · Signature</b></td><td>“Do we bind the company?”</td><td>Manager confirms → CFO signs · Finance is notified &amp; watching</td><td>Your steps 5–7 <em>merged</em>. The manager’s contract check becomes the first sequential step of the signature stage (the engine already supports multi-step stages), the CFO’s attestation is the second, and Finance gets simultaneous visibility as watchers — notified on entry, full read access, no approval burden.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p><strong>Why merge the contract check into the signature gate?</strong> In your version, the manager approves the contract, and then the same document goes to the CFO. Two ceremonies, one artifact, days of latency between them — and the stuck-chain data in this codebase (7-day detection threshold) says every extra interruption is where deals stall. As sequential steps of one gate, the manager and CFO act on the same screen contexts back-to-back, each step notifies the next automatically, and the requestor’s tracker shows one “Signature” stage instead of two confusing ones.</p>
+
+  <h3>Send-backs, rejections, and nudges — the full contract</h3>
+  <ul>
+    <li><strong>Every gate offers three actions:</strong> <em>Approve</em> · <em>Send back</em> (requires a note; returns the request to the requestor in an editable state whose primary button simply reads <b>Submit</b> — the resolver’s existing <code>forceConceptReactivation</code> mode does the chain reset) · <em>Decline</em> (terminal, reason required, requestor notified; one click duplicates the data into a fresh request so nothing is retyped).</li>
+    <li><strong>Every transition notifies someone by name.</strong> The full matrix is in <a href="#notifications">§ Notification matrix</a> — no state change is silent, ever.</li>
+    <li><strong>Nudges:</strong> the already-built manual nudge (24-hour cooldown, server-enforced) surfaces on the requestor’s tracker and each queue card; the already-typed automatic day-2/5/10 reminders get their cron wired; stuck chains (7 days) escalate to admins via the Exceptions dashboard, which finally gets a nav entry.</li>
+  </ul>
+
+  <h3>The target state machine</h3>
+  <div class="fig">
+    <svg viewBox="0 0 980 268" width="980" height="268" role="img" aria-label="Proposed three-gate lifecycle">
+      <defs><marker id="arr2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/></marker>
+      <marker id="arrb" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--high)"/></marker></defs>
+      <!-- states -->
+      <rect x="10"  y="104" width="84" height="44" rx="9" class="svg-box"/>
+      <text x="52"  y="123" text-anchor="middle" class="svg-t">Draft</text>
+      <text x="52"  y="137" text-anchor="middle" class="svg-t-sm">requestor</text>
+
+      <rect x="134" y="104" width="108" height="44" rx="9" class="svg-box-strong"/>
+      <text x="188" y="123" text-anchor="middle" class="svg-t-on">GATE 1</text>
+      <text x="188" y="137" text-anchor="middle" class="svg-t-on" font-size="10">manager · request</text>
+
+      <rect x="282" y="104" width="112" height="44" rx="9" class="svg-box"/>
+      <text x="338" y="123" text-anchor="middle" class="svg-t">Sourcing</text>
+      <text x="338" y="137" text-anchor="middle" class="svg-t-sm">“get quotes”</text>
+
+      <rect x="434" y="104" width="108" height="44" rx="9" class="svg-box-strong"/>
+      <text x="488" y="123" text-anchor="middle" class="svg-t-on">GATE 2</text>
+      <text x="488" y="137" text-anchor="middle" class="svg-t-on" font-size="10">manager · quote</text>
+
+      <rect x="582" y="104" width="112" height="44" rx="9" class="svg-box"/>
+      <text x="638" y="123" text-anchor="middle" class="svg-t">Contracting</text>
+      <text x="638" y="137" text-anchor="middle" class="svg-t-sm">vendor docs loop</text>
+
+      <rect x="734" y="104" width="118" height="44" rx="9" class="svg-box-strong"/>
+      <text x="793" y="119" text-anchor="middle" class="svg-t-on">GATE 3</text>
+      <text x="793" y="131" text-anchor="middle" class="svg-t-on" font-size="9.5">manager → CFO signs</text>
+      <text x="793" y="142" text-anchor="middle" class="svg-t-on" font-size="9.5">finance watching</text>
+
+      <rect x="892" y="80" width="80" height="40" rx="9" class="svg-box"/>
+      <text x="932" y="97" text-anchor="middle" class="svg-t">Executed</text>
+      <text x="932" y="111" text-anchor="middle" class="svg-t-sm">→ AI abstract</text>
+      <rect x="892" y="140" width="80" height="40" rx="9" class="svg-box-accent"/>
+      <text x="932" y="164" text-anchor="middle" class="svg-t-on">Active</text>
+
+      <!-- forward edges -->
+      <path d="M94 126 H132"  class="svg-edge-accent" marker-end="url(#arr2)"/>
+      <path d="M242 126 H280" class="svg-edge-accent" marker-end="url(#arr2)"/>
+      <path d="M394 126 H432" class="svg-edge-accent" marker-end="url(#arr2)"/>
+      <path d="M542 126 H580" class="svg-edge-accent" marker-end="url(#arr2)"/>
+      <path d="M694 126 H732" class="svg-edge-accent" marker-end="url(#arr2)"/>
+      <path d="M852 118 L890 103" class="svg-edge-accent" marker-end="url(#arr2)"/>
+      <path d="M932 122 V138" class="svg-edge-accent" marker-end="url(#arr2)"/>
+
+      <!-- send-back edges -->
+      <path d="M188 102 C188 66, 70 66, 55 100" class="svg-edge-back" marker-end="url(#arrb)"/>
+      <text x="120" y="60" text-anchor="middle" class="svg-t-sm">send back + note → revise, Submit again</text>
+      <path d="M488 150 C488 192, 350 192, 340 152" class="svg-edge-back" marker-end="url(#arrb)"/>
+      <text x="416" y="204" text-anchor="middle" class="svg-t-sm">quote declined → source again</text>
+      <path d="M793 150 C793 236, 648 236, 640 152" class="svg-edge-back" marker-end="url(#arrb)"/>
+      <text x="722" y="248" text-anchor="middle" class="svg-t-sm">send back → renegotiate</text>
+
+      <!-- nudge annotation -->
+      <text x="188" y="176" text-anchor="middle" class="svg-t-accent">🔔 notify + nudge</text>
+      <text x="488" y="176" text-anchor="middle" class="svg-t-accent">🔔 notify + nudge</text>
+    </svg>
+  </div>
+  <p class="fig-cap"><b>Fig. 2 — Proposed lifecycle.</b> Internally this reuses the existing chain vocabulary — Gate 1 is the <code>concept</code> stage, Sourcing/Contracting are <code>in_negotiation</code> with state-aware guidance, Gate 3 is the <code>signator</code> stage with two sequential steps. The only schema addition is the <code>quote</code> stage and document type for Gate 2. Every solid arrow ships with a notification; every dashed arrow is a send-back with a required note and a working resubmit.</p>
+
+  <h3>What the requestor sees — no more dead air</h3>
+  <div class="mock" role="img" aria-label="Mockup of the requestor's request tracker">
+    <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="m-title">leaseio · app/leases/1482 — requestor view</span></div>
+    <div class="mock-body">
+      <p class="m-h">Forklift lease — Crown FC 5252</p>
+      <p class="m-sub">Requested by Jordan Ortiz · Operations · Est. $2,150/mo × 48 mo</p>
+      <div class="stepper">
+        <div class="step done"><div class="s-dot">✓</div><div class="s-name">Request</div><div class="s-det">Approved Jun 30</div></div>
+        <div class="step done"><div class="s-dot">✓</div><div class="s-name">Sourcing</div><div class="s-det">Quote uploaded</div></div>
+        <div class="step current"><div class="s-dot">3</div><div class="s-name">Quote approval</div><div class="s-det">Maria Chen · 2 days</div></div>
+        <div class="step"><div class="s-dot">4</div><div class="s-name">Signature</div><div class="s-det">Manager → CFO</div></div>
+        <div class="step"><div class="s-dot">5</div><div class="s-name">Active</div><div class="s-det">In repository</div></div>
+      </div>
+      <div class="m-card" style="margin-top:16px">
+        <b style="color:var(--ink); font-size:13px">Waiting on Maria Chen (quote approval)</b>
+        <div class="m-note" style="margin:4px 0 10px">Sent 2 days ago. Maria was notified by email and in-app. You can send one reminder every 24 hours.</div>
+        <span class="m-btn primary">Send reminder</span>
+        <span class="m-btn">View quote (v2)</span>
+      </div>
+    </div>
+  </div>
+  <p class="mock-cap"><b>Mockup 1 — Requestor tracker.</b> Replaces the current in-flight experience (a static “pending manager review” banner that stays wrong forever). Every state names who’s next, what happens after, and gives the requestor their one action — including the nudge, which is already fully built server-side and today hidden behind a hardcoded <code>false</code>.</p>
+</section>
+
+<section id="direct-add" class="toc-anchor">
+  <div class="eyebrow">Path 2 · Direct add</div>
+  <h2>Direct add: review first, then post — with a real permission</h2>
+  <p>Today, clicking <b>Add lease</b> runs the AI and drops the lease straight into the portfolio at lifecycle <code>executed</code> — counted in totals <em>before anyone has reviewed a single extracted field</em>, with no approval concept anywhere and no permission model (<code>process_lease/index.ts:2517</code>). That contradicts your stated contract: “user adds lease, gets abstracted, reviews fields, and submits for approval — unless they have permission to post without approval.”</p>
+  <p>The review workbench itself is in good shape (per-field confidence, tab-by-tab attestation, PDF verify). What’s missing is the landing state and the posting gate:</p>
+  <ol>
+    <li><strong>Land in review, not the portfolio.</strong> Extraction completes into a <code>pending_review</code> state — invisible to portfolio totals, visible in a “Needs review” queue. (This also revives the dead NeedsReviewBanner and fixes the false “document missing” flag every direct-add currently gets on the Dashboard.)</li>
+    <li><strong>“Post without approval” is a functional role, not a checkbox column.</strong> Add <code>direct_poster</code> to <code>workspace_roles</code> — the same table every other approval capability lives in. Owner, workspace admins, and financial approvers qualify implicitly; anyone else can be granted it on the Members screen.</li>
+    <li><strong>One server action, two outcomes.</strong> A single <code>post_direct</code> action (service-role, so the governance trigger stays intact) checks the permission:
+      <ul>
+        <li><em>Has it</em> → <code>pending_review → active</code> in one step, model-locked, audit row marked <code>posted_without_approval: true</code>. The UI button reads <b>Post to portfolio</b>.</li>
+        <li><em>Doesn’t</em> → resolves an approval chain that <em>enters at the signature stage</em> (the document is already signed — running it through concept/quote gates would be nonsense), and the button reads <b>Submit for approval</b>.</li>
+      </ul>
+    </li>
+  </ol>
+
+  <div class="mock" role="img" aria-label="Mockup of the post-to-portfolio gate">
+    <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="m-title">leaseio · lease review — footer, all sections reviewed</span></div>
+    <div class="mock-body">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap">
+        <div>
+          <b style="color:var(--ink); font-size:13.5px">All 6 sections reviewed ✓</b>
+          <div class="m-note">18 fields confirmed · 2 corrected · reviewed by you, just now</div>
+        </div>
+        <div>
+          <span class="m-btn primary">Post to portfolio</span>
+          <span class="m-btn">Save Draft</span>
+        </div>
+      </div>
+      <div class="m-card" style="margin-top:14px; background:var(--surface-2); border-style:dashed">
+        <div class="m-note"><b>Without the “post directly” permission</b>, the primary button reads <b>Submit for approval</b> → “Sent to Maria Chen (finance) for final approval. You’ll be notified.” Same screen, same gesture — the permission only changes where the click goes.</div>
+      </div>
+    </div>
+  </div>
+  <p class="mock-cap"><b>Mockup 2 — The posting gate.</b> One primary action whose label tells the truth about what happens next. This replaces today’s confusing Approve-then-Activate two-step, whose Activate button renders for everyone and then 403s for most roles with a raw error.</p>
+
+  <p>Same beat, adjacent must-fixes (all verified broken): the retry pipeline gets unified with the primary one (today retry mandates Azure OCR against Hard Rule 3, skips quota and classification, drops six extracted columns, and strands recovered leases outside the portfolio forever); duplicate-document detection via content hash; async upload progress instead of a 30–150-second frozen “Submitting…” button; and the amendment dialog stops demanding an “Approver Email” that the server silently discards.</p>
+</section>
+
+<section id="setup" class="toc-anchor">
+  <div class="eyebrow">Approvals · Setup</div>
+  <h2>Approval setup: templates first, engine untouched</h2>
+  <p class="lead">You called the current setup “overly complicated.” Verified: reaching the editor takes 5 clicks through a pass-through tab; the editor exposes ~13 concepts (priority, fallback flags, parallel groups, separation-of-duties overrides…); and four of its defaults are traps that later explode in the <em>requestor’s</em> face, not the admin’s.</p>
+
+  <div class="callout danger">
+    <div class="c-title">The traps, concretely (all confirmed in code)</div>
+    <p>① Create one narrow rule (say, Real Estate only) → every other request type in the workspace <b>hard-fails at submission</b> with a 409, because “Active” defaults on, “fallback” defaults off, and the legacy path switches off the moment one active policy exists. ② Every rule defaults to priority 100, ties aren’t detected, and tied matches <b>reject the submission outright</b> — Duplicate-then-activate makes this the default outcome. ③ The editor’s flagship “AND at the same time” control writes data the engine runs <em>sequentially</em> (it keys parallelism on <code>step_order</code>, which the editor increments). ④ The “Try it on a sample request” dialog uses different logic than the live resolver — it says “matched” for exactly the configurations that will fail real submissions.</p>
+  </div>
+
+  <p>The engine underneath (policy matching → chain snapshot → frontier advancement) is sound and well-tested. So the redesign is a <strong>presentation layer</strong>:</p>
+  <ul>
+    <li><strong>Seed every new workspace with a working default policy</strong> — “Manager approves, owner signs,” fallback on — so a fresh workspace routes sanely from request #1 and the legacy path becomes unreachable for new workspaces.</li>
+    <li><strong>Simple mode: three templates + two questions.</strong> Covers what an SMB finance team actually needs; writes ordinary <code>approval_policies</code> rows under the hood. Advanced mode remains the existing editor for the 5% who need per-department chains.</li>
+    <li><strong>Guardrails at save time, not submission time:</strong> atomic policy+steps save (today a half-failed save strands an active zero-step rule that 409s everything it matches); tie detection; “no fallback exists” warning; “this role has no holders” warning; and a test dialog that calls the real resolver.</li>
+    <li><strong>Fix the parallel encoding</strong> (same <code>step_order</code>, new <code>parallel_group</code>) with a one-time data repair for existing policies.</li>
+    <li><strong>One configuration surface.</strong> The legacy “Approval Chain” card and the orphaned “Review Thresholds” setting fold into Approval Rules with a migration note — today three rival surfaces coexist and nothing tells the admin which one is live.</li>
+  </ul>
+
+  <div class="mock" role="img" aria-label="Mockup of simple-mode approval setup">
+    <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="m-title">leaseio · settings — approval rules (simple mode)</span></div>
+    <div class="mock-body">
+      <p class="m-h">How should lease requests be approved?</p>
+      <p class="m-sub">Start from a template. You can switch to advanced rules any time — your choices here become editable rules.</p>
+      <div class="m-card">
+        <b style="color:var(--ink)">Manager approves</b> <span class="m-chip plain">smallest teams</span>
+        <div class="m-note">One approval, then straight to signature by the owner.</div>
+      </div>
+      <div class="m-card selected">
+        <b style="color:var(--ink)">Manager approves, CFO signs</b> <span class="m-chip">recommended</span>
+        <div class="m-note">Manager clears the request and the quote; the CFO signs the final contract.</div>
+      </div>
+      <div class="m-card">
+        <b style="color:var(--ink)">Manager → Finance review → CFO signs</b>
+        <div class="m-note">Adds a finance review step before signature for larger commitments.</div>
+      </div>
+      <div style="margin:16px 0 6px; display:flex; flex-direction:column; gap:10px">
+        <span class="m-toggle"><span class="tg"></span> Require quote approval before contract negotiation</span>
+        <span class="m-toggle"><span class="tg off"></span> Require finance review only above <span class="m-input">$50,000 total</span></span>
+      </div>
+      <div style="margin-top:14px">
+        <span class="m-btn primary">Save — takes effect on new requests</span>
+        <span class="m-btn">Advanced rules…</span>
+      </div>
+    </div>
+  </div>
+  <p class="mock-cap"><b>Mockup 3 — Simple mode.</b> Two decisions instead of thirteen. Each template compiles to normal <code>approval_policies</code> + <code>approval_chain_steps</code> rows (priority, fallback, and stages set correctly and invisibly), so the engine, audit trail, and advanced editor all keep working unchanged.</p>
+</section>
+
+<section id="workspaces" class="toc-anchor">
+  <div class="eyebrow">Multi-workspace</div>
+  <h2>Workspaces: creation is strong, seeding is empty, one door is unlocked</h2>
+  <p>You asked how multiple workspaces work “from creation to what is templated.” The audit mapped four controlled creation paths — and one uncontrolled one.</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Path</th><th>Health</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><b>Signup → onboarding wizard</b> (first workspace)</td><td class="half">Fragile</td><td>Client-side insert; abandon the wizard (or take the email-confirmation detour) and you’re permanently stranded — no other route back to workspace creation exists. Starter never touches Stripe.</td></tr>
+      <tr><td><b>Settings → “New workspace”</b> ($499 Business flow)</td><td class="ok">Excellent</td><td>Advisory locks, idempotency, 3-D Secure resume, fail-safe cancel, forensic rollback rows. The best-engineered function in the repo.</td></tr>
+      <tr><td><b>Firm → child workspace</b></td><td class="half">Partial</td><td>Works only inside the firm onboarding wizard; no UI exists to add a second child or bind an existing workspace afterward.</td></tr>
+      <tr><td><b>Raw PostgREST INSERT</b> (browser console)</td><td class="no">Open hole</td><td>The INSERT policy has no count limit and no payment linkage: any user can mint unlimited free Starter workspaces, each resetting the 15-doc AI quota. Bypasses the 10-cap and the $499 paywall.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p><strong>What a fresh workspace contains:</strong> column defaults and one owner-membership row. That’s all. No approval policy (so requests silently auto-approve until someone finds the roles screen), no functional roles, no departments, no alert rules, timezone hardcoded to <code>America/New_York</code> even though signup collects a timezone. <strong>Nothing is templated</strong> — a firm’s 20th child workspace starts as bare as the first and must be hand-configured.</p>
+  <p><strong>Plan:</strong> ① close the raw-INSERT hole (first-workspace-only policy; additional workspaces must use the paid path); ② seed the default approval policy + departments + the signup timezone at creation; ③ add a <em>workspace template</em>: “copy configuration from…” (asset types, departments, approval rules, roles, report settings — never data) at creation time, defaulting to the firm’s or owner’s designated template workspace. ④ Rebuild <code>delete-account</code> on the shared purge helpers — today it deletes leases <em>across other tenants’ workspaces</em> by uploader ID and cancels zero Stripe subscriptions. That fix is Phase 0, not Phase 6.</p>
+</section>
+
+<section id="settings" class="toc-anchor">
+  <div class="eyebrow">Settings</div>
+  <h2>Settings: two surfaces, one role model, no placebos</h2>
+  <p>The two-surface skeleton (Account ↔ Workspaces) is actually right, and i18n key parity is perfect. The problems: <strong>three role systems collide on one screen</strong> with no explanation of precedence; several controls are placebos (the “Historical Portfolio Loader” toggle controls a feature that doesn’t exist; “default notification days” is consumed by nothing); admin member-management <strong>silently no-ops</strong> (RLS is owner-only, the UI shows success toasts and writes phantom audit rows); “Leave workspace” does nothing and reports success; and the role the whole workflow hinges on — <b>Signatory</b> — cannot be assigned anywhere in the product.</p>
+
+  <div class="mock" role="img" aria-label="Mockup of the unified members screen">
+    <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="m-title">leaseio · settings — workspace members</span></div>
+    <div class="mock-body">
+      <p class="m-h">Members</p>
+      <p class="m-sub">Access controls what someone can see and edit. Responsibilities control their part in approvals.</p>
+      <div class="tbl-wrap" style="box-shadow:none; margin:0"><table>
+        <thead><tr><th>Member</th><th>Access</th><th>Responsibilities</th></tr></thead>
+        <tbody>
+          <tr><td><b>Dana Whitfield</b><br><span class="m-note">owner</span></td><td>Owner</td><td><span class="m-chip">Signs leases</span><span class="m-chip">Posts without approval</span></td></tr>
+          <tr><td><b>Maria Chen</b></td><td>Admin</td><td><span class="m-chip">Reviews finances</span><span class="m-chip">Approves quotes</span></td></tr>
+          <tr><td><b>Sam Adeyemi</b></td><td>Editor</td><td><span class="m-chip">Approves requests</span></td></tr>
+          <tr><td><b>Jordan Ortiz</b></td><td>Editor</td><td><span class="m-chip plain">Submits requests</span></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  <p class="mock-cap"><b>Mockup 4 — One members screen.</b> Access (owner/admin/editor/viewer) and responsibilities (approves requests · reviews finances · signs leases · posts without approval) live side by side in plain language — replacing today’s three-way collision of a role dropdown, a separate functional-role checkbox grid, and a legacy “Approval Chain” card that goes routing-inert the moment a policy exists but keeps rendering as if it worked.</p>
+
+  <p>The rest of the settings plan: fix or hide the placebo controls; make member-management RLS match the UI (admins can manage members, or the UI stops offering it — recommend the former); a working “Leave workspace”; a Notifications section (email on/off per event class — the delivery pipeline already supports it); and restore a persistent entry point to the notifications center (sidebar item + unread badge).</p>
+</section>
+<section id="plan" class="toc-anchor">
+  <div class="eyebrow">The plan</div>
+  <h2>Implementation plan — seven phases, ~8 weeks</h2>
+  <p>Ordered by risk, then by user value. Phase 0 is not optional and not deferrable: it contains live money bugs, a cross-tenant data-loss bug, and the deploy backlog that may have Path 1 broken in production today. Estimates assume the current working style (you + Claude, staging-first).</p>
+
+  <div class="gantt gantt-wrap" role="img" aria-label="Phase timeline across eight weeks">
+    <div class="g-grid">
+      <div></div>
+      <div class="g-head">wk 1</div><div class="g-head">wk 2</div><div class="g-head">wk 3</div><div class="g-head">wk 4</div><div class="g-head">wk 5</div><div class="g-head">wk 6</div><div class="g-head">wk 7</div><div class="g-head">wk 8</div>
+      <div class="g-label">0 · Safety &amp; money<small>deploys · billing · data loss</small></div>
+      <div class="g-track"><span class="g-bar b0" style="grid-column: 1 / span 1"></span></div>
+      <div class="g-label">1 · Path 1 completable<small>the seven wires</small></div>
+      <div class="g-track"><span class="g-bar" style="grid-column: 2 / span 1"></span></div>
+      <div class="g-label">2 · Your flow<small>quote gate · tracker · finance</small></div>
+      <div class="g-track"><span class="g-bar" style="grid-column: 3 / span 2"></span></div>
+      <div class="g-label">3 · Setup simplicity<small>templates · seeding · guardrails</small></div>
+      <div class="g-track"><span class="g-bar" style="grid-column: 4 / span 2"></span></div>
+      <div class="g-label">4 · Direct add<small>review state · posting permission</small></div>
+      <div class="g-track"><span class="g-bar" style="grid-column: 6 / span 1"></span></div>
+      <div class="g-label">5 · Settings &amp; roles<small>one members model</small></div>
+      <div class="g-track"><span class="g-bar" style="grid-column: 7 / span 1"></span></div>
+      <div class="g-label">6 · Trust &amp; polish<small>dashboards · i18n · mobile · firm</small></div>
+      <div class="g-track"><span class="g-bar" style="grid-column: 8 / span 1"></span></div>
+    </div>
+  </div>
+  <p class="fig-cap">Phases 2 and 3 overlap deliberately (backend vs settings surface). Phase 6 is a starting point, not an ending — its items continue as routine work.</p>
+
+  <div class="callout">
+    <div class="c-title">Definition of done — how every phase exits</div>
+    <p>No phase is “done” on green tests alone. Each one exits through, in order: <b>① a rendered walkthrough</b> of the affected user journeys — the app run against staging and clicked through as the real personas (requestor, approver, CFO, firm admin), with screenshots attached to the phase summary; <b>② the polish and layout review lanes</b> on every touched surface, covering copy (labels like “Save Draft”, not “Save &amp; finish later”), empty states, error states, and i18n coverage — not just the diff, the whole screen; <b>③ the standing reviewer sweep</b> (code auditor, security scanner, integrity reviewer, test author) with Critical/High findings surfaced before any fix; and <b>④ docs reconciled in the same commit.</b></p>
+    <p>Two known blind spots from this review are folded into gate ①: workspace-switching state isolation (React Query cache bleed between workspaces) is exercised in every multi-workspace walkthrough, and the firm journey (create firm → invite member → open child workspace → switch back) is the mandatory exit test for the firm items in Phase 6.</p>
+  </div>
+
+  <div class="callout">
+    <div class="c-title">Execution notes — for the next session’s model (Opus 4.8 / Sonnet)</div>
+    <p>This plan is written to be model-agnostic: every item carries file:line anchors, each area has a full evidence report in <code>docs/reviews/2026-07-03/</code>, and the definition-of-done above is the exit gate regardless of which model executes. Required reading order per phase: <code>CLAUDE.md</code> → this document’s phase card → the relevant per-area report(s). The <code>peak-operating-protocol</code> skill is installed at <code>.claude/skills/peak-operating-protocol/</code> and applies to every phase; its routing maps cleanly onto this plan — Phase 0 (payments, migrations, production data) is its “irreversible actions” row (strongest model, full protocol, verify before claiming), well-specified wiring items may run on Sonnet, and final verification of anything consequential is never delegated down-tier.</p>
+    <p><b>Autonomy contract (owner-ratified 2026-07-04, full autonomy):</b> this plan is approved in full — all six Decisions are resolved. Executing sessions do not wait for per-action approval, do not re-surface plan-scoped Critical/High findings, and roll phase to phase without a go-ahead (see the AUTONOMOUS EXECUTION MODE banner in <code>CLAUDE.md</code>, which supersedes the surfacing rule for plan-scoped work; <code>.claude/settings.json</code> sets <code>defaultMode: bypassPermissions</code>). The one hard stop: work requiring the owner’s credentials — Stripe dashboard STOPs, cron secrets, vendor consoles — batched as a checklist atop each phase summary. Out-of-scope destructive discoveries may be fixed but are logged prominently in the phase summary. Autonomy waives approvals, never the definition-of-done gates.</p>
+  </div>
+
+  <div class="phase p0" id="phase-0">
+    <h3>Phase 0 — Stop the bleeding <span class="sev sev-crit">Critical</span></h3>
+    <div class="p-meta">Week 1 · ~5 days · deploys + migrations + two edge-function rebuilds</div>
+    <ul>
+      <li><b>Run the operator backlog</b> (see <a href="#operator">checklist</a>): redeploy the 4 stale edge functions, set the 4 cron secrets, schedule the missing crons, finish Stripe STOPs 3/7/10 + pack prices. Then verify the deployed resolver matches the repo — until then, treat Path-1 submission as possibly broken in production. <span class="fp">docs/DEPLOY_RUNBOOK_2026-06-18.md</span></li>
+      <li><b>Rebuild <code>delete-account</code> on the shared purge helpers:</b> cancel all Stripe subscriptions, delete only <em>owned</em> workspaces’ data, never delete leases by uploader ID, fix FK ordering. Also fix the <code>profiles → leases</code> CASCADE that can destroy other tenants’ records at the schema level. <span class="fp">supabase/functions/delete-account/index.ts:63-91 · _shared/workspace_purge.ts</span></li>
+      <li><b>Close the free-workspace hole:</b> restrict the workspaces INSERT policy to first-workspace-only; everything else goes through the paid RPC. <span class="fp">baseline_schema.sql:3823</span></li>
+      <li><b>Stop double-billing on plan switch:</b> cancel the previous plan subscription when checkout completes. <span class="fp">create-checkout/index.ts:187-217 · stripe-webhook/index.ts:321-355</span></li>
+      <li><b>Apply the #18 storage-RLS fix</b> (written six weeks ago, never applied) so report PDFs can upload at all; revoke public summary tokens on lease deletion. <span class="fp">20260516120001_storage_policies.sql:83-94</span></li>
+      <li><b>Fix the Stripe Basil API bug:</b> <code>subscription.current_period_end</code> no longer exists at the pinned API version — read it from items. Renewal dates are silently wrong. <span class="fp">stripe-webhook/index.ts:97-130</span></li>
+      <li><b>Enforce price parity, Stripe ↔ config (owner 2026-07-11):</b> the displayed amount and the charged amount must never silently diverge (the $249-vs-$299 incident). Add a CI guardrail that reads each hardcoded Stripe price ID's <code>unit_amount</code> and fails the build if it ≠ <code>pricing.ts</code>. Follow-up option: generate the <code>pricing.ts</code> amounts from Stripe at build time so the number is single-sourced from Stripe — but keep entitlements (caps, quotas, feature flags) in code, and never add a live client-side Stripe fetch to the public pricing page. <span class="fp">src/config/pricing.ts · create-checkout/stripe-webhook price IDs</span></li>
+    </ul>
+  </div>
+
+  <div class="phase" id="phase-1">
+    <h3>Phase 1 — Make Path 1 completable end-to-end</h3>
+    <div class="p-meta">Week 2 · ~6–7 days · almost entirely wiring of already-built machinery</div>
+    <ul>
+      <li><b>Unblock the negotiation panel:</b> chain states stop matching the intake early-return; DocumentsPanel, escalate, and advance become reachable. One targeted change unblocks the back half of the flow. <span class="fp">LeaseReview.tsx:429-433 · lifecycleStates.ts:66</span></li>
+      <li><b>Wire the signature gate:</b> queue rows for signator steps navigate to SignatorReview (replacing the always-failing inline Approve); <code>advance-to-final-review</code> re-creates the signator row after a send-back; notification deep-links carry the URL.</li>
+      <li><b>Fix every backward arrow:</b> requestor can revise and <b>Submit</b> again after a send-back (resolver’s existing <code>forceConceptReactivation</code> mode); fresh signator rows on re-advance; a served-side exit for <code>chain_violation</code>; frontier gating in <code>act-on-chain-step</code> so steps can’t be acted out of order (the predicate is already written and tested — it’s just unused).</li>
+      <li><b>End the silence:</b> add <code>recipient_ids</code> to the four submitter notification writers; notify <code>nextAssignees</code> server-side on every advance; notify the requestor at every gate outcome.</li>
+      <li><b>Close the executed dead-end:</b> counter-signature upload triggers <code>process_lease</code> executed-mode abstraction; Activate works from <code>fully_executed</code>. Resolves KNOWN_ISSUES #94.</li>
+      <li><b>Resurrect the nudge:</b> delete the hardcoded <code>false</code>; mount the button on the tracker and queue cards; schedule the day-2/5/10 reminder cron.</li>
+      <li><b>Truthful request form:</b> route preview calls the real resolver in dry-run; remove the false “AI will extract” labels on the request path.</li>
+    </ul>
+  </div>
+
+  <div class="phase" id="phase-2">
+    <h3>Phase 2 — Your flow: the quote gate, the tracker, finance visibility</h3>
+    <div class="p-meta">Weeks 3–4 · ~6 days · the only genuinely new workflow construction in the plan</div>
+    <ul>
+      <li><b>Quote gate (Gate 2):</b> <code>quote</code> document type; a <code>quote</code> chain stage between concept and signator (frontier rank concept &lt; quote &lt; signator); toggleable per template. Approve/decline with note; decline returns to Sourcing.</li>
+      <li><b>Requestor tracker (Mockup 1):</b> stepper + “waiting on / what’s next” card on the lease page for every in-flight state; a <b>My requests</b> scope so submitters can find their in-flight work at all (today in-flight chain leases appear in no list).</li>
+      <li><b>Gate 3 as a package:</b> manager confirm + CFO attestation as sequential signator-stage steps in the default templates; Finance (financial-approver role holders) notified on entry to signature and listed as watchers on the lease.</li>
+      <li><b>Oversight surfaces see chain leases:</b> Approvals “All pending” and “Reviewed” tabs, the pipeline card, and the sidebar badge all learn the chain states and per-assignee counts (today each computes something different).</li>
+    </ul>
+  </div>
+
+  <div class="phase" id="phase-3">
+    <h3>Phase 3 — Approval setup, simplified</h3>
+    <div class="p-meta">Weeks 4–5 · ~6 days · presentation layer over the untouched engine</div>
+    <ul>
+      <li><b>Simple mode</b> (Mockup 3): three templates + quote toggle + optional amount threshold, compiling to ordinary policies. Advanced mode = current editor.</li>
+      <li><b>Seed a default policy at workspace creation</b> (“Manager approves, owner signs”, fallback on) and retire the legacy path for new workspaces.</li>
+      <li><b>Save-time guardrails:</b> atomic policy+steps save; priority-tie detection; missing-fallback and zero-holder warnings; SoD errors that say what to change; test dialog runs the live resolver with resolved names.</li>
+      <li><b>Fix the parallel encoding bug</b> + one-time repair migration for existing policies. <span class="fp">ChainDiagram.tsx:145-168</span></li>
+      <li><b>One config surface:</b> legacy Approval Chain card and Review Thresholds fold into Approval Rules; remove the pass-through hop tab.</li>
+    </ul>
+  </div>
+
+  <div class="phase" id="phase-4">
+    <h3>Phase 4 — Direct add: review state + posting permission</h3>
+    <div class="p-meta">Week 6 · ~5 days</div>
+    <ul>
+      <li><b><code>pending_review</code> landing state</b> for extractions (portfolio totals exclude it); “Needs review” queue; NeedsReviewBanner finally reachable.</li>
+      <li><b><code>direct_poster</code> functional role + <code>post_direct</code> server action</b> (Mockup 2): post-to-portfolio vs submit-for-approval entering at the signature stage.</li>
+      <li><b>Unify the retry pipeline with <code>process_lease</code></b> (retry = same pipeline, retry flag): restores Hard Rule 3, quota gating, classification, confidence rows, and stops stranding recovered leases.</li>
+      <li><b>Truth &amp; safety details:</b> duplicate-document hash check; async progress for the 30–150 s extraction wait; write (or retire) <code>executed_document_url</code> so the permanent false “document missing” flag dies; amendment dialog stops collecting a dead “Approver Email”; ImportHistory gets a nav entry.</li>
+      <li><b>Onboarding import (added 2026-07-04):</b> a bulk-import wizard for new customers bringing an existing portfolio — multi-file upload → queued batch abstraction (async, quota-aware, priced by the already-defined Onboarding Packs) → the same pending-review queue → bulk post. Replaces the placebo “Historical Portfolio Loader” toggle with the feature it advertises. <span class="fp">WorkspaceSettings.tsx backdoor_enabled (currently controls nothing) · pricing.ts Onboarding Packs</span></li>
+    </ul>
+  </div>
+
+  <div class="phase" id="phase-5">
+    <h3>Phase 5 — Settings &amp; the one role model</h3>
+    <div class="p-meta">Week 7 · ~5 days</div>
+    <ul>
+      <li><b>Unified Members screen</b> (Mockup 4): access + responsibilities, including <b>Signs leases</b> (finally assignable) and <b>Posts without approval</b>.</li>
+      <li><b>Make member management real:</b> RLS lets admins manage members (or the UI stops pretending); “Leave workspace” actually leaves; no more phantom success toasts or phantom audit rows.</li>
+      <li><b>Remove the placebos:</b> Historical-Loader toggle hidden until the feature exists; notification-days either wired into a real alert-rules UI (with sensible seeded defaults: 90/60/30-day renewal reminders) or removed.</li>
+      <li><b>Notifications home:</b> sidebar entry + unread badge + per-event-class email preferences.</li>
+    </ul>
+  </div>
+
+  <div class="phase" id="phase-6">
+    <h3>Phase 6 — Trust &amp; polish (start of a rhythm, not an end)</h3>
+    <div class="p-meta">Week 8 → ongoing</div>
+    <ul>
+      <li><b>Persona-aware dashboard:</b> “Needs your action” filtered to the viewer’s actual assignments; signature-stage leases visible in the pipeline; the Needs-Action tile links somewhere that can display the items it counts.</li>
+      <li><b>i18n sweep:</b> half the app’s core surfaces are hardcoded English despite perfect locale-file parity — Spanish users deserve the product the locale files promise.</li>
+      <li><b>Mobile:</b> the shell is unusable below ~640 px (KNOWN_ISSUES #145) — responsive sidebar collapse.</li>
+      <li><b>ASC data entry + reporting redesign (per resolved Decision 2):</b> replace every LeaseIO-computed accounting output with user-entered ASC fields (classification, discount rate, ROU/liability figures from their accounting tool — stored with attribution, reported verbatim); ground-up UX redesign of the reports/disclosure section; wire the dead Export/download buttons; restore the single-lease report entry point; exclude soft-deleted leases; amend PRODUCT_STRATEGY.md + CLAUDE.md to the repository-not-calculator ruling in the same change.</li>
+      <li><b>Firm follow-ons:</b> add-second-child UI, firm-role effective access actually enforced, released-child downgrade path, invitation-accept refresh bug.</li>
+      <li><b>Landing funnel:</b> the lease-audit lead magnet is auth-walled for the cold visitors it exists to catch; login drops the preserved redirect. Fix both; remove the Terms claim about accounting-system integrations that don’t exist.</li>
+      <li><b>Docs reconciliation:</b> CLAUDE.md and KNOWN_ISSUES carry a dozen verified false claims (firm checkout “deferred” though shipped; #109/#114/#123 stamped resolved though the user-facing symptom persists; architecture doc promising exits that don’t exist). Docs get corrected in the same commits as the fixes — per the house rule that stale docs are how sessions mislead each other.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="snippets" class="toc-anchor">
+  <div class="eyebrow">Evidence</div>
+  <h2>Code worth your review — the eight smoking guns</h2>
+  <p>Each of these is quoted verbatim from the repo today, with why it matters. They’re chosen because each one explains a whole class of symptoms you’ve felt.</p>
+
+  <h3>1 · The nudge system is behind a hardcoded <code>false</code></h3>
+  <span class="file-tag">src/pages/app/LeaseReview.tsx:436</span>
+  <div class="code"><span class="dim">// Check status states</span>
+<span class="hl">const isPendingApproval = false;</span>
+const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';</div>
+  <p class="code-cap">The only place NudgeApproverButton mounts is gated on this constant. The server side — cooldowns, effective-assignee resolution, immediate email — is complete and unreachable. KNOWN_ISSUES #109 marks the nudge “BUILT.”</p>
+
+  <h3>2 · One equivalence mapping blocks the entire negotiation stage</h3>
+  <span class="file-tag">src/pages/app/LeaseReview.tsx:429-433 · src/lib/lifecycleStates.ts:66</span>
+  <div class="code">const isIntakeStage = lifecycleStatusTyped != null &amp;&amp; (
+  isEquivalent(lifecycleStatusTyped, 'submitted') ||
+  isEquivalent(lifecycleStatusTyped, 'under_review') ||
+  <span class="hl">isEquivalent(lifecycleStatusTyped, 'approved')</span>   <span class="dim">// ← 'in_negotiation' is “equivalent” to 'approved'</span>
+);</div>
+  <p class="code-cap">Because <code>in_negotiation</code> shares a semantic group with legacy <code>approved</code>, every chain lease in negotiation renders the intake screen — which never mounts the Documents panel where quote/contract upload, escalate, and “send to signature” live. This is breakpoint 3 in Fig. 1, and it makes the flagship workflow uncompletable.</p>
+
+  <h3>3 · Send-back’s recovery path is a comment describing code that doesn’t exist</h3>
+  <span class="file-tag">supabase/functions/act-on-chain-step/index.ts:525-537</span>
+  <div class="code"><span class="dim">// … the lease is re-advanced via Phase 4's advance-to-final-review
+// when ready, <span class="hl">which will insert a fresh pending signator row.</span></span>
+await supabaseAdmin
+  .from("lease_approval_chain")
+  .update({ status: "superseded" })
+  .eq("lease_id", step.lease_id)
+  .eq("stage", step.stage)
+  .eq("status", "pending");</div>
+  <p class="code-cap"><code>advance-to-final-review</code> inserts nothing — it only stamps <code>pending_since</code> on rows that are already pending (of which, after this UPDATE, there are none). Result: any signator send-back permanently strands the lease. The concept-stage send-back has the same shape of failure.</p>
+
+  <h3>4 · Requestor notifications are written without recipients — so they never send</h3>
+  <span class="file-tag">src/pages/app/ApprovalQueue.tsx:1073-1078 · supabase/functions/dispatch-notifications/index.ts:60-61</span>
+  <div class="code"><span class="dim">// writer (queue reject) — no recipient_ids anywhere:</span>
+details: {
+  notification_type: 'notify_submitter_rejected',
+  message: `Your request "${lease.request_title}" was rejected. …`,
+},
+<span class="dim">// dispatcher — skips exactly these rows, forever:</span>
+const recipients = (r.details ?? {}).recipient_ids;
+<span class="hl">if (!Array.isArray(recipients) || recipients.length === 0) continue;</span></div>
+  <p class="code-cap">Four submitter-outcome writers share this bug; the in-app fan-out trigger has the same requirement. This is why the requestor hears nothing at any gate.</p>
+
+  <h3>5 · Direct-add lands in the portfolio before anyone reviews it</h3>
+  <span class="file-tag">supabase/functions/process_lease/index.ts:2515-2518</span>
+  <div class="code">.update({
+  status: 'Ready',
+  <span class="hl">lifecycle_status:       'executed',</span>   <span class="dim">// straight into portfolio totals — no review, no approval</span>
+  status_changed_at:      lifecycleChangedAt,</div>
+  <p class="code-cap">Your Path-2 contract — review, then approval unless permitted — has no code expression today. Phase 4 gives it one (<code>pending_review</code> + <code>direct_poster</code> + <code>post_direct</code>).</p>
+
+  <h3>6 · Account deletion reaches into other tenants’ repositories</h3>
+  <span class="file-tag">supabase/functions/delete-account/index.ts:83-91</span>
+  <div class="code"><span class="dim">// 3. Delete user's leases (in case any are orphaned)</span>
+const { error: leasesError } = await supabaseClient
+  .from("leases")
+  .delete()
+  <span class="hl">.eq("user_id", user.id);</span>   <span class="dim">// user_id = uploader — includes leases submitted into EMPLOYERS' workspaces</span></div>
+  <p class="code-cap">An employee deleting their personal account erases the requests they filed in their employer’s workspace — audit trail and all. The same function cancels zero Stripe subscriptions. Both fixes are Phase 0.</p>
+
+  <h3>7 · The setup traps: one narrow rule breaks every other request</h3>
+  <span class="file-tag">supabase/functions/resolve-approval-chain/index.ts:325-363 (behavior)</span>
+  <div class="code"><span class="dim">// matchPolicy semantics, verified:</span>
+zero active policies      → legacy path (submission succeeds)
+≥1 active, none match,
+  no fallback             → <span class="hl">409 no_match_no_fallback — submission blocked</span>
+two matches tied on
+  priority (default: 100) → <span class="hl">409 ambiguous_match — submission blocked</span></div>
+  <p class="code-cap">The editor defaults Active=on, fallback=off (buried in “Advanced”), priority=100 for every rule. The person who sees the failure is the warehouse requestor at submission time, not the admin who caused it. Phase 3’s guardrails move these errors to save time.</p>
+
+  <h3>8 · “At the same time” approvers are stored sequentially</h3>
+  <span class="file-tag">src/pages/settings/ChainDiagram.tsx:145-151</span>
+  <div class="code">export function addParallelApprover(steps, parallelGroup) {
+  const maxOrder = steps.reduce((m, s) =&gt; Math.max(m, s.step_order), 0);
+  return [...steps, blankStep(<span class="hl">maxOrder + 1</span>, parallelGroup)];  <span class="dim">// engine keys parallelism on step_order —
+                                                    // a NEW order = sequential, not parallel</span>
+}</div>
+  <p class="code-cap">The engine (and the architecture doc) define parallel as <em>same step_order</em>; the editor gives each “parallel” co-approver a new one. Notifications, SLA clocks, and step labels all behave sequentially while the editor shows them side-by-side.</p>
+</section>
+
+<section id="notifications" class="toc-anchor">
+  <div class="eyebrow">Communication</div>
+  <h2>The notification matrix — today vs. after Phase 2</h2>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Event</th><th>Who must hear it</th><th>Today</th><th>After</th></tr></thead>
+    <tbody>
+      <tr><td>Request submitted</td><td>Gate-1 approver</td><td class="ok">Works</td><td>in-app + email, deep link to queue</td></tr>
+      <tr><td>Request approved (Gate 1)</td><td><b>Requestor</b></td><td class="no">Silent</td><td>“Approved — upload quotes when ready” + tracker update</td></tr>
+      <tr><td>Quote uploaded</td><td>Gate-2 approver</td><td class="no">No gate exists</td><td>in-app + email, deep link</td></tr>
+      <tr><td>Quote approved / declined</td><td>Requestor</td><td class="no">No gate exists</td><td>outcome + reason + next step</td></tr>
+      <tr><td>Sent to signature</td><td>Manager step, then CFO; <b>Finance watchers</b></td><td class="half">Role-holders only — a role no UI can assign</td><td>direct assignee + finance CC on entry</td></tr>
+      <tr><td>Next sequential approver’s turn</td><td>That approver</td><td class="no">Computed, then discarded</td><td>server-side notify on every advance</td></tr>
+      <tr><td>Any reject / send-back</td><td>Requestor</td><td class="no">Rows written without recipients → never delivered</td><td>outcome + note + link to revise and Submit</td></tr>
+      <tr><td>Signature complete → counter-signature</td><td>Execution owner</td><td class="half">Panel exists; reminders built, cron never scheduled</td><td>assignment notice + scheduled reminder cadence</td></tr>
+      <tr><td>Executed doc abstracted, ready for review</td><td>Reviewer / finance</td><td class="no">Abstraction never triggers</td><td>“Extraction ready — review 12 fields”</td></tr>
+      <tr><td>Extraction failed / stuck</td><td>Uploader; admin at 7 days</td><td class="half">Banner only; reclaim cron unscheduled</td><td>notification + working reclaim sweep</td></tr>
+      <tr><td>Unlock requested / change-set decided</td><td>Admins / requester</td><td class="no">Audit rows only</td><td>notify both directions</td></tr>
+      <tr><td>Manual nudge</td><td>Current assignee</td><td class="no">Button can’t render</td><td>restored, 24 h cooldown (already server-enforced)</td></tr>
+      <tr><td>Automatic day-2/5/10 reminders</td><td>Current assignee</td><td class="half">Types defined, never fired</td><td>cron-scheduled</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="operator" class="toc-anchor">
+  <div class="eyebrow">Operations</div>
+  <h2>Operator backlog — finished code waiting on you (or on ops access)</h2>
+  <p><b>Updated 2026-07-04 against the live system</b> — several items this review took from the deploy docs turned out to be already done (the docs were stale). Live verification found: 11 crons scheduled and returning 200s, approval e-mails delivering, the <code>resolve-approval-chain</code> redeploy (#84/#111) complete with the Phase-7 backfill applied and verified, and the #18 storage policy fixed live (out-of-band — repo/docs drift to be captured by a build session). The three never-scheduled crons (<code>sweep-pending-workspaces</code>, <code>firm-billing-reconcile</code>, <code>vault-renewal-reminder</code>) were scheduled fail-closed on 2026-07-04 (migration <code>20260704120000</code>) and await only their secrets.</p>
+  <p><b>What actually remains is below — and every step is written out click-by-click in <code>docs/ops/OPERATOR_BACKLOG_RUNBOOK_2026-07-04.md</code></b> (~40 min at the desk + a ~15 min go-live block).</p>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>#</th><th>Action (runbook step)</th><th>What is broken until it runs</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>Redeploy <code>process_lease</code> + <code>vendor-health-check</code> (+ <code>retry_lease</code> belt-and-braces) — repo changed after their last deploys</td><td>Deployed cap-counting still includes soft-deleted leases; vendor health checks run month-old code</td></tr>
+      <tr><td class="num">2</td><td>Arm the three new crons: set <code>SWEEP_PENDING_WORKSPACES / FIRM_BILLING / VAULT_RENEWAL _CRON_SECRET</code> + insert into <code>private.cron_secrets</code></td><td>Abandoned-workspace cleanup, firm billing drift repair, and Vault renewal reminders 401 harmlessly</td></tr>
+      <tr><td class="num">3</td><td>Stripe STOP 7: annual Price IDs (<code>STRIPE_PRICE_*_ANNUAL</code>)</td><td>Annual checkout 503s (<code>annual_not_configured</code>)</td></tr>
+      <tr><td class="num">4</td><td>Pack Price IDs (<code>STRIPE_PRICE_PACK_10/20/50</code>)</td><td>Document-pack purchases fail closed</td></tr>
+      <tr><td class="num">5</td><td>Stripe STOP 10: Vault product + $249/yr price</td><td>Every Vault conversion path 503s (its reminder cron is already armed-ready)</td></tr>
+      <tr><td class="num">6</td><td>Go-live block — Stripe STOP 3: live-mode webhook (5 events incl. <code>payment_intent.succeeded</code>) + live-mode duplicates of every Price + full secret swap</td><td>Live-mode payments don’t update entitlements; single-lease credits charge without granting</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="decisions" class="toc-anchor">
+  <div class="eyebrow">Your call</div>
+  <h2>Six decisions — all resolved 2026-07-04</h2>
+  <p>All six were decided per the recommendation. Decision 2 was refined by the owner beyond the recommendation; its resolution below is the binding version, and it exposed a genuine contradiction between the two source-of-truth documents.</p>
+
+  <div class="decision">
+    <div class="d-q">1 · Starter monetization — enforce it? <span class="sev sev-good">Resolved — recommended</span></div>
+    <p>Today the default signup path never touches Stripe: no card, no trial clock, nothing server-side ever blocks a never-paying workspace, and the landing page’s “7-day free trial” is not implemented anywhere. </p>
+    <p class="d-rec">Recommend: checkout with 7-day trial at onboarding (card up front), grace-lock after — matches the landing copy you already published.</p>
+  </div>
+  <div class="decision">
+    <div class="d-q">2 · The ASC 842 report vs. Hard Rule #1 <span class="sev sev-good">Resolved — refined by owner</span></div>
+    <p><b>Root cause surfaced during resolution:</b> the two source-of-truth documents contradict each other. CLAUDE.md Hard Rule #1 says “never add ASC 842 compliance features”; PRODUCT_STRATEGY.md (line 13) says LeaseIO “produces verified ASC 842 reports.” Phase 8 built to the strategy doc — which is how the calculation engine got shipped against the hard rule.</p>
+    <p><b>Owner’s ruling (2026-07-04):</b> LeaseIO is the <em>repository</em> for ASC 842 information, never the calculator. Users enter their own ASC figures per lease — classification, discount rate, and the ROU-asset/liability numbers produced by their accounting tool — and LeaseIO stores them with attribution and reports them verbatim alongside the lease record, documents, and audit trail. Every LeaseIO-computed accounting output (PV of liability, straight-line expense, the five classification tests) comes out of the user-facing product. The section also gets a ground-up UX redesign — the owner’s verdict on the current one: not clean, simple, or easy to navigate. Both source documents are amended to this ruling in the same change, per the schema-and-docs discipline.</p>
+    <p class="d-rec">Scope: Phase 6 → “ASC data entry + reporting redesign” (promoted from a polish bullet to a named work item).</p>
+  </div>
+  <div class="decision">
+    <div class="d-q">3 · Retire the legacy approval path for new workspaces? <span class="sev sev-good">Resolved — recommended</span></div>
+    <p>Once every new workspace is seeded with a default policy, the legacy threshold/roles path becomes unreachable for them, and the three-way config confusion collapses. Existing legacy-routed leases finish on the old path; no data migration.</p>
+    <p class="d-rec">Recommend: yes — seed + retire for new, grandfather in-flight.</p>
+  </div>
+  <div class="decision">
+    <div class="d-q">4 · Quote gate default — on or off? <span class="sev sev-good">Resolved — recommended</span></div>
+    <p>Gate 2 is the piece of your ideal flow that adds a genuinely new interruption. As a template toggle it can default on (your described flow) or off (lighter default, teams opt in).</p>
+    <p class="d-rec">Recommend: on in the “Manager approves, CFO signs” template, off in “Manager only.”</p>
+  </div>
+  <div class="decision">
+    <div class="d-q">5 · Departments: free text or picklist? <span class="sev sev-good">Resolved — recommended</span></div>
+    <p>Approval rules can match on department, but the request form collects free text — “Ops” ≠ “Operations”, so department-scoped rules silently misroute. The workspace already has a <code>department_options</code> config column that the form ignores.</p>
+    <p class="d-rec">Recommend: picklist from workspace settings, seeded at creation.</p>
+  </div>
+  <div class="decision">
+    <div class="d-q">6 · Rejection semantics — terminal or revisable? <span class="sev sev-good">Resolved — recommended</span></div>
+    <p>The architecture doc promises a revise loop after rejection; the code makes rejection hard-terminal. Two coherent options: keep rejection terminal (with reason + one-click “duplicate into a new request”), or add a revisable rejected state.</p>
+    <p class="d-rec">Recommend: keep terminal + duplicate — simpler mental model, preserves the audit trail, and “Send back” already covers the fix-and-return case.</p>
+  </div>
+</section>
+
+<section id="appendix" class="toc-anchor">
+  <div class="eyebrow">Appendix</div>
+  <h2>Area scorecard — all 17 subsystems</h2>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Area</th><th>Verdict</th><th>One-line health read</th></tr></thead>
+    <tbody>
+      <tr><td><b>Request workflow (Path 1)</b></td><td>Fix</td><td>Server engine solid and test-pinned; UI-blocked at negotiation; send-backs strand; executed dead-ends.</td></tr>
+      <tr><td><b>Approval engine</b></td><td>Fix</td><td>Forward path correct; every backward arrow broken; reroute machinery dormant end-to-end.</td></tr>
+      <tr><td><b>Approval setup UX</b></td><td>Fix (redesign the surface)</td><td>Good editor craft; four defaults are submission-breaking traps; ~13 concepts; no templates or seeding.</td></tr>
+      <tr><td><b>Approval queues</b></td><td>Fix</td><td>“Needs my review” is a real unified inbox; signature gate broken end-to-end; six surfaces disagree on counts.</td></tr>
+      <tr><td><b>Direct add &amp; review</b></td><td>Fix</td><td>Works E2E but lands unreviewed AI output in the portfolio with no approval concept; review workbench solid.</td></tr>
+      <tr><td><b>AI pipeline</b></td><td>Fix</td><td>Primary path well-engineered, models current; retry pipeline divergent and rule-violating; three metering bypasses.</td></tr>
+      <tr><td><b>Workspaces</b></td><td>Fix</td><td>Paid creation path excellent; raw-INSERT bypass; delete-account catastrophic; nothing seeded or templated.</td></tr>
+      <tr><td><b>Settings</b></td><td>Fix (consolidate roles)</td><td>Two-surface skeleton right; placebo controls; silent no-op member management; Signatory unassignable.</td></tr>
+      <tr><td><b>Firm layer</b></td><td>Fix</td><td>More built than the docs claim (self-serve checkout shipped); can’t add a second child via UI; access mapping unimplemented.</td></tr>
+      <tr><td><b>Billing</b></td><td>Fix</td><td>Webhook well-defended; double-billing on upgrade; Starter free forever; Stripe API-version date bug.</td></tr>
+      <tr><td><b>Notifications</b></td><td>Fix</td><td>Architecture sound; recipients missing on the rows that matter; nudge dead; center orphaned from nav.</td></tr>
+      <tr><td><b>Governance</b></td><td>Fix</td><td>Lock/change-set core hardened; apply path writes raw text into typed columns; analytics go stale after governed edits.</td></tr>
+      <tr><td><b>Reports &amp; audit</b></td><td>Fix</td><td>Full subsystem exists; storage RLS blocks all PDF uploads (#18); dead export buttons; Hard-Rule-1 tension.</td></tr>
+      <tr><td><b>Dashboard &amp; portfolio</b></td><td>Fix</td><td>Composition sound, workspace-scoped, soft-deletes excluded; action layer persona-blind; signature stage invisible.</td></tr>
+      <tr><td><b>Auth &amp; roles</b></td><td>Fix</td><td>Enforcement backbone solid; removed members retain approval power; two role systems need one story.</td></tr>
+      <tr><td><b>Platform &amp; security</b></td><td>Fix</td><td>1,357/1,357 tests green, CI green, RLS layered; the deploy backlog is the top platform risk; mobile unusable.</td></tr>
+      <tr><td><b>Landing &amp; i18n</b></td><td>Fix</td><td>Pricing consistent, locale parity perfect; lead-magnet funnel auth-walled; core app hardcoded English; trial claim false.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Coverage notes</h3>
+  <p>A completeness pass flagged lanes deliberately left for follow-up review (none block this plan): the embedded AI assistant subsystem, operational-monitoring internals, the risks/watchlist cluster, React Query caching strategy, concurrent-edit conflict handling, accessibility, and currency/locale formatting. Two micro-findings from that pass: <code>src/lib/corsHelper.ts</code> is dead code with a dangerously load-bearing name, and the Support page ships a permanently disabled “Documentation — coming soon” button.</p>
+
+  <h3>Method</h3>
+  <p>17 subsystem reviewers + 6 persona journey walkthroughs (first-run, approval setup, requestor, approver, direct-add, settings) read the code directly — docs used only as claims to verify. Every Critical/High finding was then re-derived by an independent adversarial verifier instructed to refute it: 123 claims checked, 113 confirmed, 9 partially confirmed, 1 refuted (discarded). Detailed per-area reports (with full evidence and remediation notes) accompany this document in <code>docs/reviews/2026-07-03/</code>.</p>
+
+  <div class="footer-note">
+    LeaseIO end-to-end review · prepared 2026-07-03 on branch <code>claude/leaseio-end-to-end-review-163v6w</code> · findings verified against commit <code>fd31dfe</code>. Mockups are design intent, not shipped UI.
+  </div>
+</section>
+</main>
+</div>
+
+</body>
+</html>

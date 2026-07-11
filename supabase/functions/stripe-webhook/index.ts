@@ -10,8 +10,8 @@ import {
 import { GRACE_DAYS } from "../_shared/cancellation_lifecycle.ts";
 
 const PRICE_IDS: Record<string, string> = {
-  starter: "price_1SntpyH03PByDjY31dGmC0E2",
-  business: "price_1SntqQH03PByDjY3MrvOjOsu",
+  starter: "price_1TpdTdHbcO8VqfxHIvhLsvN9",
+  business: "price_1TpdVWHbcO8VqfxHKTN0lyOf",
 };
 
 // A document-pack subscription is tagged with this metadata; it must NEVER be
