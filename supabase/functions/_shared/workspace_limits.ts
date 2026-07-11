@@ -20,7 +20,7 @@ export const WORKSPACE_LIMITS: Record<string, number> = {
 
 // Business monthly price — must match stripe-webhook PRICE_IDS.business and the
 // create-checkout business monthly price. Hardcoded (existing production value).
-export const BUSINESS_MONTHLY_PRICE_ID = "price_1SntqQH03PByDjY3MrvOjOsu";
+export const BUSINESS_MONTHLY_PRICE_ID = "price_1TpdVWHbcO8VqfxHKTN0lyOf";
 
 // Per-workspace Business price in USD, for honest consent copy ("$499 today").
 export const BUSINESS_MONTHLY_PRICE_USD = 499;
