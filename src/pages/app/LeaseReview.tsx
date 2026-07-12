@@ -170,12 +170,13 @@ interface ExtractedJson {
 // "Reviewed" affordance at the bottom of the tab content. Internally
 // confirmation is still persisted per-section so the data shape doesn't
 // change — the UI just lifts the gesture to the tab level.
+// NB: `title` holds an i18n key — translate with t(tab.title) at render time.
 type ReviewTab = { key: string; title: string; sections: SectionKey[] };
 const REVIEW_TABS: ReviewTab[] = [
-  { key: 'general', title: 'General Information', sections: ['parties', 'property', 'dates'] },
-  { key: 'vendor', title: 'Vendor', sections: ['vendor'] },
-  { key: 'rent', title: 'Rent', sections: ['rent'] },
-  { key: 'options', title: 'Options', sections: ['options'] },
+  { key: 'general', title: 'locked_lease.tabs.general', sections: ['parties', 'property', 'dates'] },
+  { key: 'vendor', title: 'locked_lease.vendor.title', sections: ['vendor'] },
+  { key: 'rent', title: 'locked_lease.tabs.rent', sections: ['rent'] },
+  { key: 'options', title: 'lease_review.tabs.options', sections: ['options'] },
 ];
 const SECTION_TRAVERSAL_ORDER: SectionKey[] = REVIEW_TABS.flatMap((t) => t.sections);
 const SECTION_TO_TAB: Record<SectionKey, string> = Object.fromEntries(
@@ -531,13 +532,13 @@ export default function LeaseReview() {
       if ((resubmitData as any)?.error) throw new Error((resubmitData as any).error);
       const newStatus = (resubmitData as any)?.to_status ?? 'submitted';
 
-      toast.success('Resubmitted for review');
+      toast.success(t('lease_review.toasts.resubmit_success'));
       setResubmitDialogOpen(false);
       setLease((prev: any) => prev ? { ...prev, lifecycle_status: newStatus, financial_returned_to_submitter: false } : prev);
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
     } catch (err) {
       console.error(err);
-      toast.error('Failed to resubmit');
+      toast.error(t('lease_review.toasts.resubmit_failed'));
     } finally {
       setResubmitting(false);
     }
@@ -568,19 +569,19 @@ export default function LeaseReview() {
         // NB: this project compiles with strictNullChecks off, so a boolean
         // discriminant (`if (!result.ok)`) does not narrow the union — use the
         // `in` operator, which narrows regardless of strict mode.
-        const message = 'errorMessage' in result ? result.errorMessage : 'Could not retry routing. Please try again.';
+        const message = 'errorMessage' in result ? result.errorMessage : t('lease_review.toasts.retry_routing_failed');
         setLastRoutingError(message);
         toast.error(message);
         return;
       }
       const finalStatus = 'finalStatus' in result ? result.finalStatus : undefined;
       setLastRoutingError(null);
-      toast.success('Request routed for approval');
+      toast.success(t('lease_review.toasts.routed_for_approval'));
       setLease((prev: any) => (prev ? { ...prev, lifecycle_status: finalStatus } : prev));
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
     } catch (err) {
       console.error('Retry routing failed:', err);
-      const message = 'Could not retry routing. Please try again.';
+      const message = t('lease_review.toasts.retry_routing_failed');
       setLastRoutingError(message);
       toast.error(message);
     } finally {
@@ -597,15 +598,15 @@ export default function LeaseReview() {
       const { data, error } = await supabase.functions.invoke('legacy-lease-action', {
         body: { action: 'cancel_request', leaseId: lease.id },
       });
-      if (error) throw new Error(error.message ?? 'Cancel failed');
+      if (error) throw new Error(error.message ?? t('lease_review.toasts.cancel_request_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success('Request cancelled');
+      toast.success(t('lease_review.toasts.request_cancelled'));
       setLease((prev: any) => (prev ? { ...prev, lifecycle_status: 'cancelled' } : prev));
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
     } catch (err: any) {
-      toast.error(err?.message ?? 'Failed to cancel request');
+      toast.error(err?.message ?? t('lease_review.toasts.cancel_request_failed'));
     }
-  }, [lease, queryClient]);
+  }, [lease, queryClient, t]);
 
   const saveRequestEdits = useCallback(async () => {
     if (!lease || !user) return;
@@ -661,14 +662,14 @@ export default function LeaseReview() {
       } : prev);
 
       setEditingRequest(false);
-      toast.success('Report attributes updated');
+      toast.success(t('lease_review.toasts.report_attributes_updated'));
     } catch (err) {
       console.error('Error saving request edits:', err);
-      toast.error('Failed to save changes');
+      toast.error(t('lease_review.toasts.save_changes_failed'));
     } finally {
       setSavingEdits(false);
     }
-  }, [lease, user, requestEdits]);
+  }, [lease, user, requestEdits, t]);
 
   const refreshStagedItemCount = useCallback(async () => {
     if (!activeChangeSet?.id) return;
@@ -697,16 +698,16 @@ export default function LeaseReview() {
       .select('id');
     if (error) {
       console.error('[LeaseReview] stage field error:', error);
-      toast.error(`Could not save edit to "${fieldLabel}": ${error.message ?? 'unknown error'}`);
+      toast.error(t('lease_review.toasts.stage_edit_failed', { fieldLabel, message: error.message ?? t('lease_review.toasts.unknown_error') }));
       return;
     }
     if (!data || data.length === 0) {
       console.warn('[LeaseReview] stage field affected 0 rows — possible RLS issue', { fieldName });
-      toast.error(`Could not save edit to "${fieldLabel}": no rows updated. Check workspace permissions.`);
+      toast.error(t('lease_review.toasts.stage_edit_no_rows', { fieldLabel }));
       return;
     }
     await refreshStagedItemCount();
-  }, [refreshStagedItemCount]);
+  }, [refreshStagedItemCount, t]);
 
 
   const saveRename = useCallback(async () => {
@@ -717,17 +718,17 @@ export default function LeaseReview() {
       .update({ request_title: trimmed || null })
       .eq('id', lease.id);
     if (error) {
-      toast.error('Failed to rename lease');
+      toast.error(t('lease_review.toasts.rename_failed'));
       return;
     }
     setLease((prev: any) => prev ? { ...prev, request_title: trimmed || null } : prev);
     setRenameDialogOpen(false);
-    toast.success('Lease renamed');
-  }, [lease, renameValue]);
+    toast.success(t('lease_review.toasts.rename_success'));
+  }, [lease, renameValue, t]);
 
   const handleStageDocumentUpload = useCallback(async () => {
     if (!lease || !user || !stageFile) {
-      toast.error('Select a PDF file first');
+      toast.error(t('lease_review.toasts.select_pdf_first'));
       return;
     }
 
@@ -763,14 +764,14 @@ export default function LeaseReview() {
 
       setLease((prev: any) => (prev ? { ...prev, storage_path: storagePath, filename: stageFile.name } : prev));
       setStageFile(null);
-      toast.success('Document uploaded');
+      toast.success(t('lease_review.toasts.document_uploaded'));
     } catch (error) {
       console.error('Error uploading stage document:', error);
-      toast.error('Failed to upload document');
+      toast.error(t('lease_review.toasts.upload_failed'));
     } finally {
       setUploadingStageFile(false);
     }
-  }, [lease, stageFile, user]);
+  }, [lease, stageFile, user, t]);
 
   const handleRunAbstraction = useCallback(async () => {
     if (!lease) return;
@@ -788,7 +789,7 @@ export default function LeaseReview() {
       }
 
       if (!fileToProcess) {
-        toast.error('Upload an executed document before running abstraction');
+        toast.error(t('lease_review.toasts.executed_doc_required'));
         return;
       }
 
@@ -810,17 +811,17 @@ export default function LeaseReview() {
         },
       });
 
-      toast.success('Abstraction started');
+      toast.success(t('lease_review.toasts.abstraction_started'));
       if (data?.leaseId) {
         navigate(`/app/leases/${data.leaseId}`);
       }
     } catch (error) {
       console.error('Error running abstraction:', error);
-      toast.error('Failed to run abstraction');
+      toast.error(t('lease_review.toasts.abstraction_failed'));
     } finally {
       setRunningAbstraction(false);
     }
-  }, [lease, navigate, stageFile, user?.id]);
+  }, [lease, navigate, stageFile, user?.id, t]);
 
   // Derived rent insights — prefer current period from schedule over the initial extracted value
   const derivedInsights = useMemo(() => {
@@ -1122,12 +1123,12 @@ export default function LeaseReview() {
         const { data, error } = await supabase.functions.invoke('lease-governance-action', {
           body: { action: 'cancel_change_set', changeSetId: activeChangeSet.id },
         });
-        if (error) throw new Error(error.message ?? 'Lock failed');
+        if (error) throw new Error(error.message ?? t('lease_review.toasts.lock_failed'));
         if ((data as any)?.error) throw new Error((data as any).error);
-        toast.success('Lease locked (no changes to submit)');
+        toast.success(t('lease_review.toasts.locked_no_changes'));
         refetchLease();
       } catch (err: any) {
-        toast.error(`Failed to lock: ${err?.message ?? 'unknown error'}`);
+        toast.error(t('lease_review.toasts.lock_failed_with_reason', { message: err?.message ?? t('lease_review.toasts.unknown_error') }));
       } finally {
         setSubmittingChanges(false);
       }
@@ -1142,12 +1143,12 @@ export default function LeaseReview() {
       const { data, error } = await supabase.functions.invoke('legacy-lease-action', {
         body: { action: 'model_lock', leaseId: lease.id },
       });
-      if (error) throw new Error(error.message ?? 'Lock failed');
+      if (error) throw new Error(error.message ?? t('lease_review.toasts.lock_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
-      toast.success('Lease locked and activated');
+      toast.success(t('lease_review.toasts.locked_activated'));
       refetchLease();
     } catch (err: any) {
-      toast.error(err?.message ?? 'Failed to lock lease');
+      toast.error(err?.message ?? t('lease_review.toasts.lock_failed'));
     } finally {
       setSubmittingChanges(false);
     }
@@ -1377,9 +1378,9 @@ export default function LeaseReview() {
 
   const remainingTabTitles = useMemo(
     () => REVIEW_TABS
-      .filter((t) => !t.sections.every((s) => confirmedSections.includes(s)))
-      .map((t) => t.title),
-    [confirmedSections],
+      .filter((tab) => !tab.sections.every((s) => confirmedSections.includes(s)))
+      .map((tab) => t(tab.title)),
+    [confirmedSections, t],
   );
 
   // Toggle every section in a tab. Confirming a tab marks all its
@@ -1425,7 +1426,7 @@ export default function LeaseReview() {
       }
     }
     if (shouldRevertApproval) {
-      toast.message('Tab reopened — lease unapproved and editable.');
+      toast.message(t('lease_review.toasts.tab_reopened'));
     }
 
     if (!allIn) {
@@ -1567,19 +1568,19 @@ export default function LeaseReview() {
 
     if (result.ok === false) {
       if (result.reason === 'invalid_base_rent') {
-        toast.error('Base rent amount is required to generate a schedule');
+        toast.error(t('lease_review.toasts.base_rent_required'));
       } else if (result.reason === 'missing_escalation_rate') {
-        toast.error('Escalation rate is required for annual schedule generation');
+        toast.error(t('lease_review.toasts.escalation_rate_required'));
       }
       return;
     }
 
     const { error } = await supabase.from('rent_schedules').insert(result.rows as any);
-    if (error) { toast.error('Failed to generate schedule'); return; }
+    if (error) { toast.error(t('lease_review.toasts.generate_schedule_failed')); return; }
     const { data } = await supabase.from('rent_schedules').select('*').eq('lease_id', leaseId).order('period_start');
     if (data) setRentSchedule(data);
-    toast.success('Rent schedule generated');
-  }, [leaseId, form.lease_start, form.lease_end, form.base_rent_amount, lease?.escalation_rate]);
+    toast.success(t('lease_review.toasts.schedule_generated'));
+  }, [leaseId, form.lease_start, form.lease_end, form.base_rent_amount, lease?.escalation_rate, t]);
 
   // Phase 4 — refetch lease from DB (used after executed doc upload or term edits)
   const refetchLease = useCallback(async () => {
@@ -1618,16 +1619,16 @@ export default function LeaseReview() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       setCancelChangeSetDialogOpen(false);
-      toast.success('Changes discarded. Lease locked.');
+      toast.success(t('lease_review.toasts.changes_discarded'));
       refetchLease();
     } catch (err) {
       console.error('Error canceling change set:', err);
-      toast.error('Failed to discard changes');
+      toast.error(t('lease_review.toasts.discard_failed'));
     } finally {
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       setCancelingChangeSet(false);
     }
-  }, [lease, user, activeChangeSet, refetchLease]);
+  }, [lease, user, activeChangeSet, refetchLease, t]);
 
   // Save draft
   const handleSync = async () => {
@@ -1701,9 +1702,9 @@ export default function LeaseReview() {
       // returns to false (hides the visible "Save draft" button).
       originalValues.current = { ...form };
       setSavedAt((n) => n + 1);
-      toast.success("Lease saved successfully");
+      toast.success(t('lease_review.toasts.lease_saved'));
     } catch (err) {
-      toast.error("Save failed");
+      toast.error(t('lease_review.toasts.save_failed'));
     } finally {
       setSaving(false);
     }
@@ -1712,7 +1713,7 @@ export default function LeaseReview() {
   // Approve lease - stores approval in extracted_json._approval
   const handleApproveLease = async () => {
     if (!allSectionsReviewed) {
-      toast.error("Mark every section reviewed before approving the lease.");
+      toast.error(t('lease_review.toasts.review_all_before_approve'));
       return;
     }
 
@@ -1785,10 +1786,10 @@ export default function LeaseReview() {
         extracted_json: updateData.extracted_json,
       }));
 
-      toast.success("Lease approved successfully");
+      toast.success(t('lease_review.toasts.approve_success'));
     } catch (err) {
       console.error('Error approving lease:', err);
-      toast.error("Failed to approve lease");
+      toast.error(t('lease_review.toasts.approve_failed'));
     } finally {
       setApproving(false);
     }
@@ -1816,10 +1817,10 @@ export default function LeaseReview() {
         extracted_json: restExtractedJson,
       }));
       
-      toast.success("Lease reopened for editing");
+      toast.success(t('lease_review.toasts.reopen_success'));
     } catch (err) {
       console.error('Error reopening lease:', err);
-      toast.error("Failed to reopen lease");
+      toast.error(t('lease_review.toasts.reopen_failed'));
     } finally {
       setReopening(false);
     }
@@ -1844,11 +1845,11 @@ export default function LeaseReview() {
       setLease((prev: any) => prev ? { ...prev, status: 'Failed', error_message: 'Processing cancelled by user' } : prev);
     } catch (err) {
       console.error('Error cancelling processing:', err);
-      toast.error('Failed to cancel processing');
+      toast.error(t('lease_review.toasts.cancel_processing_failed'));
     } finally {
       setCancellingProcessing(false);
     }
-  }, [lease, user]);
+  }, [lease, user, t]);
 
   const handleUnlockLease = useCallback(async () => {
     if (!lease || !user) return;
@@ -1861,13 +1862,13 @@ export default function LeaseReview() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
 
-      toast.success('Lease unlocked - changes must be submitted for approval');
+      toast.success(t('lease_review.toasts.unlock_success'));
       refetchLease();
     } catch (err) {
       console.error('Error unlocking lease:', err);
-      toast.error('Failed to unlock lease');
+      toast.error(t('lease_review.toasts.unlock_failed'));
     }
-  }, [lease, user, pendingUnlockRequest, refetchLease]);
+  }, [lease, user, pendingUnlockRequest, refetchLease, t]);
 
   const handleDenyUnlock = useCallback(async () => {
     if (!lease || !user || !pendingUnlockRequest?.id) return;
@@ -1878,13 +1879,13 @@ export default function LeaseReview() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
 
-      toast.success('Unlock request denied');
+      toast.success(t('lease_review.toasts.unlock_denied'));
       refetchLease();
     } catch (err) {
       console.error('Error denying unlock:', err);
-      toast.error('Failed to deny unlock request');
+      toast.error(t('lease_review.toasts.deny_unlock_failed'));
     }
-  }, [lease, user, pendingUnlockRequest, refetchLease]);
+  }, [lease, user, pendingUnlockRequest, refetchLease, t]);
 
   /**
    * Lock-with-edits: routes the staged change_set through the centralized
@@ -1899,7 +1900,7 @@ export default function LeaseReview() {
    */
   const handleSubmitChanges = useCallback(async (mode: 'approver' | 'self_approve' = 'approver', requestedApproverId: string | null = null) => {
     if (!lease || !user || !activeChangeSet?.id) return;
-    if (stagedItemCount === 0) { toast.error('No changes to submit'); return; }
+    if (stagedItemCount === 0) { toast.error(t('lease_review.toasts.no_changes_to_submit')); return; }
     setSubmittingChanges(true);
     try {
       const { data, error } = await supabase.functions.invoke('lease-governance-action', {
@@ -1910,22 +1911,22 @@ export default function LeaseReview() {
           requestedApproverId: mode === 'approver' ? requestedApproverId : null,
         },
       });
-      if (error) throw new Error(error.message ?? 'Submit failed');
+      if (error) throw new Error(error.message ?? t('lease_review.toasts.submit_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
       if (mode === 'self_approve') {
-        toast.success('Changes applied — self-approved by admin role');
+        toast.success(t('lease_review.toasts.changes_self_approved'));
       } else {
-        toast.success('Changes submitted for approval — lease locked');
+        toast.success(t('lease_review.toasts.changes_submitted'));
       }
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       refetchLease();
     } catch (err: any) {
       console.error('Error submitting changes:', err);
-      toast.error(`Failed to submit changes: ${err?.message ?? 'unknown error'}`);
+      toast.error(t('lease_review.toasts.submit_changes_failed', { message: err?.message ?? t('lease_review.toasts.unknown_error') }));
     } finally {
       setSubmittingChanges(false);
     }
-  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease, queryClient]);
+  }, [lease, user, activeChangeSet, stagedItemCount, refetchLease, queryClient, t]);
 
   const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
   const handleRequestUnlock = useCallback(async () => {
@@ -1935,16 +1936,16 @@ export default function LeaseReview() {
       const { data, error } = await supabase.functions.invoke('request-lease-unlock', {
         body: { leaseId: lease.id },
       });
-      if (error || !data?.ok) throw new Error(error?.message || data?.error || 'Request failed');
-      toast.success('Unlock request sent to your workspace admin');
+      if (error || !data?.ok) throw new Error(error?.message || data?.error || t('lease_review.toasts.unlock_request_failed'));
+      toast.success(t('lease_review.toasts.unlock_request_sent'));
       refetchLease();
     } catch (err: any) {
       console.error('Error requesting unlock:', err);
-      toast.error(err.message ?? 'Failed to send unlock request');
+      toast.error(err.message ?? t('lease_review.toasts.unlock_request_failed'));
     } finally {
       setIsRequestingUnlock(false);
     }
-  }, [lease, user, refetchLease]);
+  }, [lease, user, refetchLease, t]);
 
   // #116: honor the ?action=archive deep-link from ImportHistory's Archive
   // steer. A committed lease can't be hard-deleted there; the steer opens the
@@ -1971,7 +1972,7 @@ export default function LeaseReview() {
 
   if (loading)
     return (
-      <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">Initializing Cockpit...</div>
+      <div className="flex h-screen items-center justify-center font-sans text-muted-foreground">{t('lease_review.processing.initializing')}</div>
     );
 
   // Show processing indicator
@@ -1989,22 +1990,22 @@ export default function LeaseReview() {
               <Loader2 className="h-10 w-10 text-primary animate-spin" />
             </div>
           </div>
-          <h2 className="text-2xl font-semibold mb-2">Processing Lease</h2>
+          <h2 className="text-2xl font-semibold mb-2">{t('lease_review.processing.title')}</h2>
           <p className="text-muted-foreground text-center max-w-md mb-2">
-            Our AI is extracting key terms and data from your document. This typically takes 30-90 seconds.
+            {t('lease_review.processing.description')}
           </p>
           <p className="text-sm text-muted-foreground mb-1">{lease?.filename}</p>
           {elapsedSeconds > 0 ? (
             <p className="text-xs text-muted-foreground mb-6 flex items-center gap-1.5">
               <Clock className="h-3 w-3" />
-              {formatElapsed(elapsedSeconds)} elapsed{elapsedSeconds > 90 ? ' \u00b7 taking longer than usual' : ''}
+              {t('lease_review.processing.elapsed', { time: formatElapsed(elapsedSeconds) })}{elapsedSeconds > 90 ? t('lease_review.processing.taking_longer') : ''}
             </p>
           ) : (
             <div className="mb-6" />
           )}
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => navigate('/app/imports')}>
-              View Import History
+              {t('lease_review.processing.view_import_history')}
             </Button>
             <Button
               variant="ghost"
@@ -2013,7 +2014,7 @@ export default function LeaseReview() {
               onClick={handleCancelProcessing}
             >
               {cancellingProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <X className="h-4 w-4 mr-2" />}
-              Cancel Processing
+              {t('lease_review.processing.cancel_processing')}
             </Button>
           </div>
         </div>
@@ -2048,18 +2049,18 @@ export default function LeaseReview() {
   let nextStepBanner: { type: 'action' | 'info'; message: string } | null = null;
   if (isEquivalent(lifecycle, 'submitted')) {
     if (isManagerApprover || isAdminUser) {
-      nextStepBanner = { type: 'action', message: 'Action required: this request is waiting for your manager review.' };
+      nextStepBanner = { type: 'action', message: t('lease_review.banners.manager_action_required') };
     } else if (isRequestor) {
-      nextStepBanner = { type: 'info', message: "Your request is pending manager review. You'll be notified when the status changes." };
+      nextStepBanner = { type: 'info', message: t('lease_review.banners.pending_manager_review') };
     }
   } else if (isEquivalent(lifecycle, 'under_review')) {
     if (isFinancialApprover || isAdminUser) {
-      nextStepBanner = { type: 'action', message: 'Action required: this request is awaiting your financial review.' };
+      nextStepBanner = { type: 'action', message: t('lease_review.banners.financial_action_required') };
     } else {
-      nextStepBanner = { type: 'info', message: "This request is under financial review. You'll be notified once a decision is made." };
+      nextStepBanner = { type: 'info', message: t('lease_review.banners.under_financial_review') };
     }
   } else if (isEquivalent(lifecycle, 'approved')) {
-    nextStepBanner = { type: 'info', message: 'This request is approved. Upload the executed document to advance to Executed status.' };
+    nextStepBanner = { type: 'info', message: t('lease_review.banners.approved_next_step') };
   }
 
   // C2 — failed-routing draft: a focused page with a retry, instead of the
@@ -2070,16 +2071,16 @@ export default function LeaseReview() {
       <AppLayout>
         <div className="max-w-3xl mx-auto p-6 space-y-4">
           <AppHeader
-            title={lease.request_title || 'Lease Request'}
+            title={lease.request_title || t('lease_review.intake.lease_request_fallback')}
             subtitle={
               <div className="flex items-center gap-2">
                 <LifecycleStatusBadge status={lease.lifecycle_status as any} />
-                <span className="text-sm text-muted-foreground">{lease.requesting_department || 'Unknown department'}</span>
+                <span className="text-sm text-muted-foreground">{lease.requesting_department || t('lease_review.intake.unknown_department')}</span>
               </div>
             }
             actions={
               <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
-                Approval Queue
+                {t('lease_review.intake.approval_queue')}
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             }
@@ -2123,17 +2124,17 @@ export default function LeaseReview() {
       <AppLayout>
         <div className="p-6 space-y-4">
           <AppHeader
-            title={lease.request_title || 'Lease Request'}
+            title={lease.request_title || t('lease_review.intake.lease_request_fallback')}
             subtitle={
               <div className="flex items-center gap-2">
                 <LifecycleStatusBadge status={lease.lifecycle_status as any} />
-                <span className="text-sm text-muted-foreground">{lease.requesting_department || 'Unknown department'}</span>
+                <span className="text-sm text-muted-foreground">{lease.requesting_department || t('lease_review.intake.unknown_department')}</span>
               </div>
             }
             actions={
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
-                  Approval Queue
+                  {t('lease_review.intake.approval_queue')}
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
                 {/* Manual "Move to Under Review / Approved / Mark Executed" overrides
@@ -2147,12 +2148,12 @@ export default function LeaseReview() {
                     variant="outline"
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                     onClick={() => {
-                      if (window.confirm("Cancel this lease request? The request is withdrawn and preserved in your records — you won't be able to resubmit it.")) {
+                      if (window.confirm(t('lease_review.intake.cancel_request_confirm'))) {
                         handleCancelRequest();
                       }
                     }}
                   >
-                    Cancel Request
+                    {t('lease_review.intake.cancel_request')}
                   </Button>
                 )}
               </div>
@@ -2193,7 +2194,7 @@ export default function LeaseReview() {
             <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-4 flex flex-col sm:flex-row sm:items-start gap-3">
               <RotateCcw className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-amber-800 dark:text-amber-300">Returned for Revision</p>
+                <p className="font-medium text-amber-800 dark:text-amber-300">{t('lease_review.banners.returned_title')}</p>
                 {lease?.financial_rejection_reason && (
                   <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
                     "{lease.financial_rejection_reason}"
@@ -2203,14 +2204,14 @@ export default function LeaseReview() {
                     under read-only (the rejection reason above stays, it's info). */}
                 {!isReadOnly && (
                   <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                    Edit your financial inputs and resubmit to route through the approval chain again.
+                    {t('lease_review.banners.returned_hint')}
                   </p>
                 )}
               </div>
               {!isReadOnly && (
                 <Button size="sm" variant="outline" className="flex-shrink-0 border-amber-400 text-amber-800 hover:bg-amber-100" onClick={openResubmit}>
                   <RotateCcw className="h-4 w-4 mr-1.5" />
-                  Edit &amp; Resubmit
+                  {t('lease_review.resubmit.title')}
                 </Button>
               )}
             </div>
@@ -2225,7 +2226,7 @@ export default function LeaseReview() {
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div className="flex items-center gap-2">
-                  <CardTitle>Report Attributes</CardTitle>
+                  <CardTitle>{t('lease_review.intake.report_attributes')}</CardTitle>
                   {!isReadOnly && !editingRequest && !lease.requesting_department && (
                     <button
                       className="text-xs text-amber-600 border border-amber-400 rounded-full px-2 py-0.5 hover:bg-amber-50 transition-colors"
@@ -2234,12 +2235,12 @@ export default function LeaseReview() {
                         setTimeout(() => document.getElementById('report-attr-department')?.focus(), 50);
                       }}
                     >
-                      + Add Department
+                      {t('lease_review.intake.add_department')}
                     </button>
                   )}
                 </div>
                 {!isReadOnly && !editingRequest && (
-                  <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>Edit</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>{t('common.edit')}</Button>
                 )}
                 {editingRequest && (
                   <div className="flex items-center gap-2">
@@ -2261,10 +2262,10 @@ export default function LeaseReview() {
                         vendor_zip: (lease as any).vendor_zip || '',
                         vendor_phone: (lease as any).vendor_phone || '',
                       });
-                    }}>Cancel</Button>
+                    }}>{t('common.cancel')}</Button>
                     <Button size="sm" disabled={savingEdits} onClick={saveRequestEdits}>
                       {savingEdits ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                      Save
+                      {t('common.save')}
                     </Button>
                   </div>
                 )}
@@ -2273,18 +2274,18 @@ export default function LeaseReview() {
                 {editingRequest ? (
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
-                      <Label className="text-xs font-medium text-muted-foreground">Asset Type</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('lease_review.fields.asset_type')}</Label>
                       <select
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         value={requestEdits.asset_type}
                         onChange={(e) => setRequestEdits(prev => ({ ...prev, asset_type: e.target.value }))}
                       >
-                        <option value="">— Select —</option>
-                        {assetTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+                        <option value="">{t('lease_review.intake.select_placeholder')}</option>
+                        {assetTypes.map((assetType) => <option key={assetType} value={assetType}>{assetType}</option>)}
                       </select>
                     </div>
                     <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Region</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('lease_review.fields.region')}</Label>
                       <input
                         list="region-options"
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -2296,7 +2297,7 @@ export default function LeaseReview() {
                       </datalist>
                     </div>
                     <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Location</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('lease_review.fields.location')}</Label>
                       <input
                         list="location-options"
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -2308,7 +2309,7 @@ export default function LeaseReview() {
                       </datalist>
                     </div>
                     <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Building</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('lease_review.fields.building')}</Label>
                       <input
                         list="building-options"
                         className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -2320,7 +2321,7 @@ export default function LeaseReview() {
                       </datalist>
                     </div>
                     <div>
-                      <Label className="text-xs font-medium text-muted-foreground">Department</Label>
+                      <Label className="text-xs font-medium text-muted-foreground">{t('lease_review.fields.department')}</Label>
                       <input
                         id="report-attr-department"
                         list="department-options"
@@ -2335,11 +2336,11 @@ export default function LeaseReview() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                    <p><span className="font-medium">Asset Type:</span> {(lease as any).asset_type || '\u2014'}</p>
-                    <p><span className="font-medium">Region:</span> {(lease as any).region || '\u2014'}</p>
-                    <p><span className="font-medium">Location:</span> {(lease as any).location || '\u2014'}</p>
-                    <p><span className="font-medium">Building:</span> {(lease as any).building || '\u2014'}</p>
-                    <p className="col-span-2"><span className="font-medium">Department:</span> {lease.requesting_department || '\u2014'}</p>
+                    <p><span className="font-medium">{t('lease_review.fields.asset_type')}:</span> {(lease as any).asset_type || '\u2014'}</p>
+                    <p><span className="font-medium">{t('lease_review.fields.region')}:</span> {(lease as any).region || '\u2014'}</p>
+                    <p><span className="font-medium">{t('lease_review.fields.location')}:</span> {(lease as any).location || '\u2014'}</p>
+                    <p><span className="font-medium">{t('lease_review.fields.building')}:</span> {(lease as any).building || '\u2014'}</p>
+                    <p className="col-span-2"><span className="font-medium">{t('lease_review.fields.department')}:</span> {lease.requesting_department || '\u2014'}</p>
                   </div>
                 )}
               </CardContent>
@@ -2347,19 +2348,19 @@ export default function LeaseReview() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle>Internal Notes</CardTitle>
+                <CardTitle>{t('lease_review.intake.internal_notes')}</CardTitle>
                 {!editingRequest && (
-                  <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>Edit</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditingRequest(true)}>{t('common.edit')}</Button>
                 )}
                 {editingRequest && (
                   <div className="flex items-center gap-2">
                     <Button variant="ghost" size="sm" onClick={() => {
                       setEditingRequest(false);
                       setRequestEdits(prev => ({ ...prev, request_description: lease.request_description || (lease as any).notes || '' }));
-                    }}>Cancel</Button>
+                    }}>{t('common.cancel')}</Button>
                     <Button size="sm" disabled={savingEdits} onClick={saveRequestEdits}>
                       {savingEdits ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
-                      Save
+                      {t('common.save')}
                     </Button>
                   </div>
                 )}
@@ -2369,7 +2370,7 @@ export default function LeaseReview() {
                   <textarea
                     rows={4}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    placeholder="Add internal notes..."
+                    placeholder={t('lease_review.intake.notes_placeholder')}
                     value={requestEdits.request_description}
                     onChange={(e) => setRequestEdits(prev => ({ ...prev, request_description: e.target.value }))}
                   />
@@ -2383,7 +2384,7 @@ export default function LeaseReview() {
           </div>
 
           <Card>
-              <CardHeader><CardTitle>Attachments</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t('lease_review.intake.attachments')}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {lease.storage_path && lease.filename && (
                   <div className="flex items-center justify-between rounded-md border p-2.5 text-sm bg-muted/30">
@@ -2397,10 +2398,10 @@ export default function LeaseReview() {
                       onClick={async () => {
                         const { data } = await supabase.storage.from('leases').createSignedUrl(lease.storage_path, 120);
                         if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-                        else toast.error('Could not generate download link');
+                        else toast.error(t('lease_review.toasts.download_link_failed'));
                       }}
                     >
-                      Download
+                      {t('common.download')}
                     </Button>
                   </div>
                 )}
@@ -2425,7 +2426,7 @@ export default function LeaseReview() {
                     />
                     <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
-                      {stageFile ? stageFile.name : 'Click to select a PDF or drag and drop'}
+                      {stageFile ? stageFile.name : t('lease_review.intake.click_to_select')}
                     </p>
                   </div>
                 )}
@@ -2442,7 +2443,7 @@ export default function LeaseReview() {
                 {!isReadOnly && (
                   <Button onClick={handleStageDocumentUpload} disabled={uploadingStageFile || !stageFile} variant="outline" className="w-full">
                     {uploadingStageFile ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                    Upload Document
+                    {t('lease_review.intake.upload_document')}
                   </Button>
                 )}
 
@@ -2467,38 +2468,38 @@ export default function LeaseReview() {
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
                     <DollarSign size={14} className="text-green-600" />
-                    Financial Terms
+                    {t('lease_review.intake.financial_terms')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <p className="text-xs text-muted-foreground">Monthly Payment</p>
+                    <p className="text-xs text-muted-foreground">{t('lease_review.intake.monthly_payment')}</p>
                     <p className="font-medium">
                       {lease.monthly_payment ? formatLocalizedCurrency(Number(lease.monthly_payment), language) : '\u2014'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Term</p>
-                    <p className="font-medium">{lease.term_months ? `${lease.term_months} months` : '\u2014'}</p>
+                    <p className="text-xs text-muted-foreground">{t('lease_review.intake.term')}</p>
+                    <p className="font-medium">{lease.term_months ? t('lease_review.intake.term_months_value', { count: Number(lease.term_months) }) : '\u2014'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Asset Type</p>
+                    <p className="text-xs text-muted-foreground">{t('lease_review.fields.asset_type')}</p>
                     <p className="font-medium capitalize">{lease.asset_type || '\u2014'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Escalation Rate</p>
+                    <p className="text-xs text-muted-foreground">{t('lease_review.intake.escalation_rate')}</p>
                     <p className="font-medium">
-                      {lease.escalation_rate != null ? `${lease.escalation_rate}% / yr` : '\u2014'}
+                      {lease.escalation_rate != null ? t('lease_review.intake.escalation_rate_value', { rate: lease.escalation_rate }) : '\u2014'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Start Date</p>
+                    <p className="text-xs text-muted-foreground">{t('lease_review.intake.start_date')}</p>
                     <p className="font-medium">
                       {lease.lease_start ? format(new Date(lease.lease_start), 'MMM d, yyyy') : '\u2014'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">End Date</p>
+                    <p className="text-xs text-muted-foreground">{t('lease_review.intake.end_date')}</p>
                     <p className="font-medium">
                       {lease.lease_start && lease.term_months ? (() => {
                         const end = new Date(lease.lease_start);
@@ -2515,19 +2516,19 @@ export default function LeaseReview() {
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center gap-2">
                       <DollarSign size={14} className="text-blue-600" />
-                      Financial Impact
+                      {t('lease_review.intake.financial_impact')}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {lease.covenant_flagged && (
                       <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
                         <AlertTriangle size={12} />
-                        Covenant threshold may be impacted
+                        {t('lease_review.intake.covenant_warning')}
                       </div>
                     )}
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
-                        <p className="text-xs text-muted-foreground">Total Cash Commitment</p>
+                        <p className="text-xs text-muted-foreground">{t('lease_review.intake.total_commitment')}</p>
                         <p className="font-medium">
                           {lease.calc_total_commitment
                             ? formatLocalizedCurrency(Number(lease.calc_total_commitment), language)
@@ -2535,7 +2536,7 @@ export default function LeaseReview() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Est. Lease Liability (PV)</p>
+                        <p className="text-xs text-muted-foreground">{t('lease_review.intake.pv_liability')}</p>
                         <p className="font-medium">
                           {lease.calc_pv_liability
                             ? formatLocalizedCurrency(Number(lease.calc_pv_liability), language)
@@ -2543,7 +2544,7 @@ export default function LeaseReview() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Monthly P&amp;L Charge</p>
+                        <p className="text-xs text-muted-foreground">{t('lease_review.intake.monthly_pl')}</p>
                         <p className="font-medium">
                           {lease.calc_straight_line_exp
                             ? formatLocalizedCurrency(Number(lease.calc_straight_line_exp), language)
@@ -2551,7 +2552,7 @@ export default function LeaseReview() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Cash vs. P&amp;L Delta</p>
+                        <p className="text-xs text-muted-foreground">{t('lease_review.intake.cash_pl_delta')}</p>
                         <p className="font-medium">
                           {lease.calc_cash_pl_delta != null
                             ? formatLocalizedCurrency(Number(lease.calc_cash_pl_delta), language)
@@ -2560,7 +2561,7 @@ export default function LeaseReview() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 pt-1">
-                      <p className="text-xs text-muted-foreground">Classification:</p>
+                      <p className="text-xs text-muted-foreground">{t('lease_review.intake.classification')}</p>
                       <Badge
                         variant="outline"
                         className={cn(
@@ -2571,11 +2572,11 @@ export default function LeaseReview() {
                         )}
                       >
                         {lease.lease_classification === 'pending'
-                          ? 'Pending Financial Review'
+                          ? t('lease_review.intake.classification_pending')
                           : lease.lease_classification === 'operating'
-                          ? 'Operating Lease'
+                          ? t('lease_review.intake.classification_operating')
                           : lease.lease_classification === 'finance'
-                          ? 'Finance Lease'
+                          ? t('lease_review.intake.classification_finance')
                           : '\u2014'}
                       </Badge>
                     </div>
@@ -2597,14 +2598,14 @@ export default function LeaseReview() {
         <Dialog open={resubmitDialogOpen} onOpenChange={(o) => !o && setResubmitDialogOpen(false)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Edit &amp; Resubmit</DialogTitle>
+              <DialogTitle>{t('lease_review.resubmit.title')}</DialogTitle>
               <DialogDescription>
-                Update the financial inputs below. The request will be routed through the approval chain from the beginning.
+                {t('lease_review.resubmit.description')}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="space-y-1.5">
-                <Label htmlFor="rs-payment" className="text-sm">Monthly Payment ($)</Label>
+                <Label htmlFor="rs-payment" className="text-sm">{t('lease_review.resubmit.monthly_payment')}</Label>
                 <Input
                   id="rs-payment"
                   type="number"
@@ -2616,7 +2617,7 @@ export default function LeaseReview() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="rs-term" className="text-sm">Term (months)</Label>
+                  <Label htmlFor="rs-term" className="text-sm">{t('locked_lease.timing.term_months')}</Label>
                   <Input
                     id="rs-term"
                     type="number"
@@ -2627,7 +2628,7 @@ export default function LeaseReview() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="rs-esc" className="text-sm">Annual Escalation (%)</Label>
+                  <Label htmlFor="rs-esc" className="text-sm">{t('lease_review.resubmit.annual_escalation')}</Label>
                   <Input
                     id="rs-esc"
                     type="number"
@@ -2639,7 +2640,7 @@ export default function LeaseReview() {
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="rs-start" className="text-sm">Start Date</Label>
+                <Label htmlFor="rs-start" className="text-sm">{t('lease_review.intake.start_date')}</Label>
                 <Input
                   id="rs-start"
                   type="date"
@@ -2656,18 +2657,18 @@ export default function LeaseReview() {
                   className="h-4 w-4 rounded border-input accent-primary"
                 />
                 <label htmlFor="rs-covenant" className="text-sm cursor-pointer">
-                  This commitment may impact financial covenants
+                  {t('lease_review.resubmit.covenant_checkbox')}
                 </label>
               </div>
             </div>
             <DialogFooter className="flex-col sm:flex-row gap-2">
               <Button variant="outline" onClick={() => setResubmitDialogOpen(false)} disabled={resubmitting}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleResubmit} disabled={resubmitting || !resubmitFields.monthlyPayment || !resubmitFields.termMonths}>
                 {resubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Resubmit for Review
+                {t('lease_review.resubmit.submit')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2691,30 +2692,30 @@ export default function LeaseReview() {
       <AppLayout>
         <div className="p-6 space-y-4">
           <AppHeader
-            title={lease.request_title || 'Lease Request'}
+            title={lease.request_title || t('lease_review.intake.lease_request_fallback')}
             subtitle={
               <div className="flex items-center gap-2">
                 <LifecycleStatusBadge status={lease.lifecycle_status as any} />
-                <span className="text-sm text-muted-foreground">{lease.requesting_department || 'Unknown department'}</span>
+                <span className="text-sm text-muted-foreground">{lease.requesting_department || t('lease_review.intake.unknown_department')}</span>
               </div>
             }
             actions={
               <Button variant="outline" size="sm" onClick={() => navigate('/app/leases')}>
                 <ChevronLeft className="h-4 w-4 mr-1" />
-                Back to Leases
+                {t('lease.back_to_leases')}
               </Button>
             }
           />
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center space-y-2">
             <X className="h-7 w-7 text-destructive mx-auto" />
             <p className="text-sm font-medium text-destructive">
-              {isCancelled ? 'This lease request was cancelled.' : 'This lease request was rejected.'}
+              {isCancelled ? t('lease_review.terminal.cancelled') : t('lease_review.terminal.rejected')}
             </p>
             {rejectionReason && (
               <p className="text-sm text-muted-foreground max-w-prose mx-auto">&ldquo;{rejectionReason}&rdquo;</p>
             )}
             <p className="text-xs text-muted-foreground">
-              The request is preserved in your records. Start a new request from the Leases page if you need to.
+              {t('lease_review.terminal.preserved')}
             </p>
           </div>
         </div>
@@ -2768,7 +2769,7 @@ export default function LeaseReview() {
     if (isUnlockedDraft) return null; // handled by Cancel + Save Changes inline
     if (unreviewedLowConfCount > 0) {
       return {
-        label: `Review ${unreviewedLowConfCount} flagged field${unreviewedLowConfCount === 1 ? '' : 's'}`,
+        label: t('lease_review.header.review_flagged', { count: unreviewedLowConfCount }),
         icon: AlertTriangle,
         onClick: handleJumpToFirstFlagged,
       };
@@ -2780,18 +2781,18 @@ export default function LeaseReview() {
       // Approve" the moment all sections are confirmed.
       const ready = canApprove && !approving;
       return {
-        label: ready ? 'Ready to Approve' : 'Pending Review',
+        label: ready ? t('lease_review.header.ready_to_approve') : t('lease_review.header.pending_review'),
         icon: ready ? CheckCircle : Clock,
         onClick: handleApproveLease,
         disabled: approving || !canApprove,
         loading: approving,
         variant: ready ? 'success' : undefined,
-        tooltip: !canApprove ? 'Mark every section reviewed to enable approval' : undefined,
+        tooltip: !canApprove ? t('lease_review.header.approve_tooltip') : undefined,
       };
     }
     if (canShowLock) {
       return {
-        label: lifecycleStatus === 'executed' ? 'Activate' : 'Lock',
+        label: lifecycleStatus === 'executed' ? t('lease_review.header.activate') : t('lease_review.header.lock'),
         icon: Lock,
         onClick: () => setLockConfirmDialogOpen(true),
         loading: submittingChanges,
@@ -2800,7 +2801,7 @@ export default function LeaseReview() {
     }
     if (isApproved && !lease.model_locked) {
       return {
-        label: 'Reopen',
+        label: t('lease_review.header.reopen'),
         icon: RotateCcw,
         onClick: handleReopenLease,
         loading: reopening,
@@ -2820,7 +2821,7 @@ export default function LeaseReview() {
     if (lease?.model_locked || isReadOnly) return null;
     const confirmed = isTabConfirmed(tabKey);
     const nextTab = REVIEW_TABS.find(
-      (t) => t.key !== tabKey && !t.sections.every((s) => confirmedSections.includes(s)),
+      (tab) => tab.key !== tabKey && !tab.sections.every((s) => confirmedSections.includes(s)),
     );
     return (
       <div className="border-t pt-3 mt-2 flex items-center justify-between gap-2">
@@ -2830,10 +2831,10 @@ export default function LeaseReview() {
             aria-pressed="true"
             className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white pr-1.5"
             onClick={() => handleConfirmTab(tabKey)}
-            title="Reviewed — click to unmark"
+            title={t('lease_review.tabs.reviewed_unmark_title')}
           >
             <Check size={12} />
-            Reviewed
+            {t('lease_review.tabs.reviewed')}
             <X size={11} className="opacity-70 ml-0.5" />
           </Button>
         ) : (
@@ -2844,7 +2845,7 @@ export default function LeaseReview() {
             onClick={() => handleConfirmTab(tabKey)}
           >
             <Check size={12} />
-            Reviewed
+            {t('lease_review.tabs.reviewed')}
           </Button>
         )}
         {nextTab ? (
@@ -2853,9 +2854,9 @@ export default function LeaseReview() {
             size="sm"
             className="h-7 text-xs gap-1"
             onClick={() => handleAdvanceTab(nextTab.key)}
-            title={`Go to ${nextTab.title}`}
+            title={t('lease_review.tabs.go_to', { title: t(nextTab.title) })}
           >
-            Next: {nextTab.title}
+            {t('lease_review.tabs.next', { title: t(nextTab.title) })}
             <ChevronRight size={12} />
           </Button>
         ) : null}
@@ -2878,12 +2879,12 @@ export default function LeaseReview() {
         <AppHeader
           title={
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="truncate min-w-0">{lease.request_title || lease.property_address || lease.filename || 'Untitled Lease'}</span>
+              <span className="truncate min-w-0">{lease.request_title || lease.property_address || lease.filename || t('lease_review.header.untitled_lease')}</span>
               {!isReadOnly && (
                 <button
                   onClick={() => { setRenameValue(lease.request_title || ''); setRenameDialogOpen(true); }}
                   className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
-                  title="Rename lease"
+                  title={t('lease_review.header.rename_lease')}
                 >
                   <Pencil size={13} />
                 </button>
@@ -2896,13 +2897,13 @@ export default function LeaseReview() {
               {isUnlockedDraft && (
                 <Badge className="shrink-0 bg-amber-100 text-amber-800 border border-amber-300 text-xs dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
                   <Unlock size={11} className="mr-1" />
-                  {stagedItemCount > 0 ? `Editing — ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''}` : 'Editing'}
+                  {stagedItemCount > 0 ? t('lease_review.header.editing_with_count', { count: stagedItemCount }) : t('lease_review.header.editing')}
                 </Badge>
               )}
               {isApproved && (
                 <Badge className="shrink-0 bg-green-600 text-white text-xs">
                   <CheckCircle size={12} className="mr-1" />
-                  Approved
+                  {t('lease.approved')}
                 </Badge>
               )}
             </div>
@@ -2924,15 +2925,15 @@ export default function LeaseReview() {
                   onClick={async () => { await flushStagedEdits(); setLockConfirmDialogOpen(true); }}
                   disabled={submittingChanges || saving}
                   title={stagedItemCount > 0
-                    ? 'Submit your changes for approval'
-                    : 'Lock this lease (no changes to submit)'}
+                    ? t('lease_review.header.submit_tooltip')
+                    : t('lease_review.header.lock_tooltip_no_changes')}
                 >
                   {submittingChanges ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Lock size={14} className="mr-1.5" />}
-                  {stagedItemCount > 0 ? 'Submit for approval' : 'Lock'}
+                  {stagedItemCount > 0 ? t('lease_review.header.submit_for_approval') : t('lease_review.header.lock')}
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" aria-label="More actions">
+                    <Button variant="outline" size="sm" aria-label={t('common.more_actions')}>
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -2943,7 +2944,7 @@ export default function LeaseReview() {
                       className="text-destructive focus:text-destructive"
                     >
                       <X className="h-4 w-4 mr-2" />
-                      Cancel
+                      {t('common.cancel')}
                     </DropdownMenuItem>
                     {(userRole === 'admin' || userRole === 'owner') && (
                       <DropdownMenuItem onClick={() => setShowArchiveDialog(true)}>
@@ -2996,7 +2997,7 @@ export default function LeaseReview() {
                 {isDirty && !isLocked && (
                   <Button size="sm" variant="outline" onClick={handleSync} disabled={saving}>
                     {saving ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Save size={14} className="mr-1.5" />}
-                    Save draft
+                    {t('lease_review.header.save_draft')}
                   </Button>
                 )}
 
@@ -3004,7 +3005,7 @@ export default function LeaseReview() {
                     pull (primary), not present (toolbar of 7). */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" aria-label="More actions">
+                    <Button variant="outline" size="sm" aria-label={t('common.more_actions')}>
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -3015,12 +3016,12 @@ export default function LeaseReview() {
                     {!isLocked && (
                       <DropdownMenuItem onClick={handleSync} disabled={saving}>
                         {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                        Save draft
+                        {t('lease_review.header.save_draft')}
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem onClick={() => downloadCSV(exportLeasePayload, form, rentSchedule)}>
                       <Download className="h-4 w-4 mr-2" />
-                      Export CSV
+                      {t('audit.export_csv')}
                     </DropdownMenuItem>
                     {!isReadOnly && ((isMasterLease && !isProcessing) || (userRole === 'admin' || userRole === 'owner')) ? (
                       <DropdownMenuSeparator />
@@ -3028,7 +3029,7 @@ export default function LeaseReview() {
                     {!isReadOnly && isMasterLease && !isProcessing && (
                       <DropdownMenuItem onClick={() => setShowAmendmentDialog(true)}>
                         <Upload className="h-4 w-4 mr-2" />
-                        Upload amendment
+                        {t('lease_review.header.upload_amendment')}
                       </DropdownMenuItem>
                     )}
                     {!isReadOnly && (userRole === 'admin' || userRole === 'owner') && (
@@ -3059,7 +3060,7 @@ export default function LeaseReview() {
             confirmedSectionCount={confirmedTabsCount}
             totalRequiredSections={REVIEW_TABS.length}
             remainingSectionTitles={remainingTabTitles}
-            requiredSectionTitles={REVIEW_TABS.map((t) => t.title)}
+            requiredSectionTitles={REVIEW_TABS.map((tab) => t(tab.title))}
             onConfirmAllRequired={handleConfirmAllRequired}
           />
         )}
@@ -3084,9 +3085,9 @@ export default function LeaseReview() {
                   <div className="flex h-full flex-col bg-muted/50 relative">
                     <div className="p-2 border-b flex justify-between bg-background items-center">
                       <span className="text-[10px] font-bold uppercase text-muted-foreground px-2 tracking-tight">
-                        Source Document
+                        {t('review.source_document')}
                       </span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }} title="Collapse source document" aria-label="Collapse source document">
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { pdfPanelRef.current?.collapse(); setIsPdfCollapsed(true); }} title={t('lease_review.pdf.collapse')} aria-label={t('lease_review.pdf.collapse')}>
                         <ChevronLeft size={16} />
                       </Button>
                     </div>
@@ -3125,10 +3126,10 @@ export default function LeaseReview() {
                       size="sm"
                       className="gap-1.5"
                       onClick={() => { pdfPanelRef.current?.expand(); setIsPdfCollapsed(false); }}
-                      title="Re-open the source document panel"
+                      title={t('lease_review.pdf.reopen_title')}
                     >
                       <ChevronRight size={14} />
-                      Show source document
+                      {t('lease_review.pdf.show')}
                     </Button>
                   )}
                   {/* Archived ("deleted") state banner — without it the page
@@ -3174,9 +3175,9 @@ export default function LeaseReview() {
                       <div className="flex items-start gap-3">
                         <AlertTriangle className="h-5 w-5 text-purple-600 mt-0.5 shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-purple-800 text-sm mb-1">Possible Parent Leases</h4>
+                          <h4 className="font-semibold text-purple-800 text-sm mb-1">{t('lease_review.banners.parent_candidates_title')}</h4>
                           <p className="text-xs text-purple-700/80 mb-2">
-                            This document looks like an amendment. Based on the extracted parties and property, it may belong to one of these existing leases in the workspace. Confirm the parent lease before finalizing.
+                            {t('lease_review.banners.parent_candidates_body')}
                           </p>
                           <ul className="text-sm text-purple-700 space-y-2">
                             {extractedJson._parent_lease_candidates.map((c) => (
@@ -3187,10 +3188,10 @@ export default function LeaseReview() {
                                     to={`/app/leases/${c.id}/review`}
                                     className="font-medium underline hover:text-purple-900"
                                   >
-                                    {c.request_title || c.tenant_name || `Lease ${c.id.slice(0, 8)}`}
+                                    {c.request_title || c.tenant_name || t('lease_review.banners.lease_fallback_label', { id: c.id.slice(0, 8) })}
                                   </Link>
                                   <span className="text-xs text-purple-700/70">
-                                    {' — '}matches on {c.match_reasons.join(' + ')}
+                                    {' — '}{t('lease_review.banners.matches_on', { reasons: c.match_reasons.join(' + ') })}
                                     {c.lifecycle_status ? ` · ${displayLabel(c.lifecycle_status as LifecycleStatus)}` : ''}
                                   </span>
                                 </div>
@@ -3206,9 +3207,9 @@ export default function LeaseReview() {
                       <div className="flex items-start gap-3">
                         <AlertTriangle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-blue-800 text-sm mb-1">Classification Check</h4>
+                          <h4 className="font-semibold text-blue-800 text-sm mb-1">{t('lease_review.banners.tier2_title')}</h4>
                           <p className="text-xs text-blue-700/80 mb-2">
-                            The AI classifier flagged possible mismatches between this document and how it was uploaded. Review and confirm before finalizing.
+                            {t('lease_review.banners.tier2_body')}
                           </p>
                           <ul className="text-sm text-blue-700 space-y-1">
                             {extractedJson._tier2_warnings.map((warning, i) => (
@@ -3224,7 +3225,7 @@ export default function LeaseReview() {
                               onClick={() => setTier2CorrectionOpen(true)}
                               className="mt-2 text-xs font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900"
                             >
-                              AI got this wrong? Submit a correction
+                              {t('lease_review.banners.tier2_correction_cta')}
                             </button>
                           )}
                         </div>
@@ -3236,7 +3237,7 @@ export default function LeaseReview() {
                       <div className="flex items-start gap-3">
                         <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-amber-800 text-sm mb-1">Validation Warnings</h4>
+                          <h4 className="font-semibold text-amber-800 text-sm mb-1">{t('lease_review.banners.validation_title')}</h4>
                           <ul className="text-sm text-amber-700 space-y-1">
                             {extractedJson._validation_warnings.map((warning, i) => (
                               <li key={i} className="flex items-center gap-2">
@@ -3252,7 +3253,7 @@ export default function LeaseReview() {
                   {lowConfidenceFields.length > 0 && (
                     <Badge variant="outline" className="text-amber-600 border-amber-400">
                       <AlertTriangle size={10} className="mr-1" />
-                      {lowConfidenceFields.length} fields need attention
+                      {t('lease_review.strip.flagged_label', { count: lowConfidenceFields.length })}
                     </Badge>
                   )}
                   {/* Staged-edits status — lifted here from the General tab so
@@ -3266,13 +3267,13 @@ export default function LeaseReview() {
                       <CardContent className="py-3 px-4">
                         <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
                           {activeChangeSet.status === 'draft'
-                            ? 'Editing — changes need approval'
-                            : 'Pending approval'}
+                            ? t('lease_review.banners.staged_editing_title')
+                            : t('lease_review.banners.staged_pending_title')}
                         </p>
                         <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
                           {activeChangeSet.status === 'draft'
-                            ? 'Your changes need approval before they apply to the lease.'
-                            : 'Your proposed changes are with your financial approver.'}
+                            ? t('lease_review.banners.staged_editing_body')
+                            : t('lease_review.banners.staged_pending_body')}
                         </p>
                       </CardContent>
                     </Card>
@@ -3286,13 +3287,13 @@ export default function LeaseReview() {
                       safety net for very narrow viewports — tabs scroll
                       horizontally rather than disappearing off the edge. */}
                   <TabsList className="sticky top-0 z-10 w-full shrink-0 justify-start overflow-x-auto border-b border-border bg-background">
-                    <TabsTrigger value="general" title="General Information">General</TabsTrigger>
-                    <TabsTrigger value="vendor" title="Vendor / Counterparty">Vendor</TabsTrigger>
-                    <TabsTrigger value="rent" title="Rent">Rent</TabsTrigger>
-                    <TabsTrigger value="options" title="Options & Clauses">Options</TabsTrigger>
-                    <TabsTrigger value="risks" title="Risks">Risks</TabsTrigger>
-                    <TabsTrigger value="documents" title="Documents">Documents</TabsTrigger>
-                    <TabsTrigger value="asc842" title="ASC 842 Inputs">ASC 842</TabsTrigger>
+                    <TabsTrigger value="general" title={t('locked_lease.tabs.general')}>{t('lease_review.tabs.general')}</TabsTrigger>
+                    <TabsTrigger value="vendor" title={t('lease_review.tabs.vendor_full')}>{t('locked_lease.vendor.title')}</TabsTrigger>
+                    <TabsTrigger value="rent" title={t('locked_lease.tabs.rent')}>{t('locked_lease.tabs.rent')}</TabsTrigger>
+                    <TabsTrigger value="options" title={t('lease_review.tabs.options_full')}>{t('lease_review.tabs.options')}</TabsTrigger>
+                    <TabsTrigger value="risks" title={t('locked_lease.tabs.risks')}>{t('locked_lease.tabs.risks')}</TabsTrigger>
+                    <TabsTrigger value="documents" title={t('locked_lease.tabs.documents')}>{t('locked_lease.tabs.documents')}</TabsTrigger>
+                    <TabsTrigger value="asc842" title={t('lease_review.tabs.asc842_full')}>ASC 842</TabsTrigger>
                   </TabsList>
 
                   <div className={cn("py-4 space-y-4 mx-auto pb-24", showPdfPanel ? "max-w-2xl" : "max-w-3xl")}>
@@ -3327,7 +3328,7 @@ export default function LeaseReview() {
                                   <CardTitle className="text-sm flex items-center justify-between">
                                     <span className="flex items-center gap-2 text-blue-700">
                                       <GitBranch size={14} />
-                                      Current Terms (Parent Lease)
+                                      {t('lease_review.parent.current_terms')}
                                     </span>
                                     <ChevronDown className={cn("h-4 w-4 text-blue-600 transition-transform", showParentTerms && "rotate-180")} />
                                   </CardTitle>
@@ -3336,23 +3337,23 @@ export default function LeaseReview() {
                               <CollapsibleContent>
                                 <CardContent className="pt-0 pb-4 grid grid-cols-2 gap-4 text-sm">
                                   <div>
-                                    <Label className="text-[10px] uppercase text-blue-600">Landlord</Label>
-                                    <p className="font-medium">{parentLease.landlord_name || 'N/A'}</p>
+                                    <Label className="text-[10px] uppercase text-blue-600">{t('review.landlord')}</Label>
+                                    <p className="font-medium">{parentLease.landlord_name || t('review.confidence.na')}</p>
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] uppercase text-blue-600">Tenant</Label>
-                                    <p className="font-medium">{parentLease.tenant_name || 'N/A'}</p>
+                                    <Label className="text-[10px] uppercase text-blue-600">{t('review.tenant')}</Label>
+                                    <p className="font-medium">{parentLease.tenant_name || t('review.confidence.na')}</p>
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] uppercase text-blue-600">Monthly Rent</Label>
+                                    <Label className="text-[10px] uppercase text-blue-600">{t('review.monthly_rent')}</Label>
                                     <p className="font-medium">
-                                      ${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount || 'N/A'}
+                                      ${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount || t('review.confidence.na')}
                                     </p>
                                   </div>
                                   <div>
-                                    <Label className="text-[10px] uppercase text-blue-600">Lease End</Label>
+                                    <Label className="text-[10px] uppercase text-blue-600">{t('review.lease_end')}</Label>
                                     <p className="font-medium">
-                                      {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : 'N/A'}
+                                      {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : t('review.confidence.na')}
                                     </p>
                                   </div>
                                 </CardContent>
@@ -3374,14 +3375,14 @@ export default function LeaseReview() {
                               <Card className="shadow-none border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
                                   <div>
-                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Unlock requested</p>
+                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{t('lease_review.unlock.requested_title')}</p>
                                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                                      A team member has requested to unlock this lease for editing.
+                                      {t('lease_review.unlock.requested_body')}
                                       {pendingUnlockRequest.request_reason && (
-                                        <> Reason: {pendingUnlockRequest.request_reason}.</>
+                                        <> {t('lease_review.unlock.reason', { reason: pendingUnlockRequest.request_reason })}</>
                                       )}
                                       {pendingUnlockRequest.created_at && (
-                                        <> Submitted {new Date(pendingUnlockRequest.created_at).toLocaleDateString()}.</>
+                                        <> {t('lease_review.unlock.submitted_date', { date: new Date(pendingUnlockRequest.created_at).toLocaleDateString() })}</>
                                       )}
                                     </p>
                                   </div>
@@ -3393,7 +3394,7 @@ export default function LeaseReview() {
                                       onClick={handleUnlockLease}
                                     >
                                       <RotateCcw size={14} className="mr-1.5" />
-                                      Approve & Unlock
+                                      {t('lease_review.unlock.approve_unlock')}
                                     </Button>
                                     <Button
                                       variant="ghost"
@@ -3401,7 +3402,7 @@ export default function LeaseReview() {
                                       className="text-muted-foreground"
                                       onClick={handleDenyUnlock}
                                     >
-                                      Deny
+                                      {t('locked_lease.deny_unlock')}
                                     </Button>
                                   </div>
                                 </CardContent>
@@ -3411,8 +3412,8 @@ export default function LeaseReview() {
                               <Card className="shadow-none border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
                                   <div>
-                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Admin: Unlock to edit</p>
-                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">Unlocking lets you propose changes — they need financial approval before they take effect.</p>
+                                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{t('lease_review.unlock.admin_title')}</p>
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">{t('lease_review.unlock.admin_body')}</p>
                                   </div>
                                   <Button
                                     variant="outline"
@@ -3421,7 +3422,7 @@ export default function LeaseReview() {
                                     onClick={handleUnlockLease}
                                   >
                                     <RotateCcw size={14} className="mr-1.5" />
-                                    Unlock
+                                    {t('locked_lease.admin_unlock')}
                                   </Button>
                                 </CardContent>
                               </Card>
@@ -3430,11 +3431,11 @@ export default function LeaseReview() {
                               <Card className="shadow-none border">
                                 <CardContent className="py-3 px-4 flex items-center justify-between gap-4">
                                   <div>
-                                    <p className="text-sm font-medium">Request unlock</p>
+                                    <p className="text-sm font-medium">{t('lease_review.unlock.request_title')}</p>
                                     <p className="text-xs text-muted-foreground mt-0.5">
                                       {pendingUnlockRequest
-                                        ? 'Your unlock request is pending admin approval.'
-                                        : 'Ask your workspace admin to unlock this lease for editing.'}
+                                        ? t('lease_review.unlock.request_pending')
+                                        : t('lease_review.unlock.request_hint')}
                                     </p>
                                   </div>
                                   {!pendingUnlockRequest && (
@@ -3446,11 +3447,11 @@ export default function LeaseReview() {
                                       disabled={isRequestingUnlock}
                                     >
                                       {isRequestingUnlock ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <RotateCcw size={14} className="mr-1.5" />}
-                                      Request Unlock
+                                      {t('lease_review.unlock.request_button')}
                                     </Button>
                                   )}
                                   {pendingUnlockRequest && (
-                                    <Badge variant="outline" className="shrink-0">Pending</Badge>
+                                    <Badge variant="outline" className="shrink-0">{t('lease_review.unlock.pending_badge')}</Badge>
                                   )}
                                 </CardContent>
                               </Card>
@@ -3555,7 +3556,7 @@ export default function LeaseReview() {
                               onClick={() => setAddRiskOpen(true)}
                             >
                               <Plus className="h-3.5 w-3.5" />
-                              Add Risk
+                              {t('lease_review.risks.add_risk')}
                             </Button>
                           </div>
                         )}
@@ -3692,19 +3693,19 @@ export default function LeaseReview() {
       <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Rename Lease</DialogTitle>
-            <DialogDescription>Set a display name for this lease. Leave blank to use the filename.</DialogDescription>
+            <DialogTitle>{t('lease_review.rename_dialog.title')}</DialogTitle>
+            <DialogDescription>{t('lease_review.rename_dialog.description')}</DialogDescription>
           </DialogHeader>
           <Input
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
-            placeholder={lease?.filename || 'Enter a name…'}
+            placeholder={lease?.filename || t('lease_review.rename_dialog.placeholder')}
             onKeyDown={(e) => { if (e.key === 'Enter') saveRename(); }}
             autoFocus
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveRename}>Save</Button>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>{t('common.cancel')}</Button>
+            <Button onClick={saveRename}>{t('common.save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3713,14 +3714,14 @@ export default function LeaseReview() {
       <Dialog open={cancelChangeSetDialogOpen} onOpenChange={setCancelChangeSetDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Discard your changes?</DialogTitle>
+            <DialogTitle>{t('lease_review.discard_dialog.title')}</DialogTitle>
             <DialogDescription>
-              Your changes will be discarded and the lease will return to its locked state. This can't be undone.
+              {t('lease_review.discard_dialog.description')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelChangeSetDialogOpen(false)} disabled={cancelingChangeSet}>
-              Keep editing
+              {t('lease_review.discard_dialog.keep_editing')}
             </Button>
             <Button
               variant="destructive"
@@ -3728,7 +3729,7 @@ export default function LeaseReview() {
               disabled={cancelingChangeSet}
             >
               {cancelingChangeSet ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Discard changes
+              {t('lease_review.discard_dialog.discard')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3770,33 +3771,33 @@ export default function LeaseReview() {
                   <DialogTitle className="flex items-center gap-2">
                     <Lock className="h-5 w-5 text-success" />
                     {isReLock
-                      ? `Submit ${stagedItemCount} change${stagedItemCount !== 1 ? 's' : ''} for approval`
+                      ? t('lease_review.lock_dialog.submit_title', { count: stagedItemCount })
                       : isEmptyDraftRelock
-                        ? 'Lock this lease'
-                        : lifecycleStatus === 'executed' ? 'Activate this lease?' : 'Lock this lease'}
+                        ? t('lease_review.lock_dialog.lock_title')
+                        : lifecycleStatus === 'executed' ? t('lease_review.lock_dialog.activate_title') : t('lease_review.lock_dialog.lock_title')}
                   </DialogTitle>
                   <DialogDescription>
                     {isReLock
                       ? adminCanSelfApprove
-                        ? 'As an admin you can apply your changes immediately, or route them through another admin for approval.'
-                        : 'Your changes will be submitted for financial approval. Approved changes apply to the live record; rejected ones are dropped.'
+                        ? t('lease_review.lock_dialog.desc_self_approve')
+                        : t('lease_review.lock_dialog.desc_submit')
                       : isEmptyDraftRelock
-                        ? 'You unlocked this lease but didn\'t make any edits. Locking now will discard the empty edit session and return the lease to its prior locked state.'
-                        : 'This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.'}
+                        ? t('lease_review.lock_dialog.desc_empty_draft')
+                        : t('lease_review.lock_dialog.desc_activate')}
                   </DialogDescription>
                 </DialogHeader>
                 {!isReLock && (
                   <ul className="text-xs text-muted-foreground space-y-1 ml-5 list-disc">
-                    <li>All executed terms and variance fields are frozen</li>
-                    <li>Lease status moves to <strong>Active</strong></li>
-                    <li>Record appears in the Active Portfolio dashboard</li>
-                    <li>A lock event is written to the activity log</li>
+                    <li>{t('lease_review.lock_dialog.bullet_frozen')}</li>
+                    <li>{t('lease_review.lock_dialog.bullet_status_prefix')} <strong>{t('lease_review.lock_dialog.bullet_status_active')}</strong></li>
+                    <li>{t('lease_review.lock_dialog.bullet_dashboard')}</li>
+                    <li>{t('lease_review.lock_dialog.bullet_lock_event')}</li>
                   </ul>
                 )}
                 {adminCanSelfApprove && (
                   <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
-                    <p><strong className="text-foreground">Apply</strong> — changes take effect immediately. Recorded as self-approved by admin role.</p>
-                    <p><strong className="text-foreground">Request Approval</strong> — another admin reviews.</p>
+                    <p><strong className="text-foreground">{t('lease_review.lock_dialog.apply_label')}</strong> {t('lease_review.lock_dialog.apply_explain')}</p>
+                    <p><strong className="text-foreground">{t('lease_review.lock_dialog.request_approval_label')}</strong> {t('lease_review.lock_dialog.request_approval_explain')}</p>
                   </div>
                 )}
                 {/* Approver picker for the Request Approval flow. Always shown
@@ -3807,20 +3808,20 @@ export default function LeaseReview() {
                   <div className="space-y-1.5">
                     <Label htmlFor="approver-select" className="text-xs font-medium text-muted-foreground">
                       {approverCandidates.length === 1 && approverCandidates[0].id === user?.id
-                        ? 'Approver (no other admins available — pick Apply instead, or self-target):'
-                        : 'Send approval request to:'}
+                        ? t('lease_review.lock_dialog.approver_label_self_only')
+                        : t('lease_review.lock_dialog.approver_label')}
                     </Label>
                     <Select
                       value={selectedApproverId ?? undefined}
                       onValueChange={(v) => setSelectedApproverId(v)}
                     >
                       <SelectTrigger id="approver-select" className="h-9 text-sm">
-                        <SelectValue placeholder="Choose an approver" />
+                        <SelectValue placeholder={t('lease_review.lock_dialog.approver_placeholder')} />
                       </SelectTrigger>
                       <SelectContent>
                         {approverCandidates.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
-                            {c.label}{c.isOwner ? ' — Owner' : ''}
+                            {c.label}{c.isOwner ? t('lease_review.lock_dialog.owner_suffix') : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -3829,12 +3830,12 @@ export default function LeaseReview() {
                 )}
                 <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted-foreground">
                   {isReLock
-                    ? 'This action is irreversible from this screen. To make further edits later, request another unlock.'
-                    : 'You can request to unlock the record after activation, but each unlock requires a new approval cycle.'}
+                    ? t('lease_review.lock_dialog.warn_relock')
+                    : t('lease_review.lock_dialog.warn_activate')}
                 </div>
                 <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-2 sm:flex-wrap sm:justify-end">
                   <Button variant="outline" onClick={() => setLockConfirmDialogOpen(false)} disabled={submittingChanges} className="sm:w-auto w-full">
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                   {adminCanSelfApprove ? (
                     <>
@@ -3846,11 +3847,11 @@ export default function LeaseReview() {
                         }}
                         disabled={submittingChanges || !selectedApproverId}
                         title={selectedApproverId
-                          ? 'Request approval from the selected admin'
-                          : 'Pick an approver above first'}
+                          ? t('lease_review.lock_dialog.request_approval_title')
+                          : t('lease_review.lock_dialog.pick_approver_first')}
                         className="sm:w-auto w-full whitespace-nowrap"
                       >
-                        Request Approval
+                        {t('lease_review.lock_dialog.request_approval_label')}
                       </Button>
                       <Button
                         className="bg-success hover:bg-success/90 text-white sm:w-auto w-full whitespace-nowrap"
@@ -3859,10 +3860,10 @@ export default function LeaseReview() {
                           setLockConfirmDialogOpen(false);
                         }}
                         disabled={submittingChanges}
-                        title="Apply changes immediately and record self-approval in the audit trail"
+                        title={t('lease_review.lock_dialog.apply_title')}
                       >
                         {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-                        Apply
+                        {t('lease_review.lock_dialog.apply_label')}
                       </Button>
                     </>
                   ) : (
@@ -3879,11 +3880,11 @@ export default function LeaseReview() {
                       }}
                       disabled={submittingChanges || (isReLock && !selectedApproverId)}
                       title={isReLock && !selectedApproverId
-                        ? 'Pick an approver above first'
+                        ? t('lease_review.lock_dialog.pick_approver_first')
                         : undefined}
                     >
                       {submittingChanges ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
-                      {isReLock ? 'Submit for approval' : isEmptyDraftRelock ? 'Lock' : (lifecycleStatus === 'executed' ? 'Activate' : 'Lock')}
+                      {isReLock ? t('lease_review.header.submit_for_approval') : isEmptyDraftRelock ? t('lease_review.header.lock') : (lifecycleStatus === 'executed' ? t('lease_review.header.activate') : t('lease_review.header.lock'))}
                     </Button>
                   )}
                 </DialogFooter>

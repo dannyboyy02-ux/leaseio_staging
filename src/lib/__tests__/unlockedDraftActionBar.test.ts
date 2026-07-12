@@ -61,10 +61,12 @@ describe('unlocked-draft action bar — finalize/re-lock affordance', () => {
 
   it('labels the button as a submit/lock primary action so it is not removed silently', () => {
     // Guards against the button being gutted to a no-op or relabeled away from
-    // its submit semantics while keeping the onClick. Quoted to match the label
-    // literals (not the <Lock> icon or setLockConfirmDialogOpen identifiers).
-    expect(unlockedDraftBlock).toContain("'Submit for approval'");
-    expect(unlockedDraftBlock).toContain("'Lock'");
+    // its submit semantics while keeping the onClick. Since the i18n sweep the
+    // labels are locale keys resolved via t() — assert the keys (not English
+    // literals), which still distinguishes the label from the <Lock> icon and
+    // setLockConfirmDialogOpen identifiers.
+    expect(unlockedDraftBlock).toContain("t('lease_review.header.submit_for_approval')");
+    expect(unlockedDraftBlock).toContain("t('lease_review.header.lock')");
   });
 
   it('confirms the unreachable builder call site still exists OUTSIDE the branch (so the narrowing is load-bearing)', () => {
