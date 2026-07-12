@@ -57,8 +57,20 @@ const matchSummary = (
   assetTypeOptions: AssetTypeOption[],
 ): { label: string; value: string }[] => {
   const out: { label: string; value: string }[] = [];
-  if (p.match_asset_types.length)
-    out.push({ label: 'Asset', value: p.match_asset_types.map((v) => assetLabel(v, assetTypeOptions)).join(', ') });
+  if (p.match_asset_types.length) {
+    // Dedupe by canonical key so a legacy rule holding both 'real_estate' and
+    // 'property' collapses to a single "Property (Real Estate)" chip (they are
+    // one class) instead of a duplicated pair.
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const v of p.match_asset_types) {
+      const key = canonicalAssetType(v);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      labels.push(assetLabel(v, assetTypeOptions));
+    }
+    out.push({ label: 'Asset', value: labels.join(', ') });
+  }
   if (p.match_lease_types.length) out.push({ label: 'Type', value: p.match_lease_types.join(', ') });
   if (p.match_departments.length) out.push({ label: 'Dept', value: p.match_departments.join(', ') });
   if (p.match_regions.length) out.push({ label: 'Region', value: p.match_regions.join(', ') });

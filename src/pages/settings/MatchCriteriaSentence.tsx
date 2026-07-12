@@ -76,12 +76,21 @@ export function leaseTypeLabel(
   state: MatchCriteriaState,
   options: AssetTypeOption[] = DEFAULT_ASSET_TYPE_OPTIONS,
 ): string {
-  const assetLabels = state.match_asset_types.map(
-    // prettyAssetType humanizes values outside the resolved option list —
-    // workspace-configured or legacy keys (e.g. 'real_estate') rendered raw
-    // snake_case in the rule sentence (live walkthrough 2026-07-12).
-    (v) => options.find((o) => o.value === v)?.label ?? prettyAssetType(v),
-  );
+  // Resolve + dedupe asset values by CANONICAL key so the pill reads the same
+  // built-in label ("Property (Real Estate)") that the checkbox below it and
+  // the rules-list chip now show for a legacy 'real_estate' rule — and a rule
+  // holding two synonyms of one class collapses to a single label. (Cross-axis
+  // asset+lease overlap is intentionally left as-is — see KNOWN_ISSUES.)
+  const seen = new Set<string>();
+  const assetLabels: string[] = [];
+  for (const v of state.match_asset_types) {
+    const key = canonicalAssetType(v);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    assetLabels.push(
+      options.find((o) => canonicalAssetType(o.value) === key)?.label ?? prettyAssetType(v),
+    );
+  }
   const all = [...assetLabels, ...state.match_lease_types];
   if (all.length === 0) return 'any lease type';
   return joinWithOr(all);

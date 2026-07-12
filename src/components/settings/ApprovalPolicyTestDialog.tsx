@@ -318,7 +318,15 @@ export function ApprovalPolicyTestDialog({
         </div>
 
         <DialogFooter className="px-6 py-4 border-t shrink-0">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              // Match the X / Escape / backdrop paths (onOpenChange wrapper
+              // resets on close) so reopening never shows a stale result.
+              reset();
+              onOpenChange(false);
+            }}
+          >
             Close
           </Button>
           <Button onClick={run} disabled={running || !workspaceId}>
