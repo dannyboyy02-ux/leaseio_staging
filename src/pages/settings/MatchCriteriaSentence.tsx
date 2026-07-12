@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { prettyAssetType } from '@/lib/assetTypes';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — must stay aligned with leases.asset_type and leases.lease_type
@@ -75,7 +76,10 @@ export function joinWithOr(values: string[]): string {
 /** "any lease type" when both arrays empty; otherwise asset+lease combined. */
 export function leaseTypeLabel(state: MatchCriteriaState): string {
   const assetLabels = state.match_asset_types.map(
-    (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v,
+    // prettyAssetType humanizes values outside the built-in option list —
+    // workspace-configured or legacy keys (e.g. 'real_estate') rendered raw
+    // snake_case in the rule sentence (live walkthrough 2026-07-12).
+    (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? prettyAssetType(v),
   );
   const all = [...assetLabels, ...state.match_lease_types];
   if (all.length === 0) return 'any lease type';

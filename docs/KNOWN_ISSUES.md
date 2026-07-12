@@ -5,6 +5,27 @@ list and reference it in the commit message.
 
 ---
 
+## Workspace-settings walkthrough 2026-07-12 (Members / approval chains / roles / lease config) — fixed + filed
+
+Same live-browser method as the billing walkthrough (owner: "none of this seems easy to navigate or is self-explanatory"). Walked: My Workspaces inventory, Company Profile, Members, Notifications, Lease Configuration, Risk Watchlist, Approval Rules (+ standalone rules list/editor), Onboarding.
+
+**Root confusion confirmed on screen: three permission systems stacked on the Members page with no explanation** — Team Members access roles (Owner/Admin/Editor/Viewer), the legacy fixed "Approval Chain" editor (manager→financial), and an "Other Roles" grid with a SECOND Admin toggle — while the real routing engine (Approval Rules) sat behind a bounce button on a section page whose visible content was two unrelated settings (Review Thresholds, Counter-Signature Window). An admin configuring the Members-page chain would reasonably believe they'd set up approvals.
+
+**Fixed 2026-07-12 (verified rendered):**
+1. Members page: "Approval Chain" → **"Default approvers"**, described as the FALLBACK ("routes a lease request only when no Approval Rule matches"), with an inline callout + link "Set up Approval Rules →" naming the precedence.
+2. "Other Roles" → **"Workflow roles"** with explicit definitions (Submitter = can create/submit requests; Admin = same Admin as the Team Members access level).
+3. Approval Rules section card: leads with what rules DO + the precedence over the default chain; button "Open Approval Rules"→"Manage rules" + a line saying what's inside (rule builder + sample-request tester).
+4. Rule-builder sentence leaked raw snake_case (`real_estate`) for asset types outside its hardcoded option list — now humanized via `prettyAssetType` fallback.
+
+**Filed (deeper, own beat):**
+- **[MEDIUM] Rule-builder asset-type options are hardcoded** (`property/equipment/vehicle/other` in `MatchCriteriaSentence.tsx`) and ignore the workspace's configured Asset Types (Lease Configuration section) — a rule can't match a custom asset type the workspace actually uses, and legacy `real_estate` values don't equal `property`. Options should come from `workspaces.asset_type_abbreviations` keys + built-ins, with value normalization (`normalizeAssetKey`).
+- **[LOW] Rule editor's sticky action bar** (Try it / Cancel / Save) overlaps form content at some scroll positions — give the page bottom padding equal to the bar height.
+- **[LOW] Lease Configuration has five separate Save buttons** (asset types/departments/regions/locations/buildings) — consider one sticky save or per-list autosave; also the two Members-page saves (role dropdowns save instantly, Workflow roles need "Save Roles") are inconsistent persistence models on one page.
+- **[LOW] Default-approvers rows show the assignee twice** (avatar+name AND the same name in the select) — collapse to the select-only once a row is assigned.
+- **[INFO] The legacy default chain remains the only pre-Rules routing surface** — long-term, consider representing it AS the default Approval Rule (single mental model; the DB already has `is_default_fallback`).
+
+---
+
 ## Live billing-UX walkthrough 2026-07-12 (Playwright-driven, stubbed backend) — fixed + findings
 
 The owner reported (a) a blank page from the invoice "View" link and (b) inconsistent cancel notices between the in-app flow and the portal path. Rather than diff-reading, the actual app was driven in a real browser (local Vite against a network-stubbed backend mirroring live staging data shapes), walking the full Billing tab state machine: trialing → cancel dialog → scheduled-cancel → resume → portal round-trip → plan picker → usage.
