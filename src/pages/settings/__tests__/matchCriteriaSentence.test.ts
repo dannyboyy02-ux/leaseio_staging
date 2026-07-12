@@ -10,6 +10,12 @@ import { prettyAssetType, canonicalAssetType } from '@/lib/assetTypes';
 //       docs/APPROVAL_POLICY_EDITOR_VISUAL_CONTRACT.md (§3 — sentence pills).
 //
 // IF YOU CHANGE A HELPER IN MatchCriteriaSentence.tsx, MIRROR IT HERE.
+//
+// i18n note (2026-07-12): the component helpers now emit their fixed phrases
+// ("any lease type", "at least …", the "or" joins) through i18next
+// (policy_editor.sentence.*). This mirror deliberately keeps the literal
+// ENGLISH strings — it pins the en output, same stance as fmtMoney pinning
+// en-US currency below; the data transforms under test are unchanged.
 
 const ASSET_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'property', label: 'Property (Real Estate)' },

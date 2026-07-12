@@ -259,7 +259,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
         .select('id');
       if (upErr) throw upErr;
       if (!updatedRows || updatedRows.length === 0) {
-        throw new Error('No rows updated — likely a permissions issue. Contact your workspace admin.');
+        throw new Error(t('locked_lease.risks.dismiss_no_rows'));
       }
       await (supabase as any).from('lease_activity_log').insert({
         lease_id: lease.id,
@@ -273,17 +273,17 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
           reason: reasonTrimmed,
         },
       });
-      toast.success(`Dismissed risk: ${dismissTarget.title}`);
+      toast.success(t('locked_lease.risks.dismissed_toast', { title: dismissTarget.title }));
       setDismissTarget(null);
       setDismissReason('');
       await refetchRisks();
     } catch (err: any) {
       console.error('[LockedLeaseDetail] dismiss risk failed:', err);
-      toast.error(`Could not dismiss risk: ${err?.message ?? 'unknown error'}`);
+      toast.error(t('locked_lease.risks.dismiss_failed', { message: err?.message ?? t('locked_lease.risks.unknown_error') }));
     } finally {
       setDismissing(false);
     }
-  }, [dismissTarget, dismissReason, lease?.id, refetchRisks]);
+  }, [dismissTarget, dismissReason, lease?.id, refetchRisks, t]);
   const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'obligations' | 'risks' | 'asc842' | 'documents'>('general');
   const canEditAsc842 = !readOnly && (userRole === 'admin' || userRole === 'owner' || userRole === 'editor');
 
@@ -490,7 +490,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
               <TabsTrigger value="options">{t('locked_lease.tabs.options')}</TabsTrigger>
               <TabsTrigger value="obligations">{t('locked_lease.tabs.obligations')}</TabsTrigger>
               <TabsTrigger value="risks">{t('locked_lease.tabs.risks')}</TabsTrigger>
-              <TabsTrigger value="asc842">ASC 842 Inputs</TabsTrigger>
+              <TabsTrigger value="asc842">{t('locked_lease.tabs.asc842')}</TabsTrigger>
               <TabsTrigger value="documents">{t('locked_lease.tabs.documents')}</TabsTrigger>
             </TabsList>
 
@@ -574,7 +574,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
                     onClick={() => setAddRiskOpen(true)}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Add Risk
+                    {t('locked_lease.risks.add_button')}
                   </Button>
                 </div>
               )}
@@ -628,7 +628,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
                                   variant="ghost"
                                   size="icon"
                                   className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                                  title="Dismiss this risk — it will be removed from this lease and excluded from all reports"
+                                  title={t('locked_lease.risks.dismiss_tooltip')}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setDismissTarget(r);
@@ -714,32 +714,30 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Dismiss this risk?</AlertDialogTitle>
+            <AlertDialogTitle>{t('locked_lease.risks.dismiss_title')}</AlertDialogTitle>
             <AlertDialogDescription>
               <strong className="block mb-1">{dismissTarget?.title}</strong>
-              Once dismissed, this risk will be hidden and excluded from every report,
-              export, and analysis surface for this lease. The action is logged in the
-              audit trail.
+              {t('locked_lease.risks.dismiss_desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Reason (optional)</Label>
+            <Label className="text-xs font-medium text-muted-foreground">{t('locked_lease.risks.dismiss_reason_label')}</Label>
             <Textarea
               value={dismissReason}
               onChange={(e) => setDismissReason(e.target.value)}
-              placeholder="e.g. Standard provision in our portfolio; no action needed"
+              placeholder={t('locked_lease.risks.dismiss_reason_placeholder')}
               rows={3}
               disabled={dismissing}
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={dismissing}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={dismissing}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDismiss}
               disabled={dismissing}
               className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
-              {dismissing ? 'Dismissing…' : 'Dismiss risk'}
+              {dismissing ? t('locked_lease.risks.dismissing') : t('locked_lease.risks.dismiss_cta')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -758,7 +756,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
           pendingCapture={null}
           clearPendingCapture={() => {}}
           onRequestCapture={() => {
-            toast.info('Open the lease workbench to highlight a clause in the PDF.');
+            toast.info(t('locked_lease.risks.capture_unavailable'));
           }}
           onRiskAdded={refetchRisks}
         />

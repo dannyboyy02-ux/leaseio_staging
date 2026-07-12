@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { stageLabel } from '@/lib/lifecycleStates';
+import { localizedStageLabel } from '@/lib/lifecycleLabels';
 import { useNavigate } from 'react-router-dom';
 import { format, formatDistance } from 'date-fns';
 import {
@@ -35,6 +36,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { cn } from '@/lib/utils';
 
 interface StuckRow {
@@ -72,6 +74,7 @@ interface OOORow {
 }
 
 export default function ExceptionsDashboard() {
+  const { t } = useAppTranslation();
   const { workspace, userRole } = useApp();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -156,13 +159,13 @@ export default function ExceptionsDashboard() {
       if (cancelled) return;
       const leaseMap = new Map<string, string>();
       for (const l of ((leasesResp as any).data ?? []) as any[]) {
-        leaseMap.set(l.id, l.request_title || l.filename || 'Untitled lease');
+        leaseMap.set(l.id, l.request_title || l.filename || t('locked_lease.untitled'));
       }
       const userMap = new Map<string, string>();
       for (const p of ((profilesResp as any).data ?? []) as any[]) {
         const fn = (p.first_name as string | null) ?? '';
         const ln = (p.last_name as string | null) ?? '';
-        userMap.set(p.id, (fn || ln) ? `${fn} ${ln}`.trim() : (p.email ?? 'Unknown'));
+        userMap.set(p.id, (fn || ln) ? `${fn} ${ln}`.trim() : (p.email ?? t('exceptions.unknown_user')));
       }
 
       // Filter to workspace-scope (RLS already enforces this on tables
@@ -195,24 +198,24 @@ export default function ExceptionsDashboard() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [workspace?.id, isAdminOrOwner, refreshKey]);
+    // (t included so hydrated fallback labels re-resolve on language change —
+    // same pattern as Notifications.tsx)
+  }, [workspace?.id, isAdminOrOwner, refreshKey, t]);
 
   if (!isAdminOrOwner) {
     return (
       <AppLayout>
-        <AppHeader title="Exceptions" />
+        <AppHeader title={t('exceptions.title')} />
         <div className="max-w-2xl mx-auto py-10">
           <Card className="border-destructive/40">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-5 w-5" />
-                Admin only
+                {t('exceptions.admin_only')}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              The exceptions dashboard surfaces governance exceptions that
-              require administrative attention. Only workspace owners and
-              admins can access it.
+              {t('exceptions.admin_only_desc')}
             </CardContent>
           </Card>
         </div>
@@ -223,8 +226,8 @@ export default function ExceptionsDashboard() {
   return (
     <AppLayout>
       <AppHeader
-        title="Exceptions"
-        subtitle="Governance findings that need administrative attention"
+        title={t('exceptions.title')}
+        subtitle={t('exceptions.subtitle')}
         actions={
           <Button
             size="sm"
@@ -233,7 +236,7 @@ export default function ExceptionsDashboard() {
             disabled={loading}
           >
             <RotateCw className={cn('h-3.5 w-3.5 mr-1.5', loading && 'animate-spin')} />
-            Refresh
+            {t('analytics.refresh')}
           </Button>
         }
       />
@@ -251,7 +254,7 @@ export default function ExceptionsDashboard() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Clock className="h-4 w-4" />
-                    Stuck Chains
+                    {t('exceptions.stuck_chains')}
                     <Badge variant="secondary" className="ml-1">{stuck.length}</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -265,9 +268,12 @@ export default function ExceptionsDashboard() {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{r.lease_title}</p>
                         <p className="text-xs text-muted-foreground">
-                          Detected {formatDistance(new Date(r.created_at), new Date(), { addSuffix: true })}
+                          {t('exceptions.detected_time', { time: formatDistance(new Date(r.created_at), new Date(), { addSuffix: true }) })}
                           {' · '}
-                          {(r.details?.days_stuck ?? '?')} days stuck in {r.details?.stage ? stageLabel(r.details.stage as string) : '—'}
+                          {t('exceptions.days_stuck_in', {
+                            days: r.details?.days_stuck ?? '?',
+                            stage: r.details?.stage ? localizedStageLabel(r.details.stage as string) : '—',
+                          })}
                         </p>
                       </div>
                       <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -283,7 +289,7 @@ export default function ExceptionsDashboard() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <UserMinus className="h-4 w-4" />
-                    Deactivated Approver Alerts
+                    {t('exceptions.deactivated_approvers')}
                     <Badge variant="secondary" className="ml-1">{validationFailed.length}</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -298,10 +304,10 @@ export default function ExceptionsDashboard() {
                         <p className="text-sm font-medium truncate">{r.lease_title}</p>
                         <p className="text-xs text-muted-foreground">
                           {r.details?.reason === 'no_policy_delegate_configured'
-                            ? 'No policy delegate configured — manual reassignment required'
+                            ? t('exceptions.reason_no_delegate')
                             : r.details?.reason === 'policy_delegate_also_inactive'
-                            ? 'Both original and policy delegate are inactive'
-                            : 'Manual reassignment required'}
+                            ? t('exceptions.reason_delegate_inactive')
+                            : t('exceptions.reason_manual')}
                           {' · '}
                           {formatDistance(new Date(r.created_at), new Date(), { addSuffix: true })}
                         </p>
@@ -319,7 +325,7 @@ export default function ExceptionsDashboard() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4" />
-                    Recent Admin Overrides
+                    {t('exceptions.recent_overrides')}
                     <Badge variant="secondary" className="ml-1">{overrides.length}</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -340,7 +346,7 @@ export default function ExceptionsDashboard() {
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {format(new Date(r.override_at), 'MMM d, yyyy h:mm a')}
-                            {r.override_by_name && ` · by ${r.override_by_name}`}
+                            {r.override_by_name && ` · ${t('exceptions.by_name', { name: r.override_by_name })}`}
                           </p>
                           <p className="text-xs italic mt-1 line-clamp-2">"{r.override_reason}"</p>
                         </div>
@@ -358,7 +364,7 @@ export default function ExceptionsDashboard() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <CalendarOff className="h-4 w-4" />
-                    Active Out-of-Office
+                    {t('exceptions.active_ooo')}
                     <Badge variant="secondary" className="ml-1">{oooList.length}</Badge>
                   </CardTitle>
                 </CardHeader>
@@ -366,8 +372,8 @@ export default function ExceptionsDashboard() {
                   {oooList.map((r) => (
                     <div key={r.id} className="rounded-md border p-3">
                       <p className="text-sm">
-                        <strong>{r.user_name ?? 'Unknown'}</strong> →{' '}
-                        <strong>{r.delegate_name ?? 'Unknown'}</strong>
+                        <strong>{r.user_name ?? t('exceptions.unknown_user')}</strong> →{' '}
+                        <strong>{r.delegate_name ?? t('exceptions.unknown_user')}</strong>
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {format(new Date(r.starts_at), 'MMM d')} → {format(new Date(r.ends_at), 'MMM d, yyyy')}
@@ -386,7 +392,7 @@ export default function ExceptionsDashboard() {
                 <Card>
                   <CardContent className="py-12 text-center text-sm text-muted-foreground">
                     <AlertOctagon className="h-8 w-8 mx-auto mb-3 opacity-40" />
-                    No exceptions detected. The cron functions check daily; come back if any flag.
+                    {t('exceptions.none_detected')}
                   </CardContent>
                 </Card>
               )}

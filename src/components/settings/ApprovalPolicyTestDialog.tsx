@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { roleLabel, stageLabel } from '@/lib/lifecycleStates';
+import { localizedRoleLabel, localizedStageLabel } from '@/lib/lifecycleLabels';
 import { Loader2, AlertTriangle, CheckCircle2, XCircle, Users } from 'lucide-react';
 import {
   Dialog,
@@ -22,7 +23,9 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { buildAssetTypeOptions, type AssetTypeOption } from '@/lib/assetTypes';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
+import { localizedAssetTypeLabel } from '@/lib/assetTypeLabels';
 // Built-in asset-type options; the workspace's configured Asset Types are
 // merged in by the caller via `assetTypeOptions`. The matcher canonicalizes
 // both sides (preview_policy_resolution → canonical_asset_type), so a custom
@@ -72,6 +75,7 @@ export function ApprovalPolicyTestDialog({
   workspaceId,
   assetTypeOptions = DEFAULT_ASSET_TYPE_OPTIONS,
 }: Props) {
+  const { t } = useAppTranslation();
   const [assetType, setAssetType] = useState<string>('');
   const [leaseType, setLeaseType] = useState<string>('');
   const [department, setDepartment] = useState<string>('');
@@ -99,7 +103,7 @@ export function ApprovalPolicyTestDialog({
     try {
       const annualNum = annualCost.trim() === '' ? 0 : parseFloat(annualCost);
       if (annualCost.trim() !== '' && !Number.isFinite(annualNum)) {
-        throw new Error('Annual cost must be a number.');
+        throw new Error(t('policy_editor.tester.cost_invalid'));
       }
       const { data, error } = await supabase.rpc('preview_policy_resolution', {
         p_workspace_id: workspaceId,
@@ -112,7 +116,7 @@ export function ApprovalPolicyTestDialog({
       if (error) throw error;
       setResult(data as unknown as ResolutionResult);
     } catch (err: any) {
-      setErrorMsg(err?.message ?? 'Failed to run resolution');
+      setErrorMsg(err?.message ?? t('policy_editor.tester.run_failed'));
     } finally {
       setRunning(false);
     }
@@ -128,10 +132,9 @@ export function ApprovalPolicyTestDialog({
     >
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
-          <DialogTitle>Test policy resolution</DialogTitle>
+          <DialogTitle>{t('policy_editor.tester.title')}</DialogTitle>
           <DialogDescription>
-            Simulate what would happen if a request with these attributes were submitted right now. This is read-only —
-            no policies or chains are created.
+            {t('policy_editor.tester.desc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -139,19 +142,19 @@ export function ApprovalPolicyTestDialog({
           {/* Inputs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Asset type</Label>
+              <Label className="text-xs">{t('policy_editor.tester.asset_type')}</Label>
               <Select
                 value={assetType || ANY}
                 onValueChange={(v) => setAssetType(v === ANY ? '' : v)}
               >
                 <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Any" />
+                  <SelectValue placeholder={t('policy_editor.tester.any')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ANY}>Any</SelectItem>
+                  <SelectItem value={ANY}>{t('policy_editor.tester.any')}</SelectItem>
                   {assetTypeOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
-                      {o.label}
+                      {localizedAssetTypeLabel(o)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -159,16 +162,16 @@ export function ApprovalPolicyTestDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Lease type</Label>
+              <Label className="text-xs">{t('policy_editor.tester.lease_type')}</Label>
               <Select
                 value={leaseType || ANY}
                 onValueChange={(v) => setLeaseType(v === ANY ? '' : v)}
               >
                 <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Any" />
+                  <SelectValue placeholder={t('policy_editor.tester.any')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ANY}>Any</SelectItem>
+                  <SelectItem value={ANY}>{t('policy_editor.tester.any')}</SelectItem>
                   {LEASE_TYPE_OPTIONS.map((v) => (
                     <SelectItem key={v} value={v}>
                       {v}
@@ -179,27 +182,27 @@ export function ApprovalPolicyTestDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Department</Label>
+              <Label className="text-xs">{t('policy_editor.tester.department')}</Label>
               <Input
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                placeholder="e.g. Operations"
+                placeholder={t('policy_editor.tester.department_placeholder')}
                 className="h-9"
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Region</Label>
+              <Label className="text-xs">{t('policy_editor.tester.region')}</Label>
               <Input
                 value={region}
                 onChange={(e) => setRegion(e.target.value)}
-                placeholder="e.g. West"
+                placeholder={t('policy_editor.tester.region_placeholder')}
                 className="h-9"
               />
             </div>
 
             <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-xs">Estimated annual cost (USD)</Label>
+              <Label className="text-xs">{t('policy_editor.tester.annual_cost')}</Label>
               <Input
                 type="number"
                 value={annualCost}
@@ -221,13 +224,13 @@ export function ApprovalPolicyTestDialog({
           {result && (
             <div className="space-y-3">
               <div className="border-t pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Result</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">{t('policy_editor.tester.result')}</p>
 
                 {result.matched === false ? (
                   <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
                     <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-destructive">No policy matched</p>
+                      <p className="text-sm font-medium text-destructive">{t('policy_editor.tester.no_match')}</p>
                       <p className="text-xs text-muted-foreground mt-1">{result.error}</p>
                     </div>
                   </div>
@@ -237,8 +240,8 @@ export function ApprovalPolicyTestDialog({
                       <div className="flex items-center gap-2 flex-wrap">
                         <CheckCircle2 className="h-4 w-4 text-green-600" />
                         <p className="text-sm font-medium">{result.policy_name}</p>
-                        <Badge variant="outline" className="text-xs">priority {result.policy_priority}</Badge>
-                        <Badge variant="outline" className="text-xs">version {result.policy_version}</Badge>
+                        <Badge variant="outline" className="text-xs">{t('policy_editor.priority_badge', { n: result.policy_priority })}</Badge>
+                        <Badge variant="outline" className="text-xs">{t('policy_editor.tester.version_badge', { n: result.policy_version })}</Badge>
                       </div>
                       {result.warnings.length > 0 && (
                         <div className="mt-2 space-y-1">
@@ -258,10 +261,10 @@ export function ApprovalPolicyTestDialog({
                       return (
                         <div key={stage}>
                           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-                            {stageLabel(stage)}
+                            {localizedStageLabel(stage)}
                           </p>
                           {stageSteps.length === 0 ? (
-                            <p className="text-xs text-muted-foreground italic px-3 py-2">No steps configured.</p>
+                            <p className="text-xs text-muted-foreground italic px-3 py-2">{t('policy_editor.tester.no_steps')}</p>
                           ) : (
                             <div className="space-y-1.5">
                               {stageSteps.map((s, i) => (
@@ -271,26 +274,26 @@ export function ApprovalPolicyTestDialog({
                                 >
                                   <Users className="h-4 w-4 text-muted-foreground shrink-0" />
                                   <div className="min-w-0 flex-1 text-xs">
-                                    <span className="font-medium">Step {s.step_order}</span>
+                                    <span className="font-medium">{t('policy_editor.tester.step_n', { n: s.step_order })}</span>
                                     {s.parallel_group !== 1 && (
-                                      <span className="text-muted-foreground"> · group {s.parallel_group}</span>
+                                      <span className="text-muted-foreground"> · {t('policy_editor.tester.group_n', { n: s.parallel_group })}</span>
                                     )}
                                     <span className="text-muted-foreground"> · </span>
                                     <span>
                                       {s.approver_user_id
-                                        ? `User ${s.approver_user_id.slice(0, 8)}…`
-                                        : `Role: ${roleLabel(s.approver_role)}`}
+                                        ? t('policy_editor.tester.user_short', { id: s.approver_user_id.slice(0, 8) })
+                                        : t('policy_editor.tester.role_line', { role: localizedRoleLabel(s.approver_role) })}
                                     </span>
                                     {s.delegate_user_id && (
                                       <span className="text-muted-foreground">
-                                        {' '}· delegate {s.delegate_user_id.slice(0, 8)}…
+                                        {' '}· {t('policy_editor.tester.delegate_short', { id: s.delegate_user_id.slice(0, 8) })}
                                       </span>
                                     )}
                                   </div>
                                   {s.is_required ? (
-                                    <Badge variant="outline" className="text-[10px]">required</Badge>
+                                    <Badge variant="outline" className="text-[10px]">{t('policy_editor.tester.required')}</Badge>
                                   ) : (
-                                    <Badge variant="secondary" className="text-[10px]">optional</Badge>
+                                    <Badge variant="secondary" className="text-[10px]">{t('policy_editor.tester.optional')}</Badge>
                                   )}
                                 </div>
                               ))}
@@ -301,13 +304,13 @@ export function ApprovalPolicyTestDialog({
                     })}
 
                     <div className="text-xs text-muted-foreground pt-1">
-                      Separation of duties:{' '}
+                      {t('policy_editor.tester.sod_line')}{' '}
                       <strong>
                         {result.separation_override == null
-                          ? 'Inherits workspace default'
+                          ? t('policy_editor.tester.sod_inherits')
                           : result.separation_override
-                          ? 'Require distinct users'
-                          : 'Allow same user in multiple roles'}
+                          ? t('policy_editor.sod_require_label')
+                          : t('policy_editor.tester.sod_allow')}
                       </strong>
                     </div>
                   </>
@@ -327,16 +330,16 @@ export function ApprovalPolicyTestDialog({
               onOpenChange(false);
             }}
           >
-            Close
+            {t('common.close')}
           </Button>
           <Button onClick={run} disabled={running || !workspaceId}>
             {running ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                Resolving…
+                {t('policy_editor.tester.running')}
               </>
             ) : (
-              'Run resolution'
+              t('policy_editor.tester.run')
             )}
           </Button>
         </DialogFooter>

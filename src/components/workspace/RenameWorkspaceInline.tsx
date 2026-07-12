@@ -10,6 +10,7 @@ import { Pencil, Check, X, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface RenameWorkspaceInlineProps {
   workspaceId: string;
@@ -28,6 +29,7 @@ export function RenameWorkspaceInline({
   className,
   canEdit = true,
 }: RenameWorkspaceInlineProps) {
+  const { t } = useAppTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(currentName);
   const [saving, setSaving] = useState(false);
@@ -49,7 +51,7 @@ export function RenameWorkspaceInline({
   const handleSave = async () => {
     const trimmed = draft.trim();
     if (!trimmed) {
-      toast.error('Workspace name cannot be empty');
+      toast.error(t('workspace.rename.err_empty'));
       return;
     }
     if (trimmed === currentName) {
@@ -63,7 +65,7 @@ export function RenameWorkspaceInline({
         .update({ name: trimmed })
         .eq('id', workspaceId);
       if (error) throw error;
-      toast.success('Workspace renamed');
+      toast.success(t('workspace.rename.success'));
       setEditing(false);
       onRenamed?.(trimmed);
       // Fire-and-forget: an audit-write failure must not surface as a
@@ -82,7 +84,7 @@ export function RenameWorkspaceInline({
         });
     } catch (err) {
       console.error('Error renaming workspace:', err);
-      toast.error('Failed to rename — only the workspace owner can rename');
+      toast.error(t('workspace.rename.failed'));
       setDraft(currentName);
       setEditing(false);
     } finally {
@@ -108,7 +110,7 @@ export function RenameWorkspaceInline({
           'group inline-flex items-center gap-2 text-left hover:text-foreground transition-colors',
           className,
         )}
-        title="Click to rename"
+        title={t('workspace.rename.click_to_rename')}
       >
         <span>{currentName}</span>
         <Pencil className="h-3.5 w-3.5 opacity-0 group-hover:opacity-60 transition-opacity" />
@@ -136,7 +138,7 @@ export function RenameWorkspaceInline({
         onClick={handleSave}
         disabled={saving}
         className="p-1 rounded hover:bg-muted text-success disabled:opacity-50"
-        title="Save"
+        title={t('common.save')}
       >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
       </button>
@@ -145,7 +147,7 @@ export function RenameWorkspaceInline({
         onClick={handleCancel}
         disabled={saving}
         className="p-1 rounded hover:bg-muted text-muted-foreground disabled:opacity-50"
-        title="Cancel"
+        title={t('common.cancel')}
       >
         <X className="h-4 w-4" />
       </button>

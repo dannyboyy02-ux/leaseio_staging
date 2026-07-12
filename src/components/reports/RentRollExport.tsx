@@ -53,7 +53,7 @@ export function RentRollExport() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
       if (!workspace?.id) {
-        toast.error('No workspace selected');
+        toast.error(t('reports.no_workspace'));
         return;
       }
 
@@ -80,7 +80,7 @@ export function RentRollExport() {
       if (error) throw error;
 
       if (!leases || leases.length === 0) {
-        toast.error('No leases to export');
+        toast.error(t('reports.no_leases_to_export'));
         return;
       }
 
@@ -94,17 +94,19 @@ export function RentRollExport() {
       const totalMonthly = leases.reduce((sum, l) => sum + getBaseMonthlyRent(l), 0);
       const totalAnnual = totalMonthly * 12;
 
+      // Presentational display headers (Excel/Sheets) — nothing downstream
+      // parses these column names back in.
       const headers = [
-        'Property Address',
-        'Tenant',
-        'Landlord',
-        'Lease Start',
-        'Lease End',
-        'Days Remaining',
-        'Monthly Rent',
-        'Annual Rent',
-        'Rent Frequency',
-        'Escalation Type',
+        t('lease.property_address'),
+        t('lease.tenant'),
+        t('lease.landlord'),
+        t('reports.csv_lease_start'),
+        t('reports.csv_lease_end'),
+        t('reports.csv_days_remaining'),
+        t('reports.csv_monthly_rent'),
+        t('reports.csv_annual_rent'),
+        t('reports.csv_rent_frequency'),
+        t('reports.csv_escalation_type'),
       ];
 
       const rows = leases.map((lease) => {
@@ -113,7 +115,7 @@ export function RentRollExport() {
         const propertyAddress =
           getExtractedFieldValue(extractedJson?.property_address) ||
           lease.filename ||
-          'Unknown';
+          t('reports.csv_unknown');
         return [
           propertyAddress,
           lease.tenant_name || '',
@@ -123,16 +125,16 @@ export function RentRollExport() {
           calculateDaysRemaining(lease.lease_end) ?? '',
           formatCurrency(monthly),
           formatCurrency(monthly * 12),
-          lease.base_rent_frequency || 'Monthly',
+          lease.base_rent_frequency || t('rent_schedule.monthly'),
           lease.rent_escalation_type || '',
         ];
       });
 
       rows.push([]);
-      rows.push(['PORTFOLIO SUMMARY', '', '', '', '', '', '', '', '', '']);
-      rows.push(['Total Active Leases', String(leases.length), '', '', '', '', '', '', '', '']);
-      rows.push(['Total Monthly Rent', formatCurrency(totalMonthly), '', '', '', '', '', '', '', '']);
-      rows.push(['Total Annual Rent (run-rate)', formatCurrency(totalAnnual), '', '', '', '', '', '', '', '']);
+      rows.push([t('reports.csv_portfolio_summary'), '', '', '', '', '', '', '', '', '']);
+      rows.push([t('reports.csv_total_active_leases'), String(leases.length), '', '', '', '', '', '', '', '']);
+      rows.push([t('dashboard.total_monthly_rent'), formatCurrency(totalMonthly), '', '', '', '', '', '', '', '']);
+      rows.push([t('reports.csv_total_annual_rent'), formatCurrency(totalAnnual), '', '', '', '', '', '', '', '']);
 
       const csvContent = [
         headers.map(escapeCsvCell).join(','),
@@ -149,10 +151,10 @@ export function RentRollExport() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      toast.success(`Exported ${leases.length} leases to CSV`);
+      toast.success(t('reports.export_success', { count: leases.length }));
     } catch (error) {
       console.error('Export error:', error);
-      toast.error('Failed to export rent roll');
+      toast.error(t('reports.export_failed'));
     } finally {
       setIsExporting(false);
     }

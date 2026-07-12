@@ -10,7 +10,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useNeedsAction } from '@/hooks/useNeedsAction';
 
 export default function NeedsActionPage() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -30,8 +30,8 @@ export default function NeedsActionPage() {
   return (
     <AppLayout>
       <AppHeader
-        title="Needs Your Action"
-        subtitle={!loading && totalCount > 0 ? `${totalCount} item${totalCount !== 1 ? 's' : ''} require attention` : undefined}
+        title={t('dashboard.needs_your_action')}
+        subtitle={!loading && totalCount > 0 ? t('dashboard.items_require_attention', { count: totalCount }) : undefined}
       />
       <div className="p-6">
         {loading ? (
@@ -43,8 +43,8 @@ export default function NeedsActionPage() {
         ) : totalCount === 0 ? (
           <div className="flex flex-col items-center py-16 text-center">
             <CheckCircle2 className="h-10 w-10 text-green-500 mb-3" />
-            <p className="text-base font-medium">All caught up</p>
-            <p className="text-sm text-muted-foreground mt-1">No actions required right now</p>
+            <p className="text-base font-medium">{t('dashboard.all_caught_up')}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t('dashboard.no_actions_required_now')}</p>
           </div>
         ) : (
           <div className="space-y-6 max-w-3xl">
@@ -56,7 +56,7 @@ export default function NeedsActionPage() {
                 >
                   <div className="flex items-center gap-2 flex-1">
                     <Bell className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-semibold">Pending Approvals</span>
+                    <span className="text-sm font-semibold">{t('dashboard.pending_approvals')}</span>
                     <Badge variant="secondary">{pendingApprovals.length}</Badge>
                   </div>
                   <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', collapsed.approvals && 'rotate-180')} />
@@ -80,12 +80,12 @@ export default function NeedsActionPage() {
                         </div>
                         <div className="ml-3 shrink-0 text-right flex items-center gap-2">
                           {item.daysWaiting > 7 ? (
-                            <Badge variant="destructive" className="text-xs">Overdue</Badge>
+                            <Badge variant="destructive" className="text-xs">{t('firm.inbox.urgency_overdue')}</Badge>
                           ) : (
-                            <p className="text-xs text-muted-foreground">{item.daysWaiting}d waiting</p>
+                            <p className="text-xs text-muted-foreground">{t('dashboard.days_waiting', { count: item.daysWaiting })}</p>
                           )}
                           <p className="text-xs text-muted-foreground">
-                            {formatCurrency(item.annualValue)}/yr
+                            {formatCurrency(item.annualValue)}/{t('dashboard.per_year_short')}
                           </p>
                         </div>
                       </div>
@@ -103,7 +103,7 @@ export default function NeedsActionPage() {
                 >
                   <div className="flex items-center gap-2 flex-1">
                     <RotateCcw className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm font-semibold">Returned for Revision</span>
+                    <span className="text-sm font-semibold">{t('dashboard.returned_for_revision')}</span>
                     <Badge variant="secondary">{returnedLeases.length}</Badge>
                   </div>
                   <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', collapsed.returned && 'rotate-180')} />
@@ -122,7 +122,7 @@ export default function NeedsActionPage() {
                           {item.rejectionReason ? (
                             <p className="text-xs text-muted-foreground truncate">"{item.rejectionReason}"</p>
                           ) : (
-                            <p className="text-xs text-muted-foreground">Returned for revision</p>
+                            <p className="text-xs text-muted-foreground">{t('dashboard.returned_for_revision_item')}</p>
                           )}
                         </div>
                       </div>
@@ -140,7 +140,7 @@ export default function NeedsActionPage() {
                 >
                   <div className="flex items-center gap-2 flex-1">
                     <Unlock className="h-4 w-4 text-blue-500" />
-                    <span className="text-sm font-semibold">Unlocked for Editing</span>
+                    <span className="text-sm font-semibold">{t('dashboard.unlocked_for_editing')}</span>
                     <Badge variant="secondary">{unlockedLeases.length}</Badge>
                   </div>
                   <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', collapsed.unlocked && 'rotate-180')} />
@@ -156,7 +156,7 @@ export default function NeedsActionPage() {
                         <Unlock className="h-4 w-4 shrink-0 text-blue-500" />
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium">{item.leaseName}</p>
-                          <p className="text-xs text-muted-foreground">Draft changes pending submission</p>
+                          <p className="text-xs text-muted-foreground">{t('dashboard.draft_changes_pending')}</p>
                         </div>
                       </div>
                     ))}
@@ -172,7 +172,7 @@ export default function NeedsActionPage() {
                   onClick={() => toggleSection('flags')}
                 >
                   <div className="flex items-center gap-2 flex-1">
-                    <span className="text-sm font-semibold">Other Flags</span>
+                    <span className="text-sm font-semibold">{t('dashboard.other_flags')}</span>
                     <Badge variant="secondary">{otherFlags.reduce((s, f) => s + f.count, 0)}</Badge>
                   </div>
                   <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', collapsed.flags && 'rotate-180')} />

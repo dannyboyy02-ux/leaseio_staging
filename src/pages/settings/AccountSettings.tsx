@@ -123,12 +123,12 @@ export default function AccountSettings() {
   const relativeTime = (iso: string): string => {
     const diff = Date.now() - new Date(iso).getTime();
     const m = Math.floor(diff / 60000);
-    if (m < 1) return 'just now';
-    if (m < 60) return `${m}m ago`;
+    if (m < 1) return t('account.time_just_now');
+    if (m < 60) return t('account.time_minutes_ago', { count: m });
     const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
+    if (h < 24) return t('account.time_hours_ago', { count: h });
     const d = Math.floor(h / 24);
-    if (d < 30) return `${d}d ago`;
+    if (d < 30) return t('account.time_days_ago', { count: d });
     return new Date(iso).toLocaleDateString(language === 'es' ? 'es-419' : 'en-US', { month: 'short', day: 'numeric' });
   };
 
@@ -290,10 +290,10 @@ export default function AccountSettings() {
         .eq('id', authUser.id);
       if (error) throw error;
       setAiConsentAt(null);
-      toast.success('AI processing consent revoked');
+      toast.success(t('account.consent_revoked_toast'));
     } catch (err) {
       console.error('Error revoking AI consent:', err);
-      toast.error('Failed to revoke consent');
+      toast.error(t('account.consent_revoke_failed'));
     } finally {
       setIsRevokingConsent(false);
     }
@@ -310,10 +310,10 @@ export default function AccountSettings() {
         .eq('id', authUser.id);
       if (error) throw error;
       setAiConsentAt(now);
-      toast.success('AI processing consent recorded');
+      toast.success(t('account.consent_recorded_toast'));
     } catch (err) {
       console.error('Error granting AI consent:', err);
-      toast.error('Failed to record consent');
+      toast.error(t('account.consent_record_failed'));
     } finally {
       setIsRevokingConsent(false);
     }
@@ -321,7 +321,7 @@ export default function AccountSettings() {
 
   const handleSaveProfile = async () => {
     if (!authUser) {
-      toast.error('You must be logged in to save changes');
+      toast.error(t('account.must_be_logged_in'));
       return;
     }
 
@@ -340,10 +340,10 @@ export default function AccountSettings() {
       if (error) throw error;
 
       await refreshProfile();
-      toast.success('Profile updated successfully!');
+      toast.success(t('account.profile_updated'));
     } catch (error) {
       console.error('Error saving profile:', error);
-      toast.error('Failed to save profile');
+      toast.error(t('account.profile_save_failed'));
     } finally {
       setIsSaving(false);
     }
@@ -351,15 +351,15 @@ export default function AccountSettings() {
 
   const handleChangePassword = async () => {
     if (!newPassword || !confirmPassword) {
-      toast.error('Please enter a new password');
+      toast.error(t('account.password_enter_new'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error('Passwords do not match');
+      toast.error(t('auth.errors.password_mismatch'));
       return;
     }
     if (newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      toast.error(t('account.password_min_length'));
       return;
     }
 
@@ -374,10 +374,10 @@ export default function AccountSettings() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      toast.success('Password updated successfully!');
+      toast.success(t('account.password_updated'));
     } catch (error) {
       console.error('Error changing password:', error);
-      toast.error('Failed to change password');
+      toast.error(t('account.password_change_failed'));
     } finally {
       setIsChangingPassword(false);
     }
@@ -408,7 +408,7 @@ export default function AccountSettings() {
       toast.success(t('account.preference_saved'), { id: 'pref-saved' });
     } catch (error) {
       console.error('Error saving notification prefs:', error);
-      toast.error('Failed to save preferences');
+      toast.error(t('account.preferences_save_failed'));
     }
   };
 
@@ -420,12 +420,12 @@ export default function AccountSettings() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      toast.success('Account deleted successfully');
+      toast.success(t('account.account_deleted'));
       await signOut();
       navigate('/');
     } catch (error) {
       console.error('Error deleting account:', error);
-      toast.error('Failed to delete account. Please try again.');
+      toast.error(t('account.account_delete_failed'));
     } finally {
       setIsDeleting(false);
     }
@@ -437,10 +437,10 @@ export default function AccountSettings() {
       // Supabase doesn't have a direct "logout other sessions" - we use signOut with scope
       const { error } = await supabase.auth.signOut({ scope: 'others' });
       if (error) throw error;
-      toast.success('All other sessions have been logged out');
+      toast.success(t('account.sessions_logged_out'));
     } catch (error) {
       console.error('Error logging out other sessions:', error);
-      toast.error('Failed to log out other sessions');
+      toast.error(t('account.sessions_logout_failed'));
     } finally {
       setIsLoggingOutOthers(false);
     }
@@ -864,12 +864,12 @@ export default function AccountSettings() {
                   <Label htmlFor="user-timezone">{t('account.timezone')}</Label>
                   <Select value={timezone} onValueChange={setTimezone}>
                     <SelectTrigger id="user-timezone">
-                      <SelectValue placeholder="Select timezone" />
+                      <SelectValue placeholder={t('workspace.select_timezone')} />
                     </SelectTrigger>
                     <SelectContent>
                       {timezones.map((tz) => (
                         <SelectItem key={tz.value} value={tz.value}>
-                          {tz.label}
+                          {t(`workspace.tz.${tz.value}`, { defaultValue: tz.label })}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1776,10 +1776,11 @@ export default function AccountSettings() {
  */
 function ThemeRadio() {
   const { theme, setTheme } = useTheme();
+  const { t } = useLanguage();
   const options: Array<{ value: 'light' | 'dark' | 'system'; label: string; Icon: typeof Sun }> = [
-    { value: 'light', label: 'Light', Icon: Sun },
-    { value: 'dark', label: 'Dark', Icon: Moon },
-    { value: 'system', label: 'System', Icon: Monitor },
+    { value: 'light', label: t('account.theme_light'), Icon: Sun },
+    { value: 'dark', label: t('account.theme_dark'), Icon: Moon },
+    { value: 'system', label: t('account.theme_system'), Icon: Monitor },
   ];
   const active = (theme as 'light' | 'dark' | 'system' | undefined) ?? 'system';
   return (

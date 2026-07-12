@@ -615,7 +615,13 @@ export default function Leases() {
     const total = leases.length;
     const active = activeLeases.length;
     if (totalMonthlyRent > 0) {
-      return t('leases.subtitle_rent', { rent: formatCurrency(totalMonthlyRent), active, total });
+      // activePart is a pluralized sub-key so es agrees at n=1 ("1 activo",
+      // not "1 activos") — i18next can't pluralize mid-string (#152 LOW).
+      return t('leases.subtitle_rent', {
+        rent: formatCurrency(totalMonthlyRent),
+        activePart: t('leases.subtitle_active', { count: active }),
+        total,
+      });
     }
     return t('leases.subtitle_count', { count: total });
     // eslint-disable-next-line react-hooks/exhaustive-deps

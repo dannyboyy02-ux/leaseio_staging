@@ -60,6 +60,9 @@ interface ActivityRow {
 
 const PAGE_SIZE = 20;
 
+// English fallback labels. Display resolves through the
+// audit.activity_types.<type> locale keys (defaultValue = this map) so the
+// static regression test over this map and the i18n layer can't drift apart.
 const ACTIVITY_LABELS: Record<string, string> = {
   created: 'Created',
   status_change: 'Status changed',
@@ -107,6 +110,13 @@ const ACTIVITY_LABELS: Record<string, string> = {
 export default function AuditLog() {
   const { t } = useAppTranslation();
   const { workspace } = useApp();
+
+  // Localized label for an activity type; unknown types render raw (dynamic
+  // data), known types fall back to the English map if the key is missing.
+  const activityLabel = (type: string) =>
+    ACTIVITY_LABELS[type]
+      ? t(`audit.activity_types.${type}`, { defaultValue: ACTIVITY_LABELS[type] })
+      : type;
   const [searchParams, setSearchParams] = useSearchParams();
   const initialLeaseId = searchParams.get('leaseId') ?? '';
 
@@ -182,15 +192,15 @@ export default function AuditLog() {
     const headers = [
       t('audit.timestamp'),
       t('audit.lease'),
-      'Activity',
-      'From Status',
-      'To Status',
-      'Routing Path',
+      t('audit.activity_col'),
+      t('audit.from_status'),
+      t('audit.to_status'),
+      t('audit.routing_path'),
     ];
     const rows = entries.map((row) => [
       format(new Date(row.created_at), 'yyyy-MM-dd HH:mm:ss'),
       row.leases?.request_title || row.leases?.tenant_name || row.leases?.filename || row.lease_id,
-      ACTIVITY_LABELS[row.activity_type] ?? row.activity_type,
+      activityLabel(row.activity_type),
       row.from_status || '',
       row.to_status || '',
       (row.details && (row.details as Record<string, unknown>).routing_path as string) || '',
@@ -270,7 +280,7 @@ export default function AuditLog() {
                 />
               </div>
               <div className="w-[240px]">
-                <label className="text-xs text-muted-foreground mb-1 block">Activity type</label>
+                <label className="text-xs text-muted-foreground mb-1 block">{t('audit.activity_type')}</label>
                 <Select
                   value={activityFilter || 'all'}
                   onValueChange={(value) => {
@@ -279,12 +289,12 @@ export default function AuditLog() {
                   }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="All activity types" />
+                    <SelectValue placeholder={t('audit.all_activity_types')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All activity types</SelectItem>
-                    {Object.entries(ACTIVITY_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    <SelectItem value="all">{t('audit.all_activity_types')}</SelectItem>
+                    {Object.keys(ACTIVITY_LABELS).map((value) => (
+                      <SelectItem key={value} value={value}>{activityLabel(value)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -301,9 +311,9 @@ export default function AuditLog() {
                 <TableRow>
                   <TableHead>{t('audit.timestamp')}</TableHead>
                   <TableHead>{t('audit.lease')}</TableHead>
-                  <TableHead>Activity</TableHead>
-                  <TableHead>Transition</TableHead>
-                  <TableHead>Actor</TableHead>
+                  <TableHead>{t('audit.activity_col')}</TableHead>
+                  <TableHead>{t('audit.transition')}</TableHead>
+                  <TableHead>{t('audit.actor')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -353,13 +363,13 @@ export default function AuditLog() {
                         >
                           <FileText size={14} className="text-muted-foreground" />
                           <span className="truncate max-w-[200px]">
-                            {row.leases?.request_title || row.leases?.tenant_name || row.leases?.filename || 'Unknown'}
+                            {row.leases?.request_title || row.leases?.tenant_name || row.leases?.filename || t('audit.unknown')}
                           </span>
                         </Link>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {ACTIVITY_LABELS[row.activity_type] ?? row.activity_type}
+                          {activityLabel(row.activity_type)}
                         </Badge>
                       </TableCell>
                       <TableCell>

@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { cn } from '@/lib/utils';
 import {
   displayLabel,
@@ -44,6 +45,7 @@ import {
 import { ChainStepBadges } from '@/components/leases/ChainStepBadges';
 import { VoluntaryDelegationModal } from '@/components/workflow/VoluntaryDelegationModal';
 
+import { localizedRoleLabel, localizedStageLabel, localizedStatusLabel } from '@/lib/lifecycleLabels';
 interface QueueLease {
   id: string;
   request_title: string | null;
@@ -84,14 +86,15 @@ function LeaseQueueCard({
   onReject: (lease: QueueLease) => void;
   onView: (lease: QueueLease) => void;
 }) {
+  const { t } = useAppTranslation();
   // Phase 3: queue-specific labels preserved for both vocabularies via
   // isEquivalent. The bespoke "Awaiting X Review" strings are queue UX —
-  // displayLabel('submitted') would lose that context.
+  // localizedStatusLabel('submitted') would lose that context.
   const status = lease.lifecycle_status as LifecycleStatus;
   const statusLabel =
-    isEquivalent(status, 'submitted') ? 'Awaiting Manager Review'
-    : isEquivalent(status, 'under_review') ? 'Awaiting Financial Review'
-    : displayLabel(status);
+    isEquivalent(status, 'submitted') ? t('approvals.queue.awaiting_manager_review')
+    : isEquivalent(status, 'under_review') ? t('approvals.queue.awaiting_financial_review')
+    : localizedStatusLabel(status);
 
   const canManagerAct =
     isManagerApprover &&
@@ -111,7 +114,7 @@ function LeaseQueueCard({
                 onClick={() => onView(lease)}
                 className="text-sm font-semibold text-left hover:underline truncate block max-w-full"
               >
-                {lease.request_title || 'Untitled Request'}
+                {lease.request_title || t('approvals.queue.untitled_request')}
               </button>
               {lease.tenant_name && (
                 <p className="text-xs font-medium text-foreground/70 mt-0.5 truncate">
@@ -129,7 +132,7 @@ function LeaseQueueCard({
               {lease.covenant_flagged && (
                 <Badge variant="destructive" className="text-[10px] px-1.5">
                   <AlertTriangle className="h-3 w-3 mr-1" />
-                  Covenant
+                  {t('approvals.queue.covenant_badge')}
                 </Badge>
               )}
               <Badge variant="outline" className="text-[10px]">{statusLabel}</Badge>
@@ -139,17 +142,19 @@ function LeaseQueueCard({
           {/* Financial summary */}
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="rounded-md bg-muted/60 p-2">
-              <p className="text-muted-foreground">Monthly</p>
+              <p className="text-muted-foreground">{t('approvals.queue.monthly')}</p>
               <p className="font-semibold">{fmt(lease.monthly_payment)}</p>
             </div>
             <div className="rounded-md bg-muted/60 p-2">
-              <p className="text-muted-foreground">Term</p>
+              <p className="text-muted-foreground">{t('approvals.financial.term')}</p>
               <p className="font-semibold">
-                {lease.term_months != null ? `${lease.term_months} mo` : '\u2014'}
+                {lease.term_months != null
+                  ? t('approvals.queue.months_short', { count: lease.term_months })
+                  : '\u2014'}
               </p>
             </div>
             <div className="rounded-md bg-muted/60 p-2">
-              <p className="text-muted-foreground">Total Commitment</p>
+              <p className="text-muted-foreground">{t('approvals.queue.total_commitment')}</p>
               <p className="font-semibold">{fmt(lease.calc_total_commitment)}</p>
             </div>
           </div>
@@ -157,7 +162,7 @@ function LeaseQueueCard({
           {/* Submitter + date */}
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              {lease.requestorName || lease.requestorEmail || 'Unknown submitter'}
+              {lease.requestorName || lease.requestorEmail || t('approvals.queue.unknown_submitter')}
             </span>
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
@@ -177,7 +182,7 @@ function LeaseQueueCard({
                     onClick={() => onApprove(lease)}
                   >
                     <CheckCircle className="h-4 w-4 mr-1.5" />
-                    Approve
+                    {t('approval.approve')}
                   </Button>
                   <Button
                     size="sm"
@@ -186,10 +191,10 @@ function LeaseQueueCard({
                     onClick={() => onReject(lease)}
                   >
                     <XCircle className="h-4 w-4 mr-1.5" />
-                    Reject
+                    {t('approval.reject')}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => onView(lease)} className="gap-1">
-                    View Lease <ChevronRight className="h-4 w-4" />
+                    {t('approvals.queue.view_lease')} <ChevronRight className="h-4 w-4" />
                   </Button>
                 </>
               ) : canFinancialAct ? (
@@ -200,7 +205,7 @@ function LeaseQueueCard({
                     onClick={() => onView(lease)}
                     className="flex-1 sm:flex-none gap-1"
                   >
-                    Open Financial Review <ChevronRight className="h-4 w-4" />
+                    {t('approvals.queue.open_financial_review')} <ChevronRight className="h-4 w-4" />
                   </Button>
                   <Button
                     size="sm"
@@ -209,12 +214,12 @@ function LeaseQueueCard({
                     onClick={() => onReject(lease)}
                   >
                     <XCircle className="h-4 w-4 mr-1.5" />
-                    Reject
+                    {t('approval.reject')}
                   </Button>
                 </>
               ) : (
                 <Button size="sm" variant="ghost" onClick={() => onView(lease)} className="gap-1">
-                  View Lease <ChevronRight className="h-4 w-4" />
+                  {t('approvals.queue.view_lease')} <ChevronRight className="h-4 w-4" />
                 </Button>
               )}
             </div>
@@ -226,7 +231,7 @@ function LeaseQueueCard({
               onClick={() => onView(lease)}
               className="gap-1 w-full sm:w-auto"
             >
-              View Lease <ChevronRight className="h-4 w-4" />
+              {t('approvals.queue.view_lease')} <ChevronRight className="h-4 w-4" />
             </Button>
           )}
         </div>
@@ -295,6 +300,7 @@ function ChainStepCard({
   onView: (leaseId: string) => void;
   onActed: () => void;
 }) {
+  const { t } = useAppTranslation();
   const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'send_back' | null>(null);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
@@ -303,10 +309,10 @@ function ChainStepCard({
 
   // Visual tag distinguishing source — per the Phase 2 guard rail, makes
   // it obvious where each row came from when merged with legacy ones.
-  const stageText = stageLabel(step.stage);
+  const stageText = localizedStageLabel(step.stage);
   const tagLabel = step.approver_role
-    ? `${stageText} · ${roleLabel(step.approver_role)}`
-    : `${stageText} · Step ${step.step_order}`;
+    ? `${stageText} · ${localizedRoleLabel(step.approver_role)}`
+    : `${stageText} · ${t('approvals.queue.step_n', { n: step.step_order })}`;
 
   const submit = async (action: 'approve' | 'reject' | 'send_back') => {
     setBusy(true);
@@ -319,15 +325,15 @@ function ChainStepCard({
         },
       });
       if (error || !(data as any)?.ok) {
-        toast.error((data as any)?.error || error?.message || 'Action failed');
+        toast.error((data as any)?.error || error?.message || t('approvals.common.action_failed'));
         return;
       }
       toast.success(
         action === 'approve'
-          ? 'Step approved'
+          ? t('approvals.queue.step_approved')
           : action === 'reject'
-          ? 'Step rejected'
-          : 'Step sent back',
+          ? t('approvals.queue.step_rejected')
+          : t('approvals.queue.step_sent_back'),
       );
       setActionDialog(null);
       setComment('');
@@ -347,7 +353,7 @@ function ChainStepCard({
                 onClick={() => onView(step.lease_id)}
                 className="text-sm font-semibold text-left hover:underline truncate block max-w-full"
               >
-                {step.request_title || 'Untitled Request'}
+                {step.request_title || t('approvals.queue.untitled_request')}
               </button>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {step.asset_type && <span className="capitalize">{step.asset_type}</span>}
@@ -375,15 +381,15 @@ function ChainStepCard({
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
             {step.monthly_payment != null && (
               <span>
-                <strong className="text-foreground">{fmt(step.monthly_payment)}</strong> /mo
+                <strong className="text-foreground">{fmt(step.monthly_payment)}</strong> /{t('common.per_month_short')}
               </span>
             )}
             {step.calc_total_commitment != null && (
               <span>
-                Total <strong className="text-foreground">{fmt(step.calc_total_commitment)}</strong>
+                {t('approvals.queue.total')} <strong className="text-foreground">{fmt(step.calc_total_commitment)}</strong>
               </span>
             )}
-            <span>Submitted {format(new Date(step.created_at), 'MMM d, yyyy')}</span>
+            <span>{t('approvals.queue.submitted_on', { date: format(new Date(step.created_at), 'MMM d, yyyy') })}</span>
           </div>
 
           <div className="flex flex-wrap gap-2 pt-2 border-t">
@@ -394,7 +400,7 @@ function ChainStepCard({
               className="flex-1 sm:flex-none"
             >
               {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-1" />}
-              Approve
+              {t('approval.approve')}
             </Button>
             <Button
               size="sm"
@@ -403,7 +409,7 @@ function ChainStepCard({
               disabled={busy}
               className="flex-1 sm:flex-none"
             >
-              Send Back
+              {t('approvals.signator.send_back')}
             </Button>
             <Button
               size="sm"
@@ -413,7 +419,7 @@ function ChainStepCard({
               className="flex-1 sm:flex-none"
             >
               <XCircle className="h-4 w-4 mr-1" />
-              Reject
+              {t('approval.reject')}
             </Button>
             <Button
               size="sm"
@@ -421,9 +427,9 @@ function ChainStepCard({
               onClick={() => setDelegateOpen(true)}
               disabled={busy}
               className="flex-1 sm:flex-none"
-              title="Hand this step to a workspace member"
+              title={t('approvals.queue.delegate_title')}
             >
-              Delegate…
+              {t('approvals.queue.delegate_ellipsis')}
             </Button>
             <Button
               size="sm"
@@ -432,7 +438,7 @@ function ChainStepCard({
               disabled={busy}
               className="flex-1 sm:flex-none"
             >
-              View <ChevronRight className="h-4 w-4 ml-1" />
+              {t('common.view')} <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
           </div>
         </div>
@@ -450,26 +456,28 @@ function ChainStepCard({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {actionDialog === 'reject' ? 'Reject step' : 'Send back to submitter'}
+              {actionDialog === 'reject'
+                ? t('approvals.queue.reject_step_title')
+                : t('approvals.queue.send_back_title')}
             </DialogTitle>
             <DialogDescription>
               {actionDialog === 'reject'
-                ? 'Rejecting will mark the lease as rejected and supersede all other pending steps.'
-                : 'Sending back will move the lease back to submitted and supersede current-stage pending steps. The submitter must resubmit.'}
+                ? t('approvals.queue.reject_step_desc')
+                : t('approvals.queue.send_back_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label className="text-xs">Comment (required)</Label>
+            <Label className="text-xs">{t('approvals.queue.comment_required')}</Label>
             <Textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="Explain the reason…"
+              placeholder={t('approvals.queue.explain_reason_placeholder')}
               rows={3}
             />
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setActionDialog(null)} disabled={busy}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant={actionDialog === 'reject' ? 'destructive' : 'default'}
@@ -477,7 +485,7 @@ function ChainStepCard({
               disabled={busy || !comment.trim()}
             >
               {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-              Confirm
+              {t('common.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -509,6 +517,7 @@ interface ChangeSetForReview {
 export default function ApprovalQueue() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t } = useAppTranslation();
   const { user, workspace, userFunctionalRoles, userRole } = useApp();
 
   const isManagerApprover = userFunctionalRoles.includes('manager_approver');
@@ -785,11 +794,11 @@ export default function ApprovalQueue() {
           .map((d) => {
             const l: any = dLeaseMap.get(d.lease_id) ?? {};
             const p: any = dProfMap.get(d.delegated_to) ?? {};
-            const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || 'the delegate';
+            const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || p.email || t('approvals.queue.the_delegate');
             return {
               chainStepId: d.chain_step_id,
               leaseId: d.lease_id,
-              leaseTitle: l.request_title || l.tenant_name || 'Untitled lease',
+              leaseTitle: l.request_title || l.tenant_name || t('locked_lease.untitled'),
               delegateName: name,
               stage: (dStepMap.get(d.chain_step_id)?.stage ?? 'concept') as 'concept' | 'signator',
               delegatedAt: d.delegated_at,
@@ -866,10 +875,10 @@ export default function ApprovalQueue() {
         ]);
         unlockRows.push({
           ...row,
-          leaseName: (leaseRes.data as any)?.request_title ?? (leaseRes.data as any)?.filename ?? 'Unnamed lease',
+          leaseName: (leaseRes.data as any)?.request_title ?? (leaseRes.data as any)?.filename ?? t('approvals.queue.unnamed_lease'),
           requesterName: (profileRes.data as any)?.first_name
             ? `${(profileRes.data as any).first_name} ${(profileRes.data as any).last_name}`
-            : (profileRes.data as any)?.email ?? 'Unknown user',
+            : (profileRes.data as any)?.email ?? t('approvals.queue.unknown_user'),
         });
       }
 
@@ -885,10 +894,10 @@ export default function ApprovalQueue() {
           lease_id: row.lease_id,
           change_summary: row.change_summary,
           submitted_at: row.submitted_at,
-          leaseName: (leaseRes.data as any)?.request_title ?? (leaseRes.data as any)?.filename ?? 'Unnamed lease',
+          leaseName: (leaseRes.data as any)?.request_title ?? (leaseRes.data as any)?.filename ?? t('approvals.queue.unnamed_lease'),
           submitterName: (profileRes.data as any)?.first_name
             ? `${(profileRes.data as any).first_name} ${(profileRes.data as any).last_name}`
-            : (profileRes.data as any)?.email ?? 'Unknown user',
+            : (profileRes.data as any)?.email ?? t('approvals.queue.unknown_user'),
           items: row.lease_change_set_items ?? [],
         });
       }
@@ -919,8 +928,8 @@ export default function ApprovalQueue() {
       if ((data as any)?.error) throw new Error((data as any).error);
 
       toast.success(unlockActType === 'approve'
-        ? 'Unlock approved — the lease is now unlocked for editing'
-        : 'Unlock request rejected');
+        ? t('approvals.queue.unlock_approved')
+        : t('approvals.queue.unlock_rejected'));
       setUnlockActTarget(null);
       setUnlockActType(null);
       setGovernanceNote('');
@@ -928,7 +937,7 @@ export default function ApprovalQueue() {
       fetchGovernanceData();
     } catch (err) {
       console.error('Error acting on unlock request:', err);
-      toast.error('Action failed');
+      toast.error(t('approvals.common.action_failed'));
     } finally {
       setIsGovernanceActing(false);
     }
@@ -949,8 +958,8 @@ export default function ApprovalQueue() {
       if ((data as any)?.error) throw new Error((data as any).error);
 
       toast.success(changeSetActType === 'approve'
-        ? 'Changes approved and applied to lease'
-        : 'Changes rejected - submitter can revise or cancel');
+        ? t('approvals.queue.changes_approved')
+        : t('approvals.queue.changes_rejected'));
       setChangeSetActTarget(null);
       setChangeSetActType(null);
       setGovernanceNote('');
@@ -958,7 +967,7 @@ export default function ApprovalQueue() {
       fetchGovernanceData();
     } catch (err) {
       console.error('Error acting on change set:', err);
-      toast.error('Action failed');
+      toast.error(t('approvals.common.action_failed'));
     } finally {
       setIsGovernanceActing(false);
     }
@@ -974,11 +983,11 @@ export default function ApprovalQueue() {
         body: { chainStepId },
       });
       if (error) throw new Error(error.message);
-      if ((data as any)?.ok === false) throw new Error((data as any)?.error || 'Revoke failed');
-      toast.success('Delegation revoked — the step is back in your queue.');
+      if ((data as any)?.ok === false) throw new Error((data as any)?.error || t('approvals.queue.revoke_failed'));
+      toast.success(t('approvals.queue.delegation_revoked'));
       fetchLeases();
     } catch (err: any) {
-      toast.error(err?.message || 'Could not revoke the delegation.');
+      toast.error(err?.message || t('approvals.queue.revoke_failed_toast'));
     } finally {
       setRevokingStepId(null);
     }
@@ -1007,7 +1016,7 @@ export default function ApprovalQueue() {
           ? { action: 'manager_approve', leaseId: lease.id }
           : { action: 'financial_approve', leaseId: lease.id, classification: 'operating' },
       });
-      if (error) throw new Error(error.message ?? 'Approval failed');
+      if (error) throw new Error(error.message ?? t('approvals.errors.approval_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
 
       if (isManager) {
@@ -1030,13 +1039,17 @@ export default function ApprovalQueue() {
         }
       }
 
-      toast.success(isManager ? 'Approved \u2014 forwarded to financial review' : 'Commitment approved');
+      toast.success(
+        isManager
+          ? t('approvals.queue.approved_forwarded')
+          : t('approvals.common.commitment_approved'),
+      );
       setApproveTarget(null);
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       fetchLeases();
     } catch (err) {
       console.error(err);
-      const msg = err instanceof Error ? err.message : 'Failed to approve';
+      const msg = err instanceof Error ? err.message : t('approvals.errors.failed_to_approve');
       toast.error(msg);
     } finally {
       setIsActing(false);
@@ -1062,7 +1075,7 @@ export default function ApprovalQueue() {
           reason: rejectReason.trim(),
         },
       });
-      if (error) throw new Error(error.message ?? 'Rejection failed');
+      if (error) throw new Error(error.message ?? t('approvals.errors.rejection_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
 
       if (lease.requestorEmail) {
@@ -1077,14 +1090,14 @@ export default function ApprovalQueue() {
         } as any);
       }
 
-      toast.success('Request rejected');
+      toast.success(t('approvals.common.request_rejected'));
       setRejectTarget(null);
       setRejectReason('');
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
       fetchLeases();
     } catch (err) {
       console.error(err);
-      const msg = err instanceof Error ? err.message : 'Failed to reject';
+      const msg = err instanceof Error ? err.message : t('approvals.errors.failed_to_reject');
       toast.error(msg);
     } finally {
       setIsActing(false);
@@ -1128,8 +1141,8 @@ export default function ApprovalQueue() {
       return (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <FileText className="h-12 w-12 mb-3 opacity-40" />
-          <p className="font-medium">Nothing here</p>
-          <p className="text-sm">No items to show in this tab</p>
+          <p className="font-medium">{t('approvals.queue.nothing_here')}</p>
+          <p className="text-sm">{t('approvals.queue.no_items')}</p>
         </div>
       );
     }
@@ -1139,13 +1152,13 @@ export default function ApprovalQueue() {
         {hasExecutionOwnerItems && (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-              Counter-signature follow-up ({executionOwnerLeases.length})
+              {t('approvals.queue.counter_signature_follow_up', { count: executionOwnerLeases.length })}
             </p>
             <div className="space-y-2">
               {executionOwnerLeases.map((l) => {
                 const dueFmt = l.counter_signature_due_date
                   ? format(new Date(l.counter_signature_due_date), 'MMM d, yyyy')
-                  : 'No due date';
+                  : t('approvals.queue.no_due_date');
                 return (
                   <Card
                     key={`exec-${l.id}`}
@@ -1155,15 +1168,15 @@ export default function ApprovalQueue() {
                     <CardContent className="p-4 flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate">
-                          {l.request_title || l.tenant_name || 'Untitled lease'}
+                          {l.request_title || l.tenant_name || t('locked_lease.untitled')}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          You are the execution owner · Due {dueFmt}
+                          {t('approvals.queue.execution_owner_due', { date: dueFmt })}
                           {l.counter_signature_reminder_count != null &&
                           l.counter_signature_reminder_count > 0
-                            ? ` · ${l.counter_signature_reminder_count} reminder${
-                                l.counter_signature_reminder_count === 1 ? '' : 's'
-                              } sent`
+                            ? ` · ${t('approvals.queue.reminders_sent', {
+                                count: l.counter_signature_reminder_count,
+                              })}`
                             : ''}
                         </p>
                       </div>
@@ -1207,7 +1220,7 @@ export default function ApprovalQueue() {
         {hasDelegatedByMe && (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-              Delegated by me ({delegatedByMe.length})
+              {t('approvals.queue.delegated_by_me', { count: delegatedByMe.length })}
             </p>
             <div className="space-y-2">
               {delegatedByMe.map((d) => (
@@ -1222,8 +1235,10 @@ export default function ApprovalQueue() {
                         {d.leaseTitle}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Delegated to {d.delegateName} ·{' '}
-                        {d.stage === 'signator' ? 'Final approval' : 'Initial approval'} ·{' '}
+                        {t('approvals.queue.delegated_to', { name: d.delegateName })} ·{' '}
+                        {d.stage === 'signator'
+                          ? t('approvals.queue.final_approval')
+                          : t('approvals.queue.initial_approval')} ·{' '}
                         {format(new Date(d.delegatedAt), 'MMM d, yyyy')}
                       </p>
                     </button>
@@ -1239,7 +1254,7 @@ export default function ApprovalQueue() {
                       ) : (
                         <Undo2 className="h-3.5 w-3.5 mr-1.5" />
                       )}
-                      Revoke
+                      {t('approvals.queue.revoke')}
                     </Button>
                   </CardContent>
                 </Card>
@@ -1268,8 +1283,8 @@ export default function ApprovalQueue() {
       return (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <FileText className="h-12 w-12 mb-3 opacity-40" />
-          <p className="font-medium">Nothing here</p>
-          <p className="text-sm">No items to show in this tab</p>
+          <p className="font-medium">{t('approvals.queue.nothing_here')}</p>
+          <p className="text-sm">{t('approvals.queue.no_items')}</p>
         </div>
       );
     }
@@ -1311,26 +1326,26 @@ export default function ApprovalQueue() {
   return (
     <AppLayout>
       <AppHeader
-        title="Approvals"
-        subtitle="Review and act on commitment requests requiring your approval"
+        title={t('approvals.queue.title')}
+        subtitle={t('approvals.queue.subtitle')}
       />
 
       <PageLayout width="narrow">
         <Tabs defaultValue="mine">
           <TabsList className={`w-full sm:w-auto mb-6 grid sm:inline-flex ${showGovernanceTab ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="mine" className="gap-1.5">
-              Needs My Review
+              {t('approvals.queue.tab_mine')}
               {pendingCount > 0 && (
                 <Badge variant="destructive" className="text-[10px] h-4 min-w-[1.25rem] px-1">
                   {pendingCount}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="all">All Pending</TabsTrigger>
-            <TabsTrigger value="reviewed">Reviewed</TabsTrigger>
+            <TabsTrigger value="all">{t('approvals.queue.tab_all')}</TabsTrigger>
+            <TabsTrigger value="reviewed">{t('approvals.queue.tab_reviewed')}</TabsTrigger>
             {showGovernanceTab && (
               <TabsTrigger value="governance" className="gap-1.5">
-                Governance
+                {t('approvals.queue.tab_governance')}
                 {governanceCount > 0 && (
                   <Badge variant="destructive" className="text-[10px] h-4 min-w-[1.25rem] px-1">
                     {governanceCount}
@@ -1353,10 +1368,10 @@ export default function ApprovalQueue() {
                   {isAdminUser && (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                        Unlock Requests ({unlockRequests.length})
+                        {t('approvals.queue.unlock_requests', { count: unlockRequests.length })}
                       </p>
                       {unlockRequests.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">No pending unlock requests</p>
+                        <p className="text-sm text-muted-foreground text-center py-6">{t('approvals.queue.no_unlock_requests')}</p>
                       ) : (
                         <div className="space-y-3">
                           {unlockRequests.map((req) => (
@@ -1371,13 +1386,13 @@ export default function ApprovalQueue() {
                                       {req.leaseName}
                                     </button>
                                     <p className="text-xs text-muted-foreground mt-0.5">
-                                      Requested by {req.requesterName} · {format(new Date(req.created_at), 'MMM d, yyyy')}
+                                      {t('approvals.queue.requested_by', { name: req.requesterName })} · {format(new Date(req.created_at), 'MMM d, yyyy')}
                                     </p>
                                   </div>
                                 </div>
                                 {req.request_reason && (
                                   <p className="text-xs bg-muted/40 rounded px-2 py-1.5">
-                                    <span className="font-medium">Reason: </span>{req.request_reason}
+                                    <span className="font-medium">{t('approvals.queue.reason_label')} </span>{req.request_reason}
                                   </p>
                                 )}
                                 <div className="flex gap-2 pt-1">
@@ -1385,13 +1400,13 @@ export default function ApprovalQueue() {
                                     className="border-green-500 text-green-700 hover:bg-green-50"
                                     onClick={() => { setUnlockActTarget(req); setUnlockActType('approve'); setGovernanceNote(''); }}
                                   >
-                                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />Approve & Unlock
+                                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />{t('approvals.queue.approve_unlock')}
                                   </Button>
                                   <Button size="sm" variant="ghost"
                                     className="text-muted-foreground"
                                     onClick={() => { setUnlockActTarget(req); setUnlockActType('reject'); setGovernanceNote(''); }}
                                   >
-                                    <XCircle className="h-3.5 w-3.5 mr-1.5" />Deny
+                                    <XCircle className="h-3.5 w-3.5 mr-1.5" />{t('approvals.queue.deny')}
                                   </Button>
                                 </div>
                               </CardContent>
@@ -1405,10 +1420,10 @@ export default function ApprovalQueue() {
                   {(isAdminUser || isFinancialApprover) && (
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                        Change Set Approvals ({changeSets.length})
+                        {t('approvals.queue.change_set_approvals', { count: changeSets.length })}
                       </p>
                       {changeSets.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">No pending change approvals</p>
+                        <p className="text-sm text-muted-foreground text-center py-6">{t('approvals.queue.no_change_approvals')}</p>
                       ) : (
                         <div className="space-y-3">
                           {changeSets.map((cs) => (
@@ -1423,7 +1438,7 @@ export default function ApprovalQueue() {
                                       {cs.leaseName}
                                     </button>
                                     <p className="text-xs text-muted-foreground mt-0.5">
-                                      Submitted by {cs.submitterName}
+                                      {t('approvals.queue.submitted_by_name', { name: cs.submitterName })}
                                       {cs.submitted_at && <> · {format(new Date(cs.submitted_at), 'MMM d, yyyy')}</>}
                                     </p>
                                   </div>
@@ -1432,13 +1447,15 @@ export default function ApprovalQueue() {
                                     className="text-xs gap-1 shrink-0"
                                     onClick={() => setExpandedChangeSet(expandedChangeSet === cs.id ? null : cs.id)}
                                   >
-                                    {expandedChangeSet === cs.id ? 'Hide' : 'View'} changes
+                                    {expandedChangeSet === cs.id
+                                      ? t('approvals.queue.hide_changes')
+                                      : t('approvals.queue.view_changes')}
                                     <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expandedChangeSet === cs.id ? 'rotate-90' : ''}`} />
                                   </Button>
                                 </div>
                                 {cs.change_summary && (
                                   <p className="text-xs bg-muted/40 rounded px-2 py-1.5">
-                                    <span className="font-medium">Summary: </span>{cs.change_summary}
+                                    <span className="font-medium">{t('approvals.queue.summary_label')} </span>{cs.change_summary}
                                   </p>
                                 )}
                                 {expandedChangeSet === cs.id && cs.items.length > 0 && (
@@ -1446,9 +1463,9 @@ export default function ApprovalQueue() {
                                     <table className="w-full text-xs">
                                       <thead>
                                         <tr className="border-b bg-muted/40">
-                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">Field</th>
-                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">Current</th>
-                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">Proposed</th>
+                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">{t('approvals.queue.field')}</th>
+                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">{t('approvals.queue.current')}</th>
+                                          <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">{t('approvals.queue.proposed')}</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -1468,13 +1485,13 @@ export default function ApprovalQueue() {
                                     className="border-green-500 text-green-700 hover:bg-green-50"
                                     onClick={() => { setChangeSetActTarget(cs); setChangeSetActType('approve'); setGovernanceNote(''); }}
                                   >
-                                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />Approve Changes
+                                    <CheckCircle className="h-3.5 w-3.5 mr-1.5" />{t('approvals.queue.approve_changes')}
                                   </Button>
                                   <Button size="sm" variant="ghost"
                                     className="text-muted-foreground"
                                     onClick={() => { setChangeSetActTarget(cs); setChangeSetActType('reject'); setGovernanceNote(''); }}
                                   >
-                                    <XCircle className="h-3.5 w-3.5 mr-1.5" />Reject
+                                    <XCircle className="h-3.5 w-3.5 mr-1.5" />{t('approval.reject')}
                                   </Button>
                                 </div>
                               </CardContent>
@@ -1499,28 +1516,32 @@ export default function ApprovalQueue() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {unlockActType === 'approve' ? 'Approve unlock request?' : 'Deny unlock request?'}
+              {unlockActType === 'approve'
+                ? t('approvals.queue.approve_unlock_q')
+                : t('approvals.queue.deny_unlock_q')}
             </DialogTitle>
             <DialogDescription>
               {unlockActType === 'approve'
-                ? `Approving will unlock "${unlockActTarget?.leaseName}" for editing. Changes will need financial approval before they take effect.`
-                : `Denying will keep "${unlockActTarget?.leaseName}" locked. The submitter will see the denied status.`}
+                ? t('approvals.queue.approve_unlock_desc', { name: unlockActTarget?.leaseName })
+                : t('approvals.queue.deny_unlock_desc', { name: unlockActTarget?.leaseName })}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
-            <Label htmlFor="gov-note" className="text-sm font-medium">Note {unlockActType === 'reject' && <span className="text-muted-foreground">(optional)</span>}</Label>
-            <Textarea id="gov-note" className="mt-2" rows={2} placeholder="Optional note to the requester..."
+            <Label htmlFor="gov-note" className="text-sm font-medium">{t('approvals.queue.note')} {unlockActType === 'reject' && <span className="text-muted-foreground">{t('approvals.queue.optional_suffix')}</span>}</Label>
+            <Textarea id="gov-note" className="mt-2" rows={2} placeholder={t('approvals.queue.note_placeholder')}
               value={governanceNote} onChange={(e) => setGovernanceNote(e.target.value)} />
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => { setUnlockActTarget(null); setUnlockActType(null); setGovernanceNote(''); }} disabled={isGovernanceActing}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setUnlockActTarget(null); setUnlockActType(null); setGovernanceNote(''); }} disabled={isGovernanceActing}>{t('common.cancel')}</Button>
             <Button
               variant={unlockActType === 'approve' ? 'default' : 'destructive'}
               onClick={handleUnlockAct}
               disabled={isGovernanceActing}
             >
               {isGovernanceActing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {unlockActType === 'approve' ? 'Approve & Unlock' : 'Deny Request'}
+              {unlockActType === 'approve'
+                ? t('approvals.queue.approve_unlock')
+                : t('approvals.queue.deny_request')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1534,30 +1555,37 @@ export default function ApprovalQueue() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {changeSetActType === 'approve' ? 'Approve proposed changes?' : 'Reject proposed changes?'}
+              {changeSetActType === 'approve'
+                ? t('approvals.queue.approve_changes_q')
+                : t('approvals.queue.reject_changes_q')}
             </DialogTitle>
             <DialogDescription>
               {changeSetActType === 'approve'
-                ? `Approving will apply ${changeSetActTarget?.items.length ?? 0} field change(s) to "${changeSetActTarget?.leaseName}".`
-                : `Rejecting discards the proposed changes — the lease keeps its current terms and stays locked.`}
+                ? t('approvals.queue.approve_changes_desc', {
+                    count: changeSetActTarget?.items.length ?? 0,
+                    name: changeSetActTarget?.leaseName,
+                  })
+                : t('approvals.queue.reject_changes_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
             <Label htmlFor="cs-note" className="text-sm font-medium">
-              Note {changeSetActType === 'approve' ? <span className="text-muted-foreground">(optional)</span> : <span className="text-destructive">*</span>}
+              {t('approvals.queue.note')} {changeSetActType === 'approve' ? <span className="text-muted-foreground">{t('approvals.queue.optional_suffix')}</span> : <span className="text-destructive">*</span>}
             </Label>
-            <Textarea id="cs-note" className="mt-2" rows={3} placeholder="Reason or feedback..."
+            <Textarea id="cs-note" className="mt-2" rows={3} placeholder={t('approvals.queue.reason_feedback_placeholder')}
               value={governanceNote} onChange={(e) => setGovernanceNote(e.target.value)} />
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => { setChangeSetActTarget(null); setChangeSetActType(null); setGovernanceNote(''); }} disabled={isGovernanceActing}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setChangeSetActTarget(null); setChangeSetActType(null); setGovernanceNote(''); }} disabled={isGovernanceActing}>{t('common.cancel')}</Button>
             <Button
               variant={changeSetActType === 'approve' ? 'default' : 'destructive'}
               onClick={handleChangeSetAct}
               disabled={isGovernanceActing || (changeSetActType === 'reject' && !governanceNote.trim())}
             >
               {isGovernanceActing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {changeSetActType === 'approve' ? 'Approve & Apply' : 'Reject Changes'}
+              {changeSetActType === 'approve'
+                ? t('approvals.queue.approve_apply')
+                : t('approvals.queue.reject_changes')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1567,10 +1595,9 @@ export default function ApprovalQueue() {
       <Dialog open={!!approveTarget} onOpenChange={(o) => !o && setApproveTarget(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Approve this commitment?</DialogTitle>
+            <DialogTitle>{t('approvals.queue.approve_commitment_q')}</DialogTitle>
             <DialogDescription>
-              Approving will forward "{approveTarget?.request_title}" to the Financial Approver
-              for review. This action is recorded in the audit log.
+              {t('approvals.queue.approve_commitment_desc', { title: approveTarget?.request_title })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -1579,11 +1606,11 @@ export default function ApprovalQueue() {
               onClick={() => setApproveTarget(null)}
               disabled={isActing}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleApprove} disabled={isActing}>
               {isActing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Approve for Financial Review
+              {t('approvals.queue.approve_for_financial')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1596,21 +1623,20 @@ export default function ApprovalQueue() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Reject this request?</DialogTitle>
+            <DialogTitle>{t('approvals.queue.reject_request_q')}</DialogTitle>
             <DialogDescription>
-              The submitter will be notified with your reason. This action is recorded in the
-              audit log.
+              {t('approvals.queue.reject_request_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
             <Label htmlFor="reject-reason" className="text-sm font-medium">
-              Reason for rejection <span className="text-destructive">*</span>
+              {t('approvals.queue.reason_for_rejection')} <span className="text-destructive">*</span>
             </Label>
             <Textarea
               id="reject-reason"
               className="mt-2"
               rows={4}
-              placeholder="Explain why this request is being rejected\u2026"
+              placeholder={t('approvals.queue.reject_reason_placeholder')}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
@@ -1621,7 +1647,7 @@ export default function ApprovalQueue() {
               onClick={() => { setRejectTarget(null); setRejectReason(''); }}
               disabled={isActing}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -1629,7 +1655,7 @@ export default function ApprovalQueue() {
               disabled={isActing || !rejectReason.trim()}
             >
               {isActing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Reject Request
+              {t('approvals.queue.reject_request')}
             </Button>
           </DialogFooter>
         </DialogContent>

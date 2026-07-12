@@ -12,6 +12,7 @@ interface Risk {
   leaseId: string;
   title: string;
   riskType: 'auto_renewal' | 'expiring' | 'cpi_escalation';
+  /** i18n key for the risk badge label, translated at render. */
   label: string;
   badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline';
   badgeClass: string;
@@ -21,15 +22,16 @@ interface Risk {
 
 type FilterType = 'all' | 'auto_renewal' | 'expiring' | 'cpi_escalation';
 
-const CHIP_LABELS: Record<FilterType, string> = {
-  all: 'All',
-  auto_renewal: 'Auto-Renew',
-  expiring: 'Expiring',
-  cpi_escalation: 'CPI',
+// Chip labels are i18n keys, translated at render.
+const CHIP_LABEL_KEYS: Record<FilterType, string> = {
+  all: 'dashboard.filter_all',
+  auto_renewal: 'dashboard.filter_auto_renew',
+  expiring: 'dashboard.filter_expiring',
+  cpi_escalation: 'dashboard.filter_cpi',
 };
 
 export function UpcomingRisks() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { workspace } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const [risks, setRisks] = useState<Risk[]>([]);
@@ -63,7 +65,7 @@ export function UpcomingRisks() {
       const derived: Risk[] = [];
 
       for (const lease of leases) {
-        const title = lease.request_title ?? lease.filename ?? 'Unnamed lease';
+        const title = lease.request_title ?? lease.filename ?? t('dashboard.unnamed_lease');
         const expiryStr = lease.executed_expiry_date ?? lease.lease_end;
         const expiryDate = expiryStr ? new Date(expiryStr) : null;
         const daysToExpiry =
@@ -93,7 +95,7 @@ export function UpcomingRisks() {
             leaseId: lease.id,
             title,
             riskType: 'auto_renewal',
-            label: 'Opt-out window closing',
+            label: 'dashboard.risk_optout',
             badgeVariant: 'default',
             badgeClass: 'bg-indigo-100 text-indigo-700',
             daysRemaining: daysToExpiry,
@@ -112,7 +114,7 @@ export function UpcomingRisks() {
             leaseId: lease.id,
             title,
             riskType: 'expiring',
-            label: 'Lease expiring',
+            label: 'dashboard.risk_expiring',
             badgeVariant: 'destructive',
             badgeClass: 'bg-red-100 text-red-700',
             daysRemaining: daysToExpiry,
@@ -125,7 +127,7 @@ export function UpcomingRisks() {
             leaseId: lease.id,
             title,
             riskType: 'cpi_escalation',
-            label: 'CPI projection not applied',
+            label: 'dashboard.risk_cpi',
             badgeVariant: 'secondary',
             badgeClass: 'bg-amber-100 text-amber-700',
             daysRemaining: null,
@@ -152,7 +154,9 @@ export function UpcomingRisks() {
     }
 
     fetchData();
-  }, [workspace?.id]);
+    // `language` re-runs the fetch on switch so the translated title
+    // fallbacks rebuild (mirrors IntakeTrend/CommitmentHistory).
+  }, [workspace?.id, language]);
 
   const filteredRisks = activeFilter === 'all' ? risks : risks.filter((r) => r.riskType === activeFilter);
 
@@ -161,7 +165,7 @@ export function UpcomingRisks() {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-medium">
           <AlertTriangle className="h-4 w-4 text-amber-500" />
-          Upcoming Risks
+          {t('dashboard.upcoming_risks')}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -174,12 +178,12 @@ export function UpcomingRisks() {
         ) : risks.length === 0 ? (
           <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
             <Shield className="h-4 w-4 shrink-0" />
-            <span>No immediate risks detected · monitoring renewals, escalations, expirations</span>
+            <span>{t('dashboard.no_immediate_risks')}</span>
           </div>
         ) : (
           <div>
             <div className="flex gap-1 flex-wrap mb-3">
-              {(Object.keys(CHIP_LABELS) as FilterType[]).map((f) => (
+              {(Object.keys(CHIP_LABEL_KEYS) as FilterType[]).map((f) => (
                 <button
                   key={f}
                   onClick={() => setActiveFilter(f)}
@@ -190,14 +194,14 @@ export function UpcomingRisks() {
                       : 'border-border text-muted-foreground hover:border-foreground/50',
                   )}
                 >
-                  {CHIP_LABELS[f]}
+                  {t(CHIP_LABEL_KEYS[f])}
                 </button>
               ))}
             </div>
             {filteredRisks.length === 0 ? (
               <div className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
                 <Shield className="h-4 w-4 shrink-0" />
-                <span>No {CHIP_LABELS[activeFilter].toLowerCase()} risks detected</span>
+                <span>{t('dashboard.no_type_risks', { type: t(CHIP_LABEL_KEYS[activeFilter]).toLowerCase() })}</span>
               </div>
             ) : filteredRisks.slice(0, 5).map((risk, index) => (
               <div
@@ -210,7 +214,7 @@ export function UpcomingRisks() {
                       <span className="text-lg font-bold leading-none block">
                         {risk.daysRemaining}
                       </span>
-                      <span className="block text-xs text-muted-foreground">days</span>
+                      <span className="block text-xs text-muted-foreground">{t('dashboard.days')}</span>
                     </>
                   ) : (
                     <span className="text-xs text-muted-foreground">&mdash;</span>
@@ -221,11 +225,11 @@ export function UpcomingRisks() {
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${risk.badgeClass}`}
                   >
-                    {risk.label}
+                    {t(risk.label)}
                   </span>
                 </div>
                 <span className="text-xs text-muted-foreground shrink-0">
-                  {formatCurrency(risk.annualRent)}/yr
+                  {formatCurrency(risk.annualRent)}/{t('dashboard.per_year_short')}
                 </span>
               </div>
             ))}

@@ -40,6 +40,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface RiskTemplate {
   id: string;
@@ -92,6 +93,7 @@ export function AddRiskDialog({
   clearPendingCapture,
   captureActive,
 }: AddRiskDialogProps) {
+  const { t } = useAppTranslation();
   const [tab, setTab] = useState<'template' | 'custom'>('template');
   const [templates, setTemplates] = useState<RiskTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -139,7 +141,7 @@ export function AddRiskDialog({
         .order('title');
       if (!cancelled) {
         if (error) {
-          toast.error(`Failed to load templates: ${error.message}`);
+          toast.error(t('leases.risk.load_templates_failed', { message: error.message }));
         } else {
           setTemplates((data ?? []) as RiskTemplate[]);
         }
@@ -157,31 +159,31 @@ export function AddRiskDialog({
     setCitationPage(String(pendingCapture.page));
     setCitationSnippet(pendingCapture.text);
     clearPendingCapture();
-    toast.success(`Captured selection from page ${pendingCapture.page}`);
-  }, [pendingCapture, clearPendingCapture]);
+    toast.success(t('leases.risk.captured_from_page', { page: pendingCapture.page }));
+  }, [pendingCapture, clearPendingCapture, t]);
 
   const filteredTemplates = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return templates;
     return templates.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.default_explanation.toLowerCase().includes(q)
+      (tpl) =>
+        tpl.title.toLowerCase().includes(q) ||
+        tpl.default_explanation.toLowerCase().includes(q)
     );
   }, [templates, searchQuery]);
 
-  const handlePickTemplate = (t: RiskTemplate) => {
-    setPickedTemplateId(t.id);
-    setTitle(t.title);
-    setSeverity(t.severity);
-    setExplanation(t.default_explanation);
+  const handlePickTemplate = (tpl: RiskTemplate) => {
+    setPickedTemplateId(tpl.id);
+    setTitle(tpl.title);
+    setSeverity(tpl.severity);
+    setExplanation(tpl.default_explanation);
   };
 
   const isFormValid = title.trim().length >= 3 && explanation.trim().length >= 5;
 
   const handleSubmit = async () => {
     if (!isFormValid) {
-      toast.error('Title and explanation are required');
+      toast.error(t('leases.risk.validation_required'));
       return;
     }
     setSaving(true);
@@ -190,7 +192,7 @@ export function AddRiskDialog({
       const userId = userData?.user?.id ?? null;
       const pageNum = citationPage.trim() ? Number(citationPage.trim()) : null;
       if (citationPage.trim() && (!Number.isFinite(pageNum) || (pageNum as number) < 1)) {
-        throw new Error('Citation page must be a positive integer');
+        throw new Error(t('leases.risk.citation_page_invalid'));
       }
       const insertPayload = {
         lease_id: leaseId,
@@ -252,12 +254,12 @@ export function AddRiskDialog({
           promoted_to_template: !!promotedTemplateId,
         },
       });
-      toast.success(`Added risk: ${title.trim()}`);
+      toast.success(t('leases.risk.added', { title: title.trim() }));
       onRiskAdded();
       onOpenChange(false);
     } catch (err: any) {
       console.error('[AddRiskDialog] save failed:', err);
-      toast.error(`Could not add risk: ${err?.message ?? 'unknown error'}`);
+      toast.error(t('leases.risk.add_failed', { message: err?.message ?? t('leases.risk.unknown_error') }));
     } finally {
       setSaving(false);
     }
@@ -284,16 +286,15 @@ export function AddRiskDialog({
       >
         {captureActive && (
           <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-[12px] text-amber-900 flex items-center gap-2 shrink-0">
-            <span className="font-medium">Selecting in PDF</span>
-            <span className="text-amber-800">— highlight any text, then click <strong>Use selection</strong> in the PDF toolbar.</span>
+            <span className="font-medium">{t('leases.risk.selecting_banner')}</span>
+            <span className="text-amber-800">{t('leases.risk.selecting_hint_before')} <strong>{t('leases.risk.use_selection')}</strong> {t('leases.risk.selecting_hint_after')}</span>
           </div>
         )}
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
-          <DialogTitle>Add a risk to this lease</DialogTitle>
+          <DialogTitle>{t('leases.risk.title')}</DialogTitle>
           {!captureActive && (
             <DialogDescription>
-              Pick a predefined risk or write your own. Cite the supporting clause so it shows up
-              with a (Page N) link and Sparkles highlight just like AI-extracted risks.
+              {t('leases.risk.description')}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -303,10 +304,10 @@ export function AddRiskDialog({
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'template' | 'custom')}>
           <TabsList className="grid grid-cols-2 mb-2">
             <TabsTrigger value="template" className="gap-1.5">
-              <Wand2 className="h-3.5 w-3.5" /> From template
+              <Wand2 className="h-3.5 w-3.5" /> {t('leases.risk.tab_template')}
             </TabsTrigger>
             <TabsTrigger value="custom" className="gap-1.5">
-              <Plus className="h-3.5 w-3.5" /> Custom
+              <Plus className="h-3.5 w-3.5" /> {t('leases.risk.tab_custom')}
             </TabsTrigger>
           </TabsList>
 
@@ -314,7 +315,7 @@ export function AddRiskDialog({
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search templates…"
+                placeholder={t('leases.risk.search_placeholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-8 h-8 text-sm"
@@ -323,37 +324,37 @@ export function AddRiskDialog({
             <div className="max-h-48 overflow-y-auto border rounded">
               {templatesLoading ? (
                 <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading templates…
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t('leases.risk.loading_templates')}
                 </div>
               ) : filteredTemplates.length === 0 ? (
                 <div className="py-6 text-center text-sm text-muted-foreground">
-                  No templates match your search.
+                  {t('leases.risk.no_templates_match')}
                 </div>
               ) : (
                 <ul className="divide-y">
-                  {filteredTemplates.map((t) => (
-                    <li key={t.id}>
+                  {filteredTemplates.map((tpl) => (
+                    <li key={tpl.id}>
                       <button
                         type="button"
-                        onClick={() => handlePickTemplate(t)}
+                        onClick={() => handlePickTemplate(tpl)}
                         className={cn(
                           'w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors',
-                          pickedTemplateId === t.id && 'bg-primary/10'
+                          pickedTemplateId === tpl.id && 'bg-primary/10'
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm flex-1">{t.title}</span>
-                          <Badge className={cn('text-[10px]', SEV_BADGE[t.severity])}>
-                            {t.severity}
+                          <span className="font-medium text-sm flex-1">{tpl.title}</span>
+                          <Badge className={cn('text-[10px]', SEV_BADGE[tpl.severity])}>
+                            {t(`leases.risk.severity_${tpl.severity}`)}
                           </Badge>
-                          {t.is_system && (
+                          {tpl.is_system && (
                             <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                              system
+                              {t('leases.risk.system_badge')}
                             </Badge>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                          {t.default_explanation}
+                          {tpl.default_explanation}
                         </p>
                       </button>
                     </li>
@@ -363,14 +364,14 @@ export function AddRiskDialog({
             </div>
             {pickedTemplateId && (
               <p className="text-xs text-muted-foreground">
-                Edit the prefilled fields below before saving — your edits don't change the template.
+                {t('leases.risk.template_edit_hint')}
               </p>
             )}
           </TabsContent>
 
           <TabsContent value="custom" className="space-y-2">
             <p className="text-xs text-muted-foreground">
-              Write a one-off risk specific to this lease.
+              {t('leases.risk.custom_hint')}
             </p>
           </TabsContent>
         </Tabs>
@@ -388,11 +389,9 @@ export function AddRiskDialog({
                 className="mt-0.5 h-4 w-4 accent-primary cursor-pointer"
               />
               <span className="flex-1">
-                <span className="font-medium">Watch for this risk in future abstractions</span>
+                <span className="font-medium">{t('leases.risk.watch_label')}</span>
                 <span className="block text-xs text-muted-foreground mt-0.5">
-                  Saves this title, severity, and explanation as a workspace template. The AI will
-                  flag it on future leases in this workspace if it spots a matching clause.
-                  Manage templates in <span className="underline">Settings → Workspace → Risk Watchlist</span>.
+                  {t('leases.risk.watch_desc')} <span className="underline">{t('leases.risk.watch_path')}</span>.
                 </span>
               </span>
             </label>
@@ -401,35 +400,35 @@ export function AddRiskDialog({
 
         <div className="space-y-3">
           <div className="grid gap-1.5">
-            <Label htmlFor="risk-title">Title</Label>
+            <Label htmlFor="risk-title">{t('workspace.watchlist.form_title')}</Label>
             <Input
               id="risk-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Mileage overage at 35¢/mile"
+              placeholder={t('workspace.watchlist.title_placeholder')}
               maxLength={200}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="risk-severity">Severity</Label>
+            <Label htmlFor="risk-severity">{t('workspace.watchlist.form_severity')}</Label>
             <Select value={severity} onValueChange={(v) => setSeverity(v as any)}>
               <SelectTrigger id="risk-severity" className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="low">{t('workspace.watchlist.sev_low')}</SelectItem>
+                <SelectItem value="medium">{t('workspace.watchlist.sev_medium')}</SelectItem>
+                <SelectItem value="high">{t('workspace.watchlist.sev_high')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="risk-explanation">Explanation</Label>
+            <Label htmlFor="risk-explanation">{t('workspace.watchlist.form_explanation')}</Label>
             <Textarea
               id="risk-explanation"
               value={explanation}
               onChange={(e) => setExplanation(e.target.value)}
-              placeholder="Why this matters and what the practical implication is."
+              placeholder={t('leases.risk.explanation_placeholder')}
               rows={3}
             />
           </div>
@@ -437,7 +436,7 @@ export function AddRiskDialog({
           <div className="border-t pt-3 space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-medium text-muted-foreground">
-                Citation (optional)
+                {t('leases.risk.citation_label')}
               </Label>
               <Button
                 type="button"
@@ -448,19 +447,19 @@ export function AddRiskDialog({
                 disabled={captureActive}
               >
                 <Search className="h-3 w-3" />
-                {captureActive ? 'Selecting…' : 'Highlight in PDF'}
+                {captureActive ? t('leases.risk.selecting_button') : t('leases.risk.highlight_in_pdf')}
               </Button>
             </div>
             <div className="grid grid-cols-[1fr,80px] gap-2">
               <Textarea
                 value={citationSnippet}
                 onChange={(e) => setCitationSnippet(e.target.value)}
-                placeholder="Paste or type the supporting clause text (or click Highlight in PDF)"
+                placeholder={t('leases.risk.citation_placeholder')}
                 rows={2}
                 className="text-xs"
               />
               <Input
-                placeholder="Page"
+                placeholder={t('common.page')}
                 inputMode="numeric"
                 value={citationPage}
                 onChange={(e) => setCitationPage(e.target.value.replace(/[^\d]/g, ''))}
@@ -474,16 +473,16 @@ export function AddRiskDialog({
 
         <DialogFooter className="px-6 py-4 border-t shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={!isFormValid || saving}>
             {saving ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                Adding…
+                {t('leases.risk.adding')}
               </>
             ) : (
-              'Add risk'
+              t('leases.risk.add_cta')
             )}
           </Button>
         </DialogFooter>

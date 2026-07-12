@@ -21,7 +21,7 @@ interface LeaseRow {
 }
 
 export function IntakeTrend() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { workspace } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const [data, setData] = useState<MonthPoint[]>([]);
@@ -74,7 +74,7 @@ export function IntakeTrend() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm font-medium">
           <ClipboardList className="h-4 w-4" />
-          New Lease Intake — Last 6 Months
+          {t('dashboard.intake_trend_title')}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -84,7 +84,7 @@ export function IntakeTrend() {
           </div>
         ) : isEmpty ? (
           <div className="flex items-center justify-center h-48">
-            <p className="text-sm text-muted-foreground">No lease intake data yet.</p>
+            <p className="text-sm text-muted-foreground">{t('dashboard.no_intake_data')}</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={200}>
@@ -107,8 +107,8 @@ export function IntakeTrend() {
               />
               <Tooltip
                 formatter={(val: number, name: string) => {
-                  if (name === 'count') return [`${val} lease${val !== 1 ? 's' : ''}`, 'Leases'];
-                  if (name === 'value') return [formatCurrency(val), 'Annual Value'];
+                  if (name === 'count') return [t('dashboard.leases_count', { count: val }), t('dashboard.leases_label')];
+                  if (name === 'value') return [formatCurrency(val), t('dashboard.annual_value')];
                   return [val, name];
                 }}
                 contentStyle={{

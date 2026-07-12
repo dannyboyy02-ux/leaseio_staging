@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { supabase } from '@/integrations/supabase/client';
 import {
   counterSignatureUrgency,
@@ -50,6 +51,7 @@ const URGENCY_TEXT: Record<CounterSignatureUrgency, string> = {
 };
 
 export function PendingCounterSignatureCard() {
+  const { t } = useAppTranslation();
   const { workspace } = useApp();
   const navigate = useNavigate();
   const [rows, setRows] = useState<Row[]>([]);
@@ -113,7 +115,7 @@ export function PendingCounterSignatureCard() {
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <Clock className="h-4 w-4" />
-          Awaiting Counter-Signature
+          {t('dashboard.awaiting_counter_signature')}
           <Badge variant="secondary" className="ml-1">
             {sorted.length}
           </Badge>
@@ -128,7 +130,7 @@ export function PendingCounterSignatureCard() {
           const title =
             r.filename ||
             [r.tenant_name, r.landlord_name].filter(Boolean).join(' ↔ ') ||
-            'Untitled lease';
+            t('dashboard.untitled_lease');
           return (
             <button
               key={r.id}
@@ -138,12 +140,10 @@ export function PendingCounterSignatureCard() {
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{title}</p>
                 <p className="text-xs text-muted-foreground">
-                  Due {dueFmt}
+                  {t('dashboard.due_date_short', { date: dueFmt })}
                   {r.counter_signature_reminder_count != null &&
                   r.counter_signature_reminder_count > 0
-                    ? ` · ${r.counter_signature_reminder_count} reminder${
-                        r.counter_signature_reminder_count === 1 ? '' : 's'
-                      } sent`
+                    ? ` · ${t('dashboard.reminders_sent', { count: r.counter_signature_reminder_count })}`
                     : ''}
                 </p>
               </div>
@@ -152,7 +152,9 @@ export function PendingCounterSignatureCard() {
                   variant="outline"
                   className={cn('text-[10px]', URGENCY_TEXT[urgency])}
                 >
-                  {counterSignatureUrgencyLabel(urgency)}
+                  {t(`lifecycle.urgency.${urgency}`, {
+                    defaultValue: counterSignatureUrgencyLabel(urgency),
+                  })}
                 </Badge>
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </div>

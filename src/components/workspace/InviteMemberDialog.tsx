@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { WorkspaceRole } from "@/types";
 import { useApp } from "@/contexts/AppContext";
+import { useAppTranslation } from "@/hooks/useAppTranslation";
 
 interface InviteMemberDialogProps {
   open: boolean;
@@ -24,14 +25,15 @@ interface InviteMemberDialogProps {
   onInviteSent: () => void;
 }
 
-const roleDescriptions: Record<WorkspaceRole, string> = {
-  admin: "Full access including billing & member management",
-  editor: "Upload, edit, export leases. No billing or member access",
-  viewer: "Read-only access to view leases and reports",
+const roleDescriptionKeys: Record<WorkspaceRole, string> = {
+  admin: "workspace.invite.role_desc_admin",
+  editor: "workspace.invite.role_desc_editor",
+  viewer: "workspace.invite.role_desc_viewer",
 };
 
 export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSent }: InviteMemberDialogProps) {
   const { workspace } = useApp();
+  const { t } = useAppTranslation();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName]   = useState("");
   const [email, setEmail]         = useState("");
@@ -49,7 +51,7 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
 
   const handleInvite = async () => {
     if (!workspaceId) {
-      toast.error("Workspace not found. Refresh and try again.");
+      toast.error(t("workspace.invite.err_no_workspace"));
       return;
     }
 
@@ -57,10 +59,10 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
     const trimmedLast  = lastName.trim();
     const trimmedEmail = email.trim().toLowerCase();
 
-    if (!trimmedFirst) { toast.error("First name is required"); return; }
-    if (!trimmedLast)  { toast.error("Last name is required");  return; }
+    if (!trimmedFirst) { toast.error(t("workspace.invite.err_first_required")); return; }
+    if (!trimmedLast)  { toast.error(t("workspace.invite.err_last_required"));  return; }
     if (!trimmedEmail || !emailRegex.test(trimmedEmail)) {
-      toast.error("A valid email address is required");
+      toast.error(t("workspace.invite.err_email_invalid"));
       return;
     }
 
@@ -78,30 +80,30 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
       });
 
       if (error) {
-        toast.error(error.message || "Failed to send invitation");
+        toast.error(error.message || t("workspace.invite.err_send_failed"));
         return;
       }
 
       if (!data?.ok) {
-        toast.error((data as any)?.message || "Failed to send invitation");
+        toast.error((data as any)?.message || t("workspace.invite.err_send_failed"));
         return;
       }
 
       const result = (data as any)?.data?.results?.[0];
       if (result) {
-        if (result.code === "INVITE_RESENT")   toast.success(`Invitation resent to ${trimmedEmail}`);
-        else if (result.code === "MEMBER_ADDED") toast.success(`${trimmedFirst} already has an account and was added directly`);
-        else if (result.code === "ALREADY_MEMBER") { toast.info(`${trimmedEmail} is already a member`); return; }
-        else toast.success(`Invitation sent to ${trimmedFirst} ${trimmedLast}`);
+        if (result.code === "INVITE_RESENT")   toast.success(t("workspace.invite.resent", { email: trimmedEmail }));
+        else if (result.code === "MEMBER_ADDED") toast.success(t("workspace.invite.member_added", { name: trimmedFirst }));
+        else if (result.code === "ALREADY_MEMBER") { toast.info(t("workspace.invite.already_member", { email: trimmedEmail })); return; }
+        else toast.success(t("workspace.invite.sent", { name: `${trimmedFirst} ${trimmedLast}` }));
       } else {
-        toast.success(`Invitation sent to ${trimmedFirst} ${trimmedLast}`);
+        toast.success(t("workspace.invite.sent", { name: `${trimmedFirst} ${trimmedLast}` }));
       }
 
       reset();
       onOpenChange(false);
       onInviteSent();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to send invitation");
+      toast.error(err?.message || t("workspace.invite.err_send_failed"));
     } finally {
       setIsInviting(false);
     }
@@ -115,10 +117,10 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
-            Invite Team Member
+            {t("workspace.invite.title")}
           </DialogTitle>
           <DialogDescription>
-            Enter their details and they'll receive a personalised invitation by email.
+            {t("workspace.invite.desc")}
           </DialogDescription>
         </DialogHeader>
 
@@ -126,22 +128,22 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="first-name">
-                First Name <span className="text-destructive">*</span>
+                {t("account.first_name")} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="first-name"
-                placeholder="Jane"
+                placeholder={t("workspace.invite.first_placeholder")}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="last-name">
-                Last Name <span className="text-destructive">*</span>
+                {t("account.last_name")} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="last-name"
-                placeholder="Smith"
+                placeholder={t("workspace.invite.last_placeholder")}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
               />
@@ -150,12 +152,12 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
 
           <div className="space-y-2">
             <Label htmlFor="invite-email">
-              Email Address <span className="text-destructive">*</span>
+              {t("workspace.invite.email_label")} <span className="text-destructive">*</span>
             </Label>
             <Input
               id="invite-email"
               type="email"
-              placeholder="jane.smith@company.com"
+              placeholder={t("workspace.invite.email_placeholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && canSubmit && handleInvite()}
@@ -163,28 +165,28 @@ export function InviteMemberDialog({ open, onOpenChange, workspaceId, onInviteSe
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="role">Role</Label>
+            <Label htmlFor="role">{t("workspace.invite.role_label")}</Label>
             <Select value={role} onValueChange={(v) => setRole(v as WorkspaceRole)}>
               <SelectTrigger id="role">
-                <SelectValue placeholder="Select a role" />
+                <SelectValue placeholder={t("workspace.invite.role_placeholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="admin"><span className="font-medium">Admin</span></SelectItem>
-                <SelectItem value="editor"><span className="font-medium">Editor</span></SelectItem>
-                <SelectItem value="viewer"><span className="font-medium">Viewer</span></SelectItem>
+                <SelectItem value="admin"><span className="font-medium">{t("workspace.admin")}</span></SelectItem>
+                <SelectItem value="editor"><span className="font-medium">{t("workspace.editor")}</span></SelectItem>
+                <SelectItem value="viewer"><span className="font-medium">{t("workspace.viewer")}</span></SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{roleDescriptions[role]}</p>
+            <p className="text-xs text-muted-foreground">{t(roleDescriptionKeys[role])}</p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
           <Button variant="accent" onClick={handleInvite} disabled={!canSubmit}>
             {isInviting ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</>
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("workspace.invite.sending")}</>
             ) : (
-              <><UserPlus className="h-4 w-4 mr-2" />Send Invitation</>
+              <><UserPlus className="h-4 w-4 mr-2" />{t("workspace.invite.send")}</>
             )}
           </Button>
         </DialogFooter>

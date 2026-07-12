@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAppTranslation } from "@/hooks/useAppTranslation";
 
 interface PendingInvite {
   id: string;
@@ -20,6 +21,7 @@ interface PendingInvitesListProps {
 }
 
 export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListProps) {
+  const { t } = useAppTranslation();
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   if (invites.length === 0) return null;
@@ -32,19 +34,19 @@ export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListPro
       });
 
       if (error) {
-        toast.error(error.message || "Failed to resend invitation");
+        toast.error(error.message || t("workspace.invite.err_resend_failed"));
         return;
       }
 
       if (!data?.ok) {
-        toast.error(data?.message || "Failed to resend invitation");
+        toast.error(data?.message || t("workspace.invite.err_resend_failed"));
         return;
       }
 
-      toast.success(`Invitation resent to ${invite.email}`);
+      toast.success(t("workspace.invite.resent", { email: invite.email }));
       onRefresh();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to resend invitation");
+      toast.error(err?.message || t("workspace.invite.err_resend_failed"));
     } finally {
       setLoadingId(null);
     }
@@ -58,19 +60,19 @@ export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListPro
       });
 
       if (error) {
-        toast.error(error.message || "Failed to revoke invitation");
+        toast.error(error.message || t("workspace.invite.err_revoke_failed"));
         return;
       }
 
       if (!data?.ok) {
-        toast.error(data?.message || "Failed to revoke invitation");
+        toast.error(data?.message || t("workspace.invite.err_revoke_failed"));
         return;
       }
 
-      toast.success(`Invitation to ${invite.email} revoked`);
+      toast.success(t("workspace.invite.revoked", { email: invite.email }));
       onRefresh();
     } catch (err: any) {
-      toast.error(err?.message || "Failed to revoke invitation");
+      toast.error(err?.message || t("workspace.invite.err_revoke_failed"));
     } finally {
       setLoadingId(null);
     }
@@ -78,7 +80,7 @@ export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListPro
 
   return (
     <div>
-      <p className="text-sm font-medium mb-3">Pending Invitations</p>
+      <p className="text-sm font-medium mb-3">{t("workspace.members_panel.pending_title")}</p>
       <div className="space-y-0 rounded-md border divide-y">
         {invites.map((invite) => {
           const expired = isPast(new Date(invite.expires_at));
@@ -92,12 +94,12 @@ export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListPro
                 <p className="text-sm font-medium truncate">{invite.email}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Badge variant="secondary" className="text-xs capitalize">
-                    {invite.role}
+                    {t(`workspace.${invite.role}`, { defaultValue: invite.role })}
                   </Badge>
                   <span className={`text-xs ${expired ? "text-destructive" : "text-muted-foreground"}`}>
                     {expired
-                      ? `Expired ${format(new Date(invite.expires_at), "MMM d")}`
-                      : `Expires ${format(new Date(invite.expires_at), "MMM d")}`}
+                      ? t("workspace.invite.expired_on", { date: format(new Date(invite.expires_at), "MMM d") })
+                      : t("workspace.invite.expires_on", { date: format(new Date(invite.expires_at), "MMM d") })}
                   </span>
                 </div>
               </div>
@@ -107,14 +109,14 @@ export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListPro
                   size="sm"
                   onClick={() => handleResend(invite)}
                   disabled={isLoading}
-                  title="Resend invitation"
+                  title={t("workspace.invite.resend_title")}
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <RefreshCcw className="h-4 w-4" />
                   )}
-                  <span className="ml-1 hidden sm:inline">Resend</span>
+                  <span className="ml-1 hidden sm:inline">{t("workspace.invite.resend")}</span>
                 </Button>
                 <Button
                   variant="ghost"
@@ -122,14 +124,14 @@ export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListPro
                   onClick={() => handleRevoke(invite)}
                   disabled={isLoading}
                   className="text-destructive hover:text-destructive"
-                  title="Revoke invitation"
+                  title={t("workspace.invite.revoke_title")}
                 >
                   {isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Trash2 className="h-4 w-4" />
                   )}
-                  <span className="ml-1 hidden sm:inline">Revoke</span>
+                  <span className="ml-1 hidden sm:inline">{t("workspace.invite.revoke")}</span>
                 </Button>
               </div>
             </div>

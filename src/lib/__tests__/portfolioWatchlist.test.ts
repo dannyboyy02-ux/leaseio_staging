@@ -1,6 +1,21 @@
 import { describe, it, expect } from 'vitest';
+import i18n from 'i18next';
+import enCommon from '../../locales/en/common.json';
 import { buildWatchlist } from '@/lib/portfolioWatchlist';
 import { UNASSIGNED, type PortfolioLease } from '@/lib/portfolioIntelligence';
+
+// buildWatchlist renders flag copy through i18next at build time (i18n sweep
+// 2026-07-12). Initialize the shared singleton with the REAL en resources so
+// these assertions pin the exact strings users see; buildWatchlist below runs
+// at module scope, so this top-level await must come first.
+await i18n.init({
+  lng: 'en',
+  fallbackLng: 'en',
+  defaultNS: 'common',
+  ns: ['common'],
+  resources: { en: { common: enCommon } },
+  interpolation: { escapeValue: false },
+});
 
 const ASOF = new Date(Date.UTC(2026, 0, 1)); // 2026-01-01
 

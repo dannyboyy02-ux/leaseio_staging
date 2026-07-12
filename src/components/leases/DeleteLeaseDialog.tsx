@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { AlertTriangle } from 'lucide-react';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 // Hard, permanent delete. As of #79 this is NOT used from the Leases list
 // (which uses ArchiveLeaseDialog — restorable archive). It remains the
@@ -27,6 +28,7 @@ export function DeleteLeaseDialog({
   leaseName,
   onConfirm,
 }: DeleteLeaseDialogProps) {
+  const { t } = useAppTranslation();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -35,20 +37,19 @@ export function DeleteLeaseDialog({
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
               <AlertTriangle className="h-5 w-5 text-destructive" />
             </div>
-            <AlertDialogTitle>Delete Lease</AlertDialogTitle>
+            <AlertDialogTitle>{t('leases.hard_delete.title')}</AlertDialogTitle>
           </div>
           <AlertDialogDescription className="pt-2">
-            Are you sure you want to delete <span className="font-medium text-foreground">"{leaseName}"</span>?
-            This action cannot be undone. All associated data including identified risks will be permanently removed.
+            {t('leases.hard_delete.desc', { name: leaseName })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Delete
+            {t('common.delete')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

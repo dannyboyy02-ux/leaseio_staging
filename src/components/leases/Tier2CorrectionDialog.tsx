@@ -31,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 type CorrectionType =
   | 'is_lease_override'
@@ -53,31 +54,31 @@ interface Props {
   documentSummary?: string | null;
 }
 
-const CORRECTION_TYPE_OPTIONS: Array<{ value: CorrectionType; label: string; description: string }> = [
+const CORRECTION_TYPE_OPTIONS: Array<{ value: CorrectionType; labelKey: string; descriptionKey: string }> = [
   {
     value: 'asset_type_changed',
-    label: 'Wrong asset type',
-    description: 'The classifier called this real estate / equipment / vehicle, but it should be a different type.',
+    labelKey: 'leases.tier2.type_asset_label',
+    descriptionKey: 'leases.tier2.type_asset_desc',
   },
   {
     value: 'lease_type_changed',
-    label: 'Wrong lease type (master vs amendment)',
-    description: 'The classifier called this a master lease but it is an amendment, or vice versa.',
+    labelKey: 'leases.tier2.type_lease_label',
+    descriptionKey: 'leases.tier2.type_lease_desc',
   },
   {
     value: 'is_lease_override',
-    label: 'It IS a lease (we said no)',
-    description: 'The classifier rejected this as not-a-lease, but it actually is one.',
+    labelKey: 'leases.tier2.type_is_lease_label',
+    descriptionKey: 'leases.tier2.type_is_lease_desc',
   },
   {
     value: 'parent_lease_changed',
-    label: 'Wrong parent lease',
-    description: 'The suggested parent lease was wrong; the real parent is different.',
+    labelKey: 'leases.tier2.type_parent_label',
+    descriptionKey: 'leases.tier2.type_parent_desc',
   },
   {
     value: 'general_correction',
-    label: 'Other classification error',
-    description: 'A correction that doesn\'t fit the categories above.',
+    labelKey: 'leases.tier2.type_general_label',
+    descriptionKey: 'leases.tier2.type_general_desc',
   },
 ];
 
@@ -89,6 +90,7 @@ export function Tier2CorrectionDialog({
   originalClassification,
   documentSummary,
 }: Props) {
+  const { t } = useAppTranslation();
   const [correctionType, setCorrectionType] = useState<CorrectionType>('asset_type_changed');
   const [correctedAssetType, setCorrectedAssetType] = useState<string>('');
   const [correctedLeaseType, setCorrectedLeaseType] = useState<string>('');
@@ -106,7 +108,7 @@ export function Tier2CorrectionDialog({
 
   const handleSubmit = async () => {
     if (!workspaceId) {
-      toast.error('Workspace not loaded');
+      toast.error(t('leases.tier2.workspace_not_loaded'));
       return;
     }
 
@@ -118,20 +120,20 @@ export function Tier2CorrectionDialog({
       correctedClassification.is_lease = correctedIsLease;
     } else if (correctionType === 'asset_type_changed') {
       if (!correctedAssetType) {
-        toast.error('Please select the correct asset type');
+        toast.error(t('leases.tier2.select_asset_error'));
         return;
       }
       correctedClassification.asset_type = correctedAssetType;
     } else if (correctionType === 'lease_type_changed') {
       if (!correctedLeaseType) {
-        toast.error('Please select the correct lease type');
+        toast.error(t('leases.tier2.select_lease_error'));
         return;
       }
       correctedClassification.lease_type = correctedLeaseType;
     } else {
       // general_correction / parent_lease_changed — rely on user_note for the signal
       if (!userNote.trim()) {
-        toast.error('Please describe the correction in the notes field');
+        toast.error(t('leases.tier2.describe_error'));
         return;
       }
     }
@@ -153,14 +155,14 @@ export function Tier2CorrectionDialog({
         },
       );
       if (error) throw error;
-      if ((data as any)?.ok === false) throw new Error((data as any)?.error ?? 'Correction failed');
+      if ((data as any)?.ok === false) throw new Error((data as any)?.error ?? t('leases.tier2.correction_failed'));
 
-      toast.success('Correction recorded — the AI will use this to improve future classifications for your workspace');
+      toast.success(t('leases.tier2.success'));
       reset();
       onOpenChange(false);
     } catch (err) {
       console.error('[Tier2CorrectionDialog] submit failed:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to record correction');
+      toast.error(err instanceof Error ? err.message : t('leases.tier2.record_failed'));
     } finally {
       setSubmitting(false);
     }
@@ -170,42 +172,42 @@ export function Tier2CorrectionDialog({
     <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) reset(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Submit a correction</DialogTitle>
+          <DialogTitle>{t('leases.tier2.title')}</DialogTitle>
           <DialogDescription>
-            Help your workspace's AI classifier learn. Recent corrections from your team are used as guidance for similar documents going forward.
+            {t('leases.tier2.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="correction-type">What was wrong?</Label>
+            <Label htmlFor="correction-type">{t('leases.tier2.what_wrong')}</Label>
             <Select value={correctionType} onValueChange={(v) => setCorrectionType(v as CorrectionType)}>
               <SelectTrigger id="correction-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {CORRECTION_TYPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  <SelectItem key={opt.value} value={opt.value}>{t(opt.labelKey)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {CORRECTION_TYPE_OPTIONS.find((o) => o.value === correctionType)?.description}
+              {t(CORRECTION_TYPE_OPTIONS.find((o) => o.value === correctionType)?.descriptionKey ?? '')}
             </p>
           </div>
 
           {correctionType === 'asset_type_changed' && (
             <div className="space-y-2">
-              <Label htmlFor="corrected-asset-type">Correct asset type</Label>
+              <Label htmlFor="corrected-asset-type">{t('leases.tier2.correct_asset_type')}</Label>
               <Select value={correctedAssetType} onValueChange={setCorrectedAssetType}>
                 <SelectTrigger id="corrected-asset-type">
-                  <SelectValue placeholder="Select…" />
+                  <SelectValue placeholder={t('leases.tier2.select_placeholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="real_estate">Real estate</SelectItem>
-                  <SelectItem value="equipment">Equipment</SelectItem>
-                  <SelectItem value="vehicle">Vehicle</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="real_estate">{t('leases.tier2.asset_real_estate')}</SelectItem>
+                  <SelectItem value="equipment">{t('leases.tier2.asset_equipment')}</SelectItem>
+                  <SelectItem value="vehicle">{t('leases.tier2.asset_vehicle')}</SelectItem>
+                  <SelectItem value="other">{t('leases.tier2.asset_other')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -213,14 +215,14 @@ export function Tier2CorrectionDialog({
 
           {correctionType === 'lease_type_changed' && (
             <div className="space-y-2">
-              <Label htmlFor="corrected-lease-type">Correct lease type</Label>
+              <Label htmlFor="corrected-lease-type">{t('leases.tier2.correct_lease_type')}</Label>
               <Select value={correctedLeaseType} onValueChange={setCorrectedLeaseType}>
                 <SelectTrigger id="corrected-lease-type">
-                  <SelectValue placeholder="Select…" />
+                  <SelectValue placeholder={t('leases.tier2.select_placeholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="master">Master lease</SelectItem>
-                  <SelectItem value="amendment">Amendment</SelectItem>
+                  <SelectItem value="master">{t('leases.tier2.master_lease')}</SelectItem>
+                  <SelectItem value="amendment">{t('leases.tier2.amendment')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -228,7 +230,7 @@ export function Tier2CorrectionDialog({
 
           {correctionType === 'is_lease_override' && (
             <div className="space-y-2">
-              <Label htmlFor="corrected-is-lease">Is this a lease?</Label>
+              <Label htmlFor="corrected-is-lease">{t('leases.tier2.is_this_lease')}</Label>
               <Select
                 value={correctedIsLease ? 'yes' : 'no'}
                 onValueChange={(v) => setCorrectedIsLease(v === 'yes')}
@@ -237,8 +239,8 @@ export function Tier2CorrectionDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="yes">Yes — this is a lease</SelectItem>
-                  <SelectItem value="no">No — confirming it isn't a lease</SelectItem>
+                  <SelectItem value="yes">{t('leases.tier2.yes_lease')}</SelectItem>
+                  <SelectItem value="no">{t('leases.tier2.no_lease')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -246,29 +248,29 @@ export function Tier2CorrectionDialog({
 
           <div className="space-y-2">
             <Label htmlFor="user-note">
-              Notes <span className="text-muted-foreground">(optional, but helpful)</span>
+              {t('leases.tier2.notes_label')} <span className="text-muted-foreground">{t('leases.tier2.notes_optional')}</span>
             </Label>
             <Textarea
               id="user-note"
               value={userNote}
               onChange={(e) => setUserNote(e.target.value)}
-              placeholder="Why was this wrong? Any context you'd want a colleague to know."
+              placeholder={t('leases.tier2.notes_placeholder')}
               rows={3}
               maxLength={1000}
             />
             <p className="text-xs text-muted-foreground">
-              The AI uses your notes as guidance for similar documents. Stays in your workspace.
+              {t('leases.tier2.notes_help')}
             </p>
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={submitting}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Submit correction
+            {t('leases.tier2.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

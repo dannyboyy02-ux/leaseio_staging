@@ -240,16 +240,16 @@ export function UpcomingEvents() {
 
   const GROUP_ORDER: UpcomingEvent['type'][] = ['expiration', 'renewal', 'payment', 'escalation'];
   const GROUP_META: Record<string, { label: string; subtotal: (evs: UpcomingEvent[]) => string }> = {
-    expiration: { label: 'Expirations', subtotal: (evs) => `${evs.length} lease${evs.length !== 1 ? 's' : ''}` },
-    renewal:    { label: 'Renewals',    subtotal: (evs) => `${evs.length} lease${evs.length !== 1 ? 's' : ''}` },
+    expiration: { label: t('dashboard.expirations'), subtotal: (evs) => t('dashboard.leases_count', { count: evs.length }) },
+    renewal:    { label: t('dashboard.renewals'),    subtotal: (evs) => t('dashboard.leases_count', { count: evs.length }) },
     payment: {
-      label: 'Payments',
+      label: t('dashboard.payments'),
       subtotal: (evs) => {
         const total = evs.reduce((s, e) => s + (e.amount ?? 0), 0);
-        return `${evs.length} lease${evs.length !== 1 ? 's' : ''} · ${formatCurrency(total, language)}/mo`;
+        return `${t('dashboard.leases_count', { count: evs.length })} · ${formatCurrency(total, language)}/${t('common.per_month_short')}`;
       },
     },
-    escalation: { label: 'Escalations', subtotal: (evs) => `${evs.length} lease${evs.length !== 1 ? 's' : ''}` },
+    escalation: { label: t('dashboard.escalations'), subtotal: (evs) => t('dashboard.leases_count', { count: evs.length }) },
   };
 
   const groups = GROUP_ORDER
@@ -283,7 +283,7 @@ export function UpcomingEvents() {
               className="h-7 px-2 text-xs"
               onClick={() => setViewMode('list')}
             >
-              List
+              {t('dashboard.list_view')}
             </Button>
             <Button
               variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
@@ -292,7 +292,7 @@ export function UpcomingEvents() {
               onClick={() => { setViewMode('calendar'); setSelectedDay(null); }}
             >
               <Calendar className="h-3.5 w-3.5 mr-1" />
-              Cal
+              {t('dashboard.calendar_short')}
             </Button>
           </div>
         </div>
@@ -332,7 +332,10 @@ export function UpcomingEvents() {
               </div>
 
               <div className="grid grid-cols-7 gap-0.5">
-                {['Su','Mo','Tu','We','Th','Fr','Sa'].map((d) => (
+                {[
+                  t('dashboard.wd_sun'), t('dashboard.wd_mon'), t('dashboard.wd_tue'), t('dashboard.wd_wed'),
+                  t('dashboard.wd_thu'), t('dashboard.wd_fri'), t('dashboard.wd_sat'),
+                ].map((d) => (
                   <div key={d} className="text-[10px] font-medium text-muted-foreground text-center py-1">{d}</div>
                 ))}
                 {cells.map((day, i) => {
@@ -375,10 +378,10 @@ export function UpcomingEvents() {
 
               <div className="flex gap-3 flex-wrap pt-1 border-t">
                 {[
-                  { type: 'payment',    label: 'Payment',    color: 'bg-blue-500' },
-                  { type: 'expiration', label: 'Expiry',     color: 'bg-red-500' },
-                  { type: 'renewal',    label: 'Renewal',    color: 'bg-indigo-500' },
-                  { type: 'escalation', label: 'Escalation', color: 'bg-amber-500' },
+                  { type: 'payment',    label: t('dashboard.payment'),    color: 'bg-blue-500' },
+                  { type: 'expiration', label: t('dashboard.expiry'),     color: 'bg-red-500' },
+                  { type: 'renewal',    label: t('dashboard.renewal'),    color: 'bg-indigo-500' },
+                  { type: 'escalation', label: t('dashboard.escalation'), color: 'bg-amber-500' },
                 ].map(({ type, label, color }) => (
                   <div key={type} className="flex items-center gap-1 text-xs text-muted-foreground">
                     <span className={cn('w-2 h-2 rounded-full', color)} />
@@ -449,7 +452,7 @@ export function UpcomingEvents() {
                     onClick={() => dismissEvents(events.map((e) => e.id))}
                     className="text-xs text-muted-foreground hover:text-foreground shrink-0 ml-1"
                   >
-                    Dismiss all
+                    {t('dashboard.dismiss_all')}
                   </button>
                 </div>
                 {!isCollapsed && (() => {
@@ -487,7 +490,7 @@ export function UpcomingEvents() {
                                     {getDaysLabel(event.daysUntil)}
                                   </span>
                                   {event.amount && (
-                                    <><span className="text-muted-foreground">·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}/mo</span></>
+                                    <><span className="text-muted-foreground">·</span><span className="font-medium text-foreground">{formatCurrency(event.amount, language)}/{t('common.per_month_short')}</span></>
                                   )}
                                 </div>
                               </div>
@@ -498,7 +501,7 @@ export function UpcomingEvents() {
                             <button
                               onClick={() => dismissEvents([event.id])}
                               className="p-2 mr-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
-                              title="Dismiss"
+                              title={t('quota_banner.dismiss')}
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -510,7 +513,7 @@ export function UpcomingEvents() {
                           onClick={() => setDrawerGroup(type)}
                           className="w-full py-2 text-xs text-center text-muted-foreground hover:text-foreground border-t transition-colors"
                         >
-                          Show all {events.length} →
+                          {t('dashboard.show_all_arrow', { count: events.length })}
                         </button>
                       )}
                     </div>
@@ -557,7 +560,7 @@ export function UpcomingEvents() {
                     </span>
                     {event.amount && (
                       <><span className="text-muted-foreground">·</span>
-                      <span className="font-medium text-foreground">{formatCurrency(event.amount, language)}/mo</span></>
+                      <span className="font-medium text-foreground">{formatCurrency(event.amount, language)}/{t('common.per_month_short')}</span></>
                     )}
                   </div>
                 </div>

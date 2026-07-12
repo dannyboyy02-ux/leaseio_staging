@@ -51,6 +51,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import {
   counterSignatureUrgency,
   counterSignatureUrgencyLabel,
@@ -101,6 +102,7 @@ export function CounterSignaturePanel({
   onChanged,
 }: CounterSignaturePanelProps) {
   const { user, userRole } = useApp();
+  const { t } = useAppTranslation();
 
   const [ownerName, setOwnerName] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberOption[]>([]);
@@ -139,10 +141,10 @@ export function CounterSignaturePanel({
       if (data) {
         const fn = (data.first_name as string | null) ?? '';
         const ln = (data.last_name as string | null) ?? '';
-        const display = (fn || ln) ? `${fn} ${ln}`.trim() : (data.email as string) || 'Unknown';
+        const display = (fn || ln) ? `${fn} ${ln}`.trim() : (data.email as string) || t('leases.counter_signature.unknown');
         setOwnerName(display);
       } else {
-        setOwnerName('Unknown');
+        setOwnerName(t('leases.counter_signature.unknown'));
       }
     })();
     return () => {
@@ -196,7 +198,7 @@ export function CounterSignaturePanel({
       .map((p) => {
         const fn = (p.first_name as string | null) ?? '';
         const ln = (p.last_name as string | null) ?? '';
-        const display = (fn || ln) ? `${fn} ${ln}`.trim() : (p.email as string) || 'Unknown';
+        const display = (fn || ln) ? `${fn} ${ln}`.trim() : (p.email as string) || t('leases.counter_signature.unknown');
         return { id: p.id, display };
       })
       .sort((a, b) => a.display.localeCompare(b.display));
@@ -212,7 +214,7 @@ export function CounterSignaturePanel({
 
   const handleReassign = async () => {
     if (!reassignTo) {
-      toast.error('Pick a new execution owner.');
+      toast.error(t('leases.counter_signature.pick_owner'));
       return;
     }
     setBusy(true);
@@ -225,16 +227,16 @@ export function CounterSignaturePanel({
         },
       });
       if (error || !(data as any)?.ok) {
-        const msg = (data as any)?.error || error?.message || 'Reassignment failed';
+        const msg = (data as any)?.error || error?.message || t('leases.counter_signature.reassign_failed');
         toast.error(msg);
         return;
       }
-      toast.success('Execution owner reassigned.');
+      toast.success(t('leases.counter_signature.reassigned'));
       setReassignOpen(false);
       onChanged();
     } catch (err: any) {
       console.error('[CounterSignaturePanel] reassign error:', err);
-      toast.error(err?.message || 'Reassignment failed');
+      toast.error(err?.message || t('leases.counter_signature.reassign_failed'));
     } finally {
       setBusy(false);
     }
@@ -247,16 +249,16 @@ export function CounterSignaturePanel({
         body: { leaseId },
       });
       if (error || !(data as any)?.ok) {
-        const msg = (data as any)?.error || error?.message || 'Failed to record';
+        const msg = (data as any)?.error || error?.message || t('leases.counter_signature.record_failed');
         toast.error(msg);
         return;
       }
-      toast.success('Counter-signature recorded. Lease moved to fully executed.');
+      toast.success(t('leases.counter_signature.recorded'));
       setConfirmOpen(false);
       onChanged();
     } catch (err: any) {
       console.error('[CounterSignaturePanel] confirm receipt error:', err);
-      toast.error(err?.message || 'Failed to record');
+      toast.error(err?.message || t('leases.counter_signature.record_failed'));
     } finally {
       setBusy(false);
     }
@@ -282,10 +284,12 @@ export function CounterSignaturePanel({
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-base flex items-center gap-2">
               <Clock className="h-4 w-4" />
-              Counter-Signature
+              {t('leases.counter_signature.title')}
             </CardTitle>
             <Badge variant="outline" className={cn('text-xs', style.text)}>
-              {counterSignatureUrgencyLabel(urgency)}
+              {t(`lifecycle.urgency.${urgency}`, {
+                defaultValue: counterSignatureUrgencyLabel(urgency),
+              })}
             </Badge>
           </div>
         </CardHeader>
@@ -295,8 +299,7 @@ export function CounterSignaturePanel({
             <div className="flex items-start gap-2 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <span>
-                This lease is 14+ days past its counter-signature due date. Escalate to
-                leadership or consider cancellation if the counterparty has stalled.
+                {t('leases.counter_signature.critically_overdue')}
               </span>
             </div>
           )}
@@ -304,7 +307,7 @@ export function CounterSignaturePanel({
           {/* Execution owner row */}
           <div className="flex items-center justify-between gap-3 text-sm">
             <div>
-              <p className="text-xs text-muted-foreground">Execution owner</p>
+              <p className="text-xs text-muted-foreground">{t('leases.counter_signature.execution_owner')}</p>
               <p className="font-medium">{ownerName ?? '—'}</p>
             </div>
             {canReassign && (
@@ -315,7 +318,7 @@ export function CounterSignaturePanel({
                 disabled={busy}
               >
                 <UserCog className="h-3.5 w-3.5 mr-1.5" />
-                Reassign
+                {t('leases.counter_signature.reassign')}
               </Button>
             )}
           </div>
@@ -323,11 +326,11 @@ export function CounterSignaturePanel({
           {/* Due date row */}
           <div className="flex items-center justify-between gap-3 text-sm">
             <div>
-              <p className="text-xs text-muted-foreground">Due date</p>
+              <p className="text-xs text-muted-foreground">{t('leases.counter_signature.due_date')}</p>
               <p className="font-medium">{dueDateFmt}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-muted-foreground">Reminders sent</p>
+              <p className="text-xs text-muted-foreground">{t('leases.counter_signature.reminders_sent')}</p>
               <p className="font-medium">{reminderCount ?? 0}</p>
             </div>
           </div>
@@ -341,7 +344,7 @@ export function CounterSignaturePanel({
               disabled={busy}
             >
               <Upload className="h-3.5 w-3.5 mr-1.5" />
-              Upload Counter-Signed Document
+              {t('leases.counter_signature.upload_cta')}
             </Button>
             <Button
               size="sm"
@@ -349,14 +352,14 @@ export function CounterSignaturePanel({
               disabled={!canRecordReceipt || !hasCounterSignedDoc || busy}
               title={
                 !canRecordReceipt
-                  ? 'Only the execution owner or a workspace admin can record receipt.'
+                  ? t('leases.counter_signature.confirm_no_permission')
                   : !hasCounterSignedDoc
-                  ? 'Upload a fully-executed counterparty-returned document first.'
-                  : 'Mark counter-signature received and advance to fully executed.'
+                  ? t('leases.counter_signature.confirm_no_doc')
+                  : t('leases.counter_signature.confirm_ready')
               }
             >
               <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
-              Confirm Counter-Signature Received
+              {t('leases.counter_signature.confirm_cta')}
             </Button>
           </div>
         </CardContent>
@@ -376,18 +379,17 @@ export function CounterSignaturePanel({
       <Dialog open={reassignOpen} onOpenChange={(o) => !busy && setReassignOpen(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reassign Execution Owner</DialogTitle>
+            <DialogTitle>{t('leases.counter_signature.reassign_title')}</DialogTitle>
             <DialogDescription>
-              The new owner becomes responsible for chasing the counter-signed document
-              and receives reminders.
+              {t('leases.counter_signature.reassign_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="new-owner">New execution owner</Label>
+              <Label htmlFor="new-owner">{t('leases.counter_signature.new_owner_label')}</Label>
               <Select value={reassignTo} onValueChange={setReassignTo} disabled={busy}>
                 <SelectTrigger id="new-owner">
-                  <SelectValue placeholder="Select a workspace member" />
+                  <SelectValue placeholder={t('leases.counter_signature.select_member')} />
                 </SelectTrigger>
                 <SelectContent>
                   {members.map((m) => (
@@ -399,7 +401,7 @@ export function CounterSignaturePanel({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="reassign-reason">Reason (optional)</Label>
+              <Label htmlFor="reassign-reason">{t('leases.counter_signature.reason_optional')}</Label>
               <Textarea
                 id="reassign-reason"
                 value={reassignReason}
@@ -407,18 +409,18 @@ export function CounterSignaturePanel({
                 rows={3}
                 maxLength={500}
                 disabled={busy}
-                placeholder="e.g., out of office for two weeks"
+                placeholder={t('leases.counter_signature.reason_placeholder')}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReassignOpen(false)} disabled={busy}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleReassign} disabled={busy || !reassignTo}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <RefreshCcw className="h-4 w-4 mr-2" />
-              Reassign
+              {t('leases.counter_signature.reassign')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -427,24 +429,22 @@ export function CounterSignaturePanel({
       <Dialog open={confirmOpen} onOpenChange={(o) => !busy && setConfirmOpen(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Counter-Signature Received</DialogTitle>
+            <DialogTitle>{t('leases.counter_signature.confirm_cta')}</DialogTitle>
             <DialogDescription>
-              This advances the lease to <strong>fully executed</strong>. The existing
-              extraction flow takes over from there.
+              {t('leases.counter_signature.confirm_desc_before')} <strong>{t('leases.counter_signature.fully_executed')}</strong>{t('leases.counter_signature.confirm_desc_after')}
             </DialogDescription>
           </DialogHeader>
           <div className="text-sm text-muted-foreground">
-            Make sure the most recent uploaded document is the counterparty's fully
-            countersigned copy.
+            {t('leases.counter_signature.confirm_note')}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={busy}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleConfirmReceipt} disabled={busy}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <CheckCircle2 className="h-4 w-4 mr-2" />
-              Confirm
+              {t('common.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>

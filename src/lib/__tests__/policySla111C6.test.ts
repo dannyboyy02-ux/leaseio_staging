@@ -27,7 +27,9 @@ describe('#111 C6a — ChainStepBadges + ApprovalQueue drive off the policy SLA'
     expect(src).toContain("import { pendingSlaStatus } from '@/lib/slaStatus'");
     expect(src).toContain('slaDays?: number | null');
     expect(src).toContain('pendingSlaStatus(pendingSince, slaDays)');
-    expect(src).toContain('· over SLA');
+    // i18n sweep 2026-07-12: the badge text renders through i18next now —
+    // pin the key + count arg (same guard: over-SLA state is distinct copy).
+    expect(src).toContain("t('leases.chain.pending_over_sla', { count: days })");
     // The old hardcoded threshold must be gone from the badge color logic.
     expect(src).not.toMatch(/days >= 7 \? 'text-destructive'/);
   });
@@ -58,6 +60,8 @@ describe('#111 C6b — ApprovalPolicyEditPage threads sla_days through all sites
   });
   it('renders an input bound to form.sla_days', () => {
     expect(src).toContain('value={form.sla_days}');
-    expect(src).toContain('Approval SLA (days)');
+    // i18n sweep 2026-07-12: the "Approval SLA (days)" label now renders via
+    // policy_editor.sla_label — pin the key reference (same site, same guard).
+    expect(src).toContain("t('policy_editor.sla_label')");
   });
 });

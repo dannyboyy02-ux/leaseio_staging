@@ -9,6 +9,12 @@ import { describe, it, expect } from 'vitest';
 //       docs/APPROVAL_POLICY_EDITOR_VISUAL_CONTRACT.md (avatar color & initials).
 //
 // IF YOU CHANGE A HELPER IN ChainDiagram.tsx, MIRROR IT HERE.
+//
+// i18n note (2026-07-12): the component helpers now emit their fixed phrases
+// ("Anyone with role", "Backup: …", "Optional", the role labels — source uses
+// labelKey → policy_editor.chain.*) through i18next. This mirror deliberately
+// keeps the literal ENGLISH strings — it pins the en output; the data
+// transforms under test are unchanged.
 
 interface ChainStep {
   uiId: string;

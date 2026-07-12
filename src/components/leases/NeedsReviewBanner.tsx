@@ -85,7 +85,7 @@ export function NeedsReviewBanner({
           {missingFields.map((field) => (
             <li key={field.key} className="flex items-center gap-2 text-sm">
               <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
-              <span>{t('needs_review.missing', { label: field.label })}</span>
+              <span>{t('needs_review.missing', { label: t(`lease_review.field_labels.${field.key}`, { defaultValue: field.label }) })}</span>
             </li>
           ))}
           {lowConfidenceFields.map((field) => {
@@ -101,7 +101,7 @@ export function NeedsReviewBanner({
                     isLow ? 'text-destructive' : 'text-amber-500'
                   )}
                 />
-                <span>{t('needs_review.low_confidence', { label: field.label, pct: field.pct })}</span>
+                <span>{t('needs_review.low_confidence', { label: t(`lease_review.field_labels.${field.key}`, { defaultValue: field.label }), pct: field.pct })}</span>
               </li>
             );
           })}

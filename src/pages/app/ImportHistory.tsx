@@ -100,7 +100,7 @@ export default function ImportHistory() {
       setImports(data || []);
     } catch (error) {
       console.error('Error fetching imports:', error);
-      toast.error('Failed to load import history');
+      toast.error(t('import.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -135,7 +135,7 @@ export default function ImportHistory() {
 
   const handleRetry = async (importRow: ImportRow) => {
     if (!importRow.storage_path) {
-      toast.error('Cannot retry: file not found in storage');
+      toast.error(t('import.retry_no_file'));
       return;
     }
 
@@ -144,7 +144,7 @@ export default function ImportHistory() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        toast.error('Please log in to retry');
+        toast.error(t('import.login_to_retry'));
         return;
       }
 
@@ -156,11 +156,11 @@ export default function ImportHistory() {
         throw new Error(response.error.message);
       }
 
-      toast.success('Re-processing started');
+      toast.success(t('import.reprocessing_started'));
       fetchImports();
     } catch (error) {
       console.error('Retry error:', error);
-      toast.error('Failed to retry processing');
+      toast.error(t('import.retry_failed'));
     } finally {
       setRetryingId(null);
     }
@@ -201,7 +201,7 @@ export default function ImportHistory() {
 
       if (leaseError) throw leaseError;
 
-      toast.success('Lease deleted successfully');
+      toast.success(t('import.delete_success'));
       setDeleteDialogOpen(false);
       setSelectedLease(null);
       fetchImports();
@@ -212,7 +212,7 @@ export default function ImportHistory() {
       // present (the UI already steers committed leases to Archive, so this is a
       // defense-in-depth backstop) rather than a generic failure toast.
       const message =
-        error instanceof Error && error.message ? error.message : 'Failed to delete lease';
+        error instanceof Error && error.message ? error.message : t('import.delete_failed');
       toast.error(message);
     }
   };
@@ -282,7 +282,7 @@ export default function ImportHistory() {
                   {filteredImports.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                        No imports match your search
+                        {t('import.no_match')}
                       </TableCell>
                     </TableRow>
                   ) : (

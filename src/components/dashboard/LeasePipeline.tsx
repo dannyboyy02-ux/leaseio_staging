@@ -25,17 +25,19 @@ const formatCompactCurrency = (value: number, language: SupportedLocale): string
 // portfolio. 90 days = roughly one quarter of finance review cadence.
 const ACTIVE_LOOKBACK_DAYS = 90;
 
+// Labels are i18n keys, translated at render time (the `active` key also
+// interpolates {{days}} = ACTIVE_LOOKBACK_DAYS).
 const STAGES = [
-  { key: 'submitted',    label: 'Submitted',                            color: 'bg-blue-400',   href: '/app/approvals' },
-  { key: 'under_review', label: 'Under Review',                          color: 'bg-amber-400',  href: '/app/approvals' },
-  { key: 'approved',     label: 'Approved',                              color: 'bg-purple-400', href: '/app/approvals' },
-  { key: 'executed',     label: 'Executed',                              color: 'bg-indigo-400', href: '/app/leases?status=active' },
-  { key: 'active',       label: `Active (${ACTIVE_LOOKBACK_DAYS}d)`,    color: 'bg-green-500',  href: '/app/leases?status=active' },
+  { key: 'submitted',    labelKey: 'dashboard.stage_submitted',    color: 'bg-blue-400',   href: '/app/approvals' },
+  { key: 'under_review', labelKey: 'dashboard.stage_under_review', color: 'bg-amber-400',  href: '/app/approvals' },
+  { key: 'approved',     labelKey: 'dashboard.stage_approved',     color: 'bg-purple-400', href: '/app/approvals' },
+  { key: 'executed',     labelKey: 'dashboard.stage_executed',     color: 'bg-indigo-400', href: '/app/leases?status=active' },
+  { key: 'active',       labelKey: 'dashboard.stage_active_days',  color: 'bg-green-500',  href: '/app/leases?status=active' },
 ] as const;
 
 interface StageData {
   key: string;
-  label: string;
+  labelKey: string;
   color: string;
   href: string;
   count: number;
@@ -44,7 +46,7 @@ interface StageData {
 
 export function LeasePipeline() {
   const { workspace } = useApp();
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -88,7 +90,7 @@ export function LeasePipeline() {
         );
         return {
           key: stage.key,
-          label: stage.label,
+          labelKey: stage.labelKey,
           color: stage.color,
           href: stage.href,
           count: matching.length,
@@ -135,7 +137,7 @@ export function LeasePipeline() {
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
             <BarChart2 className="h-4 w-4" />
-            Lease Pipeline
+            {t('dashboard.lease_pipeline')}
           </div>
           <Button
             variant="link"
@@ -143,7 +145,7 @@ export function LeasePipeline() {
             className="h-auto p-0 text-xs"
             onClick={() => navigate('/app/leases')}
           >
-            Full pipeline
+            {t('dashboard.full_pipeline')}
           </Button>
         </CardTitle>
       </CardHeader>
@@ -163,7 +165,7 @@ export function LeasePipeline() {
                 onClick={() => navigate(stage.href)}
               >
                 <span className="w-28 text-xs text-muted-foreground shrink-0">
-                  {stage.label}
+                  {t(stage.labelKey, { days: ACTIVE_LOOKBACK_DAYS })}
                 </span>
                 <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                   <div
@@ -183,17 +185,17 @@ export function LeasePipeline() {
                 {stage.key === bottleneckStage && (
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-100 rounded px-1.5 py-0.5 shrink-0">
                     <AlertCircle className="h-2.5 w-2.5" />
-                    Bottleneck
+                    {t('dashboard.bottleneck')}
                   </span>
                 )}
               </div>
             ))}
             <div className="pt-3 border-t mt-2 flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                Total in progress: {inProgressCount} lease{inProgressCount !== 1 ? 's' : ''}
+                {t('dashboard.total_in_progress', { count: inProgressCount })}
               </p>
               <p className="text-[10px] text-muted-foreground italic">
-                Active row tracks the last {ACTIVE_LOOKBACK_DAYS} days. Mature leases live in the Portfolio.
+                {t('dashboard.active_row_note', { days: ACTIVE_LOOKBACK_DAYS })}
               </p>
             </div>
           </div>

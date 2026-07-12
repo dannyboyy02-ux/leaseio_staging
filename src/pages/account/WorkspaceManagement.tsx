@@ -34,7 +34,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import {
   Card,
   CardContent,
@@ -88,7 +88,7 @@ interface WorkspaceMeta {
 
 export function WorkspaceManagementContent() {
   const { user, workspace: activeWorkspace, availableWorkspaces, refreshProfile, switchWorkspace } = useApp();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const queryClient = useQueryClient();
 
   const [manageMembersWorkspaceId, setManageMembersWorkspaceId] = useState<string | null>(null);
@@ -149,7 +149,7 @@ export function WorkspaceManagementContent() {
           const ownerHasRow = accepted.some((r) => r.user_id === w.owner_id);
           return {
             ...w,
-            name: w.name ?? 'Unnamed workspace',
+            name: w.name ?? t('workspace.mgmt.unnamed'),
             member_count: accepted.length + (ownerHasRow ? 0 : 1),
             pending_invite_count: rows.length - accepted.length,
             lease_count: leaseCount ?? 0,
@@ -189,7 +189,7 @@ export function WorkspaceManagementContent() {
         .eq('workspace_id', leaveTarget.id)
         .eq('user_id', user.id);
       if (error) throw error;
-      toast.success(`Left "${leaveTarget.name}"`);
+      toast.success(t('workspace.mgmt.left_toast', { name: leaveTarget.name }));
       setLeaveTarget(null);
       // If we just left the active workspace, switch to a fallback.
       if (activeWorkspace?.id === leaveTarget.id) {
@@ -202,7 +202,7 @@ export function WorkspaceManagementContent() {
       console.error('leave workspace error:', err);
       // Raw DB/RLS error strings read like stack traces to a finance user —
       // log the real error, show a human one.
-      toast.error("Couldn't leave this workspace — please try again or contact support.");
+      toast.error(t('workspace.mgmt.leave_error'));
     } finally {
       setBusy(false);
     }
@@ -239,10 +239,10 @@ export function WorkspaceManagementContent() {
             <div>
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Crown className="h-4 w-4 text-amber-500" />
-                Workspaces you own
+                {t('workspace.mgmt.own_title')}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Full management — rename, manage members, delete.
+                {t('workspace.mgmt.own_desc')}
               </p>
             </div>
             <Button onClick={() => setNewWorkspaceOpen(true)} className="shrink-0">
@@ -260,13 +260,10 @@ export function WorkspaceManagementContent() {
           ) : ownedMeta.length === 0 ? (
             <Card>
               <CardContent className="py-10 text-center space-y-3">
-                <p className="text-muted-foreground">
-                  You don't own any workspaces yet. A workspace is where your team's
-                  leases, approvals, and settings live.
-                </p>
+                <p className="text-muted-foreground">{t('workspace.mgmt.empty_body')}</p>
                 <Button onClick={() => setNewWorkspaceOpen(true)}>
                   <Plus className="h-4 w-4 mr-1.5" />
-                  Create your first workspace
+                  {t('workspace.mgmt.empty_cta')}
                 </Button>
               </CardContent>
             </Card>
@@ -292,7 +289,7 @@ export function WorkspaceManagementContent() {
                             />
                             {isActive && (
                               <Badge variant="default" className="text-[10px] px-1.5">
-                                Active
+                                {t('workspace.mgmt.active')}
                               </Badge>
                             )}
                             {ws.plan && (
@@ -304,15 +301,15 @@ export function WorkspaceManagementContent() {
                           <CardDescription className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                             <span className="inline-flex items-center gap-1">
                               <Users className="h-3 w-3" />
-                              {ws.member_count} member{ws.member_count === 1 ? '' : 's'}
+                              {t('workspace.mgmt.members_count', { count: ws.member_count })}
                               {ws.pending_invite_count > 0 &&
-                                ` · ${ws.pending_invite_count} pending`}
+                                ` · ${t('workspace.mgmt.pending_count', { count: ws.pending_invite_count })}`}
                             </span>
                             <span className="inline-flex items-center gap-1">
                               <FileText className="h-3 w-3" />
-                              {ws.lease_count} lease{ws.lease_count === 1 ? '' : 's'}
+                              {t('workspace.mgmt.leases_count', { count: ws.lease_count })}
                             </span>
-                            <span>Created {format(new Date(ws.created_at), 'MMM d, yyyy')}</span>
+                            <span>{t('workspace.mgmt.created', { date: formatLocalizedDate(ws.created_at, language, { month: 'short', day: 'numeric', year: 'numeric' }) })}</span>
                           </CardDescription>
                         </div>
                       </div>
@@ -324,7 +321,7 @@ export function WorkspaceManagementContent() {
                         onClick={() => setManageMembersWorkspaceId(ws.id)}
                       >
                         <Users className="h-3.5 w-3.5 mr-1.5" />
-                        Manage members
+                        {t('workspace.mgmt.manage_members')}
                       </Button>
                       {!isActive && (
                         <Button
@@ -333,14 +330,14 @@ export function WorkspaceManagementContent() {
                           onClick={() => switchWorkspace(ws.id)}
                         >
                           <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
-                          Switch to
+                          {t('workspace.mgmt.switch_to')}
                         </Button>
                       )}
                       {isActive && (
                         <Button size="sm" variant="ghost" asChild>
                           <Link to="/app/settings/workspaces/profile">
                             <Settings className="h-3.5 w-3.5 mr-1.5" />
-                            Settings
+                            {t('workspace.mgmt.settings')}
                           </Link>
                         </Button>
                       )}
@@ -367,7 +364,7 @@ export function WorkspaceManagementContent() {
                             onClick={() => setDeleteTarget(ws)}
                           >
                             <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                            Delete
+                            {t('workspace.mgmt.delete')}
                           </Button>
                         </div>
                       ) : (
@@ -380,7 +377,7 @@ export function WorkspaceManagementContent() {
                             onClick={() => setDeleteTarget(ws)}
                           >
                             <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                            Delete
+                            {t('workspace.mgmt.delete')}
                           </Button>
                         </>
                       )}
@@ -397,10 +394,10 @@ export function WorkspaceManagementContent() {
           <section>
             <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
               <Building2 className="h-4 w-4 text-muted-foreground" />
-              Workspaces you belong to
+              {t('workspace.mgmt.member_title')}
             </h2>
             <p className="text-sm text-muted-foreground mb-4">
-              You have member access. Leave a workspace to lose access immediately.
+              {t('workspace.mgmt.member_desc')}
             </p>
             <div className="space-y-3">
               {memberOnly.map((ws) => {
@@ -413,11 +410,11 @@ export function WorkspaceManagementContent() {
                           <span className="font-semibold truncate">{ws.name}</span>
                           {isActive && (
                             <Badge variant="default" className="text-[10px] px-1.5">
-                              Active
+                              {t('workspace.mgmt.active')}
                             </Badge>
                           )}
                           <Badge variant="outline" className="text-[10px] px-1.5 capitalize">
-                            {ws.role}
+                            {t(`workspace.${ws.role}`, { defaultValue: ws.role })}
                           </Badge>
                           {ws.plan && (
                             <Badge variant="secondary" className="text-[10px] px-1.5 capitalize">
@@ -444,7 +441,7 @@ export function WorkspaceManagementContent() {
                             {/* ArrowRightLeft, not ExternalLink — this switches the
                                 in-app active workspace, it doesn't open a new tab. */}
                             <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
-                            Switch to
+                            {t('workspace.mgmt.switch_to')}
                           </Button>
                         )}
                         <Button
@@ -454,7 +451,7 @@ export function WorkspaceManagementContent() {
                           onClick={() => setLeaveTarget({ id: ws.id, name: ws.name })}
                         >
                           <LogOut className="h-3.5 w-3.5 mr-1.5" />
-                          Leave
+                          {t('workspace.mgmt.leave')}
                         </Button>
                       </div>
                     </CardContent>
@@ -475,10 +472,8 @@ export function WorkspaceManagementContent() {
           {manageMembersWorkspace && (
             <>
               <SheetHeader>
-                <SheetTitle>Members — {manageMembersWorkspace.name}</SheetTitle>
-                <SheetDescription>
-                  Invite, change roles, or remove members. Changes apply to this workspace only.
-                </SheetDescription>
+                <SheetTitle>{t('workspace.mgmt.sheet_title', { name: manageMembersWorkspace.name })}</SheetTitle>
+                <SheetDescription>{t('workspace.mgmt.sheet_desc')}</SheetDescription>
               </SheetHeader>
               <div className="mt-6 space-y-6">
                 <MembersPanel
@@ -533,14 +528,14 @@ export function WorkspaceManagementContent() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave workspace?</AlertDialogTitle>
+            <AlertDialogTitle>{t('workspace.mgmt.leave_title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              You'll lose access to <strong>{leaveTarget?.name}</strong> immediately.
-              The workspace owner will need to invite you again to restore access.
+              {t('workspace.mgmt.leave_body_prefix')} <strong>{leaveTarget?.name}</strong>{' '}
+              {t('workspace.mgmt.leave_body_suffix')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{t('workspace.mgmt.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -550,7 +545,7 @@ export function WorkspaceManagementContent() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Leave workspace
+              {t('workspace.mgmt.leave_confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,6 +66,7 @@ const SEV_BADGE: Record<string, string> = {
 };
 
 export function RiskWatchlistManager({ workspaceId }: Props) {
+  const { t } = useAppTranslation();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<RiskTemplate[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -131,7 +133,7 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
 
   const saveForm = async () => {
     if (title.trim().length < 3 || explanation.trim().length < 5) {
-      toast.error('Title (≥3 chars) and explanation (≥5 chars) are required');
+      toast.error(t('workspace.watchlist.validation'));
       return;
     }
     setSaving(true);
@@ -149,7 +151,7 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
           .select('id');
         if (error) throw error;
         if (!data || data.length === 0) throw new Error('No rows updated — likely a permissions issue.');
-        toast.success('Watchlist entry updated');
+        toast.success(t('workspace.watchlist.updated'));
       } else {
         const { data: userData } = await supabase.auth.getUser();
         const { error } = await (supabase as any)
@@ -161,13 +163,13 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
             created_by: userData?.user?.id ?? null,
           });
         if (error) throw error;
-        toast.success('Added to watchlist — future abstractions will check for this');
+        toast.success(t('workspace.watchlist.added'));
       }
       cancelForm();
       await refetch();
     } catch (err: any) {
       console.error('Watchlist save failed:', err);
-      toast.error("Couldn't save that watchlist entry — please try again.");
+      toast.error(t('workspace.watchlist.save_error'));
     } finally {
       setSaving(false);
     }
@@ -184,12 +186,12 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
         .select('id');
       if (error) throw error;
       if (!data || data.length === 0) throw new Error('No rows deleted — likely a permissions issue.');
-      toast.success('Removed from watchlist');
+      toast.success(t('workspace.watchlist.removed'));
       setDeleting(null);
       await refetch();
     } catch (err: any) {
       console.error('Watchlist delete failed:', err);
-      toast.error("Couldn't delete that watchlist entry — please try again.");
+      toast.error(t('workspace.watchlist.delete_error'));
     } finally {
       setSaving(false);
     }
@@ -202,15 +204,12 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
       <CardHeader className="border-b py-3">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-sm font-bold">Risk Watchlist</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Patterns the AI explicitly checks against on every subsequent lease abstraction in
-              this workspace. Add common clauses your team flags so they show up consistently.
-            </p>
+            <CardTitle className="text-sm font-bold">{t('workspace.watchlist.title')}</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">{t('workspace.watchlist.desc')}</p>
           </div>
           {!formMode && (
             <Button size="sm" variant="outline" className="gap-1.5" onClick={startCreate}>
-              <Plus className="h-3.5 w-3.5" /> Add to watchlist
+              <Plus className="h-3.5 w-3.5" /> {t('workspace.watchlist.add_button')}
             </Button>
           )}
         </div>
@@ -219,47 +218,47 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
         {formMode && (
           <div className="border rounded-md p-3 bg-muted/20 space-y-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="watch-title" className="text-xs">Title</Label>
+              <Label htmlFor="watch-title" className="text-xs">{t('workspace.watchlist.form_title')}</Label>
               <Input
                 id="watch-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Mileage overage at 35¢/mile"
+                placeholder={t('workspace.watchlist.title_placeholder')}
                 maxLength={200}
                 disabled={saving}
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="watch-sev" className="text-xs">Severity</Label>
+              <Label htmlFor="watch-sev" className="text-xs">{t('workspace.watchlist.form_severity')}</Label>
               <Select value={severity} onValueChange={(v) => setSeverity(v as any)} disabled={saving}>
                 <SelectTrigger id="watch-sev" className="h-9">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="low">{t('workspace.watchlist.sev_low')}</SelectItem>
+                  <SelectItem value="medium">{t('workspace.watchlist.sev_medium')}</SelectItem>
+                  <SelectItem value="high">{t('workspace.watchlist.sev_high')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="watch-exp" className="text-xs">Explanation</Label>
+              <Label htmlFor="watch-exp" className="text-xs">{t('workspace.watchlist.form_explanation')}</Label>
               <Textarea
                 id="watch-exp"
                 value={explanation}
                 onChange={(e) => setExplanation(e.target.value)}
-                placeholder="What clause to look for and why it matters."
+                placeholder={t('workspace.watchlist.explanation_placeholder')}
                 rows={3}
                 disabled={saving}
               />
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button size="sm" variant="ghost" onClick={cancelForm} disabled={saving}>
-                <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                <X className="h-3.5 w-3.5 mr-1" /> {t('workspace.watchlist.cancel')}
               </Button>
               <Button size="sm" onClick={saveForm} disabled={saving}>
                 {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
-                {formMode === 'create' ? 'Add' : 'Save'}
+                {formMode === 'create' ? t('workspace.watchlist.add') : t('workspace.watchlist.save')}
               </Button>
             </div>
           </div>
@@ -267,44 +266,42 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
 
         {loading ? (
           <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t('workspace.watchlist.loading')}
           </div>
         ) : loadError ? (
           <div className="flex flex-col items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-6 text-center">
-            <p className="text-sm text-destructive font-medium">Couldn't load your watchlist.</p>
-            <p className="text-xs text-muted-foreground">
-              Your entries are safe — this is a loading problem, not a data problem.
-            </p>
+            <p className="text-sm text-destructive font-medium">{t('workspace.watchlist.load_error_title')}</p>
+            <p className="text-xs text-muted-foreground">{t('workspace.watchlist.load_error_body')}</p>
             <Button size="sm" variant="outline" onClick={() => void refetch()}>
-              Try again
+              {t('workspace.watchlist.retry')}
             </Button>
           </div>
         ) : items.length === 0 && !formMode ? (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No watchlist entries yet. Click <strong>Add to watchlist</strong>, or use the
-            "+ Risk → Custom → Watch for this" checkbox on a lease.
+            {t('workspace.watchlist.empty_prefix')} <strong>{t('workspace.watchlist.add_button')}</strong>
+            {t('workspace.watchlist.empty_suffix')}
           </p>
         ) : (
           <ul className="divide-y border rounded-md">
-            {items.map((t) => (
+            {items.map((tpl) => (
               <li
-                key={t.id}
-                className={cn('p-3 flex items-start gap-2', editingId === t.id && 'opacity-50')}
+                key={tpl.id}
+                className={cn('p-3 flex items-start gap-2', editingId === tpl.id && 'opacity-50')}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm">{t.title}</span>
-                    <Badge className={cn('text-[10px]', SEV_BADGE[t.severity])}>{t.severity}</Badge>
+                    <span className="font-medium text-sm">{tpl.title}</span>
+                    <Badge className={cn('text-[10px]', SEV_BADGE[tpl.severity])}>{t(`workspace.watchlist.sev_${tpl.severity}`)}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{t.default_explanation}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{tpl.default_explanation}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    onClick={() => startEdit(t)}
-                    title="Edit"
+                    onClick={() => startEdit(tpl)}
+                    title={t('workspace.watchlist.edit')}
                     disabled={!!formMode}
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -313,8 +310,8 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 hover:text-destructive"
-                    onClick={() => setDeleting(t)}
-                    title="Remove"
+                    onClick={() => setDeleting(tpl)}
+                    title={t('workspace.watchlist.remove')}
                     disabled={!!formMode}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -329,21 +326,20 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
       <AlertDialog open={!!deleting} onOpenChange={(open) => !saving && !open && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove from watchlist?</AlertDialogTitle>
+            <AlertDialogTitle>{t('workspace.watchlist.delete_title')}</AlertDialogTitle>
             <AlertDialogDescription>
               <strong className="block mb-1">{deleting?.title}</strong>
-              Future lease abstractions in this workspace will no longer be checked for this
-              pattern. Existing risks already added to leases are unaffected.
+              {t('workspace.watchlist.delete_body')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={saving}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={saving}>{t('workspace.watchlist.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
               disabled={saving}
               className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
-              {saving ? 'Removing…' : 'Remove'}
+              {saving ? t('workspace.watchlist.removing') : t('workspace.watchlist.remove')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

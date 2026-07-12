@@ -47,21 +47,25 @@ import {
 } from '@/lib/leaseSubmissionDecision';
 import { FinancialImpactPreview } from './FinancialImpactPreview';
 
-const leaseRequestSchema = z.object({
-  assetType: z.enum(['equipment', 'vehicle', 'property', 'other']),
-  description: z.string().trim().min(3, 'Description is required'),
-  vendor: z.string().trim().optional(),
-  requestingDepartment: z.string().trim().min(2, 'Requesting department is required'),
-  // These three are optional — AI will extract them from the uploaded document.
-  // Filling them in unlocks the financial impact preview and approval routing.
-  monthlyPayment: z.coerce.number().positive().optional(),
-  termMonths: z.coerce.number().int().min(1).max(360).optional(),
-  startDate: z.string().optional(),
-  escalationRate: z.coerce.number().min(0).default(0),
-  covenantFlagged: z.boolean().default(false),
-});
+const makeLeaseRequestSchema = (t: (key: string) => string) =>
+  z.object({
+    assetType: z.enum(['equipment', 'vehicle', 'property', 'other']),
+    description: z.string().trim().min(3, t('workflow.request.validation.description_required')),
+    vendor: z.string().trim().optional(),
+    requestingDepartment: z
+      .string()
+      .trim()
+      .min(2, t('workflow.request.validation.department_required')),
+    // These three are optional — AI will extract them from the uploaded document.
+    // Filling them in unlocks the financial impact preview and approval routing.
+    monthlyPayment: z.coerce.number().positive().optional(),
+    termMonths: z.coerce.number().int().min(1).max(360).optional(),
+    startDate: z.string().optional(),
+    escalationRate: z.coerce.number().min(0).default(0),
+    covenantFlagged: z.boolean().default(false),
+  });
 
-type LeaseRequestFormValues = z.infer<typeof leaseRequestSchema>;
+type LeaseRequestFormValues = z.infer<ReturnType<typeof makeLeaseRequestSchema>>;
 
 interface LeaseRequestFormProps {
   open: boolean;
@@ -69,16 +73,17 @@ interface LeaseRequestFormProps {
   onSuccess?: (leaseId: string) => void;
 }
 
+// Labels come from the i18n catalog: workflow.request.asset_types.<value>
 const ASSET_TYPE_OPTIONS = [
-  { value: 'equipment', label: 'Equipment', icon: Cpu },
-  { value: 'vehicle',   label: 'Vehicle',   icon: Car },
-  { value: 'property',  label: 'Property',  icon: Building2 },
-  { value: 'other',     label: 'Other',     icon: Package },
+  { value: 'equipment', icon: Cpu },
+  { value: 'vehicle',   icon: Car },
+  { value: 'property',  icon: Building2 },
+  { value: 'other',     icon: Package },
 ] as const;
 
 export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequestFormProps) {
   const { user, workspace, userRole } = useApp();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const isAdminRole = userRole === 'admin' || userRole === 'owner';
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,6 +99,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     approvalThreshold: number | null;
     covenantThreshold: number | null;
   }>({ discountRate: 5.5, approvalThreshold: null, covenantThreshold: null });
+
+  const leaseRequestSchema = useMemo(() => makeLeaseRequestSchema(t), [t]);
 
   const form = useForm<LeaseRequestFormValues>({
     resolver: zodResolver(leaseRequestSchema),
@@ -224,7 +231,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
 
   const submit = async (values: LeaseRequestFormValues) => {
     if (!user || !workspace) {
-      toast.error('Please log in to submit a request');
+      toast.error(t('workflow.request.login_required'));
       return;
     }
 
@@ -412,13 +419,13 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         description: `New commitment request: ${values.description}`,
       });
 
-      toast.success('Request submitted');
+      toast.success(t('workflow.request.submitted_toast'));
       onOpenChange(false);
       onSuccess?.(lease.id);
       navigate(`/app/leases/${lease.id}`);
     } catch (error) {
       console.error('Failed to submit lease request:', error);
-      toast.error('Failed to submit request');
+      toast.error(t('workflow.request.submit_failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -428,9 +435,9 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>New Commitment Request</SheetTitle>
+          <SheetTitle>{t('workflow.request.title')}</SheetTitle>
           <SheetDescription>
-            Enter lease terms to see the financial impact before you submit.
+            {t('workflow.request.subtitle')}
           </SheetDescription>
         </SheetHeader>
 
@@ -439,26 +446,25 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           <div className="mx-4 mt-4 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:bg-amber-950/20 dark:border-amber-700">
             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">No approvers configured</p>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{t('workflow.request.no_approvers_title')}</p>
               {/* The reader is typically a non-admin submitter — the Members
                   section is admin-only, so a link would silently bounce them
                   to My Workspaces. Admins get the direct link; everyone else
                   gets plain "ask your admin" text. */}
               {isAdminRole ? (
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                  This request will be auto-approved. Assign approval roles in{' '}
+                  {t('workflow.request.auto_approved_admin_prefix')}{' '}
                   <Link
                     to="/app/settings/workspaces/users"
                     className="underline"
                     onClick={() => onOpenChange(false)}
                   >
-                    Workspaces → Members
+                    {t('workflow.request.members_link')}
                   </Link>.
                 </p>
               ) : (
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                  This request will be auto-approved. Ask your admin to assign
-                  approval roles under Workspaces → Members.
+                  {t('workflow.request.auto_approved_member')}
                 </p>
               )}
             </div>
@@ -466,24 +472,28 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         )}
 
         <div className="mx-4 mt-4 rounded-lg border border-border bg-muted/30 p-3">
-          <p className="text-sm font-medium">Approval route preview</p>
+          <p className="text-sm font-medium">{t('workflow.request.route_preview')}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant="outline">Submit</Badge>
-            {approvalPreview.requiresManagerApproval && <Badge variant="secondary">Manager review</Badge>}
-            {approvalPreview.requiresFinancialApproval && <Badge variant="secondary">Financial review</Badge>}
+            <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
+            {approvalPreview.requiresManagerApproval && <Badge variant="secondary">{t('workflow.request.badge_manager')}</Badge>}
+            {approvalPreview.requiresFinancialApproval && <Badge variant="secondary">{t('workflow.request.badge_financial')}</Badge>}
             <Badge variant={previewStatus === 'approved' ? 'default' : 'outline'}>
-              {previewStatus === 'approved' ? 'Auto-approved' : 'Posted after approval'}
+              {previewStatus === 'approved'
+                ? t('workflow.request.badge_auto_approved')
+                : t('workflow.request.badge_posted_after')}
             </Badge>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {approvalPreview.requiresFinancialApproval
               ? covenantFlagged
-                ? 'Financial review is required because this request is covenant-flagged.'
+                ? t('workflow.request.review_covenant')
                 : workspaceSettings.approvalThreshold != null &&
                   (calcs?.totalCashCommitment ?? 0) >= workspaceSettings.approvalThreshold
-                ? `Financial review is required because the total commitment meets or exceeds the ${formatLocalizedCurrency(workspaceSettings.approvalThreshold, language)} threshold.`
-                : 'Financial review is required based on your workspace approval settings.'
-              : 'No additional reviewers are required with the current values.'}
+                ? t('workflow.request.review_threshold', {
+                    amount: formatLocalizedCurrency(workspaceSettings.approvalThreshold, language),
+                  })
+                : t('workflow.request.review_settings')
+              : t('workflow.request.review_none')}
           </p>
         </div>
 
@@ -497,7 +507,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
               {/* ——— Commitment Details ——— */}
               <div className="space-y-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Commitment Details
+                  {t('workflow.request.commitment_details')}
                 </p>
 
                 <FormField
@@ -505,7 +515,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   name="assetType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Asset Type</FormLabel>
+                      <FormLabel>{t('workflow.request.asset_type')}</FormLabel>
                       <div className="grid grid-cols-4 gap-2">
                         {ASSET_TYPE_OPTIONS.map((option) => {
                           const Icon = option.icon;
@@ -524,7 +534,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                             >
                               <div className="flex flex-col items-center gap-1 text-xs font-medium">
                                 <Icon className="h-4 w-4" />
-                                {option.label}
+                                {t(`workflow.request.asset_types.${option.value}`)}
                               </div>
                             </button>
                           );
@@ -541,10 +551,10 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Description <span className="text-destructive">*</span>
+                        {t('workflow.request.description')} <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="What is being leased?" {...field} />
+                        <Input placeholder={t('workflow.request.description_placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -556,9 +566,9 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   name="vendor"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Vendor</FormLabel>
+                      <FormLabel>{t('workflow.request.vendor')}</FormLabel>
                       <FormControl>
-                        <Input placeholder="Vendor name (optional)" {...field} />
+                        <Input placeholder={t('workflow.request.vendor_placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -571,10 +581,10 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Requesting Department <span className="text-destructive">*</span>
+                        {t('workflow.request.requesting_department')} <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="Operations" {...field} />
+                        <Input placeholder={t('workflow.request.department_placeholder')} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -587,7 +597,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
               {/* ——— Lease Terms ——— */}
               <div className="space-y-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Lease Terms
+                  {t('workflow.request.lease_terms')}
                 </p>
 
                 <FormField
@@ -596,8 +606,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Monthly Payment
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">(AI will extract from document)</span>
+                        {t('workflow.request.monthly_payment')}
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">{t('workflow.request.ai_extract_full')}</span>
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
@@ -631,8 +641,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Term (months)
-                          <span className="ml-1 text-xs font-normal text-muted-foreground">(AI will extract)</span>
+                          {t('locked_lease.timing.term_months')}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">{t('workflow.request.ai_extract')}</span>
                         </FormLabel>
                         <FormControl>
                           <Input
@@ -658,7 +668,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                     name="escalationRate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Annual Escalation (%)</FormLabel>
+                        <FormLabel>{t('workflow.request.annual_escalation')}</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
@@ -685,15 +695,15 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        Start Date
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">(AI will extract)</span>
+                        {t('workflow.request.start_date')}
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">{t('workflow.request.ai_extract')}</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="date" {...field} />
                       </FormControl>
                       {calcs?.endDate && (
                         <p className="text-xs text-muted-foreground">
-                          End date: {calcs.endDate}
+                          {t('workflow.request.end_date_note', { date: calcs.endDate })}
                         </p>
                       )}
                       <FormMessage />
@@ -718,10 +728,10 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
               {/* ——— Document ——— */}
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Document
+                  {t('workflow.request.document')}
                 </p>
                 <Label className="text-sm font-normal text-muted-foreground">
-                  Attach Quote / Draft Lease (optional PDF, max 20 MB)
+                  {t('workflow.request.attach_label')}
                 </Label>
                 <div
                   {...getRootProps()}
@@ -735,7 +745,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   <input {...getInputProps()} />
                   <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
-                    {file ? file.name : 'Drop PDF here or click to browse'}
+                    {file ? file.name : t('workflow.request.drop_pdf')}
                   </p>
                 </div>
                 {file && (
@@ -759,10 +769,10 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         <SheetFooter>
           <Button type="submit" form="lease-request-form" disabled={!canSubmit}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Submit Request
+            {t('workflow.request.submit')}
           </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
         </SheetFooter>
       </SheetContent>

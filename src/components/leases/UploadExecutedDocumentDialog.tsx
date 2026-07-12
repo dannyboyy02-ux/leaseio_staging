@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface UploadExecutedDocumentDialogProps {
   leaseId: string;
@@ -22,6 +23,7 @@ export function UploadExecutedDocumentDialog({
   leaseFilename,
   onSuccess,
 }: UploadExecutedDocumentDialogProps) {
+  const { t } = useAppTranslation();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -40,12 +42,12 @@ export function UploadExecutedDocumentDialog({
   });
 
   const handleSubmit = async () => {
-    if (!file) { toast.error('Please upload the executed lease PDF'); return; }
+    if (!file) { toast.error(t('documents.executed_upload.no_file')); return; }
     setIsSubmitting(true);
     setStage('uploading');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) { toast.error('Session expired. Please log in again.'); return; }
+      if (!session?.access_token) { toast.error(t('common.session_expired')); return; }
 
       const formData = new FormData();
       formData.append('file', file);
@@ -54,7 +56,7 @@ export function UploadExecutedDocumentDialog({
       setStage('extracting');
 
       const { data: result, error: invokeError } = await supabase.functions.invoke('process_lease', { body: formData });
-      if (invokeError) throw new Error(`Upload failed: ${invokeError.message}`);
+      if (invokeError) throw new Error(t('documents.executed_upload.upload_failed_with', { message: invokeError.message }));
       if (result?.error) throw new Error(result.error);
 
       // process_lease flips lifecycle_status -> 'executed' server-side (with
@@ -65,36 +67,40 @@ export function UploadExecutedDocumentDialog({
       queryClient.invalidateQueries({ queryKey: ['needs-action'] });
 
       setStage('done');
-      toast.success('Executed document uploaded and terms extracted');
+      toast.success(t('documents.executed_upload.success'));
       setTimeout(() => {
         setOpen(false); setFile(null); setStage('idle');
         onSuccess?.(result.executedData ?? {}, result.variance ?? {});
       }, 800);
     } catch (error: any) {
       console.error('[UploadExecutedDocumentDialog]', error);
-      toast.error(error.message || 'Failed to upload executed document');
+      toast.error(error.message || t('documents.executed_upload.failed'));
       setStage('idle');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const stageLabel = { idle: 'Upload & Extract Terms', uploading: 'Uploading...', extracting: 'Extracting Terms...', done: 'Done' }[stage];
+  const stageLabel = {
+    idle: t('documents.executed_upload.stage_idle'),
+    uploading: t('documents.executed_upload.stage_uploading'),
+    extracting: t('documents.executed_upload.stage_extracting'),
+    done: t('common.done'),
+  }[stage];
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!isSubmitting) setOpen(v); }}>
       <DialogTrigger asChild>
         <Button variant="default" size="sm" className="gap-1.5">
           <FileCheck size={14} />
-          Upload Executed Copy
+          {t('documents.executed_upload.trigger')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload Executed Document</DialogTitle>
+          <DialogTitle>{t('documents.executed_upload.title')}</DialogTitle>
           <DialogDescription>
-            Upload the fully executed (signed) copy of "{leaseFilename}". Terms will be extracted
-            and compared against the pipeline record.
+            {t('documents.executed_upload.desc', { name: leaseFilename })}
           </DialogDescription>
         </DialogHeader>
         <div className="py-4">
@@ -123,25 +129,25 @@ export function UploadExecutedDocumentDialog({
               <>
                 <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  {isDragActive ? 'Drop the PDF here...' : 'Drag & drop the executed PDF, or click to select'}
+                  {isDragActive ? t('amendments.upload.drop_here') : t('documents.executed_upload.drag_drop')}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">PDF only · Max 50 MB</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('documents.executed_upload.max_size')}</p>
               </>
             )}
           </div>
           {stage === 'extracting' && (
             <p className="text-xs text-muted-foreground text-center mt-3 animate-pulse">
-              Extracting terms with AI — this may take 30–60 seconds...
+              {t('documents.executed_upload.extracting_note')}
             </p>
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>Cancel</Button>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>{t('common.cancel')}</Button>
           <Button onClick={handleSubmit} disabled={isSubmitting || !file}>
             {isSubmitting ? (
               <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{stageLabel}</>
             ) : stage === 'done' ? (
-              <><CheckCircle className="h-4 w-4 mr-2 text-green-500" />Done</>
+              <><CheckCircle className="h-4 w-4 mr-2 text-green-500" />{t('common.done')}</>
             ) : stageLabel}
           </Button>
         </DialogFooter>

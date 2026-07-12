@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Clock, ShieldCheck, UserCheck, UserCog } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { pendingSlaStatus } from '@/lib/slaStatus';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export type AssigneeResolutionSource =
   | 'policy_user'
@@ -59,6 +60,7 @@ export function ChainStepBadges({
   slaDays,
   className,
 }: ChainStepBadgesProps) {
+  const { t } = useAppTranslation();
   const { daysPending: days, overSla } = pendingSlaStatus(pendingSince, slaDays);
   const badges: React.ReactNode[] = [];
 
@@ -67,8 +69,8 @@ export function ChainStepBadges({
       <Badge key="vd" variant="outline" className="text-[10px] gap-1">
         <UserCheck className="h-2.5 w-2.5" />
         {originalAssigneeName
-          ? `Delegated to you by ${originalAssigneeName}`
-          : 'Delegated to you'}
+          ? t('leases.chain.delegated_by', { name: originalAssigneeName })
+          : t('leases.chain.delegated')}
       </Badge>,
     );
   } else if (source === 'ooo_delegate') {
@@ -76,8 +78,8 @@ export function ChainStepBadges({
       <Badge key="ooo" variant="outline" className="text-[10px] gap-1">
         <UserCog className="h-2.5 w-2.5" />
         {originalAssigneeName
-          ? `Acting for ${originalAssigneeName} (out of office)`
-          : 'Acting (original assignee out of office)'}
+          ? t('leases.chain.acting_for', { name: originalAssigneeName })
+          : t('leases.chain.acting_ooo')}
       </Badge>,
     );
   } else if (source === 'policy_delegate') {
@@ -85,15 +87,15 @@ export function ChainStepBadges({
       <Badge key="pd" variant="outline" className="text-[10px] gap-1 text-warning">
         <Clock className="h-2.5 w-2.5" />
         {delegateAfterDays != null
-          ? `Delegate active (no response in ${delegateAfterDays} days)`
-          : 'Delegate active (timeout)'}
+          ? t('leases.chain.delegate_active_days', { days: delegateAfterDays })
+          : t('leases.chain.delegate_active_timeout')}
       </Badge>,
     );
   } else if (source === 'admin_reassign') {
     badges.push(
       <Badge key="ar" variant="outline" className="text-[10px] gap-1 text-destructive">
         <ShieldCheck className="h-2.5 w-2.5" />
-        Admin reassigned
+        {t('leases.chain.admin_reassigned')}
       </Badge>,
     );
   }
@@ -113,8 +115,8 @@ export function ChainStepBadges({
       >
         {overSla ? <AlertTriangle className="h-2.5 w-2.5" /> : <Clock className="h-2.5 w-2.5" />}
         {overSla
-          ? `Pending ${days} ${days === 1 ? 'day' : 'days'} · over SLA`
-          : `Pending ${days} ${days === 1 ? 'day' : 'days'}`}
+          ? t('leases.chain.pending_over_sla', { count: days })
+          : t('leases.chain.pending_days', { count: days })}
       </Badge>,
     );
   }

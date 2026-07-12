@@ -93,7 +93,7 @@ export function LeaseDocumentsTab({
   const handleDownload = useCallback(async (path: string, displayName: string, bucket: string) => {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 120);
     if (error || !data?.signedUrl) {
-      toast.error('Could not generate download link');
+      toast.error(t('documents.tab.download_link_failed'));
       return;
     }
     const a = document.createElement('a');
@@ -101,7 +101,7 @@ export function LeaseDocumentsTab({
     a.download = displayName;
     a.target = '_blank';
     a.click();
-  }, []);
+  }, [t]);
 
   // Deletion order matters (integrity review 2026-06-12):
   //   1. Governed leases UPDATE first — prevent_locked_lease_edits fail-fasts
@@ -200,12 +200,12 @@ export function LeaseDocumentsTab({
         ]);
 
       if (leaseError || !leaseRow) {
-        throw new Error(leaseError?.message ?? 'Lease not found');
+        throw new Error(leaseError?.message ?? t('documents.tab.lease_not_found'));
       }
 
       const l = leaseRow as Record<string, any>;
       const lease: ReportLease = {
-        display_name: (l.request_title as string | null) || (l.filename as string | null) || 'Lease',
+        display_name: (l.request_title as string | null) || (l.filename as string | null) || t('documents.tab.lease_fallback'),
         asset_type: (l.asset_type as string | null) ?? null,
         landlord: (l.landlord_name as string | null) ?? null,
         tenant: (l.tenant_name as string | null) ?? null,
@@ -258,17 +258,17 @@ export function LeaseDocumentsTab({
 
       const url = URL.createObjectURL(blob);
       const version = analyses.length + 1;
-      const name = `${lease.display_name} - Lease Summary v${version}.pdf`;
+      const name = t('documents.tab.summary_filename', { name: lease.display_name, version });
 
       setAnalyses(prev => [...prev, { url, name, generatedAt }]);
-      toast.success('Lease summary ready');
+      toast.success(t('documents.tab.summary_ready'));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to generate summary';
+      const message = err instanceof Error ? err.message : t('documents.tab.summary_failed');
       toast.error(message);
     } finally {
       setGeneratingPdf(false);
     }
-  }, [leaseId, analyses.length, language]);
+  }, [leaseId, analyses.length, language, t]);
 
   const hasDocuments =
     Boolean(storagePath && filename) ||
@@ -278,9 +278,9 @@ export function LeaseDocumentsTab({
   return (
     <Card className="shadow-none border overflow-hidden">
       <CardHeader className="bg-muted/30 border-b py-3">
-        <CardTitle className="text-sm font-bold">Documents</CardTitle>
+        <CardTitle className="text-sm font-bold">{t('documents.tab.card_title')}</CardTitle>
         <CardDescription className="text-xs">
-          Original files and on-demand summaries for this lease
+          {t('documents.tab.card_desc')}
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4 space-y-2">
@@ -291,7 +291,7 @@ export function LeaseDocumentsTab({
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{filename}</p>
-                <p className="text-xs text-muted-foreground">Original lease</p>
+                <p className="text-xs text-muted-foreground">{t('documents.tab.original_lease')}</p>
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -301,14 +301,14 @@ export function LeaseDocumentsTab({
                 onClick={() => handleDownload(storagePath, filename, 'leases')}
               >
                 <Download className="h-3.5 w-3.5 mr-1.5" />
-                Download
+                {t('common.download')}
               </Button>
               {canDeleteOriginal && (
                 <Button
                   size="sm"
                   variant="ghost"
                   className="text-muted-foreground hover:text-destructive"
-                  aria-label={`Delete ${filename}`}
+                  aria-label={t('documents.tab.delete_aria', { name: filename })}
                   onClick={() =>
                     setPendingDelete({ kind: 'original', path: storagePath, name: filename })
                   }
@@ -327,7 +327,7 @@ export function LeaseDocumentsTab({
               <FileText className="h-4 w-4 text-green-600 shrink-0" />
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{executedFilename}</p>
-                <p className="text-xs text-muted-foreground">Executed copy</p>
+                <p className="text-xs text-muted-foreground">{t('documents.tab.executed_copy')}</p>
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -337,14 +337,14 @@ export function LeaseDocumentsTab({
                 onClick={() => handleDownload(executedStoragePath, executedFilename, 'executed-leases')}
               >
                 <Download className="h-3.5 w-3.5 mr-1.5" />
-                Download
+                {t('common.download')}
               </Button>
               {canDeleteExecuted && (
                 <Button
                   size="sm"
                   variant="ghost"
                   className="text-muted-foreground hover:text-destructive"
-                  aria-label={`Delete ${executedFilename}`}
+                  aria-label={t('documents.tab.delete_aria', { name: executedFilename })}
                   onClick={() =>
                     setPendingDelete({
                       kind: 'executed',
@@ -380,14 +380,14 @@ export function LeaseDocumentsTab({
               <Button size="sm" variant="ghost" asChild>
                 <a href={report.url} download={report.name}>
                   <Download className="h-3.5 w-3.5 mr-1.5" />
-                  Download
+                  {t('common.download')}
                 </a>
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 className="text-muted-foreground hover:text-destructive"
-                aria-label={`Remove ${report.name}`}
+                aria-label={t('documents.tab.remove_aria', { name: report.name })}
                 onClick={() =>
                   setPendingDelete({ kind: 'summary', url: report.url, name: report.name })
                 }
@@ -401,7 +401,7 @@ export function LeaseDocumentsTab({
         {/* Empty state — no PDFs and no generated summary yet */}
         {!hasDocuments && (
           <p className="text-xs text-muted-foreground py-2">
-            No documents uploaded for this lease yet.
+            {t('documents.tab.no_documents')}
           </p>
         )}
 
@@ -422,9 +422,9 @@ export function LeaseDocumentsTab({
             <div className="flex items-center gap-2 min-w-0">
               <FileText className="h-4 w-4 text-blue-600 shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-medium">Lease Summary</p>
+                <p className="text-sm font-medium">{t('documents.tab.summary_title')}</p>
                 <p className="text-xs text-muted-foreground">
-                  1–2 page PDF — financial summary, key clauses, risks
+                  {t('documents.tab.summary_desc')}
                 </p>
               </div>
             </div>
@@ -438,12 +438,12 @@ export function LeaseDocumentsTab({
               {generatingPdf ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  Generating…
+                  {t('documents.tab.generating')}
                 </>
               ) : (
                 <>
                   <FileText className="h-3.5 w-3.5 mr-1.5" />
-                  Generate Summary
+                  {t('documents.tab.generate_cta')}
                 </>
               )}
             </Button>
@@ -453,9 +453,9 @@ export function LeaseDocumentsTab({
             <div className="flex items-center gap-2 min-w-0">
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
               <div className="min-w-0">
-                <p className="text-sm font-medium">Lease Summary</p>
+                <p className="text-sm font-medium">{t('documents.tab.summary_title')}</p>
                 <p className="text-xs text-muted-foreground">
-                  Available after the lease is finalized (model-locked)
+                  {t('documents.tab.summary_locked_hint')}
                 </p>
               </div>
             </div>

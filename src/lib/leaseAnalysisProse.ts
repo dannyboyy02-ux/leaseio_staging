@@ -4,7 +4,12 @@
 // data — no judgement, no portfolio context, just formatting. A template
 // gives the same output, faster, free, deterministic, and available to
 // all tiers.
+//
+// i18n: prose renders in the viewer's language at generation time (the PDF
+// is built client-side on click, after i18next init), via the module-level
+// `t` — same idiom as the PDF builders (LeaseAnalysisExport, RentRollExport).
 
+import { t } from 'i18next';
 import {
   formatReportCurrency,
   formatReportDate,
@@ -24,10 +29,12 @@ function describeTerm(lease: ReportLease): string {
   const start = formatReportDate(lease.lease_start);
   const end = formatReportDate(lease.lease_end);
   if (months && start !== '—' && end !== '—') {
-    return `The lease has a ${months}-month term commencing ${start} and expiring ${end}.`;
+    return t('leases.analysis_prose.term_full', { months, start, end });
   }
-  if (months) return `The lease has a ${months}-month term.`;
-  if (start !== '—' && end !== '—') return `The lease runs from ${start} through ${end}.`;
+  if (months) return t('leases.analysis_prose.term_months_only', { months });
+  if (start !== '—' && end !== '—') {
+    return t('leases.analysis_prose.term_dates_only', { start, end });
+  }
   return '';
 }
 
@@ -35,30 +42,40 @@ function describeRent(lease: ReportLease): string {
   if (lease.monthly_rent == null) return '';
   const monthly = formatReportCurrency(lease.monthly_rent);
   const annual = formatReportCurrency(lease.monthly_rent * 12);
-  return `Monthly rent is ${monthly} (${annual} annualized).`;
+  return t('leases.analysis_prose.rent', { monthly, annual });
 }
 
 function describeEscalation(lease: ReportLease): string {
   if (!lease.escalation_type || lease.escalation_type === 'none') return '';
   if (lease.escalation_type === 'fixed_percent' && lease.escalation_rate != null) {
-    return `Rent escalates at ${lease.escalation_rate}% annually.`;
+    return t('leases.analysis_prose.esc_fixed', { rate: lease.escalation_rate });
   }
   if (lease.escalation_type === 'index') {
-    return 'Rent escalates against an index (CPI or similar); future obligations carry inflation exposure.';
+    return t('leases.analysis_prose.esc_index');
   }
   if (lease.escalation_type === 'stepped') {
-    return 'Rent steps up on a scheduled basis defined in the rent schedule.';
+    return t('leases.analysis_prose.esc_stepped');
   }
-  return `Escalation: ${lease.escalation_type.replace(/_/g, ' ')}.`;
+  return t('leases.analysis_prose.esc_other', {
+    type: lease.escalation_type.replace(/_/g, ' '),
+  });
 }
 
 function describeCommitment(lease: ReportLease): string {
   const parts: string[] = [];
   if (lease.total_commitment != null) {
-    parts.push(`Total cash commitment over the term is ${formatReportCurrency(lease.total_commitment)}.`);
+    parts.push(
+      t('leases.analysis_prose.commitment_total', {
+        amount: formatReportCurrency(lease.total_commitment),
+      }),
+    );
   }
   if (lease.pv_liability != null) {
-    parts.push(`Present value of the lease liability is ${formatReportCurrency(lease.pv_liability)}.`);
+    parts.push(
+      t('leases.analysis_prose.commitment_pv', {
+        amount: formatReportCurrency(lease.pv_liability),
+      }),
+    );
   }
   return parts.join(' ');
 }
@@ -74,19 +91,19 @@ function buildFinancialSummary(lease: ReportLease): string {
 
 function describeRenewal(lease: ReportLease): string {
   const r = lease.renewal_options;
-  if (!r) return 'No renewal options recorded.';
-  return `Renewal: ${r}`.trim();
+  if (!r) return t('leases.analysis_prose.renewal_none');
+  return t('leases.analysis_prose.renewal', { text: r }).trim();
 }
 
 function describeTermination(lease: ReportLease): string {
-  const t = lease.termination_clauses;
-  if (!t) return 'No early-termination rights recorded — the tenant is bound for the full term unless the lease specifies otherwise.';
-  return `Termination: ${t}`.trim();
+  const term = lease.termination_clauses;
+  if (!term) return t('leases.analysis_prose.termination_none');
+  return t('leases.analysis_prose.termination', { text: term }).trim();
 }
 
 function describeDeposit(lease: ReportLease): string {
   if (!lease.security_deposit) return '';
-  return `Security deposit: ${lease.security_deposit}.`;
+  return t('leases.analysis_prose.deposit', { text: lease.security_deposit });
 }
 
 function buildKeyClausesSummary(lease: ReportLease): string {
@@ -102,7 +119,13 @@ function buildRiskNarrative(lease: ReportLease): Array<{ title: string; narrativ
   // extraction time. Use that directly — no AI rephrasing needed.
   return lease.risks.map((risk) => ({
     title: risk.title,
-    narrative: risk.explanation || `Severity: ${risk.severity}.`,
+    narrative:
+      risk.explanation ||
+      t('leases.analysis_prose.risk_severity', {
+        severity: t(`leases.analysis_prose.severity_${risk.severity}`, {
+          defaultValue: risk.severity,
+        }),
+      }),
   }));
 }
 
@@ -111,15 +134,17 @@ function buildExecutiveNotes(lease: ReportLease): string {
   // Priority: highest-severity risk > index escalation flag > size of commitment.
   const highRisk = lease.risks.find((r) => r.severity === 'high');
   if (highRisk) {
-    return `Most material risk: ${highRisk.title}. ${highRisk.explanation || ''}`.trim();
+    return `${t('leases.analysis_prose.exec_top_risk', { title: highRisk.title })} ${highRisk.explanation || ''}`.trim();
   }
   if (lease.escalation_type === 'index' || lease.needs_escalation_review) {
-    return 'This lease carries index-based or unresolved escalation terms — future obligations should be reviewed each period before they apply.';
+    return t('leases.analysis_prose.exec_index_escalation');
   }
   if (lease.total_commitment != null && lease.total_commitment > 0) {
-    return `Total cash commitment of ${formatReportCurrency(lease.total_commitment)} over the term.`;
+    return t('leases.analysis_prose.exec_commitment', {
+      amount: formatReportCurrency(lease.total_commitment),
+    });
   }
-  return 'No material risks flagged at extraction. Confirm the rent schedule and renewal posture before finalizing.';
+  return t('leases.analysis_prose.exec_no_risks');
 }
 
 export function buildLeaseAnalysisProse(lease: ReportLease): ReportProse {

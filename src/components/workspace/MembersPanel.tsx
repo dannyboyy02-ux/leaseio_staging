@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { t as globalT } from 'i18next';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
 import { MemberRoleSelect } from '@/components/workspace/MemberRoleSelect';
@@ -87,11 +88,11 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
           const profile = profiles?.find((p) => p.id === member.user_id);
           return {
             ...member,
-            email: profile?.email || 'Unknown',
+            email: profile?.email || globalT('workspace.members_panel.unknown_user'),
             name:
               profile?.first_name && profile?.last_name
                 ? `${profile.first_name} ${profile.last_name}`
-                : profile?.email || 'Unknown User',
+                : profile?.email || globalT('workspace.members_panel.unknown_user'),
           };
         }) || []
       );
@@ -123,7 +124,7 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
         .eq('id', memberId)
         .eq('workspace_id', workspaceId);
       if (error) throw error;
-      toast.success('Member removed');
+      toast.success(t('workspace.members_panel.removed'));
       refetchMembers();
       // Fire-and-forget: an audit-write failure must not surface as a
       // removal failure — the delete above already committed.
@@ -143,7 +144,7 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
       }
     } catch (error) {
       console.error('Error removing member:', error);
-      toast.error('Failed to remove member');
+      toast.error(t('workspace.members_panel.remove_failed'));
     }
   };
 
@@ -204,11 +205,11 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
                 </div>
                 <Badge variant="default" className="flex items-center gap-1">
                   <Crown className="h-3 w-3" />
-                  Admin
+                  {t('workspace.admin')}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Add team members to configure roles and approval workflows.
+                {t('workspace.members_panel.single_hint')}
               </p>
             </div>
           ) : (
@@ -275,8 +276,8 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
       {pendingInvites.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Pending Invitations</CardTitle>
-            <CardDescription>Invitations that have not yet been accepted.</CardDescription>
+            <CardTitle>{t('workspace.members_panel.pending_title')}</CardTitle>
+            <CardDescription>{t('workspace.members_panel.pending_desc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <PendingInvitesList invites={pendingInvites} onRefresh={refetchPending} />
@@ -329,11 +330,11 @@ export function useWorkspaceMembers(workspaceId: string | undefined) {
           const profile = profiles?.find((p) => p.id === member.user_id);
           return {
             ...member,
-            email: profile?.email || 'Unknown',
+            email: profile?.email || globalT('workspace.members_panel.unknown_user'),
             name:
               profile?.first_name && profile?.last_name
                 ? `${profile.first_name} ${profile.last_name}`
-                : profile?.email || 'Unknown User',
+                : profile?.email || globalT('workspace.members_panel.unknown_user'),
           };
         }) || []
       );

@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/popover';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import type { PostedLease } from '@/types/workflow';
 
 interface ParentLeaseComboboxProps {
@@ -32,6 +33,7 @@ export function ParentLeaseCombobox({
   disabled = false 
 }: ParentLeaseComboboxProps) {
   const { workspace } = useApp();
+  const { t } = useAppTranslation();
   const [open, setOpen] = useState(false);
   const [leases, setLeases] = useState<PostedLease[]>([]);
   const [loading, setLoading] = useState(false);
@@ -79,26 +81,28 @@ export function ParentLeaseCombobox({
               <div className="min-w-0">
                 <p className="font-medium truncate">{selectedLease.filename}</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {selectedLease.tenant_name || 'No tenant'} • 
-                  {selectedLease.lease_end 
-                    ? ` Ends ${format(new Date(selectedLease.lease_end), 'MMM yyyy')}`
-                    : ' No end date'
+                  {selectedLease.tenant_name || t('workflow.parent_lease.no_tenant')} •
+                  {selectedLease.lease_end
+                    ? ` ${t('workflow.parent_lease.ends', { date: format(new Date(selectedLease.lease_end), 'MMM yyyy') })}`
+                    : ` ${t('workflow.parent_lease.no_end_date')}`
                   }
                 </p>
               </div>
             </div>
           ) : (
-            <span className="text-muted-foreground">Select parent lease...</span>
+            <span className="text-muted-foreground">{t('workflow.parent_lease.select_placeholder')}</span>
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search by filename, tenant, or landlord..." />
+          <CommandInput placeholder={t('workflow.parent_lease.search_placeholder')} />
           <CommandList>
             <CommandEmpty>
-              {loading ? 'Loading leases...' : 'No posted leases found.'}
+              {loading
+                ? t('workflow.parent_lease.loading')
+                : t('workflow.parent_lease.none_found')}
             </CommandEmpty>
             <CommandGroup>
               {leases.map((lease) => (
@@ -120,12 +124,12 @@ export function ParentLeaseCombobox({
                   <div className="min-w-0 flex-1">
                     <p className="font-medium truncate">{lease.filename}</p>
                     <p className="text-xs text-muted-foreground">
-                      {lease.tenant_name || 'No tenant'} 
+                      {lease.tenant_name || t('workflow.parent_lease.no_tenant')}
                       {lease.landlord_name && ` • ${lease.landlord_name}`}
                     </p>
                     {lease.lease_end && (
                       <p className="text-xs text-muted-foreground">
-                        Ends: {format(new Date(lease.lease_end), 'MMM d, yyyy')}
+                        {t('workflow.parent_lease.ends_colon', { date: format(new Date(lease.lease_end), 'MMM d, yyyy') })}
                       </p>
                     )}
                   </div>

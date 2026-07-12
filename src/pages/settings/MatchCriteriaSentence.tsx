@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { t } from 'i18next';
 import { ChevronDown, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 import { prettyAssetType, buildAssetTypeOptions, canonicalAssetType, type AssetTypeOption } from '@/lib/assetTypes';
 
+import { localizedAssetTypeLabel } from '@/lib/assetTypeLabels';
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — must stay aligned with leases.asset_type and leases.lease_type
 // CHECK constraints. The "lease type" pill in the sentence is the visual
@@ -67,8 +69,12 @@ const fmtMoney = (raw: string, language: SupportedLocale): string => {
 export function joinWithOr(values: string[]): string {
   if (values.length === 0) return '';
   if (values.length === 1) return values[0];
-  if (values.length === 2) return `${values[0]} or ${values[1]}`;
-  return `${values.slice(0, -1).join(', ')}, or ${values[values.length - 1]}`;
+  if (values.length === 2)
+    return t('policy_editor.sentence.join_two', { a: values[0], b: values[1] });
+  return t('policy_editor.sentence.join_many', {
+    items: values.slice(0, -1).join(', '),
+    last: values[values.length - 1],
+  });
 }
 
 /** "any lease type" when both arrays empty; otherwise asset+lease combined. */
@@ -88,31 +94,34 @@ export function leaseTypeLabel(
     if (seen.has(key)) continue;
     seen.add(key);
     assetLabels.push(
-      options.find((o) => canonicalAssetType(o.value) === key)?.label ?? prettyAssetType(v),
+      (() => {
+        const found = options.find((o) => canonicalAssetType(o.value) === key);
+        return found ? localizedAssetTypeLabel(found) : prettyAssetType(v);
+      })(),
     );
   }
   const all = [...assetLabels, ...state.match_lease_types];
-  if (all.length === 0) return 'any lease type';
+  if (all.length === 0) return t('policy_editor.sentence.any_lease_type');
   return joinWithOr(all);
 }
 
 export function departmentLabel(state: MatchCriteriaState): string {
-  if (state.match_departments.length === 0) return 'any department';
+  if (state.match_departments.length === 0) return t('policy_editor.sentence.any_department');
   return joinWithOr(state.match_departments);
 }
 
 export function regionLabel(state: MatchCriteriaState): string {
-  if (state.match_regions.length === 0) return 'any region';
+  if (state.match_regions.length === 0) return t('policy_editor.sentence.any_region');
   return joinWithOr(state.match_regions);
 }
 
 export function costLabel(state: MatchCriteriaState, language: SupportedLocale): string {
   const min = state.match_min_annual_cost.trim();
   const max = state.match_max_annual_cost.trim();
-  if (!min && !max) return 'any annual cost';
+  if (!min && !max) return t('policy_editor.sentence.any_annual_cost');
   if (min && max) return `${fmtMoney(min, language)} – ${fmtMoney(max, language)}`;
-  if (min) return `at least ${fmtMoney(min, language)}`;
-  return `at most ${fmtMoney(max, language)}`;
+  if (min) return t('policy_editor.sentence.at_least', { amount: fmtMoney(min, language) });
+  return t('policy_editor.sentence.at_most', { amount: fmtMoney(max, language) });
 }
 
 export function isLeaseTypeActive(state: MatchCriteriaState): boolean {
@@ -152,10 +161,10 @@ export function MatchCriteriaSentence({
   regionSuggestions,
   assetTypeOptions = DEFAULT_ASSET_TYPE_OPTIONS,
 }: Props) {
-  const { language } = useLanguage();
+  const { language, t: tr } = useLanguage();
   return (
     <p className="text-sm leading-8 text-foreground">
-      When someone requests{' '}
+      {tr('policy_editor.sentence.when_someone_requests')}{' '}
       <CriterionPill
         label={leaseTypeLabel(state, assetTypeOptions)}
         active={isLeaseTypeActive(state)}
@@ -166,7 +175,7 @@ export function MatchCriteriaSentence({
       >
         <LeaseTypeEditor state={state} onChange={onChange} assetTypeOptions={assetTypeOptions} />
       </CriterionPill>
-      {' '}in{' '}
+      {' '}{tr('policy_editor.sentence.in_department')}{' '}
       <CriterionPill
         label={departmentLabel(state)}
         active={isDepartmentActive(state)}
@@ -177,11 +186,11 @@ export function MatchCriteriaSentence({
           values={state.match_departments}
           onChange={(v) => onChange({ ...state, match_departments: v })}
           suggestions={departmentSuggestions}
-          placeholder="Add a department…"
-          heading="Match these departments"
+          placeholder={tr('policy_editor.sentence.add_department_placeholder')}
+          heading={tr('policy_editor.sentence.match_departments')}
         />
       </CriterionPill>
-      {' '}for{' '}
+      {' '}{tr('policy_editor.sentence.for_cost')}{' '}
       <CriterionPill
         label={costLabel(state, language)}
         active={isCostActive(state)}
@@ -196,7 +205,7 @@ export function MatchCriteriaSentence({
       >
         <CostRangeEditor state={state} onChange={onChange} />
       </CriterionPill>
-      , located in{' '}
+      {tr('policy_editor.sentence.located_in')}{' '}
       <CriterionPill
         label={regionLabel(state)}
         active={isRegionActive(state)}
@@ -207,11 +216,11 @@ export function MatchCriteriaSentence({
           values={state.match_regions}
           onChange={(v) => onChange({ ...state, match_regions: v })}
           suggestions={regionSuggestions}
-          placeholder="Add a region…"
-          heading="Match these regions"
+          placeholder={tr('policy_editor.sentence.add_region_placeholder')}
+          heading={tr('policy_editor.sentence.match_regions')}
         />
       </CriterionPill>
-      .
+      {tr('policy_editor.sentence.sentence_end')}
     </p>
   );
 }
@@ -236,6 +245,7 @@ function CriterionPill({
   onClear,
   children,
 }: CriterionPillProps) {
+  const { t: tr } = useLanguage();
   const [open, setOpen] = useState(false);
 
   return (
@@ -264,7 +274,7 @@ function CriterionPill({
             e.stopPropagation();
             onClear();
           }}
-          aria-label="Remove this filter"
+          aria-label={tr('policy_editor.sentence.remove_filter')}
           className="ml-1 inline-flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
         >
           <X className="w-3 h-3" />
@@ -287,6 +297,7 @@ function LeaseTypeEditor({
   onChange: (s: MatchCriteriaState) => void;
   assetTypeOptions: AssetTypeOption[];
 }) {
+  const { t: tr } = useLanguage();
   // Compare/toggle by canonical key so a rule stored with a legacy or
   // AI-classifier spelling ('real_estate') shows the matching built-in
   // ('property') checked — and clicking it removes that stored value rather
@@ -309,7 +320,7 @@ function LeaseTypeEditor({
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <p className="text-xs font-medium">Asset types</p>
+        <p className="text-xs font-medium">{tr('policy_editor.sentence.asset_types_heading')}</p>
         {assetTypeOptions.map((o) => (
           <label
             key={o.value}
@@ -319,12 +330,12 @@ function LeaseTypeEditor({
               checked={assetChecked(o.value)}
               onCheckedChange={() => toggleAsset(o.value)}
             />
-            <span>{o.label}</span>
+            <span>{localizedAssetTypeLabel(o)}</span>
           </label>
         ))}
       </div>
       <div className="space-y-1.5">
-        <p className="text-xs font-medium">Lease types</p>
+        <p className="text-xs font-medium">{tr('policy_editor.sentence.lease_types_heading')}</p>
         {LEASE_TYPE_OPTIONS.map((o) => (
           <label
             key={o}
@@ -349,15 +360,16 @@ function CostRangeEditor({
   state: MatchCriteriaState;
   onChange: (s: MatchCriteriaState) => void;
 }) {
+  const { t: tr } = useLanguage();
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium">Set the dollar range</p>
+      <p className="text-xs font-medium">{tr('policy_editor.sentence.cost_heading')}</p>
       <p className="text-[10px] text-muted-foreground">
-        Leave one side blank to mean "any".
+        {tr('policy_editor.sentence.cost_hint')}
       </p>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-wide">From (USD)</Label>
+          <Label className="text-[10px] uppercase tracking-wide">{tr('policy_editor.sentence.cost_from')}</Label>
           <Input
             type="number"
             inputMode="decimal"
@@ -365,12 +377,12 @@ function CostRangeEditor({
             onChange={(e) =>
               onChange({ ...state, match_min_annual_cost: e.target.value })
             }
-            placeholder="Any"
+            placeholder={tr('policy_editor.sentence.cost_any_placeholder')}
             className="h-8 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-wide">To (USD)</Label>
+          <Label className="text-[10px] uppercase tracking-wide">{tr('policy_editor.sentence.cost_to')}</Label>
           <Input
             type="number"
             inputMode="decimal"
@@ -378,7 +390,7 @@ function CostRangeEditor({
             onChange={(e) =>
               onChange({ ...state, match_max_annual_cost: e.target.value })
             }
-            placeholder="Any"
+            placeholder={tr('policy_editor.sentence.cost_any_placeholder')}
             className="h-8 text-sm"
           />
         </div>
@@ -402,6 +414,7 @@ function ChipEditor({
   placeholder,
   heading,
 }: ChipEditorProps) {
+  const { t: tr } = useLanguage();
   const [draft, setDraft] = useState('');
   const add = (v: string) => {
     const trimmed = v.trim();
@@ -449,13 +462,13 @@ function ChipEditor({
           onClick={() => add(draft)}
           disabled={!draft.trim()}
         >
-          Add
+          {tr('workspace.lease_config.add')}
         </Button>
       </div>
       {remaining.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           <span className="text-[10px] text-muted-foreground self-center">
-            Suggestions:
+            {tr('policy_editor.sentence.suggestions')}
           </span>
           {remaining.slice(0, 8).map((s) => (
             <button

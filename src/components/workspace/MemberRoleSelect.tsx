@@ -10,6 +10,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { WorkspaceRole } from '@/types';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface MemberRoleSelectProps {
   memberId: string;
@@ -28,6 +29,7 @@ export function MemberRoleSelect({
   workspaceId,
   targetUserId,
 }: MemberRoleSelectProps) {
+  const { t } = useAppTranslation();
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleRoleChange = async (newRole: WorkspaceRole) => {
@@ -51,7 +53,7 @@ export function MemberRoleSelect({
 
       if (error) throw error;
 
-      toast.success('Role updated successfully');
+      toast.success(t('workspace.members_panel.role_updated'));
       onRoleChanged();
 
       // Fire-and-forget: an audit-write failure must not surface as a
@@ -72,7 +74,7 @@ export function MemberRoleSelect({
       }
     } catch (error) {
       console.error('Error updating role:', error);
-      toast.error('Failed to update role');
+      toast.error(t('workspace.members_panel.role_update_failed'));
     } finally {
       setIsUpdating(false);
     }
@@ -94,9 +96,9 @@ export function MemberRoleSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="admin">Admin</SelectItem>
-          <SelectItem value="editor">Editor</SelectItem>
-          <SelectItem value="viewer">Viewer</SelectItem>
+          <SelectItem value="admin">{t('workspace.admin')}</SelectItem>
+          <SelectItem value="editor">{t('workspace.editor')}</SelectItem>
+          <SelectItem value="viewer">{t('workspace.viewer')}</SelectItem>
         </SelectContent>
       </Select>
     </div>

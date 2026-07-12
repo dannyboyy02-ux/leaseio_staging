@@ -18,6 +18,7 @@ import {
   View,
   StyleSheet,
 } from '@react-pdf/renderer';
+import { t } from 'i18next';
 import {
   LIABILITY_DISCLAIMER,
   NOT_A_FINANCIAL_STATEMENT_BANNER,
@@ -143,8 +144,8 @@ export function LeaseDisclosureDocument({
       <Page size="LETTER" style={styles.page}>
         {/* Watermark band — fixed on every page */}
         <View style={styles.watermarkBand} fixed>
-          <Text style={styles.watermarkText}>{NOT_A_FINANCIAL_STATEMENT_BANNER}</Text>
-          <Text style={styles.watermarkRight}>Report {reportId.slice(0, 8)}</Text>
+          <Text style={styles.watermarkText}>{t('reports.not_financial_statement', { defaultValue: NOT_A_FINANCIAL_STATEMENT_BANNER })}</Text>
+          <Text style={styles.watermarkRight}>{t('reports.pdf_report_id_short', { id: reportId.slice(0, 8) })}</Text>
         </View>
 
         {/* Header */}
@@ -152,18 +153,18 @@ export function LeaseDisclosureDocument({
           <View style={styles.brandLeft}>
             <Text style={styles.wordmark}>LeaseIO</Text>
             <Text style={styles.reportTitle}>
-              ASC 842 Disclosure Report — {leaseLabel}
+              {t('reports.pdf_lease_report_title', { label: leaseLabel })}
             </Text>
           </View>
           <View style={styles.brandRight}>
             <Text style={styles.brandRightLine}>{organizationName}</Text>
-            <Text style={styles.brandRightLine}>Generated {generatedAtDisplay}</Text>
+            <Text style={styles.brandRightLine}>{t('reports.generated_on', { date: generatedAtDisplay })}</Text>
           </View>
         </View>
 
         {/* Liability disclaimer */}
         <View style={styles.disclaimerBox}>
-          <Text style={styles.disclaimerText}>{LIABILITY_DISCLAIMER}</Text>
+          <Text style={styles.disclaimerText}>{t('reports.disclaimer_body', { defaultValue: LIABILITY_DISCLAIMER })}</Text>
         </View>
 
         {renderLeaseSections(sections)}
@@ -171,11 +172,13 @@ export function LeaseDisclosureDocument({
         {/* Footer */}
         <View style={styles.footer} fixed>
           <Text style={styles.footerText}>
-            LeaseIO Data Report · Not a Financial Statement · {generatedAtDisplay}
+            {t('reports.pdf_footer_line', { date: generatedAtDisplay })}
           </Text>
           <Text
             style={styles.footerText}
-            render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+            render={({ pageNumber, totalPages }) =>
+              t('reports.pdf_page_of', { page: pageNumber, total: totalPages })
+            }
           />
         </View>
       </Page>

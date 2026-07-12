@@ -40,10 +40,9 @@ import {
 } from '@/lib/portfolioIntelligence';
 import { buildWatchlist, type Severity, type WatchFlag } from '@/lib/portfolioWatchlist';
 
-// NOTE: copy on this surface is English-hardcoded, matching the pre-existing
-// Portfolio page (the only localized piece is currency via formatCurrency).
-// Full i18n of the Portfolio surface (incl. the watchlist's generated factual
-// sentences) is tracked as a follow-up — see KNOWN_ISSUES.
+// NOTE: the watchlist's generated factual sentences (title/description/value)
+// come from src/lib/portfolioWatchlist.ts and remain English — localizing
+// those generated strings is tracked as a follow-up.
 
 // Deterministic, brand-derived palette for Cost-by-Department segments; the
 // neutral grey is reserved for the "Other" / "Unassigned" buckets.
@@ -115,6 +114,7 @@ function SectionCard({
 // ---------------------------------------------------------------------------
 
 function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentForecast> }) {
+  const { t } = useLanguage();
   const max = Math.max(...data.map((b) => b.contracted + b.uncontracted), 1);
   return (
     <div>
@@ -130,7 +130,7 @@ function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentFo
               <div className="flex w-full max-w-[40px] flex-1 flex-col justify-end">
                 {uh > 0 && (
                   <div
-                    title="Term ends (uncontracted)"
+                    title={t('portfolio.term_ends_uncontracted')}
                     className="rounded-t"
                     style={{
                       height: `${uh}%`,
@@ -152,14 +152,14 @@ function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentFo
       </div>
       <div className="mt-4 flex flex-wrap gap-4 border-t border-border pt-3 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm" style={{ background: 'hsl(var(--chart-contracted))' }} /> Contracted rent (with escalations)
+          <span className="h-3 w-3 rounded-sm" style={{ background: 'hsl(var(--chart-contracted))' }} /> {t('portfolio.contracted_rent_legend')}
         </span>
         <span className="flex items-center gap-1.5">
           <span
             className="h-3 w-3 rounded-sm"
             style={{ background: 'hsl(var(--muted-foreground) / 0.12)', border: '1px dashed hsl(var(--muted-foreground) / 0.5)' }}
           />{' '}
-          Term ends (uncontracted)
+          {t('portfolio.term_ends_uncontracted')}
         </span>
       </div>
     </div>
@@ -167,6 +167,7 @@ function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentFo
 }
 
 function CostByDepartment({ data }: { data: ReturnType<typeof costByDepartment> }) {
+  const { t } = useLanguage();
   return (
     <div>
       <div className="mb-4 flex h-4 overflow-hidden rounded-full">
@@ -179,7 +180,7 @@ function CostByDepartment({ data }: { data: ReturnType<typeof costByDepartment> 
           <div key={s.department} className="flex items-center gap-2 text-[13px]">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: deptColor(s.department, i) }} />
             <span className="flex-1 truncate">{s.department}</span>
-            <span className="text-muted-foreground">{compactCurrency(s.annualCost)}/yr</span>
+            <span className="text-muted-foreground">{compactCurrency(s.annualCost)}/{t('dashboard.per_year_short')}</span>
             <span className="w-10 text-right font-semibold">{Math.round(s.pct)}%</span>
           </div>
         ))}
@@ -189,6 +190,7 @@ function CostByDepartment({ data }: { data: ReturnType<typeof costByDepartment> 
 }
 
 function CostPerSqft({ data }: { data: ReturnType<typeof costPerSqftByLocation> }) {
+  const { t } = useLanguage();
   const scaleMax = Math.max(...data.rows.map((r) => r.ratePerSqft), data.averageRatePerSqft ?? 0, 1) * 1.1;
   return (
     <div className="flex flex-col gap-3.5">
@@ -197,8 +199,10 @@ function CostPerSqft({ data }: { data: ReturnType<typeof costPerSqftByLocation> 
           <div className="mb-1.5 flex items-baseline justify-between gap-2">
             <span className="truncate text-[13px] font-medium">{r.name}</span>
             <span className="shrink-0 text-xs font-semibold text-muted-foreground">
-              ${r.ratePerSqft.toFixed(2)}/sqft · {r.deltaVsAvg > 0 ? '+' : ''}
-              {Math.round(r.deltaVsAvg * 100)}% vs avg
+              {t('portfolio.rate_vs_avg', {
+                rate: r.ratePerSqft.toFixed(2),
+                delta: `${r.deltaVsAvg > 0 ? '+' : ''}${Math.round(r.deltaVsAvg * 100)}`,
+              })}
             </span>
           </div>
           <div className="relative h-2.5 rounded-full bg-muted">
@@ -211,7 +215,7 @@ function CostPerSqft({ data }: { data: ReturnType<typeof costPerSqftByLocation> 
             />
             {data.averageRatePerSqft != null && (
               <div
-                title={`Portfolio average $${data.averageRatePerSqft.toFixed(2)}/sqft`}
+                title={t('portfolio.portfolio_average_tooltip', { rate: data.averageRatePerSqft.toFixed(2) })}
                 className="absolute -top-0.5 h-3.5 w-0.5 bg-foreground/55"
                 style={{ left: `${(data.averageRatePerSqft / scaleMax) * 100}%` }}
               />
@@ -221,11 +225,11 @@ function CostPerSqft({ data }: { data: ReturnType<typeof costPerSqftByLocation> 
       ))}
       {data.averageRatePerSqft != null && (
         <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-3 w-0.5 bg-foreground/55" /> Portfolio blended average (${data.averageRatePerSqft.toFixed(2)}/sqft)
+          <span className="h-3 w-0.5 bg-foreground/55" /> {t('portfolio.blended_average_legend', { rate: data.averageRatePerSqft.toFixed(2) })}
         </div>
       )}
       {data.excludedCount > 0 && (
-        <p className="text-xs text-muted-foreground">{data.excludedCount} lease{data.excludedCount === 1 ? '' : 's'} excluded (no square footage).</p>
+        <p className="text-xs text-muted-foreground">{t('portfolio.excluded_no_sqft', { count: data.excludedCount })}</p>
       )}
     </div>
   );
@@ -244,8 +248,9 @@ const WATCH_TONE: Record<Severity, { wrap: string; chip: string }> = {
 };
 
 function Watchlist({ flags }: { flags: WatchFlag[] }) {
+  const { t } = useLanguage();
   if (flags.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted-foreground">No flags from the current critical-date checks.</p>;
+    return <p className="py-6 text-center text-sm text-muted-foreground">{t('portfolio.watchlist_empty')}</p>;
   }
   return (
     <div className="flex flex-col gap-2.5">
@@ -268,7 +273,7 @@ function Watchlist({ flags }: { flags: WatchFlag[] }) {
               <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone.chip}`}>{f.value}</span>
               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" asChild>
                 <Link to={`/app/leases/${f.leaseId}`}>
-                  View lease <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  {t('import.view')} <ArrowRight className="ml-1 h-3.5 w-3.5" />
                 </Link>
               </Button>
             </div>
@@ -284,7 +289,7 @@ function Watchlist({ flags }: { flags: WatchFlag[] }) {
 // ---------------------------------------------------------------------------
 
 export default function Portfolio() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { workspace, canAccessFeature } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
 
@@ -317,9 +322,12 @@ export default function Portfolio() {
   const leases: PortfolioLease[] = useMemo(
     () =>
       (rows ?? []).map((row) =>
-        toPortfolioLease(row, getPropertyDisplayName(row.extracted_json, row.request_title || row.filename, 'Property')),
+        toPortfolioLease(
+          row,
+          getPropertyDisplayName(row.extracted_json, row.request_title || row.filename, t('portfolio.property_fallback')),
+        ),
       ),
-    [rows],
+    [rows, t],
   );
 
   const kpis = useMemo(() => computeKpis(leases, asOf), [leases, asOf]);
@@ -327,24 +335,27 @@ export default function Portfolio() {
   const locations = useMemo(() => costPerSqftByLocation(leases), [leases]);
   const forecast = useMemo(() => rentCommitmentForecast(leases, asOf), [leases, asOf]);
   const forecastHasData = useMemo(() => forecast.some((b) => b.contracted > 0 || b.uncontracted > 0), [forecast]);
-  const watchlist = useMemo(() => buildWatchlist(leases, { asOf }), [leases, asOf]);
+  // `language` in deps: flag copy is baked at build time inside buildWatchlist
+  // (module-level i18next t), so a language switch must rebuild the list.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const watchlist = useMemo(() => buildWatchlist(leases, { asOf }), [leases, asOf, language]);
   const indexLeases = useMemo(() => leases.filter((l) => l.escalationType === 'index'), [leases]);
 
   const headerSubtitle =
     leases.length > 0
       ? [
-          `${leases.length} lease${leases.length === 1 ? '' : 's'}`,
-          kpis.totalSquareFootage > 0 ? `${kpis.totalSquareFootage.toLocaleString()} sqft` : null,
-          `${kpis.marketCount} market${kpis.marketCount === 1 ? '' : 's'}`,
+          t('dashboard.leases_count', { count: leases.length }),
+          kpis.totalSquareFootage > 0 ? t('portfolio.sqft_value', { value: kpis.totalSquareFootage.toLocaleString() }) : null,
+          t('portfolio.markets_count', { count: kpis.marketCount }),
         ]
           .filter(Boolean)
           .join(' · ')
-      : 'Occupancy cost, commitment, and critical-date awareness';
+      : t('portfolio.subtitle_default');
 
   if (!hasBusinessAccess) {
     return (
       <AppLayout>
-        <AppHeader title="Portfolio Intelligence" subtitle="Occupancy cost, commitment, and critical-date awareness" />
+        <AppHeader title={t('portfolio.title')} subtitle={t('portfolio.subtitle_default')} />
         <PageLayout width="wide">
           <Card variant="ghost" className="mx-auto max-w-2xl border-2 border-dashed border-border">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -352,15 +363,14 @@ export default function Portfolio() {
                 <Lock className="h-8 w-8 text-muted-foreground" />
               </div>
               <Badge variant="business" className="mb-4">
-                Business Plan
+                {t('common.business_plan')}
               </Badge>
-              <h3 className="mb-2 text-lg font-semibold">Portfolio Intelligence is a Business-plan feature</h3>
+              <h3 className="mb-2 text-lg font-semibold">{t('portfolio.business_gate_title')}</h3>
               <p className="mb-6 max-w-md text-sm text-muted-foreground">
-                Upgrade to Business to unlock portfolio occupancy cost, the rent-commitment forecast, cost composition,
-                and the lease watchlist.
+                {t('portfolio.business_gate_desc')}
               </p>
               <Button variant="accent" size="lg" asChild>
-                <Link to="/app/settings/account?tab=billing">Upgrade to Business</Link>
+                <Link to="/app/settings/account?tab=billing">{t('integrations.upgrade_business')}</Link>
               </Button>
             </CardContent>
           </Card>
@@ -371,7 +381,7 @@ export default function Portfolio() {
 
   return (
     <AppLayout>
-      <AppHeader title="Portfolio Intelligence" subtitle={headerSubtitle} />
+      <AppHeader title={t('portfolio.title')} subtitle={headerSubtitle} />
       <PageLayout width="wide">
         {isLoading ? (
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -388,10 +398,9 @@ export default function Portfolio() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
               <Layers className="mb-4 h-12 w-12 text-muted-foreground/40" />
-              <h3 className="mb-2 text-lg font-semibold text-foreground">Portfolio intelligence appears after posting leases</h3>
+              <h3 className="mb-2 text-lg font-semibold text-foreground">{t('portfolio.empty_title')}</h3>
               <p className="max-w-sm text-sm text-muted-foreground">
-                Once leases are active, this page summarizes occupancy cost, the commitment forecast, cost composition,
-                and critical-date flags.
+                {t('portfolio.empty_desc')}
               </p>
             </CardContent>
           </Card>
@@ -402,54 +411,54 @@ export default function Portfolio() {
               <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
                 <Info className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
-                  {kpis.missingAreaCount > 0 && `${kpis.missingAreaCount} of ${kpis.leaseCount} lease${kpis.leaseCount === 1 ? '' : 's'} missing square footage — excluded from $/sqft metrics. `}
-                  {kpis.missingRentCount > 0 && `${kpis.missingRentCount} missing rent — excluded from cost metrics. `}
-                  {kpis.missingEndDateCount > 0 && `${kpis.missingEndDateCount} missing term dates — excluded from the forecast and Avg Term Remaining.`}
+                  {kpis.missingAreaCount > 0 && `${t('portfolio.missing_area', { missing: kpis.missingAreaCount, count: kpis.leaseCount })} `}
+                  {kpis.missingRentCount > 0 && `${t('portfolio.missing_rent', { count: kpis.missingRentCount })} `}
+                  {kpis.missingEndDateCount > 0 && t('portfolio.missing_end_dates', { count: kpis.missingEndDateCount })}
                 </span>
               </div>
             )}
 
             {/* KPI strip */}
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-              <KpiTile label="Annual Occupancy Cost" value={formatCurrency(kpis.annualOccupancyCost)} sub={`across ${kpis.leaseCount} lease${kpis.leaseCount === 1 ? '' : 's'}`} />
+              <KpiTile label={t('portfolio.kpi_annual_occupancy')} value={formatCurrency(kpis.annualOccupancyCost)} sub={t('portfolio.kpi_across_leases', { count: kpis.leaseCount })} />
               <KpiTile
-                label="Remaining Commitment"
+                label={t('portfolio.kpi_remaining_commitment')}
                 value={formatCurrency(kpis.remainingCommitment)}
-                sub={kpis.contractedThroughYear ? `undiscounted · through ${kpis.contractedThroughYear}` : 'undiscounted contracted cash'}
+                sub={kpis.contractedThroughYear ? t('portfolio.kpi_undiscounted_through', { year: kpis.contractedThroughYear }) : t('portfolio.kpi_undiscounted_cash')}
               />
               <KpiTile
-                label="Blended Cost"
+                label={t('portfolio.kpi_blended_cost')}
                 value={kpis.blendedCostPerSqft != null ? `$${kpis.blendedCostPerSqft.toFixed(2)}` : '—'}
-                sub={kpis.blendedCostPerSqft != null ? 'per sqft / yr' : 'add square footage'}
+                sub={kpis.blendedCostPerSqft != null ? t('portfolio.kpi_per_sqft_yr') : t('portfolio.kpi_add_sqft')}
               />
-              <KpiTile label="Total Footprint" value={kpis.totalSquareFootage.toLocaleString()} sub={`sqft · ${kpis.marketCount} market${kpis.marketCount === 1 ? '' : 's'}`} />
-              <KpiTile label="Avg Term Remaining" value={`${kpis.avgTermRemainingYears.toFixed(1)} yrs`} sub="weighted by rent" />
+              <KpiTile label={t('portfolio.kpi_total_footprint')} value={kpis.totalSquareFootage.toLocaleString()} sub={t('portfolio.kpi_sqft_markets', { count: kpis.marketCount })} />
+              <KpiTile label={t('portfolio.kpi_avg_term')} value={t('portfolio.years_value', { years: kpis.avgTermRemainingYears.toFixed(1) })} sub={t('portfolio.kpi_weighted_by_rent')} />
             </div>
 
             {/* Row 1 — forecast + composition */}
             <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1.7fr_1fr]">
-              <SectionCard title="Rent Commitment Forecast" sub="Contractual obligations by year — see the re-leasing cliff coming" icon={BarChart3} right={<Badge variant="secondary">Next 5 yrs</Badge>}>
+              <SectionCard title={t('portfolio.forecast_title')} sub={t('portfolio.forecast_sub')} icon={BarChart3} right={<Badge variant="secondary">{t('portfolio.next_5_yrs')}</Badge>}>
                 {forecastHasData ? (
                   <CommitmentForecast data={forecast} />
                 ) : (
-                  <p className="py-6 text-center text-sm text-muted-foreground">Add lease end dates to see the commitment forecast.</p>
+                  <p className="py-6 text-center text-sm text-muted-foreground">{t('portfolio.forecast_empty')}</p>
                 )}
               </SectionCard>
-              <SectionCard title="Cost by Department" sub="Where the spend sits" icon={Layers}>
-                {depts.length > 0 ? <CostByDepartment data={depts} /> : <p className="text-sm text-muted-foreground">No cost data yet.</p>}
+              <SectionCard title={t('portfolio.cost_by_department')} sub={t('portfolio.cost_by_department_sub')} icon={Layers}>
+                {depts.length > 0 ? <CostByDepartment data={depts} /> : <p className="text-sm text-muted-foreground">{t('portfolio.no_cost_data')}</p>}
               </SectionCard>
             </div>
 
             {/* Row 2 — benchmark + watchlist */}
             <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1fr_1.4fr]">
-              <SectionCard title="Cost per sqft by Location" sub="Against the portfolio blended average" icon={Scale}>
+              <SectionCard title={t('portfolio.cost_per_sqft_title')} sub={t('portfolio.cost_per_sqft_sub')} icon={Scale}>
                 {locations.rows.length > 0 ? (
                   <CostPerSqft data={locations} />
                 ) : (
-                  <p className="text-sm text-muted-foreground">No leases with square footage yet.</p>
+                  <p className="text-sm text-muted-foreground">{t('portfolio.no_sqft_leases')}</p>
                 )}
               </SectionCard>
-              <SectionCard title="Lease Watchlist" sub="Flags surfaced from abstracted lease terms" icon={Flag} right={watchlist.length > 0 ? <Badge variant="secondary">{watchlist.length} item{watchlist.length === 1 ? '' : 's'}</Badge> : undefined}>
+              <SectionCard title={t('portfolio.watchlist_title')} sub={t('portfolio.watchlist_sub')} icon={Flag} right={watchlist.length > 0 ? <Badge variant="secondary">{t('portfolio.items_count', { count: watchlist.length })}</Badge> : undefined}>
                 <Watchlist flags={watchlist} />
               </SectionCard>
             </div>
@@ -460,18 +469,17 @@ export default function Portfolio() {
                 <CardContent className="p-5">
                   <div className="mb-1 flex items-center gap-2 text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="h-4 w-4" />
-                    <p className="text-sm font-semibold">Index-Lease Disclosure</p>
+                    <p className="text-sm font-semibold">{t('portfolio.index_disclosure_title')}</p>
                   </div>
                   <p className="mb-3 text-xs text-muted-foreground">
-                    CPI / index-based leases escalate on an external index, so their future rent isn't fixed — shown
-                    separately and treated as flat in the forecast above.
+                    {t('portfolio.index_disclosure_body')}
                   </p>
                   <div className="space-y-2">
                     {indexLeases.map((l) => (
                       <Link
                         key={l.id}
                         to={`/app/leases/${l.id}`}
-                        aria-label={`View lease ${l.propertyName}`}
+                        aria-label={t('portfolio.view_lease_aria', { name: l.propertyName })}
                         className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-sm hover:bg-amber-100 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
                       >
                         <span className="truncate">{l.propertyName}</span>
@@ -486,7 +494,7 @@ export default function Portfolio() {
             {/* Provenance */}
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Info className="h-3.5 w-3.5" />
-              Metrics computed from abstracted lease terms for this workspace. Figures are not financial advice.
+              {t('portfolio.provenance')}
             </div>
           </>
         )}

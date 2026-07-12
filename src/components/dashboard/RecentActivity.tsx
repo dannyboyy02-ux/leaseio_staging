@@ -35,35 +35,41 @@ interface ExtractionRow {
 // the canonical displayLabel() in src/lib/lifecycleStates.ts. Extended
 // in place here per the Phase 3 plan; consolidation to a single helper
 // is tracked as a dedicated future refactor.
-const LIFECYCLE_LABELS: Record<string, string> = {
+// Values are i18n keys, translated at render via the component's `t`.
+const LIFECYCLE_LABEL_KEYS: Record<string, string> = {
   // Legacy
-  submitted: 'Submitted for approval',
-  under_review: 'Under review',
-  approved: 'Approved',
-  executed: 'Executed',
-  active: 'Active',
-  expired: 'Expired',
-  rejected: 'Rejected',
+  submitted: 'dashboard.lifecycle.submitted',
+  under_review: 'dashboard.lifecycle.under_review',
+  approved: 'dashboard.lifecycle.approved',
+  executed: 'dashboard.lifecycle.executed',
+  active: 'dashboard.lifecycle.active',
+  expired: 'dashboard.lifecycle.expired',
+  rejected: 'dashboard.lifecycle.rejected',
   // Chain — labels intentionally identical to legacy where the user-facing
   // meaning matches; chain-only states get their canonical labels.
-  concept_submitted: 'Submitted for approval',
-  concept_under_review: 'Under review',
-  in_negotiation: 'In negotiation',
-  final_review: 'Final review',
-  pending_counter_signature: 'Awaiting counter-signature',
-  fully_executed: 'Fully executed',
-  chain_violation: 'Chain violation',
+  concept_submitted: 'dashboard.lifecycle.submitted',
+  concept_under_review: 'dashboard.lifecycle.under_review',
+  in_negotiation: 'dashboard.lifecycle.in_negotiation',
+  final_review: 'dashboard.lifecycle.final_review',
+  pending_counter_signature: 'dashboard.lifecycle.pending_counter_signature',
+  fully_executed: 'dashboard.lifecycle.fully_executed',
+  chain_violation: 'dashboard.lifecycle.chain_violation',
 };
 
-function getActivityLabel(activityType: string, lifecycleStatus?: string | null): string {
+// Translator signature shared by the module-level helpers below — the
+// component passes its react-i18next `t` down so labels re-render on
+// language change.
+type Translate = (key: string, opts?: Record<string, unknown>) => string;
+
+function getActivityLabel(t: Translate, activityType: string, lifecycleStatus?: string | null): string {
   switch (activityType) {
-    case 'created': return 'Lease created';
+    case 'created': return t('dashboard.activity_created');
     case 'status_change':
-      return lifecycleStatus && LIFECYCLE_LABELS[lifecycleStatus]
-        ? `Status \u2192 ${LIFECYCLE_LABELS[lifecycleStatus]}`
-        : 'Status updated';
-    case 'document_upload': return 'Document uploaded';
-    case 'executed_uploaded': return 'Executed document uploaded';
+      return lifecycleStatus && LIFECYCLE_LABEL_KEYS[lifecycleStatus]
+        ? t('dashboard.activity_status_to', { status: t(LIFECYCLE_LABEL_KEYS[lifecycleStatus]) })
+        : t('dashboard.activity_status_updated');
+    case 'document_upload': return t('dashboard.activity_document_upload');
+    case 'executed_uploaded': return t('dashboard.activity_executed_uploaded');
     default: return activityType;
   }
 }
@@ -90,7 +96,7 @@ function getDotColor(lifecycleStatus: string | null): string {
   }
 }
 
-function getRelativeDate(dateStr: string, language: SupportedLocale): string {
+function getRelativeDate(t: Translate, dateStr: string, language: SupportedLocale): string {
   const date = new Date(dateStr);
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -99,15 +105,15 @@ function getRelativeDate(dateStr: string, language: SupportedLocale): string {
   const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffDays = Math.round((todayStart.getTime() - dateStart.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 30) return `${diffDays} days ago`;
+  if (diffDays === 0) return t('dashboard.today');
+  if (diffDays === 1) return t('dashboard.yesterday');
+  if (diffDays < 30) return t('dashboard.days_ago', { count: diffDays });
   return formatLocalizedDate(date, language, { month: 'short', day: 'numeric' });
 }
 
 export function RecentActivity() {
   const { workspace } = useApp();
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const [activityData, setActivityData] = useState<ActivityRow[]>([]);
   const [extractionData, setExtractionData] = useState<ExtractionRow[]>([]);
@@ -150,7 +156,7 @@ export function RecentActivity() {
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
             <Inbox className="h-4 w-4" />
-            Recent Activity
+            {t('dashboard.recent_activity')}
           </div>
           <Button
             variant="link"
@@ -158,7 +164,7 @@ export function RecentActivity() {
             className="h-auto p-0 text-xs"
             onClick={() => navigate('/app/leases')}
           >
-            All activity
+            {t('dashboard.all_activity')}
           </Button>
         </CardTitle>
       </CardHeader>
@@ -170,15 +176,15 @@ export function RecentActivity() {
         ) : (
           <>
             {activityData.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No recent activity.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">{t('dashboard.no_recent_activity')}</p>
             ) : (
               <div>
                 {activityData.map((item) => {
                   const lease = item.leases;
-                  const title = lease.request_title ?? lease.filename ?? 'Untitled';
-                  const label = getActivityLabel(item.activity_type, lease.lifecycle_status);
+                  const title = lease.request_title ?? lease.filename ?? t('dashboard.untitled');
+                  const label = getActivityLabel(t, item.activity_type, lease.lifecycle_status);
                   const dotColor = getDotColor(lease.lifecycle_status);
-                  const relDate = getRelativeDate(item.created_at, language);
+                  const relDate = getRelativeDate(t, item.created_at, language);
 
                   return (
                     <div key={item.id} className="flex items-center gap-3 py-2 border-b last:border-0">
@@ -195,15 +201,15 @@ export function RecentActivity() {
             )}
 
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-4 mb-2">
-              AI Extractions
+              {t('dashboard.ai_extractions')}
             </p>
 
             {extractionData.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-2">No extractions yet.</p>
+              <p className="text-sm text-muted-foreground text-center py-2">{t('dashboard.no_extractions')}</p>
             ) : (
               <div>
                 {extractionData.map((item) => {
-                  const title = item.request_title ?? item.filename ?? 'Untitled';
+                  const title = item.request_title ?? item.filename ?? t('dashboard.untitled');
                   const score =
                     item.avg_confidence_score !== null
                       ? Math.round(item.avg_confidence_score * 100)
@@ -215,25 +221,25 @@ export function RecentActivity() {
                     badge = (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-secondary text-secondary-foreground">
                         <Loader2 className="h-3 w-3 animate-spin" />
-                        Processing
+                        {t('common.processing')}
                       </span>
                     );
                   } else if (item.model_locked) {
                     badge = (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">
-                        Locked
+                        {t('locked_lease.locked_badge')}
                       </span>
                     );
                   } else if (item.avg_confidence_score !== null && item.avg_confidence_score < 0.8) {
                     badge = (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
-                        Needs Review
+                        {t('lease.needs_review')}
                       </span>
                     );
                   } else {
                     badge = (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">
-                        Reviewed
+                        {t('dashboard.reviewed_badge')}
                       </span>
                     );
                   }
@@ -243,7 +249,7 @@ export function RecentActivity() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{title}</p>
                         {score !== null && !isProcessing && (
-                          <p className="text-xs text-muted-foreground">{score}% confidence</p>
+                          <p className="text-xs text-muted-foreground">{t('dashboard.confidence_pct', { score })}</p>
                         )}
                       </div>
                       {badge}

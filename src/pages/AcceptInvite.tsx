@@ -21,15 +21,15 @@ interface InviteInfo {
 }
 
 interface PasswordRequirement {
-  label: string;
+  labelKey: string;
   met: (pw: string) => boolean;
 }
 
 const PASSWORD_REQUIREMENTS: PasswordRequirement[] = [
-  { label: "At least 8 characters",       met: (pw) => pw.length >= 8 },
-  { label: "At least one uppercase letter", met: (pw) => /[A-Z]/.test(pw) },
-  { label: "At least one lowercase letter", met: (pw) => /[a-z]/.test(pw) },
-  { label: "At least one number",           met: (pw) => /[0-9]/.test(pw) },
+  { labelKey: "accept_invite.password_req.min_length", met: (pw) => pw.length >= 8 },
+  { labelKey: "accept_invite.password_req.uppercase",  met: (pw) => /[A-Z]/.test(pw) },
+  { labelKey: "accept_invite.password_req.lowercase",  met: (pw) => /[a-z]/.test(pw) },
+  { labelKey: "accept_invite.password_req.number",     met: (pw) => /[0-9]/.test(pw) },
 ];
 
 export default function AcceptInvite() {
@@ -144,7 +144,7 @@ export default function AcceptInvite() {
         const msg = data?.message || error?.message || t('accept_invite.failed');
         if (data?.code === 'ACCOUNT_EXISTS') {
           // Edge case: account was created between info check and now — redirect to login
-          toast.error("An account already exists for this email. Please log in.");
+          toast.error(t('accept_invite.account_exists'));
           navigate(`/login?next=/accept-invite?token=${encodeURIComponent(token)}`, { replace: true });
         } else {
           toast.error(msg);
@@ -159,7 +159,7 @@ export default function AcceptInvite() {
       });
 
       if (signInError) {
-        toast.error("Account created but sign-in failed. Please log in manually.");
+        toast.error(t('accept_invite.signin_failed_manual'));
         navigate(`/login?next=/app/dashboard`, { replace: true });
         return;
       }
@@ -201,24 +201,24 @@ export default function AcceptInvite() {
 
     if (status === "create_password") {
       const displayName = inviteInfo?.first_name
-        ? `Hi ${inviteInfo.first_name},`
-        : "Welcome,";
+        ? t('accept_invite.hi_name', { name: inviteInfo.first_name })
+        : t('accept_invite.welcome');
       return (
         <div className="flex flex-col gap-5">
           <div className="text-center">
             <p className="font-semibold text-lg">{displayName}</p>
             <p className="text-muted-foreground text-sm mt-1">
-              Create your password to join <strong>{inviteInfo?.workspaceName}</strong> as a {inviteInfo?.role}.
+              {t('accept_invite.create_password_before')} <strong>{inviteInfo?.workspaceName}</strong> {t('accept_invite.create_password_after', { role: inviteInfo?.role })}
             </p>
           </div>
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="new-password">Password</Label>
+              <Label htmlFor="new-password">{t('auth.password')}</Label>
               <Input
                 id="new-password"
                 type="password"
-                placeholder="Create a password"
+                placeholder={t('accept_invite.password_placeholder')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
@@ -230,37 +230,37 @@ export default function AcceptInvite() {
               {PASSWORD_REQUIREMENTS.map((req) => {
                 const met = req.met(password);
                 return (
-                  <li key={req.label} className={`flex items-center gap-1.5 ${met ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  <li key={req.labelKey} className={`flex items-center gap-1.5 ${met ? 'text-green-600' : 'text-muted-foreground'}`}>
                     {met
                       ? <Check className="h-3 w-3 shrink-0" />
                       : <X className="h-3 w-3 shrink-0" />}
-                    {req.label}
+                    {t(req.labelKey)}
                   </li>
                 );
               })}
             </ul>
 
             <div className="space-y-1.5">
-              <Label htmlFor="confirm-password">Confirm Password</Label>
+              <Label htmlFor="confirm-password">{t('auth.confirm_password')}</Label>
               <Input
                 id="confirm-password"
                 type="password"
-                placeholder="Confirm your password"
+                placeholder={t('accept_invite.confirm_password_placeholder')}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCreatePassword()}
                 autoComplete="new-password"
               />
               {confirmPassword && !passwordsMatch && (
-                <p className="text-xs text-destructive">Passwords do not match</p>
+                <p className="text-xs text-destructive">{t('accept_invite.passwords_no_match')}</p>
               )}
             </div>
           </div>
 
           <Button onClick={handleCreatePassword} disabled={!canSubmitPassword} className="w-full">
             {isSubmitting
-              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Creating account…</>
-              : "Create Account & Join Workspace"}
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t('accept_invite.creating_account')}</>
+              : t('accept_invite.create_and_join')}
           </Button>
         </div>
       );

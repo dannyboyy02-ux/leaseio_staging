@@ -1,6 +1,7 @@
 import { ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface AmendmentChange {
   field: string;
@@ -13,26 +14,27 @@ interface AmendmentChangesProps {
   changes: AmendmentChange[];
 }
 
-// Field display name mapping
+// Field display name mapping (values are i18n keys, resolved at render)
 const FIELD_LABELS: Record<string, string> = {
-  landlord_name: 'Landlord',
-  tenant_name: 'Tenant',
-  property_address: 'Property Address',
-  lease_start: 'Lease Start',
-  lease_end: 'Lease End',
-  rent_commencement_date: 'Rent Commencement',
-  current_monthly_rent: 'Monthly Rent',
-  base_rent_amount: 'Base Rent',
-  base_rent_frequency: 'Rent Frequency',
-  security_deposit: 'Security Deposit',
-  rent_escalation_type: 'Escalation Type',
-  square_footage: 'Square Footage',
-  renewal_options: 'Renewal Options',
-  termination_clauses: 'Termination Clauses',
-  escalation_clauses: 'Escalation Clauses',
+  landlord_name: 'lease.landlord',
+  tenant_name: 'lease.tenant',
+  property_address: 'lease.property_address',
+  lease_start: 'amendments.fields.lease_start',
+  lease_end: 'amendments.fields.lease_end',
+  rent_commencement_date: 'amendments.fields.rent_commencement',
+  current_monthly_rent: 'leases.monthly_rent',
+  base_rent_amount: 'amendments.fields.base_rent',
+  base_rent_frequency: 'lease.rent_frequency',
+  security_deposit: 'lease.security_deposit',
+  rent_escalation_type: 'rent_schedule.escalation_type',
+  square_footage: 'amendments.fields.square_footage',
+  renewal_options: 'lease.renewal_options',
+  termination_clauses: 'lease.termination_clauses',
+  escalation_clauses: 'amendments.fields.escalation_clauses',
 };
 
 export function AmendmentChanges({ changes }: AmendmentChangesProps) {
+  const { t } = useAppTranslation();
   if (!changes || changes.length === 0) {
     return null;
   }
@@ -46,12 +48,12 @@ export function AmendmentChanges({ changes }: AmendmentChangesProps) {
 
     switch (type) {
       case 'added':
-        return <Badge variant="outline" className="text-[9px] text-green-600 border-green-400 bg-green-50">Added</Badge>;
+        return <Badge variant="outline" className="text-[9px] text-green-600 border-green-400 bg-green-50">{t('amendments.changes.added')}</Badge>;
       case 'removed':
-        return <Badge variant="outline" className="text-[9px] text-red-600 border-red-400 bg-red-50">Removed</Badge>;
+        return <Badge variant="outline" className="text-[9px] text-red-600 border-red-400 bg-red-50">{t('amendments.changes.removed')}</Badge>;
       case 'modified':
       default:
-        return <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-400 bg-amber-50">Changed</Badge>;
+        return <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-400 bg-amber-50">{t('amendments.changes.changed')}</Badge>;
     }
   };
 
@@ -71,9 +73,9 @@ export function AmendmentChanges({ changes }: AmendmentChangesProps) {
       <CardHeader className="bg-orange-100/50 border-b border-orange-200 py-3">
         <CardTitle className="text-sm font-bold flex items-center gap-2 text-orange-700">
           <ArrowRight size={16} />
-          Amendment Changes
+          {t('amendments.changes.title')}
           <Badge variant="outline" className="ml-1 text-orange-600 border-orange-400">
-            {changes.length} field{changes.length !== 1 ? 's' : ''}
+            {t('amendments.changes.field_count', { count: changes.length })}
           </Badge>
         </CardTitle>
       </CardHeader>
@@ -85,7 +87,7 @@ export function AmendmentChanges({ changes }: AmendmentChangesProps) {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="font-medium text-sm">
-                {FIELD_LABELS[change.field] || change.field}
+                {FIELD_LABELS[change.field] ? t(FIELD_LABELS[change.field]) : change.field}
               </span>
               {getChangeTypeBadge(change)}
             </div>

@@ -64,7 +64,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <Button variant="accent" onClick={handleNewRequest}>
                 <Plus className="h-4 w-4 mr-2" />
-                New Request
+                {t('dashboard.new_request')}
               </Button>
             </div>
           )

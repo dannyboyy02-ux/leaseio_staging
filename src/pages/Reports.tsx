@@ -220,7 +220,7 @@ export default function Reports() {
                   <CardDescription className="mb-4">{t(report.descKey)}</CardDescription>
                   <div className="flex gap-2">
                     <Button variant="secondary" className="flex-1" asChild={!!report.href}>
-                      {report.href ? <Link to={report.href}>{t('reports.view_report')}</Link> : <span>Coming soon</span>}
+                      {report.href ? <Link to={report.href}>{t('reports.view_report')}</Link> : <span>{t('packs.unavailable')}</span>}
                     </Button>
                     <Button variant="ghost" size="icon" disabled={!canExport || !report.href}>
                       <Download className="h-4 w-4" />
@@ -235,7 +235,7 @@ export default function Reports() {
         <Card>
           <CardHeader>
             <CardTitle>{t('reports.monthly_overview')}</CardTitle>
-            <CardDescription>Total commitment by lifecycle status across your portfolio</CardDescription>
+            <CardDescription>{t('reports.commitment_by_status_desc')}</CardDescription>
           </CardHeader>
           <CardContent>
             {chartLoading ? (
@@ -244,7 +244,7 @@ export default function Reports() {
               </div>
             ) : statusData.length === 0 ? (
               <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
-                No lease data yet.
+                {t('reports.no_lease_data')}
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={240}>
@@ -265,7 +265,7 @@ export default function Reports() {
                   <Tooltip
                     formatter={(val: number) => [
                       formatLocalizedCurrency(val, language),
-                      'Commitment',
+                      t('dashboard.commitment'),
                     ]}
                     labelFormatter={(l) => String(l).replace('_', ' ')}
                     contentStyle={{
@@ -293,8 +293,8 @@ export default function Reports() {
         {varianceLeases.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Variance Outliers</CardTitle>
-              <CardDescription>Leases with the largest executed vs pipeline payment variance</CardDescription>
+              <CardTitle className="text-base">{t('reports.variance_outliers')}</CardTitle>
+              <CardDescription>{t('reports.variance_outliers_desc')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-0">
@@ -309,22 +309,22 @@ export default function Reports() {
                     >
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">
-                          {lease.filename || lease.tenant_name || 'Unnamed lease'}
+                          {lease.filename || lease.tenant_name || t('dashboard.unnamed_lease')}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Pipeline: {formatLocalizedCurrency(Number(lease.monthly_payment || 0), language)}/mo
+                          {t('reports.pipeline_monthly', { amount: formatLocalizedCurrency(Number(lease.monthly_payment || 0), language) })}
                           &nbsp;&middot;&nbsp;
-                          Executed: {formatLocalizedCurrency(Number(lease.executed_monthly_payment || 0), language)}/mo
+                          {t('reports.executed_monthly', { amount: formatLocalizedCurrency(Number(lease.executed_monthly_payment || 0), language) })}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {pct !== null && (
                           <Badge variant={pct >= 10 ? 'destructive' : 'warning'} className="text-[10px]">
-                            {formatLocalizedPercent(pct, language, 1, 1)} variance
+                            {t('reports.variance_badge', { percent: formatLocalizedPercent(pct, language, 1, 1) })}
                           </Badge>
                         )}
                         <Button variant="ghost" size="sm" asChild>
-                          <Link to={`/app/leases/${lease.id}`}>View</Link>
+                          <Link to={`/app/leases/${lease.id}`}>{t('common.view')}</Link>
                         </Button>
                       </div>
                     </div>
