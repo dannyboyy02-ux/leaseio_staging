@@ -62,24 +62,25 @@ const timezones = [
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 function SaveStatusChip({ status }: { status: SaveStatus | undefined }) {
+  const { t } = useLanguage();
   if (!status || status === 'idle') return null;
   if (status === 'saving') {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" role="status">
-        <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+        <Loader2 className="h-3 w-3 animate-spin" /> {t('workspace.autosave.saving')}
       </span>
     );
   }
   if (status === 'saved') {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400" role="status">
-        <Check className="h-3 w-3" /> Saved
+        <Check className="h-3 w-3" /> {t('workspace.autosave.saved')}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 text-xs text-destructive" role="status">
-      <AlertTriangle className="h-3 w-3" /> Not saved
+      <AlertTriangle className="h-3 w-3" /> {t('workspace.autosave.not_saved')}
     </span>
   );
 }
@@ -120,14 +121,13 @@ function SectionCardHeader({
 /** Load-failure callout: the on-screen values are NOT the stored config, so
  *  editing is blocked until a reload succeeds (loader-honesty gate). */
 function ConfigLoadErrorNotice({ onRetry }: { onRetry: () => void }) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-6 text-center">
-      <p className="text-sm text-destructive font-medium">Couldn't load this workspace's configuration.</p>
-      <p className="text-xs text-muted-foreground">
-        Editing is paused so nothing gets overwritten — your stored settings are safe.
-      </p>
+      <p className="text-sm text-destructive font-medium">{t('workspace.config_error.title')}</p>
+      <p className="text-xs text-muted-foreground">{t('workspace.config_error.body')}</p>
       <Button size="sm" variant="outline" onClick={onRetry}>
-        Try again
+        {t('workspace.config_error.retry')}
       </Button>
     </div>
   );
@@ -137,10 +137,11 @@ function ConfigLoadErrorNotice({ onRetry }: { onRetry: () => void }) {
  *  it — replaces disabled Save buttons (a dead affordance) with an honest
  *  statement of why the fields are locked. */
 function ReadOnlyNotice() {
+  const { t } = useLanguage();
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
       <Eye className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-      <span>View-only — only workspace admins can change these settings.</span>
+      <span>{t('workspace.view_only')}</span>
     </div>
   );
 }
@@ -424,7 +425,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     } catch (error) {
       console.error('Error saving roles:', error);
       setStatus('roles', 'error', 4000);
-      toast.error("Couldn't save that role change — it was not applied. Please try again.");
+      toast.error(t('workspace.errors.save_role'));
       await loadRoles();
     }
   };
@@ -501,7 +502,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
       setStatus(key, 'error', 4000);
       toast.error(
         error instanceof Error && error.message === 'no_rows'
-          ? 'You do not have permission to change these settings.'
+          ? t('workspace.errors.no_permission')
           : friendlyError,
       );
       return false;
@@ -515,12 +516,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     const name = workspaceName.trim();
     if (!name || name === persistedRef.current.name) {
       if (!name) {
-        toast.error("The workspace name can't be empty.");
+        toast.error(t('workspace.errors.name_empty'));
         setWorkspaceName(persistedRef.current.name);
       }
       return;
     }
-    const ok = await persistWorkspace('general', { name }, "Couldn't save the workspace name.");
+    const ok = await persistWorkspace('general', { name }, t('workspace.errors.save_name'));
     if (ok) {
       persistedRef.current.name = name;
       if (refreshProfile) await refreshProfile();
@@ -532,7 +533,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   const saveTimezone = async (tz: string) => {
     setTimezone(tz);
     if (tz === persistedRef.current.timezone) return;
-    const ok = await persistWorkspace('general', { timezone: tz }, "Couldn't save the timezone — it may be locked on this workspace.");
+    const ok = await persistWorkspace('general', { timezone: tz }, t('workspace.errors.save_timezone'));
     if (ok) {
       persistedRef.current.timezone = tz;
       if (refreshProfile) await refreshProfile();
@@ -547,11 +548,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     if (raw === persistedRef.current.notificationDays) return;
     if (!Number.isFinite(days) || days < 1 || days > 365) {
       setStatus('notifications', 'error', 4000);
-      toast.error('Reminder days must be between 1 and 365.');
+      toast.error(t('workspace.errors.reminder_range'));
       setNotificationDays(persistedRef.current.notificationDays);
       return;
     }
-    const ok = await persistWorkspace('notifications', { default_notification_days: days }, "Couldn't save the reminder setting.");
+    const ok = await persistWorkspace('notifications', { default_notification_days: days }, t('workspace.errors.save_reminder'));
     if (ok) {
       persistedRef.current.notificationDays = String(days);
       setNotificationDays(String(days));
@@ -572,11 +573,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     const days = parseInt(raw, 10);
     if (!Number.isFinite(days) || days < 1 || days > 365) {
       setStatus('countersig', 'error', 4000);
-      toast.error('Counter-signature window must be between 1 and 365 days.');
+      toast.error(t('workspace.errors.countersig_range'));
       setCounterSignatureDueDays(persistedRef.current.counterSignatureDueDays);
       return;
     }
-    const ok = await persistWorkspace('countersig', { counter_signature_default_due_days: days }, "Couldn't save the counter-signature window.");
+    const ok = await persistWorkspace('countersig', { counter_signature_default_due_days: days }, t('workspace.errors.save_countersig'));
     if (ok) {
       persistedRef.current.counterSignatureDueDays = String(days);
       setCounterSignatureDueDays(String(days));
@@ -603,7 +604,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
       !Number.isFinite(approval) || approval < 0
     ) {
       setStatus('thresholds', 'error', 4000);
-      toast.error('Thresholds must be zero or a positive dollar amount.');
+      toast.error(t('workspace.errors.thresholds_range'));
       setCovenantThreshold(persistedRef.current.covenantThreshold);
       setApprovalThreshold(persistedRef.current.approvalThreshold);
       return;
@@ -611,7 +612,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     const ok = await persistWorkspace(
       'thresholds',
       { covenant_threshold: covenant, approval_threshold: approval },
-      "Couldn't save the review thresholds.",
+      t('workspace.errors.save_thresholds'),
     );
     if (ok) {
       // Normalize display to the STORED values so the field never shows ''
@@ -638,7 +639,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     const ok = await persistWorkspace(
       'onboarding',
       { backdoor_enabled: value },
-      "Couldn't save the onboarding setting.",
+      t('workspace.errors.save_onboarding'),
     );
     if (!ok) setBackdoorEnabled(prev);
   };
@@ -651,7 +652,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     const ok = await persistWorkspace(
       'asset_types',
       { asset_type_config: nextConfig, asset_type_abbreviations: nextAbbr },
-      "Couldn't save asset types.",
+      t('workspace.errors.save_asset_types'),
     );
     if (ok) {
       persistedRef.current.assetTypeConfig = nextConfig;
@@ -682,9 +683,9 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     void persistAssetTypes(nextConfig, nextAbbr);
     // Instant-persist removed the old "just don't press Save" safety net —
     // an undo toast is its replacement (restores the abbreviation too).
-    toast(`Removed "${type}"`, {
+    toast(t('workspace.autosave.removed_item', { item: type }), {
       action: {
-        label: 'Undo',
+        label: t('workspace.autosave.undo'),
         onClick: () => {
           setAssetTypeConfig(prevConfig);
           setAssetTypeAbbr(prevAbbr);
@@ -710,7 +711,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     const persist = async (next: string[]) => {
       if (configLoadState !== 'ready') return; // loader-honesty gate
       setOptions(next);
-      const ok = await persistWorkspace(dbColumn, { [dbColumn]: next }, "Couldn't save that change.");
+      const ok = await persistWorkspace(dbColumn, { [dbColumn]: next }, t('workspace.errors.save_generic'));
       if (ok) {
         persistedRef.current.lists[dbColumn] = next;
       } else {
@@ -727,8 +728,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
       handleRemove: (item: string) => {
         const prev = options;
         void persist(options.filter((o) => o !== item));
-        toast(`Removed "${item}"`, {
-          action: { label: 'Undo', onClick: () => void persist(prev) },
+        toast(t('workspace.autosave.removed_item', { item }), {
+          action: { label: t('workspace.autosave.undo'), onClick: () => void persist(prev) },
         });
       },
     };
@@ -787,7 +788,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   <Label htmlFor="timezone">{t('workspace.default_timezone')}</Label>
                   <Select value={timezone} onValueChange={(tz) => void saveTimezone(tz)}>
                     <SelectTrigger id="timezone" disabled={!canEdit}>
-                      <SelectValue placeholder="Select timezone" />
+                      <SelectValue placeholder={t('workspace.select_timezone')} />
                     </SelectTrigger>
                     <SelectContent>
                       {timezones.map((tz) => (
@@ -799,7 +800,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   </Select>
                   <p className="text-xs text-muted-foreground">{t('workspace.timezone_desc')}</p>
                 </div>
-                {canEdit && <p className="text-xs text-muted-foreground">Changes save automatically.</p>}
+                {canEdit && <p className="text-xs text-muted-foreground">{t('workspace.autosave.note')}</p>}
               </CardContent>
             </Card>
           </TabsContent>
@@ -822,8 +823,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                 <Card>
                   <SectionCardHeader
                     icon={Users}
-                    title="Default approvers"
-                    description="The fallback chain: Manager Approval, then Financial Approval. It routes a lease request only when no Approval Rule matches it."
+                    title={t('workspace.approvers.title')}
+                    description={t('workspace.approvers.desc')}
                     status={saveStatus['roles']}
                   >
                     {/* Live walkthrough 2026-07-12: this legacy editor read as THE
@@ -832,15 +833,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         and thought they were done. Name the relationship and put
                         a door to the rules right here. */}
                     <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                      <span>
-                        Want different approvers by asset type, department, or deal size? That's an
-                        Approval Rule — rules always run before this default chain.
-                      </span>
+                      <span>{t('workspace.approvers.callout')}</span>
                       <Link
                         to="/app/settings/workspaces/approval_policies"
                         className="font-medium text-primary hover:underline"
                       >
-                        Set up Approval Rules →
+                        {t('workspace.approvers.setup_link')}
                       </Link>
                     </div>
                   </SectionCardHeader>
@@ -848,12 +846,10 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     {/* Approval chain slots */}
                     {rolesLoadError ? (
                       <div className="flex flex-col items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-6 text-center">
-                        <p className="text-sm text-destructive font-medium">Couldn't load the current role assignments.</p>
-                        <p className="text-xs text-muted-foreground">
-                          Editing is paused so nothing gets overwritten — your stored assignments are safe.
-                        </p>
+                        <p className="text-sm text-destructive font-medium">{t('workspace.approvers.load_error_title')}</p>
+                        <p className="text-xs text-muted-foreground">{t('workspace.approvers.load_error_body')}</p>
                         <Button size="sm" variant="outline" onClick={() => void loadRoles()}>
-                          Try again
+                          {t('workspace.config_error.retry')}
                         </Button>
                       </div>
                     ) : membersLoading || !rolesLoaded ? (
@@ -865,8 +861,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       <div className="space-y-3">
                         {(
                           [
-                            { role: 'manager_approver' as const, step: 'Step 1', label: 'Manager Approval', assignedId: managerApproverId },
-                            { role: 'financial_approver' as const, step: 'Step 2', label: 'Financial Approval', assignedId: financialApproverId },
+                            { role: 'manager_approver' as const, step: t('workspace.approvers.step1'), label: t('workspace.approvers.manager'), assignedId: managerApproverId },
+                            { role: 'financial_approver' as const, step: t('workspace.approvers.step2'), label: t('workspace.approvers.financial'), assignedId: financialApproverId },
                           ]
                         ).map(({ role, step, label, assignedId }) => {
                           const assignedMember = members.find((m) => m.user_id === assignedId);
@@ -889,7 +885,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                     </div>
                                   </div>
                                 ) : (
-                                  <p className="text-sm text-muted-foreground ml-2 italic">No approver assigned</p>
+                                  <p className="text-sm text-muted-foreground ml-2 italic">{t('workspace.approvers.none_assigned')}</p>
                                 )}
                               </div>
                               {canEdit && (
@@ -903,9 +899,9 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                         render at left; echoing the selection here duplicated it. */}
                                     <SelectTrigger
                                       className="h-8 text-xs w-[110px]"
-                                      aria-label={`${assignedMember ? 'Change' : 'Assign'} ${label} approver`}
+                                      aria-label={t('workspace.approvers.select_aria', { action: assignedMember ? t('workspace.approvers.change') : t('workspace.approvers.assign'), label })}
                                     >
-                                      {assignedMember ? 'Change' : 'Assign'}
+                                      {assignedMember ? t('workspace.approvers.change') : t('workspace.approvers.assign')}
                                     </SelectTrigger>
                                     <SelectContent>
                                       {members.map((m) => {
@@ -930,7 +926,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                       onClick={() => assignApproverRole(role, null)}
                                       disabled={!rolesWritable}
-                                      aria-label={`Clear ${label} assignee`}
+                                      aria-label={t('workspace.approvers.clear_aria', { label })}
                                     >
                                       <X className="h-3.5 w-3.5" />
                                     </Button>
@@ -944,7 +940,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                           <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:bg-amber-950/20 dark:border-amber-700">
                             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                             <p className="text-xs text-amber-700 dark:text-amber-400">
-                              No Financial Approver assigned — commitments will stall after manager approval.
+                              {t('workspace.approvers.no_financial_warning')}
                             </p>
                           </div>
                         )}
@@ -953,16 +949,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
 
                     {/* Member roles: submitter + admin */}
                     <div>
-                      <p className="text-sm font-medium mb-1">Workflow roles</p>
+                      <p className="text-sm font-medium mb-1">{t('workspace.approvers.workflow_title')}</p>
                       {/* Corrected 2026-07-12: the workflow Admin is NOT the Team-Members
                           access level — it's a separate grant (workspace_roles) that
                           canUploadExecutedDocument / canAccessVarianceReview check. The
                           earlier "same Admin" copy was wrong and hid a real capability. */}
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Submitter: can create and submit lease requests. Workflow admin: can upload
-                        executed documents and review variance reports — this is separate from the
-                        Team Members access level above.
-                      </p>
+                      <p className="text-xs text-muted-foreground mb-3">{t('workspace.approvers.workflow_desc')}</p>
                       {membersLoading || !rolesLoaded ? (
                         <div className="space-y-3">
                           {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
@@ -970,9 +962,9 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       ) : (
                         <div className="divide-y divide-border rounded-lg border">
                           <div className="hidden sm:grid grid-cols-[1fr_100px_100px] gap-4 px-3 pb-2 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            <span>Member</span>
-                            <span className="text-center">Submitter</span>
-                            <span className="text-center">Workflow admin</span>
+                            <span>{t('workspace.approvers.member_col')}</span>
+                            <span className="text-center">{t('workspace.approvers.submitter')}</span>
+                            <span className="text-center">{t('workspace.approvers.workflow_admin')}</span>
                           </div>
                           {members.map((member) => {
                             const roles = memberRoles[member.user_id] || new Set<FunctionalRole>();
@@ -993,14 +985,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                   <div className="sm:col-span-2 flex items-center">
                                     <Badge variant="default" className="flex items-center gap-1 text-xs">
                                       <Crown className="h-3 w-3" />
-                                      Owner — all roles
+                                      {t('workspace.approvers.owner_all')}
                                     </Badge>
                                   </div>
                                 ) : (
                                   <div className="flex gap-6 sm:contents">
                                     {(['submitter', 'admin'] as const).map((role) => (
                                       <div key={role} className="flex sm:justify-center items-center gap-2">
-                                        <span className="text-xs text-muted-foreground sm:hidden">{role === 'admin' ? 'Workflow admin' : 'Submitter'}:</span>
+                                        <span className="text-xs text-muted-foreground sm:hidden">{role === 'admin' ? t('workspace.approvers.workflow_admin') : t('workspace.approvers.submitter')}:</span>
                                         <Checkbox
                                           checked={roles.has(role)}
                                           onCheckedChange={() => { if (canEdit) toggleFunctionalRole(member.user_id, role); }}
@@ -1018,7 +1010,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     </div>
 
                     {canEdit ? (
-                      <p className="text-xs text-muted-foreground">Changes save automatically.</p>
+                      <p className="text-xs text-muted-foreground">{t('workspace.autosave.note')}</p>
                     ) : (
                       <ReadOnlyNotice />
                     )}
@@ -1055,7 +1047,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     />
                     <p className="text-xs text-muted-foreground">{t('workspace.reminder_desc')}</p>
                   </div>
-                  {canEdit && <p className="text-xs text-muted-foreground">Changes save automatically.</p>}
+                  {canEdit && <p className="text-xs text-muted-foreground">{t('workspace.autosave.note')}</p>}
                 </CardContent>
               </Card>
 
@@ -1071,8 +1063,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               <Card>
                 <SectionCardHeader
                   icon={Settings2}
-                  title="Asset Types"
-                  description="Configure the list of asset types available when classifying leases. These are used by the AI during extraction to classify the asset. Set a short abbreviation (e.g. RE, EQP) to keep the Leases table tight — leave it blank to use the built-in default."
+                  title={t('workspace.lease_config.asset_title')}
+                  description={t('workspace.lease_config.asset_desc')}
                   status={saveStatus['asset_types']}
                 />
                 <CardContent className="space-y-4">
@@ -1090,7 +1082,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                           }
                           onBlur={saveAssetAbbreviations}
                           placeholder={assetAbbreviation(type)}
-                          aria-label={`${type} abbreviation`}
+                          aria-label={t('workspace.lease_config.abbr_aria', { type })}
                           maxLength={5}
                           className="h-7 w-20 text-center text-xs"
                           disabled={saveStatus['asset_types'] === 'saving'}
@@ -1101,7 +1093,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                           className="h-6 w-6 text-muted-foreground hover:text-destructive"
                           onClick={() => handleRemoveAssetType(type)}
                           disabled={saveStatus['asset_types'] === 'saving'}
-                          aria-label={`Remove ${type}`}
+                          aria-label={t('workspace.lease_config.remove_aria', { item: type })}
                         >
                           <X size={12} />
                         </Button>
@@ -1110,7 +1102,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   </div>
                   <div className="flex gap-2">
                     <Input
-                      placeholder="Add new asset type..."
+                      placeholder={t('workspace.lease_config.asset_add_placeholder')}
                       value={newAssetType}
                       onChange={(e) => setNewAssetType(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddAssetType(); } }}
@@ -1118,10 +1110,10 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     />
                     <Button variant="outline" size="sm" onClick={handleAddAssetType} disabled={!newAssetType.trim() || saveStatus['asset_types'] === 'saving'}>
                       <Plus size={14} className="mr-1" />
-                      Add
+                      {t('workspace.lease_config.add')}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">Changes save automatically.</p>
+                  <p className="text-xs text-muted-foreground">{t('workspace.autosave.note')}</p>
                 </CardContent>
               </Card>
 
@@ -1134,13 +1126,16 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   Buildings:   { options: buildingOptions,   newVal: newBuildingOption,   setOptions: setBuildingOptions,   setNew: setNewBuildingOption,   dbColumn: 'building_options' },
                 };
                 const cfg = configs[label];
+                const i18nKey = { Departments: 'departments', Regions: 'regions', Locations: 'locations', Buildings: 'buildings' }[label];
+                const fieldKey = { Departments: 'department', Regions: 'region', Locations: 'location', Buildings: 'building' }[label];
+                const fieldName = t(`workspace.lease_config.${fieldKey}`);
                 const handlers = makeOptionListHandlers(cfg.options, cfg.setOptions, cfg.setNew, cfg.dbColumn);
                 return (
                   <Card key={label}>
                     <SectionCardHeader
                       icon={Settings2}
-                      title={label}
-                      description={`Configure the available options for the ${label.toLowerCase().slice(0, -1)} field on leases. Users can also type a custom value.`}
+                      title={t(`workspace.lease_config.${i18nKey}`)}
+                      description={t('workspace.lease_config.list_desc', { field: fieldName })}
                       status={saveStatus[cfg.dbColumn]}
                     />
                     <CardContent className="space-y-4">
@@ -1154,19 +1149,19 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                               className="h-6 w-6 text-muted-foreground hover:text-destructive"
                               onClick={() => handlers.handleRemove(item)}
                               disabled={saveStatus[cfg.dbColumn] === 'saving'}
-                              aria-label={`Remove ${item}`}
+                              aria-label={t('workspace.lease_config.remove_aria', { item })}
                             >
                               <X size={12} />
                             </Button>
                           </div>
                         ))}
                         {cfg.options.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No options configured — the field will accept free text.</p>
+                          <p className="text-xs text-muted-foreground">{t('workspace.lease_config.no_options')}</p>
                         )}
                       </div>
                       <div className="flex gap-2">
                         <Input
-                          placeholder={`Add new ${label.toLowerCase().slice(0, -1)}…`}
+                          placeholder={t('workspace.lease_config.add_item_placeholder', { field: fieldName })}
                           value={cfg.newVal}
                           onChange={(e) => cfg.setNew(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handlers.handleAdd(cfg.newVal); } }}
@@ -1174,10 +1169,10 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         />
                         <Button variant="outline" size="sm" onClick={() => handlers.handleAdd(cfg.newVal)} disabled={!cfg.newVal.trim() || saveStatus[cfg.dbColumn] === 'saving'}>
                           <Plus size={14} className="mr-1" />
-                          Add
+                          {t('workspace.lease_config.add')}
                         </Button>
                       </div>
-                      <p className="text-xs text-muted-foreground">Changes save automatically.</p>
+                      <p className="text-xs text-muted-foreground">{t('workspace.autosave.note')}</p>
                     </CardContent>
                   </Card>
                 );
@@ -1204,22 +1199,19 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               <Card>
                 <SectionCardHeader
                   icon={GitBranch}
-                  title="Approval Rules"
-                  description="Rules decide who approves each lease request — by asset type, department, dollar size, or region. The first matching rule runs its approver chain; when nothing matches, the Default approvers on the Members page take over."
+                  title={t('workspace.rules.title')}
+                  description={t('workspace.rules.desc')}
                 />
                 <CardContent className="space-y-2">
                   <Button asChild>
                     <Link to="/app/settings/approval-policies">
                       <ExternalLink className="h-4 w-4 mr-1.5" />
-                      Manage rules
+                      {t('workspace.rules.manage')}
                     </Link>
                   </Button>
                   {/* Live walkthrough 2026-07-12: this section opened on a bounce
                       button with no hint of what exists — say what you'll find. */}
-                  <p className="text-xs text-muted-foreground">
-                    View, reorder, and edit your rules — including the plain-language rule builder
-                    with a sample-request tester.
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t('workspace.rules.whats_inside')}</p>
                 </CardContent>
               </Card>
 
@@ -1230,13 +1222,13 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               <Card>
                 <SectionCardHeader
                   icon={TrendingUp}
-                  title="Review Thresholds"
-                  description="Dollar limits that trigger financial review for new lease requests."
+                  title={t('workspace.thresholds.title')}
+                  description={t('workspace.thresholds.desc')}
                   status={saveStatus['thresholds']}
                 />
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="approval-threshold">Approval Threshold ($)</Label>
+                    <Label htmlFor="approval-threshold">{t('workspace.thresholds.approval_label')}</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                       <Input
@@ -1253,13 +1245,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         className="pl-7"
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Commitments with total cash commitment above this amount require Financial Approver review. Set to 0 to require review for all.
-                    </p>
+                    <p className="text-xs text-muted-foreground">{t('workspace.thresholds.approval_help')}</p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="covenant-threshold">Lease Liability Alert ($)</Label>
+                    <Label htmlFor="covenant-threshold">{t('workspace.thresholds.covenant_label')}</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                       <Input
@@ -1272,26 +1262,24 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         onBlur={() => void saveThresholds()}
                         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                         disabled={!canEdit}
-                        placeholder="Optional"
+                        placeholder={t('workspace.thresholds.optional')}
                         className="pl-7"
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Total portfolio lease liability limit. Commitments that exceed this threshold trigger a portfolio risk alert.
-                    </p>
+                    <p className="text-xs text-muted-foreground">{t('workspace.thresholds.covenant_help')}</p>
                   </div>
 
-                  {canEdit && <p className="text-xs text-muted-foreground">Changes save automatically.</p>}
+                  {canEdit && <p className="text-xs text-muted-foreground">{t('workspace.autosave.note')}</p>}
 
                   {/* Signpost for the dissolved Financial tab's third field —
                       "where did the discount rate go?" is the predictable
                       first question after this IA change. */}
                   <p className="text-xs text-muted-foreground border-t border-border pt-3">
-                    Looking for the discount rate? It now lives in{' '}
+                    {t('workspace.thresholds.signpost_prefix')}{' '}
                     <Link to="/app/reports" className="text-primary hover:underline">
-                      Report settings
+                      {t('workspace.thresholds.signpost_link')}
                     </Link>{' '}
-                    on the Reports page.
+                    {t('workspace.thresholds.signpost_suffix')}
                   </p>
                 </CardContent>
               </Card>
@@ -1302,14 +1290,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               <Card>
                 <SectionCardHeader
                   icon={PenLine}
-                  title="Counter-Signature Window"
-                  description="Default number of days from signator approval until the counter-signed document is expected. Reminders fire 7 days before, on the due date, and at 7 / 14 / 28 days overdue."
+                  title={t('workspace.countersig.title')}
+                  description={t('workspace.countersig.desc')}
                   status={saveStatus['countersig']}
                 />
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="counter-signature-days">
-                      Default counter-signature window (days)
+                      {t('workspace.countersig.label')}
                     </Label>
                     <Input
                       id="counter-signature-days"
@@ -1322,11 +1310,9 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       max={365}
                       disabled={!canEdit}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Must be between 1 and 365 days. Default: 21.
-                    </p>
+                    <p className="text-xs text-muted-foreground">{t('workspace.countersig.help')}</p>
                   </div>
-                  {canEdit && <p className="text-xs text-muted-foreground">Changes save automatically.</p>}
+                  {canEdit && <p className="text-xs text-muted-foreground">{t('workspace.autosave.note')}</p>}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1338,23 +1324,21 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               <Card>
                 <SectionCardHeader
                   icon={Package}
-                  title="Historical Portfolio Loader"
-                  description="Enable a simplified form for loading existing leases during onboarding. Turn off when your portfolio is loaded."
+                  title={t('workspace.onboarding_section.title')}
+                  description={t('workspace.onboarding_section.desc')}
                   status={saveStatus['onboarding']}
                 />
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <Label>Portfolio Loader</Label>
-                      <p className="text-xs text-muted-foreground">
-                        When enabled, shows the historical portfolio intake form to workspace members.
-                      </p>
+                      <Label>{t('workspace.onboarding_section.toggle_label')}</Label>
+                      <p className="text-xs text-muted-foreground">{t('workspace.onboarding_section.toggle_desc')}</p>
                     </div>
                     <Switch
                       checked={backdoorEnabled}
                       onCheckedChange={(value) => handleSaveBackdoor(value)}
                       disabled={saveStatus['onboarding'] === 'saving'}
-                      aria-label="Enable historical portfolio loader"
+                      aria-label={t('workspace.onboarding_section.toggle_aria')}
                     />
                   </div>
                 </CardContent>

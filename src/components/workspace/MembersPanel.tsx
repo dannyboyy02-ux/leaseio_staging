@@ -123,7 +123,7 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
         .eq('id', memberId)
         .eq('workspace_id', workspaceId);
       if (error) throw error;
-      toast.success('Member removed');
+      toast.success(t('workspace.members_panel.removed'));
       refetchMembers();
       // Fire-and-forget: an audit-write failure must not surface as a
       // removal failure — the delete above already committed.
@@ -143,7 +143,7 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
       }
     } catch (error) {
       console.error('Error removing member:', error);
-      toast.error('Failed to remove member');
+      toast.error(t('workspace.members_panel.remove_failed'));
     }
   };
 
@@ -208,7 +208,7 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Add team members to configure roles and approval workflows.
+                {t('workspace.members_panel.single_hint')}
               </p>
             </div>
           ) : (
@@ -275,8 +275,8 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
       {pendingInvites.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Pending Invitations</CardTitle>
-            <CardDescription>Invitations that have not yet been accepted.</CardDescription>
+            <CardTitle>{t('workspace.members_panel.pending_title')}</CardTitle>
+            <CardDescription>{t('workspace.members_panel.pending_desc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <PendingInvitesList invites={pendingInvites} onRefresh={refetchPending} />

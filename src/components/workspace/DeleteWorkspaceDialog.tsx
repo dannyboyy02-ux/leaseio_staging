@@ -25,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { toast } from 'sonner';
 
 interface DeleteWorkspaceDialogProps {
@@ -53,6 +54,7 @@ export function DeleteWorkspaceDialog({
   isOnlyWorkspace = false,
   onDeleted,
 }: DeleteWorkspaceDialogProps) {
+  const { t } = useAppTranslation();
   const [typed, setTyped] = useState('');
   const [ackedLast, setAckedLast] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -88,14 +90,13 @@ export function DeleteWorkspaceDialog({
         memberCount: number;
         storageObjectsPurged: number;
       };
-      toast.success(
-        `Workspace deleted — ${result.leaseCount} lease${result.leaseCount === 1 ? '' : 's'}, ${result.memberCount} member${result.memberCount === 1 ? '' : 's'}, ${result.storageObjectsPurged} file${result.storageObjectsPurged === 1 ? '' : 's'} removed`,
-      );
+      void result; // counts were shown in the confirm dialog; keep the toast short
+      toast.success(t('workspace.delete_dialog.success'));
       onOpenChange(false);
       onDeleted();
     } catch (err) {
       console.error('delete-workspace error:', err);
-      toast.error('Failed to delete workspace');
+      toast.error(t('workspace.delete_dialog.fail'));
     } finally {
       setBusy(false);
     }
@@ -107,38 +108,31 @@ export function DeleteWorkspaceDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
-            Delete workspace
+            {t('workspace.delete_dialog.title')}
           </DialogTitle>
           <DialogDescription className="pt-2 text-foreground">
-            This will permanently delete the <strong>{workspaceName}</strong>{' '}
-            workspace and all of its data — every lease, every uploaded
-            document, every approval policy, every audit log entry, every
-            member assignment.
+            {t('workspace.delete_dialog.intro_prefix')} <strong>{workspaceName}</strong>{' '}
+            {t('workspace.delete_dialog.intro_suffix')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
-          <p className="font-medium text-destructive">This cannot be undone.</p>
+          <p className="font-medium text-destructive">{t('workspace.delete_dialog.cannot_undo')}</p>
           <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground list-disc list-inside">
-            <li>
-              {leaseCount} lease{leaseCount === 1 ? '' : 's'} will be permanently deleted
-            </li>
-            <li>
-              {memberCount} member{memberCount === 1 ? '' : 's'} will lose access immediately
-            </li>
-            <li>All uploaded PDF files will be purged from storage</li>
-            <li>Approval policies, invites, and configuration will be erased</li>
+            <li>{t('workspace.delete_dialog.leases_bullet', { count: leaseCount })}</li>
+            <li>{t('workspace.delete_dialog.members_bullet', { count: memberCount })}</li>
+            <li>{t('workspace.delete_dialog.files_bullet')}</li>
+            <li>{t('workspace.delete_dialog.config_bullet')}</li>
           </ul>
         </div>
 
         {isOnlyWorkspace && (
           <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/20">
             <p className="font-medium text-amber-800 dark:text-amber-300">
-              This is your only workspace.
+              {t('workspace.delete_dialog.only_title')}
             </p>
             <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
-              After deleting it you'll have no active workspace and will need to
-              create a new one before you can use LeaseIO again.
+              {t('workspace.delete_dialog.only_body')}
             </p>
             <label className="mt-2 flex items-start gap-2 text-xs text-amber-900 dark:text-amber-200 cursor-pointer">
               <Checkbox
@@ -147,14 +141,15 @@ export function DeleteWorkspaceDialog({
                 disabled={busy}
                 className="mt-0.5"
               />
-              <span>I understand I'll be left without a workspace.</span>
+              <span>{t('workspace.delete_dialog.only_ack')}</span>
             </label>
           </div>
         )}
 
         <div className="space-y-2">
           <Label htmlFor="confirm-name" className="text-sm">
-            Type <strong className="font-mono">{workspaceName}</strong> to confirm:
+            {t('workspace.delete_dialog.type_prefix')} <strong className="font-mono">{workspaceName}</strong>{' '}
+            {t('workspace.delete_dialog.type_suffix')}
           </Label>
           <Input
             id="confirm-name"
@@ -173,7 +168,7 @@ export function DeleteWorkspaceDialog({
             onClick={() => onOpenChange(false)}
             disabled={busy}
           >
-            Cancel
+            {t('workspace.delete_dialog.cancel')}
           </Button>
           <Button
             variant="destructive"
@@ -181,7 +176,7 @@ export function DeleteWorkspaceDialog({
             disabled={!matches || busy}
           >
             {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-            {busy ? 'Deleting…' : 'Delete workspace permanently'}
+            {busy ? t('workspace.delete_dialog.deleting') : t('workspace.delete_dialog.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>
