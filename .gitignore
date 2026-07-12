@@ -41,3 +41,6 @@ supabase/.temp/
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Playwright MCP session artifacts (screenshots, snapshots, console logs)
+.playwright-mcp/
