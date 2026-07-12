@@ -579,10 +579,28 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               {members && members.length > 1 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Approval Chain</CardTitle>
+                    <CardTitle>Default approvers</CardTitle>
                     <CardDescription>
-                      Assign one approver to each step. Lease requests flow through Manager Approval first, then Financial Approval before execution.
+                      The fallback chain: Manager Approval, then Financial Approval. It routes a
+                      lease request only when no Approval Rule matches it.
                     </CardDescription>
+                    {/* Live walkthrough 2026-07-12: this legacy editor read as THE
+                        approval setup while the real routing engine (Approval
+                        Rules) hid behind a bounce link — admins configured this
+                        and thought they were done. Name the relationship and put
+                        a door to the rules right here. */}
+                    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                      <span>
+                        Want different approvers by asset type, department, or deal size? That's an
+                        Approval Rule — rules always run before this default chain.
+                      </span>
+                      <Link
+                        to="/app/settings/workspaces/approval_policies"
+                        className="font-medium text-primary hover:underline"
+                      >
+                        Set up Approval Rules →
+                      </Link>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* Approval chain slots */}
@@ -675,8 +693,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
 
                     {/* Member roles: submitter + admin */}
                     <div>
-                      <p className="text-sm font-medium mb-1">Other Roles</p>
-                      <p className="text-xs text-muted-foreground mb-3">Control who can submit lease requests and who has admin access.</p>
+                      <p className="text-sm font-medium mb-1">Workflow roles</p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Submitter: can create and submit lease requests. Admin: full workspace
+                        administration — the same Admin as the access level in Team Members above.
+                      </p>
                       {membersLoading || !rolesLoaded ? (
                         <div className="space-y-3">
                           {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
@@ -958,20 +979,26 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     <div>
                       <CardTitle>Approval Rules</CardTitle>
                       <CardDescription>
-                        Per-workspace rules that decide who approves a lease request based on its asset type,
-                        department, dollar threshold, region, and more. Each rule defines the conditions that match
-                        and the chain of approvers that runs.
+                        Rules decide who approves each lease request — by asset type, department,
+                        dollar size, or region. The first matching rule runs its approver chain;
+                        when nothing matches, the Default approvers on the Members page take over.
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-2">
                   <Button asChild>
                     <Link to="/app/settings/approval-policies">
                       <ExternalLink className="h-4 w-4 mr-1.5" />
-                      Open Approval Rules
+                      Manage rules
                     </Link>
                   </Button>
+                  {/* Live walkthrough 2026-07-12: this section opened on a bounce
+                      button with no hint of what exists — say what you'll find. */}
+                  <p className="text-xs text-muted-foreground">
+                    View, reorder, and edit your rules — including the plain-language rule builder
+                    with a sample-request tester.
+                  </p>
                 </CardContent>
               </Card>
 
