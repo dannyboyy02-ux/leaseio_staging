@@ -1143,12 +1143,23 @@ export default function AccountSettings() {
             )}
 
             {/* Trial banner — visible while subscription is in Stripe's trial window.
-                Suppressed on firm-bound workspaces: the firm owns billing, so a
-                stale workspace-level trial status must not show a portal button
-                that 403s firm_managed (audit D1). */}
+                Suppressed on firm-bound workspaces: the firm owns billing (audit D1).
+                When a cancel is SCHEDULED the charge warning would be a lie
+                ("card will be charged on X" directly above "Scheduled to cancel
+                on X" — live walkthrough 2026-07-12), so the banner swaps to the
+                honest no-charge variant. The payment-method button was removed:
+                the Payment section directly below is the single portal door
+                (one action, one label — the banner is informational). */}
             {!firmBound && workspace.subscriptionStatus === 'trialing' && formattedPeriodEnd && (
-              <div className="rounded-lg border border-accent/40 bg-accent/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-                <div>
+              scheduledCancel ? (
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3">
+                  <p className="text-sm font-medium text-foreground">{t('account.trial_canceled_banner_title')}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t('account.trial_canceled_banner_desc', { date: scheduledCancelDate ?? formattedPeriodEnd })}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-accent/40 bg-accent/5 px-4 py-3">
                   <p className="text-sm font-medium text-foreground">{t('account.trial_banner_title')}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {trialDaysLeft === 0
@@ -1159,19 +1170,7 @@ export default function AccountSettings() {
                         })}
                   </p>
                 </div>
-                {isAdminUser ? (
-                  <Button size="sm" variant="outline" onClick={handleManagePayment} disabled={isManagingPayment}>
-                    {isManagingPayment ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <CreditCard className="h-4 w-4 mr-2" />
-                    )}
-                    {t('account.add_payment_method')}
-                  </Button>
-                ) : (
-                  <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
-                )}
-              </div>
+              )
             )}
 
             {/* Past-due / unpaid / incomplete states — payment failed; user must update method.
@@ -1350,8 +1349,15 @@ export default function AccountSettings() {
                   {/* Card → "Visa •••• 4242"; a wallet/bank method (Stripe Link,
                       Apple Pay, ACH) has no last4 → render its label so a paying
                       customer never sees a blank "no payment method" line
-                      (incident 2026-07-11). */}
-                  <span className="text-sm text-foreground capitalize">
+                      (incident 2026-07-11). `capitalize` ONLY on the brand line —
+                      applied to a label it mangled the Link email into
+                      "Lat36foods@Gmail.Com" (live walkthrough 2026-07-12). */}
+                  <span
+                    className={cn(
+                      'text-sm text-foreground',
+                      billingSummary.card.last4 && 'capitalize',
+                    )}
+                  >
                     {billingSummary.card.last4
                       ? `${billingSummary.card.brand ?? ''} •••• ${billingSummary.card.last4}`
                       : (billingSummary.card.label ?? t('account.payment_none'))}
@@ -1399,15 +1405,34 @@ export default function AccountSettings() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
+                            {/* Hosted page + direct PDF. Stripe's hosted invoice
+                                page is a JS app (blank under content blockers —
+                                owner report 2026-07-12, verified server-side:
+                                200 OK but a 745-byte script shell); the PDF
+                                downloads with no JS, so it's the robust path. */}
                             {inv.hostedInvoiceUrl || inv.invoicePdf ? (
-                              <a
-                                href={inv.hostedInvoiceUrl ?? inv.invoicePdf ?? '#'}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline text-sm"
-                              >
-                                {t('account.invoice_view')}
-                              </a>
+                              <span className="inline-flex items-center gap-3">
+                                {inv.hostedInvoiceUrl && (
+                                  <a
+                                    href={inv.hostedInvoiceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline text-sm"
+                                  >
+                                    {t('account.invoice_view')}
+                                  </a>
+                                )}
+                                {inv.invoicePdf && (
+                                  <a
+                                    href={inv.invoicePdf}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline text-sm"
+                                  >
+                                    {t('account.invoice_pdf')}
+                                  </a>
+                                )}
+                              </span>
                             ) : (
                               <span className="text-muted-foreground text-sm">—</span>
                             )}
@@ -1660,8 +1685,11 @@ export default function AccountSettings() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Downgrade Confirmation Dialog — spells out Business feature loss
-          before handing off to the billing portal. */}
+      {/* Downgrade Confirmation Dialog — spells out Business feature loss,
+          then routes through CHECKOUT like an upgrade (2026-07-12): one
+          consistent plan-change flow. The webhook cancels the displaced sub
+          automatically, and the portal is card-management-only now, so the
+          old "finish in the billing portal" handoff would dead-end. */}
       <AlertDialog open={!!confirmDowngradePlan} onOpenChange={() => setConfirmDowngradePlan(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1680,8 +1708,9 @@ export default function AccountSettings() {
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
+                const planId = confirmDowngradePlan;
                 setConfirmDowngradePlan(null);
-                handleManagePayment();
+                if (planId) proceedWithCheckout(planId);
               }}
             >
               {t('account.downgrade_confirm_cta')}

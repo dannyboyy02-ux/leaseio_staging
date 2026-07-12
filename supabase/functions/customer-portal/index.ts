@@ -4,6 +4,51 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 import { getCorsHeaders } from "../_shared/cors.ts";
 
+// Card-management-only portal configuration (2026-07-12, live UX walkthrough).
+// The in-app Billing tab owns cancel/resume (cancel-subscription fn) and plan
+// changes, each with full feedback; the portal's own duplicate cancel flow was
+// a second, silent cancel path — a user canceling there returned to a neutral
+// "Billing information refreshed" toast instead of the scheduled-cancel notice
+// (owner report). Pin a configuration limited to payment-method update +
+// invoice history so the portal can ONLY do what the app sends people there
+// for. Resolved once per function instance (cached); on any failure we fall
+// back to the account's default configuration — the portal stays usable, it
+// just temporarily regains Stripe's default features.
+let cachedPortalConfigId: string | null = null;
+// deno-lint-ignore no-explicit-any
+async function resolvePortalConfiguration(stripe: any): Promise<string | null> {
+  if (cachedPortalConfigId) return cachedPortalConfigId;
+  try {
+    const existing = await stripe.billingPortal.configurations.list({ limit: 100, active: true });
+    const hit = existing.data.find(
+      // deno-lint-ignore no-explicit-any
+      (c: any) => c.metadata?.leaseio_config === "card_management_v1" && c.active,
+    );
+    if (hit) {
+      cachedPortalConfigId = hit.id;
+      return hit.id;
+    }
+    const created = await stripe.billingPortal.configurations.create({
+      business_profile: {},
+      features: {
+        payment_method_update: { enabled: true },
+        invoice_history: { enabled: true },
+        subscription_cancel: { enabled: false },
+        customer_update: { enabled: false },
+      },
+      metadata: { leaseio_config: "card_management_v1" },
+    });
+    cachedPortalConfigId = created.id;
+    return created.id;
+  } catch (e) {
+    console.error(
+      "[CUSTOMER-PORTAL] configuration resolve failed — using account default:",
+      e instanceof Error ? e.message : e,
+    );
+    return null;
+  }
+}
+
 serve(async (req) => {
   // P1-02: derive CORS from request origin per call — see create-checkout for context.
   const corsHeaders = getCorsHeaders(req.headers.get("origin"));
@@ -106,12 +151,35 @@ serve(async (req) => {
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const origin = req.headers.get("origin") || "http://localhost:5173";
 
-    const portalSession = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      // ?portal=return lets the Billing tab acknowledge the round-trip (toast +
-      // refresh + re-fetch the saved card) instead of returning in silence.
-      return_url: `${origin}/app/settings/account?tab=billing&portal=return`,
-    });
+    const portalConfigId = await resolvePortalConfiguration(stripe);
+    const returnUrl = `${origin}/app/settings/account?tab=billing&portal=return`;
+    let portalSession;
+    try {
+      portalSession = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        // Card-management-only configuration (see resolvePortalConfiguration) —
+        // cancel/plan changes live in-app where they get proper notices.
+        ...(portalConfigId ? { configuration: portalConfigId } : {}),
+        // ?portal=return lets the Billing tab acknowledge the round-trip (toast +
+        // refresh + re-fetch the saved card) instead of returning in silence.
+        return_url: returnUrl,
+      });
+    } catch (sessionErr) {
+      // A cached configuration id can go stale (e.g. deactivated in the Stripe
+      // dashboard) and would otherwise 500 every request for this instance's
+      // lifetime. Drop the cache and retry once on the account default —
+      // degraded (Stripe's default features) beats a dead portal button.
+      if (!portalConfigId) throw sessionErr;
+      console.error(
+        "[CUSTOMER-PORTAL] session create failed with pinned configuration — retrying on account default:",
+        sessionErr instanceof Error ? sessionErr.message : sessionErr,
+      );
+      cachedPortalConfigId = null;
+      portalSession = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl,
+      });
+    }
 
     return new Response(JSON.stringify({ url: portalSession.url }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

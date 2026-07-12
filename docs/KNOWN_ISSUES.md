@@ -5,6 +5,24 @@ list and reference it in the commit message.
 
 ---
 
+## Live billing-UX walkthrough 2026-07-12 (Playwright-driven, stubbed backend) — fixed + findings
+
+The owner reported (a) a blank page from the invoice "View" link and (b) inconsistent cancel notices between the in-app flow and the portal path. Rather than diff-reading, the actual app was driven in a real browser (local Vite against a network-stubbed backend mirroring live staging data shapes), walking the full Billing tab state machine: trialing → cancel dialog → scheduled-cancel → resume → portal round-trip → plan picker → usage.
+
+**Invoice "View" blank page — NOT a setup problem (verified server-side).** The hosted invoice URL returns HTTP 200 with a valid "Stripe Invoice" page — but the body is a ~745-byte JS shell rendered entirely by `js.stripe.com`. Under a content blocker (or while the script loads) the page is a dark blank frame — which is what the owner's extension-heavy Safari showed. Nothing to configure. Mitigation shipped: invoice rows now show **View** (hosted page) + **PDF** (direct download, no JS required).
+
+**Cancel-notice inconsistency — root cause: the portal offered its own duplicate Cancel.** Canceling inside the Stripe portal returned to a neutral "Billing information refreshed" toast instead of the scheduled-cancel notice. RESOLVED: `customer-portal` now pins a **card-management-only portal configuration** (payment-method update + invoice history; subscription cancel/update disabled; tagged `metadata.leaseio_config=card_management_v1`, created on first use, cached; falls back to the account default on failure). The in-app flow is now the single cancel door, with its full notice. As a knock-on, the **downgrade** dialog (which handed off to the portal — a dead-end once the portal lost plan controls) now routes through **checkout, same as upgrades**; the hardened webhook cancels the displaced sub automatically.
+
+**Also fixed from the state walk (each verified live before/after):**
+- Trial banner contradiction: with a cancel scheduled, the banner said "the card on file will be charged on {date}" directly above "Scheduled to cancel on {date}". Now a scheduled-cancel trial shows the honest variant ("…scheduled to cancel — you won't be charged. Resume anytime…").
+- `capitalize` CSS on the payment line mangled the Stripe Link email ("Lat36foods@Gmail.Com") — now applied to the card-brand line only.
+- Duplicate portal doors on the trial state (banner button + Payment "Update") with different labels — the banner button was removed; the Payment section is the single door. Dead `account.add_payment_method` key removed from both locales.
+- Casing consistency: "Cancel subscription" / "Keep subscription" / "Update payment method" (en+es).
+
+Ops note: a seeded walkthrough login exists in staging auth (`claude-ui-walkthrough@leaseio.test`, accepted admin member of Labs Analytix) for future UI walkthroughs; remove it if undesired. The temporary `debug-invoice-check` edge fn was tombstoned (410) — deletable from the dashboard.
+
+---
+
 ## Money-path audit 2026-07-11 (second pass, adversarial lens) — fixed + deferred
 
 Three parallel adversarial reviews (webhook state machine/races · financial math/ledgers · Stripe Basil API semantics) + live staging verification. The ledgers (credits, packs, entitlement guard) came back genuinely solid — atomic, idempotent, fail-closed, price-verified. The defects were at the subscription-orchestration layer and in Basil API field moves.
@@ -80,8 +98,8 @@ A Business owner whose only saved method is Stripe Link / ACH cannot create addi
 - **Operator deploy:** deploy `cancel-subscription`; redeploy `get-billing-summary` + `customer-portal`; frontend ships with the next Vercel build.
 
 ### Deferred (own beat — cosmetic/consistency, filed not fixed)
-- **[MEDIUM] Downgrade still uses the Stripe portal** (`handleAdjustPlanSelect` → confirm → `handleManagePayment`), while an *upgrade* is a clean in-app checkout. Asymmetric, and depends on the portal being configured with both prices. Follow-up: in-app downgrade via `stripe.subscriptions.update` to the Starter price with proration (reuse the cancel-subscription shape). The new `?portal=return` handler at least gives it feedback now.
-- **[MEDIUM] Payment-CTA label drift** — trial banner "Add or update payment method" vs Payment section "Add/Update" vs past-due "Update Payment Method": one destination (portal), several labels. And a *trialing* admin sees two buttons to the same portal (banner + Payment section). Standardize to one verb per intent; drop the trial-banner button in favor of pointing at the Payment section.
+- ~~**[MEDIUM] Downgrade still uses the Stripe portal**~~ **RESOLVED 2026-07-12** (live-walkthrough batch): downgrades now route through checkout like upgrades; the webhook cancels the displaced sub. The portal is card-management-only.
+- ~~**[MEDIUM] Payment-CTA label drift**~~ **RESOLVED 2026-07-12**: trial-banner button removed (Payment section is the single portal door); past-due label sentence-cased; dead `add_payment_method` key removed.
 - **[LOW] Scheduled-cancel visibility for non-admins** — non-admins don't fetch `get-billing-summary`, so they can't see the `cancelAtPeriodEnd` flag. Rather than assert a possibly-false "Auto-renews", the plan header now **suppresses the renewal line entirely when the flag is unknown** (integrity review 2026-07-11 — the "Auto-renews" line is gated on `billingSummary?.subscription` being present, so only an admin whose summary loaded ever sees it; the honest-silence fix). Residual edge (accepted): a *second* admin who opened the Billing tab before the cancel was scheduled keeps a cached summary (the per-workspace `billingSummaryFetchedFor` guard) and sees "Auto-renews" until a manual refresh — the admin who performed the cancel force-refetches and sees the truth immediately. A persisted `cancel_at_period_end` column (webhook-mirrored) would close the residual app-wide if ever needed.
 - **[LOW] Cancellation reason (WHY) not captured** on the `subscription_cancel_scheduled` audit row (integrity review) — a subscription cancel is a self-attributed owner/admin decision (WHO/WHEN/WHAT are recorded), so not an integrity requirement; a future churn-analytics pass could accept a free-text reason in the request body.
 
