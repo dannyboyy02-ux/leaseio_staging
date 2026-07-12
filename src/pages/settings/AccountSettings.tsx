@@ -762,7 +762,7 @@ export default function AccountSettings() {
           {/* Vertical rail (Claude.ai-style). Collapses to a horizontal strip below md breakpoint.
               Override the shadcn defaults (h-10, items-center, justify-center, bg-muted, p-1) for
               vertical mode so the rail floats to the top instead of centering its items. */}
-          <TabsList className="h-auto flex-wrap shrink-0 md:w-56 md:flex-col md:items-stretch md:justify-start md:bg-transparent md:p-0 md:gap-1">
+          <TabsList className="h-auto flex-wrap shrink-0 md:w-56 md:flex-col md:items-stretch md:justify-start md:bg-transparent md:p-0 md:gap-1 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
             <TabsTrigger value="profile" className={railTriggerClass}>
               <User className="h-4 w-4" />
               {t('account.profile')}
@@ -806,9 +806,11 @@ export default function AccountSettings() {
             </Link>
           </TabsList>
 
-          {/* Content panel — min-h stabilizes the layout so switching tabs
-              with different content lengths doesn't make the page reflow. */}
-          <div className="flex-1 min-w-0 md:min-h-[640px]">
+          {/* Content panel — capped width (matches the Workspaces settings
+              surface) so forms don't stretch on wide monitors; min-h stabilizes
+              the layout so switching tabs with different content lengths doesn't
+              make the page reflow. */}
+          <div className="flex-1 min-w-0 max-w-4xl md:min-h-[32rem]">
 
           {/* Profile */}
           <TabsContent value="profile" className="space-y-6 mt-0">

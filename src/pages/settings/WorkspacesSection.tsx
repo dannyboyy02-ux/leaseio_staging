@@ -76,9 +76,20 @@ export default function WorkspacesSection() {
   const requestedDenied = !!section && !sections.some((s) => s.id === section);
   const active = requestedDenied || !section ? MY_WORKSPACES : section;
 
+  // Orientation: deep in a tall section the sticky header still just said
+  // "Workspaces" — append the active section so the top of the screen always
+  // answers "where am I".
+  const activeLabel =
+    active === MY_WORKSPACES
+      ? t('workspace.my_workspaces')
+      : sections.find((s) => s.id === active)?.label ?? '';
+  const headerTitle = activeLabel
+    ? `${t('workspace.workspaces_title')} · ${activeLabel}`
+    : t('workspace.workspaces_title');
+
   const railItemClass = (isActive: boolean) =>
     cn(
-      'md:w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors',
+      'md:w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap shrink-0',
       isActive
         ? 'bg-muted text-foreground'
         : 'text-muted-foreground hover:text-foreground hover:bg-muted/60',
@@ -86,16 +97,20 @@ export default function WorkspacesSection() {
 
   return (
     <AppLayout>
-      <AppHeader title={t('workspace.workspaces_title')} subtitle={t('workspace.workspaces_subtitle')} />
+      <AppHeader title={headerTitle} subtitle={t('workspace.workspaces_subtitle')} />
 
       <div className="p-6">
         <div className="flex flex-col md:flex-row gap-6 md:items-start">
-          {/* Rail */}
-          <nav className="flex flex-wrap md:flex-col md:w-56 shrink-0 gap-1 md:items-stretch">
+          {/* Rail — sticky on desktop so the section nav stays visible while a
+              tall section (Lease Configuration, Members) scrolls. top-20 clears
+              the 64px sticky AppHeader with a 16px gap; self-start + a max-height
+              on the rail itself keep it from stretching or overflowing. On mobile
+              it stays a horizontally-scrollable strip (no wrap pile). */}
+          <nav className="flex md:flex-col md:w-56 shrink-0 gap-1 md:items-stretch overflow-x-auto md:overflow-x-visible md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto pb-1 md:pb-0">
             {/* Back to account-level Settings */}
             <Link
               to="/app/settings/account"
-              className="md:w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+              className="md:w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors whitespace-nowrap shrink-0"
             >
               <ArrowLeft className="h-4 w-4" />
               {t('workspace.back_to_settings')}
@@ -134,8 +149,11 @@ export default function WorkspacesSection() {
             )}
           </nav>
 
-          {/* Content panel */}
-          <div className="flex-1 min-w-0 md:min-h-[640px]">
+          {/* Content panel — one shared max-width for EVERY section so the
+              content edge doesn't jump when switching rail items (My Workspaces
+              used to cap at max-w-5xl while the config sections were uncapped
+              and stretched full-width). */}
+          <div className="flex-1 min-w-0 max-w-4xl md:min-h-[32rem]">
             {requestedDenied && (
               <p className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/20 dark:border-amber-700 dark:text-amber-300">
                 {t('workspace.section_no_access')}
