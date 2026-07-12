@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
-import { prettyAssetType } from '@/lib/assetTypes';
+import { prettyAssetType, buildAssetTypeOptions, canonicalAssetType, type AssetTypeOption } from '@/lib/assetTypes';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — must stay aligned with leases.asset_type and leases.lease_type
@@ -18,12 +18,10 @@ import { prettyAssetType } from '@/lib/assetTypes';
 // contract addendum (§3 — exactly four pills in the sentence template).
 // ───────────────────────────────────────────────────────────────────────────
 
-const ASSET_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'property', label: 'Property (Real Estate)' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'vehicle', label: 'Vehicle' },
-  { value: 'other', label: 'Other' },
-];
+// Asset-type options are workspace-aware (built-ins + configured Asset Types),
+// built via buildAssetTypeOptions in @/lib/assetTypes — the single source that
+// replaced this file's former hardcoded list. Callers pass the resolved list in.
+const DEFAULT_ASSET_TYPE_OPTIONS: AssetTypeOption[] = buildAssetTypeOptions();
 
 const LEASE_TYPE_OPTIONS: string[] = ['Real Estate', 'Equipment'];
 
@@ -74,13 +72,25 @@ export function joinWithOr(values: string[]): string {
 }
 
 /** "any lease type" when both arrays empty; otherwise asset+lease combined. */
-export function leaseTypeLabel(state: MatchCriteriaState): string {
-  const assetLabels = state.match_asset_types.map(
-    // prettyAssetType humanizes values outside the built-in option list —
-    // workspace-configured or legacy keys (e.g. 'real_estate') rendered raw
-    // snake_case in the rule sentence (live walkthrough 2026-07-12).
-    (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? prettyAssetType(v),
-  );
+export function leaseTypeLabel(
+  state: MatchCriteriaState,
+  options: AssetTypeOption[] = DEFAULT_ASSET_TYPE_OPTIONS,
+): string {
+  // Resolve + dedupe asset values by CANONICAL key so the pill reads the same
+  // built-in label ("Property (Real Estate)") that the checkbox below it and
+  // the rules-list chip now show for a legacy 'real_estate' rule — and a rule
+  // holding two synonyms of one class collapses to a single label. (Cross-axis
+  // asset+lease overlap is intentionally left as-is — see KNOWN_ISSUES.)
+  const seen = new Set<string>();
+  const assetLabels: string[] = [];
+  for (const v of state.match_asset_types) {
+    const key = canonicalAssetType(v);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    assetLabels.push(
+      options.find((o) => canonicalAssetType(o.value) === key)?.label ?? prettyAssetType(v),
+    );
+  }
   const all = [...assetLabels, ...state.match_lease_types];
   if (all.length === 0) return 'any lease type';
   return joinWithOr(all);
@@ -130,6 +140,9 @@ interface Props {
   onChange: (next: MatchCriteriaState) => void;
   departmentSuggestions: string[];
   regionSuggestions: string[];
+  /** Workspace-resolved asset-type options (built-ins + configured Asset
+   *  Types). Falls back to the built-ins when the caller doesn't pass them. */
+  assetTypeOptions?: AssetTypeOption[];
 }
 
 export function MatchCriteriaSentence({
@@ -137,20 +150,21 @@ export function MatchCriteriaSentence({
   onChange,
   departmentSuggestions,
   regionSuggestions,
+  assetTypeOptions = DEFAULT_ASSET_TYPE_OPTIONS,
 }: Props) {
   const { language } = useLanguage();
   return (
     <p className="text-sm leading-8 text-foreground">
-      When someone requests a{' '}
+      When someone requests{' '}
       <CriterionPill
-        label={leaseTypeLabel(state)}
+        label={leaseTypeLabel(state, assetTypeOptions)}
         active={isLeaseTypeActive(state)}
         color="blue"
         onClear={() =>
           onChange({ ...state, match_asset_types: [], match_lease_types: [] })
         }
       >
-        <LeaseTypeEditor state={state} onChange={onChange} />
+        <LeaseTypeEditor state={state} onChange={onChange} assetTypeOptions={assetTypeOptions} />
       </CriterionPill>
       {' '}in{' '}
       <CriterionPill
@@ -239,7 +253,7 @@ function CriterionPill({
             <ChevronDown className="w-3 h-3 opacity-70" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 p-3">
+        <PopoverContent align="start" className="w-72 p-3 max-h-80 overflow-y-auto">
           {children}
         </PopoverContent>
       </Popover>
@@ -267,13 +281,22 @@ function CriterionPill({
 function LeaseTypeEditor({
   state,
   onChange,
+  assetTypeOptions,
 }: {
   state: MatchCriteriaState;
   onChange: (s: MatchCriteriaState) => void;
+  assetTypeOptions: AssetTypeOption[];
 }) {
+  // Compare/toggle by canonical key so a rule stored with a legacy or
+  // AI-classifier spelling ('real_estate') shows the matching built-in
+  // ('property') checked — and clicking it removes that stored value rather
+  // than appending a second synonym. Mirrors the matcher's canonical equality.
+  const assetChecked = (optionValue: string) =>
+    state.match_asset_types.some((x) => canonicalAssetType(x) === canonicalAssetType(optionValue));
   const toggleAsset = (v: string) => {
-    const next = state.match_asset_types.includes(v)
-      ? state.match_asset_types.filter((x) => x !== v)
+    const canon = canonicalAssetType(v);
+    const next = assetChecked(v)
+      ? state.match_asset_types.filter((x) => canonicalAssetType(x) !== canon)
       : [...state.match_asset_types, v];
     onChange({ ...state, match_asset_types: next });
   };
@@ -287,13 +310,13 @@ function LeaseTypeEditor({
     <div className="space-y-3">
       <div className="space-y-1.5">
         <p className="text-xs font-medium">Asset types</p>
-        {ASSET_TYPE_OPTIONS.map((o) => (
+        {assetTypeOptions.map((o) => (
           <label
             key={o.value}
             className="flex items-center gap-2 py-0.5 cursor-pointer text-sm"
           >
             <Checkbox
-              checked={state.match_asset_types.includes(o.value)}
+              checked={assetChecked(o.value)}
               onCheckedChange={() => toggleAsset(o.value)}
             />
             <span>{o.label}</span>

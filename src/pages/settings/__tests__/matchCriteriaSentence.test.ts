@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { prettyAssetType, canonicalAssetType } from '@/lib/assetTypes';
 
 // Mirror of pure helpers from `src/pages/settings/MatchCriteriaSentence.tsx`.
 // The component imports radix UI / lucide-react, so we keep the test
@@ -52,10 +53,23 @@ function joinWithOr(values: string[]): string {
   return `${values.slice(0, -1).join(', ')}, or ${values[values.length - 1]}`;
 }
 
-function leaseTypeLabel(state: MatchCriteriaState): string {
-  const assetLabels = state.match_asset_types.map(
-    (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v,
-  );
+// Mirror of the component helper. It resolves + dedupes asset values by
+// CANONICAL key against the resolved options list (built-ins + workspace Asset
+// Types); values outside the list fall back to prettyAssetType, NOT raw.
+function leaseTypeLabel(
+  state: MatchCriteriaState,
+  options: Array<{ value: string; label: string }> = ASSET_TYPE_OPTIONS,
+): string {
+  const seen = new Set<string>();
+  const assetLabels: string[] = [];
+  for (const v of state.match_asset_types) {
+    const key = canonicalAssetType(v);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    assetLabels.push(
+      options.find((o) => canonicalAssetType(o.value) === key)?.label ?? prettyAssetType(v),
+    );
+  }
   const all = [...assetLabels, ...state.match_lease_types];
   if (all.length === 0) return 'any lease type';
   return joinWithOr(all);
@@ -136,10 +150,23 @@ describe('leaseTypeLabel — combined asset+lease pill', () => {
       }),
     ).toBe('Property (Real Estate) or Real Estate');
   });
-  it('falls back to raw value when asset_type is unknown', () => {
+  it('humanizes an unknown asset_type via prettyAssetType (not raw)', () => {
     expect(
       leaseTypeLabel({ ...empty(), match_asset_types: ['unknown'] }),
-    ).toBe('unknown');
+    ).toBe('Unknown');
+  });
+  it('resolves a legacy value canonically to the built-in label (not raw Title Case)', () => {
+    // 'real_estate' canonicalizes to the built-in 'property' → its label, so
+    // the pill matches the checkbox + list chip (vocabulary coherence).
+    expect(
+      leaseTypeLabel({ ...empty(), match_asset_types: ['real_estate'] }),
+    ).toBe('Property (Real Estate)');
+  });
+  it('dedupes two synonyms of one class to a single label', () => {
+    // A malformed legacy rule holding BOTH spellings collapses to one label.
+    expect(
+      leaseTypeLabel({ ...empty(), match_asset_types: ['real_estate', 'property'] }),
+    ).toBe('Property (Real Estate)');
   });
 });
 

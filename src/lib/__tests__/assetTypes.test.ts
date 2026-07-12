@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeAssetKey, prettyAssetType, assetAbbreviation } from '@/lib/assetTypes';
+import {
+  normalizeAssetKey,
+  prettyAssetType,
+  assetAbbreviation,
+  canonicalAssetType,
+  buildAssetTypeOptions,
+} from '@/lib/assetTypes';
 
 describe('normalizeAssetKey', () => {
   it('collapses snake_case, spaces, and case to one key', () => {
@@ -15,6 +21,69 @@ describe('prettyAssetType', () => {
     expect(prettyAssetType('real_estate')).toBe('Real Estate');
     expect(prettyAssetType('equipment')).toBe('Equipment');
     expect(prettyAssetType(null)).toBe('');
+  });
+});
+
+describe('canonicalAssetType', () => {
+  it('folds all three real-estate synonyms onto one token', () => {
+    // The bug this fixes: LeaseRequestForm writes 'property', the AI classifier
+    // writes 'real_estate', LeaseReview writes the label "Real Estate" — all
+    // one asset class, exact-matched into silent rule misses before this.
+    expect(canonicalAssetType('property')).toBe('realestate');
+    expect(canonicalAssetType('real_estate')).toBe('realestate');
+    expect(canonicalAssetType('Real Estate')).toBe('realestate');
+    expect(canonicalAssetType('REAL-ESTATE')).toBe('realestate');
+  });
+  it('leaves every other type as its own normalized key', () => {
+    expect(canonicalAssetType('equipment')).toBe('equipment');
+    expect(canonicalAssetType('Vehicle')).toBe('vehicle');
+    expect(canonicalAssetType('other')).toBe('other');
+    // A workspace-custom class keeps its own identity (not folded).
+    expect(canonicalAssetType('Warehouse')).toBe('warehouse');
+  });
+  it('matches the SQL/Deno mirror on the folding rule (property only)', () => {
+    // 'property' is the ONLY synonym folded; 'properties' must NOT fold.
+    expect(canonicalAssetType('properties')).toBe('properties');
+  });
+  it('returns empty for nullish/blank input', () => {
+    expect(canonicalAssetType(null)).toBe('');
+    expect(canonicalAssetType(undefined)).toBe('');
+    expect(canonicalAssetType('')).toBe('');
+  });
+});
+
+describe('buildAssetTypeOptions', () => {
+  it('returns exactly the four built-ins when no config given', () => {
+    const opts = buildAssetTypeOptions();
+    expect(opts.map((o) => o.value)).toEqual(['property', 'equipment', 'vehicle', 'other']);
+    expect(opts[0].label).toBe('Property (Real Estate)');
+  });
+  it('appends a workspace-custom class not covered by a built-in', () => {
+    const opts = buildAssetTypeOptions(['Warehouse']);
+    expect(opts.map((o) => o.value)).toEqual([
+      'property',
+      'equipment',
+      'vehicle',
+      'other',
+      'Warehouse',
+    ]);
+    // The custom option carries its own value + humanized label.
+    const custom = opts.find((o) => o.value === 'Warehouse');
+    expect(custom?.label).toBe('Warehouse');
+  });
+  it('does NOT duplicate a configured label that canonicalizes to a built-in', () => {
+    // "Real Estate" folds to the built-in 'property'; "Equipment" matches the
+    // built-in 'equipment' — neither should be re-appended.
+    const opts = buildAssetTypeOptions(['Real Estate', 'Equipment', 'Vehicle', 'Other']);
+    expect(opts.map((o) => o.value)).toEqual(['property', 'equipment', 'vehicle', 'other']);
+  });
+  it('dedupes two custom labels that share a canonical key', () => {
+    const opts = buildAssetTypeOptions(['Warehouse', 'ware-house']);
+    expect(opts.filter((o) => canonicalAssetType(o.value) === 'warehouse')).toHaveLength(1);
+  });
+  it('skips blank/whitespace configured labels', () => {
+    const opts = buildAssetTypeOptions(['', '   ']);
+    expect(opts.map((o) => o.value)).toEqual(['property', 'equipment', 'vehicle', 'other']);
   });
 });
 

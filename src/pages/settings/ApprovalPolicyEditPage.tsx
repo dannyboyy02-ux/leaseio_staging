@@ -29,11 +29,15 @@ import { validatePolicy } from './approvalPolicyValidation';
 import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
 import { MatchCriteriaSentence } from './MatchCriteriaSentence';
 import { ChainDiagram, seedSingleEmptyStep, type ChainStep } from './ChainDiagram';
+import { buildAssetTypeOptions } from '@/lib/assetTypes';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — FUNCTIONAL_ROLE_OPTIONS now lives in ChainDiagram (its only
-// consumer post-P1.3). ASSET_TYPE_OPTIONS and LEASE_TYPE_OPTIONS live in
-// MatchCriteriaSentence (its only consumer post-P1.2).
+// consumer post-P1.3). Asset-type options are built here via
+// buildAssetTypeOptions(workspace asset_type_config) and passed down to both
+// MatchCriteriaSentence and ApprovalPolicyTestDialog (single source in
+// src/lib/assetTypes.ts, canonicalized by canonicalAssetType). LEASE_TYPE_OPTIONS
+// still lives in each of those consumers.
 // ───────────────────────────────────────────────────────────────────────────
 
 type SodMode = 'inherit' | 'allow' | 'require';
@@ -106,13 +110,14 @@ export default function ApprovalPolicyEditPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('workspaces')
-        .select('separation_of_duties_default, department_options, region_options')
+        .select('separation_of_duties_default, department_options, region_options, asset_type_config')
         .eq('id', workspace!.id)
         .maybeSingle();
       return {
         sodDefault: Boolean((data as any)?.separation_of_duties_default ?? true),
         departments: ((data as any)?.department_options ?? []) as string[],
         regions: ((data as any)?.region_options ?? []) as string[],
+        assetTypes: ((data as any)?.asset_type_config ?? []) as string[],
       };
     },
   });
@@ -137,6 +142,11 @@ export default function ApprovalPolicyEditPage() {
       }));
     },
   });
+
+  // Asset-type options for the rule builder + sample-request tester: the four
+  // built-ins plus any workspace-configured Asset Type (Lease Configuration).
+  // Falls back to built-ins until the workspace row loads.
+  const assetTypeOptions = buildAssetTypeOptions(wsExtras.data?.assetTypes);
 
   // Load existing policy (and steps) for edit mode.
   useEffect(() => {
@@ -400,6 +410,7 @@ export default function ApprovalPolicyEditPage() {
               onChange={(next) => setForm({ ...form, ...next })}
               departmentSuggestions={wsExtras.data?.departments ?? []}
               regionSuggestions={wsExtras.data?.regions ?? []}
+              assetTypeOptions={assetTypeOptions}
             />
           </CardContent>
         </Card>
@@ -568,6 +579,7 @@ export default function ApprovalPolicyEditPage() {
         open={testOpen}
         onOpenChange={setTestOpen}
         workspaceId={workspace?.id ?? null}
+        assetTypeOptions={assetTypeOptions}
       />
     </AppLayout>
   );

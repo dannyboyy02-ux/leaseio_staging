@@ -509,6 +509,9 @@ export function WorkspaceManagementContent() {
           workspaceName={deleteTarget.name}
           leaseCount={deleteTarget.lease_count}
           memberCount={deleteTarget.member_count}
+          isOnlyWorkspace={
+            availableWorkspaces.filter((w) => w.id !== deleteTarget.id).length === 0
+          }
           onDeleted={handleAfterDelete}
         />
       )}

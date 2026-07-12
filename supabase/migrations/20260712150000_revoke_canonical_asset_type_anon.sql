@@ -1,0 +1,13 @@
+-- Follow-up to 20260712140000: finish the anon revoke on canonical_asset_type.
+--
+-- That migration's `REVOKE ALL ... FROM PUBLIC` was insufficient: Supabase's
+-- ALTER DEFAULT PRIVILEGES grants EXECUTE on new public functions to `anon`
+-- (and `authenticated`) EXPLICITLY, not via PUBLIC — so revoking PUBLIC left
+-- an explicit `anon=X` grant behind. The peer approval-policy functions
+-- (preview_policy_resolution, apply_policy_steps) carry NO anon grant; align
+-- canonical_asset_type with that convention. The function is a pure text
+-- transform with no data access (harmless if left public), so this is
+-- convention-cleanliness, not a security fix — but it makes the intent of the
+-- prior migration's REVOKE actually hold. Idempotent (REVOKE is a no-op if the
+-- grant is already absent).
+REVOKE ALL ON FUNCTION public.canonical_asset_type(text) FROM anon;

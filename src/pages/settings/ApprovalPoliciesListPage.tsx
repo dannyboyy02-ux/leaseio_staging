@@ -16,6 +16,12 @@ import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTe
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import {
+  buildAssetTypeOptions,
+  canonicalAssetType,
+  prettyAssetType,
+  type AssetTypeOption,
+} from '@/lib/assetTypes';
 
 type Policy = {
   id: string;
@@ -38,9 +44,33 @@ const fmtMoney = (n: number | null, language: SupportedLocale): string =>
     ? '—'
     : formatLocalizedCurrency(n, language);
 
-const matchSummary = (p: Policy, language: SupportedLocale): { label: string; value: string }[] => {
+/** Humanize a stored asset value to the same label the editor shows — the
+ *  configured/built-in option label when it canonically matches, else Title
+ *  Case (so raw 'property'/'real_estate' don't leak into the summary chip). */
+const assetLabel = (value: string, options: AssetTypeOption[]): string =>
+  options.find((o) => canonicalAssetType(o.value) === canonicalAssetType(value))?.label ??
+  prettyAssetType(value);
+
+const matchSummary = (
+  p: Policy,
+  language: SupportedLocale,
+  assetTypeOptions: AssetTypeOption[],
+): { label: string; value: string }[] => {
   const out: { label: string; value: string }[] = [];
-  if (p.match_asset_types.length) out.push({ label: 'Asset', value: p.match_asset_types.join(', ') });
+  if (p.match_asset_types.length) {
+    // Dedupe by canonical key so a legacy rule holding both 'real_estate' and
+    // 'property' collapses to a single "Property (Real Estate)" chip (they are
+    // one class) instead of a duplicated pair.
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const v of p.match_asset_types) {
+      const key = canonicalAssetType(v);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      labels.push(assetLabel(v, assetTypeOptions));
+    }
+    out.push({ label: 'Asset', value: labels.join(', ') });
+  }
   if (p.match_lease_types.length) out.push({ label: 'Type', value: p.match_lease_types.join(', ') });
   if (p.match_departments.length) out.push({ label: 'Dept', value: p.match_departments.join(', ') });
   if (p.match_regions.length) out.push({ label: 'Region', value: p.match_regions.join(', ') });
@@ -89,15 +119,26 @@ export default function ApprovalPoliciesListPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workspaces')
-        .select('separation_of_duties_default')
+        .select('separation_of_duties_default, asset_type_config')
         .eq('id', workspace!.id)
         .maybeSingle();
       if (error) throw error;
-      return Boolean((data as any)?.separation_of_duties_default ?? true);
+      return {
+        sodDefault: Boolean((data as any)?.separation_of_duties_default ?? true),
+        assetTypes: ((data as any)?.asset_type_config ?? []) as string[],
+      };
     },
   });
 
   const sortedPolicies = useMemo(() => policiesQuery.data ?? [], [policiesQuery.data]);
+
+  // Shared asset-type options (built-ins + workspace-configured Asset Types) so
+  // the list-card summaries AND the tester speak the same vocabulary as the
+  // editor. Falls back to built-ins until the workspace row loads.
+  const assetTypeOptions = useMemo(
+    () => buildAssetTypeOptions(sodQuery.data?.assetTypes),
+    [sodQuery.data?.assetTypes],
+  );
 
   const toggleSodDefault = async (next: boolean) => {
     if (!workspace?.id) return;
@@ -109,7 +150,13 @@ export default function ApprovalPoliciesListPage() {
       toast.error('Failed to update workspace setting');
       return;
     }
-    queryClient.setQueryData(['workspace-sod-default', workspace.id], next);
+    queryClient.setQueryData(
+      ['workspace-sod-default', workspace.id],
+      (prev: { sodDefault: boolean; assetTypes: string[] } | undefined) => ({
+        sodDefault: next,
+        assetTypes: prev?.assetTypes ?? [],
+      }),
+    );
     toast.success(`Workspace default for distinct approvers: ${next ? 'ON' : 'OFF'}`);
   };
 
@@ -217,10 +264,10 @@ export default function ApprovalPoliciesListPage() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-xs text-muted-foreground">
-                  {sodQuery.data ? 'ON — distinct users required' : 'OFF — same user allowed'}
+                  {sodQuery.data?.sodDefault ? 'ON — distinct users required' : 'OFF — same user allowed'}
                 </span>
                 <Switch
-                  checked={Boolean(sodQuery.data)}
+                  checked={Boolean(sodQuery.data?.sodDefault)}
                   onCheckedChange={toggleSodDefault}
                   disabled={sodQuery.isPending}
                 />
@@ -270,7 +317,7 @@ export default function ApprovalPoliciesListPage() {
             ) : (
               <div className="space-y-2">
                 {sortedPolicies.map((p) => {
-                  const chips = matchSummary(p, language);
+                  const chips = matchSummary(p, language, assetTypeOptions);
                   return (
                     <div
                       key={p.id}
@@ -364,7 +411,12 @@ export default function ApprovalPoliciesListPage() {
         </Card>
       </div>
 
-      <ApprovalPolicyTestDialog open={testOpen} onOpenChange={setTestOpen} workspaceId={workspace?.id ?? null} />
+      <ApprovalPolicyTestDialog
+        open={testOpen}
+        onOpenChange={setTestOpen}
+        workspaceId={workspace?.id ?? null}
+        assetTypeOptions={assetTypeOptions}
+      />
     </AppLayout>
   );
 }

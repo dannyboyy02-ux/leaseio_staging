@@ -21,17 +21,20 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
+import { buildAssetTypeOptions, type AssetTypeOption } from '@/lib/assetTypes';
 
-// Asset type values match the leases.asset_type CHECK constraint exactly.
-// Display labels are friendly text; the value sent to the RPC is the raw enum.
-const ASSET_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'property', label: 'Property (Real Estate)' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'vehicle', label: 'Vehicle' },
-  { value: 'other', label: 'Other' },
-];
+// Built-in asset-type options; the workspace's configured Asset Types are
+// merged in by the caller via `assetTypeOptions`. The matcher canonicalizes
+// both sides (preview_policy_resolution → canonical_asset_type), so a custom
+// label stored by LeaseReview still resolves against a 'property' rule.
+const DEFAULT_ASSET_TYPE_OPTIONS: AssetTypeOption[] = buildAssetTypeOptions();
 
 const LEASE_TYPE_OPTIONS: string[] = ['Real Estate', 'Equipment'];
+
+// Radix Select can't use an empty-string value, so "Any" (no filter) uses a
+// sentinel that we map back to '' before calling the RPC. Without this there's
+// no way back to "Any" once a value is picked short of closing the dialog.
+const ANY = '__any';
 
 type ResolutionResult =
   | {
@@ -58,9 +61,17 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workspaceId: string | null;
+  /** Workspace-resolved asset-type options (built-ins + configured Asset
+   *  Types). Falls back to the built-ins when the caller doesn't pass them. */
+  assetTypeOptions?: AssetTypeOption[];
 }
 
-export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Props) {
+export function ApprovalPolicyTestDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+  assetTypeOptions = DEFAULT_ASSET_TYPE_OPTIONS,
+}: Props) {
   const [assetType, setAssetType] = useState<string>('');
   const [leaseType, setLeaseType] = useState<string>('');
   const [department, setDepartment] = useState<string>('');
@@ -129,12 +140,16 @@ export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Pr
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Asset type</Label>
-              <Select value={assetType} onValueChange={setAssetType}>
+              <Select
+                value={assetType || ANY}
+                onValueChange={(v) => setAssetType(v === ANY ? '' : v)}
+              >
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ASSET_TYPE_OPTIONS.map((o) => (
+                  <SelectItem value={ANY}>Any</SelectItem>
+                  {assetTypeOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
                       {o.label}
                     </SelectItem>
@@ -145,11 +160,15 @@ export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Pr
 
             <div className="space-y-1.5">
               <Label className="text-xs">Lease type</Label>
-              <Select value={leaseType} onValueChange={setLeaseType}>
+              <Select
+                value={leaseType || ANY}
+                onValueChange={(v) => setLeaseType(v === ANY ? '' : v)}
+              >
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={ANY}>Any</SelectItem>
                   {LEASE_TYPE_OPTIONS.map((v) => (
                     <SelectItem key={v} value={v}>
                       {v}
@@ -299,7 +318,15 @@ export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Pr
         </div>
 
         <DialogFooter className="px-6 py-4 border-t shrink-0">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              // Match the X / Escape / backdrop paths (onOpenChange wrapper
+              // resets on close) so reopening never shows a stale result.
+              reset();
+              onOpenChange(false);
+            }}
+          >
             Close
           </Button>
           <Button onClick={run} disabled={running || !workspaceId}>
