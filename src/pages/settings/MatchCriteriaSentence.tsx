@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
-import { prettyAssetType, buildAssetTypeOptions, type AssetTypeOption } from '@/lib/assetTypes';
+import { prettyAssetType, buildAssetTypeOptions, canonicalAssetType, type AssetTypeOption } from '@/lib/assetTypes';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — must stay aligned with leases.asset_type and leases.lease_type
@@ -146,7 +146,7 @@ export function MatchCriteriaSentence({
   const { language } = useLanguage();
   return (
     <p className="text-sm leading-8 text-foreground">
-      When someone requests a{' '}
+      When someone requests{' '}
       <CriterionPill
         label={leaseTypeLabel(state, assetTypeOptions)}
         active={isLeaseTypeActive(state)}
@@ -244,7 +244,7 @@ function CriterionPill({
             <ChevronDown className="w-3 h-3 opacity-70" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 p-3">
+        <PopoverContent align="start" className="w-72 p-3 max-h-80 overflow-y-auto">
           {children}
         </PopoverContent>
       </Popover>
@@ -278,9 +278,16 @@ function LeaseTypeEditor({
   onChange: (s: MatchCriteriaState) => void;
   assetTypeOptions: AssetTypeOption[];
 }) {
+  // Compare/toggle by canonical key so a rule stored with a legacy or
+  // AI-classifier spelling ('real_estate') shows the matching built-in
+  // ('property') checked — and clicking it removes that stored value rather
+  // than appending a second synonym. Mirrors the matcher's canonical equality.
+  const assetChecked = (optionValue: string) =>
+    state.match_asset_types.some((x) => canonicalAssetType(x) === canonicalAssetType(optionValue));
   const toggleAsset = (v: string) => {
-    const next = state.match_asset_types.includes(v)
-      ? state.match_asset_types.filter((x) => x !== v)
+    const canon = canonicalAssetType(v);
+    const next = assetChecked(v)
+      ? state.match_asset_types.filter((x) => canonicalAssetType(x) !== canon)
       : [...state.match_asset_types, v];
     onChange({ ...state, match_asset_types: next });
   };
@@ -300,7 +307,7 @@ function LeaseTypeEditor({
             className="flex items-center gap-2 py-0.5 cursor-pointer text-sm"
           >
             <Checkbox
-              checked={state.match_asset_types.includes(o.value)}
+              checked={assetChecked(o.value)}
               onCheckedChange={() => toggleAsset(o.value)}
             />
             <span>{o.label}</span>

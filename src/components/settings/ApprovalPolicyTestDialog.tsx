@@ -31,6 +31,11 @@ const DEFAULT_ASSET_TYPE_OPTIONS: AssetTypeOption[] = buildAssetTypeOptions();
 
 const LEASE_TYPE_OPTIONS: string[] = ['Real Estate', 'Equipment'];
 
+// Radix Select can't use an empty-string value, so "Any" (no filter) uses a
+// sentinel that we map back to '' before calling the RPC. Without this there's
+// no way back to "Any" once a value is picked short of closing the dialog.
+const ANY = '__any';
+
 type ResolutionResult =
   | {
       matched: true;
@@ -135,11 +140,15 @@ export function ApprovalPolicyTestDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs">Asset type</Label>
-              <Select value={assetType} onValueChange={setAssetType}>
+              <Select
+                value={assetType || ANY}
+                onValueChange={(v) => setAssetType(v === ANY ? '' : v)}
+              >
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={ANY}>Any</SelectItem>
                   {assetTypeOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
                       {o.label}
@@ -151,11 +160,15 @@ export function ApprovalPolicyTestDialog({
 
             <div className="space-y-1.5">
               <Label className="text-xs">Lease type</Label>
-              <Select value={leaseType} onValueChange={setLeaseType}>
+              <Select
+                value={leaseType || ANY}
+                onValueChange={(v) => setLeaseType(v === ANY ? '' : v)}
+              >
                 <SelectTrigger className="h-9">
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={ANY}>Any</SelectItem>
                   {LEASE_TYPE_OPTIONS.map((v) => (
                     <SelectItem key={v} value={v}>
                       {v}
