@@ -77,16 +77,26 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
   const [explanation, setExplanation] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Distinct error state — a failed load must NOT render the genuine-empty
+  // "No watchlist entries yet" copy (the user would believe they have none
+  // and could re-add duplicates or assume the AI isn't checking).
+  const [loadError, setLoadError] = useState(false);
+
   const refetch = async () => {
     setLoading(true);
+    setLoadError(false);
     const { data, error } = await (supabase as any)
       .from('risk_templates')
       .select('*')
       .eq('workspace_id', workspaceId)
       .eq('is_system', false)
       .order('created_at', { ascending: false });
-    if (error) toast.error(`Failed to load watchlist: ${error.message}`);
-    else setItems((data ?? []) as RiskTemplate[]);
+    if (error) {
+      console.error('Failed to load watchlist:', error);
+      setLoadError(true);
+    } else {
+      setItems((data ?? []) as RiskTemplate[]);
+    }
     setLoading(false);
   };
 
@@ -256,6 +266,16 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
         {loading ? (
           <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading…
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-6 text-center">
+            <p className="text-sm text-destructive font-medium">Couldn't load your watchlist.</p>
+            <p className="text-xs text-muted-foreground">
+              Your entries are safe — this is a loading problem, not a data problem.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              Try again
+            </Button>
           </div>
         ) : items.length === 0 && !formMode ? (
           <p className="text-sm text-muted-foreground text-center py-4">

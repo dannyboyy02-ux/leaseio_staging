@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react';
-import { Save, Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, type Dispatch, type SetStateAction, type ComponentType, type ReactNode } from 'react';
+import { Loader2, Crown, TrendingUp, AlertTriangle, Package, Settings2, Plus, X, GitBranch, ExternalLink, Check, Building2, Bell, PenLine, Users, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,6 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MembersPanel, useWorkspaceMembers } from '@/components/workspace/MembersPanel';
-import { WorkspaceRole } from '@/types';
 import type { FunctionalRole } from '@/types/lifecycle';
 import { Link } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -40,8 +39,95 @@ const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
   { value: 'America/Chicago', label: 'Central Time (CT)' },
   { value: 'America/Denver', label: 'Mountain Time (MT)' },
+  { value: 'America/Phoenix', label: 'Arizona (no DST)' },
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AKT)' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST)' },
+  { value: 'UTC', label: 'UTC' },
+  { value: 'Europe/London', label: 'London (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Central European (CET)' },
+  { value: 'Asia/Kolkata', label: 'India (IST)' },
+  { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
+  { value: 'Asia/Tokyo', label: 'Japan (JST)' },
+  { value: 'Australia/Sydney', label: 'Sydney (AET)' },
+  { value: 'America/Sao_Paulo', label: 'São Paulo (BRT)' },
 ];
+
+// ── Autosave status ─────────────────────────────────────────────────────
+// This surface saves every change automatically (selects/checkboxes persist
+// on change, text inputs on blur) — one persistence model for the whole page,
+// replacing the old mix of per-card Save buttons and instant-saving controls.
+// The chip is the per-card confirmation; failures toast AND revert the field.
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+function SaveStatusChip({ status }: { status: SaveStatus | undefined }) {
+  if (!status || status === 'idle') return null;
+  if (status === 'saving') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" role="status">
+        <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+      </span>
+    );
+  }
+  if (status === 'saved') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400" role="status">
+        <Check className="h-3 w-3" /> Saved
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-destructive" role="status">
+      <AlertTriangle className="h-3 w-3" /> Not saved
+    </span>
+  );
+}
+
+/** Card header with an icon + right-aligned autosave chip — the single
+ *  treatment for every section card on this surface (design-system
+ *  consistency: no more icon-vs-plain header drift). */
+function SectionCardHeader({
+  icon: Icon,
+  title,
+  description,
+  status,
+  children,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  description?: ReactNode;
+  status?: SaveStatus;
+  children?: ReactNode;
+}) {
+  return (
+    <CardHeader>
+      <div className="flex items-start gap-2">
+        <Icon className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <CardTitle>{title}</CardTitle>
+          {description && <CardDescription>{description}</CardDescription>}
+        </div>
+        <div className="shrink-0 pt-1">
+          <SaveStatusChip status={status} />
+        </div>
+      </div>
+      {children}
+    </CardHeader>
+  );
+}
+
+/** Compact view-only callout for members who can see a section but not edit
+ *  it — replaces disabled Save buttons (a dead affordance) with an honest
+ *  statement of why the fields are locked. */
+function ReadOnlyNotice() {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+      <Eye className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+      <span>View-only — only workspace admins can change these settings.</span>
+    </div>
+  );
+}
 
 interface WorkspaceSettingsProps {
   /** The visible section id — controlled by the parent. The sole consumer
@@ -60,17 +146,54 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   const [notificationDays, setNotificationDays] = useState(
     String(workspace?.defaultNotificationDays || 90)
   );
-  const [isSaving, setIsSaving] = useState(false);
-  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
-  const [isSavingFinancial, setIsSavingFinancial] = useState(false);
-  const [isSavingRoles, setIsSavingRoles] = useState(false);
   const [backdoorEnabled, setBackdoorEnabled] = useState(false);
   const [isSavingBackdoor, setIsSavingBackdoor] = useState(false);
   // Phase 5 — counter-signature window default. Workspace-level setting
   // that drives the due date computed when a lease enters
   // pending_counter_signature.
   const [counterSignatureDueDays, setCounterSignatureDueDays] = useState('21');
-  const [isSavingCounterSignature, setIsSavingCounterSignature] = useState(false);
+
+  // ── Unified autosave plumbing ──────────────────────────────────────────
+  // One status entry per card (keys: general/notifications/roles/asset_types/
+  // <option column>/thresholds/countersig). `persistedRef` holds the last
+  // KNOWN-SAVED value of each field so blur handlers skip no-op writes and
+  // failure paths can revert the field instead of showing unsaved state as
+  // saved (the old model's silent-data-loss failure).
+  const [saveStatus, setSaveStatusMap] = useState<Record<string, SaveStatus>>({});
+  const statusTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const setStatus = useCallback((key: string, s: SaveStatus, clearAfterMs?: number) => {
+    if (statusTimers.current[key]) clearTimeout(statusTimers.current[key]);
+    setSaveStatusMap((prev) => ({ ...prev, [key]: s }));
+    if (clearAfterMs) {
+      statusTimers.current[key] = setTimeout(
+        () => setSaveStatusMap((prev) => ({ ...prev, [key]: 'idle' })),
+        clearAfterMs,
+      );
+    }
+  }, []);
+  useEffect(() => () => { Object.values(statusTimers.current).forEach(clearTimeout); }, []);
+
+  const persistedRef = useRef<{
+    name: string;
+    timezone: string;
+    notificationDays: string;
+    covenantThreshold: string;
+    approvalThreshold: string;
+    counterSignatureDueDays: string;
+    assetTypeConfig: string[];
+    assetTypeAbbr: Record<string, string>;
+    lists: Record<string, string[]>;
+  }>({
+    name: workspace?.name || '',
+    timezone: workspace?.timezone || 'America/New_York',
+    notificationDays: String(workspace?.defaultNotificationDays || 90),
+    covenantThreshold: '',
+    approvalThreshold: '0',
+    counterSignatureDueDays: '21',
+    assetTypeConfig: [],
+    assetTypeAbbr: {},
+    lists: {},
+  });
 
   // Phase 2 — functional roles state: map of user_id → Set<FunctionalRole>
   const [memberRoles, setMemberRoles] = useState<Record<string, Set<FunctionalRole>>>({});
@@ -87,7 +210,6 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   // below so a pre-migration deploy (column absent) degrades to built-in defaults.
   const [assetTypeAbbr, setAssetTypeAbbr] = useState<Record<string, string>>({});
   const [newAssetType, setNewAssetType] = useState('');
-  const [isSavingAssetTypes, setIsSavingAssetTypes] = useState(false);
 
   useEffect(() => {
     if (!workspace?.id) return;
@@ -102,6 +224,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
       const abbr = data.asset_type_abbreviations;
       if (abbr && typeof abbr === 'object' && !Array.isArray(abbr)) {
         setAssetTypeAbbr(abbr as Record<string, string>);
+        persistedRef.current.assetTypeAbbr = abbr as Record<string, string>;
       }
     })();
     return () => { cancelled = true; };
@@ -109,19 +232,15 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
 
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
   const [newDepartmentOption, setNewDepartmentOption] = useState('');
-  const [isSavingDepartments, setIsSavingDepartments] = useState(false);
 
   const [regionOptions, setRegionOptions] = useState<string[]>([]);
   const [newRegionOption, setNewRegionOption] = useState('');
-  const [isSavingRegions, setIsSavingRegions] = useState(false);
 
   const [locationOptions, setLocationOptions] = useState<string[]>([]);
   const [newLocationOption, setNewLocationOption] = useState('');
-  const [isSavingLocations, setIsSavingLocations] = useState(false);
 
   const [buildingOptions, setBuildingOptions] = useState<string[]>([]);
   const [newBuildingOption, setNewBuildingOption] = useState('');
-  const [isSavingBuildings, setIsSavingBuildings] = useState(false);
 
   const canEdit = canEditWorkspaceSettings(userRole);
   const canManageMembers = canManageWorkspaceMembers(userRole);
@@ -138,6 +257,9 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
       setWorkspaceName(workspace.name || '');
       setTimezone(workspace.timezone || 'America/New_York');
       setNotificationDays(String(workspace.defaultNotificationDays || 90));
+      persistedRef.current.name = workspace.name || '';
+      persistedRef.current.timezone = workspace.timezone || 'America/New_York';
+      persistedRef.current.notificationDays = String(workspace.defaultNotificationDays || 90);
     }
   }, [workspace]);
 
@@ -154,7 +276,10 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
         .maybeSingle();
       if (cancelled) return;
       const v = (data as any)?.counter_signature_default_due_days;
-      if (typeof v === 'number') setCounterSignatureDueDays(String(v));
+      if (typeof v === 'number') {
+        setCounterSignatureDueDays(String(v));
+        persistedRef.current.counterSignatureDueDays = String(v);
+      }
     })();
     return () => {
       cancelled = true;
@@ -171,20 +296,28 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
       .single()
       .then(({ data }) => {
         if (data) {
-          setCovenantThreshold(
-            (data as any).covenant_threshold != null
-              ? String((data as any).covenant_threshold)
-              : ''
-          );
-          setApprovalThreshold(String((data as any).approval_threshold ?? 0));
+          const cov = (data as any).covenant_threshold != null ? String((data as any).covenant_threshold) : '';
+          const appr = String((data as any).approval_threshold ?? 0);
+          setCovenantThreshold(cov);
+          setApprovalThreshold(appr);
+          persistedRef.current.covenantThreshold = cov;
+          persistedRef.current.approvalThreshold = appr;
           setBackdoorEnabled((data as any).backdoor_enabled ?? false);
           if (Array.isArray((data as any).asset_type_config) && (data as any).asset_type_config.length > 0) {
             setAssetTypeConfig((data as any).asset_type_config as string[]);
+            persistedRef.current.assetTypeConfig = (data as any).asset_type_config as string[];
           }
-          if (Array.isArray((data as any).department_options)) setDepartmentOptions((data as any).department_options as string[]);
-          if (Array.isArray((data as any).region_options)) setRegionOptions((data as any).region_options as string[]);
-          if (Array.isArray((data as any).location_options)) setLocationOptions((data as any).location_options as string[]);
-          if (Array.isArray((data as any).building_options)) setBuildingOptions((data as any).building_options as string[]);
+          for (const [col, set] of [
+            ['department_options', setDepartmentOptions],
+            ['region_options', setRegionOptions],
+            ['location_options', setLocationOptions],
+            ['building_options', setBuildingOptions],
+          ] as const) {
+            if (Array.isArray((data as any)[col])) {
+              set((data as any)[col] as string[]);
+              persistedRef.current.lists[col] = (data as any)[col] as string[];
+            }
+          }
         }
       });
   }, [workspace?.id]);
@@ -208,74 +341,66 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
 
   useEffect(() => { void loadRoles(); }, [loadRoles]);
 
-  const toggleFunctionalRole = (userId: string, role: FunctionalRole) => {
-    setMemberRoles((prev) => {
-      const next = { ...prev };
-      const current = new Set(next[userId] || []);
-      if (current.has(role)) {
-        current.delete(role);
-      } else {
-        current.add(role);
+  // Autosave: every role change persists immediately through the atomic
+  // set_workspace_roles RPC (full-replace in one transaction — audit D3), so
+  // a toggle can never be silently lost by navigating away. On failure the
+  // RPC left the stored roles untouched; re-sync the UI to that true state.
+  const persistRoles = async (next: Record<string, Set<FunctionalRole>>) => {
+    if (!canEdit || !workspace?.id) return;
+    setStatus('roles', 'saving');
+    try {
+      const assignments: Array<{ user_id: string; role: FunctionalRole }> = [];
+      for (const [userId, roles] of Object.entries(next)) {
+        for (const role of roles) {
+          assignments.push({ user_id: userId, role });
+        }
       }
-      next[userId] = current;
-      return next;
-    });
+      const { error } = await (supabase as any).rpc('set_workspace_roles', {
+        p_workspace_id: workspace.id,
+        p_assignments: assignments,
+      });
+      if (error) throw error;
+      setStatus('roles', 'saved', 2000);
+    } catch (error) {
+      console.error('Error saving roles:', error);
+      setStatus('roles', 'error', 4000);
+      toast.error("Couldn't save that role change — it was not applied. Please try again.");
+      await loadRoles();
+    }
+  };
+
+  const rolesSaving = saveStatus['roles'] === 'saving';
+
+  const toggleFunctionalRole = (userId: string, role: FunctionalRole) => {
+    const next = { ...memberRoles };
+    const current = new Set(next[userId] || []);
+    if (current.has(role)) current.delete(role);
+    else current.add(role);
+    next[userId] = current;
+    setMemberRoles(next);
+    void persistRoles(next);
   };
 
   // Assign a single approver role (clears existing holder first — one person per step)
   const assignApproverRole = (role: 'manager_approver' | 'financial_approver', userId: string | null) => {
-    setMemberRoles((prev) => {
-      const next: Record<string, Set<FunctionalRole>> = {};
-      for (const [uid, roles] of Object.entries(prev)) {
-        const updated = new Set(roles);
-        updated.delete(role);
-        next[uid] = updated;
-      }
-      if (userId) {
-        if (!next[userId]) next[userId] = new Set();
-        next[userId].add(role);
-      }
-      return next;
-    });
+    const next: Record<string, Set<FunctionalRole>> = {};
+    for (const [uid, roles] of Object.entries(memberRoles)) {
+      const updated = new Set(roles);
+      updated.delete(role);
+      next[uid] = updated;
+    }
+    if (userId) {
+      if (!next[userId]) next[userId] = new Set();
+      next[userId].add(role);
+    }
+    setMemberRoles(next);
+    void persistRoles(next);
   };
 
   const managerApproverId = Object.entries(memberRoles).find(([, r]) => r.has('manager_approver'))?.[0] ?? null;
   const financialApproverId = Object.entries(memberRoles).find(([, r]) => r.has('financial_approver'))?.[0] ?? null;
 
   const hasFinancialApprover = financialApproverId !== null;
-
-  const handleSaveRoles = async () => {
-    if (!canEdit) { toast.error(t('workspace.read_only')); return; }
-    if (!workspace?.id) { toast.error('No workspace found'); return; }
-    setIsSavingRoles(true);
-    try {
-      // Atomic replace via RPC — the delete + re-insert happen in one
-      // transaction server-side, so a failed insert can no longer leave the
-      // workspace with all functional roles wiped (audit D3).
-      const assignments: Array<{ user_id: string; role: FunctionalRole }> = [];
-      for (const [userId, roles] of Object.entries(memberRoles)) {
-        for (const role of roles) {
-          assignments.push({ user_id: userId, role });
-        }
-      }
-
-      const { error } = await (supabase as any).rpc('set_workspace_roles', {
-        p_workspace_id: workspace.id,
-        p_assignments: assignments,
-      });
-      if (error) throw error;
-
-      toast.success('Team roles saved');
-    } catch (error) {
-      console.error('Error saving roles:', error);
-      toast.error("Couldn't save team roles — no changes were applied. Please try again.");
-      // The atomic RPC left the stored roles untouched on failure; re-sync the
-      // UI to that true state instead of leaving the optimistic edits showing.
-      await loadRoles();
-    } finally {
-      setIsSavingRoles(false);
-    }
-  };
 
   // OWM Checkpoint 2: members query lives in MembersPanel; the
   // re-exported hook here keeps the roster available for the Approval
@@ -285,125 +410,129 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     isLoading: membersLoading,
   } = useWorkspaceMembers(workspace?.id);
 
-  const handleSaveGeneral = async () => {
-    if (!canEdit) { toast.error(t('workspace.read_only')); return; }
-    if (!workspace?.id) { toast.error('No workspace found'); return; }
-    setIsSaving(true);
+  // Generic autosave write for workspaces columns. #70 defense-in-depth:
+  // .select('id') so an RLS-blocked 0-row update surfaces as an error rather
+  // than a false "Saved". Returns true on success; on failure sets the card's
+  // error status + toasts, and the caller reverts the field.
+  const persistWorkspace = async (
+    key: string,
+    patch: Record<string, unknown>,
+    friendlyError: string,
+  ): Promise<boolean> => {
+    if (!canEdit || !workspace?.id) return false;
+    setStatus(key, 'saving');
     try {
-      // #70 defense-in-depth: .select() so an RLS-blocked 0-row update surfaces
-      // as an error rather than a false "saved". #87: timezone is a config
-      // column frozen by the read-only guard on a non-live (grace/Vault)
-      // workspace; if the bundled update is rejected, retry the rename alone so
-      // it isn't blocked as collateral (name stays editable — owner-rename
-      // carve-out).
       const { data, error } = await supabase
         .from('workspaces')
-        .update({ name: workspaceName.trim(), timezone })
+        .update(patch as any)
         .eq('id', workspace.id)
         .select('id');
-      if (error) {
-        const retry = await supabase
-          .from('workspaces')
-          .update({ name: workspaceName.trim() })
-          .eq('id', workspace.id)
-          .select('id');
-        if (retry.error || !retry.data?.length) throw error;
-        if (refreshProfile) await refreshProfile();
-        toast.warning('Name saved — other settings are read-only on this workspace.');
-        return;
-      }
+      if (error) throw error;
       if (!data?.length) throw new Error('no_rows');
-      if (refreshProfile) await refreshProfile();
-      toast.success('Workspace settings saved!');
+      setStatus(key, 'saved', 2000);
+      return true;
     } catch (error) {
-      console.error('Error saving workspace:', error);
+      console.error(`Error saving ${key}:`, error);
+      setStatus(key, 'error', 4000);
       toast.error(
         error instanceof Error && error.message === 'no_rows'
           ? 'You do not have permission to change these settings.'
-          : 'Failed to save workspace settings',
+          : friendlyError,
       );
-    } finally {
-      setIsSaving(false);
+      return false;
     }
   };
 
-  const handleSaveNotifications = async () => {
-    if (!canEdit) { toast.error(t('workspace.read_only')); return; }
-    if (!workspace?.id) { toast.error('No workspace found'); return; }
-    setIsSavingNotifications(true);
-    try {
-      const days = parseInt(notificationDays) || 90;
-      const { error } = await supabase
-        .from('workspaces')
-        .update({ default_notification_days: days })
-        .eq('id', workspace.id);
-      if (error) throw error;
+  // Name persists on blur; timezone on select change. Writing them separately
+  // (instead of the old bundled update) means a frozen timezone (#87 — config
+  // column locked on a non-live workspace) can't block a rename as collateral.
+  const saveName = async () => {
+    const name = workspaceName.trim();
+    if (!name || name === persistedRef.current.name) {
+      if (!name) setWorkspaceName(persistedRef.current.name);
+      return;
+    }
+    const ok = await persistWorkspace('general', { name }, "Couldn't save the workspace name.");
+    if (ok) {
+      persistedRef.current.name = name;
       if (refreshProfile) await refreshProfile();
-      toast.success('Notification settings saved!');
-    } catch (error) {
-      console.error('Error saving notifications:', error);
-      toast.error('Failed to save notification settings');
-    } finally {
-      setIsSavingNotifications(false);
+    } else {
+      setWorkspaceName(persistedRef.current.name);
     }
   };
 
-  // Phase 5 — save counter-signature window. Persists
-  // workspaces.counter_signature_default_due_days; act-on-chain-step
-  // reads this when computing counter_signature_due_date at signator
-  // approve. CHECK constraint enforces 1..365 server-side.
-  const handleSaveCounterSignature = async () => {
-    if (!canEdit) {
-      toast.error(t('workspace.read_only'));
+  const saveTimezone = async (tz: string) => {
+    setTimezone(tz);
+    if (tz === persistedRef.current.timezone) return;
+    const ok = await persistWorkspace('general', { timezone: tz }, "Couldn't save the timezone — it may be locked on this workspace.");
+    if (ok) {
+      persistedRef.current.timezone = tz;
+      if (refreshProfile) await refreshProfile();
+    } else {
+      setTimezone(persistedRef.current.timezone);
+    }
+  };
+
+  const saveNotificationDays = async () => {
+    const raw = notificationDays.trim();
+    const days = parseInt(raw, 10);
+    if (raw === persistedRef.current.notificationDays) return;
+    if (!Number.isFinite(days) || days < 1 || days > 365) {
+      toast.error('Reminder days must be between 1 and 365.');
+      setNotificationDays(persistedRef.current.notificationDays);
       return;
     }
-    if (!workspace?.id) {
-      toast.error('No workspace found');
-      return;
+    const ok = await persistWorkspace('notifications', { default_notification_days: days }, "Couldn't save the reminder setting.");
+    if (ok) {
+      persistedRef.current.notificationDays = String(days);
+      setNotificationDays(String(days));
+      if (refreshProfile) await refreshProfile();
+    } else {
+      setNotificationDays(persistedRef.current.notificationDays);
     }
-    const days = parseInt(counterSignatureDueDays, 10);
+  };
+
+  // Phase 5 — counter-signature window (act-on-chain-step reads this when
+  // computing counter_signature_due_date; CHECK enforces 1..365 server-side).
+  const saveCounterSignature = async () => {
+    const raw = counterSignatureDueDays.trim();
+    if (raw === persistedRef.current.counterSignatureDueDays) return;
+    const days = parseInt(raw, 10);
     if (!Number.isFinite(days) || days < 1 || days > 365) {
       toast.error('Counter-signature window must be between 1 and 365 days.');
+      setCounterSignatureDueDays(persistedRef.current.counterSignatureDueDays);
       return;
     }
-    setIsSavingCounterSignature(true);
-    try {
-      const { error } = await (supabase as any)
-        .from('workspaces')
-        .update({ counter_signature_default_due_days: days })
-        .eq('id', workspace.id);
-      if (error) throw error;
-      toast.success('Counter-signature window saved.');
-    } catch (error) {
-      console.error('Error saving counter-signature window:', error);
-      toast.error('Failed to save counter-signature window');
-    } finally {
-      setIsSavingCounterSignature(false);
+    const ok = await persistWorkspace('countersig', { counter_signature_default_due_days: days }, "Couldn't save the counter-signature window.");
+    if (ok) {
+      persistedRef.current.counterSignatureDueDays = String(days);
+      setCounterSignatureDueDays(String(days));
+    } else {
+      setCounterSignatureDueDays(persistedRef.current.counterSignatureDueDays);
     }
   };
 
-  // Saves the two review thresholds (now housed under Approval Rules).
-  // The discount rate is saved separately by DiscountRateCard on
-  // /app/reports, which also owns the lease-financials recompute.
-  const handleSaveThresholds = async () => {
-    if (!canEdit) { toast.error(t('workspace.read_only')); return; }
-    if (!workspace?.id) { toast.error('No workspace found'); return; }
-    setIsSavingFinancial(true);
-    try {
-      const { error } = await supabase
-        .from('workspaces')
-        .update({
-          covenant_threshold: covenantThreshold ? parseFloat(covenantThreshold) : null,
-          approval_threshold: parseFloat(approvalThreshold) || 0,
-        } as any)
-        .eq('id', workspace.id);
-      if (error) throw error;
-      toast.success('Review thresholds saved!');
-    } catch (error) {
-      console.error('Error saving review thresholds:', error);
-      toast.error('Failed to save review thresholds');
-    } finally {
-      setIsSavingFinancial(false);
+  // Review thresholds (housed under Approval Rules). The discount rate is
+  // saved separately by DiscountRateCard on /app/reports.
+  const saveThresholds = async () => {
+    if (
+      covenantThreshold === persistedRef.current.covenantThreshold &&
+      approvalThreshold === persistedRef.current.approvalThreshold
+    ) return;
+    const ok = await persistWorkspace(
+      'thresholds',
+      {
+        covenant_threshold: covenantThreshold ? parseFloat(covenantThreshold) : null,
+        approval_threshold: parseFloat(approvalThreshold) || 0,
+      },
+      "Couldn't save the review thresholds.",
+    );
+    if (ok) {
+      persistedRef.current.covenantThreshold = covenantThreshold;
+      persistedRef.current.approvalThreshold = approvalThreshold;
+    } else {
+      setCovenantThreshold(persistedRef.current.covenantThreshold);
+      setApprovalThreshold(persistedRef.current.approvalThreshold);
     }
   };
 
@@ -426,72 +555,76 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     }
   };
 
+  // Asset types persist on every add/remove (and abbreviation edits on blur) —
+  // the old staged-then-Save model silently lost list edits when the user
+  // clicked another rail item before hitting Save.
+  const persistAssetTypes = async (nextConfig: string[], nextAbbr: Record<string, string>) => {
+    const ok = await persistWorkspace(
+      'asset_types',
+      { asset_type_config: nextConfig, asset_type_abbreviations: nextAbbr },
+      "Couldn't save asset types.",
+    );
+    if (ok) {
+      persistedRef.current.assetTypeConfig = nextConfig;
+      persistedRef.current.assetTypeAbbr = nextAbbr;
+    } else {
+      setAssetTypeConfig(persistedRef.current.assetTypeConfig);
+      setAssetTypeAbbr(persistedRef.current.assetTypeAbbr);
+    }
+  };
+
   const handleAddAssetType = () => {
     const trimmed = newAssetType.trim();
     if (!trimmed || assetTypeConfig.includes(trimmed)) return;
-    setAssetTypeConfig(prev => [...prev, trimmed]);
+    const nextConfig = [...assetTypeConfig, trimmed];
+    setAssetTypeConfig(nextConfig);
     setNewAssetType('');
+    void persistAssetTypes(nextConfig, assetTypeAbbr);
   };
 
   const handleRemoveAssetType = (type: string) => {
-    setAssetTypeConfig(prev => prev.filter(t => t !== type));
-    setAssetTypeAbbr(prev => {
-      const next = { ...prev };
-      delete next[type];
-      return next;
-    });
+    const nextConfig = assetTypeConfig.filter((t) => t !== type);
+    const nextAbbr = { ...assetTypeAbbr };
+    delete nextAbbr[type];
+    setAssetTypeConfig(nextConfig);
+    setAssetTypeAbbr(nextAbbr);
+    void persistAssetTypes(nextConfig, nextAbbr);
   };
 
-  const handleSaveAssetTypes = async () => {
-    if (!workspace?.id) return;
-    setIsSavingAssetTypes(true);
-    try {
-      const { error } = await supabase
-        .from('workspaces')
-        .update({ asset_type_config: assetTypeConfig, asset_type_abbreviations: assetTypeAbbr } as any)
-        .eq('id', workspace.id);
-      if (error) throw error;
-      toast.success('Asset types saved');
-    } catch (error) {
-      console.error('Error saving asset types:', error);
-      toast.error('Failed to save asset types');
-    } finally {
-      setIsSavingAssetTypes(false);
-    }
+  const saveAssetAbbreviations = () => {
+    const prev = persistedRef.current.assetTypeAbbr;
+    const changed =
+      Object.keys({ ...prev, ...assetTypeAbbr }).some((k) => (prev[k] ?? '') !== (assetTypeAbbr[k] ?? ''));
+    if (changed) void persistAssetTypes(assetTypeConfig, assetTypeAbbr);
   };
 
   const makeOptionListHandlers = (
     options: string[],
     setOptions: Dispatch<SetStateAction<string[]>>,
     setNew: Dispatch<SetStateAction<string>>,
-    setIsSaving: Dispatch<SetStateAction<boolean>>,
     dbColumn: string,
-  ) => ({
-    handleAdd: (value: string) => {
-      const trimmed = value.trim();
-      if (!trimmed || options.includes(trimmed)) return;
-      setOptions(prev => [...prev, trimmed]);
-      setNew('');
-    },
-    handleRemove: (item: string) => setOptions(prev => prev.filter(o => o !== item)),
-    handleSave: async (latest: string[]) => {
-      if (!workspace?.id) return;
-      setIsSaving(true);
-      try {
-        const { error } = await supabase
-          .from('workspaces')
-          .update({ [dbColumn]: latest } as any)
-          .eq('id', workspace.id);
-        if (error) throw error;
-        toast.success('Options saved');
-      } catch (err) {
-        console.error(err);
-        toast.error('Failed to save options');
-      } finally {
-        setIsSaving(false);
+  ) => {
+    const persist = async (next: string[]) => {
+      setOptions(next);
+      const ok = await persistWorkspace(dbColumn, { [dbColumn]: next }, "Couldn't save that change.");
+      if (ok) {
+        persistedRef.current.lists[dbColumn] = next;
+      } else {
+        setOptions(persistedRef.current.lists[dbColumn] ?? options);
       }
-    },
-  });
+    };
+    return {
+      handleAdd: (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed || options.includes(trimmed)) return;
+        setNew('');
+        void persist([...options, trimmed]);
+      },
+      handleRemove: (item: string) => {
+        void persist(options.filter((o) => o !== item));
+      },
+    };
+  };
 
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -522,11 +655,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                 </Button>
               </CardContent>
             </Card>
+            {!canEdit && <ReadOnlyNotice />}
             <Card>
-              <CardHeader>
-                <CardTitle>{t('workspace.details')}</CardTitle>
-                <CardDescription>{t('workspace.basic_info')}</CardDescription>
-              </CardHeader>
+              <SectionCardHeader
+                icon={Building2}
+                title={t('workspace.details')}
+                description={t('workspace.basic_info')}
+                status={saveStatus['general']}
+              />
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="workspace-name">{t('workspace.name')}</Label>
@@ -534,12 +670,13 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     id="workspace-name"
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
+                    onBlur={() => void saveName()}
                     disabled={!canEdit}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="timezone">{t('workspace.default_timezone')}</Label>
-                  <Select value={timezone} onValueChange={setTimezone}>
+                  <Select value={timezone} onValueChange={(tz) => void saveTimezone(tz)}>
                     <SelectTrigger id="timezone" disabled={!canEdit}>
                       <SelectValue placeholder="Select timezone" />
                     </SelectTrigger>
@@ -553,11 +690,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   </Select>
                   <p className="text-xs text-muted-foreground">{t('workspace.timezone_desc')}</p>
                 </div>
-                <Button variant="accent" onClick={handleSaveGeneral} disabled={!canEdit || isSaving}>
-                  {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                  {isSaving ? t('workspace.saving') : t('workspace.save_changes')}
-                </Button>
-                {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                <p className="text-xs text-muted-foreground">Changes save automatically.</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -578,12 +711,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               {/* Approval Roles — only shown when multiple members exist */}
               {members && members.length > 1 && (
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Default approvers</CardTitle>
-                    <CardDescription>
-                      The fallback chain: Manager Approval, then Financial Approval. It routes a
-                      lease request only when no Approval Rule matches it.
-                    </CardDescription>
+                  <SectionCardHeader
+                    icon={Users}
+                    title="Default approvers"
+                    description="The fallback chain: Manager Approval, then Financial Approval. It routes a lease request only when no Approval Rule matches it."
+                    status={saveStatus['roles']}
+                  >
                     {/* Live walkthrough 2026-07-12: this legacy editor read as THE
                         approval setup while the real routing engine (Approval
                         Rules) hid behind a bounce link — admins configured this
@@ -601,7 +734,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         Set up Approval Rules →
                       </Link>
                     </div>
-                  </CardHeader>
+                  </SectionCardHeader>
                   <CardContent className="space-y-6">
                     {/* Approval chain slots */}
                     {membersLoading || !rolesLoaded ? (
@@ -645,9 +778,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                   <Select
                                     value={assignedId ?? ''}
                                     onValueChange={(val) => assignApproverRole(role, val || null)}
+                                    disabled={rolesSaving}
                                   >
-                                    <SelectTrigger className="h-8 text-xs w-[160px]">
-                                      <SelectValue placeholder={assignedMember ? 'Change' : 'Assign'} />
+                                    {/* Static trigger text — the assignee's avatar+name already
+                                        render at left; echoing the selection here duplicated it. */}
+                                    <SelectTrigger className="h-8 text-xs w-[110px]">
+                                      {assignedMember ? 'Change' : 'Assign'}
                                     </SelectTrigger>
                                     <SelectContent>
                                       {members.map((m) => {
@@ -671,6 +807,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                       size="icon"
                                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                       onClick={() => assignApproverRole(role, null)}
+                                      disabled={rolesSaving}
+                                      aria-label={`Clear ${label} assignee`}
                                     >
                                       <X className="h-3.5 w-3.5" />
                                     </Button>
@@ -694,9 +832,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     {/* Member roles: submitter + admin */}
                     <div>
                       <p className="text-sm font-medium mb-1">Workflow roles</p>
+                      {/* Corrected 2026-07-12: the workflow Admin is NOT the Team-Members
+                          access level — it's a separate grant (workspace_roles) that
+                          canUploadExecutedDocument / canAccessVarianceReview check. The
+                          earlier "same Admin" copy was wrong and hid a real capability. */}
                       <p className="text-xs text-muted-foreground mb-3">
-                        Submitter: can create and submit lease requests. Admin: full workspace
-                        administration — the same Admin as the access level in Team Members above.
+                        Submitter: can create and submit lease requests. Workflow admin: can upload
+                        executed documents and review variance reports — this is separate from the
+                        Team Members access level above.
                       </p>
                       {membersLoading || !rolesLoaded ? (
                         <div className="space-y-3">
@@ -707,7 +850,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                           <div className="hidden sm:grid grid-cols-[1fr_100px_100px] gap-4 px-3 pb-2 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             <span>Member</span>
                             <span className="text-center">Submitter</span>
-                            <span className="text-center">Admin</span>
+                            <span className="text-center">Workflow admin</span>
                           </div>
                           {members.map((member) => {
                             const roles = memberRoles[member.user_id] || new Set<FunctionalRole>();
@@ -738,8 +881,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                         <span className="text-xs text-muted-foreground sm:hidden capitalize">{role}:</span>
                                         <Checkbox
                                           checked={roles.has(role)}
-                                          onCheckedChange={() => { if (canEdit && !isSavingRoles) toggleFunctionalRole(member.user_id, role); }}
-                                          disabled={!canEdit || isSavingRoles}
+                                          onCheckedChange={() => { if (canEdit && !rolesSaving) toggleFunctionalRole(member.user_id, role); }}
+                                          disabled={!canEdit || rolesSaving}
                                         />
                                       </div>
                                     ))}
@@ -752,21 +895,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="accent"
-                        onClick={handleSaveRoles}
-                        disabled={!canEdit || isSavingRoles}
-                      >
-                        {isSavingRoles ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <Save className="h-4 w-4 mr-2" />
-                        )}
-                        {isSavingRoles ? 'Saving…' : 'Save Roles'}
-                      </Button>
-                      {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
-                    </div>
+                    {canEdit ? (
+                      <p className="text-xs text-muted-foreground">Changes save automatically.</p>
+                    ) : (
+                      <ReadOnlyNotice />
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -776,11 +909,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
           {/* Notifications */}
           {canAccessDefaults && (
             <TabsContent value="notifications" className="space-y-6">
+              {!canEdit && <ReadOnlyNotice />}
               <Card>
-                <CardHeader>
-                  <CardTitle>{t('workspace.notification_settings')}</CardTitle>
-                  <CardDescription>{t('workspace.notification_timing')}</CardDescription>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={Bell}
+                  title={t('workspace.notification_settings')}
+                  description={t('workspace.notification_timing')}
+                  status={saveStatus['notifications']}
+                />
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="notification-days">{t('workspace.reminder_days')}</Label>
@@ -789,25 +925,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       type="number"
                       value={notificationDays}
                       onChange={(e) => setNotificationDays(e.target.value)}
+                      onBlur={() => void saveNotificationDays()}
                       min="1"
                       max="365"
                       disabled={!canEdit}
                     />
                     <p className="text-xs text-muted-foreground">{t('workspace.reminder_desc')}</p>
                   </div>
-                  <Button
-                    variant="accent"
-                    onClick={handleSaveNotifications}
-                    disabled={!canEdit || isSavingNotifications}
-                  >
-                    {isSavingNotifications ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    {isSavingNotifications ? t('workspace.saving') : t('workspace.save_changes')}
-                  </Button>
-                  {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                  {canEdit && <p className="text-xs text-muted-foreground">Changes save automatically.</p>}
                 </CardContent>
               </Card>
 
@@ -818,20 +943,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
           {isAdmin && (
             <TabsContent value="lease_config" className="space-y-6">
               <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Settings2 className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <CardTitle>Asset Types</CardTitle>
-                      <CardDescription>
-                        Configure the list of asset types available when classifying leases.
-                        These are used by the AI during extraction to classify the asset.
-                        Set a short abbreviation (e.g. RE, EQP) to keep the Leases table tight —
-                        leave it blank to use the built-in default.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={Settings2}
+                  title="Asset Types"
+                  description="Configure the list of asset types available when classifying leases. These are used by the AI during extraction to classify the asset. Set a short abbreviation (e.g. RE, EQP) to keep the Leases table tight — leave it blank to use the built-in default."
+                  status={saveStatus['asset_types']}
+                />
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     {assetTypeConfig.map((type) => (
@@ -845,6 +962,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                               [type]: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5),
                             }))
                           }
+                          onBlur={saveAssetAbbreviations}
                           placeholder={assetAbbreviation(type)}
                           aria-label={`${type} abbreviation`}
                           maxLength={5}
@@ -874,44 +992,28 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       Add
                     </Button>
                   </div>
-                  <Button
-                    variant="accent"
-                    onClick={handleSaveAssetTypes}
-                    disabled={isSavingAssetTypes}
-                  >
-                    {isSavingAssetTypes ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    {isSavingAssetTypes ? 'Saving…' : 'Save Asset Types'}
-                  </Button>
+                  <p className="text-xs text-muted-foreground">Changes save automatically.</p>
                 </CardContent>
               </Card>
 
               {/* Departments */}
               {(['Departments', 'Regions', 'Locations', 'Buildings'] as const).map((label) => {
-                const configs: Record<string, { options: string[]; newVal: string; setOptions: Dispatch<SetStateAction<string[]>>; setNew: Dispatch<SetStateAction<string>>; isSaving: boolean; setIsSaving: Dispatch<SetStateAction<boolean>>; dbColumn: string }> = {
-                  Departments: { options: departmentOptions, newVal: newDepartmentOption, setOptions: setDepartmentOptions, setNew: setNewDepartmentOption, isSaving: isSavingDepartments, setIsSaving: setIsSavingDepartments, dbColumn: 'department_options' },
-                  Regions:     { options: regionOptions,     newVal: newRegionOption,     setOptions: setRegionOptions,     setNew: setNewRegionOption,     isSaving: isSavingRegions,     setIsSaving: setIsSavingRegions,     dbColumn: 'region_options' },
-                  Locations:   { options: locationOptions,   newVal: newLocationOption,   setOptions: setLocationOptions,   setNew: setNewLocationOption,   isSaving: isSavingLocations,   setIsSaving: setIsSavingLocations,   dbColumn: 'location_options' },
-                  Buildings:   { options: buildingOptions,   newVal: newBuildingOption,   setOptions: setBuildingOptions,   setNew: setNewBuildingOption,   isSaving: isSavingBuildings,   setIsSaving: setIsSavingBuildings,   dbColumn: 'building_options' },
+                const configs: Record<string, { options: string[]; newVal: string; setOptions: Dispatch<SetStateAction<string[]>>; setNew: Dispatch<SetStateAction<string>>; dbColumn: string }> = {
+                  Departments: { options: departmentOptions, newVal: newDepartmentOption, setOptions: setDepartmentOptions, setNew: setNewDepartmentOption, dbColumn: 'department_options' },
+                  Regions:     { options: regionOptions,     newVal: newRegionOption,     setOptions: setRegionOptions,     setNew: setNewRegionOption,     dbColumn: 'region_options' },
+                  Locations:   { options: locationOptions,   newVal: newLocationOption,   setOptions: setLocationOptions,   setNew: setNewLocationOption,   dbColumn: 'location_options' },
+                  Buildings:   { options: buildingOptions,   newVal: newBuildingOption,   setOptions: setBuildingOptions,   setNew: setNewBuildingOption,   dbColumn: 'building_options' },
                 };
                 const cfg = configs[label];
-                const handlers = makeOptionListHandlers(cfg.options, cfg.setOptions, cfg.setNew, cfg.setIsSaving, cfg.dbColumn);
+                const handlers = makeOptionListHandlers(cfg.options, cfg.setOptions, cfg.setNew, cfg.dbColumn);
                 return (
                   <Card key={label}>
-                    <CardHeader>
-                      <div className="flex items-center gap-2">
-                        <Settings2 className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <CardTitle>{label}</CardTitle>
-                          <CardDescription>
-                            Configure the available options for the {label.toLowerCase().slice(0, -1)} field on leases. Users can also type a custom value.
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
+                    <SectionCardHeader
+                      icon={Settings2}
+                      title={label}
+                      description={`Configure the available options for the ${label.toLowerCase().slice(0, -1)} field on leases. Users can also type a custom value.`}
+                      status={saveStatus[cfg.dbColumn]}
+                    />
                     <CardContent className="space-y-4">
                       <div className="space-y-2">
                         {cfg.options.map((item) => (
@@ -944,14 +1046,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                           Add
                         </Button>
                       </div>
-                      <Button
-                        variant="accent"
-                        onClick={() => handlers.handleSave(cfg.options)}
-                        disabled={cfg.isSaving}
-                      >
-                        {cfg.isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                        {cfg.isSaving ? 'Saving…' : `Save ${label}`}
-                      </Button>
+                      <p className="text-xs text-muted-foreground">Changes save automatically.</p>
                     </CardContent>
                   </Card>
                 );
@@ -973,19 +1068,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
           {isAdmin && (
             <TabsContent value="approval_policies" className="space-y-6">
               <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <GitBranch className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <CardTitle>Approval Rules</CardTitle>
-                      <CardDescription>
-                        Rules decide who approves each lease request — by asset type, department,
-                        dollar size, or region. The first matching rule runs its approver chain;
-                        when nothing matches, the Default approvers on the Members page take over.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={GitBranch}
+                  title="Approval Rules"
+                  description="Rules decide who approves each lease request — by asset type, department, dollar size, or region. The first matching rule runs its approver chain; when nothing matches, the Default approvers on the Members page take over."
+                />
                 <CardContent className="space-y-2">
                   <Button asChild>
                     <Link to="/app/settings/approval-policies">
@@ -1007,17 +1094,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   financial review, so they belong with the approval rules.
                   (The discount rate moved to Report Settings on /app/reports.) */}
               <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <CardTitle>Review Thresholds</CardTitle>
-                      <CardDescription>
-                        Dollar limits that trigger financial review for new lease requests.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={TrendingUp}
+                  title="Review Thresholds"
+                  description="Dollar limits that trigger financial review for new lease requests."
+                  status={saveStatus['thresholds']}
+                />
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="approval-threshold">Approval Threshold ($)</Label>
@@ -1030,6 +1112,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         step="1000"
                         value={approvalThreshold}
                         onChange={(e) => setApprovalThreshold(e.target.value)}
+                        onBlur={() => void saveThresholds()}
                         disabled={!canEdit}
                         placeholder="0"
                         className="pl-7"
@@ -1051,6 +1134,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         step="1000"
                         value={covenantThreshold}
                         onChange={(e) => setCovenantThreshold(e.target.value)}
+                        onBlur={() => void saveThresholds()}
                         disabled={!canEdit}
                         placeholder="Optional"
                         className="pl-7"
@@ -1061,19 +1145,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     </p>
                   </div>
 
-                  <Button
-                    variant="accent"
-                    onClick={handleSaveThresholds}
-                    disabled={!canEdit || isSavingFinancial}
-                  >
-                    {isSavingFinancial ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    {isSavingFinancial ? t('workspace.saving') : 'Save Thresholds'}
-                  </Button>
-                  {!canEdit && <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>}
+                  {canEdit && <p className="text-xs text-muted-foreground">Changes save automatically.</p>}
 
                   {/* Signpost for the dissolved Financial tab's third field —
                       "where did the discount rate go?" is the predictable
@@ -1092,14 +1164,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   approval rules (it's chain configuration, not a personal
                   notification preference). */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Counter-Signature Window</CardTitle>
-                  <CardDescription>
-                    Default number of days from signator approval until the
-                    counter-signed document is expected. Reminders fire 7 days
-                    before, on the due date, and at 7 / 14 / 28 days overdue.
-                  </CardDescription>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={PenLine}
+                  title="Counter-Signature Window"
+                  description="Default number of days from signator approval until the counter-signed document is expected. Reminders fire 7 days before, on the due date, and at 7 / 14 / 28 days overdue."
+                  status={saveStatus['countersig']}
+                />
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="counter-signature-days">
@@ -1110,6 +1180,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       type="number"
                       value={counterSignatureDueDays}
                       onChange={(e) => setCounterSignatureDueDays(e.target.value)}
+                      onBlur={() => void saveCounterSignature()}
                       min={1}
                       max={365}
                       disabled={!canEdit}
@@ -1118,21 +1189,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       Must be between 1 and 365 days. Default: 21.
                     </p>
                   </div>
-                  <Button
-                    variant="accent"
-                    onClick={handleSaveCounterSignature}
-                    disabled={!canEdit || isSavingCounterSignature}
-                  >
-                    {isSavingCounterSignature ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4 mr-2" />
-                    )}
-                    {isSavingCounterSignature ? t('workspace.saving') : t('workspace.save_changes')}
-                  </Button>
-                  {!canEdit && (
-                    <p className="text-xs text-muted-foreground">{t('workspace.read_only')}</p>
-                  )}
+                  {canEdit && <p className="text-xs text-muted-foreground">Changes save automatically.</p>}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1142,18 +1199,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
           {isAdmin && (
             <TabsContent value="onboarding" className="space-y-6">
               <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Package className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <CardTitle>Historical Portfolio Loader</CardTitle>
-                      <CardDescription>
-                        Enable a simplified form for loading existing leases during onboarding.
-                        Turn off when your portfolio is loaded.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
+                <SectionCardHeader
+                  icon={Package}
+                  title="Historical Portfolio Loader"
+                  description="Enable a simplified form for loading existing leases during onboarding. Turn off when your portfolio is loaded."
+                />
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
