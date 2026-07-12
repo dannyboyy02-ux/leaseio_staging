@@ -79,9 +79,8 @@ export function DeleteWorkspaceDialog({
         body: { workspaceId, confirmName: typed },
       });
       if (error || !(data as any)?.ok) {
-        const msg =
-          (data as any)?.error || error?.message || 'Failed to delete workspace';
-        toast.error(msg);
+        console.error('delete-workspace failed:', (data as any)?.error ?? error);
+        toast.error(t('workspace.delete_dialog.fail'));
         return;
       }
       const result = data as {

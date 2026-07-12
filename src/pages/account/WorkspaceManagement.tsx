@@ -34,7 +34,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { format } from 'date-fns';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import {
   Card,
   CardContent,
@@ -88,7 +88,7 @@ interface WorkspaceMeta {
 
 export function WorkspaceManagementContent() {
   const { user, workspace: activeWorkspace, availableWorkspaces, refreshProfile, switchWorkspace } = useApp();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const queryClient = useQueryClient();
 
   const [manageMembersWorkspaceId, setManageMembersWorkspaceId] = useState<string | null>(null);
@@ -149,7 +149,7 @@ export function WorkspaceManagementContent() {
           const ownerHasRow = accepted.some((r) => r.user_id === w.owner_id);
           return {
             ...w,
-            name: w.name ?? 'Unnamed workspace',
+            name: w.name ?? t('workspace.mgmt.unnamed'),
             member_count: accepted.length + (ownerHasRow ? 0 : 1),
             pending_invite_count: rows.length - accepted.length,
             lease_count: leaseCount ?? 0,
@@ -309,7 +309,7 @@ export function WorkspaceManagementContent() {
                               <FileText className="h-3 w-3" />
                               {t('workspace.mgmt.leases_count', { count: ws.lease_count })}
                             </span>
-                            <span>{t('workspace.mgmt.created', { date: format(new Date(ws.created_at), 'MMM d, yyyy') })}</span>
+                            <span>{t('workspace.mgmt.created', { date: formatLocalizedDate(ws.created_at, language, { month: 'short', day: 'numeric', year: 'numeric' }) })}</span>
                           </CardDescription>
                         </div>
                       </div>
@@ -414,7 +414,7 @@ export function WorkspaceManagementContent() {
                             </Badge>
                           )}
                           <Badge variant="outline" className="text-[10px] px-1.5 capitalize">
-                            {ws.role}
+                            {t(`workspace.${ws.role}`, { defaultValue: ws.role })}
                           </Badge>
                           {ws.plan && (
                             <Badge variant="secondary" className="text-[10px] px-1.5 capitalize">
@@ -545,7 +545,7 @@ export function WorkspaceManagementContent() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Leave workspace
+              {t('workspace.mgmt.leave_confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

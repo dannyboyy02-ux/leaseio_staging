@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { t as globalT } from 'i18next';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { InviteMemberDialog } from '@/components/workspace/InviteMemberDialog';
 import { MemberRoleSelect } from '@/components/workspace/MemberRoleSelect';
@@ -87,11 +88,11 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
           const profile = profiles?.find((p) => p.id === member.user_id);
           return {
             ...member,
-            email: profile?.email || 'Unknown',
+            email: profile?.email || globalT('workspace.members_panel.unknown_user'),
             name:
               profile?.first_name && profile?.last_name
                 ? `${profile.first_name} ${profile.last_name}`
-                : profile?.email || 'Unknown User',
+                : profile?.email || globalT('workspace.members_panel.unknown_user'),
           };
         }) || []
       );
@@ -204,7 +205,7 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
                 </div>
                 <Badge variant="default" className="flex items-center gap-1">
                   <Crown className="h-3 w-3" />
-                  Admin
+                  {t('workspace.admin')}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
@@ -329,11 +330,11 @@ export function useWorkspaceMembers(workspaceId: string | undefined) {
           const profile = profiles?.find((p) => p.id === member.user_id);
           return {
             ...member,
-            email: profile?.email || 'Unknown',
+            email: profile?.email || globalT('workspace.members_panel.unknown_user'),
             name:
               profile?.first_name && profile?.last_name
                 ? `${profile.first_name} ${profile.last_name}`
-                : profile?.email || 'Unknown User',
+                : profile?.email || globalT('workspace.members_panel.unknown_user'),
           };
         }) || []
       );

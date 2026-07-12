@@ -1284,7 +1284,6 @@
       "active": "Active",
       "members_count_one": "{{count}} member",
       "members_count_other": "{{count}} members",
-      "pending_count": "{{count}} pending",
       "leases_count_one": "{{count}} lease",
       "leases_count_other": "{{count}} leases",
       "created": "Created {{date}}",
@@ -1302,7 +1301,11 @@
       "leave_body_suffix": "immediately. The workspace owner will need to invite you again to restore access.",
       "cancel": "Cancel",
       "left_toast": "Left \"{{name}}\"",
-      "leave_error": "Couldn't leave this workspace — please try again or contact support."
+      "leave_error": "Couldn't leave this workspace — please try again or contact support.",
+      "leave_confirm": "Leave workspace",
+      "pending_count_one": "{{count}} pending",
+      "pending_count_other": "{{count}} pending",
+      "unnamed": "Unnamed workspace"
     },
     "delete_dialog": {
       "title": "Delete workspace",
@@ -1366,7 +1369,25 @@
       "pending_title": "Pending Invitations",
       "pending_desc": "Invitations that have not yet been accepted.",
       "role_updated": "Role updated",
-      "role_update_failed": "Couldn't update that member's role — please try again."
+      "role_update_failed": "Couldn't update that member's role — please try again.",
+      "unknown_user": "Unknown user"
+    },
+    "tz": {
+      "America/New_York": "Eastern Time (ET)",
+      "America/Chicago": "Central Time (CT)",
+      "America/Denver": "Mountain Time (MT)",
+      "America/Phoenix": "Arizona (no DST)",
+      "America/Los_Angeles": "Pacific Time (PT)",
+      "America/Anchorage": "Alaska Time (AKT)",
+      "Pacific/Honolulu": "Hawaii Time (HST)",
+      "UTC": "UTC",
+      "Europe/London": "London (GMT/BST)",
+      "Europe/Paris": "Central European (CET)",
+      "Asia/Kolkata": "India (IST)",
+      "Asia/Singapore": "Singapore (SGT)",
+      "Asia/Tokyo": "Japan (JST)",
+      "Australia/Sydney": "Sydney (AET)",
+      "America/Sao_Paulo": "São Paulo (BRT)"
     }
   },
   "integrations": {

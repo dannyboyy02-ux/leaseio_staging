@@ -17,11 +17,9 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { assetAbbreviation } from '@/lib/assetTypes';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MembersPanel, useWorkspaceMembers } from '@/components/workspace/MembersPanel';
 import type { FunctionalRole } from '@/types/lifecycle';
@@ -735,14 +733,6 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     };
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'admin': return t('workspace.admin');
-      case 'editor': return t('workspace.editor');
-      case 'viewer': return t('workspace.viewer');
-      default: return role;
-    }
-  };
 
   return (
     <div>
@@ -793,7 +783,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     <SelectContent>
                       {timezones.map((tz) => (
                         <SelectItem key={tz.value} value={tz.value}>
-                          {tz.label}
+                          {t(`workspace.tz.${tz.value}`, { defaultValue: tz.label })}
                         </SelectItem>
                       ))}
                     </SelectContent>
