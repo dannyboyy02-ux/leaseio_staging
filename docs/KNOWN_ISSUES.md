@@ -5,6 +5,28 @@ list and reference it in the commit message.
 
 ---
 
+## Settings/Workspaces LIVE walkthrough (2nd pass) 2026-07-12 — layout fixed, felt items filed
+
+Owner: "the walkthrough didn't do a good job on UI polish through Settings/Workspace; sections under My Workspaces don't stay stationary when subsections scroll." Reproduced + verified fixes in a REAL browser (local Vite against a mock Supabase, owner-shaped data). Layout reviewer + polish reviewer swept the full surface.
+
+**Fixed + live-verified (this pass):**
+- **Section rail scrolled off-screen on tall sections** (the reported bug) — rail is now `md:sticky md:top-20` on both `WorkspacesSection` and `AccountSettings`; mobile rail is a horizontal scroll strip, not a wrapped pile. (commit `cb30b65`)
+- **Content width jumped between sections** (My Workspaces `max-w-5xl` vs uncapped config sections) — one shared `max-w-4xl`; `min-h` trimmed to cut short-section dead space; header now shows the active section ("Workspaces · Members"). (`cb30b65`)
+- **Deleting your only workspace stranded the account** — informed-consent gate added (amber warning + required acknowledgement). (commit `76f1694`)
+
+**Filed — felt-experience, needs a product decision or its own pass:**
+- **[HIGH] Silent data-loss + inconsistent persistence model.** Adding/removing a Lease-Configuration list item (asset types / departments / regions / locations / buildings) stages in local state and is lost with no warning if the user clicks another rail item before that card's "Save" (`WorkspaceSettings.tsx:429-494`). Worse, the whole surface teaches contradictory save rules: role dropdowns + rename + onboarding toggle autosave, while Lease Config + Workflow-roles + approver assignment need an explicit Save. **Decision needed:** unify on ONE model — recommend autosave-everywhere with a per-card "Saved ✓/Saving…" indicator (eliminates the staging loss and matches the controls that already autosave). Until then, at minimum dirty-gate the Save buttons (disable when unchanged — they're always accent-colored + always enabled today and toast "saved!" on unchanged data, `WorkspaceSettings.tsx:556/798/877/947/1064/1121`).
+- **[HIGH] Body copy on the default landing panel + most of WorkspaceSettings is hardcoded English** while the rail is i18n'd — a Spanish admin gets a Spanish rail wrapping English panels (`WorkspaceManagement.tsx` + `WorkspaceSettings.tsx`, many lines). Large but mechanical; own ticket.
+- **[MEDIUM] Editor role sees "Company Profile" + "Notifications" rail items with every field disabled + a dead disabled Save.** Either hide those items for editors or render an honest read-only presentation instead of disabled controls.
+- **[MEDIUM] "Company Profile" rail label opens a card titled "Workspace Details"** (name + timezone only, no company identity) — the label over-promises. Rename to "General"/"Workspace Details".
+- **[MEDIUM] Workflow-roles "Admin" checkbox collides with the Team-Members "Admin" access role** (two Admin controls for the same person, can contradict). Drop the Admin column from Workflow roles (Admin is fully expressed by the access dropdown) or bind them.
+- **[MEDIUM] Risk Watchlist load failure renders the genuine-empty state** ("No watchlist entries yet") — track an error state distinct from empty + a Retry panel (`RiskWatchlistManager.tsx:80-91`).
+- **[MEDIUM] Leave-workspace surfaces raw `err.message` + hardcoded English copy** (`WorkspaceManagement.tsx:193,204`).
+- **[MEDIUM] Card-header + section-heading treatments are inconsistent** across the surface (some cards have a leading icon, some don't; "My Workspaces" uses `text-lg` h2 while section cards use `font-display text-xl` CardTitle). Introduce a shared `SectionCardHeader`/`SettingsSectionHeader` primitive.
+- **[LOW] Timezone select offers only ET/CT/MT/PT** (no AZ/HI/UTC/international); owned-empty state is a bare negative; member-of "Switch to" uses an `ExternalLink` icon implying a new tab.
+
+---
+
 ## Workspace-settings walkthrough 2026-07-12 (Members / approval chains / roles / lease config) — fixed + filed
 
 Same live-browser method as the billing walkthrough (owner: "none of this seems easy to navigate or is self-explanatory"). Walked: My Workspaces inventory, Company Profile, Members, Notifications, Lease Configuration, Risk Watchlist, Approval Rules (+ standalone rules list/editor), Onboarding.
