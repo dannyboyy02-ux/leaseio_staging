@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 
+import { localizedStatusLabel } from '@/lib/lifecycleLabels';
 interface Amendment {
   id: string;
   filename: string;
@@ -125,19 +126,19 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false
     switch (displayStatus) {
       case 'Processing':
       case 'Uploaded':
-        return <Badge variant="secondary" className="text-xs">Processing</Badge>;
+        return <Badge variant="secondary" className="text-xs">{t('lease.processing')}</Badge>;
       case 'Ready':
       case 'Review Required':
-        return <Badge variant="outline" className="text-xs text-amber-600 border-amber-400">Needs Review</Badge>;
+        return <Badge variant="outline" className="text-xs text-amber-600 border-amber-400">{t('lease.needs_review')}</Badge>;
       case 'Posted':
-        return <Badge variant="default" className="text-xs bg-green-600">Posted</Badge>;
+        return <Badge variant="default" className="text-xs bg-green-600">{t('amendments.status_posted')}</Badge>;
       case 'Failed':
-        return <Badge variant="destructive" className="text-xs">Failed</Badge>;
+        return <Badge variant="destructive" className="text-xs">{t('lease.failed')}</Badge>;
       default:
         // Phase 3: route lifecycle_status values through displayLabel so
         // chain-vocabulary states (e.g. 'concept_submitted') render with
         // their canonical user-facing label instead of the raw enum.
-        return <Badge variant="outline" className="text-xs">{displayLabel(displayStatus as LifecycleStatus)}</Badge>;
+        return <Badge variant="outline" className="text-xs">{localizedStatusLabel(displayStatus as LifecycleStatus)}</Badge>;
     }
   };
 
@@ -147,7 +148,7 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false
         <CardHeader className="bg-muted/30 border-b py-3">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
             <FileEdit size={16} className="text-orange-600" />
-            Amendments
+            {t('amendments.title')}
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-4 flex items-center justify-center py-8">
@@ -162,7 +163,7 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false
       <CardHeader className="bg-muted/30 border-b py-3">
         <CardTitle className="text-sm font-bold flex items-center gap-2">
           <FileEdit size={16} className="text-orange-600" />
-          Amendments
+          {t('amendments.title')}
           {amendments.length > 0 && (
             <Badge variant="outline" className="ml-1 text-xs">
               {amendments.length}
@@ -173,7 +174,7 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false
       <CardContent className="pt-4">
         {amendments.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No amendments linked to this lease.
+            {t('amendments.empty')}
           </p>
         ) : (
           <div className="space-y-3">
@@ -185,13 +186,13 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{amendment.filename}</p>
                   <p className="text-xs text-muted-foreground">
-                    Uploaded {format(new Date(amendment.uploaded_at), 'MMM d, yyyy')}
+                    {t('amendments.uploaded_on', { date: format(new Date(amendment.uploaded_at), 'MMM d, yyyy') })}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 ml-3">
                   {getStatusBadge(amendment.status, amendment.lifecycle_status)}
                   <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/app/leases/${amendment.id}`} aria-label={`Open ${amendment.filename}`}>
+                    <Link to={`/app/leases/${amendment.id}`} aria-label={t('amendments.open_aria', { name: amendment.filename })}>
                       <ExternalLink size={14} />
                     </Link>
                   </Button>
@@ -200,7 +201,7 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false
                       variant="ghost"
                       size="sm"
                       className="text-muted-foreground"
-                      aria-label={`Archive ${amendment.filename}`}
+                      aria-label={t('amendments.archive_aria', { name: amendment.filename })}
                       onClick={() => setPendingDelete(amendment)}
                     >
                       <Archive size={14} />

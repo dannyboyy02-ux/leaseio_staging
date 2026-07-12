@@ -2,6 +2,8 @@
 import '../../workspace/__tests__/_jsdomPolyfills';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import i18n from 'i18next';
+import enCommon from '../../../locales/en/common.json';
 import {
   LeaseStatusBadge,
   isProcessingStatus,
@@ -9,6 +11,18 @@ import {
   needsReviewStatus,
 } from '../LeaseStatusBadge';
 import { LifecycleStatusBadge } from '@/components/lifecycle/LifecycleStatusBadge';
+
+// Badge labels render through i18next (i18n sweep 2026-07-12). Initialize the
+// singleton with the REAL en resources so the assertions below pin the exact
+// per-status copy users see (lifecycle.status.* / lifecycle.status_short.*).
+await i18n.init({
+  lng: 'en',
+  fallbackLng: 'en',
+  defaultNS: 'common',
+  ns: ['common'],
+  resources: { en: { common: enCommon } },
+  interpolation: { escapeValue: false },
+});
 
 // Pins the badge unification: LeaseStatusBadge is the single canonical badge
 // (variant + soft appearances, one label source via displayLabel), and

@@ -62,6 +62,7 @@ function capitalize(s: string | null): string {
 }
 
 export default function LeaseAudit() {
+  const { t } = useLanguage();
   const [step, setStep] = useState<Step>('collect');
   const [formError, setFormError] = useState('');
   const [files, setFiles] = useState<FileItem[]>([]);
@@ -91,11 +92,11 @@ export default function LeaseAudit() {
   const startAudit = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
-      setFormError('Please sign in before starting an audit.');
+      setFormError(t('lease_audit.signin_required'));
       return;
     }
     if (files.length === 0) {
-      setFormError('Please upload at least one PDF.');
+      setFormError(t('lease_audit.upload_one'));
       return;
     }
     setFormError('');
@@ -126,7 +127,7 @@ export default function LeaseAudit() {
 
         if (!res.ok || data.error) {
           setFiles((prev) =>
-            prev.map((f, idx) => idx === i ? { ...f, status: 'error', error: data.error || 'Analysis failed' } : f),
+            prev.map((f, idx) => idx === i ? { ...f, status: 'error', error: data.error || t('lease_audit.analysis_failed') } : f),
           );
           if (data.limitReached) break;
           continue;
@@ -140,7 +141,7 @@ export default function LeaseAudit() {
         );
       } catch {
         setFiles((prev) =>
-          prev.map((f, idx) => idx === i ? { ...f, status: 'error', error: 'Network error' } : f),
+          prev.map((f, idx) => idx === i ? { ...f, status: 'error', error: t('lease_audit.network_error') } : f),
         );
       }
     }
@@ -184,9 +185,9 @@ export default function LeaseAudit() {
             LeaseIO
           </Link>
           <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-muted-foreground hover:text-foreground">Sign in</Link>
+            <Link to="/login" className="text-sm text-muted-foreground hover:text-foreground">{t('auth.sign_in')}</Link>
             <Button size="sm" asChild>
-              <Link to="/signup?plan=starter">Get Started</Link>
+              <Link to="/signup?plan=starter">{t('landing.nav.get_started')}</Link>
             </Button>
           </div>
         </div>
@@ -243,18 +244,19 @@ function CollectStep({
   fileInputRef: React.RefObject<HTMLInputElement>;
   onStart: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="space-y-8">
       <div className="text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium mb-4">
           <Sparkles className="h-3.5 w-3.5" />
-          Authenticated audit workspace
+          {t('lease_audit.badge')}
         </div>
         <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-3">
-          Your free lease audit
+          {t('lease_audit.title')}
         </h1>
         <p className="text-muted-foreground max-w-xl mx-auto">
-          Upload up to {MAX_DOCS} lease PDFs. Claude reads each one and tells you what's in them - monthly obligations, key dates, escalation terms, and risks.
+          {t('lease_audit.intro', { max: MAX_DOCS })}
         </p>
       </div>
 
@@ -273,10 +275,10 @@ function CollectStep({
           >
             <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm font-medium text-foreground">
-              Drop lease PDFs here or <span className="text-primary">browse</span>
+              {t('lease_audit.drop_prefix')} <span className="text-primary">{t('lease_audit.browse')}</span>
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              PDF only · max 20 MB each · up to {MAX_DOCS} documents
+              {t('lease_audit.constraints', { max: MAX_DOCS })}
             </p>
             <input
               ref={fileInputRef}
@@ -312,7 +314,7 @@ function CollectStep({
             onClick={onStart}
             disabled={files.length === 0}
           >
-            Analyze My Leases
+            {t('lease_audit.analyze_cta')}
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           {formError && (
@@ -322,8 +324,8 @@ function CollectStep({
       </Card>
 
       <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" /> Bank-grade security</span>
-        <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Powered by Claude AI</span>
+        <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" /> {t('lease_audit.security')}</span>
+        <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> {t('lease_audit.powered_by')}</span>
       </div>
     </div>
   );
@@ -333,15 +335,16 @@ function CollectStep({
 // STEP 2 — Processing
 // =====================================================================
 function ProcessingStep({ files }: { files: FileItem[] }) {
+  const { t } = useLanguage();
   const done  = files.filter((f) => f.status === 'done').length;
   const total = files.length;
 
   return (
     <div className="space-y-8">
       <div className="text-center">
-        <h2 className="font-display text-2xl font-bold text-foreground mb-2">Analyzing your leases…</h2>
+        <h2 className="font-display text-2xl font-bold text-foreground mb-2">{t('lease_audit.processing_title')}</h2>
         <p className="text-muted-foreground text-sm">
-          Claude is reading each document. This takes 20–60 seconds per file.
+          {t('lease_audit.processing_desc')}
         </p>
       </div>
 
@@ -357,8 +360,8 @@ function ProcessingStep({ files }: { files: FileItem[] }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{f.file.name}</p>
-                {f.status === 'processing' && <p className="text-xs text-muted-foreground">Reading with Claude…</p>}
-                {f.status === 'done'       && <p className="text-xs text-green-600">Extracted</p>}
+                {f.status === 'processing' && <p className="text-xs text-muted-foreground">{t('lease_audit.reading')}</p>}
+                {f.status === 'done'       && <p className="text-xs text-green-600">{t('lease_audit.extracted')}</p>}
                 {f.status === 'error'      && <p className="text-xs text-destructive">{f.error}</p>}
               </div>
             </div>
@@ -368,7 +371,7 @@ function ProcessingStep({ files }: { files: FileItem[] }) {
 
       {done < total && (
         <p className="text-center text-sm text-muted-foreground">
-          {done} of {total} complete
+          {t('lease_audit.progress', { done, total })}
         </p>
       )}
     </div>
@@ -388,16 +391,16 @@ function ResultsStep({
   escalationBreakdown: [string, number][];
   riskCounts: Record<string, number>;
 }) {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const highRisks = riskCounts['high'] ?? 0;
 
   if (leases.length === 0) {
     return (
       <div className="text-center py-16 space-y-4">
         <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto" />
-        <p className="font-medium text-foreground">No leases were extracted successfully.</p>
-        <p className="text-sm text-muted-foreground">Please check your files and try again.</p>
-        <Button variant="outline" onClick={() => window.location.reload()}>Try Again</Button>
+        <p className="font-medium text-foreground">{t('lease_audit.none_extracted')}</p>
+        <p className="text-sm text-muted-foreground">{t('lease_audit.check_files')}</p>
+        <Button variant="outline" onClick={() => window.location.reload()}>{t('lease_audit.try_again')}</Button>
       </div>
     );
   }
@@ -408,13 +411,13 @@ function ResultsStep({
       <div className="text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400 text-xs font-medium mb-4">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          Analysis complete
+          {t('lease_audit.complete_badge')}
         </div>
         <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground mb-2">
-          Your lease portfolio snapshot
+          {t('lease_audit.snapshot_title')}
         </h2>
         <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-          Based on {leases.length} document{leases.length !== 1 ? 's' : ''} analyzed by Claude.
+          {t('lease_audit.based_on', { count: leases.length })}
         </p>
       </div>
 
@@ -422,25 +425,25 @@ function ResultsStep({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-1">Leases Analyzed</p>
+            <p className="text-xs text-muted-foreground mb-1">{t('lease_audit.kpi_leases')}</p>
             <p className="text-2xl font-bold font-display">{leases.length}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-1">Monthly Obligation</p>
+            <p className="text-xs text-muted-foreground mb-1">{t('lease_audit.kpi_monthly')}</p>
             <p className="text-2xl font-bold font-display">{fmt(totalMonthly, language)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-1">Annual Obligation</p>
+            <p className="text-xs text-muted-foreground mb-1">{t('dashboard.annual_obligation')}</p>
             <p className="text-2xl font-bold font-display">{fmt(annualObligation, language)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-muted-foreground mb-1">High-Risk Clauses</p>
+            <p className="text-xs text-muted-foreground mb-1">{t('lease_audit.kpi_high_risk')}</p>
             <p className={cn('text-2xl font-bold font-display', highRisks > 0 && 'text-destructive')}>
               {highRisks}
             </p>
@@ -455,7 +458,7 @@ function ResultsStep({
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Building2 className="h-4 w-4" /> Asset Mix
+                  <Building2 className="h-4 w-4" /> {t('lease_audit.asset_mix')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -472,7 +475,7 @@ function ResultsStep({
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <TrendingUp className="h-4 w-4" /> Escalation Mix
+                  <TrendingUp className="h-4 w-4" /> {t('lease_audit.escalation_mix')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -490,7 +493,7 @@ function ResultsStep({
 
       {/* Per-lease cards */}
       <div className="space-y-4">
-        <h3 className="font-semibold text-foreground">Lease Details</h3>
+        <h3 className="font-semibold text-foreground">{t('lease_audit.lease_details')}</h3>
         {leases.map((lease) => (
           <LeaseCard key={lease.id} lease={lease} />
         ))}
@@ -501,9 +504,9 @@ function ResultsStep({
         <CardContent className="pt-6 pb-6 text-center space-y-4">
           <Sparkles className="h-8 w-8 mx-auto opacity-80" />
           <div>
-            <h3 className="font-display text-xl font-bold mb-1">Unlock your full portfolio</h3>
+            <h3 className="font-display text-xl font-bold mb-1">{t('lease_audit.upgrade_title')}</h3>
             <p className="text-primary-foreground/80 text-sm max-w-sm mx-auto">
-              Manage all your leases, get approval workflows, track renewals, and ask Claude anything about your portfolio.
+              {t('lease_audit.upgrade_desc')}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -512,15 +515,15 @@ function ResultsStep({
                 {/* Derive from PLANS so this CTA can never drift from the
                     canonical Starter price (price-parity guardrail — the $249
                     hardcode here contradicted the $299 checkout, PR #81). */}
-                Start with Starter — ${PLANS.starter.price.monthly}/mo
+                {t('lease_audit.start_starter', { price: PLANS.starter.price.monthly })}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10" asChild>
-              <Link to="/signup?plan=business">See Business Plan</Link>
+              <Link to="/signup?plan=business">{t('lease_audit.see_business')}</Link>
             </Button>
           </div>
-          <p className="text-xs text-primary-foreground/60">No credit card required to start</p>
+          <p className="text-xs text-primary-foreground/60">{t('lease_audit.no_card')}</p>
         </CardContent>
       </Card>
     </div>
@@ -528,7 +531,7 @@ function ResultsStep({
 }
 
 function LeaseCard({ lease }: { lease: ExtractedLease }) {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const highRisks   = lease.risks.filter((r) => r.severity === 'high').length;
   const mediumRisks = lease.risks.filter((r) => r.severity === 'medium').length;
 
@@ -549,10 +552,10 @@ function LeaseCard({ lease }: { lease: ExtractedLease }) {
               </Badge>
             )}
             {highRisks > 0 && (
-              <Badge variant="destructive" className="text-xs">{highRisks} high risk</Badge>
+              <Badge variant="destructive" className="text-xs">{t('lease_audit.high_risk_count', { count: highRisks })}</Badge>
             )}
             {highRisks === 0 && mediumRisks > 0 && (
-              <Badge variant="secondary" className="text-xs">{mediumRisks} medium risk</Badge>
+              <Badge variant="secondary" className="text-xs">{t('lease_audit.medium_risk_count', { count: mediumRisks })}</Badge>
             )}
           </div>
         </div>
@@ -560,19 +563,19 @@ function LeaseCard({ lease }: { lease: ExtractedLease }) {
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div>
-            <p className="text-muted-foreground">Tenant</p>
+            <p className="text-muted-foreground">{t('lease.tenant')}</p>
             <p className="font-medium truncate">{lease.tenant_name ?? '—'}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Landlord</p>
+            <p className="text-muted-foreground">{t('lease.landlord')}</p>
             <p className="font-medium truncate">{lease.landlord_name ?? '—'}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Start → End</p>
+            <p className="text-muted-foreground">{t('lease_audit.start_end')}</p>
             <p className="font-medium">{fmtDate(lease.lease_start, language)} → {fmtDate(lease.lease_end, language)}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Monthly Rent</p>
+            <p className="text-muted-foreground">{t('leases.monthly_rent')}</p>
             <p className="font-medium">
               {lease.current_monthly_rent ? fmt(lease.current_monthly_rent, language) : '—'}
             </p>
@@ -583,7 +586,7 @@ function LeaseCard({ lease }: { lease: ExtractedLease }) {
           <div className="grid grid-cols-2 gap-3 text-xs">
             {lease.escalation_type && (
               <div>
-                <p className="text-muted-foreground">Escalation</p>
+                <p className="text-muted-foreground">{t('dashboard.escalation')}</p>
                 <p className="font-medium">
                   {capitalize(lease.escalation_type)}
                   {lease.escalation_rate ? ` (${lease.escalation_rate}%)` : ''}
@@ -592,7 +595,7 @@ function LeaseCard({ lease }: { lease: ExtractedLease }) {
             )}
             {lease.security_deposit && (
               <div>
-                <p className="text-muted-foreground">Security Deposit</p>
+                <p className="text-muted-foreground">{t('lease.security_deposit')}</p>
                 <p className="font-medium">{lease.security_deposit}</p>
               </div>
             )}
@@ -611,11 +614,11 @@ function LeaseCard({ lease }: { lease: ExtractedLease }) {
                   r.severity === 'low'    && 'bg-muted text-muted-foreground',
                 )}
               >
-                <span className="font-medium capitalize">{r.severity}: </span>{r.title}
+                <span className="font-medium capitalize">{t(`lease_audit.severity.${r.severity}`, { defaultValue: r.severity })}: </span>{r.title}
               </div>
             ))}
             {lease.risks.length > 3 && (
-              <p className="text-xs text-muted-foreground pl-1">+{lease.risks.length - 3} more risks</p>
+              <p className="text-xs text-muted-foreground pl-1">{t('lease_audit.more_risks', { count: lease.risks.length - 3 })}</p>
             )}
           </div>
         )}

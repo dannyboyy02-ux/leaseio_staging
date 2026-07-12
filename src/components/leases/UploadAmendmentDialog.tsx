@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface UploadAmendmentDialogProps {
   parentLeaseId: string;
@@ -34,6 +35,7 @@ export function UploadAmendmentDialog({
   open: controlledOpen,
   onOpenChange,
 }: UploadAmendmentDialogProps) {
+  const { t } = useAppTranslation();
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined && onOpenChange !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -57,12 +59,12 @@ export function UploadAmendmentDialog({
 
   const handleSubmit = async () => {
     if (!file) {
-      toast.error('Please upload an amendment PDF');
+      toast.error(t('amendments.upload.no_file'));
       return;
     }
 
     if (!approverEmail || !approverEmail.includes('@')) {
-      toast.error('Please enter a valid approver email');
+      toast.error(t('amendments.upload.invalid_email'));
       return;
     }
 
@@ -71,7 +73,7 @@ export function UploadAmendmentDialog({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        toast.error('Session expired. Please log in again.');
+        toast.error(t('common.session_expired'));
         return;
       }
 
@@ -90,25 +92,25 @@ export function UploadAmendmentDialog({
 
       if (invokeError) {
         console.error('Edge function invocation error:', invokeError);
-        throw new Error(`Failed to process amendment: ${invokeError.message}`);
+        throw new Error(t('amendments.upload.process_failed_with', { message: invokeError.message }));
       }
 
       if (result?.error) {
-        throw new Error(result.error || 'Failed to process amendment');
+        throw new Error(result.error || t('amendments.upload.process_failed'));
       }
 
       if (result.leaseId) {
-        toast.success('Amendment uploaded and processing started');
+        toast.success(t('amendments.upload.success'));
         setOpen(false);
         setFile(null);
         setApproverEmail('');
         onSuccess?.(result.leaseId);
       } else {
-        throw new Error('No lease ID returned from processing');
+        throw new Error(t('amendments.upload.no_lease_id'));
       }
     } catch (error: any) {
       console.error('Error uploading amendment:', error);
-      toast.error(error.message || 'Failed to upload amendment');
+      toast.error(error.message || t('amendments.upload.failed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -120,32 +122,32 @@ export function UploadAmendmentDialog({
         <DialogTrigger asChild>
           <Button variant="outline" size="sm">
             <FileEdit size={14} className="mr-1" />
-            Upload Amendment
+            {t('amendments.upload.title')}
           </Button>
         </DialogTrigger>
       )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload Amendment</DialogTitle>
+          <DialogTitle>{t('amendments.upload.title')}</DialogTitle>
           <DialogDescription>
-            Upload an amendment document for "{parentFilename}"
+            {t('amendments.upload.desc', { name: parentFilename })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="approverEmail">Approver Email</Label>
+            <Label htmlFor="approverEmail">{t('amendments.upload.approver_email')}</Label>
             <Input
               id="approverEmail"
               type="email"
-              placeholder="approver@company.com"
+              placeholder={t('amendments.upload.approver_placeholder')}
               value={approverEmail}
               onChange={(e) => setApproverEmail(e.target.value)}
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Amendment Document</Label>
+            <Label>{t('amendments.upload.document_label')}</Label>
             <div
               {...getRootProps()}
               className={cn(
@@ -183,11 +185,11 @@ export function UploadAmendmentDialog({
                   <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
                   <p className="text-sm text-muted-foreground">
                     {isDragActive
-                      ? 'Drop the PDF here...'
-                      : 'Drag & drop a PDF, or click to select'}
+                      ? t('amendments.upload.drop_here')
+                      : t('amendments.upload.drag_drop')}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Max file size: 20MB
+                    {t('amendments.upload.max_size')}
                   </p>
                 </>
               )}
@@ -197,16 +199,16 @@ export function UploadAmendmentDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting || !file}>
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Uploading...
+                {t('amendments.upload.uploading')}
               </>
             ) : (
-              'Upload Amendment'
+              t('amendments.upload.title')
             )}
           </Button>
         </DialogFooter>

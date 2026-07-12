@@ -29,6 +29,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useProcessing } from '@/contexts/ProcessingContext';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface LeaseUploadModalProps {
   open: boolean;
@@ -55,6 +56,7 @@ interface ParentLease {
 type Step = 'upload' | 'classify' | 'error' | 'tier2_rejected';
 
 export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceeded }: LeaseUploadModalProps) {
+  const { t } = useAppTranslation();
   const { startProcessing } = useProcessing();
   const { workspace } = useApp();
   const [step, setStep] = useState<Step>('upload');
@@ -143,7 +145,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        toast.error('Session expired. Please log in again.');
+        toast.error(t('leases.upload.session_expired'));
         setIsUploading(false);
         return;
       }
@@ -172,14 +174,14 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
       });
 
       if (invokeError) {
-        throw new Error(`Failed to process lease: ${invokeError.message}`);
+        throw new Error(t('leases.upload.process_failed_with', { message: invokeError.message }));
       }
 
       // Tier 2 hard rejection — surface the override path instead of
       // a generic error. Only fires on the FIRST submit (forceOverride=false);
       // if the user already overrode and we still get this, it's a bug.
       if (result?.reason === 'tier2_classification_failed' && !forceOverride) {
-        const detail = (result as any)?.detail || result.error || "This document doesn't appear to be a lease.";
+        const detail = (result as any)?.detail || result.error || t('leases.upload.not_a_lease_fallback');
         setTier2RejectDetail(detail);
         setStep('tier2_rejected');
         return;
@@ -194,7 +196,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
       }
 
       if (result?.error) {
-        throw new Error(result.error || 'Failed to process lease');
+        throw new Error(result.error || t('leases.upload.process_failed'));
       }
 
       if (result?.leaseId) {
@@ -205,9 +207,9 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
 
     } catch (error) {
       console.error('Upload error:', error);
-      setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
+      setErrorMessage(error instanceof Error ? error.message : t('leases.upload.unexpected_error'));
       setStep('error');
-      toast.error('Failed to process lease');
+      toast.error(t('leases.upload.process_failed'));
     } finally {
       setIsUploading(false);
     }
@@ -236,23 +238,23 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {step === 'upload' && 'Upload Lease Document'}
-            {step === 'classify' && 'Classify Document'}
-            {step === 'error' && 'Processing Failed'}
-            {step === 'tier2_rejected' && 'AI says this isn\'t a lease'}
+            {step === 'upload' && t('lease.upload.title')}
+            {step === 'classify' && t('lease.upload.classify_title')}
+            {step === 'error' && t('lease.upload.error_title')}
+            {step === 'tier2_rejected' && t('leases.upload.tier2_title')}
           </DialogTitle>
           <DialogDescription>
-            {step === 'upload' && 'Upload a PDF lease document to begin extraction'}
-            {step === 'classify' && 'Help us understand what type of document this is'}
-            {step === 'error' && 'There was a problem processing your document'}
-            {step === 'tier2_rejected' && 'Our classifier rejected this upload. Review and decide.'}
+            {step === 'upload' && t('lease.upload.upload_desc')}
+            {step === 'classify' && t('lease.upload.classify_desc')}
+            {step === 'error' && t('lease.upload.error_desc')}
+            {step === 'tier2_rejected' && t('leases.upload.tier2_desc')}
           </DialogDescription>
         </DialogHeader>
 
         {step === 'upload' && (
           <>
           <p className="text-xs text-muted-foreground text-center -mt-1 mb-1">
-            Documents are processed by AI to extract key terms. We never use your data for AI training.
+            {t('leases.upload.privacy_note')}
           </p>
           <div
             {...getRootProps()}
@@ -268,13 +270,13 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
               <Upload className="h-6 w-6 text-muted-foreground" />
             </div>
             <p className="text-sm font-medium mb-1">
-              {isDragActive ? 'Drop your file here' : 'Drag & drop your lease PDF'}
+              {isDragActive ? t('lease.upload.drop_here') : t('lease.upload.drag_drop')}
             </p>
             <p className="text-xs text-muted-foreground mb-4">
-              or click to browse (max 50MB)
+              {t('lease.upload.click_browse')}
             </p>
             <Button variant="outline" size="sm" type="button">
-              Select File
+              {t('lease.upload.select_file')}
             </Button>
           </div>
           </>
@@ -308,17 +310,17 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             {/* Document Type */}
             <div className="space-y-3">
               <Label className="flex items-center gap-2">
-                Is this a new lease or an amendment?
+                {t('lease.upload.is_new_or_amendment')}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-4 w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-xs">
                     <p className="text-sm">
-                      <strong>Master Lease:</strong> The original, standalone lease agreement.
+                      <strong>{t('leases.upload.master_tooltip_label')}</strong> {t('leases.upload.master_tooltip_body')}
                     </p>
                     <p className="text-sm mt-1">
-                      <strong>Amendment:</strong> A modification to an existing master lease.
+                      <strong>{t('leases.upload.amendment_tooltip_label')}</strong> {t('leases.upload.amendment_tooltip_body')}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -339,9 +341,9 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
                 >
                   <RadioGroupItem value="master" id="master" className="sr-only" />
                   <FileText className="h-6 w-6" />
-                  <span className="font-medium">New Lease</span>
+                  <span className="font-medium">{t('lease.upload.new_lease')}</span>
                   <span className="text-xs text-muted-foreground text-center">
-                    Original lease document
+                    {t('lease.upload.original_doc')}
                   </span>
                 </Label>
                 <Label
@@ -355,9 +357,9 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
                 >
                   <RadioGroupItem value="amendment" id="amendment" className="sr-only" />
                   <FileText className="h-6 w-6" />
-                  <span className="font-medium">Amendment</span>
+                  <span className="font-medium">{t('lease.upload.amendment_label')}</span>
                   <span className="text-xs text-muted-foreground text-center">
-                    Modifies existing lease
+                    {t('lease.upload.modifies_existing')}
                   </span>
                 </Label>
               </RadioGroup>
@@ -366,20 +368,20 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             {/* Parent Lease Selection */}
             {leaseType === 'amendment' && (
               <div className="space-y-2 animate-fade-up">
-                <Label htmlFor="parent-lease">Select the master lease this amends</Label>
+                <Label htmlFor="parent-lease">{t('lease.upload.select_master')}</Label>
                 <Select value={parentLeaseId} onValueChange={setParentLeaseId} disabled={loadingParentLeases}>
                   <SelectTrigger id="parent-lease">
-                    <SelectValue placeholder={loadingParentLeases ? "Loading leases..." : "Search or select a lease..."} />
+                    <SelectValue placeholder={loadingParentLeases ? t('leases.upload.loading_leases') : t('lease.upload.search_select')} />
                   </SelectTrigger>
                   <SelectContent>
                     {availableParentLeases.length === 0 && !loadingParentLeases ? (
                       <div className="p-2 text-center text-sm text-muted-foreground">
-                        No posted leases available
+                        {t('leases.upload.no_posted_leases')}
                       </div>
                     ) : (
                       availableParentLeases.map((lease) => (
                         <SelectItem key={lease.id} value={lease.id}>
-                          {lease.tenant_name || 'Unknown Tenant'} - {lease.landlord_name || 'Unknown Landlord'}
+                          {lease.tenant_name || t('leases.upload.unknown_tenant')} - {lease.landlord_name || t('leases.upload.unknown_landlord')}
                           {lease.lease_start && ` (${lease.lease_start})`}
                         </SelectItem>
                       ))
@@ -392,7 +394,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             {/* Actions */}
             <div className="flex gap-3 pt-2">
               <Button variant="outline" onClick={handleClose} className="flex-1">
-                Cancel
+                {t('lease.upload.cancel')}
               </Button>
               <Button
                 variant="accent"
@@ -400,7 +402,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
                 className="flex-1"
                 disabled={isUploading || (leaseType === 'amendment' && !parentLeaseId)}
               >
-                {isUploading ? 'Submitting...' : <><span>Continue</span> <ChevronRight className="h-4 w-4 ml-1" /></>}
+                {isUploading ? t('leases.upload.submitting') : <><span>{t('lease.upload.continue')}</span> <ChevronRight className="h-4 w-4 ml-1" /></>}
               </Button>
             </div>
           </div>
@@ -411,19 +413,19 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
               <AlertCircle className="h-8 w-8 text-destructive" />
             </div>
-            <p className="text-sm font-medium mb-2">Processing Failed</p>
+            <p className="text-sm font-medium mb-2">{t('lease.upload.error_title')}</p>
             <p className="text-xs text-muted-foreground text-center max-w-xs mb-2">
               {errorMessage}
             </p>
             <p className="text-xs text-muted-foreground text-center max-w-xs mb-6">
-              Please try again or contact support if the issue persists.
+              {t('leases.upload.try_again_note')}
             </p>
             <div className="flex gap-3 w-full">
               <Button variant="outline" onClick={handleClose} className="flex-1">
-                Cancel
+                {t('lease.upload.cancel')}
               </Button>
               <Button variant="accent" onClick={handleRetry} className="flex-1">
-                Try Again
+                {t('leases.upload.try_again')}
               </Button>
             </div>
           </div>
@@ -436,7 +438,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
                 <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-amber-900 mb-1">
-                    The AI classifier didn't recognize this as a lease
+                    {t('leases.upload.tier2_banner_title')}
                   </p>
                   <p className="text-xs text-amber-800">{tier2RejectDetail}</p>
                 </div>
@@ -444,18 +446,15 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             </div>
             <div className="rounded-lg border border-muted p-4 mb-4 text-xs text-muted-foreground space-y-2">
               <p>
-                <strong className="text-foreground">If this IS a lease:</strong> Click "Override and proceed". The
-                document will be extracted as normal, and your override will help train the classifier for similar
-                documents from your workspace going forward.
+                <strong className="text-foreground">{t('leases.upload.tier2_if_lease_label')}</strong> {t('leases.upload.tier2_if_lease_body')}
               </p>
               <p>
-                <strong className="text-foreground">If you uploaded the wrong file:</strong> Cancel and try again
-                with the correct PDF.
+                <strong className="text-foreground">{t('leases.upload.tier2_wrong_file_label')}</strong> {t('leases.upload.tier2_wrong_file_body')}
               </p>
             </div>
             <div className="flex gap-3 w-full">
               <Button variant="outline" onClick={handleClose} className="flex-1" disabled={isUploading}>
-                Cancel
+                {t('lease.upload.cancel')}
               </Button>
               <Button
                 variant="accent"
@@ -463,7 +462,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
                 className="flex-1"
                 disabled={isUploading}
               >
-                {isUploading ? 'Processing…' : 'Override and proceed'}
+                {isUploading ? t('leases.upload.processing') : t('leases.upload.override_proceed')}
               </Button>
             </div>
           </div>

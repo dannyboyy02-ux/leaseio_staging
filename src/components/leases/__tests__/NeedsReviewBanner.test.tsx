@@ -26,10 +26,16 @@ vi.mock('@/hooks/useAppTranslation', () => ({
   useAppTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
       if (opts && typeof opts === 'object') {
-        const params = Object.entries(opts)
+        // Mirror real i18next: a bare { defaultValue } lookup (the nested
+        // field-label resolution) falls back to the default string, so the
+        // outer echo stays readable ("label=Landlord Name").
+        const { defaultValue, ...rest } = opts as { defaultValue?: unknown };
+        const params = Object.entries(rest)
           .map(([k, v]) => `${k}=${String(v)}`)
           .join(',');
-        return params ? `${key}(${params})` : key;
+        if (params) return `${key}(${params})`;
+        if (defaultValue !== undefined) return String(defaultValue);
+        return key;
       }
       return key;
     },

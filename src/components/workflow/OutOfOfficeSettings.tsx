@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { toast } from 'sonner';
 
 interface OOORow {
@@ -46,6 +47,7 @@ interface MemberOption {
 
 export function OutOfOfficeSettings() {
   const { user, workspace } = useApp();
+  const { t } = useAppTranslation();
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [oooRecords, setOooRecords] = useState<OOORow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ export function OutOfOfficeSettings() {
       for (const p of ((profiles ?? []) as any[])) {
         const fn = (p.first_name as string | null) ?? '';
         const ln = (p.last_name as string | null) ?? '';
-        const display = (fn || ln) ? `${fn} ${ln}`.trim() : (p.email ?? 'Unknown');
+        const display = (fn || ln) ? `${fn} ${ln}`.trim() : (p.email ?? t('workflow.common.unknown'));
         byId.set(p.id as string, display);
       }
       list.forEach((r) => { r.delegate_name = byId.get(r.delegate_user_id) ?? null; });
@@ -112,7 +114,7 @@ export function OutOfOfficeSettings() {
         .map((p) => {
           const fn = (p.first_name as string | null) ?? '';
           const ln = (p.last_name as string | null) ?? '';
-          const display = (fn || ln) ? `${fn} ${ln}`.trim() : (p.email ?? 'Unknown');
+          const display = (fn || ln) ? `${fn} ${ln}`.trim() : (p.email ?? t('workflow.common.unknown'));
           return { id: p.id, display };
         })
         .sort((a, b) => a.display.localeCompare(b.display));
@@ -124,11 +126,11 @@ export function OutOfOfficeSettings() {
 
   const submit = async () => {
     if (!startsAt || !endsAt || !delegateId) {
-      toast.error('Start, end, and delegate are required.');
+      toast.error(t('workflow.ooo.fields_required'));
       return;
     }
     if (new Date(startsAt) >= new Date(endsAt)) {
-      toast.error('Start must be before end.');
+      toast.error(t('workflow.ooo.start_before_end'));
       return;
     }
     if (!workspace?.id) return;
@@ -144,15 +146,15 @@ export function OutOfOfficeSettings() {
         },
       });
       if (error || !(data as any)?.ok) {
-        const msg = (data as any)?.error || error?.message || 'Failed to record OOO.';
+        const msg = (data as any)?.error || error?.message || t('workflow.ooo.record_failed');
         toast.error(msg);
         return;
       }
       const stepsRouted = (data as any).stepsRouted ?? 0;
       toast.success(
         stepsRouted > 0
-          ? `Out of office recorded. ${stepsRouted} pending step(s) routed to your delegate.`
-          : 'Out of office recorded. No currently-pending steps routed.',
+          ? t('workflow.ooo.recorded_routed', { count: stepsRouted })
+          : t('workflow.ooo.recorded_none'),
       );
       setStartsAt('');
       setEndsAt('');
@@ -160,7 +162,7 @@ export function OutOfOfficeSettings() {
       setReason('');
       refresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to record OOO.');
+      toast.error(err?.message || t('workflow.ooo.record_failed'));
     } finally {
       setBusy(false);
     }
@@ -173,19 +175,19 @@ export function OutOfOfficeSettings() {
         body: { oooId },
       });
       if (error || !(data as any)?.ok) {
-        const msg = (data as any)?.error || error?.message || 'Failed to revoke.';
+        const msg = (data as any)?.error || error?.message || t('workflow.ooo.revoke_failed');
         toast.error(msg);
         return;
       }
       const reverted = (data as any).stepsReverted ?? 0;
       toast.success(
         reverted > 0
-          ? `Out of office cancelled. ${reverted} step(s) reverted to original assignee.`
-          : 'Out of office cancelled.',
+          ? t('workflow.ooo.cancelled_reverted', { count: reverted })
+          : t('workflow.ooo.cancelled'),
       );
       refresh();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to revoke.');
+      toast.error(err?.message || t('workflow.ooo.revoke_failed'));
     } finally {
       setRevokingId(null);
     }
@@ -211,12 +213,13 @@ export function OutOfOfficeSettings() {
             <CalendarOff className="h-5 w-5 text-warning shrink-0 mt-0.5" />
             <div className="space-y-1 flex-1">
               <p className="font-semibold text-sm">
-                You are currently out of office until{' '}
-                {format(new Date(activeOOO.ends_at), 'MMM d, yyyy h:mm a')}
+                {t('workflow.ooo.active_until', {
+                  date: format(new Date(activeOOO.ends_at), 'MMM d, yyyy h:mm a'),
+                })}
               </p>
               <p className="text-xs text-muted-foreground">
-                Approvals are routed to{' '}
-                <strong>{activeOOO.delegate_name ?? 'your delegate'}</strong>.
+                {t('workflow.ooo.routed_to_prefix')}{' '}
+                <strong>{activeOOO.delegate_name ?? t('workflow.ooo.your_delegate')}</strong>.
               </p>
             </div>
           </CardContent>
@@ -225,17 +228,15 @@ export function OutOfOfficeSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Out of Office</CardTitle>
+          <CardTitle>{t('workflow.ooo.title')}</CardTitle>
           <CardDescription>
-            Declare an OOO window with a designated delegate. While
-            you're out, approvals assigned to you will route to your
-            delegate automatically.
+            {t('workflow.ooo.desc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="ooo-start">Start</Label>
+              <Label htmlFor="ooo-start">{t('leases.start')}</Label>
               <Input
                 id="ooo-start"
                 type="datetime-local"
@@ -245,7 +246,7 @@ export function OutOfOfficeSettings() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ooo-end">End</Label>
+              <Label htmlFor="ooo-end">{t('leases.end')}</Label>
               <Input
                 id="ooo-end"
                 type="datetime-local"
@@ -256,10 +257,10 @@ export function OutOfOfficeSettings() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ooo-delegate">Delegate</Label>
+            <Label htmlFor="ooo-delegate">{t('workflow.ooo.delegate')}</Label>
             <Select value={delegateId} onValueChange={setDelegateId} disabled={busy}>
               <SelectTrigger id="ooo-delegate">
-                <SelectValue placeholder="Select a workspace member" />
+                <SelectValue placeholder={t('workflow.delegation.select_member')} />
               </SelectTrigger>
               <SelectContent>
                 {members.map((m) => (
@@ -271,30 +272,29 @@ export function OutOfOfficeSettings() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ooo-reason">Reason (optional)</Label>
+            <Label htmlFor="ooo-reason">{t('workflow.delegation.reason_optional')}</Label>
             <Textarea
               id="ooo-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               maxLength={500}
-              placeholder="e.g., Vacation"
+              placeholder={t('workflow.ooo.reason_placeholder')}
               disabled={busy}
             />
           </div>
           <Button onClick={submit} disabled={busy || !startsAt || !endsAt || !delegateId}>
             {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Record Out of Office
+            {t('workflow.ooo.record')}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Existing Records</CardTitle>
+          <CardTitle>{t('workflow.ooo.existing_title')}</CardTitle>
           <CardDescription>
-            Active and upcoming OOO windows. Revoking ends the routing
-            and reverts pending delegated steps to you.
+            {t('workflow.ooo.existing_desc')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -304,7 +304,7 @@ export function OutOfOfficeSettings() {
             </div>
           ) : oooRecords.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              No out-of-office records.
+              {t('workflow.ooo.none')}
             </p>
           ) : (
             <div className="space-y-2">
@@ -330,22 +330,22 @@ export function OutOfOfficeSettings() {
                         </span>
                         {isActive && (
                           <Badge variant="default" className="text-[10px]">
-                            Active
+                            {t('lease.active')}
                           </Badge>
                         )}
                         {isUpcoming && (
                           <Badge variant="outline" className="text-[10px]">
-                            Upcoming
+                            {t('locked_lease.critical_dates.upcoming')}
                           </Badge>
                         )}
                         {isPast && !isActive && (
                           <Badge variant="secondary" className="text-[10px]">
-                            Past
+                            {t('notifications.past')}
                           </Badge>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Delegate: {r.delegate_name ?? 'Unknown'}
+                        {t('workflow.ooo.delegate_name', { name: r.delegate_name ?? t('workflow.common.unknown') })}
                       </p>
                       {r.reason && (
                         <p className="text-xs text-muted-foreground mt-0.5 italic">
@@ -365,7 +365,7 @@ export function OutOfOfficeSettings() {
                         ) : (
                           <X className="h-3.5 w-3.5 mr-1.5" />
                         )}
-                        Cancel
+                        {t('common.cancel')}
                       </Button>
                     )}
                   </div>

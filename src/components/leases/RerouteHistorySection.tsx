@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { localizedStatusLabel } from '@/lib/lifecycleLabels';
 import { format } from 'date-fns';
 import { ChevronDown, ChevronUp, GitBranch, Shield } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface RerouteEvent {
   id: string;
@@ -48,10 +50,11 @@ interface RerouteHistorySectionProps {
   leaseId: string;
 }
 
+// Values are i18n keys, resolved at render.
 const MODE_LABEL: Record<RerouteEvent['detection_mode'], string> = {
-  auto: 'Auto-detected',
-  manual_admin: 'Manual (admin)',
-  manual_audit: 'Audit-flagged',
+  auto: 'leases.reroute.mode_auto',
+  manual_admin: 'leases.reroute.mode_manual_admin',
+  manual_audit: 'leases.reroute.mode_manual_audit',
 };
 
 function formatAttrValue(v: unknown): string {
@@ -67,6 +70,7 @@ function formatAttrValue(v: unknown): string {
 }
 
 export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
+  const { t } = useAppTranslation();
   const [events, setEvents] = useState<RerouteEvent[]>([]);
   const [policies, setPolicies] = useState<Map<string, PolicyMeta>>(new Map());
   const [users, setUsers] = useState<Map<string, string>>(new Map());
@@ -119,7 +123,7 @@ export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
       for (const u of ((userResult as any).data ?? []) as any[]) {
         const fn = (u.first_name as string | null) ?? '';
         const ln = (u.last_name as string | null) ?? '';
-        const display = (fn || ln) ? `${fn} ${ln}`.trim() : (u.email ?? 'Unknown');
+        const display = (fn || ln) ? `${fn} ${ln}`.trim() : (u.email ?? t('common.unknown'));
         userMap.set(u.id as string, display);
       }
       setUsers(userMap);
@@ -147,7 +151,7 @@ export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <GitBranch className="h-4 w-4" />
-          Chain Reroute History
+          {t('leases.reroute.history_title')}
           <Badge variant="secondary" className="ml-1">
             {events.length}
           </Badge>
@@ -157,14 +161,14 @@ export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
         {events.map((e) => {
           const isOpen = expanded.has(e.id);
           const priorName = e.prior_policy_id
-            ? (policies.get(e.prior_policy_id)?.name ?? `policy ${e.prior_policy_id.slice(0, 8)}…`)
-            : '(no prior policy)';
+            ? (policies.get(e.prior_policy_id)?.name ?? t('leases.reroute.policy_short', { id: e.prior_policy_id.slice(0, 8) }))
+            : t('leases.reroute.no_prior_policy');
           const newName = e.new_policy_id
-            ? (policies.get(e.new_policy_id)?.name ?? `policy ${e.new_policy_id.slice(0, 8)}…`)
+            ? (policies.get(e.new_policy_id)?.name ?? t('leases.reroute.policy_short', { id: e.new_policy_id.slice(0, 8) }))
             : '—';
           const triggerName = e.triggered_by
-            ? (users.get(e.triggered_by) ?? 'Unknown user')
-            : 'system';
+            ? (users.get(e.triggered_by) ?? t('workspace.members_panel.unknown_user'))
+            : t('leases.reroute.system');
           const changedKeys = e.changed_attributes
             ? Object.keys(e.changed_attributes)
             : [];
@@ -185,29 +189,29 @@ export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
                       {priorName} → {newName}
                     </span>
                     <Badge variant="outline" className="text-[10px]">
-                      {MODE_LABEL[e.detection_mode]}
+                      {t(MODE_LABEL[e.detection_mode])}
                     </Badge>
                     {e.resulted_in_chain_violation && (
                       <Badge variant="destructive" className="text-[10px] gap-0.5">
                         <Shield className="h-2.5 w-2.5" />
-                        Chain violation
+                        {t('leases.reroute.chain_violation_badge')}
                       </Badge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {format(new Date(e.triggered_at), 'MMM d, yyyy h:mm a')} ·
-                    triggered by {triggerName}
+                    {format(new Date(e.triggered_at), 'MMM d, yyyy h:mm a')} ·{' '}
+                    {t('leases.reroute.triggered_by', { name: triggerName })}
                   </p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs mt-1">
                     <span>
-                      <span className="text-muted-foreground">Lifecycle:</span>{' '}
-                      {displayLabel(e.prior_lifecycle_status as LifecycleStatus)} → {displayLabel(e.new_lifecycle_status as LifecycleStatus)}
+                      <span className="text-muted-foreground">{t('leases.reroute.lifecycle_label')}</span>{' '}
+                      {localizedStatusLabel(e.prior_lifecycle_status as LifecycleStatus)} → {localizedStatusLabel(e.new_lifecycle_status as LifecycleStatus)}
                     </span>
                     <span>
-                      <span className="text-muted-foreground">Steps:</span>{' '}
-                      <span className="text-success">+{e.steps_added_count} added</span>,{' '}
-                      <span className="text-destructive">{e.steps_superseded_count} superseded</span>,{' '}
-                      {e.steps_preserved_count} preserved
+                      <span className="text-muted-foreground">{t('leases.reroute.steps_label')}</span>{' '}
+                      <span className="text-success">{t('leases.reroute.steps_added', { count: e.steps_added_count })}</span>,{' '}
+                      <span className="text-destructive">{t('leases.reroute.steps_superseded', { count: e.steps_superseded_count })}</span>,{' '}
+                      {t('leases.reroute.steps_preserved', { count: e.steps_preserved_count })}
                     </span>
                   </div>
                   {changedKeys.length > 0 && (
@@ -238,21 +242,21 @@ export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
                 <div className="mt-3 pt-3 border-t space-y-2 text-xs">
                   {e.trigger_reason && (
                     <div>
-                      <span className="text-muted-foreground">Trigger reason:</span>{' '}
+                      <span className="text-muted-foreground">{t('leases.reroute.trigger_reason')}</span>{' '}
                       {e.trigger_reason}
                     </div>
                   )}
                   {changedKeys.length > 0 && e.changed_attributes && (
                     <div className="space-y-1">
                       <p className="text-muted-foreground font-medium">
-                        Attribute diff:
+                        {t('leases.reroute.attribute_diff')}
                       </p>
                       <table className="w-full text-[11px]">
                         <thead className="text-muted-foreground">
                           <tr>
-                            <th className="text-left py-0.5 pr-2">Field</th>
-                            <th className="text-left py-0.5 pr-2">From</th>
-                            <th className="text-left py-0.5">To</th>
+                            <th className="text-left py-0.5 pr-2">{t('leases.reroute.field')}</th>
+                            <th className="text-left py-0.5 pr-2">{t('leases.reroute.from')}</th>
+                            <th className="text-left py-0.5">{t('leases.reroute.to')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -274,13 +278,13 @@ export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
                   )}
                   {e.prior_policy_version != null && e.new_policy_version != null && (
                     <div>
-                      <span className="text-muted-foreground">Policy version:</span>{' '}
+                      <span className="text-muted-foreground">{t('leases.reroute.policy_version')}</span>{' '}
                       v{e.prior_policy_version} → v{e.new_policy_version}
                     </div>
                   )}
                   {e.notes && (
                     <div>
-                      <span className="text-muted-foreground">Notes:</span> {e.notes}
+                      <span className="text-muted-foreground">{t('leases.reroute.notes_label')}</span> {e.notes}
                     </div>
                   )}
                 </div>

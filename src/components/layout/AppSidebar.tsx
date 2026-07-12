@@ -294,12 +294,12 @@ export function AppSidebar() {
 
   // --- Standard (workspace-mode) nav, declarative + reorderable ---
   const standardItems: StandardNavItem[] = [
-    { key: 'dashboard', label: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard, visible: true },
-    { key: 'leases', label: 'Leases', href: '/app/leases', icon: FileText, visible: true },
+    { key: 'dashboard', label: t('nav.dashboard'), href: '/app/dashboard', icon: LayoutDashboard, visible: true },
+    { key: 'leases', label: t('nav.leases'), href: '/app/leases', icon: FileText, visible: true },
     { key: 'firm', label: t('firm.nav.firm'), href: '/app/firm', icon: Building2, badge: firm.pendingActionsCount, visible: firm.isFirmUser },
-    { key: 'approvals', label: 'Approvals', href: '/app/approvals', icon: ClipboardCheck, badge: approvalBadge, visible: showApprovals && !hideApprovalsForSubmitterOnly },
-    { key: 'portfolio', label: 'Portfolio', href: '/app/portfolio', icon: Layers, requiresBusiness: true, visible: true },
-    { key: 'reports', label: 'Reports', href: '/app/reports', icon: BarChart3, visible: true },
+    { key: 'approvals', label: t('nav.approvals'), href: '/app/approvals', icon: ClipboardCheck, badge: approvalBadge, visible: showApprovals && !hideApprovalsForSubmitterOnly },
+    { key: 'portfolio', label: t('nav.portfolio'), href: '/app/portfolio', icon: Layers, requiresBusiness: true, visible: true },
+    { key: 'reports', label: t('nav.reports'), href: '/app/reports', icon: BarChart3, visible: true },
   ];
   const itemByKey = new Map(standardItems.map((i) => [i.key, i]));
   const orderedItems = navOrder
@@ -545,7 +545,7 @@ export function AppSidebar() {
           <DropdownMenuTrigger asChild>
             {collapsed ? (
               <button
-                aria-label={workspace?.name ?? 'Workspace'}
+                aria-label={workspace?.name ?? t('nav.workspace')}
                 className="mx-auto flex h-11 w-11 items-center justify-center rounded-md hover:bg-sidebar-accent transition-colors"
               >
                 {workspace ? (
@@ -576,7 +576,7 @@ export function AppSidebar() {
               </>
             ) : null}
             <DropdownMenuLabel className="text-xs text-muted-foreground">
-              Switch workspace
+              {t('vault.member_wall_switch')}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             {(() => {

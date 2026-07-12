@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { DocumentsTimeline, type DocumentRow } from './DocumentsTimeline';
 import { UploadDocumentDialog } from './UploadDocumentDialog';
 import { EscalateToConceptDialog } from './EscalateToConceptDialog';
@@ -58,6 +59,7 @@ export function DocumentsPanel({
   readOnly = false,
 }: DocumentsPanelProps) {
   const { user, userRole } = useApp();
+  const { t } = useAppTranslation();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [escalateOpen, setEscalateOpen] = useState(false);
   const [advanceBusy, setAdvanceBusy] = useState(false);
@@ -100,7 +102,7 @@ export function DocumentsPanel({
         const display =
           p.first_name && p.last_name
             ? `${p.first_name} ${p.last_name}`
-            : p.email ?? 'Unknown';
+            : p.email ?? t('common.unknown');
         profileMap.set(p.id, display);
       }
       return docs.map((d) => ({
@@ -134,15 +136,15 @@ export function DocumentsPanel({
       );
       if (error || !(data as any)?.ok) {
         const msg =
-          (data as any)?.error || error?.message || 'Failed to advance';
+          (data as any)?.error || error?.message || t('documents.panel.advance_failed');
         toast.error(msg);
         return;
       }
-      toast.success('Advanced to final review');
+      toast.success(t('documents.panel.advance_success'));
       onLifecycleChanged();
     } catch (err) {
       console.error('advance error:', err);
-      toast.error('Failed to advance');
+      toast.error(t('documents.panel.advance_failed'));
     } finally {
       setAdvanceBusy(false);
     }
@@ -162,12 +164,12 @@ export function DocumentsPanel({
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <CardTitle className="text-base">Documents</CardTitle>
+            <CardTitle className="text-base">{t('locked_lease.tabs.documents')}</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
               {canUpload && (
                 <Button size="sm" onClick={() => setUploadOpen(true)}>
                   <Upload className="h-3.5 w-3.5 mr-1.5" />
-                  Upload Document
+                  {t('documents.panel.upload_button')}
                 </Button>
               )}
               {isNegotiating && canTransition && (
@@ -178,7 +180,7 @@ export function DocumentsPanel({
                     onClick={() => setEscalateOpen(true)}
                   >
                     <ArrowLeftCircle className="h-3.5 w-3.5 mr-1.5" />
-                    Send back to initial approval
+                    {t('documents.panel.send_back')}
                   </Button>
                   <Button
                     size="sm"
@@ -187,8 +189,8 @@ export function DocumentsPanel({
                     disabled={!hasFinalNegotiated || advanceBusy}
                     title={
                       !hasFinalNegotiated
-                        ? 'Upload a Final Negotiated document first'
-                        : 'Advance to final review'
+                        ? t('documents.panel.advance_disabled_hint')
+                        : t('documents.panel.advance_hint')
                     }
                   >
                     {advanceBusy ? (
@@ -196,7 +198,7 @@ export function DocumentsPanel({
                     ) : (
                       <ArrowRightCircle className="h-3.5 w-3.5 mr-1.5" />
                     )}
-                    Advance to Final Review
+                    {t('documents.panel.advance_button')}
                   </Button>
                 </>
               )}

@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import i18next from 'i18next';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedDate } from '@/lib/dateFormatters';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
@@ -37,20 +38,20 @@ interface InAppAlert {
 
 const ALERT_CONFIG: Record<
   string,
-  { icon: React.ElementType; variant: 'warning' | 'destructive' | 'info' | 'default'; label: string }
+  { icon: React.ElementType; variant: 'warning' | 'destructive' | 'info' | 'default'; labelKey: string }
 > = {
-  expiry_approaching: { icon: Clock,        variant: 'warning',     label: 'Expiry' },
-  covenant_breach:    { icon: ShieldAlert,  variant: 'destructive', label: 'Covenant' },
-  variance_high:      { icon: ArrowUpDown,  variant: 'info',        label: 'Variance' },
-  approval_pending:   { icon: AlertTriangle,variant: 'default',     label: 'Approval' },
+  expiry_approaching: { icon: Clock,        variant: 'warning',     labelKey: 'notifications.alert_type.expiry' },
+  covenant_breach:    { icon: ShieldAlert,  variant: 'destructive', labelKey: 'notifications.alert_type.covenant' },
+  variance_high:      { icon: ArrowUpDown,  variant: 'info',        labelKey: 'notifications.alert_type.variance' },
+  approval_pending:   { icon: AlertTriangle,variant: 'default',     labelKey: 'notifications.alert_type.approval' },
 };
 
 function timeAgo(dateStr: string): string {
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60_000);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return i18next.t('notifications.time_ago_m', { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return i18next.t('notifications.time_ago_h', { count: hrs });
+  return i18next.t('notifications.time_ago_d', { count: Math.floor(hrs / 24) });
 }
 
 // ─── Email event scheduler types (lease_notifications table) ─────────────────
@@ -196,7 +197,7 @@ export default function Notifications() {
         <Tabs defaultValue="alerts">
           <TabsList className="mb-6">
             <TabsTrigger value="alerts" className="relative">
-              Alerts
+              {t('notifications.alerts')}
               {unreadCount > 0 && (
                 <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-medium text-accent-foreground">
                   {unreadCount}
@@ -220,26 +221,26 @@ export default function Notifications() {
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-6">
                     <Bell className="h-8 w-8 text-muted-foreground" />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">No alerts</h3>
+                  <h3 className="text-lg font-semibold mb-2">{t('notifications.no_alerts')}</h3>
                   <p className="text-sm text-muted-foreground max-w-md">
-                    System alerts will appear here when thresholds are breached.
+                    {t('notifications.alerts_empty_desc')}
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-3">
                 {alerts.map((alert, idx) => {
-                  const cfg = ALERT_CONFIG[alert.alert_type] ?? {
-                    icon: Bell,
-                    variant: 'default' as const,
-                    // Fanned approval/delegation notifications (#111 follow-on)
-                    // carry their notification_type as alert_type, e.g.
-                    // "notify_financial_approver" → "Financial Approver".
-                    label: alert.alert_type
-                      .replace(/^notify_/, '')
-                      .replace(/_/g, ' ')
-                      .replace(/\b\w/g, (c) => c.toUpperCase()),
-                  };
+                  const known = ALERT_CONFIG[alert.alert_type];
+                  const cfg = known ?? { icon: Bell, variant: 'default' as const };
+                  // Fanned approval/delegation notifications (#111 follow-on)
+                  // carry their notification_type as alert_type, e.g.
+                  // "notify_financial_approver" → "Financial Approver".
+                  const alertLabel = known
+                    ? t(known.labelKey)
+                    : alert.alert_type
+                        .replace(/^notify_/, '')
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, (c) => c.toUpperCase());
                   const AlertIcon = cfg.icon;
                   const isUnread = !alert.read_at;
                   return (
@@ -268,7 +269,7 @@ export default function Notifications() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <Badge variant={cfg.variant} className="text-[10px]">{cfg.label}</Badge>
+                              <Badge variant={cfg.variant} className="text-[10px]">{alertLabel}</Badge>
                               {isUnread && (
                                 <span className="h-2 w-2 rounded-full bg-accent shrink-0" />
                               )}

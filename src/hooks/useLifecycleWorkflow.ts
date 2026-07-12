@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { t } from 'i18next';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { toast } from 'sonner';
@@ -50,12 +51,12 @@ export function useLifecycleWorkflow() {
   // Create a lease request and route it based on workspace approval config
   const createDraftLease = useCallback(async (input: CreateDraftLeaseInput): Promise<string | null> => {
     if (!user || !workspace) {
-      toast.error('You must be logged in');
+      toast.error(t('workflow.lifecycle.login_required'));
       return null;
     }
 
     if (!isBusinessPlan) {
-      toast.error('Lease workflow is only available on Business plan');
+      toast.error(t('workflow.lifecycle.business_only'));
       return null;
     }
 
@@ -163,16 +164,20 @@ export function useLifecycleWorkflow() {
         },
       });
 
-      const statusMessages: Record<string, string> = {
-        submitted: 'Request submitted — awaiting manager review',
-        under_review: 'Request submitted — awaiting financial review',
-        approved: 'Request auto-approved (no approvers configured)',
+      const statusMessageKeys: Record<string, string> = {
+        submitted: 'workflow.lifecycle.submitted_manager',
+        under_review: 'workflow.lifecycle.submitted_financial',
+        approved: 'workflow.lifecycle.auto_approved',
       };
-      toast.success(statusMessages[initialStatus] || 'Lease request submitted');
+      toast.success(
+        statusMessageKeys[initialStatus]
+          ? t(statusMessageKeys[initialStatus])
+          : t('workflow.lifecycle.request_submitted'),
+      );
       return data.id;
     } catch (error) {
       console.error('Error creating lease request:', error);
-      toast.error('Failed to submit lease request');
+      toast.error(t('workflow.lifecycle.submit_failed'));
       return null;
     } finally {
       setIsLoading(false);
@@ -182,12 +187,12 @@ export function useLifecycleWorkflow() {
   // Submit lease for internal approval
   const submitForApproval = useCallback(async (input: SubmitForApprovalInput): Promise<boolean> => {
     if (!user) {
-      toast.error('You must be logged in');
+      toast.error(t('workflow.lifecycle.login_required'));
       return false;
     }
 
     if (input.approverIds.length === 0 || input.approverIds.length > 2) {
-      toast.error('Please select 1-2 approvers');
+      toast.error(t('workflow.lifecycle.select_approvers'));
       return false;
     }
 
@@ -225,11 +230,11 @@ export function useLifecycleWorkflow() {
         to_status: 'submitted',
       });
 
-      toast.success('Lease submitted for approval');
+      toast.success(t('workflow.lifecycle.submitted_for_approval'));
       return true;
     } catch (error) {
       console.error('Error submitting for approval:', error);
-      toast.error('Failed to submit for approval');
+      toast.error(t('workflow.lifecycle.submit_approval_failed'));
       return false;
     } finally {
       setIsLoading(false);
@@ -244,12 +249,12 @@ export function useLifecycleWorkflow() {
     comment?: string
   ): Promise<boolean> => {
     if (!user) {
-      toast.error('You must be logged in');
+      toast.error(t('workflow.lifecycle.login_required'));
       return false;
     }
 
     if ((action === 'send_back' || action === 'pause') && !comment?.trim()) {
-      toast.error('Comment is required for this action');
+      toast.error(t('workflow.lifecycle.comment_required'));
       return false;
     }
 
@@ -327,18 +332,18 @@ export function useLifecycleWorkflow() {
         details: { approval_type: approvalType, comment },
       });
 
-      const actionLabels: Record<ApprovalAction, string> = {
-        approve: 'Approved',
-        send_back: 'Sent back',
-        reject: 'Rejected',
-        pause: 'Paused',
+      const actionMessageKeys: Record<ApprovalAction, string> = {
+        approve: 'workflow.lifecycle.action_approve',
+        send_back: 'workflow.lifecycle.action_send_back',
+        reject: 'workflow.lifecycle.action_reject',
+        pause: 'workflow.lifecycle.action_pause',
       };
 
-      toast.success(`Lease ${actionLabels[action].toLowerCase()}`);
+      toast.success(t(actionMessageKeys[action]));
       return true;
     } catch (error) {
       console.error('Error taking approval action:', error);
-      toast.error('Failed to process approval action');
+      toast.error(t('workflow.lifecycle.action_failed'));
       return false;
     } finally {
       setIsLoading(false);
@@ -348,7 +353,7 @@ export function useLifecycleWorkflow() {
   // Send manual nudge
   const sendNudge = useCallback(async (leaseId: string): Promise<boolean> => {
     if (!user) {
-      toast.error('You must be logged in');
+      toast.error(t('workflow.lifecycle.login_required'));
       return false;
     }
 
@@ -365,7 +370,7 @@ export function useLifecycleWorkflow() {
       if (nudgeCheckError) throw nudgeCheckError;
 
       if (recentNudges && recentNudges.length > 0) {
-        toast.error('You can only send one nudge per 24 hours');
+        toast.error(t('workflow.lifecycle.nudge_limit'));
         return false;
       }
 
@@ -387,11 +392,11 @@ export function useLifecycleWorkflow() {
         details: { nudge_type: 'manual' },
       });
 
-      toast.success('Nudge sent to approvers');
+      toast.success(t('workflow.lifecycle.nudge_sent'));
       return true;
     } catch (error) {
       console.error('Error sending nudge:', error);
-      toast.error('Failed to send nudge');
+      toast.error(t('workflow.nudge.send_failed'));
       return false;
     } finally {
       setIsLoading(false);
@@ -404,7 +409,7 @@ export function useLifecycleWorkflow() {
     file: File
   ): Promise<boolean> => {
     if (!user || !workspace) {
-      toast.error('You must be logged in');
+      toast.error(t('workflow.lifecycle.login_required'));
       return false;
     }
 
@@ -434,11 +439,11 @@ export function useLifecycleWorkflow() {
         details: { filename: file.name },
       });
 
-      toast.success('Document uploaded');
+      toast.success(t('workflow.lifecycle.doc_uploaded'));
       return true;
     } catch (error) {
       console.error('Error uploading document:', error);
-      toast.error('Failed to upload document');
+      toast.error(t('workflow.lifecycle.doc_upload_failed'));
       return false;
     } finally {
       setIsLoading(false);
@@ -451,12 +456,12 @@ export function useLifecycleWorkflow() {
     approverIds: string[]
   ): Promise<boolean> => {
     if (!user) {
-      toast.error('You must be logged in');
+      toast.error(t('workflow.lifecycle.login_required'));
       return false;
     }
 
     if (approverIds.length === 0 || approverIds.length > 2) {
-      toast.error('Please select 1-2 approvers');
+      toast.error(t('workflow.lifecycle.select_approvers'));
       return false;
     }
 
@@ -490,11 +495,11 @@ export function useLifecycleWorkflow() {
         to_status: 'approved',
       });
 
-      toast.success('Lease submitted for execution approval');
+      toast.success(t('workflow.lifecycle.exec_submitted'));
       return true;
     } catch (error) {
       console.error('Error submitting for execution approval:', error);
-      toast.error('Failed to submit for execution approval');
+      toast.error(t('workflow.lifecycle.exec_submit_failed'));
       return false;
     } finally {
       setIsLoading(false);

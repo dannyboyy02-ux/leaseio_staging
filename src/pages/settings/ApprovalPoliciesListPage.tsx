@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { t as tGlobal } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, FlaskConical, Edit3, Copy, Archive, Loader2, Star, ChevronLeft } from 'lucide-react';
@@ -16,6 +17,7 @@ import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTe
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { localizedAssetTypeLabel } from '@/lib/assetTypeLabels';
 import {
   buildAssetTypeOptions,
   canonicalAssetType,
@@ -48,7 +50,10 @@ const fmtMoney = (n: number | null, language: SupportedLocale): string =>
  *  configured/built-in option label when it canonically matches, else Title
  *  Case (so raw 'property'/'real_estate' don't leak into the summary chip). */
 const assetLabel = (value: string, options: AssetTypeOption[]): string =>
-  options.find((o) => canonicalAssetType(o.value) === canonicalAssetType(value))?.label ??
+  (() => {
+    const found = options.find((o) => canonicalAssetType(o.value) === canonicalAssetType(value));
+    return found ? localizedAssetTypeLabel(found) : undefined;
+  })() ??
   prettyAssetType(value);
 
 const matchSummary = (
@@ -69,16 +74,16 @@ const matchSummary = (
       seen.add(key);
       labels.push(assetLabel(v, assetTypeOptions));
     }
-    out.push({ label: 'Asset', value: labels.join(', ') });
+    out.push({ label: tGlobal('policy_editor.list.chip_asset'), value: labels.join(', ') });
   }
-  if (p.match_lease_types.length) out.push({ label: 'Type', value: p.match_lease_types.join(', ') });
-  if (p.match_departments.length) out.push({ label: 'Dept', value: p.match_departments.join(', ') });
-  if (p.match_regions.length) out.push({ label: 'Region', value: p.match_regions.join(', ') });
+  if (p.match_lease_types.length) out.push({ label: tGlobal('policy_editor.list.chip_type'), value: p.match_lease_types.join(', ') });
+  if (p.match_departments.length) out.push({ label: tGlobal('policy_editor.list.chip_dept'), value: p.match_departments.join(', ') });
+  if (p.match_regions.length) out.push({ label: tGlobal('policy_editor.list.chip_region'), value: p.match_regions.join(', ') });
   const min = p.match_min_annual_cost;
   const max = p.match_max_annual_cost;
   if (min != null || max != null) {
     out.push({
-      label: 'Annual',
+      label: tGlobal('policy_editor.list.chip_annual'),
       value: `${min != null ? fmtMoney(min, language) : '—'} – ${max != null ? fmtMoney(max, language) : '—'}`,
     });
   }
@@ -147,7 +152,7 @@ export default function ApprovalPoliciesListPage() {
       .update({ separation_of_duties_default: next } as any)
       .eq('id', workspace.id);
     if (error) {
-      toast.error('Failed to update workspace setting');
+      toast.error(t('policy_editor.list.toast_sod_failed'));
       return;
     }
     queryClient.setQueryData(
@@ -157,7 +162,7 @@ export default function ApprovalPoliciesListPage() {
         assetTypes: prev?.assetTypes ?? [],
       }),
     );
-    toast.success(`Workspace default for distinct approvers: ${next ? 'ON' : 'OFF'}`);
+    toast.success(next ? t('policy_editor.list.toast_sod_on') : t('policy_editor.list.toast_sod_off'));
   };
 
   const toggleActive = async (policy: Policy, next: boolean) => {
@@ -170,7 +175,7 @@ export default function ApprovalPoliciesListPage() {
     if (error) {
       // The partial unique index will reject if turning a non-default on while
       // another default is also active — surface a helpful message.
-      toast.error(error.message || 'Failed to update rule');
+      toast.error(error.message || t('policy_editor.list.toast_rule_update_failed'));
       return;
     }
     queryClient.invalidateQueries({ queryKey: ['approval-policies', workspace?.id] });
@@ -182,13 +187,13 @@ export default function ApprovalPoliciesListPage() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
-      if (!userId) throw new Error('Not signed in');
+      if (!userId) throw new Error(t('policy_editor.toast_not_signed_in'));
 
       const { data: newPolicy, error: insertErr } = await supabase
         .from('approval_policies')
         .insert({
           workspace_id: workspace.id,
-          name: `${policy.name} (copy)`,
+          name: t('policy_editor.list.copy_name', { name: policy.name }),
           description: policy.description,
           priority: policy.priority,
           match_asset_types: policy.match_asset_types,
@@ -220,24 +225,24 @@ export default function ApprovalPoliciesListPage() {
         if (rpcErr) throw rpcErr;
       }
 
-      toast.success('Rule duplicated. Edit and activate when ready.');
+      toast.success(t('policy_editor.list.toast_duplicated'));
       queryClient.invalidateQueries({ queryKey: ['approval-policies', workspace.id] });
       navigate(`/app/settings/approval-policies/${(newPolicy as any).id}`);
     } catch (err: any) {
-      toast.error(err?.message || 'Duplicate failed');
+      toast.error(err?.message || t('policy_editor.list.toast_duplicate_failed'));
     } finally {
       setBusyId(null);
     }
   };
 
   const archive = async (policy: Policy) => {
-    if (!confirm(`Archive rule "${policy.name}"? It will be deactivated and stop matching new requests.`)) return;
+    if (!confirm(t('policy_editor.list.archive_confirm', { name: policy.name }))) return;
     await toggleActive(policy, false);
   };
 
   return (
     <AppLayout>
-      <AppHeader title="Approval Rules" />
+      <AppHeader title={t('workspace.rules.title')} />
       <div className="container mx-auto p-6 space-y-6">
         {/* This page sits outside the Settings shell, so without an explicit
             back link the user who arrived from Settings → Approval Rules has
@@ -257,14 +262,14 @@ export default function ApprovalPoliciesListPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="min-w-0">
-                <p className="text-sm font-medium">Can the same person fill multiple roles?</p>
+                <p className="text-sm font-medium">{t('policy_editor.sod_label')}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  When ON, every approval chain must use distinct users at each step. Individual rules can override this.
+                  {t('policy_editor.list.sod_toggle_desc')}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-xs text-muted-foreground">
-                  {sodQuery.data?.sodDefault ? 'ON — distinct users required' : 'OFF — same user allowed'}
+                  {sodQuery.data?.sodDefault ? t('policy_editor.list.sod_on') : t('policy_editor.list.sod_off')}
                 </span>
                 <Switch
                   checked={Boolean(sodQuery.data?.sodDefault)}
@@ -280,23 +285,22 @@ export default function ApprovalPoliciesListPage() {
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4">
             <div>
-              <CardTitle>Rules</CardTitle>
+              <CardTitle>{t('policy_editor.list.rules_title')}</CardTitle>
               <CardDescription>
-                Rules are checked in priority order — the first rule whose conditions all match a new request wins. If
-                nothing matches, the fallback rule is used.
+                {t('policy_editor.list.rules_desc')}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Button variant="outline" size="sm" onClick={() => setTestOpen(true)}>
                 <FlaskConical className="h-4 w-4 mr-1.5" />
-                Try it on a sample request
+                {t('policy_editor.try_sample')}
               </Button>
               <Button
                 size="sm"
                 onClick={() => navigate('/app/settings/approval-policies/new')}
               >
                 <Plus className="h-4 w-4 mr-1.5" />
-                New rule
+                {t('policy_editor.list.new_rule')}
               </Button>
             </div>
           </CardHeader>
@@ -309,9 +313,9 @@ export default function ApprovalPoliciesListPage() {
               </div>
             ) : sortedPolicies.length === 0 ? (
               <div className="text-center py-12 text-sm text-muted-foreground">
-                <p>No approval rules yet.</p>
+                <p>{t('policy_editor.list.empty_title')}</p>
                 <p className="mt-1">
-                  Click <strong>New rule</strong> to define the first one.
+                  {t('policy_editor.list.empty_hint_prefix')} <strong>{t('policy_editor.list.new_rule')}</strong> {t('policy_editor.list.empty_hint_suffix')}
                 </p>
               </div>
             ) : (
@@ -328,12 +332,12 @@ export default function ApprovalPoliciesListPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-medium text-sm truncate">{p.name}</p>
                             <Badge variant="outline" className="text-xs">
-                              priority {p.priority}
+                              {t('policy_editor.priority_badge', { n: p.priority })}
                             </Badge>
                             {p.is_default_fallback && (
                               <Badge className="text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-300">
                                 <Star className="h-3 w-3 mr-1" />
-                                Default fallback
+                                {t('policy_editor.list.default_fallback')}
                               </Badge>
                             )}
                           </div>
@@ -342,7 +346,7 @@ export default function ApprovalPoliciesListPage() {
                           )}
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {chips.length === 0 ? (
-                              <span className="text-xs text-muted-foreground italic">Matches all requests</span>
+                              <span className="text-xs text-muted-foreground italic">{t('policy_editor.list.matches_all')}</span>
                             ) : (
                               chips.map((c) => (
                                 <Badge key={c.label} variant="secondary" className="text-[10px] font-normal">
@@ -353,7 +357,7 @@ export default function ApprovalPoliciesListPage() {
                             )}
                           </div>
                           <p className="text-[10px] text-muted-foreground mt-2">
-                            Updated {fmtDate(p.updated_at)}
+                            {t('policy_editor.list.updated_on', { date: fmtDate(p.updated_at) })}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -363,14 +367,14 @@ export default function ApprovalPoliciesListPage() {
                               onCheckedChange={(v) => toggleActive(p, v)}
                               disabled={busyId === p.id}
                             />
-                            <span className="text-xs text-muted-foreground">{p.is_active ? 'Active' : 'Inactive'}</span>
+                            <span className="text-xs text-muted-foreground">{p.is_active ? t('policy_editor.list.active') : t('policy_editor.list.inactive')}</span>
                           </div>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
                             onClick={() => navigate(`/app/settings/approval-policies/${p.id}`)}
-                            title="Edit"
+                            title={t('common.edit')}
                           >
                             <Edit3 className="h-4 w-4" />
                           </Button>
@@ -380,7 +384,7 @@ export default function ApprovalPoliciesListPage() {
                             className="h-8 w-8"
                             onClick={() => duplicate(p)}
                             disabled={busyId === p.id}
-                            title="Duplicate"
+                            title={t('policy_editor.list.duplicate')}
                           >
                             {busyId === p.id ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -395,7 +399,7 @@ export default function ApprovalPoliciesListPage() {
                               className="h-8 w-8 text-muted-foreground hover:text-destructive"
                               onClick={() => archive(p)}
                               disabled={busyId === p.id}
-                              title="Archive"
+                              title={t('archive.archive')}
                             >
                               <Archive className="h-4 w-4" />
                             </Button>

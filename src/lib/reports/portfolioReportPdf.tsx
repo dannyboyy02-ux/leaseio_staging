@@ -13,6 +13,10 @@ import {
   View,
   StyleSheet,
 } from '@react-pdf/renderer';
+// Non-component module — no hooks; the app initializes i18next at boot
+// (src/i18n.ts), so the bound global t resolves the active language at
+// PDF-generation time.
+import { t } from 'i18next';
 import {
   LIABILITY_DISCLAIMER,
   NOT_A_FINANCIAL_STATEMENT_BANNER,
@@ -250,13 +254,13 @@ function formatCurrency(value: number | null | undefined): string {
 function reasonLabel(reason: string): string {
   switch (reason) {
     case 'not_model_locked':
-      return 'Not yet model-locked';
+      return t('reports.pdf_reason_not_model_locked');
     case 'not_active':
-      return 'Not in active lifecycle';
+      return t('reports.pdf_reason_not_active');
     case 'period_no_overlap':
-      return 'Term does not overlap period';
+      return t('reports.pdf_reason_period_no_overlap');
     case 'verification_incomplete':
-      return 'Verification incomplete';
+      return t('reports.pdf_reason_verification_incomplete');
     default:
       return reason;
   }
@@ -277,10 +281,10 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
       <Page size="LETTER" style={styles.page}>
         <View style={styles.watermarkBand} fixed>
           <Text style={styles.watermarkText}>
-            {NOT_A_FINANCIAL_STATEMENT_BANNER}
+            {t('reports.not_financial_statement', { defaultValue: NOT_A_FINANCIAL_STATEMENT_BANNER })}
           </Text>
           <Text style={styles.watermarkRight}>
-            Report {reportId.slice(0, 8)}
+            {t('reports.pdf_report_id_short', { id: reportId.slice(0, 8) })}
           </Text>
         </View>
 
@@ -288,8 +292,10 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
           <View style={styles.brandLeft}>
             <Text style={styles.wordmark}>LeaseIO</Text>
             <Text style={styles.reportTitle}>
-              Portfolio Disclosure — {report.report_metadata.period_start}{' '}
-              through {report.report_metadata.period_end}
+              {t('reports.pdf_portfolio_disclosure_range', {
+                start: report.report_metadata.period_start,
+                end: report.report_metadata.period_end,
+              })}
             </Text>
           </View>
           <View style={styles.brandRight}>
@@ -297,68 +303,68 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
               {report.report_metadata.organization_name}
             </Text>
             <Text style={styles.brandRightLine}>
-              Generated {generatedAtDisplay}
+              {t('reports.generated_on', { date: generatedAtDisplay })}
             </Text>
           </View>
         </View>
 
         <View style={styles.disclaimerBox}>
-          <Text style={styles.disclaimerText}>{LIABILITY_DISCLAIMER}</Text>
+          <Text style={styles.disclaimerText}>{t('reports.disclaimer_body', { defaultValue: LIABILITY_DISCLAIMER })}</Text>
         </View>
 
         {/* Totals */}
-        <Text style={styles.sectionTitle}>Portfolio Totals</Text>
+        <Text style={styles.sectionTitle}>{t('reports.pdf_portfolio_totals')}</Text>
         <View style={styles.totalsGrid}>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Leases included</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_leases_included')}</Text>
             <Text style={styles.cellValue}>
               {report.totals.lease_count}
             </Text>
           </View>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Leases excluded</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_leases_excluded')}</Text>
             <Text style={styles.cellValue}>
               {report.totals.excluded_count}
             </Text>
           </View>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Operating</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_operating')}</Text>
             <Text style={styles.cellValue}>
               {report.totals.operating_lease_count}
             </Text>
           </View>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Finance</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_finance')}</Text>
             <Text style={styles.cellValue}>
               {report.totals.finance_lease_count}
             </Text>
           </View>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Pending classification</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_pending_classification')}</Text>
             <Text style={styles.cellValue}>
               {report.totals.pending_classification_count}
             </Text>
           </View>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Total PV liability</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_total_pv_liability')}</Text>
             <Text style={styles.cellValue}>
               {formatCurrency(report.totals.total_pv_liability)}
             </Text>
           </View>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Total commitment</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_total_commitment')}</Text>
             <Text style={styles.cellValue}>
               {formatCurrency(report.totals.total_commitment)}
             </Text>
           </View>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Total monthly straight-line</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_total_monthly_straight_line')}</Text>
             <Text style={styles.cellValue}>
               {formatCurrency(report.totals.total_monthly_straight_line)}
             </Text>
           </View>
           <View style={styles.totalsCell}>
-            <Text style={styles.cellLabel}>Discount rate methodology</Text>
+            <Text style={styles.cellLabel}>{t('reports.pdf_discount_rate_methodology')}</Text>
             <Text style={styles.cellValue}>
               {report.report_metadata.discount_rate_method}
             </Text>
@@ -368,17 +374,17 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
         {/* Per-lease summaries */}
         {report.per_lease_summaries.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Per-Lease Summary</Text>
+            <Text style={styles.sectionTitle}>{t('reports.pdf_per_lease_summary')}</Text>
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { flex: 2 }]}>Tenant</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>Class</Text>
+              <Text style={[styles.tableHeaderText, { flex: 2 }]}>{t('lease.tenant')}</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1 }]}>{t('reports.pdf_class_col')}</Text>
               <Text
                 style={[
                   styles.tableHeaderText,
                   { flex: 1.5, textAlign: 'right' },
                 ]}
               >
-                PV Liab
+                {t('reports.pdf_pv_liab_col')}
               </Text>
               <Text
                 style={[
@@ -386,7 +392,7 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
                   { flex: 1.5, textAlign: 'right' },
                 ]}
               >
-                Commitment
+                {t('dashboard.commitment')}
               </Text>
               <Text
                 style={[
@@ -394,7 +400,7 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
                   { flex: 1, textAlign: 'right' },
                 ]}
               >
-                Flags
+                {t('reports.pdf_flags_col')}
               </Text>
             </View>
             {report.per_lease_summaries.map((s) => (
@@ -432,7 +438,7 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
                     },
                   ]}
                 >
-                  {s.flag_count} ({s.high_severity_flag_count} high)
+                  {t('reports.pdf_flags_high', { count: s.flag_count, high: s.high_severity_flag_count })}
                 </Text>
               </View>
             ))}
@@ -442,7 +448,7 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
         {/* Exclusions */}
         {report.exclusions.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Excluded Leases</Text>
+            <Text style={styles.sectionTitle}>{t('reports.pdf_excluded_leases')}</Text>
             {report.exclusions.map((g) => (
               <View key={g.reason} style={styles.exclusionGroup}>
                 <Text style={styles.exclusionTitle}>
@@ -461,7 +467,7 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
         {/* Preparer Notes */}
         {report.preparer_notes.flags.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Preparer Notes</Text>
+            <Text style={styles.sectionTitle}>{t('reports.pdf_preparer_notes')}</Text>
             {report.preparer_notes.flags.map((flag, i) => (
               <View key={`pf-${i}`} style={styles.flagRow} wrap={false}>
                 <View
@@ -470,7 +476,7 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
                     { backgroundColor: SEVERITY_COLOR[flag.severity] },
                   ]}
                 >
-                  <Text style={styles.flagBadgeText}>{flag.severity}</Text>
+                  <Text style={styles.flagBadgeText}>{t(`reports.pdf_severity_${flag.severity}`)}</Text>
                 </View>
                 <View style={styles.flagContent}>
                   <Text style={styles.flagTitle}>{flag.title}</Text>
@@ -483,12 +489,12 @@ export function PortfolioReportDocument({ report, reportId }: Props) {
 
         <View style={styles.footer} fixed>
           <Text style={styles.footerText}>
-            LeaseIO Data Report · Not a Financial Statement · {generatedAtDisplay}
+            {t('reports.pdf_footer_line', { date: generatedAtDisplay })}
           </Text>
           <Text
             style={styles.footerText}
             render={({ pageNumber, totalPages }) =>
-              `Page ${pageNumber} of ${totalPages}`
+              t('reports.pdf_page_of', { page: pageNumber, total: totalPages })
             }
           />
         </View>

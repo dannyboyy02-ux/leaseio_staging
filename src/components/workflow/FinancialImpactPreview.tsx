@@ -19,7 +19,7 @@ export function FinancialImpactPreview({
   discountRate,
   termMonths,
 }: FinancialImpactPreviewProps) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const fmt = (amount: number) => formatLocalizedCurrency(amount, language);
   const exceedsThreshold =
     covenantThreshold != null &&
@@ -28,25 +28,27 @@ export function FinancialImpactPreview({
 
   const metrics = [
     {
-      label: 'Total Cash Commitment',
+      label: t('workflow.impact.total_cash_commitment'),
       value: fmt(calculations.totalCashCommitment),
-      note: `Over ${termMonths} months`,
+      note: t('workflow.impact.over_months', { count: termMonths }),
     },
     {
-      label: 'Estimated Lease Liability',
+      label: t('workflow.impact.estimated_liability'),
       value: fmt(calculations.pvLiability),
-      note: `PV at ${discountRate}% discount rate`,
+      note: t('workflow.impact.pv_at_rate', { rate: discountRate }),
     },
     {
-      label: 'Monthly P&L Charge',
+      label: t('workflow.impact.monthly_pl_charge'),
       value: fmt(calculations.straightLineExpense),
-      note: 'Straight-line per month',
+      note: t('workflow.impact.straight_line'),
     },
     {
-      label: 'Cash vs. P&L Delta',
+      label: t('workflow.impact.cash_pl_delta'),
       value: fmt(Math.abs(calculations.cashPLDelta)),
-      note: `At lease midpoint · ${
-        calculations.cashPLDelta >= 0 ? 'cash ahead of P&L' : 'P&L ahead of cash'
+      note: `${t('workflow.impact.at_midpoint')} · ${
+        calculations.cashPLDelta >= 0
+          ? t('workflow.impact.cash_ahead')
+          : t('workflow.impact.pl_ahead')
       }`,
     },
   ];
@@ -55,20 +57,20 @@ export function FinancialImpactPreview({
     <Card className="bg-muted/40 border-dashed">
       <CardContent className="pt-4 pb-4 space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Financial Impact Preview
+          {t('workflow.impact.preview_title')}
         </p>
 
         {covenantFlagged && (
           <div className="flex items-start gap-2 rounded-md bg-warning/10 border border-warning/30 px-3 py-2 text-sm text-warning">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>Flagged for covenant review — Financial Approver will be notified</span>
+            <span>{t('workflow.impact.covenant_flagged_note')}</span>
           </div>
         )}
 
         {exceedsThreshold && (
           <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>Estimated liability exceeds covenant threshold</span>
+            <span>{t('workflow.impact.exceeds_threshold')}</span>
           </div>
         )}
 

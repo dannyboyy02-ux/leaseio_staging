@@ -43,6 +43,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { localizedStatusLabel } from '@/lib/lifecycleLabels';
 import { LeaseDiscountRateCard } from '@/components/leases/LeaseDiscountRateCard';
 
 interface LeaseDetail {
@@ -78,25 +79,20 @@ interface LeaseDetail {
 
 type Classification = 'operating' | 'finance' | 'pending';
 
+// Labels come from the i18n catalog: approvals.financial.criteria.<id>
 const ASC842_CRITERIA = [
-  { id: 'ownership', label: 'Does the lease transfer ownership of the asset by the end of the term?' },
-  { id: 'purchase_option', label: 'Does the lessee have a purchase option they are reasonably certain to exercise?' },
-  {
-    id: 'major_part',
-    label: 'Is the lease term for the major part of the asset\'s remaining economic life? (≥75% is a common threshold)',
-  },
-  {
-    id: 'pv_substantially_all',
-    label: 'Is the present value of payments ≥ substantially all of the fair value of the asset? (≥90% is a common threshold)',
-  },
-  { id: 'specialized', label: 'Is the asset so specialized it has no alternative use to the lessor at the end of the term?' },
+  { id: 'ownership' },
+  { id: 'purchase_option' },
+  { id: 'major_part' },
+  { id: 'pv_substantially_all' },
+  { id: 'specialized' },
 ];
 
 export default function FinancialReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
   const { user, workspace, userFunctionalRoles, userRole } = useApp();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const fmt = (n: number | null | undefined) => formatLocalizedCurrency(n, language);
   const fmtDec = (n: number | null | undefined) =>
     formatLocalizedCurrency(n, language, { cents: true });
@@ -148,7 +144,7 @@ export default function FinancialReview() {
         ]);
 
         if (leaseResult.error || !leaseResult.data) {
-          toast.error('Could not load lease');
+          toast.error(t('approvals.financial.load_failed'));
           navigate('/app/approvals');
           return;
         }
@@ -210,7 +206,7 @@ export default function FinancialReview() {
         }
       } catch (err) {
         console.error(err);
-        toast.error('Error loading financial review');
+        toast.error(t('approvals.financial.load_error'));
       } finally {
         setLoading(false);
       }
@@ -240,7 +236,7 @@ export default function FinancialReview() {
           classification,
         },
       });
-      if (error) throw new Error(error.message ?? 'Approval failed');
+      if (error) throw new Error(error.message ?? t('approvals.errors.approval_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
 
       // Notification row — not a workflow column, browser can still write it.
@@ -255,12 +251,12 @@ export default function FinancialReview() {
         },
       } as any);
 
-      toast.success('Commitment approved');
+      toast.success(t('approvals.common.commitment_approved'));
       setApproveDialogOpen(false);
       navigate('/app/approvals');
     } catch (err) {
       console.error(err);
-      const msg = err instanceof Error ? err.message : 'Failed to approve';
+      const msg = err instanceof Error ? err.message : t('approvals.errors.failed_to_approve');
       toast.error(msg);
     } finally {
       setIsActing(false);
@@ -282,7 +278,7 @@ export default function FinancialReview() {
           reason: rejectReason.trim(),
         },
       });
-      if (error) throw new Error(error.message ?? 'Rejection failed');
+      if (error) throw new Error(error.message ?? t('approvals.errors.rejection_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
 
       if (returnToSubmitter) {
@@ -296,7 +292,7 @@ export default function FinancialReview() {
           },
         } as any);
 
-        toast.success('Returned to submitter for revision');
+        toast.success(t('approvals.financial.returned_toast'));
       } else {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
@@ -308,14 +304,14 @@ export default function FinancialReview() {
           },
         } as any);
 
-        toast.success('Request rejected');
+        toast.success(t('approvals.common.request_rejected'));
       }
 
       setRejectDialogOpen(false);
       navigate('/app/approvals');
     } catch (err) {
       console.error(err);
-      const msg = err instanceof Error ? err.message : 'Failed to submit rejection';
+      const msg = err instanceof Error ? err.message : t('approvals.financial.reject_submit_failed');
       toast.error(msg);
     } finally {
       setIsActing(false);
@@ -325,7 +321,7 @@ export default function FinancialReview() {
   if (loading) {
     return (
       <AppLayout>
-        <AppHeader title="Financial Review" />
+        <AppHeader title={t('approvals.financial.title')} />
         <div className="p-6 space-y-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-lg" />)}
         </div>
@@ -342,12 +338,12 @@ export default function FinancialReview() {
   return (
     <AppLayout>
       <AppHeader
-        title="Financial Review"
-        subtitle={lease.request_title || 'Commitment Request'}
+        title={t('approvals.financial.title')}
+        subtitle={lease.request_title || t('approvals.financial.commitment_request')}
         actions={
           <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
             <ChevronLeft className="h-4 w-4 mr-1" />
-            Back to Approvals
+            {t('approvals.financial.back_to_approvals')}
           </Button>
         }
       />
@@ -355,8 +351,8 @@ export default function FinancialReview() {
       <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto">
         {!canAct && (
           <div className="rounded-lg border border-muted bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-            This review is in <strong>{displayLabel(lease.lifecycle_status as LifecycleStatus)}</strong> status.
-            {!isFinancialApprover && ' You do not have the Financial Approver role.'}
+            {t('approvals.financial.review_status_before')}<strong>{localizedStatusLabel(lease.lifecycle_status as LifecycleStatus)}</strong>{t('approvals.financial.review_status_after')}
+            {!isFinancialApprover && ` ${t('approvals.financial.not_financial_approver')}`}
           </div>
         )}
 
@@ -366,29 +362,29 @@ export default function FinancialReview() {
           <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Commitment Summary</CardTitle>
+                <CardTitle className="text-base">{t('approvals.financial.commitment_summary')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-y-2">
-                  <span className="text-muted-foreground">Asset Type</span>
+                  <span className="text-muted-foreground">{t('workflow.request.asset_type')}</span>
                   <span className="capitalize font-medium">{lease.asset_type || '—'}</span>
-                  <span className="text-muted-foreground">Description</span>
+                  <span className="text-muted-foreground">{t('workflow.request.description')}</span>
                   <span className="font-medium">{lease.request_title || '—'}</span>
-                  <span className="text-muted-foreground">Vendor</span>
+                  <span className="text-muted-foreground">{t('workflow.request.vendor')}</span>
                   <span className="font-medium">{lease.vendor_name || '—'}</span>
-                  <span className="text-muted-foreground">Department</span>
+                  <span className="text-muted-foreground">{t('approvals.financial.department')}</span>
                   <span className="font-medium">{lease.requesting_department || '—'}</span>
-                  <span className="text-muted-foreground">Monthly Payment</span>
+                  <span className="text-muted-foreground">{t('workflow.request.monthly_payment')}</span>
                   <span className="font-medium">{fmt(lease.monthly_payment)}</span>
-                  <span className="text-muted-foreground">Term</span>
-                  <span className="font-medium">{lease.term_months ? `${lease.term_months} months` : '—'}</span>
-                  <span className="text-muted-foreground">Escalation Rate</span>
-                  <span className="font-medium">{lease.escalation_rate != null ? `${lease.escalation_rate}% / yr` : '—'}</span>
-                  <span className="text-muted-foreground">Start Date</span>
+                  <span className="text-muted-foreground">{t('approvals.financial.term')}</span>
+                  <span className="font-medium">{lease.term_months ? t('workflow.impact.n_months', { count: lease.term_months }) : '—'}</span>
+                  <span className="text-muted-foreground">{t('approvals.financial.escalation_rate')}</span>
+                  <span className="font-medium">{lease.escalation_rate != null ? t('approvals.financial.pct_per_year', { rate: lease.escalation_rate }) : '—'}</span>
+                  <span className="text-muted-foreground">{t('workflow.request.start_date')}</span>
                   <span className="font-medium">
                     {lease.lease_start ? format(new Date(lease.lease_start), 'MMM d, yyyy') : '—'}
                   </span>
-                  <span className="text-muted-foreground">End Date</span>
+                  <span className="text-muted-foreground">{t('workflow.summary.end_date')}</span>
                   <span className="font-medium">
                     {lease.lease_end ? format(new Date(lease.lease_end), 'MMM d, yyyy') : '—'}
                   </span>
@@ -407,7 +403,7 @@ export default function FinancialReview() {
                 <Separator />
 
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Submitted by</p>
+                  <p className="text-xs text-muted-foreground">{t('approvals.financial.submitted_by')}</p>
                   <p className="font-medium">{lease.requestorName || lease.requestorEmail || '—'}</p>
                   <p className="text-xs text-muted-foreground">
                     {lease.uploaded_at
@@ -420,7 +416,7 @@ export default function FinancialReview() {
                   <>
                     <Separator />
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Manager approval</p>
+                      <p className="text-xs text-muted-foreground">{t('approvals.financial.manager_approval')}</p>
                       <p className="font-medium">{lease.managerName || lease.manager_approved_by}</p>
                       {lease.manager_approved_at && (
                         <p className="text-xs text-muted-foreground">
@@ -449,16 +445,16 @@ export default function FinancialReview() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <DollarSign className="h-4 w-4" />
-                  Financial Impact
+                  {t('workflow.impact.title')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: 'Total Cash Commitment', value: fmt(lease.calc_total_commitment), highlight: true },
-                    { label: 'PV Liability (ASC 842)', value: fmt(lease.calc_pv_liability), highlight: true },
-                    { label: 'Monthly SL Expense', value: fmtDec(lease.calc_straight_line_exp), highlight: false },
-                    { label: 'Cash vs. P&L Delta', value: fmtDec(lease.calc_cash_pl_delta), highlight: false },
+                    { label: t('workflow.impact.total_cash_commitment'), value: fmt(lease.calc_total_commitment), highlight: true },
+                    { label: t('approvals.financial.pv_liability_asc842'), value: fmt(lease.calc_pv_liability), highlight: true },
+                    { label: t('approvals.financial.monthly_sl_expense'), value: fmtDec(lease.calc_straight_line_exp), highlight: false },
+                    { label: t('workflow.impact.cash_pl_delta'), value: fmtDec(lease.calc_cash_pl_delta), highlight: false },
                   ].map(({ label, value, highlight }) => (
                     <div
                       key={label}
@@ -470,39 +466,39 @@ export default function FinancialReview() {
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Discount rate: {wsSettings.discountRate}% (incremental borrowing rate)
+                  {t('approvals.financial.discount_rate_note', { rate: wsSettings.discountRate })}
                 </p>
 
                 {/* Covenant section */}
                 <Separator />
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium">Covenant Flag</span>
+                    <span className="font-medium">{t('approvals.financial.covenant_flag')}</span>
                     <Badge
                       variant={lease.covenant_flagged ? 'destructive' : 'outline'}
                       className="text-xs"
                     >
-                      {lease.covenant_flagged ? 'Flagged' : 'Not flagged'}
+                      {lease.covenant_flagged ? t('approvals.financial.flagged') : t('approvals.financial.not_flagged')}
                     </Badge>
                   </div>
 
                   {wsSettings.covenantThreshold != null && (
                     <div className="space-y-1 rounded-lg border p-3 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Covenant threshold</span>
+                        <span className="text-muted-foreground">{t('approvals.financial.covenant_threshold')}</span>
                         <span className="font-medium">{fmt(wsSettings.covenantThreshold)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Existing finance exposure</span>
+                        <span className="text-muted-foreground">{t('approvals.financial.existing_exposure')}</span>
                         <span className="font-medium">{fmt(currentExposure)}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">This commitment</span>
+                        <span className="text-muted-foreground">{t('approvals.financial.this_commitment')}</span>
                         <span className="font-medium">{fmt(lease.calc_total_commitment)}</span>
                       </div>
                       <Separator />
                       <div className="flex justify-between font-semibold">
-                        <span>Headroom remaining</span>
+                        <span>{t('approvals.financial.headroom_remaining')}</span>
                         <span className={covenantHeadroom != null && covenantHeadroom < 0 ? 'text-destructive' : 'text-success'}>
                           {fmt(covenantHeadroom)}
                         </span>
@@ -514,8 +510,7 @@ export default function FinancialReview() {
                     <div className="flex items-start gap-2 rounded-lg border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
                       <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
                       <span>
-                        Adding this commitment would exceed the covenant threshold by {fmt(Math.abs(covenantHeadroom!))}.
-                        Approving may trigger a covenant breach.
+                        {t('approvals.financial.exceed_warning', { amount: fmt(Math.abs(covenantHeadroom!)) })}
                       </span>
                     </div>
                   )}
@@ -528,9 +523,9 @@ export default function FinancialReview() {
         {/* Classification Panel */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Lease Classification — Financial Approver Determination</CardTitle>
+            <CardTitle className="text-base">{t('approvals.financial.classification_title')}</CardTitle>
             <CardDescription>
-              Review the ASC 842 criteria below. If any criterion applies, classification as a finance lease may be required.
+              {t('approvals.financial.classification_desc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -550,7 +545,7 @@ export default function FinancialReview() {
                     htmlFor={c.id}
                     className="text-sm leading-snug cursor-pointer select-none"
                   >
-                    {c.label}
+                    {t(`approvals.financial.criteria.${c.id}`)}
                   </label>
                 </div>
               ))}
@@ -559,7 +554,7 @@ export default function FinancialReview() {
             {anyFinanceCriteria && (
               <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
                 <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                One or more finance lease indicators present. Classification as a finance lease may be required.
+                {t('approvals.financial.indicators_warning')}
               </div>
             )}
 
@@ -567,7 +562,7 @@ export default function FinancialReview() {
 
             {/* Classification selector */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Classification</Label>
+              <Label className="text-sm font-medium">{t('approvals.financial.classification')}</Label>
               <Select
                 value={classification}
                 onValueChange={(v) => setClassification(v as Classification)}
@@ -577,14 +572,14 @@ export default function FinancialReview() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="operating">Operating Lease</SelectItem>
-                  <SelectItem value="finance">Finance Lease</SelectItem>
-                  <SelectItem value="pending" disabled>Pending (must select to approve)</SelectItem>
+                  <SelectItem value="operating">{t('workflow.classification.operating')}</SelectItem>
+                  <SelectItem value="finance">{t('workflow.classification.finance')}</SelectItem>
+                  <SelectItem value="pending" disabled>{t('approvals.financial.classification_pending_option')}</SelectItem>
                 </SelectContent>
               </Select>
               {classification === 'pending' && canAct && (
                 <p className="text-xs text-destructive">
-                  You must set classification to Operating or Finance before approving.
+                  {t('approvals.financial.classification_required')}
                 </p>
               )}
             </div>
@@ -598,7 +593,7 @@ export default function FinancialReview() {
                   className="flex-1 sm:flex-none"
                 >
                   <CheckCircle className="h-4 w-4 mr-2" />
-                  Approve
+                  {t('approval.approve')}
                 </Button>
                 <Button
                   variant="outline"
@@ -606,7 +601,7 @@ export default function FinancialReview() {
                   className="flex-1 sm:flex-none text-destructive hover:text-destructive"
                 >
                   <XCircle className="h-4 w-4 mr-2" />
-                  Reject
+                  {t('approval.reject')}
                 </Button>
               </div>
             )}
@@ -618,42 +613,48 @@ export default function FinancialReview() {
       <Dialog open={approveDialogOpen} onOpenChange={(o) => !o && setApproveDialogOpen(false)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm Approval</DialogTitle>
+            <DialogTitle>{t('approvals.financial.confirm_approval_title')}</DialogTitle>
             <DialogDescription>
-              You are approving this commitment. Please confirm the details below.
+              {t('approvals.financial.confirm_approval_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border p-4 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Classification set to</span>
+              <span className="text-muted-foreground">{t('approvals.financial.classification_set_to')}</span>
               <Badge variant={classification === 'finance' ? 'default' : 'secondary'} className="capitalize">
-                {classification} Lease
+                {classification === 'finance'
+                  ? t('workflow.classification.finance')
+                  : t('workflow.classification.operating')}
               </Badge>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Total commitment</span>
+              <span className="text-muted-foreground">{t('approvals.financial.total_commitment')}</span>
               <span className="font-semibold">{fmt(lease?.calc_total_commitment)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Covenant status</span>
+              <span className="text-muted-foreground">{t('approvals.financial.covenant_status')}</span>
               <span className={wouldExceedCovenant ? 'text-destructive font-medium' : 'text-muted-foreground'}>
-                {wouldExceedCovenant ? 'Would exceed threshold' : wsSettings.covenantThreshold != null ? 'Within threshold' : 'No threshold set'}
+                {wouldExceedCovenant
+                  ? t('approvals.financial.would_exceed')
+                  : wsSettings.covenantThreshold != null
+                  ? t('approvals.financial.within_threshold')
+                  : t('approvals.financial.no_threshold')}
               </span>
             </div>
           </div>
           {wouldExceedCovenant && (
             <div className="flex items-start gap-2 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              Warning: approving this commitment will exceed your covenant threshold.
+              {t('approvals.financial.approve_exceed_warning')}
             </div>
           )}
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setApproveDialogOpen(false)} disabled={isActing}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleApprove} disabled={isActing}>
               {isActing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Confirm Approval
+              {t('approvals.financial.confirm_approval_title')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -663,32 +664,32 @@ export default function FinancialReview() {
       <Dialog open={rejectDialogOpen} onOpenChange={(o) => { if (!o) { setRejectDialogOpen(false); setRejectReason(''); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Reject this request</DialogTitle>
+            <DialogTitle>{t('approvals.financial.reject_title')}</DialogTitle>
             <DialogDescription>
-              Provide a reason. You can return it to the submitter for revision or reject it finally.
+              {t('approvals.financial.reject_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label htmlFor="fin-reject-reason" className="text-sm font-medium">
-                Reason <span className="text-destructive">*</span>
+                {t('audit.reason')} <span className="text-destructive">*</span>
               </Label>
               <Textarea
                 id="fin-reject-reason"
                 className="mt-2"
                 rows={4}
-                placeholder="Explain the reason for rejection…"
+                placeholder={t('approvals.financial.reject_reason_placeholder')}
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
               />
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
-                <p className="text-sm font-medium">Return to submitter for revision</p>
+                <p className="text-sm font-medium">{t('approvals.financial.return_to_submitter')}</p>
                 <p className="text-xs text-muted-foreground">
                   {returnToSubmitter
-                    ? 'Submitter can edit and resubmit'
-                    : 'Final rejection — cannot be resubmitted'}
+                    ? t('approvals.financial.return_hint')
+                    : t('approvals.financial.final_hint')}
                 </p>
               </div>
               <Switch
@@ -703,7 +704,7 @@ export default function FinancialReview() {
               onClick={() => { setRejectDialogOpen(false); setRejectReason(''); }}
               disabled={isActing}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -712,9 +713,9 @@ export default function FinancialReview() {
             >
               {isActing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {returnToSubmitter ? (
-                <><RotateCcw className="h-4 w-4 mr-2" />Return for Revision</>
+                <><RotateCcw className="h-4 w-4 mr-2" />{t('approvals.financial.return_for_revision')}</>
               ) : (
-                <><XCircle className="h-4 w-4 mr-2" />Final Rejection</>
+                <><XCircle className="h-4 w-4 mr-2" />{t('approvals.financial.final_rejection')}</>
               )}
             </Button>
           </DialogFooter>

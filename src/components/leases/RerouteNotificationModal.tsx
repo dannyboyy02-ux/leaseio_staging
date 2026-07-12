@@ -11,6 +11,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { localizedStatusLabel } from '@/lib/lifecycleLabels';
 import { format } from 'date-fns';
 import { ArrowDown, GitBranch, Shield } from 'lucide-react';
 import {
@@ -25,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 const SEEN_PREFIX = 'leaseio.reroute_seen.';
 
@@ -54,6 +56,7 @@ export function RerouteNotificationModal({
   userId,
 }: Props) {
   const { user } = useApp();
+  const { t } = useAppTranslation();
   const [unseenEvent, setUnseenEvent] = useState<RerouteEventLite | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -129,33 +132,29 @@ export function RerouteNotificationModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GitBranch className="h-5 w-5" />
-            Your lease was rerouted
+            {t('leases.reroute.modal_title')}
           </DialogTitle>
           <DialogDescription>
-            An attribute change on your lease triggered a reroute. The
-            approval chain has been adjusted to match the new policy. This
-            is the audit-defensibility flow working as designed — your
-            submission was preserved, the chain just expanded to include
-            the right approvers.
+            {t('leases.reroute.modal_desc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3 text-sm">
           <div>
-            <p className="text-xs text-muted-foreground">When</p>
+            <p className="text-xs text-muted-foreground">{t('leases.reroute.when')}</p>
             <p>{format(new Date(unseenEvent.triggered_at), 'MMM d, yyyy h:mm a')}</p>
           </div>
 
           <div>
-            <p className="text-xs text-muted-foreground">Lifecycle</p>
+            <p className="text-xs text-muted-foreground">{t('leases.reroute.lifecycle')}</p>
             <p className="flex items-center gap-2">
-              <span>{displayLabel(unseenEvent.prior_lifecycle_status as LifecycleStatus)}</span>
+              <span>{localizedStatusLabel(unseenEvent.prior_lifecycle_status as LifecycleStatus)}</span>
               <ArrowDown className="h-3 w-3 -rotate-90" />
-              <span className="font-medium">{displayLabel(unseenEvent.new_lifecycle_status as LifecycleStatus)}</span>
+              <span className="font-medium">{localizedStatusLabel(unseenEvent.new_lifecycle_status as LifecycleStatus)}</span>
               {unseenEvent.resulted_in_chain_violation && (
                 <Badge variant="destructive" className="text-[10px] gap-0.5">
                   <Shield className="h-2.5 w-2.5" />
-                  Chain violation
+                  {t('leases.reroute.chain_violation_badge')}
                 </Badge>
               )}
             </p>
@@ -163,7 +162,7 @@ export function RerouteNotificationModal({
 
           {changedKeys.length > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground">What changed</p>
+              <p className="text-xs text-muted-foreground">{t('leases.reroute.what_changed')}</p>
               <div className="flex flex-wrap gap-1 mt-1">
                 {changedKeys.map((k) => (
                   <Badge key={k} variant="outline" className="text-[10px]">
@@ -175,14 +174,14 @@ export function RerouteNotificationModal({
           )}
 
           <div>
-            <p className="text-xs text-muted-foreground">Chain impact</p>
+            <p className="text-xs text-muted-foreground">{t('leases.reroute.chain_impact')}</p>
             <p className="text-xs">
               <span className="text-success">
-                +{unseenEvent.steps_added_count} new approvers required
+                {t('leases.reroute.new_approvers', { count: unseenEvent.steps_added_count })}
               </span>
               {unseenEvent.steps_superseded_count > 0 && (
                 <span className="text-muted-foreground">
-                  {' '}· {unseenEvent.steps_superseded_count} prior steps superseded
+                  {' '}{t('leases.reroute.prior_superseded', { count: unseenEvent.steps_superseded_count })}
                 </span>
               )}
             </p>
@@ -190,20 +189,17 @@ export function RerouteNotificationModal({
 
           {unseenEvent.resulted_in_chain_violation && (
             <p className="text-xs text-destructive">
-              The reroute happened after this lease executed, so it has
-              entered the chain_violation state. Required retroactive
-              approvers will be notified, or an admin can acknowledge and
-              override.
+              {t('leases.reroute.violation_note')}
             </p>
           )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={dismiss}>
-            Got it
+            {t('leases.reroute.got_it')}
           </Button>
           <Button onClick={handleScrollToHistory}>
-            View Chain Reroute History
+            {t('leases.reroute.view_history')}
           </Button>
         </DialogFooter>
       </DialogContent>

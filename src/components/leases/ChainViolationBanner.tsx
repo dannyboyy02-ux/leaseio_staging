@@ -24,6 +24,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { roleLabel, stageLabel } from '@/lib/lifecycleStates';
+import { localizedRoleLabel, localizedStageLabel } from '@/lib/lifecycleLabels';
 import {
   AlertOctagon,
   ChevronRight,
@@ -46,6 +47,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { cn } from '@/lib/utils';
 
 interface PendingStep {
@@ -71,6 +73,7 @@ export function ChainViolationBanner({
   onResolved,
 }: ChainViolationBannerProps) {
   const { user, userRole } = useApp();
+  const { t } = useAppTranslation();
   const [pendingSteps, setPendingSteps] = useState<PendingStep[]>([]);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
@@ -104,7 +107,7 @@ export function ChainViolationBanner({
           for (const p of (profiles ?? []) as any[]) {
             const fn = (p.first_name as string | null) ?? '';
             const ln = (p.last_name as string | null) ?? '';
-            const display = (fn || ln) ? `${fn} ${ln}`.trim() : (p.email ?? 'Unknown');
+            const display = (fn || ln) ? `${fn} ${ln}`.trim() : (p.email ?? t('common.unknown'));
             byId.set(p.id as string, display);
           }
           for (const r of rows) {
@@ -122,7 +125,7 @@ export function ChainViolationBanner({
   const handleAcknowledgeOverride = async () => {
     const reason = overrideReason.trim();
     if (reason.length < 20) {
-      toast.error('Override reason must be at least 20 characters.');
+      toast.error(t('leases.chain_violation.reason_min'));
       return;
     }
     if (!user) return;
@@ -153,7 +156,7 @@ export function ChainViolationBanner({
         .update({ lifecycle_status: priorLifecycle, status_changed_at: nowIso })
         .eq('id', leaseId);
       if (updateError) {
-        toast.error(`Failed to revert lifecycle: ${updateError.message}`);
+        toast.error(t('leases.chain_violation.revert_failed', { message: updateError.message }));
         return;
       }
 
@@ -196,13 +199,13 @@ export function ChainViolationBanner({
         },
       ]);
 
-      toast.success('Chain violation acknowledged and overridden.');
+      toast.success(t('leases.chain_violation.override_success'));
       setOverrideOpen(false);
       setOverrideReason('');
       onResolved();
     } catch (err: any) {
       console.error('[ChainViolationBanner] override error:', err);
-      toast.error(err?.message || 'Override failed');
+      toast.error(err?.message || t('leases.chain_violation.override_failed'));
     } finally {
       setBusy(false);
     }
@@ -218,13 +221,10 @@ export function ChainViolationBanner({
             <AlertOctagon className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <div className="space-y-1 flex-1">
               <p className="font-semibold text-sm text-destructive">
-                Chain violation — retroactive approval required
+                {t('leases.chain_violation.title')}
               </p>
               <p className="text-xs text-muted-foreground">
-                This lease's policy-required approvers were not all consulted
-                before execution. Required approvers must retroactively
-                approve before the lease returns to its prior status, or an
-                admin can acknowledge and override.
+                {t('leases.chain_violation.desc')}
               </p>
             </div>
           </div>
@@ -232,7 +232,7 @@ export function ChainViolationBanner({
           {pendingSteps.length > 0 && (
             <div className="pl-8 space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground">
-                Required approvers awaiting action:
+                {t('leases.chain_violation.awaiting')}
               </p>
               <ul className="space-y-1">
                 {pendingSteps.map((s) => (
@@ -241,14 +241,14 @@ export function ChainViolationBanner({
                     className="flex items-center gap-2 text-xs"
                   >
                     <Badge variant="outline" className="text-[10px]">
-                      {stageLabel(s.stage)}
+                      {localizedStageLabel(s.stage)}
                     </Badge>
                     <span>
-                      {s.approver_name ?? (s.approver_role ? roleLabel(s.approver_role) : 'Unknown approver')}
+                      {s.approver_name ?? (s.approver_role ? localizedRoleLabel(s.approver_role) : t('leases.chain_violation.unknown_approver'))}
                     </span>
                     {s.approver_role && s.approver_name && (
                       <span className="text-muted-foreground">
-                        ({roleLabel(s.approver_role)})
+                        ({localizedRoleLabel(s.approver_role)})
                       </span>
                     )}
                   </li>
@@ -259,8 +259,7 @@ export function ChainViolationBanner({
 
           {pendingSteps.length === 0 && (
             <p className="pl-8 text-xs text-muted-foreground italic">
-              No pending required approvers found. The override path may be
-              the appropriate resolution.
+              {t('leases.chain_violation.none_pending')}
             </p>
           )}
 
@@ -273,7 +272,7 @@ export function ChainViolationBanner({
                 disabled={busy}
               >
                 <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-                Acknowledge and Override
+                {t('leases.chain_violation.ack_override')}
               </Button>
             </div>
           )}
@@ -283,18 +282,14 @@ export function ChainViolationBanner({
       <Dialog open={overrideOpen} onOpenChange={(o) => !busy && setOverrideOpen(o)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Acknowledge and Override Chain Violation</DialogTitle>
+            <DialogTitle>{t('leases.chain_violation.dialog_title')}</DialogTitle>
             <DialogDescription>
-              This bypasses the retroactive-approval requirement and reverts
-              the lease to its prior lifecycle status. The override reason is
-              captured permanently in the audit log. Use only when retroactive
-              approval is impractical (e.g., the required approver has left
-              the company and the policy needs admin attention separately).
+              {t('leases.chain_violation.dialog_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="override-reason">
-              Reason (≥20 characters, required)
+              {t('leases.chain_violation.reason_label')}
             </Label>
             <Textarea
               id="override-reason"
@@ -302,7 +297,7 @@ export function ChainViolationBanner({
               onChange={(e) => setOverrideReason(e.target.value)}
               rows={4}
               maxLength={1000}
-              placeholder="e.g., Required approver left the company; policy is being revised separately and this lease needs to remain active in the meantime."
+              placeholder={t('leases.chain_violation.reason_placeholder')}
               disabled={busy}
               className={cn(
                 overrideReason.trim().length >= 20
@@ -313,7 +308,7 @@ export function ChainViolationBanner({
               )}
             />
             <p className="text-[11px] text-muted-foreground">
-              {overrideReason.trim().length} / 20+ characters
+              {t('leases.chain_violation.char_count', { chars: overrideReason.trim().length })}
             </p>
           </div>
           <DialogFooter>
@@ -322,7 +317,7 @@ export function ChainViolationBanner({
               onClick={() => setOverrideOpen(false)}
               disabled={busy}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -331,7 +326,7 @@ export function ChainViolationBanner({
             >
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <ChevronRight className="h-4 w-4 mr-2" />
-              Override and Resolve
+              {t('leases.chain_violation.override_cta')}
             </Button>
           </DialogFooter>
         </DialogContent>

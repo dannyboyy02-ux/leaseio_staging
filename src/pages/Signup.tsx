@@ -13,18 +13,20 @@ import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { supabase } from '@/integrations/supabase/client';
 
+// Labels resolve through the shared workspace.tz.* locale map (same
+// vocabulary as WorkspaceSettings) so en/es stay in sync in one place.
 const timezones = [
-  { value: 'America/New_York', label: 'Eastern Time (ET)' },
-  { value: 'America/Chicago', label: 'Central Time (CT)' },
-  { value: 'America/Denver', label: 'Mountain Time (MT)' },
-  { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
-  { value: 'America/Anchorage', label: 'Alaska Time (AKT)' },
-  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HT)' },
-  { value: 'Europe/London', label: 'London (GMT)' },
-  { value: 'Europe/Paris', label: 'Paris (CET)' },
-  { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
-  { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
-  { value: 'Australia/Sydney', label: 'Sydney (AEST)' },
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'Europe/London',
+  'Europe/Paris',
+  'Asia/Tokyo',
+  'Asia/Singapore',
+  'Australia/Sydney',
 ];
 
 const PLAN_DISPLAY_NAMES: Record<string, string> = {
@@ -194,7 +196,7 @@ export default function Signup() {
                   <Label htmlFor="firstName">{t('auth.first_name')}</Label>
                   <Input
                     id="firstName"
-                    placeholder="Alex"
+                    placeholder={t('auth.first_name_placeholder')}
                     value={formData.firstName}
                     onChange={(e) => handleChange('firstName', e.target.value)}
                     disabled={isLoading}
@@ -204,7 +206,7 @@ export default function Signup() {
                   <Label htmlFor="lastName">{t('auth.last_name')}</Label>
                   <Input
                     id="lastName"
-                    placeholder="Morgan"
+                    placeholder={t('auth.last_name_placeholder')}
                     value={formData.lastName}
                     onChange={(e) => handleChange('lastName', e.target.value)}
                     disabled={isLoading}
@@ -217,7 +219,7 @@ export default function Signup() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@company.com"
+                  placeholder={t('auth.email_placeholder')}
                   value={formData.email}
                   onChange={(e) => handleChange('email', e.target.value)}
                   disabled={isLoading}
@@ -229,7 +231,7 @@ export default function Signup() {
                 <Label htmlFor="companyName">{t('auth.company_name')}</Label>
                 <Input
                   id="companyName"
-                  placeholder="Acme Properties"
+                  placeholder={t('auth.company_name_placeholder')}
                   value={formData.companyName}
                   onChange={(e) => handleChange('companyName', e.target.value)}
                   disabled={isLoading}
@@ -240,12 +242,12 @@ export default function Signup() {
                 <Label htmlFor="timezone">{t('auth.timezone')}</Label>
                 <Select value={formData.timezone} onValueChange={(value) => handleChange('timezone', value)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select timezone" />
+                    <SelectValue placeholder={t('workspace.select_timezone')} />
                   </SelectTrigger>
                   <SelectContent>
                     {timezones.map((tz) => (
-                      <SelectItem key={tz.value} value={tz.value}>
-                        {tz.label}
+                      <SelectItem key={tz} value={tz}>
+                        {t(`workspace.tz.${tz}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>

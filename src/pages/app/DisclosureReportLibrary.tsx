@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { supabase } from '@/integrations/supabase/client';
 import { useGenerateWorkspaceAsc842Report } from '@/hooks/useGenerateWorkspaceAsc842Report';
 
@@ -46,6 +47,7 @@ interface ReportRow {
 type Filter = 'all' | 'lease_disclosure' | 'portfolio_period';
 
 export default function DisclosureReportLibrary() {
+  const { t } = useAppTranslation();
   const { workspace } = useApp();
   const workspaceId = workspace?.id;
   const [rows, setRows] = useState<ReportRow[]>([]);
@@ -64,12 +66,12 @@ export default function DisclosureReportLibrary() {
     try {
       const result = await generateConsolidated(workspaceId);
       if (result.leaseCount === 0) {
-        toast.message('No finalized leases yet — lock a lease first.');
+        toast.message(t('reports.no_finalized_leases'));
       } else {
-        toast.success(`Consolidated report ready (${result.leaseCount} leases)`);
+        toast.success(t('reports.consolidated_ready', { count: result.leaseCount }));
       }
     } catch (e: any) {
-      toast.error(e?.message ?? 'Could not generate consolidated report');
+      toast.error(e?.message ?? t('reports.consolidated_failed'));
       resetConsolidated();
     }
   }
@@ -77,13 +79,13 @@ export default function DisclosureReportLibrary() {
   function consolidatedLabel(): string {
     switch (consolidatedStage) {
       case 'requesting':
-        return 'Assembling lease data…';
+        return t('reports.assembling_data');
       case 'rendering':
-        return 'Rendering PDF…';
+        return t('reports.rendering_pdf');
       case 'downloading':
-        return 'Downloading…';
+        return t('reports.downloading');
       default:
-        return 'Generate consolidated report';
+        return t('reports.generate_consolidated');
     }
   }
 
@@ -93,7 +95,7 @@ export default function DisclosureReportLibrary() {
       try {
         if (!workspaceId) {
           if (!cancelled) {
-            setLoadError('No active workspace selected.');
+            setLoadError(t('reports.no_workspace_selected'));
             setLoading(false);
           }
           return;
@@ -139,14 +141,14 @@ export default function DisclosureReportLibrary() {
 
   async function handleDownload(path: string | null, name: string) {
     if (!path) {
-      toast.error('Artifact not yet available');
+      toast.error(t('reports.artifact_not_available'));
       return;
     }
     const { data, error } = await supabase.storage
       .from('lease-reports')
       .createSignedUrl(path, 120);
     if (error || !data?.signedUrl) {
-      toast.error('Could not generate download link');
+      toast.error(t('reports.download_link_failed'));
       return;
     }
     const a = document.createElement('a');
@@ -159,16 +161,15 @@ export default function DisclosureReportLibrary() {
   return (
     <AppLayout>
       <AppHeader
-        title="Disclosure Reports"
-        subtitle="ASC 842 disclosure reports generated for this workspace."
+        title={t('reports.disclosure_reports_title')}
+        subtitle={t('reports.disclosure_reports_subtitle')}
       />
       <div className="px-6 py-6 space-y-4 max-w-5xl">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Consolidated workspace report</CardTitle>
+            <CardTitle className="text-base">{t('reports.consolidated_workspace_report')}</CardTitle>
             <CardDescription>
-              One PDF covering every finalized lease in this workspace. Includes a cover page,
-              table of contents, and the full ASC 842 disclosure for each lease.
+              {t('reports.consolidated_desc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -187,15 +188,15 @@ export default function DisclosureReportLibrary() {
         </Card>
 
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Filter:</span>
+          <span className="text-sm text-muted-foreground">{t('reports.filter_label')}</span>
           <Select value={filter} onValueChange={(v) => setFilter(v as Filter)}>
             <SelectTrigger className="w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="lease_disclosure">Single lease</SelectItem>
-              <SelectItem value="portfolio_period">Portfolio period</SelectItem>
+              <SelectItem value="all">{t('reports.filter_all')}</SelectItem>
+              <SelectItem value="lease_disclosure">{t('reports.filter_single_lease')}</SelectItem>
+              <SelectItem value="portfolio_period">{t('reports.filter_portfolio_period')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -203,7 +204,7 @@ export default function DisclosureReportLibrary() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              {loading ? 'Loading…' : `${filtered.length} report(s)`}
+              {loading ? t('workspace.watchlist.loading') : t('reports.report_count', { count: filtered.length })}
             </CardTitle>
             {loadError && (
               <p className="text-xs text-red-700 font-mono mt-2">{loadError}</p>
@@ -212,9 +213,9 @@ export default function DisclosureReportLibrary() {
           <CardContent className="space-y-2">
             {!loading && filtered.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No reports yet. Generate from a lease's Documents tab or the{' '}
+                {t('reports.no_reports_prefix')}{' '}
                 <Link to="/app/admin/reports" className="underline">
-                  portfolio admin page
+                  {t('reports.portfolio_admin_page')}
                 </Link>
                 .
               </p>
@@ -228,7 +229,7 @@ export default function DisclosureReportLibrary() {
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline">{isLease ? 'lease' : 'portfolio'}</Badge>
+                        <Badge variant="outline">{isLease ? t('reports.badge_lease') : t('reports.badge_portfolio')}</Badge>
                         <Badge variant="secondary">{r.report_scope}</Badge>
                         <Badge variant={r.status === 'ready' ? 'default' : 'secondary'}>
                           {r.status}
@@ -241,9 +242,9 @@ export default function DisclosureReportLibrary() {
                             {' · '}
                             {r.period_start} → {r.period_end}
                             {' · '}
-                            {r.lease_count} included
+                            {t('reports.included_count', { count: r.lease_count })}
                             {r.excluded_lease_count
-                              ? `, ${r.excluded_lease_count} excluded`
+                              ? `, ${t('reports.excluded_count', { count: r.excluded_lease_count })}`
                               : ''}
                           </>
                         )}
@@ -253,7 +254,7 @@ export default function DisclosureReportLibrary() {
                       {isLease && r.lease_id && (
                         <Button asChild size="sm" variant="outline">
                           <Link to={`/app/leases/${r.lease_id}/reports/${r.id}`}>
-                            Open
+                            {t('firm.inbox.open')}
                           </Link>
                         </Button>
                       )}

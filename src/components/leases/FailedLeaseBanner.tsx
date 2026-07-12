@@ -33,7 +33,7 @@ export function FailedLeaseBanner({
 
   const handleRetry = async () => {
     if (!storagePath) {
-      toast.error('Cannot retry: original file not found in storage');
+      toast.error(t('failed_lease.retry_no_file'));
       return;
     }
 
@@ -42,7 +42,7 @@ export function FailedLeaseBanner({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        toast.error('Please log in to retry');
+        toast.error(t('failed_lease.login_required'));
         return;
       }
 
@@ -54,11 +54,11 @@ export function FailedLeaseBanner({
         throw new Error(response.error.message);
       }
 
-      toast.success('Re-processing started');
+      toast.success(t('failed_lease.reupload_started'));
       onRetrySuccess?.();
     } catch (error) {
       console.error('Retry error:', error);
-      toast.error('Failed to retry processing');
+      toast.error(t('failed_lease.retry_failed'));
     } finally {
       setIsRetrying(false);
     }
@@ -90,7 +90,7 @@ export function FailedLeaseBanner({
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        toast.error('Please log in to retry');
+        toast.error(t('failed_lease.login_required'));
         return;
       }
 
@@ -125,10 +125,10 @@ export function FailedLeaseBanner({
   return (
     <Alert variant="destructive" className={cn('mb-4', className)}>
       <XCircle className="h-4 w-4" />
-      <AlertTitle>Processing Failed</AlertTitle>
+      <AlertTitle>{t('lease.upload.error_title')}</AlertTitle>
       <AlertDescription>
         <p className="text-sm mb-3">
-          {errorMessage || 'An error occurred while processing this lease document.'}
+          {errorMessage || t('failed_lease.generic_error')}
         </p>
         {readOnly ? (
           <p className="text-xs text-muted-foreground">{t('readonly.lease_note')}</p>
@@ -143,12 +143,12 @@ export function FailedLeaseBanner({
             {isRetrying ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Retrying...
+                {t('failed_lease.retrying')}
               </>
             ) : (
               <>
                 <RotateCcw className="h-4 w-4 mr-2" />
-                Retry Processing
+                {t('failed_lease.retry_button')}
               </>
             )}
           </Button>

@@ -1703,7 +1703,9 @@ Two LOWs from the 2026-06-09 remediation re-review fold in here:
 
 ---
 
-### Item #68: Intake entry buttons and LeaseUploadModal are hardcoded English
+### Item #68: Intake entry buttons and LeaseUploadModal are hardcoded English — **RESOLVED 2026-07-12**
+
+> **RESOLVED 2026-07-12** by the full-repo i18n sweep (see #160): Dashboard/Leases intake buttons, `AddLeaseDialog`, and the entire `LeaseUploadModal` now render through `t()` with en+es keys; `localeParity.test.ts` guards the key sets.
 
 **Severity:** Medium (i18n completeness). **Pre-existing** — surfaced 2026-06-11 by the Workstream C polish review; NOT introduced by that change.
 
@@ -2812,7 +2814,9 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 
 ---
 
-### Item #152: Leases redesign — deferred i18n LOWs (status-badge labels + ES singular subtitle)
+### Item #152: Leases redesign — deferred i18n LOWs (status-badge labels + ES singular subtitle) — **RESOLVED 2026-07-12**
+
+> **RESOLVED 2026-07-12** (full-repo i18n sweep, #160). Status badges: `src/lib/lifecycleLabels.ts` now wraps `displayLabel`/`stageLabel`/`roleLabel` with `lifecycle.status/status_short/stage/role.*` locale keys (the pure `lifecycleStates.ts` + its Deno mirror stay English-canonical); `LeaseStatusBadge` + all ~12 raw call sites render the localized labels. ES subtitle: `leases.subtitle_rent` now composes a pluralized `leases.subtitle_active_one/_other` sub-key, so n=1 reads "1 activo".
 
 > **Filed 2026-06-25** (branch `claude/relaxed-clarke-oksfz4`, Leases redesign Phase 1/2 polish review). The Phase-1/2 i18n pass localized the Leases page chrome + the `EmptyLeaseState` card; these two remainders were deferred as pre-existing/broad.
 
@@ -2829,7 +2833,7 @@ So the prop, the memo, the `ConfidenceScores` type, and the column read form a d
 > **Filed 2026-06-25** (branch `claude/relaxed-clarke-oksfz4`, Leases redesign Phase 3 polish review). The admin "Delete permanently" (soft-delete + 14-day retention + restore + purge cron) shipped; these are the reviewer-surfaced follow-ups deliberately deferred so they aren't re-discovered cold.
 
 **MEDIUM**
-- **`ArchiveLeaseDialog` is hardcoded English while the new `DeleteLeaseWithRetentionDialog` is i18n'd.** Both now sit in the same Leases kebab, so an ES user opening it sees a translated Delete dialog beside an English Archive dialog ("Archive Lease", body, "Cancel"/"Archive" buttons) — a newly-conspicuous (but pre-existing, #79) locale gap. Fix: move the Archive dialog's strings into `archive.*` keys (en+es) mirroring the delete dialog. Note the existing `archive.confirm_archive_title`/`confirm_archive_desc` keys already exist and could be reused. NOT bundled into Phase 3b per the pre-existing-issue rule.
+- **RESOLVED 2026-07-12** (full-repo i18n sweep, #160 — dialog converted to `archive.*` keys, en+es): ~~`ArchiveLeaseDialog` is hardcoded English while the new `DeleteLeaseWithRetentionDialog` is i18n'd.~~ Both now sit in the same Leases kebab, so an ES user opening it sees a translated Delete dialog beside an English Archive dialog ("Archive Lease", body, "Cancel"/"Archive" buttons) — a newly-conspicuous (but pre-existing, #79) locale gap. Fix: move the Archive dialog's strings into `archive.*` keys (en+es) mirroring the delete dialog. Note the existing `archive.confirm_archive_title`/`confirm_archive_desc` keys already exist and could be reused. NOT bundled into Phase 3b per the pre-existing-issue rule.
 - **No "Recently deleted" admin view for restore beyond the same-session Undo.** Phase 3b adds an Undo action on the delete success toast (immediate misclick safety) + ops-assisted restore via the `restore-lease` function. But a soft-deleted lease is hidden from every authenticated read (the `leases_hide_soft_deleted` RLS), so an admin who dismissed the toast has no in-product way to see/restore a lease deleted earlier in the window — they must contact support. Fix options: (a) a 4th Status-filter scope "Recently deleted" backed by a service-role list-deleted-leases function (RLS hides them from a normal client query, so it needs a service-role endpoint), with a per-row Restore; (b) accept ops-assisted restore for non-immediate recoveries. Needs a product call on whether self-serve late restore is wanted. The backend (`restore-lease`) is already built and ready either way.
 
 **LOW**
@@ -2873,7 +2877,9 @@ Also noted (LOW, optional): the four bare-text cells (`monthly_rent`/`lease_star
 
 ---
 
-### Item #156: Lease Review — `LeaseReviewSections.tsx` field UI is hardcoded English (LOW, pre-existing)
+### Item #156: Lease Review — `LeaseReviewSections.tsx` field UI is hardcoded English (LOW, pre-existing) — **RESOLVED 2026-07-12**
+
+> **RESOLVED 2026-07-12** (full-repo i18n sweep, #160): section titles + all 27 field labels render via `lease_review.section_config.*` / `lease_review.field_labels.*` with `defaultValue` fallbacks to the config literals; placeholders, empty-field captions, and the View-in-document affordance are keyed in both locales. `NeedsReviewBanner` reuses the same `field_labels` keys for vocabulary coherence.
 
 > **Filed 2026-06-26** (branch `claude/relaxed-clarke-oksfz4`, Lease Review Phase-1 polish). **Pre-existing** i18n debt surfaced by the product-polish review; the Phase-1 "View in document" affordance joins it but did not introduce the gap. Same class as #68 (intake buttons) and #152 (status-badge labels).
 
@@ -2926,3 +2932,23 @@ Also noted (LOW, optional): the four bare-text cells (`monthly_rent`/`lease_star
 **Stub remediation (own PR):** restrict the change-set INSERT policy to `service_role` only (forcing all creation through `createDraftChangeSet`, matching the status-write posture), OR add a `BEFORE INSERT` audit/guard trigger that stamps the creation event. Sweep `lease_change_set_items` INSERT policy in the same pass.
 
 **Where:** `supabase/migrations/20260516120000_baseline_schema.sql:4534` (INSERT policy), `supabase/functions/lease-governance-action/index.ts` (`createDraftChangeSet` — the intended sole creator).
+
+---
+
+### Item #160: Full-repo en/es i18n sweep — as-built + the deliberate remainders (2026-07-12)
+
+> **Filed 2026-07-12** after the owner's directive that the Spanish experience be 100% translated repo-wide. The sweep converted ~850+ strings across ~95 files (7 parallel batches A–G + a coordinator straggler pass H): every page, dialog, toast, badge, PDF builder, and lib-generated copy surface now renders through i18next with en+es keys (formal usted). `localeParity.test.ts` fails CI on key drift; CLAUDE.md's locale rule is ENFORCED. Resolves #68, #152, #156, and the #153 ArchiveLeaseDialog bullet. The items below are the **deliberate remainders**, each with a reason — not misses.
+
+**MEDIUM — DB-written notification/audit messages are frozen in English at write time.** `lease_activity_log.details.message` inserts (`LeaseRequestForm` notify helpers, `FinancialReview`/`ApprovalQueue`/`LeaseReview` comment-row writers: 'Request details updated', 'Abstraction triggered', 'Processing cancelled by user', chain notifications) and `createLeaseNotification` message args are shared records read by *other* users — translating at write time would bake the writer's language into everyone's audit trail. Correct fix is render-side: store a `message_key` + params (or `notification_type`-keyed rendering) and translate at display, keeping the stored record language-neutral. Touches the activity-log shape → wants its own scoped pass.
+
+**MEDIUM — ASC 842 exception flags are English in the PDF + JSON.** `asc842Report.ts` `buildExceptions` emits ~12 `{severity, title, explanation}` flags with no machine code; they ship in the disclosure JSON (schema-documented contract, `docs/JSON_REPORT_SCHEMA.md`) and render verbatim in the PDFs. Localizing needs an `exception_code` per flag (JSON keeps canonical English + code; PDF translates by code) and a schema-version bump. The PDF *chrome* (headings, disclaimer band/box via `reports.not_financial_statement`/`reports.disclaimer_body`, footer, page numbers) IS localized.
+
+**LOW — date-fns formatting is en-only in a few spots.** `format(date, 'MMM d')`-style month/day names (UpcomingEvents calendar, two dashboard files, DocumentsTimeline timestamps) and `formatDistanceToNowStrict` durations (`workflow.share.expires_in`) render English month/duration words under es. Fix is date-fns locale plumbing (pass `{ locale: es }` from the active language) — a logic change kept out of the string sweep. `dateFormatters.ts` + `Intl`-based surfaces (incl. the new watchlist) already localize.
+
+**LOW — portfolio dept buckets 'Other'/'Unassigned'.** `portfolioIntelligence.ts` uses these as grouping KEYS (compared in code) and they surface in Portfolio charts. Translating at source breaks comparisons; fix is a display-map at the chart boundary.
+
+**LOW — es terminology unification.** Coexisting choices from parallel batches: "Escalación" (reused older keys) vs the STYLE-glossary "incremento(s) de renta"; `dashboard.lifecycle.executed` = "Firmado" vs the glossary "Ejecutado" (the new `lifecycle.status.*` uses "Ejecutado"). One dedicated es-copy review pass to unify; all strings are already in `common.json`, so it's a locale-file-only edit.
+
+**Intentionally NOT translated:** language self-names ("English"/"Español"), plan names (Starter/Business/Vault — brand nouns), machine values (raw DB enums shown only in dev surfaces, filenames, `PDF`/`JSON`/`CSV`), diagnostic detail lines behind reason-coded translated errors (`NewWorkspaceDialog` stripe_error extras), and the canonical-English JSON export contract fields (`liability_disclaimer`, `banner`).
+
+**Where:** locale files `src/locales/{en,es}/common.json` (~+870 keys each this pass); new `src/lib/lifecycleLabels.ts` + `src/lib/assetTypeLabels.ts`; converted lib generators `leaseAnalysisProse.ts`, `portfolioWatchlist.ts` (+ `language` in Portfolio's memo deps), `useNeedsAction.ts` (language-keyed query); PDF builders under `src/lib/reports/`; guardrail `src/lib/__tests__/localeParity.test.ts`.

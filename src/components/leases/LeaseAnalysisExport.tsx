@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { t } from 'i18next';
 import { type ReportLease, type ReportProse, formatReportCurrency, formatReportDate } from '@/lib/reportGeneration';
 // Helvetica is a standard PDF font available in @react-pdf/renderer without Font.register()
 
@@ -189,10 +190,10 @@ export function LeaseAnalysisDocument({ lease, prose, generatedAt }: Props) {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.wordmark}>LeaseIO</Text>
-            <Text style={styles.headerSubtitle}>Lease Analysis Report</Text>
+            <Text style={styles.headerSubtitle}>{t('leases.analysis_export.subtitle')}</Text>
           </View>
           <View style={styles.headerRight}>
-            <Text style={styles.headerDate}>Generated {generatedAt}</Text>
+            <Text style={styles.headerDate}>{t('leases.analysis_export.generated', { date: generatedAt })}</Text>
             <Text style={[styles.headerDate, { marginTop: 2 }]}>{lease.display_name}</Text>
           </View>
         </View>
@@ -205,87 +206,87 @@ export function LeaseAnalysisDocument({ lease, prose, generatedAt }: Props) {
         )}
 
         {/* Executive Summary fields */}
-        <Text style={styles.sectionTitle}>Executive Summary</Text>
+        <Text style={styles.sectionTitle}>{t('leases.analysis_export.exec_summary')}</Text>
         <View style={styles.grid2}>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Landlord</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.landlord')}</Text>
             <Text style={styles.cellValue}>{lease.landlord || '—'}</Text>
           </View>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Tenant</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.tenant')}</Text>
             <Text style={styles.cellValue}>{lease.tenant || '—'}</Text>
           </View>
         </View>
         <View style={styles.grid2}>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Property</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.property')}</Text>
             <Text style={styles.cellValue}>{lease.property_address || '—'}</Text>
           </View>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Asset Type</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.asset_type')}</Text>
             <Text style={styles.cellValue}>{lease.asset_type ? lease.asset_type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '—'}</Text>
           </View>
         </View>
         <View style={styles.grid2}>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Lease Start</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.lease_start')}</Text>
             <Text style={styles.cellValue}>{formatReportDate(lease.lease_start)}</Text>
           </View>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Lease End</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.lease_end')}</Text>
             <Text style={styles.cellValue}>{formatReportDate(lease.lease_end)}</Text>
           </View>
         </View>
         {lease.square_footage && (
           <View style={styles.grid2}>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Square Footage</Text>
-              <Text style={styles.cellValue}>{lease.square_footage.toLocaleString()} SF</Text>
+              <Text style={styles.cellLabel}>{t('leases.analysis_export.square_footage')}</Text>
+              <Text style={styles.cellValue}>{t('leases.analysis_export.sf_value', { value: lease.square_footage.toLocaleString() })}</Text>
             </View>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Term</Text>
-              <Text style={styles.cellValue}>{lease.term_months ? `${lease.term_months} months` : '—'}</Text>
+              <Text style={styles.cellLabel}>{t('leases.analysis_export.term')}</Text>
+              <Text style={styles.cellValue}>{lease.term_months ? t('leases.analysis_export.term_months_value', { months: lease.term_months }) : '—'}</Text>
             </View>
           </View>
         )}
 
         {/* Financial Summary */}
-        <Text style={styles.sectionTitle}>Financial Obligations</Text>
+        <Text style={styles.sectionTitle}>{t('leases.analysis_export.financial')}</Text>
         {prose.financial_summary && (
           <Text style={styles.prose}>{prose.financial_summary}</Text>
         )}
         <View style={styles.grid2}>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Base Monthly Rent</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.base_rent')}</Text>
             <Text style={styles.cellValue}>{formatReportCurrency(lease.monthly_rent)}</Text>
           </View>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Escalation</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.escalation')}</Text>
             <Text style={styles.cellValue}>
               {lease.escalation_type === 'percent' && lease.escalation_rate
-                ? `${lease.escalation_rate}% annually`
+                ? t('leases.analysis_export.escalation_percent', { rate: lease.escalation_rate })
                 : lease.escalation_type === 'index'
-                ? 'Index-based (CPI)'
+                ? t('leases.analysis_export.escalation_index')
                 : lease.escalation_type === 'none'
-                ? 'None'
+                ? t('leases.analysis_export.escalation_none')
                 : '—'}
             </Text>
           </View>
         </View>
         <View style={styles.grid2}>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>Total Commitment</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.total_commitment')}</Text>
             <Text style={styles.cellValue}>{formatReportCurrency(lease.total_commitment)}</Text>
           </View>
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>PV Liability</Text>
+            <Text style={styles.cellLabel}>{t('leases.analysis_export.pv_liability')}</Text>
             <Text style={styles.cellValue}>{formatReportCurrency(lease.pv_liability)}</Text>
           </View>
         </View>
         {lease.security_deposit && (
           <View style={styles.grid2}>
             <View style={[styles.cell, { flex: 2 }]}>
-              <Text style={styles.cellLabel}>Security Deposit</Text>
+              <Text style={styles.cellLabel}>{t('leases.analysis_export.security_deposit')}</Text>
               <Text style={styles.cellValue}>{lease.security_deposit}</Text>
             </View>
           </View>
@@ -294,12 +295,12 @@ export function LeaseAnalysisDocument({ lease, prose, generatedAt }: Props) {
         {/* Rent Schedule (only if multiple periods) */}
         {hasRentSchedule && (
           <>
-            <Text style={styles.sectionTitle}>Rent Schedule</Text>
+            <Text style={styles.sectionTitle}>{t('leases.analysis_export.rent_schedule')}</Text>
             <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { flex: 2 }]}>Period</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'right' }]}>Monthly</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'right' }]}>Annual</Text>
-              <Text style={[styles.tableHeaderText, { flex: 2 }]}>Notes</Text>
+              <Text style={[styles.tableHeaderText, { flex: 2 }]}>{t('leases.analysis_export.period')}</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'right' }]}>{t('leases.analysis_export.monthly')}</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'right' }]}>{t('leases.analysis_export.annual')}</Text>
+              <Text style={[styles.tableHeaderText, { flex: 2 }]}>{t('leases.analysis_export.notes')}</Text>
             </View>
             {lease.rent_schedule.slice(0, 8).map((row, i) => (
               <View key={i} style={styles.tableRow}>
@@ -320,14 +321,14 @@ export function LeaseAnalysisDocument({ lease, prose, generatedAt }: Props) {
         )}
 
         {/* Key Clauses */}
-        <Text style={styles.sectionTitle}>Key Clauses</Text>
+        <Text style={styles.sectionTitle}>{t('leases.analysis_export.key_clauses')}</Text>
         {prose.key_clauses_summary && (
           <Text style={styles.prose}>{prose.key_clauses_summary}</Text>
         )}
         {lease.renewal_options && (
           <View style={styles.grid2}>
             <View style={[styles.cell, { flex: 1 }]}>
-              <Text style={styles.cellLabel}>Renewal Options</Text>
+              <Text style={styles.cellLabel}>{t('leases.analysis_export.renewal_options')}</Text>
               <Text style={styles.cellValue}>{lease.renewal_options}</Text>
             </View>
           </View>
@@ -335,7 +336,7 @@ export function LeaseAnalysisDocument({ lease, prose, generatedAt }: Props) {
         {lease.termination_clauses && (
           <View style={styles.grid2}>
             <View style={[styles.cell, { flex: 1 }]}>
-              <Text style={styles.cellLabel}>Termination Provisions</Text>
+              <Text style={styles.cellLabel}>{t('leases.analysis_export.termination')}</Text>
               <Text style={styles.cellValue}>{lease.termination_clauses}</Text>
             </View>
           </View>
@@ -344,14 +345,14 @@ export function LeaseAnalysisDocument({ lease, prose, generatedAt }: Props) {
         {/* Risk Register */}
         {lease.risks.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Risk Register</Text>
+            <Text style={styles.sectionTitle}>{t('leases.analysis_export.risk_register')}</Text>
             {lease.risks.map((risk, i) => {
               const riskProse = prose.risk_narrative?.find(r => r.title === risk.title);
               const bgColor = risk.severity === 'high' ? '#dc2626' : risk.severity === 'medium' ? '#d97706' : '#2563eb';
               return (
                 <View key={i} style={styles.riskRow}>
                   <View style={[styles.riskBadge, { backgroundColor: bgColor }]}>
-                    <Text style={styles.riskBadgeText}>{risk.severity}</Text>
+                    <Text style={styles.riskBadgeText}>{t(`leases.risk.severity_${risk.severity}`)}</Text>
                   </View>
                   <View style={styles.riskContent}>
                     <Text style={styles.riskTitle}>{risk.title}</Text>
@@ -367,8 +368,8 @@ export function LeaseAnalysisDocument({ lease, prose, generatedAt }: Props) {
 
         {/* Footer */}
         <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>LeaseIO · Confidential · Generated {generatedAt}</Text>
-          <Text style={styles.footerText}>AI-assisted analysis — verify all terms against original document</Text>
+          <Text style={styles.footerText}>{t('leases.analysis_export.footer_left', { date: generatedAt })}</Text>
+          <Text style={styles.footerText}>{t('leases.analysis_export.footer_right')}</Text>
         </View>
       </Page>
     </Document>

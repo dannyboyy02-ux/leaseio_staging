@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface Props {
   leaseId: string;
@@ -44,6 +45,7 @@ interface State {
 }
 
 export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) {
+  const { t } = useAppTranslation();
   const [state, setState] = useState<State | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -96,7 +98,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
         if (cancelled) return;
         // eslint-disable-next-line no-console
         console.error('[LeaseDiscountRateCard] load failed', e);
-        toast.error(e?.message ?? 'Failed to load discount rate');
+        toast.error(e?.message ?? t('leases.discount.load_failed'));
         setLoading(false);
       }
     })();
@@ -114,20 +116,18 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
   async function handleSave() {
     const rate = Number(draftRate);
     if (!Number.isFinite(rate) || rate <= 0 || rate > 50) {
-      toast.error('Discount rate must be greater than 0 and at most 50');
+      toast.error(t('leases.discount.rate_invalid'));
       return;
     }
     const basis = draftBasis.trim();
     if (basis.length < 10) {
-      toast.error(
-        'Basis must be at least 10 characters describing the methodology (audit trail).',
-      );
+      toast.error(t('leases.discount.basis_min'));
       return;
     }
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) throw new Error(t('leases.errors.not_authenticated'));
 
       const now = new Date().toISOString();
       const { error: updateError } = await supabase
@@ -165,9 +165,9 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
           : s,
       );
       setEditing(false);
-      toast.success('Discount rate updated');
+      toast.success(t('leases.discount.updated'));
     } catch (e: any) {
-      toast.error(e?.message ?? 'Save failed');
+      toast.error(e?.message ?? t('leases.errors.save_failed'));
     } finally {
       setSaving(false);
     }
@@ -178,7 +178,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
     setClearing(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) throw new Error(t('leases.errors.not_authenticated'));
 
       const previous = state.perLeaseRate;
       const previousBasis = state.basis;
@@ -222,9 +222,9 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
             }
           : s,
       );
-      toast.success('Override cleared. Lease now uses workspace default.');
+      toast.success(t('leases.discount.cleared'));
     } catch (e: any) {
-      toast.error(e?.message ?? 'Clear failed');
+      toast.error(e?.message ?? t('leases.discount.clear_failed'));
     } finally {
       setClearing(false);
     }
@@ -234,10 +234,10 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Discount Rate (IBR)</CardTitle>
+          <CardTitle className="text-base">{t('leases.discount.title')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t('workspace.watchlist.loading')}</p>
         </CardContent>
       </Card>
     );
@@ -251,18 +251,15 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <CardTitle className="text-base">Discount Rate (IBR)</CardTitle>
+            <CardTitle className="text-base">{t('leases.discount.title')}</CardTitle>
             <CardDescription>
-              Per-lease incremental borrowing rate used for ASC 842 PV
-              calculations. Required by ASC 842-20-30-3: lessee must
-              assess based on lease term, collateral, credit standing,
-              and economic environment at lease inception.
+              {t('leases.discount.desc')}
             </CardDescription>
           </div>
           {isOverridden ? (
-            <Badge variant="default">Per-lease override</Badge>
+            <Badge variant="default">{t('leases.discount.badge_override')}</Badge>
           ) : (
-            <Badge variant="outline">Workspace default</Badge>
+            <Badge variant="outline">{t('leases.discount.workspace_default')}</Badge>
           )}
         </div>
       </CardHeader>
@@ -270,7 +267,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
         <div className="grid grid-cols-2 gap-4">
           <div className="rounded-md border bg-muted/30 px-3 py-2">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">
-              Effective rate
+              {t('leases.discount.effective_rate')}
             </p>
             <p className="text-2xl font-bold mt-1">
               {effective !== null ? `${Number(effective).toFixed(2)}%` : '—'}
@@ -278,7 +275,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
           </div>
           <div className="rounded-md border bg-muted/30 px-3 py-2">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">
-              Workspace default
+              {t('leases.discount.workspace_default')}
             </p>
             <p className="text-2xl font-bold mt-1 text-muted-foreground">
               {state?.workspaceRate !== null && state?.workspaceRate !== undefined
@@ -291,13 +288,19 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
         {isOverridden && state?.basis && (
           <div className="rounded-md border px-3 py-2 text-sm">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-              Methodology / basis
+              {t('leases.discount.methodology')}
             </p>
             <p>{state.basis}</p>
             {state.setAt && (
               <p className="text-xs text-muted-foreground mt-2">
-                Set {new Date(state.setAt).toLocaleString()}
-                {state.setByLabel ? ` by ${state.setByLabel}` : ''}
+                {state.setByLabel
+                  ? t('leases.discount.set_at_by', {
+                      date: new Date(state.setAt).toLocaleString(),
+                      name: state.setByLabel,
+                    })
+                  : t('leases.discount.set_at', {
+                      date: new Date(state.setAt).toLocaleString(),
+                    })}
               </p>
             )}
           </div>
@@ -306,7 +309,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
         {!editing && canEdit && (
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={startEdit}>
-              {isOverridden ? 'Edit override' : 'Override rate for this lease'}
+              {isOverridden ? t('leases.discount.edit_override') : t('leases.discount.override_cta')}
             </Button>
             {isOverridden && (
               <Button
@@ -320,7 +323,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
                 ) : (
                   <X className="h-3.5 w-3.5 mr-1.5" />
                 )}
-                Clear override
+                {t('leases.discount.clear_override')}
               </Button>
             )}
           </div>
@@ -329,7 +332,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
         {editing && (
           <div className="space-y-3 rounded-md border border-blue-300 bg-blue-50 p-3">
             <div className="space-y-2">
-              <Label htmlFor="lease-discount-rate">Discount rate (%)</Label>
+              <Label htmlFor="lease-discount-rate">{t('leases.discount.rate_label')}</Label>
               <Input
                 id="lease-discount-rate"
                 type="number"
@@ -338,26 +341,25 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
                 max={50}
                 value={draftRate}
                 onChange={(e) => setDraftRate(e.target.value)}
-                placeholder="e.g. 5.50"
+                placeholder={t('leases.discount.rate_placeholder')}
               />
               <p className="text-xs text-muted-foreground">
-                Greater than 0, at most 50. Typical IBR range is 2–15%.
+                {t('leases.discount.rate_help')}
               </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="lease-discount-basis">
-                Methodology / basis (audit trail)
+                {t('leases.discount.basis_label')}
               </Label>
               <Textarea
                 id="lease-discount-basis"
                 value={draftBasis}
                 onChange={(e) => setDraftBasis(e.target.value)}
                 rows={3}
-                placeholder="e.g. Treasury 7Y + 250bp credit spread, dated 2026-04-01. Or: Bank-quoted IBR for 5Y secured term loan."
+                placeholder={t('leases.discount.basis_placeholder')}
               />
               <p className="text-xs text-muted-foreground">
-                Describe how the rate was derived. Must be at least 10
-                characters. Required for ASC 842 audit defensibility.
+                {t('leases.discount.basis_help')}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -367,7 +369,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
                 ) : (
                   <Save className="h-3.5 w-3.5 mr-1.5" />
                 )}
-                Save
+                {t('common.save')}
               </Button>
               <Button
                 size="sm"
@@ -375,7 +377,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
                 onClick={() => setEditing(false)}
                 disabled={saving}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </div>
@@ -383,8 +385,7 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
 
         {!canEdit && (
           <p className="text-xs text-muted-foreground">
-            Read-only — only workspace admins, editors, or the owner can
-            override the discount rate.
+            {t('leases.discount.readonly_note')}
           </p>
         )}
       </CardContent>

@@ -28,6 +28,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface Props {
   leaseId: string;
@@ -142,6 +143,7 @@ function fromDbStr(value: string | null | undefined): string {
 }
 
 export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
+  const { t } = useAppTranslation();
   const [state, setState] = useState<State>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -223,7 +225,7 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
       } catch (e: any) {
         // eslint-disable-next-line no-console
         console.error('[Asc842InputsTab] load threw', e);
-        toast.error(e?.message ?? 'Load failed');
+        toast.error(e?.message ?? t('leases.errors.load_failed'));
         setLoading(false);
       }
     })();
@@ -240,7 +242,7 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) throw new Error(t('leases.errors.not_authenticated'));
 
       const payload = {
         lease_id: leaseId,
@@ -300,7 +302,7 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
         console.warn('[Asc842InputsTab] activity log insert failed', logError);
       }
 
-      toast.success('ASC 842 inputs saved');
+      toast.success(t('leases.asc842.saved'));
       setState((prev) => ({
         ...prev,
         has_row: true,
@@ -308,14 +310,14 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
         last_updated_by_label: user.email ?? null,
       }));
     } catch (e: any) {
-      toast.error(e?.message ?? 'Save failed');
+      toast.error(e?.message ?? t('leases.errors.save_failed'));
     } finally {
       setSaving(false);
     }
   }
 
   if (loading) {
-    return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
+    return <p className="text-sm text-muted-foreground p-4">{t('workspace.watchlist.loading')}</p>;
   }
 
   return (
@@ -326,19 +328,16 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
             <div>
               <CardTitle className="text-base flex items-center gap-2">
                 <Info className="h-4 w-4 text-blue-700" />
-                ASC 842 Per-Lease Inputs
+                {t('leases.asc842.title')}
               </CardTitle>
               <CardDescription className="mt-1">
-                These values are NOT extracted by the AI pipeline. Capture
-                them per lease so the disclosure report is auditable. NULL
-                = not yet captured (different from zero, which means
-                "captured as zero").
+                {t('leases.asc842.intro')}
               </CardDescription>
             </div>
             {state.has_row ? (
-              <Badge variant="default">Captured</Badge>
+              <Badge variant="default">{t('leases.asc842.captured')}</Badge>
             ) : (
-              <Badge variant="outline">Not captured</Badge>
+              <Badge variant="outline">{t('leases.asc842.not_captured')}</Badge>
             )}
           </div>
         </CardHeader>
@@ -347,16 +346,15 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
       {/* ─── 1. Right-of-Use Asset Adjustments ─── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Right-of-Use Asset Adjustments</CardTitle>
+          <CardTitle className="text-sm">{t('leases.asc842.rou_title')}</CardTitle>
           <CardDescription>
-            ROU asset = lease liability + prepaid rent + initial direct costs
-            − lease incentives − tenant improvement allowance.
+            {t('leases.asc842.rou_desc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <NumberWithBasis
-            label="Tenant improvement allowance"
-            help="Lessor cash to fit out the space. Reduces ROU asset (ASC 842-20-25-1)."
+            label={t('leases.asc842.tia_label')}
+            help={t('leases.asc842.tia_help')}
             valueKey="tenant_improvement_allowance"
             basisKey="tenant_improvement_allowance_basis"
             state={state}
@@ -364,8 +362,8 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
             canEdit={canEdit}
           />
           <NumberWithBasis
-            label="Initial direct costs (IDC)"
-            help="Costs incremental to obtaining the lease (commissions, legal). Increases ROU (ASC 842-20-30-5)."
+            label={t('leases.asc842.idc_label')}
+            help={t('leases.asc842.idc_help')}
             valueKey="initial_direct_costs"
             basisKey="initial_direct_costs_basis"
             state={state}
@@ -373,8 +371,8 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
             canEdit={canEdit}
           />
           <NumberWithBasis
-            label="Prepaid rent (at or before commencement)"
-            help="Rent paid before commencement. Added to the ROU asset."
+            label={t('leases.asc842.prepaid_label')}
+            help={t('leases.asc842.prepaid_help')}
             valueKey="prepaid_rent"
             basisKey="prepaid_rent_basis"
             state={state}
@@ -382,8 +380,8 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
             canEdit={canEdit}
           />
           <NumberWithBasis
-            label="Lease incentives received"
-            help="Other incentives from lessor (free-rent periods, moving allowances). Reduces ROU."
+            label={t('leases.asc842.incentives_label')}
+            help={t('leases.asc842.incentives_help')}
             valueKey="lease_incentives_received"
             basisKey="lease_incentives_received_basis"
             state={state}
@@ -396,16 +394,15 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
       {/* ─── 2. Lease Liability Inputs ─── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Lease Liability Inputs</CardTitle>
+          <CardTitle className="text-sm">{t('leases.asc842.liability_title')}</CardTitle>
           <CardDescription>
-            Components included in the lease liability beyond the rent
-            schedule.
+            {t('leases.asc842.liability_desc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <NumberWithBasis
-            label="Residual value guarantee (RVG)"
-            help="Maximum amount lessee may have to pay at end of lease. Included in lease liability for finance leases (and operating if RC of being paid)."
+            label={t('leases.asc842.rvg_label')}
+            help={t('leases.asc842.rvg_help')}
             valueKey="residual_value_guarantee"
             basisKey="residual_value_guarantee_basis"
             state={state}
@@ -416,7 +413,7 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
           <Separator />
 
           <BooleanField
-            label="Purchase option present?"
+            label={t('leases.asc842.po_present_label')}
             stateKey="purchase_option_present"
             state={state}
             update={update}
@@ -425,22 +422,22 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
           {state.purchase_option_present === true && (
             <>
               <NumberField
-                label="Purchase option price"
+                label={t('leases.asc842.po_price_label')}
                 stateKey="purchase_option_price"
                 state={state}
                 update={update}
                 canEdit={canEdit}
               />
               <BooleanField
-                label="Reasonably certain to exercise?"
-                help="If true, the option price is added to the lease liability (ASC 842-10-30-5)."
+                label={t('leases.asc842.po_rc_label')}
+                help={t('leases.asc842.po_rc_help')}
                 stateKey="purchase_option_reasonably_certain"
                 state={state}
                 update={update}
                 canEdit={canEdit}
               />
               <TextareaField
-                label="Basis (why or why not RC)"
+                label={t('leases.asc842.po_basis_label')}
                 stateKey="purchase_option_basis"
                 state={state}
                 update={update}
@@ -452,22 +449,22 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
           <Separator />
 
           <NumberField
-            label="Termination penalty (if early termination)"
+            label={t('leases.asc842.term_penalty_label')}
             stateKey="termination_penalty_amount"
             state={state}
             update={update}
             canEdit={canEdit}
           />
           <BooleanField
-            label="Reasonably certain lessee will terminate early?"
-            help="If true, the penalty is included in the lease liability."
+            label={t('leases.asc842.term_penalty_rc_label')}
+            help={t('leases.asc842.term_penalty_rc_help')}
             stateKey="termination_penalty_reasonably_certain"
             state={state}
             update={update}
             canEdit={canEdit}
           />
           <TextareaField
-            label="Termination basis"
+            label={t('leases.asc842.term_penalty_basis_label')}
             stateKey="termination_penalty_basis"
             state={state}
             update={update}
@@ -480,23 +477,22 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">
-            Classification Criteria — ASC 842-10-25-2
+            {t('leases.asc842.class_title')}
           </CardTitle>
           <CardDescription>
-            Any ONE of these tests met → finance lease classification.
-            Otherwise operating.
+            {t('leases.asc842.class_desc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <BooleanField
-            label="1. Ownership transfers to lessee at end of term"
+            label={t('leases.asc842.class_1')}
             stateKey="ownership_transfers_at_end"
             state={state}
             update={update}
             canEdit={canEdit}
           />
           <BooleanField
-            label="2. Bargain purchase option lessee is RC to exercise"
+            label={t('leases.asc842.class_2')}
             stateKey="bargain_purchase_option"
             state={state}
             update={update}
@@ -504,14 +500,14 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
           />
           <div className="space-y-2">
             <BooleanField
-              label="3. Lease term is for the major part of remaining economic life (≥75%)"
+              label={t('leases.asc842.class_3')}
               stateKey="major_part_economic_life"
               state={state}
               update={update}
               canEdit={canEdit}
             />
             <NumberField
-              label="    % of remaining economic life"
+              label={t('leases.asc842.class_3_pct')}
               stateKey="major_part_economic_life_pct"
               state={state}
               update={update}
@@ -521,14 +517,14 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
           </div>
           <div className="space-y-2">
             <BooleanField
-              label="4. PV of payments ≥ substantially all of fair value (≥90%)"
+              label={t('leases.asc842.class_4')}
               stateKey="pv_substantially_all_fair_value"
               state={state}
               update={update}
               canEdit={canEdit}
             />
             <NumberField
-              label="    PV / fair value %"
+              label={t('leases.asc842.class_4_pct')}
               stateKey="pv_to_fair_value_pct"
               state={state}
               update={update}
@@ -536,7 +532,7 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
               suffix="%"
             />
             <NumberField
-              label="    Asset fair value at commencement"
+              label={t('leases.asc842.class_4_fv')}
               stateKey="asset_fair_value"
               state={state}
               update={update}
@@ -544,15 +540,15 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
             />
           </div>
           <BooleanField
-            label="5. Specialized asset with no alternative use to lessor"
+            label={t('leases.asc842.class_5')}
             stateKey="specialized_asset_no_alt_use"
             state={state}
             update={update}
             canEdit={canEdit}
           />
           <TextareaField
-            label="Overall classification basis"
-            help="Document the determination so an auditor can follow the reasoning."
+            label={t('leases.asc842.class_basis_label')}
+            help={t('leases.asc842.class_basis_help')}
             stateKey="classification_criteria_basis"
             state={state}
             update={update}
@@ -564,24 +560,22 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
       {/* ─── 4. Term Assessment ─── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Term Assessment</CardTitle>
+          <CardTitle className="text-sm">{t('leases.asc842.term_title')}</CardTitle>
           <CardDescription>
-            Renewal options "reasonably certain" to be exercised extend
-            the lease term used in PV. Short-term leases (≤12 months,
-            no purchase option RC) can be excluded from recognition.
+            {t('leases.asc842.term_desc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <NumberField
-            label="Reasonably-certain renewal term to add (months)"
-            help="If you've assessed renewal options as RC, enter the additional months they add to the lease term."
+            label={t('leases.asc842.renewal_months_label')}
+            help={t('leases.asc842.renewal_months_help')}
             stateKey="renewal_options_rc_term_months"
             state={state}
             update={update}
             canEdit={canEdit}
           />
           <TextareaField
-            label="Basis for reasonably-certain assessment (≥10 chars if extending)"
+            label={t('leases.asc842.renewal_basis_label')}
             stateKey="renewal_options_rc_basis"
             state={state}
             update={update}
@@ -589,8 +583,8 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
           />
           <Separator />
           <BooleanField
-            label="Short-term lease election (ASC 842-20-25-2)"
-            help="Election made at lease inception to not recognize ROU/liability for a 12-month-or-less lease with no RC purchase option."
+            label={t('leases.asc842.st_election_label')}
+            help={t('leases.asc842.st_election_help')}
             stateKey="short_term_lease_election"
             state={state}
             update={update}
@@ -598,7 +592,7 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
           />
           {state.short_term_lease_election === true && (
             <TextareaField
-              label="Election basis"
+              label={t('leases.asc842.st_election_basis_label')}
               stateKey="short_term_lease_election_basis"
               state={state}
               update={update}
@@ -611,23 +605,22 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
       {/* ─── 5. Disclosure / Variable Payments ─── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Disclosure / Variable Payments</CardTitle>
+          <CardTitle className="text-sm">{t('leases.asc842.disc_title')}</CardTitle>
           <CardDescription>
-            Variable payments not based on an index/rate are excluded
-            from the lease liability but disclosed under ASC 842-20-50.
+            {t('leases.asc842.disc_desc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <TextareaField
-            label="Variable payments description"
-            help="e.g., percentage rent, usage-based, CPI adjustments after commencement."
+            label={t('leases.asc842.var_desc_label')}
+            help={t('leases.asc842.var_desc_help')}
             stateKey="variable_payments_description"
             state={state}
             update={update}
             canEdit={canEdit}
           />
           <NumberField
-            label="Estimated annual variable payments"
+            label={t('leases.asc842.var_annual_label')}
             stateKey="variable_payments_estimated_annual"
             state={state}
             update={update}
@@ -635,15 +628,15 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
           />
           <Separator />
           <NumberField
-            label="Sublease income (annual)"
-            help="If the lessee has subleased the asset, enter sublease income for disclosure."
+            label={t('leases.asc842.sublease_income_label')}
+            help={t('leases.asc842.sublease_income_help')}
             stateKey="sublease_income_annual"
             state={state}
             update={update}
             canEdit={canEdit}
           />
           <TextareaField
-            label="Sublease basis"
+            label={t('leases.asc842.sublease_basis_label')}
             stateKey="sublease_basis"
             state={state}
             update={update}
@@ -657,8 +650,15 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
         <CardContent className="pt-6 flex items-center justify-between">
           <div className="text-xs text-muted-foreground">
             {state.last_updated_at
-              ? `Last updated ${new Date(state.last_updated_at).toLocaleString()}${state.last_updated_by_label ? ` by ${state.last_updated_by_label}` : ''}`
-              : 'Never saved.'}
+              ? (state.last_updated_by_label
+                  ? t('leases.asc842.last_updated_by', {
+                      date: new Date(state.last_updated_at).toLocaleString(),
+                      name: state.last_updated_by_label,
+                    })
+                  : t('leases.asc842.last_updated', {
+                      date: new Date(state.last_updated_at).toLocaleString(),
+                    }))
+              : t('leases.asc842.never_saved')}
           </div>
           <Button onClick={handleSave} disabled={!canEdit || saving}>
             {saving ? (
@@ -666,14 +666,13 @@ export function Asc842InputsTab({ leaseId, workspaceId, canEdit }: Props) {
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            {saving ? 'Saving…' : 'Save ASC 842 Inputs'}
+            {saving ? t('leases.asc842.saving') : t('leases.asc842.save_button')}
           </Button>
         </CardContent>
       </Card>
       {!canEdit && (
         <p className="text-xs text-muted-foreground">
-          Read-only — only workspace admins, editors, or the owner can
-          edit ASC 842 inputs.
+          {t('leases.asc842.readonly_note')}
         </p>
       )}
     </div>
@@ -756,6 +755,7 @@ function BooleanField({
 }: FieldCommonProps & {
   stateKey: keyof State;
 }) {
+  const { t } = useAppTranslation();
   const value = state[stateKey] as boolean | null;
   return (
     <div className="space-y-1">
@@ -776,7 +776,7 @@ function BooleanField({
           {label}
         </Label>
         <Badge variant="outline" className="text-xs">
-          {value === true ? 'Yes' : value === false ? 'No' : 'Not assessed'}
+          {value === true ? t('common.yes') : value === false ? t('common.no') : t('leases.asc842.not_assessed')}
         </Badge>
       </div>
       {help && <p className="text-xs text-muted-foreground ml-7">{help}</p>}
@@ -796,6 +796,7 @@ function NumberWithBasis({
   valueKey: keyof State;
   basisKey: keyof State;
 }) {
+  const { t } = useAppTranslation();
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
       <div className="space-y-1">
@@ -810,13 +811,13 @@ function NumberWithBasis({
         {help && <p className="text-xs text-muted-foreground">{help}</p>}
       </div>
       <div className="md:col-span-2 space-y-1">
-        <Label className="text-xs">Basis</Label>
+        <Label className="text-xs">{t('leases.asc842.basis_label')}</Label>
         <Textarea
           rows={2}
           value={String(state[basisKey] ?? '')}
           onChange={(e) => update(basisKey, e.target.value as any)}
           disabled={!canEdit}
-          placeholder="Document the source/methodology for audit trail"
+          placeholder={t('leases.asc842.basis_placeholder')}
         />
       </div>
     </div>

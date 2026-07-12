@@ -15,8 +15,6 @@ interface OnboardingStep {
   id: string;
   titleKey: string;
   descriptionKey: string;
-  title?: string;
-  description?: string;
   icon: React.ComponentType<{ className?: string }>;
   href: string;
 }
@@ -39,9 +37,7 @@ const stepDefinitions: OnboardingStep[] = [
   {
     id: 'approvers',
     titleKey: 'onboarding.step3_approvers_title',
-    title: 'Set up approval roles',
     descriptionKey: 'onboarding.step3_approvers_desc',
-    description: 'Assign manager and financial approvers in Workspaces → Members',
     icon: ShieldCheck,
     href: '/app/settings/workspaces/users',
   },
@@ -206,8 +202,8 @@ export function OnboardingChecklist() {
         <div className="space-y-2">
           {visibleSteps.map((step, index) => {
             const isCompleted = completedSteps.includes(step.id);
-            const translatedTitle = step.title || t(step.titleKey);
-            const translatedDesc = step.description || t(step.descriptionKey);
+            const translatedTitle = t(step.titleKey);
+            const translatedDesc = t(step.descriptionKey);
             const content = (
               <>
                 <div

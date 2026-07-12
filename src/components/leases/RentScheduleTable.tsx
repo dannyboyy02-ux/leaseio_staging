@@ -232,7 +232,7 @@ export function RentScheduleTable({
                                 value={editValues.period_end as string || ''}
                                 onChange={e => setEditValues(v => ({ ...v, period_end: e.target.value }))}
                                 className="h-7 text-xs w-32"
-                                placeholder="Ongoing"
+                                placeholder={t('rent_schedule.ongoing')}
                               />
                             </div>
                           </TableCell>
@@ -254,7 +254,7 @@ export function RentScheduleTable({
                               value={editValues.notes as string || ''}
                               onChange={e => setEditValues(v => ({ ...v, notes: e.target.value }))}
                               className="h-7 text-xs"
-                              placeholder="Notes"
+                              placeholder={t('rent_schedule.notes')}
                             />
                           </TableCell>
                           <TableCell>
@@ -316,7 +316,7 @@ export function RentScheduleTable({
               <div className="px-3 py-2 border-t">
                 <Button variant="ghost" size="sm" className="text-xs h-7" onClick={addRow}>
                   <Plus size={12} className="mr-1" />
-                  Add Period
+                  {t('rent_schedule.add_period')}
                 </Button>
               </div>
             )}
@@ -330,11 +330,11 @@ export function RentScheduleTable({
               <div className="flex gap-2 justify-center mt-3">
                 <Button size="sm" variant="outline" onClick={() => onGenerateSchedule('single')}>
                   <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                  Single Period
+                  {t('rent_schedule.single_period')}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => onGenerateSchedule('annual')}>
                   <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
-                  Generate Annual Schedule
+                  {t('rent_schedule.generate_annual')}
                 </Button>
               </div>
             )}

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format, formatDistanceToNowStrict } from 'date-fns';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface Props {
   leaseId: string;
@@ -22,6 +23,7 @@ const SHAREABLE_STATUSES = new Set([
 ]);
 
 export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
+  const { t } = useAppTranslation();
   const [loading, setLoading] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
       setExpiresAt(data.expires_at ?? null);
       setViewCount(data.view_count || 0);
     } catch (err: any) {
-      toast.error('Failed to generate share link');
+      toast.error(t('workflow.share.generate_failed'));
       console.error(err);
     } finally {
       setLoading(false);
@@ -82,7 +84,7 @@ export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
   };
 
   const handleRevoke = async () => {
-    if (!confirm('Revoke this share link? Anyone with the link will lose access immediately.')) return;
+    if (!confirm(t('workflow.share.revoke_confirm'))) return;
     setRevoking(true);
     try {
       const { error } = await supabase.functions.invoke('generate-summary-token', {
@@ -93,9 +95,9 @@ export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
       setGeneratedAt(null);
       setExpiresAt(null);
       setViewCount(0);
-      toast.success('Share link revoked');
+      toast.success(t('workflow.share.revoked'));
     } catch (err: any) {
-      toast.error('Failed to revoke share link');
+      toast.error(t('workflow.share.revoke_failed'));
       console.error(err);
     } finally {
       setRevoking(false);
@@ -107,16 +109,16 @@ export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
     await navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    toast.success('Link copied to clipboard');
+    toast.success(t('workflow.share.copied'));
   };
 
   return (
     <div className="rounded-lg border bg-background p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Share2 className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold">Share Financial Impact Summary</span>
+        <span className="text-sm font-semibold">{t('workflow.share.title')}</span>
         <span className="text-xs text-muted-foreground ml-1">
-          Anyone with the link can view - no login required
+          {t('workflow.share.subtitle')}
         </span>
       </div>
 
@@ -133,7 +135,7 @@ export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
           ) : (
             <Share2 className="h-4 w-4 mr-2" />
           )}
-          Generate Share Link
+          {t('workflow.share.generate')}
         </Button>
       ) : (
         <div className="space-y-2">
@@ -156,7 +158,7 @@ export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
               onClick={handleRevoke}
               disabled={revoking}
               className="shrink-0 w-9 px-0"
-              title="Revoke link"
+              title={t('workflow.share.revoke_title')}
             >
               {revoking ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
             </Button>
@@ -165,19 +167,19 @@ export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
             <span className="flex items-center gap-3">
               {generatedAt && (
                 <span>
-                  Generated {format(new Date(generatedAt), 'MMM d, yyyy')}
+                  {t('workflow.share.generated', { date: format(new Date(generatedAt), 'MMM d, yyyy') })}
                 </span>
               )}
               {expiresAt && (
                 <span>
-                  Expires in {formatDistanceToNowStrict(new Date(expiresAt))}
+                  {t('workflow.share.expires_in', { duration: formatDistanceToNowStrict(new Date(expiresAt)) })}
                 </span>
               )}
             </span>
             {viewCount > 0 && (
               <span className="flex items-center gap-1">
                 <Eye className="h-3 w-3" />
-                Viewed {viewCount} {viewCount === 1 ? 'time' : 'times'}
+                {t('workflow.share.viewed', { count: viewCount })}
               </span>
             )}
           </div>

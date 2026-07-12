@@ -10,7 +10,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useNeedsAction } from '@/hooks/useNeedsAction';
 
 export function NeedsAction() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -33,7 +33,7 @@ export function NeedsAction() {
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4" />
-            Needs Your Action
+            {t('dashboard.needs_your_action')}
           </div>
           {!loading && totalCount > 0 && (
             <Badge variant="destructive">{totalCount}</Badge>
@@ -50,7 +50,7 @@ export function NeedsAction() {
         ) : totalCount === 0 ? (
           <div className="flex flex-col items-center py-4 text-center">
             <CheckCircle2 className="h-6 w-6 text-green-500 mb-1.5" />
-            <p className="text-sm text-muted-foreground">No actions required</p>
+            <p className="text-sm text-muted-foreground">{t('dashboard.no_actions_required')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -61,7 +61,7 @@ export function NeedsAction() {
                   onClick={() => toggleSection('approvals')}
                 >
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex-1 text-left">
-                    Pending Approvals
+                    {t('dashboard.pending_approvals')}
                   </p>
                   <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', collapsed.approvals && 'rotate-180')} />
                 </button>
@@ -82,12 +82,12 @@ export function NeedsAction() {
                     </div>
                     <div className="ml-3 shrink-0 text-right flex items-center gap-2">
                       {item.daysWaiting > 7 ? (
-                        <Badge variant="destructive" className="text-xs">Overdue</Badge>
+                        <Badge variant="destructive" className="text-xs">{t('firm.inbox.urgency_overdue')}</Badge>
                       ) : (
-                        <p className="text-xs text-muted-foreground">{item.daysWaiting}d waiting</p>
+                        <p className="text-xs text-muted-foreground">{t('dashboard.days_waiting', { count: item.daysWaiting })}</p>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        {formatCurrency(item.annualValue)}/yr
+                        {formatCurrency(item.annualValue)}/{t('dashboard.per_year_short')}
                       </p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
@@ -103,7 +103,7 @@ export function NeedsAction() {
                   onClick={() => toggleSection('returned')}
                 >
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex-1 text-left">
-                    Returned for Revision
+                    {t('dashboard.returned_for_revision')}
                   </p>
                   <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', collapsed.returned && 'rotate-180')} />
                 </button>
@@ -119,7 +119,7 @@ export function NeedsAction() {
                       {item.rejectionReason ? (
                         <p className="text-xs text-muted-foreground truncate">"{item.rejectionReason}"</p>
                       ) : (
-                        <p className="text-xs text-muted-foreground">Returned for revision</p>
+                        <p className="text-xs text-muted-foreground">{t('dashboard.returned_for_revision_item')}</p>
                       )}
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
@@ -135,7 +135,7 @@ export function NeedsAction() {
                   onClick={() => toggleSection('unlocked')}
                 >
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex-1 text-left">
-                    Unlocked for Editing
+                    {t('dashboard.unlocked_for_editing')}
                   </p>
                   <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', collapsed.unlocked && 'rotate-180')} />
                 </button>
@@ -148,7 +148,7 @@ export function NeedsAction() {
                     <Unlock className="h-4 w-4 shrink-0 text-blue-500" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{item.leaseName}</p>
-                      <p className="text-xs text-muted-foreground">Draft changes pending submission</p>
+                      <p className="text-xs text-muted-foreground">{t('dashboard.draft_changes_pending')}</p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
                   </div>
@@ -163,7 +163,7 @@ export function NeedsAction() {
                   onClick={() => toggleSection('flags')}
                 >
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex-1 text-left">
-                    Other Flags
+                    {t('dashboard.other_flags')}
                   </p>
                   <ChevronDown className={cn('h-3 w-3 text-muted-foreground transition-transform', collapsed.flags && 'rotate-180')} />
                 </button>
@@ -190,7 +190,7 @@ export function NeedsAction() {
                 className="h-auto p-0 text-xs"
                 onClick={() => navigate('/app/needs-action')}
               >
-                View all
+                {t('dashboard.view_all')}
               </Button>
             </div>
           </div>

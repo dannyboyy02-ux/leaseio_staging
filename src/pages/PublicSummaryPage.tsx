@@ -6,12 +6,14 @@ import {
   type SummaryData,
 } from '@/components/summary/FinancialImpactSummary';
 import { Button } from '@/components/ui/button';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
   import.meta.env.VITE_SUPABASE_ANON_KEY) as string;
 
 export default function PublicSummaryPage() {
+  const { t } = useAppTranslation();
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<SummaryData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +58,7 @@ export default function PublicSummaryPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span className="text-sm">Loading summary&hellip;</span>
+          <span className="text-sm">{t('public_summary.loading')}</span>
         </div>
       </div>
     );
@@ -67,9 +69,9 @@ export default function PublicSummaryPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center max-w-sm px-4">
           <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Summary not found</h1>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">{t('public_summary.not_found_title')}</h1>
           <p className="text-muted-foreground text-sm">
-            This link may be invalid or has been revoked. Contact the team that shared it with you.
+            {t('public_summary.not_found_desc')}
           </p>
         </div>
       </div>
@@ -83,12 +85,12 @@ export default function PublicSummaryPage() {
         <div className="flex items-center gap-3">
           <span className="text-base font-bold text-blue-700">LeaseIO</span>
           <span className="text-muted-foreground text-sm hidden sm:block">
-            Financial Impact Summary
+            {t('public_summary.title')}
           </span>
         </div>
         <Button size="sm" variant="outline" onClick={handlePrint}>
           <Download className="h-4 w-4 mr-2" />
-          Download PDF
+          {t('public_summary.download_pdf')}
         </Button>
       </div>
 

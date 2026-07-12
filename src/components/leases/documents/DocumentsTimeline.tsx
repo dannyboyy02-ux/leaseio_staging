@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 import { documentTypeLabel, type DocumentType } from '@/lib/leaseDocuments';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import i18next from 'i18next';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export interface DocumentRow {
   id: string;
@@ -50,17 +52,18 @@ async function downloadDocument(doc: DocumentRow) {
       .from('lease-documents')
       .createSignedUrl(doc.storage_path, 120);
     if (error || !data?.signedUrl) {
-      toast.error('Could not generate download link');
+      toast.error(i18next.t('documents.timeline.download_link_failed'));
       return;
     }
     window.open(data.signedUrl, '_blank');
   } catch (err) {
     console.error('document download error:', err);
-    toast.error('Could not generate download link');
+    toast.error(i18next.t('documents.timeline.download_link_failed'));
   }
 }
 
 export function DocumentsTimeline({ documents, loading = false }: Props) {
+  const { t } = useAppTranslation();
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -74,8 +77,8 @@ export function DocumentsTimeline({ documents, loading = false }: Props) {
       <Card className="border-dashed">
         <CardContent className="py-10 text-center text-muted-foreground">
           <FileText className="h-10 w-10 mx-auto mb-3 opacity-40" />
-          <p className="text-sm">No documents uploaded yet</p>
-          <p className="text-xs mt-1">Use Upload Document to begin tracking iterations.</p>
+          <p className="text-sm">{t('documents.timeline.empty_title')}</p>
+          <p className="text-xs mt-1">{t('documents.timeline.empty_hint')}</p>
         </CardContent>
       </Card>
     );
@@ -107,16 +110,18 @@ export function DocumentsTimeline({ documents, loading = false }: Props) {
                 {doc.is_current_latest && (
                   <Badge variant="default" className="text-[10px] gap-0.5 px-1.5">
                     <Star className="h-2.5 w-2.5" />
-                    Current latest
+                    {t('documents.timeline.current_latest')}
                   </Badge>
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground mt-0.5">
                 <span>
-                  Iteration {doc.iteration_number} · v{doc.version_number}
+                  {t('documents.timeline.iteration', { iteration: doc.iteration_number, version: doc.version_number })}
                 </span>
                 <span className="font-medium text-foreground/80">
-                  {documentTypeLabel(doc.document_type)}
+                  {t(`documents.type.${doc.document_type}`, {
+                    defaultValue: documentTypeLabel(doc.document_type),
+                  })}
                 </span>
                 {doc.uploader_name && <span>{doc.uploader_name}</span>}
                 <span>{format(new Date(doc.uploaded_at), 'MMM d, yyyy h:mm a')}</span>
@@ -137,7 +142,7 @@ export function DocumentsTimeline({ documents, loading = false }: Props) {
               className="shrink-0"
             >
               <Download className="h-3.5 w-3.5 mr-1.5" />
-              Download
+              {t('common.download')}
             </Button>
           </CardContent>
         </Card>

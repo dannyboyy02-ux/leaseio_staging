@@ -19,6 +19,10 @@ import {
   View,
   StyleSheet,
 } from '@react-pdf/renderer';
+// Non-component module — no hooks; the app initializes i18next at boot
+// (src/i18n.ts), so the bound global t resolves the active language at
+// PDF-generation time.
+import { t } from 'i18next';
 import {
   LIABILITY_DISCLAIMER,
   NOT_A_FINANCIAL_STATEMENT_BANNER,
@@ -220,40 +224,40 @@ export function WorkspaceDisclosureDocument({
       {/* Cover page */}
       <Page size="LETTER" style={styles.page}>
         <View style={styles.watermarkBand} fixed>
-          <Text style={styles.watermarkText}>{NOT_A_FINANCIAL_STATEMENT_BANNER}</Text>
-          <Text style={styles.watermarkRight}>Consolidated · {reportId.slice(0, 12)}</Text>
+          <Text style={styles.watermarkText}>{t('reports.not_financial_statement', { defaultValue: NOT_A_FINANCIAL_STATEMENT_BANNER })}</Text>
+          <Text style={styles.watermarkRight}>{t('reports.pdf_consolidated_id', { id: reportId.slice(0, 12) })}</Text>
         </View>
 
         <View style={styles.coverHeader}>
           <Text style={styles.coverWordmark}>LeaseIO</Text>
-          <Text style={styles.coverTitle}>ASC 842 Disclosure Report — Consolidated</Text>
+          <Text style={styles.coverTitle}>{t('reports.pdf_consolidated_title')}</Text>
           <Text style={styles.coverSubtitle}>
-            {organizationName} · Generated {generatedAtDisplay}
+            {organizationName} · {t('reports.generated_on', { date: generatedAtDisplay })}
           </Text>
         </View>
 
         <View style={styles.coverFactGrid}>
           <View style={styles.coverFact}>
-            <Text style={styles.coverFactLabel}>Workspace</Text>
+            <Text style={styles.coverFactLabel}>{t('reports.pdf_workspace_label')}</Text>
             <Text style={styles.coverFactValue}>{organizationName}</Text>
           </View>
           <View style={styles.coverFact}>
-            <Text style={styles.coverFactLabel}>Leases included</Text>
+            <Text style={styles.coverFactLabel}>{t('reports.pdf_leases_included')}</Text>
             <Text style={styles.coverFactValue}>{leases.length}</Text>
           </View>
           <View style={styles.coverFact}>
-            <Text style={styles.coverFactLabel}>Generated</Text>
+            <Text style={styles.coverFactLabel}>{t('reports.pdf_generated_label')}</Text>
             <Text style={styles.coverFactValue}>{generatedAtIso.slice(0, 10)}</Text>
           </View>
         </View>
 
         <View style={styles.disclaimerBox}>
-          <Text style={styles.disclaimerText}>{LIABILITY_DISCLAIMER}</Text>
+          <Text style={styles.disclaimerText}>{t('reports.disclaimer_body', { defaultValue: LIABILITY_DISCLAIMER })}</Text>
         </View>
 
         {leases.length > 0 && (
           <>
-            <Text style={styles.tocHeading}>Contents</Text>
+            <Text style={styles.tocHeading}>{t('reports.pdf_contents')}</Text>
             {leases.map((lease, i) => (
               <View key={`toc-${lease.leaseId}`} style={styles.tocRow}>
                 <Text style={styles.tocLabel}>{lease.leaseLabel}</Text>
@@ -265,11 +269,11 @@ export function WorkspaceDisclosureDocument({
 
         <View style={styles.footer} fixed>
           <Text style={styles.footerText}>
-            LeaseIO Data Report · Not a Financial Statement · {generatedAtDisplay}
+            {t('reports.pdf_footer_line', { date: generatedAtDisplay })}
           </Text>
           <Text
             style={styles.footerText}
-            render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+            render={({ pageNumber, totalPages }) => t('reports.pdf_page_of', { page: pageNumber, total: totalPages })}
           />
         </View>
       </Page>
@@ -278,18 +282,18 @@ export function WorkspaceDisclosureDocument({
       {leases.map((lease) => (
         <Page key={lease.leaseId} size="LETTER" style={styles.page}>
           <View style={styles.watermarkBand} fixed>
-            <Text style={styles.watermarkText}>{NOT_A_FINANCIAL_STATEMENT_BANNER}</Text>
-            <Text style={styles.watermarkRight}>Consolidated · {reportId.slice(0, 12)}</Text>
+            <Text style={styles.watermarkText}>{t('reports.not_financial_statement', { defaultValue: NOT_A_FINANCIAL_STATEMENT_BANNER })}</Text>
+            <Text style={styles.watermarkRight}>{t('reports.pdf_consolidated_id', { id: reportId.slice(0, 12) })}</Text>
           </View>
 
           <View style={styles.leasePageHeader}>
             <View style={styles.brandLeft}>
               <Text style={styles.wordmark}>LeaseIO</Text>
-              <Text style={styles.reportTitle}>ASC 842 Disclosure — {lease.leaseLabel}</Text>
+              <Text style={styles.reportTitle}>{t('reports.pdf_lease_disclosure_title', { label: lease.leaseLabel })}</Text>
             </View>
             <View style={styles.brandRight}>
               <Text style={styles.brandRightLine}>{organizationName}</Text>
-              <Text style={styles.brandRightLine}>Generated {generatedAtDisplay}</Text>
+              <Text style={styles.brandRightLine}>{t('reports.generated_on', { date: generatedAtDisplay })}</Text>
             </View>
           </View>
 
@@ -297,11 +301,11 @@ export function WorkspaceDisclosureDocument({
 
           <View style={styles.footer} fixed>
             <Text style={styles.footerText}>
-              LeaseIO Data Report · Not a Financial Statement · {generatedAtDisplay}
+              {t('reports.pdf_footer_line', { date: generatedAtDisplay })}
             </Text>
             <Text
               style={styles.footerText}
-              render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+              render={({ pageNumber, totalPages }) => t('reports.pdf_page_of', { page: pageNumber, total: totalPages })}
             />
           </View>
         </Page>

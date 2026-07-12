@@ -144,6 +144,10 @@ describe('locale parity (en/es)', () => {
     // "no credit card" claim — but scope the 14-day check to TRIAL context, so
     // legitimate unrelated copy (e.g. the lease 14-day delete-retention window)
     // doesn't false-positive. A bare "14 days" elsewhere is fine.
+    // The lease_audit.* namespace is exempt from the no-card check: the Free
+    // Lease Audit is a card-free lead magnet (5 docs free, no signup wall), so
+    // its "no credit card required" copy is TRUE — this guard targets
+    // subscription-trial surfaces, where the 7-day trial DOES take a card.
     const noCard = /no credit card|no requiere tarjeta/i;
     const fourteenDay = /14[-\s]?d[ií]a|14[-\s]?day/i;
     const trialContext = /trial|prueba/i;
@@ -152,7 +156,9 @@ describe('locale parity (en/es)', () => {
       ['es', es],
     ] as const) {
       const hits = flattenStrings(tree).filter(
-        ([, v]) => noCard.test(v) || (fourteenDay.test(v) && trialContext.test(v)),
+        ([k, v]) =>
+          (noCard.test(v) && !k.startsWith('lease_audit.')) ||
+          (fourteenDay.test(v) && trialContext.test(v)),
       );
       expect(hits, `${name} locale contains stale trial copy`).toEqual([]);
     }

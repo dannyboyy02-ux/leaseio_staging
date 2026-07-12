@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useToast } from '@/hooks/use-toast';
 
 interface EscalationLease {
@@ -24,6 +25,7 @@ interface EscalationLease {
 }
 
 export function EscalationReviewPanel() {
+  const { t } = useAppTranslation();
   const { workspace } = useApp();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -59,7 +61,7 @@ export function EscalationReviewPanel() {
   if (leases.length === 0) return null;
 
   const displayName = (lease: EscalationLease) =>
-    lease.tenant_name || lease.request_title || lease.filename || 'Unnamed Lease';
+    lease.tenant_name || lease.request_title || lease.filename || t('dashboard.unnamed_lease');
 
   const openEdit = (lease: EscalationLease) => {
     setEditingLease(lease);
@@ -88,14 +90,14 @@ export function EscalationReviewPanel() {
       if (error) throw error;
 
       toast({
-        title: 'Escalation updated',
-        description: 'Rent schedule will recalculate on next lease processing.',
+        title: t('dashboard.escalation_updated'),
+        description: t('dashboard.escalation_updated_desc'),
       });
       queryClient.invalidateQueries({ queryKey: ['escalation-review', workspace?.id] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary', workspace?.id] });
       setEditingLease(null);
     } catch (err) {
-      toast({ title: 'Save failed', description: String(err), variant: 'destructive' });
+      toast({ title: t('dashboard.save_failed'), description: String(err), variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -107,7 +109,7 @@ export function EscalationReviewPanel() {
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
             <AlertTriangle className="h-4 w-4" />
-            Escalation Clauses &mdash; Review Required
+            {t('dashboard.escalation_review_title')}
             <Badge variant="secondary" className="ml-auto text-xs">
               {leases.length}
             </Badge>
@@ -115,8 +117,7 @@ export function EscalationReviewPanel() {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
-            The following leases have CPI/index-based escalation terms that require manual review
-            before rent schedules can be projected.
+            {t('dashboard.escalation_review_desc')}
           </p>
           <div className="space-y-2">
             {leases.map(lease => (
@@ -128,7 +129,7 @@ export function EscalationReviewPanel() {
                   <p className="text-sm font-medium truncate">{displayName(lease)}</p>
                   {lease.rent_escalation_type && (
                     <p className="text-xs text-muted-foreground truncate">
-                      Raw clause: {lease.rent_escalation_type}
+                      {t('dashboard.raw_clause', { value: lease.rent_escalation_type })}
                     </p>
                   )}
                 </div>
@@ -138,7 +139,7 @@ export function EscalationReviewPanel() {
                   className="shrink-0 text-xs"
                   onClick={() => openEdit(lease)}
                 >
-                  Edit Escalation
+                  {t('dashboard.edit_escalation')}
                   <ChevronRight className="h-3 w-3 ml-1" />
                 </Button>
               </div>
@@ -150,38 +151,38 @@ export function EscalationReviewPanel() {
       <Dialog open={!!editingLease} onOpenChange={open => !open && setEditingLease(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit Escalation</DialogTitle>
+            <DialogTitle>{t('dashboard.edit_escalation')}</DialogTitle>
           </DialogHeader>
           {editingLease && (
             <div className="space-y-4 py-2">
               <p className="text-sm text-muted-foreground">{displayName(editingLease)}</p>
               {editingLease.rent_escalation_type && (
                 <div className="rounded-md bg-muted px-3 py-2">
-                  <p className="text-xs text-muted-foreground">Raw lease clause</p>
+                  <p className="text-xs text-muted-foreground">{t('dashboard.raw_lease_clause')}</p>
                   <p className="text-sm font-mono mt-0.5">{editingLease.rent_escalation_type}</p>
                 </div>
               )}
               <div className="space-y-2">
-                <Label>Escalation Type</Label>
+                <Label>{t('review.escalation_type')}</Label>
                 <Select value={newEscalationType} onValueChange={setNewEscalationType}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
+                    <SelectValue placeholder={t('dashboard.select_type')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="percent">Percent</SelectItem>
-                    <SelectItem value="index">CPI / Index</SelectItem>
+                    <SelectItem value="none">{t('dashboard.escalation_none')}</SelectItem>
+                    <SelectItem value="percent">{t('dashboard.escalation_percent')}</SelectItem>
+                    <SelectItem value="index">{t('dashboard.escalation_cpi_index')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               {newEscalationType === 'percent' && (
                 <div className="space-y-2">
-                  <Label>Annual Escalation Rate (%)</Label>
+                  <Label>{t('dashboard.annual_escalation_rate')}</Label>
                   <Input
                     type="number"
                     min="0"
                     step="0.1"
-                    placeholder="e.g. 3.0"
+                    placeholder={t('dashboard.rate_placeholder')}
                     value={newEscalationRate}
                     onChange={e => setNewEscalationRate(e.target.value)}
                   />
@@ -189,15 +190,15 @@ export function EscalationReviewPanel() {
               )}
               {newEscalationType === 'index' && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  CPI/Index escalation &mdash; rent schedule will use baseline rent until a fixed rate is set.
+                  {t('dashboard.cpi_note')}
                 </p>
               )}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingLease(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditingLease(null)}>{t('common.cancel')}</Button>
             <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? t('account.saving') : t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>

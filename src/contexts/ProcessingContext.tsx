@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+// Global t (not the hook): toasts fire inside polling closures, and using the
+// module-level translator keeps the polling effect's dependency list stable.
+import { t } from 'i18next';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 
@@ -35,7 +38,7 @@ export function ProcessingProvider({ children }: { children: ReactNode }) {
       if (data && data.length > 0) {
         const recovered = data.map((l) => ({
           leaseId: l.id,
-          filename: l.filename || 'Unknown file',
+          filename: l.filename || t('import.unknown_file'),
           startedAt: Date.now(),
         }));
         setJobs(recovered);
@@ -70,16 +73,16 @@ export function ProcessingProvider({ children }: { children: ReactNode }) {
 
           if (lease.status === 'Ready') {
             idsToRemove.push(job.leaseId);
-            toast.success(`${job.filename} is ready for review`, {
+            toast.success(t('import.ready_for_review', { filename: job.filename }), {
               duration: 10000,
               action: {
-                label: 'Review Now',
+                label: t('import.review_now'),
                 onClick: () => navigate(`/app/leases/${job.leaseId}/review`),
               },
             });
           } else if (lease.status === 'Failed') {
             idsToRemove.push(job.leaseId);
-            toast.error(`Abstraction failed for ${job.filename}`);
+            toast.error(t('import.abstraction_failed', { filename: job.filename }));
           }
         } catch {
           // ignore transient polling errors
@@ -107,8 +110,8 @@ export function ProcessingProvider({ children }: { children: ReactNode }) {
       const next = [...prev, { leaseId, filename, startedAt: Date.now() }];
       const label =
         next.length === 1
-          ? `Abstracting "${filename}"...`
-          : `Abstracting ${next.length} documents...`;
+          ? t('import.abstracting_one', { filename })
+          : t('import.abstracting_many', { count: next.length });
       toast(label, {
         id: 'abstracting-indicator',
         duration: 3000,

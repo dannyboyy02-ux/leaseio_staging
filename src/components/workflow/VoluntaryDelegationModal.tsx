@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { toast } from 'sonner';
 
 interface VoluntaryDelegationModalProps {
@@ -51,6 +52,7 @@ export function VoluntaryDelegationModal({
   onDelegated,
 }: VoluntaryDelegationModalProps) {
   const { user } = useApp();
+  const { t } = useAppTranslation();
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [delegateId, setDelegateId] = useState<string>('');
   const [reason, setReason] = useState('');
@@ -89,7 +91,7 @@ export function VoluntaryDelegationModal({
           const fn = (p.first_name as string | null) ?? '';
           const ln = (p.last_name as string | null) ?? '';
           const display =
-            fn || ln ? `${fn} ${ln}`.trim() : (p.email as string) ?? 'Unknown';
+            fn || ln ? `${fn} ${ln}`.trim() : (p.email as string) ?? t('workflow.common.unknown');
           return { id: p.id, display };
         })
         .sort((a, b) => a.display.localeCompare(b.display));
@@ -103,7 +105,7 @@ export function VoluntaryDelegationModal({
   const handleSubmit = async () => {
     if (!chainStepId) return;
     if (!delegateId) {
-      toast.error('Pick a delegate.');
+      toast.error(t('workflow.delegation.pick_delegate'));
       return;
     }
     setBusy(true);
@@ -122,16 +124,16 @@ export function VoluntaryDelegationModal({
         const msg =
           (data as any)?.error ||
           error?.message ||
-          'Delegation failed';
+          t('workflow.delegation.failed');
         toast.error(msg);
         return;
       }
-      toast.success("Step delegated — it's moved to their queue and out of yours. Revoke it from “Delegated by me” if needed.");
+      toast.success(t('workflow.delegation.success'));
       onOpenChange(false);
       onDelegated();
     } catch (err: any) {
       console.error('[VoluntaryDelegationModal] error:', err);
-      toast.error(err?.message || 'Delegation failed');
+      toast.error(err?.message || t('workflow.delegation.failed'));
     } finally {
       setBusy(false);
     }
@@ -143,22 +145,19 @@ export function VoluntaryDelegationModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserCheck className="h-5 w-5" />
-            Delegate this step
+            {t('workflow.delegation.title')}
           </DialogTitle>
           <DialogDescription>
-            Hand this approval to a workspace member. They'll receive a
-            notification and the step moves to their queue (and off yours).
-            You can revoke it before they act from “Delegated by me” in your
-            queue.
+            {t('workflow.delegation.desc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="vd-delegate">Delegate to</Label>
+            <Label htmlFor="vd-delegate">{t('workflow.delegation.delegate_to')}</Label>
             <Select value={delegateId} onValueChange={setDelegateId} disabled={busy}>
               <SelectTrigger id="vd-delegate">
-                <SelectValue placeholder="Select a workspace member" />
+                <SelectValue placeholder={t('workflow.delegation.select_member')} />
               </SelectTrigger>
               <SelectContent>
                 {members.map((m) => (
@@ -170,19 +169,19 @@ export function VoluntaryDelegationModal({
             </Select>
             {members.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                No other members in this workspace to delegate to.
+                {t('workflow.delegation.no_members')}
               </p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="vd-reason">Reason (optional)</Label>
+            <Label htmlFor="vd-reason">{t('workflow.delegation.reason_optional')}</Label>
             <Textarea
               id="vd-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               maxLength={500}
-              placeholder="e.g., out of office next week — Sarah will handle"
+              placeholder={t('workflow.delegation.reason_placeholder')}
               disabled={busy}
             />
           </div>
@@ -190,11 +189,11 @@ export function VoluntaryDelegationModal({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={busy || !delegateId}>
             {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Delegate
+            {t('workflow.delegation.delegate')}
           </Button>
         </DialogFooter>
       </DialogContent>

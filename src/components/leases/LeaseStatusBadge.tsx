@@ -11,7 +11,9 @@ import {
   Loader2,
   XCircle,
 } from 'lucide-react';
-import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { t } from 'i18next';
+import { type LifecycleStatus } from '@/lib/lifecycleStates';
+import { localizedStatusLabel, localizedStatusShortLabel } from '@/lib/lifecycleLabels';
 import { LIFECYCLE_STATUS_CONFIG } from '@/types/lifecycle';
 
 // Canonical status badge for the whole app. Unifies the two former badges:
@@ -83,13 +85,18 @@ export function LeaseStatusBadge({
   size = 'default',
 }: StatusBadgeProps) {
   const key = status ?? '';
-  // Canonical full label, shared by both appearances.
-  const fullLabel = key ? displayLabel(key as LifecycleStatus) : 'Unknown';
+  // Canonical full label, shared by both appearances (localized; falls back
+  // to displayLabel's English for values without a locale key).
+  const fullLabel = key
+    ? localizedStatusLabel(key as LifecycleStatus)
+    : t('common.unknown', { defaultValue: 'Unknown' });
 
   if (appearance === 'soft') {
     const lifecycleConfig = LIFECYCLE_STATUS_CONFIG[key as LifecycleStatus];
     const label =
-      size === 'sm' ? (lifecycleConfig?.shortLabel ?? fullLabel) : fullLabel;
+      size === 'sm' && lifecycleConfig
+        ? localizedStatusShortLabel(key as LifecycleStatus)
+        : fullLabel;
     return (
       <Badge
         variant={lifecycleConfig?.color ?? 'outline'}

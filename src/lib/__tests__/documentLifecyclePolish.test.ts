@@ -154,8 +154,10 @@ describe('AmendmentsList archive-delete', () => {
     const gated = sliceBetween(source, '{isAdmin && !readOnly && (', 'setPendingDelete(amendment)');
     expect(gated).toContain('<Button');
     // #92: archive vocabulary — the action archives, so the label says
-    // "Archive", not "Delete".
-    expect(gated).toContain('aria-label={`Archive ${amendment.filename}`}');
+    // "Archive", not "Delete". i18n sweep 2026-07-12: the label renders
+    // through i18next now — pin the key (both locales say "Archive…", the
+    // parity test guards key existence).
+    expect(gated).toContain("aria-label={t('amendments.archive_aria', { name: amendment.filename })}");
   });
 });
 

@@ -136,7 +136,7 @@ describe('FailedLeaseBanner — readOnly (Vault) state', () => {
     expect(screen.getByText('readonly.lease_note')).toBeTruthy();
 
     // No retry button (even though storagePath is present, readOnly wins).
-    expect(screen.queryByRole('button', { name: /Retry Processing/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /failed_lease\.retry_button/ })).toBeNull();
     // No upload button.
     expect(
       screen.queryByRole('button', { name: /failed_lease\.reupload_button/ }),
@@ -150,7 +150,7 @@ describe('FailedLeaseBanner — canRetry (storagePath present)', () => {
   it('renders "Retry Processing" and re-invokes with a PLAIN object body { leaseId } (not FormData)', async () => {
     const props = renderBanner({ storagePath: 'leases/lease-abc-123/original.pdf' });
 
-    const retryBtn = screen.getByRole('button', { name: /Retry Processing/ });
+    const retryBtn = screen.getByRole('button', { name: /failed_lease\.retry_button/ });
     expect(retryBtn).toBeTruthy();
 
     await act(async () => {

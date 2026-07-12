@@ -8,8 +8,13 @@
  * structured critical dates (`renewalNoticeDeadline`, `escalationCapEndDate`)
  * that are NULL until a Tier-1 extraction enhancement captures them — those
  * rules are fully written and simply emit nothing until the data arrives.
+ *
+ * i18n: flag copy renders through i18next at build time. Callers must
+ * re-run {@link buildWatchlist} when the language changes (Portfolio keys
+ * its useMemo on the active language), same pattern as the PDF builders.
  */
 
+import i18next, { t } from 'i18next';
 import {
   costPerSqftByLocation,
   daysUntil,
@@ -58,9 +63,14 @@ const DEFAULTS: Omit<ResolvedConfig, 'asOf'> = {
   cap: 8,
 };
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const fmtMonthYear = (d: Date) => `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-const fmtLongDate = (d: Date) => `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+// UTC-pinned so HH:MM/timezone noise can't shift the rendered day; the
+// display language follows i18next (en month names when uninitialized,
+// which is also what the unit tests pin).
+const dateLocale = () => (i18next.language?.toLowerCase().startsWith('es') ? 'es' : 'en');
+const fmtMonthYear = (d: Date) =>
+  new Intl.DateTimeFormat(dateLocale(), { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(d);
+const fmtLongDate = (d: Date) =>
+  new Intl.DateTimeFormat(dateLocale(), { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(d);
 
 // --- Rules ----------------------------------------------------------------
 
@@ -72,9 +82,12 @@ const renewalNoticeDeadline: WatchRule = (leases, cfg) =>
     const due = parseIso(l.renewalNoticeDeadline)!;
     return [{
       leaseId: l.id, severity: 'warning', icon: 'calendar-clock',
-      title: `${l.propertyName} — renewal notice deadline approaching`,
-      description: `Notice to renew is due ${fmtLongDate(due)} (${Math.round(days)} days out).`,
-      value: `${Math.round(days)} days`, department: l.department,
+      title: t('portfolio.watchlist.renewal_notice_title', { name: l.propertyName }),
+      description: t('portfolio.watchlist.renewal_notice_desc', {
+        date: fmtLongDate(due), count: Math.round(days),
+      }),
+      value: t('portfolio.watchlist.days_value', { count: Math.round(days) }),
+      department: l.department,
       sourceField: 'renewalOptions', date: l.renewalNoticeDeadline,
     }];
   });
@@ -88,13 +101,20 @@ const upcomingTermExpiry: WatchRule = (leases, cfg) => {
   const soonest = Math.min(...future.map((x) => x.end.getTime()));
   return future
     .filter((x) => x.end.getTime() === soonest || daysUntil(cfg.asOf, x.l.endDate)! <= cfg.expiryWindowDays)
-    .map((x) => ({
-      leaseId: x.l.id, severity: 'info' as const, icon: 'calendar',
-      title: `${x.l.propertyName} — ${x.end.getTime() === soonest ? 'earliest term expiry' : 'upcoming term expiry'}`,
-      description: `Lease term ends ${fmtLongDate(x.end)}${x.end.getTime() === soonest ? ' — the first in the portfolio to come up.' : '.'}`,
-      value: fmtMonthYear(x.end), department: x.l.department,
-      sourceField: 'expirationDate', date: x.l.endDate,
-    }));
+    .map((x) => {
+      const isEarliest = x.end.getTime() === soonest;
+      return {
+        leaseId: x.l.id, severity: 'info' as const, icon: 'calendar',
+        title: isEarliest
+          ? t('portfolio.watchlist.earliest_expiry_title', { name: x.l.propertyName })
+          : t('portfolio.watchlist.upcoming_expiry_title', { name: x.l.propertyName }),
+        description: isEarliest
+          ? t('portfolio.watchlist.expiry_desc_earliest', { date: fmtLongDate(x.end) })
+          : t('portfolio.watchlist.expiry_desc', { date: fmtLongDate(x.end) }),
+        value: fmtMonthYear(x.end), department: x.l.department,
+        sourceField: 'expirationDate', date: x.l.endDate,
+      };
+    });
 };
 
 /** LIVE — the single highest cost-per-sqft lease, when above the blended average. */
@@ -106,9 +126,14 @@ const highestCostPerSqft: WatchRule = (leases, cfg) => {
   const dept = leases.find((l) => l.id === top.id)?.department ?? null;
   return [{
     leaseId: top.id, severity: 'muted', icon: 'arrow-up-right',
-    title: `${top.name} — highest cost per sqft`,
-    description: `At $${top.ratePerSqft.toFixed(2)}/sqft, ${Math.round(top.deltaVsAvg * 100)}% above the $${averageRatePerSqft.toFixed(2)} portfolio blended average.`,
-    value: `$${top.ratePerSqft.toFixed(2)}/sqft`, department: dept,
+    title: t('portfolio.watchlist.highest_cost_title', { name: top.name }),
+    description: t('portfolio.watchlist.highest_cost_desc', {
+      rate: top.ratePerSqft.toFixed(2),
+      pct: Math.round(top.deltaVsAvg * 100),
+      avg: averageRatePerSqft.toFixed(2),
+    }),
+    value: t('portfolio.watchlist.cost_value', { rate: top.ratePerSqft.toFixed(2) }),
+    department: dept,
     sourceField: 'squareFootage', date: null,
   }];
 };
@@ -121,8 +146,8 @@ const escalationCapExpiring: WatchRule = (leases, cfg) =>
     const end = parseIso(l.escalationCapEndDate)!;
     return [{
       leaseId: l.id, severity: 'muted', icon: 'trending-up',
-      title: `${l.propertyName} — escalation cap expires`,
-      description: `The escalation cap in the current term ends ${fmtMonthYear(end)}.`,
+      title: t('portfolio.watchlist.esc_cap_title', { name: l.propertyName }),
+      description: t('portfolio.watchlist.esc_cap_desc', { date: fmtMonthYear(end) }),
       value: fmtMonthYear(end), department: l.department,
       sourceField: 'escalations', date: l.escalationCapEndDate,
     }];

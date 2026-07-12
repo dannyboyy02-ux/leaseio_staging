@@ -7,6 +7,10 @@
 // watermark band, cover header, and footer remain per-document.
 
 import { Text, View, StyleSheet } from '@react-pdf/renderer';
+// Non-component module — no hooks; the app initializes i18next at boot
+// (src/i18n.ts), so the bound global t resolves the active language at
+// PDF-generation time.
+import { t } from 'i18next';
 import {
   type Asc842InputsSection,
   type IdentificationSection,
@@ -217,7 +221,7 @@ export function renderLeaseSections(sections: ReportSection[]) {
     <>
       {identification && (
         <>
-          <Text style={styles.sectionTitle}>Lease Identification</Text>
+          <Text style={styles.sectionTitle}>{t('reports.pdf_lease_identification')}</Text>
           {pairChunks(identification.fields).map((pair, i) => (
             <View key={`id-${i}`} style={styles.twoCol}>
               {pair.map((field, j) => (
@@ -226,7 +230,7 @@ export function renderLeaseSections(sections: ReportSection[]) {
                   <Text style={styles.cellValue}>{formatLabel(field.value)}</Text>
                   {field.citation && (
                     <Text style={styles.cellCitation}>
-                      Cite p.{field.citation.page}: "{field.citation.snippet}"
+                      {t('reports.pdf_cite', { page: field.citation.page, snippet: field.citation.snippet })}
                     </Text>
                   )}
                 </View>
@@ -239,44 +243,44 @@ export function renderLeaseSections(sections: ReportSection[]) {
 
       {asc842 && (
         <>
-          <Text style={styles.sectionTitle}>ASC 842 Measurement Inputs</Text>
+          <Text style={styles.sectionTitle}>{t('reports.pdf_asc842_inputs')}</Text>
           <View style={styles.twoCol}>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Classification</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_classification')}</Text>
               <Text style={styles.cellValue}>{asc842.classification}</Text>
             </View>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Discount Rate (IBR)</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_discount_rate_ibr')}</Text>
               <Text style={styles.cellValue}>{formatPercent(asc842.discount_rate_percent)}</Text>
             </View>
           </View>
           <View style={styles.twoCol}>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Term (months)</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_term_months')}</Text>
               <Text style={styles.cellValue}>{asc842.term_months ?? '—'}</Text>
             </View>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Commencement</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_commencement')}</Text>
               <Text style={styles.cellValue}>{formatDate(asc842.commencement_date)}</Text>
             </View>
           </View>
           <View style={styles.twoCol}>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Total Cash Commitment</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_total_cash_commitment')}</Text>
               <Text style={styles.cellValue}>{formatCurrency(asc842.total_commitment)}</Text>
             </View>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Present Value Liability</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_pv_liability')}</Text>
               <Text style={styles.cellValue}>{formatCurrency(asc842.pv_liability)}</Text>
             </View>
           </View>
           <View style={styles.twoCol}>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Straight-Line Monthly Expense</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_straight_line_monthly')}</Text>
               <Text style={styles.cellValue}>{formatCurrency(asc842.straight_line_monthly_expense)}</Text>
             </View>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Cash vs P&amp;L Delta</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_cash_pl_delta')}</Text>
               <Text style={styles.cellValue}>{formatCurrency(asc842.cash_pl_delta)}</Text>
             </View>
           </View>
@@ -285,14 +289,14 @@ export function renderLeaseSections(sections: ReportSection[]) {
 
       {payment && (
         <>
-          <Text style={styles.sectionTitle}>Payment Schedule</Text>
+          <Text style={styles.sectionTitle}>{t('reports.pdf_payment_schedule')}</Text>
           {payment.periods.length > 0 ? (
             <>
               <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderText, { flex: 2 }]}>Period</Text>
-                <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'right' }]}>Monthly</Text>
-                <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'right' }]}>Annual</Text>
-                <Text style={[styles.tableHeaderText, { flex: 2 }]}>Notes</Text>
+                <Text style={[styles.tableHeaderText, { flex: 2 }]}>{t('reports.pdf_period')}</Text>
+                <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'right' }]}>{t('rent_schedule.monthly')}</Text>
+                <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'right' }]}>{t('rent_schedule.annual')}</Text>
+                <Text style={[styles.tableHeaderText, { flex: 2 }]}>{t('reports.pdf_notes')}</Text>
               </View>
               {payment.periods.map((row, i) => (
                 <View key={`rs-${i}`} style={styles.tableRow}>
@@ -309,46 +313,46 @@ export function renderLeaseSections(sections: ReportSection[]) {
                 </View>
               ))}
               <View style={styles.totalsRow}>
-                <Text style={[styles.totalsLabel, { flex: 5.5 }]}>Total Cash Commitment</Text>
+                <Text style={[styles.totalsLabel, { flex: 5.5 }]}>{t('reports.pdf_total_cash_commitment')}</Text>
                 <Text style={[styles.totalsValue, { flex: 1.5 }]}>{formatCurrency(payment.total_cash_commitment)}</Text>
               </View>
               {payment.has_escalations && (
-                <Text style={[styles.cellCitation, { marginTop: 4 }]}>Schedule contains escalating periods.</Text>
+                <Text style={[styles.cellCitation, { marginTop: 4 }]}>{t('reports.pdf_escalating_periods')}</Text>
               )}
               {payment.citation && (
                 <Text style={styles.cellCitation}>
-                  Cite p.{payment.citation.page}: "{payment.citation.snippet}"
+                  {t('reports.pdf_cite', { page: payment.citation.page, snippet: payment.citation.snippet })}
                 </Text>
               )}
             </>
           ) : (
-            <Text style={styles.prose}>No rent schedule recorded for this lease.</Text>
+            <Text style={styles.prose}>{t('reports.pdf_no_rent_schedule')}</Text>
           )}
         </>
       )}
 
       {keyTerms && (
         <>
-          <Text style={styles.sectionTitle}>Key Terms</Text>
+          <Text style={styles.sectionTitle}>{t('reports.pdf_key_terms')}</Text>
           <View style={styles.twoCol}>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Security Deposit</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_security_deposit')}</Text>
               <Text style={styles.cellValue}>{formatCurrency(keyTerms.security_deposit)}</Text>
               {keyTerms.security_deposit_citation && (
                 <Text style={styles.cellCitation}>
-                  Cite p.{keyTerms.security_deposit_citation.page}: "{keyTerms.security_deposit_citation.snippet}"
+                  {t('reports.pdf_cite', { page: keyTerms.security_deposit_citation.page, snippet: keyTerms.security_deposit_citation.snippet })}
                 </Text>
               )}
             </View>
             <View style={styles.cell}>
-              <Text style={styles.cellLabel}>Asset Type</Text>
+              <Text style={styles.cellLabel}>{t('reports.pdf_asset_type')}</Text>
               <Text style={styles.cellValue}>{formatLabel(keyTerms.asset_type)}</Text>
             </View>
           </View>
           {keyTerms.escalation_clause && (
             <View style={styles.twoCol}>
               <View style={[styles.cell, { flex: 1 }]}>
-                <Text style={styles.cellLabel}>Escalation</Text>
+                <Text style={styles.cellLabel}>{t('dashboard.escalation')}</Text>
                 <Text style={styles.cellValue}>
                   {keyTerms.escalation_clause.type ?? '—'}
                   {keyTerms.escalation_clause.rate ? ` (${keyTerms.escalation_clause.rate}%)` : ''}
@@ -362,11 +366,11 @@ export function renderLeaseSections(sections: ReportSection[]) {
           {keyTerms.renewal_options.length > 0 && (
             <View style={styles.twoCol}>
               <View style={[styles.cell, { flex: 1 }]}>
-                <Text style={styles.cellLabel}>Renewal Options</Text>
+                <Text style={styles.cellLabel}>{t('reports.pdf_renewal_options')}</Text>
                 {keyTerms.renewal_options.map((r, i) => (
                   <Text key={`ro-${i}`} style={[styles.cellValue, { fontWeight: 'normal' }]}>
-                    {r.option_term_months ? `${r.option_term_months} months` : 'Term not specified'}
-                    {r.notice_required_days ? ` — ${r.notice_required_days}-day notice` : ''}
+                    {r.option_term_months ? t('reports.pdf_months_count', { count: r.option_term_months }) : t('reports.pdf_term_not_specified')}
+                    {r.notice_required_days ? ` — ${t('reports.pdf_day_notice', { count: r.notice_required_days })}` : ''}
                     {r.notes ? ` — ${r.notes}` : ''}
                   </Text>
                 ))}
@@ -376,20 +380,20 @@ export function renderLeaseSections(sections: ReportSection[]) {
           {keyTerms.termination_clause && (
             <View style={styles.twoCol}>
               <View style={[styles.cell, { flex: 1 }]}>
-                <Text style={styles.cellLabel}>Termination Provisions</Text>
+                <Text style={styles.cellLabel}>{t('reports.pdf_termination_provisions')}</Text>
                 <Text style={styles.cellValue}>
                   {keyTerms.termination_clause.early_termination_allowed === true
-                    ? 'Early termination permitted'
+                    ? t('reports.pdf_early_term_permitted')
                     : keyTerms.termination_clause.early_termination_allowed === false
-                      ? 'Early termination NOT permitted'
-                      : 'Termination terms — see lease'}
+                      ? t('reports.pdf_early_term_not_permitted')
+                      : t('reports.pdf_termination_see_lease')}
                 </Text>
                 {keyTerms.termination_clause.notice_days !== null && (
-                  <Text style={styles.cellCitation}>Notice: {keyTerms.termination_clause.notice_days} days</Text>
+                  <Text style={styles.cellCitation}>{t('reports.pdf_notice_days', { count: keyTerms.termination_clause.notice_days })}</Text>
                 )}
                 {keyTerms.termination_clause.penalty_amount !== null && (
                   <Text style={styles.cellCitation}>
-                    Penalty: {formatCurrency(keyTerms.termination_clause.penalty_amount)}
+                    {t('reports.pdf_penalty', { amount: formatCurrency(keyTerms.termination_clause.penalty_amount) })}
                   </Text>
                 )}
                 {keyTerms.termination_clause.notes && (
@@ -403,11 +407,11 @@ export function renderLeaseSections(sections: ReportSection[]) {
 
       {preparer && preparer.flags.length > 0 && (
         <>
-          <Text style={styles.sectionTitle}>Preparer Notes</Text>
+          <Text style={styles.sectionTitle}>{t('reports.pdf_preparer_notes')}</Text>
           {preparer.flags.map((flag, i) => (
             <View key={`pf-${i}`} style={styles.flagRow} wrap={false}>
               <View style={[styles.flagBadge, { backgroundColor: SEVERITY_COLOR[flag.severity] }]}>
-                <Text style={styles.flagBadgeText}>{flag.severity}</Text>
+                <Text style={styles.flagBadgeText}>{t(`reports.pdf_severity_${flag.severity}`)}</Text>
               </View>
               <View style={styles.flagContent}>
                 <Text style={styles.flagTitle}>{flag.title}</Text>
@@ -420,20 +424,20 @@ export function renderLeaseSections(sections: ReportSection[]) {
 
       {audit && (
         <>
-          <Text style={styles.sectionTitle}>Verification Audit Trail</Text>
+          <Text style={styles.sectionTitle}>{t('reports.pdf_verification_audit')}</Text>
           <Text style={styles.prose}>
-            {audit.total_corrections} correction(s) and {audit.total_verified_unchanged} verified-unchanged confirmation(s) recorded.
+            {t('reports.pdf_audit_summary', { corrections: audit.total_corrections, verified: audit.total_verified_unchanged })}
             {audit.model_locked_at
-              ? ` Lease finalized (model-locked) on ${audit.model_locked_at.slice(0, 10)} by ${audit.model_locked_by ?? '—'}.`
-              : ' Lease NOT yet finalized (not model-locked).'}
+              ? ` ${t('reports.pdf_finalized_on', { date: audit.model_locked_at.slice(0, 10), user: audit.model_locked_by ?? '—' })}`
+              : ` ${t('reports.pdf_not_finalized')}`}
           </Text>
           {audit.entries.length > 0 && (
             <>
               <View style={styles.tableHeader}>
-                <Text style={[styles.tableHeaderText, { flex: 2 }]}>Field</Text>
-                <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>Action</Text>
-                <Text style={[styles.tableHeaderText, { flex: 2 }]}>Confirmed at</Text>
-                <Text style={[styles.tableHeaderText, { flex: 2 }]}>Confirmed by</Text>
+                <Text style={[styles.tableHeaderText, { flex: 2 }]}>{t('reports.pdf_field_col')}</Text>
+                <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>{t('reports.pdf_action_col')}</Text>
+                <Text style={[styles.tableHeaderText, { flex: 2 }]}>{t('reports.pdf_confirmed_at')}</Text>
+                <Text style={[styles.tableHeaderText, { flex: 2 }]}>{t('reports.pdf_confirmed_by')}</Text>
               </View>
               {audit.entries.map((entry, i) => (
                 <View key={`va-${i}`} style={styles.tableRow}>
@@ -448,7 +452,7 @@ export function renderLeaseSections(sections: ReportSection[]) {
           {audit.signator_attestation && (
             <View style={styles.attestationBox}>
               <Text style={styles.attestationLabel}>
-                Final Approval Attestation
+                {t('reports.pdf_final_attestation')}
                 {audit.signator_approved_at ? ` — ${audit.signator_approved_at.slice(0, 10)}` : ''}
               </Text>
               <Text style={styles.attestationBody}>{audit.signator_attestation}</Text>

@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
+import { localizedStatusLabel } from '@/lib/lifecycleLabels';
 import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -77,16 +78,16 @@ function titleCase(s: string) {
 }
 
 export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const isApproved = APPROVED_STATUSES.includes(data.lifecycleStatus);
   const isDraft = !isApproved;
 
   const classificationLabel =
     data.leaseClassification === 'operating'
-      ? 'Operating Lease'
+      ? t('workflow.classification.operating')
       : data.leaseClassification === 'finance'
-      ? 'Finance Lease'
-      : 'Pending Financial Review';
+      ? t('workflow.classification.finance')
+      : t('workflow.summary.pending_review');
 
   const assetLabel = data.assetType
     ? data.assetType.charAt(0).toUpperCase() + data.assetType.slice(1)
@@ -96,33 +97,33 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
 
   const metrics = [
     {
-      label: 'Total Cash Commitment',
+      label: t('workflow.impact.total_cash_commitment'),
       value: fmt(data.calcTotalCommitment, language),
-      sublabel: `Over ${data.termMonths} months`,
+      sublabel: t('workflow.impact.over_months', { count: data.termMonths }),
       color: '#1d4ed8',
       bg: '#eff6ff',
       border: '#bfdbfe',
     },
     {
-      label: 'Estimated Lease Liability',
+      label: t('workflow.impact.estimated_liability'),
       value: fmt(data.calcPvLiability, language),
-      sublabel: `PV at ${data.discountRateUsed}% discount rate`,
+      sublabel: t('workflow.impact.pv_at_rate', { rate: data.discountRateUsed }),
       color: '#7c3aed',
       bg: '#f5f3ff',
       border: '#ddd6fe',
     },
     {
-      label: 'Monthly P&L Charge',
+      label: t('workflow.impact.monthly_pl_charge'),
       value: fmt(data.calcStraightLineExp, language),
-      sublabel: 'Straight-line per month',
+      sublabel: t('workflow.impact.straight_line'),
       color: '#059669',
       bg: '#f0fdf4',
       border: '#bbf7d0',
     },
     {
-      label: 'Cash vs. P&L Delta',
+      label: t('workflow.impact.cash_pl_delta'),
       value: (data.calcCashPlDelta >= 0 ? '+' : '') + fmt(data.calcCashPlDelta, language),
-      sublabel: 'At lease midpoint',
+      sublabel: t('workflow.impact.at_midpoint'),
       color: '#d97706',
       bg: '#fffbeb',
       border: '#fde68a',
@@ -167,7 +168,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
               letterSpacing: '0.05em',
             }}
           >
-            DRAFT \u2014 PENDING APPROVAL
+            {t('workflow.summary.draft_watermark')}
           </span>
         </div>
       )}
@@ -216,11 +217,11 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
                 lineHeight: 1.3,
               }}
             >
-              Lease Commitment \u2014 Financial Impact Summary
+              {t('workflow.summary.title')}
             </h1>
           </div>
           <div style={{ textAlign: 'right', fontSize: '13px', color: '#6b7280', flexShrink: 0 }}>
-            <div>Generated</div>
+            <div>{t('workflow.summary.generated')}</div>
             <div style={{ fontWeight: 600, color: '#374151' }}>{fmtDate(today)}</div>
             {isDraft && (
               <div
@@ -237,7 +238,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
                   letterSpacing: '0.06em',
                 }}
               >
-                DRAFT
+                {t('workflow.summary.draft')}
               </div>
             )}
           </div>
@@ -245,36 +246,36 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
 
         {/* ── Commitment Details ── */}
         <section style={{ marginBottom: '28px' }}>
-          <SectionHeading>Commitment Details</SectionHeading>
+          <SectionHeading>{t('workflow.request.commitment_details')}</SectionHeading>
           <FieldTable
             rows={[
-              ['Description', data.requestTitle || '\u2014'],
-              ['Asset Type', assetLabel],
-              ['Vendor', data.vendor || '\u2014'],
-              ['Requesting Department', data.requestingDepartment || '\u2014'],
-              ['Submitted', fmtDate(data.submittedAt)],
-              ['Status', data.lifecycleStatus ? displayLabel(data.lifecycleStatus as LifecycleStatus) : '\u2014'],
+              [t('workflow.request.description'), data.requestTitle || '\u2014'],
+              [t('workflow.request.asset_type'), assetLabel],
+              [t('workflow.request.vendor'), data.vendor || '\u2014'],
+              [t('workflow.request.requesting_department'), data.requestingDepartment || '\u2014'],
+              [t('approval.submitted'), fmtDate(data.submittedAt)],
+              [t('lease.status'), data.lifecycleStatus ? localizedStatusLabel(data.lifecycleStatus as LifecycleStatus) : '\u2014'],
             ]}
           />
         </section>
 
         {/* ── Lease Terms ── */}
         <section style={{ marginBottom: '28px' }}>
-          <SectionHeading>Lease Terms</SectionHeading>
+          <SectionHeading>{t('workflow.request.lease_terms')}</SectionHeading>
           <FieldTable
             rows={[
-              ['Monthly Payment', data.monthlyPayment ? fmt(data.monthlyPayment, language) : '\u2014'],
-              ['Term', data.termMonths ? `${data.termMonths} months` : '\u2014'],
-              ['Start Date', fmtDate(data.startDate)],
-              ['End Date', fmtDate(data.endDate)],
-              ['Annual Escalation', data.escalationRate > 0 ? `${data.escalationRate}%` : 'None'],
+              [t('workflow.request.monthly_payment'), data.monthlyPayment ? fmt(data.monthlyPayment, language) : '\u2014'],
+              [t('workflow.summary.term'), data.termMonths ? t('workflow.impact.n_months', { count: data.termMonths }) : '\u2014'],
+              [t('workflow.summary.start_date'), fmtDate(data.startDate)],
+              [t('workflow.summary.end_date'), fmtDate(data.endDate)],
+              [t('workflow.summary.annual_escalation'), data.escalationRate > 0 ? `${data.escalationRate}%` : t('workflow.summary.none')],
             ]}
           />
         </section>
 
         {/* ── Financial Impact (hero) ── */}
         <section style={{ marginBottom: '28px' }}>
-          <SectionHeading>Financial Impact</SectionHeading>
+          <SectionHeading>{t('workflow.impact.title')}</SectionHeading>
           <div
             style={{
               display: 'grid',
@@ -323,11 +324,11 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
 
         {/* ── Classification & Governance ── */}
         <section style={{ marginBottom: '28px' }}>
-          <SectionHeading>Classification &amp; Governance</SectionHeading>
+          <SectionHeading>{t('workflow.summary.classification_governance')}</SectionHeading>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ color: '#6b7280', fontWeight: 500, minWidth: '170px' }}>
-                Lease Classification
+                {t('workflow.summary.lease_classification')}
               </span>
               <StatusPill
                 label={classificationLabel}
@@ -342,10 +343,10 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ color: '#6b7280', fontWeight: 500, minWidth: '170px' }}>
-                Covenant Impact
+                {t('workflow.summary.covenant_impact')}
               </span>
               <StatusPill
-                label={data.covenantFlagged ? 'Flagged for Review' : 'No Covenant Impact'}
+                label={data.covenantFlagged ? t('workflow.summary.flagged_for_review') : t('workflow.summary.no_covenant_impact')}
                 variant={data.covenantFlagged ? 'amber' : 'green'}
               />
             </div>
@@ -361,8 +362,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
                   color: '#1e40af',
                 }}
               >
-                \u2139\uFE0F This lease will be recognized as a right-of-use asset on the balance
-                sheet.
+                {t('workflow.summary.rou_note')}
               </div>
             )}
           </div>
@@ -371,16 +371,16 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
         {/* ── Approval Record (only if approved) ── */}
         {isApproved && (data.financialApprovedAt || data.financialApproverName) && (
           <section style={{ marginBottom: '28px' }}>
-            <SectionHeading>Approval Record</SectionHeading>
+            <SectionHeading>{t('workflow.summary.approval_record')}</SectionHeading>
             <FieldTable
               rows={[
                 ...(data.financialApproverName
-                  ? [['Approved By', data.financialApproverName] as [string, string]]
+                  ? [[t('workflow.summary.approved_by'), data.financialApproverName] as [string, string]]
                   : []),
                 ...(data.financialApprovedAt
-                  ? [['Approval Date', fmtDateTime(data.financialApprovedAt)] as [string, string]]
+                  ? [[t('workflow.summary.approval_date'), fmtDateTime(data.financialApprovedAt)] as [string, string]]
                   : []),
-                ['Classification Confirmed', classificationLabel],
+                [t('workflow.summary.classification_confirmed'), classificationLabel],
               ]}
             />
           </section>
@@ -402,7 +402,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
               margin: '0 0 4px',
             }}
           >
-            Generated by LeaseIO \u2014 Pre-signing financial intelligence
+            {t('workflow.summary.footer_tagline')}
           </p>
           {shareUrl && (
             <p
@@ -424,8 +424,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
               fontStyle: 'italic',
             }}
           >
-            This summary is generated from inputs provided at quote stage. Final terms are subject
-            to executed lease agreement.
+            {t('workflow.summary.footer_disclaimer')}
           </p>
         </footer>
       </div>

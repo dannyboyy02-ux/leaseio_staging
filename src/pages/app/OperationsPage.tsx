@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface UsageSnapshot {
   id: string;
@@ -71,10 +72,10 @@ function pctColor(pct: number | null): string {
   return 'bg-green-500';
 }
 
-function severityBadge(threshold: AlertRow['threshold_crossed']) {
-  if (threshold === 'critical') return <Badge variant="destructive">critical</Badge>;
-  if (threshold === 'alert') return <Badge className="bg-orange-500">alert</Badge>;
-  return <Badge className="bg-yellow-500">warn</Badge>;
+function severityBadge(threshold: AlertRow['threshold_crossed'], t: (k: string) => string) {
+  if (threshold === 'critical') return <Badge variant="destructive">{t('operations.severity.critical')}</Badge>;
+  if (threshold === 'alert') return <Badge className="bg-orange-500">{t('operations.severity.alert')}</Badge>;
+  return <Badge className="bg-yellow-500">{t('operations.severity.warn')}</Badge>;
 }
 
 function daysUntil(dateStr: string): number {
@@ -86,6 +87,7 @@ function daysUntil(dateStr: string): number {
 }
 
 export default function OperationsPage() {
+  const { t } = useAppTranslation();
   // P2-02: explicit ops-admin gate. The previous design relied solely
   // on RLS — non-ops users hit the route and saw an empty dashboard
   // with no signal that they weren't authorized. Now we ask the DB
@@ -171,13 +173,13 @@ export default function OperationsPage() {
       .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: user.id })
       .eq('id', alertId);
     if (error) {
-      toast.error(`Acknowledge failed: ${error.message}`);
+      toast.error(t('operations.acknowledge_failed', { message: error.message }));
       return;
     }
     setAlerts((prev) => prev.map((a) => a.id === alertId
       ? { ...a, acknowledged_at: new Date().toISOString() }
       : a));
-    toast.success('Acknowledged');
+    toast.success(t('operations.acknowledged'));
   };
 
   const upcomingRenewals = renewals.filter((r) => daysUntil(r.renewal_date) <= 60 && daysUntil(r.renewal_date) >= 0);
@@ -185,18 +187,18 @@ export default function OperationsPage() {
   if (authStatus === 'forbidden') {
     return (
       <AppLayout>
-        <AppHeader title="Operations" />
+        <AppHeader title={t('operations.title')} />
         <div className="p-6 max-w-2xl">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <AlertCircle className="h-4 w-4 text-destructive" />
-                Forbidden
+                {t('operations.forbidden_title')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                This page is restricted to LeaseIO operations staff. If you believe you should have access, contact an existing operations admin.
+                {t('operations.forbidden_desc')}
               </p>
             </CardContent>
           </Card>
@@ -208,13 +210,13 @@ export default function OperationsPage() {
   return (
     <AppLayout>
       <AppHeader
-        title="Operations"
-        subtitle="Vendor health, upcoming renewals, recent alerts"
+        title={t('operations.title')}
+        subtitle={t('operations.subtitle')}
       />
       <div className="p-6 space-y-6 max-w-7xl">
         {(authStatus === 'checking' || loading) && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            <Loader2 className="h-4 w-4 animate-spin" /> {t('workspace.watchlist.loading')}
           </div>
         )}
 
@@ -222,13 +224,13 @@ export default function OperationsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-4 w-4" /> Vendor health
+              <Activity className="h-4 w-4" /> {t('operations.vendor_health')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {latestByMetric.length === 0 && !loading && (
               <p className="text-sm text-muted-foreground">
-                No snapshots yet. The vendor-health-check cron runs daily at 06:00 UTC; if you've just deployed, wait for the first run or trigger manually with the cron secret.
+                {t('operations.no_snapshots')}
               </p>
             )}
             <ul className="space-y-3">
@@ -257,8 +259,8 @@ export default function OperationsPage() {
                           />
                         </div>
                         <div className="flex items-baseline justify-between mt-1 text-xs text-muted-foreground">
-                          <span>{latest.current_value.toLocaleString()} / {latest.limit_value?.toLocaleString() ?? '(no cap)'}</span>
-                          <span>{pct !== null ? `${pct}%` : 'no limit'}</span>
+                          <span>{latest.current_value.toLocaleString()} / {latest.limit_value?.toLocaleString() ?? t('operations.no_cap')}</span>
+                          <span>{pct !== null ? `${pct}%` : t('operations.no_limit')}</span>
                         </div>
                       </div>
                       {series.length > 1 && (
@@ -283,13 +285,13 @@ export default function OperationsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" /> Upcoming renewals (next 60 days)
+              <Calendar className="h-4 w-4" /> {t('operations.upcoming_renewals')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {upcomingRenewals.length === 0 && !loading && (
               <p className="text-sm text-muted-foreground">
-                No renewals in the next 60 days. The vendor_renewal_calendar table is populated manually as Phase 1 hardening surfaces dates (domain, insurance, cards-on-file).
+                {t('operations.no_renewals')}
               </p>
             )}
             <table className="w-full text-sm">
@@ -301,11 +303,11 @@ export default function OperationsPage() {
                     <tr key={r.id}>
                       <td className="py-2 pr-4 font-mono text-xs">{r.vendor}</td>
                       <td className="py-2 pr-4">{r.item}</td>
-                      <td className={`py-2 pr-4 ${tone}`}>{r.renewal_date} · {days}d</td>
+                      <td className={`py-2 pr-4 ${tone}`}>{r.renewal_date} · {t('operations.days_short', { count: days })}</td>
                       <td className="py-2 pr-4">{r.amount_estimate !== null ? `$${r.amount_estimate}` : ''}</td>
-                      <td className="py-2 pr-4">{r.auto_renew ? <Badge variant="outline">auto</Badge> : <Badge variant="destructive">manual</Badge>}</td>
+                      <td className="py-2 pr-4">{r.auto_renew ? <Badge variant="outline">{t('operations.auto')}</Badge> : <Badge variant="destructive">{t('operations.manual')}</Badge>}</td>
                       <td className="py-2 text-right">
-                        {r.account_url && <a href={r.account_url} target="_blank" rel="noreferrer" className="text-primary underline text-xs">manage</a>}
+                        {r.account_url && <a href={r.account_url} target="_blank" rel="noreferrer" className="text-primary underline text-xs">{t('operations.manage')}</a>}
                       </td>
                     </tr>
                   );
@@ -319,13 +321,13 @@ export default function OperationsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" /> Recent alerts (last 50)
+              <AlertCircle className="h-4 w-4" /> {t('operations.recent_alerts')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {alerts.length === 0 && !loading && (
               <p className="text-sm text-muted-foreground">
-                No alerts on file. Threshold crossings dispatch one row per (vendor, metric, threshold) per day.
+                {t('operations.no_alerts')}
               </p>
             )}
             <ul className="space-y-2">
@@ -336,23 +338,23 @@ export default function OperationsPage() {
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      {severityBadge(a.threshold_crossed)}
+                      {severityBadge(a.threshold_crossed, t)}
                       <span className="font-mono text-sm">{a.vendor}</span>
                       <span className="text-muted-foreground">·</span>
                       <span className="font-mono text-sm">{a.metric}</span>
                       <span className="text-xs text-muted-foreground">{new Date(a.fired_at).toLocaleString()}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {a.current_value} / {a.limit_value ?? '(no cap)'}{a.pct_of_limit !== null ? ` · ${a.pct_of_limit}%` : ''}
+                      {a.current_value} / {a.limit_value ?? t('operations.no_cap')}{a.pct_of_limit !== null ? ` · ${a.pct_of_limit}%` : ''}
                     </p>
                     {a.upgrade_suggestion && (
-                      <p className="text-xs mt-1">{a.upgrade_suggestion}{a.upgrade_url && <> — <a href={a.upgrade_url} target="_blank" rel="noreferrer" className="text-primary underline">link</a></>}</p>
+                      <p className="text-xs mt-1">{a.upgrade_suggestion}{a.upgrade_url && <> — <a href={a.upgrade_url} target="_blank" rel="noreferrer" className="text-primary underline">{t('operations.link')}</a></>}</p>
                     )}
                   </div>
                   {a.acknowledged_at ? (
                     <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-1" />
                   ) : (
-                    <Button size="sm" variant="outline" onClick={() => acknowledge(a.id)}>Acknowledge</Button>
+                    <Button size="sm" variant="outline" onClick={() => acknowledge(a.id)}>{t('operations.acknowledge')}</Button>
                   )}
                 </li>
               ))}

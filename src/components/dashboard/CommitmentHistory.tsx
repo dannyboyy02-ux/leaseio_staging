@@ -22,7 +22,7 @@ function formatCompact(n: number): string {
 
 export function CommitmentHistory() {
   const { workspace } = useApp();
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const [data, setData] = useState<MonthPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,8 +71,8 @@ export function CommitmentHistory() {
             <TrendingUp className="h-5 w-5" />
           </div>
           <div>
-            <CardTitle className="text-base">Total Commitment History</CardTitle>
-            <CardDescription>Lease commitments grouped by commencement month</CardDescription>
+            <CardTitle className="text-base">{t('dashboard.total_commitment_history')}</CardTitle>
+            <CardDescription>{t('dashboard.commitment_by_month')}</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -103,7 +103,7 @@ export function CommitmentHistory() {
               <Tooltip
                 formatter={(val: number) => [
                   `$${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
-                  'Commitment',
+                  t('dashboard.commitment'),
                 ]}
                 contentStyle={{
                   background: 'hsl(var(--popover))',

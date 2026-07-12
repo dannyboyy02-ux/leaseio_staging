@@ -13,6 +13,10 @@
 // one place a class component is required.
 
 import { Component, type ReactNode } from 'react';
+// Class components can't use the useAppTranslation hook; the global t is
+// safe here because i18n is initialized at boot (src/i18n.ts via main.tsx)
+// and this fallback only renders after the app tree has already mounted.
+import { t } from 'i18next';
 
 interface Props {
   children: ReactNode;
@@ -55,7 +59,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      const message = this.state.error?.message ?? String(this.state.error ?? 'Unknown error');
+      const message = this.state.error?.message ?? String(this.state.error ?? t('errors.unknown'));
       return (
         <div
           style={{
@@ -80,11 +84,10 @@ export class ErrorBoundary extends Component<Props, State> {
             }}
           >
             <h1 style={{ fontSize: '1.25rem', fontWeight: 600, marginTop: 0, marginBottom: '0.5rem', color: '#111827' }}>
-              Something went wrong
+              {t('errors.boundary_title')}
             </h1>
             <p style={{ fontSize: '0.9rem', color: '#4b5563', lineHeight: 1.6, marginBottom: '1rem' }}>
-              An unexpected error occurred. The page failed to render. You can try
-              again, reload the app, or contact support if the issue persists.
+              {t('errors.boundary_desc')}
             </p>
             <details
               style={{
@@ -98,7 +101,7 @@ export class ErrorBoundary extends Component<Props, State> {
               }}
             >
               <summary style={{ cursor: 'pointer', fontWeight: 500, color: '#374151' }}>
-                Error details
+                {t('errors.details')}
               </summary>
               <pre
                 style={{
@@ -131,7 +134,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   cursor: 'pointer',
                 }}
               >
-                Try again
+                {t('errors.try_again')}
               </button>
               <button
                 onClick={this.handleReload}
@@ -146,7 +149,7 @@ export class ErrorBoundary extends Component<Props, State> {
                   cursor: 'pointer',
                 }}
               >
-                Reload app
+                {t('errors.reload_app')}
               </button>
             </div>
           </div>

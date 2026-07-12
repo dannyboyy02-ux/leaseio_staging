@@ -18,7 +18,7 @@ interface StatBox {
 }
 
 export function SummaryStrip() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { workspace } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const formatCurrencyDecimals = (value: number | null | undefined) => formatLocalizedCurrency(value, language, { cents: true });
@@ -87,8 +87,8 @@ export function SummaryStrip() {
 
       const monthlyRentSub =
         weightedAvgPerSqft !== null
-          ? `Avg ${formatCurrencyDecimals(weightedAvgPerSqft)}/sqft`
-          : `${portfolioLeases.length} portfolio lease${portfolioLeases.length !== 1 ? 's' : ''}`;
+          ? t('dashboard.avg_per_sqft', { amount: formatCurrencyDecimals(weightedAvgPerSqft) })
+          : t('dashboard.portfolio_leases', { count: portfolioLeases.length });
 
       // Stat 2: Needs Action — leases requiring human attention.
       // Phase 3: extend with chain awaiting_concept + in_concept_review +
@@ -168,40 +168,40 @@ export function SummaryStrip() {
 
       setStats([
         {
-          label: 'Monthly Rent',
+          label: t('dashboard.monthly_rent'),
           primary: formatCurrency(monthlyRentSum),
           sub: monthlyRentSub,
           accent: 'default',
           href: '/app/leases?status=active',
         },
         {
-          label: 'Needs Action',
+          label: t('dashboard.needs_action'),
           primary: String(needsActionCount),
-          sub: needsActionCount === 0 ? 'All clear' : `${needsActionCount} item${needsActionCount !== 1 ? 's' : ''} need attention`,
+          sub: needsActionCount === 0 ? t('dashboard.all_clear') : t('dashboard.items_need_attention', { count: needsActionCount }),
           accent: needsActionCount > 0 ? 'blue' : 'default',
           href: '/app/leases',
         },
         {
-          label: 'Awaiting Approval',
+          label: t('dashboard.awaiting_approval'),
           primary: String(awaitingCount),
-          sub: awaitingCount === 0 ? 'none pending' : `${awaitingCount} lease${awaitingCount !== 1 ? 's' : ''} pending`,
+          sub: awaitingCount === 0 ? t('dashboard.none_pending') : t('dashboard.leases_pending', { count: awaitingCount }),
           accent: 'orange',
           href: '/app/approvals',
           disabled: awaitingCount === 0,
         },
         {
-          label: 'Expiring \u2264 90 Days',
+          label: t('dashboard.expiring_90'),
           primary: String(displayExpiring90Count),
-          sub: displayExpiring90Count > 0 ? 'require attention' : 'all clear',
+          sub: displayExpiring90Count > 0 ? t('dashboard.require_attention') : t('dashboard.all_clear_lc'),
           accent: 'red',
           href: '/app/leases?status=active&expiring=90',
           disabled: displayExpiring90Count === 0,
           onDismiss: displayExpiring90Count > 0 ? () => handleDismiss('90') : undefined,
         },
         {
-          label: 'Expiring 91\u2013120 Days',
+          label: t('dashboard.expiring_91_120'),
           primary: String(displayExpiring120Count),
-          sub: displayExpiring120Count > 0 ? 'on the horizon' : 'all clear',
+          sub: displayExpiring120Count > 0 ? t('dashboard.on_the_horizon') : t('dashboard.all_clear_lc'),
           accent: displayExpiring120Count > 0 ? 'orange' : 'default',
           href: '/app/leases?status=active&expiring=120',
           disabled: displayExpiring120Count === 0,
@@ -213,7 +213,9 @@ export function SummaryStrip() {
     }
 
     fetchData();
-  }, [workspace?.id, refreshKey]);
+    // `language` re-runs the fetch on switch so the translated labels/subs
+    // rebuild (mirrors IntakeTrend/CommitmentHistory).
+  }, [workspace?.id, refreshKey, language]);
 
   if (loading) {
     return (
@@ -248,7 +250,7 @@ export function SummaryStrip() {
                   type="button"
                   onClick={(e) => { e.stopPropagation(); box.onDismiss!(); }}
                   className="text-muted-foreground/40 hover:text-green-500 transition-colors"
-                  title="Mark as seen"
+                  title={t('dashboard.mark_as_seen')}
                 >
                   <Check className="h-3 w-3" />
                 </button>

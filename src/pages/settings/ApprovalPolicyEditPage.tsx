@@ -23,6 +23,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { validatePolicy } from './approvalPolicyValidation';
@@ -83,6 +84,7 @@ const newUiId = () => `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}
 
 export default function ApprovalPolicyEditPage() {
   const { workspace } = useApp();
+  const { t } = useAppTranslation();
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = !routeId || routeId === 'new';
@@ -163,7 +165,7 @@ export default function ApprovalPolicyEditPage() {
           .maybeSingle();
         if (pErr) throw pErr;
         if (!p) {
-          toast.error('Rule not found.');
+          toast.error(t('policy_editor.toast_not_found'));
           navigate('/app/settings/approval-policies', { replace: true });
           return;
         }
@@ -218,7 +220,7 @@ export default function ApprovalPolicyEditPage() {
         setConceptSteps(concept);
         setSignatorSteps(signator);
       } catch (err: any) {
-        toast.error(err?.message ?? 'Failed to load rule');
+        toast.error(err?.message ?? t('policy_editor.toast_load_failed'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -240,7 +242,7 @@ export default function ApprovalPolicyEditPage() {
     if (form.sla_days.trim() !== '') {
       const slaNum = Number(form.sla_days);
       if (!Number.isInteger(slaNum) || slaNum <= 0) {
-        toast.error('Approval SLA must be a whole number of days greater than 0 (or leave it blank for the default of 7).');
+        toast.error(t('policy_editor.toast_sla_invalid'));
         return;
       }
     }
@@ -248,7 +250,7 @@ export default function ApprovalPolicyEditPage() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
-      if (!userId) throw new Error('Not signed in');
+      if (!userId) throw new Error(t('policy_editor.toast_not_signed_in'));
 
       const sodOverride: boolean | null =
         form.sod_mode === 'inherit' ? null : form.sod_mode === 'require' ? true : false;
@@ -303,10 +305,10 @@ export default function ApprovalPolicyEditPage() {
       });
       if (rpcErr) throw rpcErr;
 
-      toast.success(isNew ? 'Rule created.' : 'Rule saved.');
+      toast.success(isNew ? t('policy_editor.toast_created') : t('policy_editor.toast_saved'));
       navigate('/app/settings/approval-policies');
     } catch (err: any) {
-      toast.error(err?.message ?? 'Save failed');
+      toast.error(err?.message ?? t('policy_editor.toast_save_failed'));
     } finally {
       setSaving(false);
     }
@@ -315,7 +317,7 @@ export default function ApprovalPolicyEditPage() {
   if (loading) {
     return (
       <AppLayout>
-        <AppHeader title="Approval Rule" />
+        <AppHeader title={t('policy_editor.header_title')} />
         <div className="container mx-auto p-6">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -327,7 +329,7 @@ export default function ApprovalPolicyEditPage() {
 
   return (
     <AppLayout>
-      <AppHeader title={isNew ? 'New approval rule' : 'Edit approval rule'} />
+      <AppHeader title={isNew ? t('policy_editor.header_new') : t('policy_editor.header_edit')} />
       <div className="container mx-auto p-6 space-y-6 max-w-4xl">
         <div>
           <Button
@@ -337,19 +339,19 @@ export default function ApprovalPolicyEditPage() {
             className="text-muted-foreground"
           >
             <ArrowLeft className="h-4 w-4 mr-1.5" />
-            All rules
+            {t('policy_editor.all_rules')}
           </Button>
         </div>
 
         {/* Name your rule */}
         <Card>
           <CardHeader>
-            <CardTitle>Name your rule</CardTitle>
-            <CardDescription>Give it a clear name so other admins know when it should apply.</CardDescription>
+            <CardTitle>{t('policy_editor.name_card_title')}</CardTitle>
+            <CardDescription>{t('policy_editor.name_card_desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs" htmlFor="approval-rule-name">Name</Label>
+              <Label className="text-xs" htmlFor="approval-rule-name">{t('policy_editor.name_label')}</Label>
               {/*
                 autoComplete="off" + a non-standard name attribute defeats
                 Chrome's heuristic that pre-fills bare text inputs with the
@@ -362,11 +364,11 @@ export default function ApprovalPolicyEditPage() {
                 autoComplete="off"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g., Mid-size real estate leases"
+                placeholder={t('policy_editor.name_placeholder')}
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs" htmlFor="approval-rule-description">Description (optional)</Label>
+              <Label className="text-xs" htmlFor="approval-rule-description">{t('policy_editor.description_label')}</Label>
               <Textarea
                 id="approval-rule-description"
                 name="approval-rule-description-do-not-autofill"
@@ -374,18 +376,18 @@ export default function ApprovalPolicyEditPage() {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 rows={2}
-                placeholder="Notes for other admins (optional)"
+                placeholder={t('policy_editor.description_placeholder')}
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Active</Label>
+              <Label className="text-xs">{t('policy_editor.active_label')}</Label>
               <div className="flex items-center gap-2 h-10">
                 <Switch
                   checked={form.is_active}
                   onCheckedChange={(v) => setForm({ ...form, is_active: v })}
                 />
                 <span className="text-xs text-muted-foreground">
-                  {form.is_active ? 'On — this rule is in use' : 'Off — this rule is paused'}
+                  {form.is_active ? t('policy_editor.active_on') : t('policy_editor.active_off')}
                 </span>
               </div>
             </div>
@@ -395,7 +397,7 @@ export default function ApprovalPolicyEditPage() {
         {/* When does this rule apply? */}
         <Card>
           <CardHeader>
-            <CardTitle>When does this rule apply?</CardTitle>
+            <CardTitle>{t('policy_editor.when_card_title')}</CardTitle>
           </CardHeader>
           <CardContent>
             <MatchCriteriaSentence
@@ -419,14 +421,14 @@ export default function ApprovalPolicyEditPage() {
             inter-stage vertical connector per visual contract addendum §5. */}
         <Card>
           <CardHeader>
-            <CardTitle>Who needs to approve?</CardTitle>
+            <CardTitle>{t('policy_editor.who_card_title')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <ChainDiagram
               caption={{
                 badge: '1',
-                primary: 'First, get the green light',
-                secondary: 'before any paperwork starts',
+                primary: t('policy_editor.stage1_primary'),
+                secondary: t('policy_editor.stage1_secondary'),
               }}
               steps={conceptSteps}
               setSteps={setConceptSteps}
@@ -441,8 +443,8 @@ export default function ApprovalPolicyEditPage() {
             <ChainDiagram
               caption={{
                 badge: '2',
-                primary: 'Then, sign the deal',
-                secondary: 'after negotiation is done',
+                primary: t('policy_editor.stage2_primary'),
+                secondary: t('policy_editor.stage2_secondary'),
               }}
               steps={signatorSteps}
               setSteps={setSignatorSteps}
@@ -458,8 +460,8 @@ export default function ApprovalPolicyEditPage() {
               <CardHeader className="cursor-pointer hover:bg-muted/30 rounded-t-lg transition-colors">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-base">Advanced settings</CardTitle>
-                    <CardDescription>Most admins don't need to change these.</CardDescription>
+                    <CardTitle className="text-base">{t('policy_editor.advanced_title')}</CardTitle>
+                    <CardDescription>{t('policy_editor.advanced_desc')}</CardDescription>
                   </div>
                   <ChevronDown
                     className={`h-4 w-4 text-muted-foreground transition-transform ${advancedOpen ? 'rotate-180' : ''}`}
@@ -471,19 +473,19 @@ export default function ApprovalPolicyEditPage() {
               <CardContent className="space-y-6 pt-2">
                 {/* When two rules fit, which wins? */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs">When two rules fit, which wins?</Label>
+                  <Label className="text-xs">{t('policy_editor.priority_label')}</Label>
                   <Input
                     type="number"
                     value={form.priority}
                     onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value || '0', 10) })}
                     min={1}
                   />
-                  <p className="text-[10px] text-muted-foreground">Higher number wins when multiple rules match the same request.</p>
+                  <p className="text-[10px] text-muted-foreground">{t('policy_editor.priority_help')}</p>
                 </div>
 
                 {/* Approval SLA — #111 C6 */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs" htmlFor="approval-rule-sla">Approval SLA (days)</Label>
+                  <Label className="text-xs" htmlFor="approval-rule-sla">{t('policy_editor.sla_label')}</Label>
                   <Input
                     id="approval-rule-sla"
                     type="number"
@@ -493,49 +495,50 @@ export default function ApprovalPolicyEditPage() {
                     onChange={(e) => setForm({ ...form, sla_days: e.target.value })}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Steps pending longer than this are flagged “over SLA” in the approver's queue. Leave blank to use the default of 7 days.
+                    {t('policy_editor.sla_help')}
                   </p>
                 </div>
 
                 {/* Use this rule when no other rule fits */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Use this rule when no other rule fits</Label>
+                  <Label className="text-xs">{t('policy_editor.fallback_label')}</Label>
                   <div className="flex items-center gap-2 h-10">
                     <Switch
                       checked={form.is_default_fallback}
                       onCheckedChange={(v) => setForm({ ...form, is_default_fallback: v })}
                     />
                     <span className="text-xs text-muted-foreground">
-                      {form.is_default_fallback ? 'On — this is the workspace fallback' : 'Off'}
+                      {form.is_default_fallback ? t('policy_editor.fallback_on') : t('policy_editor.fallback_off')}
                     </span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Only one rule per workspace can be the fallback.</p>
+                  <p className="text-[10px] text-muted-foreground">{t('policy_editor.fallback_help')}</p>
                 </div>
 
                 {/* Can the same person fill multiple roles? */}
                 <div className="space-y-2">
-                  <Label className="text-xs">Can the same person fill multiple roles?</Label>
+                  <Label className="text-xs">{t('policy_editor.sod_label')}</Label>
                   <p className="text-[10px] text-muted-foreground">
-                    Workspace default is <strong>{wsExtras.data?.sodDefault ? 'ON (require distinct users)' : 'OFF (allow same user)'}</strong>.
+                    {t('policy_editor.sod_default_prefix')}{' '}
+                    <strong>{wsExtras.data?.sodDefault ? t('policy_editor.sod_default_on') : t('policy_editor.sod_default_off')}</strong>.
                   </p>
                   <RadioGroup value={form.sod_mode} onValueChange={(v) => setForm({ ...form, sod_mode: v as SodMode })}>
                     <div className="flex items-start space-x-2">
                       <RadioGroupItem value="inherit" id="sod-inherit" />
                       <Label htmlFor="sod-inherit" className="font-normal text-sm cursor-pointer">
-                        Use the workspace default (currently:{' '}
-                        <strong>{wsExtras.data?.sodDefault ? 'require distinct users' : 'allow same user'}</strong>)
+                        {t('policy_editor.sod_inherit_prefix')}{' '}
+                        <strong>{wsExtras.data?.sodDefault ? t('policy_editor.sod_currently_require') : t('policy_editor.sod_currently_allow')}</strong>)
                       </Label>
                     </div>
                     <div className="flex items-start space-x-2">
                       <RadioGroupItem value="allow" id="sod-allow" />
                       <Label htmlFor="sod-allow" className="font-normal text-sm cursor-pointer">
-                        Allow the same person in multiple roles
+                        {t('policy_editor.sod_allow_label')}
                       </Label>
                     </div>
                     <div className="flex items-start space-x-2">
                       <RadioGroupItem value="require" id="sod-require" />
                       <Label htmlFor="sod-require" className="font-normal text-sm cursor-pointer">
-                        Require distinct users
+                        {t('policy_editor.sod_require_label')}
                       </Label>
                     </div>
                   </RadioGroup>
@@ -553,22 +556,22 @@ export default function ApprovalPolicyEditPage() {
             disabled={saving || !workspace?.id}
           >
             <FlaskConical className="h-4 w-4 mr-1.5" />
-            Try it on a sample request
+            {t('policy_editor.try_sample')}
           </Button>
           <div className="flex-1" />
           <Button variant="ghost" onClick={() => navigate('/app/settings/approval-policies')} disabled={saving}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={save} disabled={saving}>
             {saving ? (
               <>
                 <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                Saving…
+                {t('workspace.autosave.saving')}
               </>
             ) : (
               <>
                 <Save className="h-4 w-4 mr-1.5" />
-                {isNew ? 'Create rule' : 'Save rule'}
+                {isNew ? t('policy_editor.create_rule') : t('policy_editor.save_rule')}
               </>
             )}
           </Button>

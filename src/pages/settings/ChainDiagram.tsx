@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react';
+import { t } from 'i18next';
 import {
   DndContext,
   closestCenter,
@@ -47,6 +48,7 @@ import {
   CommandSeparator,
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — keep aligned with workspace_roles. `abbrev` is the 2-letter
@@ -55,14 +57,14 @@ import { cn } from '@/lib/utils';
 
 export const FUNCTIONAL_ROLE_OPTIONS: Array<{
   value: string;
-  label: string;
+  labelKey: string;
   abbrev: string;
 }> = [
-  { value: 'submitter', label: 'Submitter', abbrev: 'SU' },
-  { value: 'manager_approver', label: 'Manager approver', abbrev: 'MA' },
-  { value: 'financial_approver', label: 'Financial approver', abbrev: 'FA' },
-  { value: 'signator', label: 'Signatory', abbrev: 'SG' },
-  { value: 'admin', label: 'Admin', abbrev: 'AD' },
+  { value: 'submitter', labelKey: 'policy_editor.chain.role_submitter', abbrev: 'SU' },
+  { value: 'manager_approver', labelKey: 'policy_editor.chain.role_manager_approver', abbrev: 'MA' },
+  { value: 'financial_approver', labelKey: 'policy_editor.chain.role_financial_approver', abbrev: 'FA' },
+  { value: 'signator', labelKey: 'policy_editor.chain.role_signator', abbrev: 'SG' },
+  { value: 'admin', labelKey: 'policy_editor.chain.role_admin', abbrev: 'AD' },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -250,14 +252,14 @@ export function approverDisplayFor(
     return {
       initials: role?.abbrev ?? step.approver_role.slice(0, 2).toUpperCase(),
       colorIndex: avatarColorIndex(`role:${step.approver_role}`),
-      primary: 'Anyone with role',
-      secondary: role?.label ?? step.approver_role,
+      primary: t('policy_editor.chain.anyone_with_role'),
+      secondary: role ? t(role.labelKey) : step.approver_role,
       empty: false,
     };
   }
   if (step.approver_user_id) {
     const m = members.find((mm) => mm.id === step.approver_user_id);
-    const fullLabel = m?.label ?? 'Unknown person';
+    const fullLabel = m?.label ?? t('policy_editor.chain.unknown_person');
     const noTail = fullLabel.replace(/\s*\([^)]+\)\s*$/, '');
     const tail = fullLabel.match(/\(([^)]+)\)\s*$/)?.[1] ?? '';
     return {
@@ -288,13 +290,13 @@ export function formatSecondaryLine(
   if (step.delegate_user_id) {
     const backup = members.find((m) => m.id === step.delegate_user_id);
     const backupName =
-      backup?.label.replace(/\s*\([^)]+\)\s*$/, '') ?? 'Unknown';
+      backup?.label.replace(/\s*\([^)]+\)\s*$/, '') ?? t('policy_editor.chain.unknown');
     const days = step.delegate_after_days
       ? ` +${step.delegate_after_days}d`
       : '';
-    parts.push(`Backup: ${backupName}${days}`);
+    parts.push(`${t('policy_editor.chain.backup_line', { name: backupName })}${days}`);
   }
-  if (!step.is_required) parts.push('Optional');
+  if (!step.is_required) parts.push(t('policy_editor.chain.optional_flag'));
   return parts.join(' · ');
 }
 
@@ -316,6 +318,7 @@ export function ChainDiagram({
   setSteps,
   memberOptions,
 }: ChainDiagramProps) {
+  const { t: tr } = useAppTranslation();
   const groups = groupByParallel(steps);
 
   const sensors = useSensors(
@@ -408,7 +411,7 @@ export function ChainDiagram({
           onClick={() => setSteps(addNextStep(steps))}
         >
           <Plus className="h-3 w-3 mr-1" />
-          Add another step
+          {tr('policy_editor.chain.add_another_step')}
         </Button>
       )}
     </div>
@@ -434,6 +437,7 @@ function ParallelStepRow({
   onRemove,
   onAddParallel,
 }: ParallelStepRowProps) {
+  const { t: tr } = useAppTranslation();
   const id = String(group[0].parallel_group);
   const {
     attributes,
@@ -462,7 +466,7 @@ function ParallelStepRow({
       <button
         type="button"
         className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none mt-3 px-1"
-        aria-label="Drag to reorder this step"
+        aria-label={tr('policy_editor.chain.drag_reorder')}
         {...attributes}
         {...listeners}
       >
@@ -484,7 +488,7 @@ function ParallelStepRow({
           onClick={onAddParallel}
         >
           <Plus className="h-3 w-3 mr-1" />
-          Add another approver to this step
+          {tr('policy_editor.chain.add_parallel_approver')}
         </Button>
       </div>
     </div>
@@ -502,6 +506,7 @@ function ParallelCardsRow({
   onUpdate: (uiId: string, patch: Partial<ChainStep>) => void;
   onRemove: (uiId: string) => void;
 }) {
+  const { t: tr } = useAppTranslation();
   if (group.length === 1) {
     return (
       <ApproverCard
@@ -528,7 +533,7 @@ function ParallelCardsRow({
             </div>
             {idx < group.length - 1 && (
               <div className="flex items-center px-1 text-[10px] font-medium text-muted-foreground leading-tight text-center whitespace-nowrap">
-                AND<br />at the<br />same<br />time
+                {tr('policy_editor.chain.and_line1')}<br />{tr('policy_editor.chain.and_line2')}<br />{tr('policy_editor.chain.and_line3')}<br />{tr('policy_editor.chain.and_line4')}
               </div>
             )}
           </Fragment>
@@ -546,7 +551,7 @@ function ParallelCardsRow({
             />
             {idx < group.length - 1 && (
               <div className="text-center text-xs font-medium text-muted-foreground">
-                — AND at the same time —
+                {tr('policy_editor.chain.and_same_time_mobile')}
               </div>
             )}
           </Fragment>
@@ -575,6 +580,7 @@ export function ApproverCard({
   onUpdate,
   onRemove,
 }: ApproverCardProps) {
+  const { t: tr } = useAppTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const display = approverDisplayFor(step, memberOptions);
@@ -606,7 +612,7 @@ export function ApproverCard({
                 colors.bg,
                 colors.text,
               )}
-              aria-label="Change approver"
+              aria-label={tr('policy_editor.chain.change_approver')}
               onClick={() => setPickerOpen(true)}
             >
               {display.initials}
@@ -629,31 +635,31 @@ export function ApproverCard({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 shrink-0"
-                aria-label="Approver options"
+                aria-label={tr('policy_editor.chain.approver_options')}
               >
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => setPickerOpen(true)}>
-                Choose someone else…
+                {tr('policy_editor.chain.choose_someone_else')}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setBackupOpen(true)}>
                 {step.delegate_user_id
-                  ? 'Edit backup approver…'
-                  : 'Add backup approver…'}
+                  ? tr('policy_editor.chain.edit_backup')
+                  : tr('policy_editor.chain.add_backup')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => onUpdate({ is_required: !step.is_required })}
               >
-                {step.is_required ? 'Mark as optional' : 'Mark as required'}
+                {step.is_required ? tr('policy_editor.chain.mark_optional') : tr('policy_editor.chain.mark_required')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={onRemove}
                 className="text-destructive focus:text-destructive"
               >
-                Remove approver
+                {tr('policy_editor.chain.remove_approver')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -717,6 +723,7 @@ function EmptyApproverSlot({
   onPick,
   onRemove,
 }: EmptyApproverSlotProps) {
+  const { t: tr } = useAppTranslation();
   const [open, setOpen] = useState(false);
   return (
     <div className="flex items-stretch gap-1">
@@ -727,7 +734,7 @@ function EmptyApproverSlot({
             className="flex-1 p-3 border-2 border-dashed rounded-lg text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors flex items-center justify-center gap-2 text-sm"
           >
             <UserPlus className="w-4 h-4" />
-            Choose an approver…
+            {tr('policy_editor.chain.choose_approver')}
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-72 p-0" align="start">
@@ -755,7 +762,7 @@ function EmptyApproverSlot({
           size="icon"
           className="h-auto w-7 text-muted-foreground hover:text-destructive"
           onClick={onRemove}
-          title="Remove this empty slot"
+          title={tr('policy_editor.chain.remove_empty_slot')}
         >
           <X className="h-3.5 w-3.5" />
         </Button>
@@ -804,26 +811,29 @@ function ApproverPickerContent({
   onSelectUser,
   onClear,
 }: ApproverPickerContentProps) {
+  const { t: tr } = useAppTranslation();
   return (
     <Command>
       <CommandInput
         placeholder={
-          includeRoles ? 'Search roles or people…' : 'Search people…'
+          includeRoles
+            ? tr('policy_editor.chain.search_roles_people')
+            : tr('policy_editor.chain.search_people')
         }
       />
       <CommandList>
-        <CommandEmpty>No matches.</CommandEmpty>
+        <CommandEmpty>{tr('policy_editor.chain.no_matches')}</CommandEmpty>
 
         {includeRoles && (
-          <CommandGroup heading="Anyone with role">
+          <CommandGroup heading={tr('policy_editor.chain.anyone_with_role')}>
             {FUNCTIONAL_ROLE_OPTIONS.map((r) => (
               <CommandItem
                 key={`role-${r.value}`}
-                value={`role ${r.label}`}
+                value={`role ${tr(r.labelKey)}`}
                 onSelect={() => onSelectRole?.(r.value)}
               >
                 <Users className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                <span className="flex-1">{r.label}</span>
+                <span className="flex-1">{tr(r.labelKey)}</span>
                 {currentRole === r.value && (
                   <Check className="h-3.5 w-3.5 text-primary" />
                 )}
@@ -834,11 +844,11 @@ function ApproverPickerContent({
 
         {includeRoles && memberOptions.length > 0 && <CommandSeparator />}
 
-        <CommandGroup heading="A specific person">
+        <CommandGroup heading={tr('policy_editor.chain.a_specific_person')}>
           {memberOptions.length === 0 ? (
             <CommandItem disabled value="__none__">
               <span className="text-muted-foreground text-xs">
-                No workspace members loaded
+                {tr('policy_editor.chain.no_members_loaded')}
               </span>
             </CommandItem>
           ) : (
@@ -864,7 +874,7 @@ function ApproverPickerContent({
             <CommandGroup>
               <CommandItem value="__clear__" onSelect={() => onClear?.()}>
                 <X className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                <span className="text-muted-foreground">Clear selection</span>
+                <span className="text-muted-foreground">{tr('policy_editor.chain.clear_selection')}</span>
               </CommandItem>
             </CommandGroup>
           </>
@@ -891,17 +901,18 @@ function BackupEditor({
   currentDays,
   onChange,
 }: BackupEditorProps) {
+  const { t: tr } = useAppTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
   const current = memberOptions.find((m) => m.id === currentUserId);
   const currentLabel =
-    current?.label.replace(/\s*\([^)]+\)\s*$/, '') ?? 'No backup chosen';
+    current?.label.replace(/\s*\([^)]+\)\s*$/, '') ??
+    tr('policy_editor.chain.no_backup_chosen');
 
   return (
     <div className="space-y-3">
-      <p className="text-xs font-medium">Backup approver</p>
+      <p className="text-xs font-medium">{tr('policy_editor.chain.backup_title')}</p>
       <p className="text-[10px] text-muted-foreground">
-        If the primary approver doesn't respond within N days, the request
-        forwards to this person.
+        {tr('policy_editor.chain.backup_hint')}
       </p>
 
       <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -937,7 +948,7 @@ function BackupEditor({
 
       <div className="space-y-1">
         <Label className="text-[10px] uppercase tracking-wide">
-          Forward after how many days?
+          {tr('policy_editor.chain.forward_after_days')}
         </Label>
         <Input
           type="number"

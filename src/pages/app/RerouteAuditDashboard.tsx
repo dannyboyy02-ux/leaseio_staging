@@ -49,10 +49,12 @@ import { Textarea } from '@/components/ui/textarea';
 
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 
+import { localizedStatusLabel } from '@/lib/lifecycleLabels';
 interface AuditFinding {
   id: string;
   lease_id: string;
@@ -78,6 +80,7 @@ interface AuditFinding {
 }
 
 export default function RerouteAuditDashboard() {
+  const { t } = useAppTranslation();
   const { workspace, userRole } = useApp();
   const navigate = useNavigate();
   const [findings, setFindings] = useState<AuditFinding[]>([]);
@@ -153,12 +156,12 @@ export default function RerouteAuditDashboard() {
       const leaseMap = new Map<string, { title: string }>();
       for (const l of ((leaseResult as any).data ?? []) as any[]) {
         leaseMap.set(l.id, {
-          title: l.request_title || l.filename || 'Untitled lease',
+          title: l.request_title || l.filename || t('locked_lease.untitled'),
         });
       }
       const policyMap = new Map<string, string>();
       for (const p of ((policyResult as any).data ?? []) as any[]) {
-        policyMap.set(p.id, p.name ?? `policy ${p.id.slice(0, 8)}…`);
+        policyMap.set(p.id, p.name ?? t('exceptions.reroute.policy_fallback', { id: p.id.slice(0, 8) }));
       }
 
       const hydrated = dedup
@@ -180,12 +183,14 @@ export default function RerouteAuditDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [workspace?.id, isAdminOrOwner, refreshKey]);
+    // (t included so hydrated fallback labels re-resolve on language change —
+    // same pattern as Notifications.tsx)
+  }, [workspace?.id, isAdminOrOwner, refreshKey, t]);
 
   const handleTrigger = async () => {
     if (!triggerTarget) return;
     if (reason.trim().length < 20) {
-      toast.error('Reason must be at least 20 characters.');
+      toast.error(t('exceptions.reroute.reason_min'));
       return;
     }
     setBusy(true);
@@ -198,16 +203,16 @@ export default function RerouteAuditDashboard() {
       );
       if (error || !(data as any)?.ok) {
         const msg =
-          (data as any)?.error || error?.message || 'Manual reroute failed';
+          (data as any)?.error || error?.message || t('exceptions.reroute.failed');
         toast.error(msg);
         return;
       }
       const outcome = (data as any).manualRerouteOutcome;
       if (outcome === 'approved') {
-        toast.success('Manual reroute applied. Chain has been reconciled.');
+        toast.success(t('exceptions.reroute.applied'));
       } else {
         toast.info(
-          `Manual reroute completed but no reroute needed (${(data as any).reason ?? 'no_reroute_needed'}).`,
+          t('exceptions.reroute.no_reroute_needed', { reason: (data as any).reason ?? 'no_reroute_needed' }),
         );
       }
       setTriggerTarget(null);
@@ -215,7 +220,7 @@ export default function RerouteAuditDashboard() {
       setRefreshKey((k) => k + 1);
     } catch (err: any) {
       console.error('[RerouteAuditDashboard] trigger error:', err);
-      toast.error(err?.message || 'Manual reroute failed');
+      toast.error(err?.message || t('exceptions.reroute.failed'));
     } finally {
       setBusy(false);
     }
@@ -224,19 +229,17 @@ export default function RerouteAuditDashboard() {
   if (!isAdminOrOwner) {
     return (
       <AppLayout>
-        <AppHeader title="Reroute Audit" />
+        <AppHeader title={t('exceptions.reroute.title')} />
         <div className="max-w-2xl mx-auto py-10">
           <Card className="border-destructive/40">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-5 w-5" />
-                Admin only
+                {t('exceptions.admin_only')}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              The reroute audit dashboard surfaces governance findings that
-              require administrative attention. Only workspace owners and
-              admins can access it.
+              {t('exceptions.reroute.admin_only_desc')}
             </CardContent>
           </Card>
         </div>
@@ -247,8 +250,8 @@ export default function RerouteAuditDashboard() {
   return (
     <AppLayout>
       <AppHeader
-        title="Reroute Audit"
-        subtitle="Daily sweep findings — leases whose policy match has drifted from their resolved chain"
+        title={t('exceptions.reroute.title')}
+        subtitle={t('exceptions.reroute.subtitle')}
         actions={
           <Button
             size="sm"
@@ -257,7 +260,7 @@ export default function RerouteAuditDashboard() {
             disabled={loading}
           >
             <RotateCw className={cn('h-3.5 w-3.5 mr-1.5', loading && 'animate-spin')} />
-            Refresh
+            {t('analytics.refresh')}
           </Button>
         }
       />
@@ -267,7 +270,7 @@ export default function RerouteAuditDashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Search className="h-4 w-4" />
-              Findings
+              {t('exceptions.reroute.findings')}
               <Badge variant="secondary" className="ml-1">
                 {findings.length}
               </Badge>
@@ -281,8 +284,7 @@ export default function RerouteAuditDashboard() {
             )}
             {!loading && findings.length === 0 && (
               <div className="text-center py-12 text-sm text-muted-foreground">
-                No misalignments detected. The next daily sweep will re-evaluate
-                every active chain-driven lease against current policy state.
+                {t('exceptions.reroute.none')}
               </div>
             )}
             {!loading &&
@@ -304,33 +306,33 @@ export default function RerouteAuditDashboard() {
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-sm">{f.lease_title}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Detected {format(new Date(f.created_at), 'MMM d, yyyy h:mm a')}
+                          {t('exceptions.detected_time', { time: format(new Date(f.created_at), 'MMM d, yyyy h:mm a') })}
                         </p>
                         <div className="text-xs mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                           <span>
-                            <span className="text-muted-foreground">Policy:</span>{' '}
-                            {f.prior_policy_name ?? '(none)'} →{' '}
+                            <span className="text-muted-foreground">{t('exceptions.reroute.policy_label')}</span>{' '}
+                            {f.prior_policy_name ?? t('exceptions.reroute.none_policy')} →{' '}
                             <span className="font-medium">{f.new_policy_name ?? '—'}</span>
                           </span>
                           <span>
-                            <span className="text-muted-foreground">Lifecycle:</span>{' '}
-                            {f.details?.prior_lifecycle_status ? displayLabel(f.details.prior_lifecycle_status as LifecycleStatus) : '—'} →{' '}
-                            {f.details?.proposed_lifecycle_status ? displayLabel(f.details.proposed_lifecycle_status as LifecycleStatus) : '—'}
+                            <span className="text-muted-foreground">{t('exceptions.reroute.lifecycle_label')}</span>{' '}
+                            {f.details?.prior_lifecycle_status ? localizedStatusLabel(f.details.prior_lifecycle_status as LifecycleStatus) : '—'} →{' '}
+                            {f.details?.proposed_lifecycle_status ? localizedStatusLabel(f.details.proposed_lifecycle_status as LifecycleStatus) : '—'}
                           </span>
                           <span>
-                            <span className="text-muted-foreground">Steps:</span>{' '}
+                            <span className="text-muted-foreground">{t('exceptions.reroute.steps_label')}</span>{' '}
                             <span className="text-success">
                               +{f.details?.steps_added_count ?? 0}
                             </span>
                             ,{' '}
                             <span className="text-destructive">
-                              {f.details?.steps_superseded_count ?? 0} superseded
+                              {t('exceptions.reroute.superseded', { count: f.details?.steps_superseded_count ?? 0 })}
                             </span>
                           </span>
                           {f.details?.proposed_chain_violation && (
                             <Badge variant="destructive" className="text-[10px] gap-0.5">
                               <Shield className="h-2.5 w-2.5" />
-                              Would enter chain_violation
+                              {t('exceptions.reroute.would_violate')}
                             </Badge>
                           )}
                         </div>
@@ -355,7 +357,7 @@ export default function RerouteAuditDashboard() {
                           onClick={() => navigate(`/app/leases/${f.lease_id}`)}
                         >
                           <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                          Open lease
+                          {t('exceptions.reroute.open_lease')}
                         </Button>
                         <Button
                           size="sm"
@@ -365,7 +367,7 @@ export default function RerouteAuditDashboard() {
                           }}
                         >
                           <ChevronRight className="h-3.5 w-3.5 mr-1.5" />
-                          Trigger Manual Reroute
+                          {t('exceptions.reroute.trigger')}
                         </Button>
                       </div>
                     </div>
@@ -387,17 +389,14 @@ export default function RerouteAuditDashboard() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Trigger Manual Reroute</DialogTitle>
+            <DialogTitle>{t('exceptions.reroute.trigger')}</DialogTitle>
             <DialogDescription>
-              {triggerTarget?.lease_title} will be re-evaluated against the
-              current policy state. If a reroute is warranted, the chain is
-              reconciled and the lease lifecycle adjusts accordingly.
-              The reason is recorded permanently in the audit log.
+              {t('exceptions.reroute.dialog_desc', { lease: triggerTarget?.lease_title })}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="reroute-reason">
-              Reason (≥20 characters, required)
+              {t('exceptions.reroute.reason_label')}
             </Label>
             <Textarea
               id="reroute-reason"
@@ -405,11 +404,11 @@ export default function RerouteAuditDashboard() {
               onChange={(e) => setReason(e.target.value)}
               rows={4}
               maxLength={1000}
-              placeholder="e.g., Audit sweep identified a stale chain after policy v3 update; rerouting to align with current state."
+              placeholder={t('exceptions.reroute.reason_placeholder')}
               disabled={busy}
             />
             <p className="text-[11px] text-muted-foreground">
-              {reason.trim().length} / 20+ characters
+              {t('exceptions.reroute.char_count', { count: reason.trim().length })}
             </p>
           </div>
           <DialogFooter>
@@ -421,14 +420,14 @@ export default function RerouteAuditDashboard() {
               }}
               disabled={busy}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleTrigger}
               disabled={busy || reason.trim().length < 20}
             >
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Trigger Reroute
+              {t('exceptions.reroute.trigger_short')}
             </Button>
           </DialogFooter>
         </DialogContent>

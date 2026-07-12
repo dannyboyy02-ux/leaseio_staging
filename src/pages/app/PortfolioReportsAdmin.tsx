@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { supabase } from '@/integrations/supabase/client';
 import {
   useGeneratePortfolioReport,
@@ -78,6 +79,7 @@ function iso(d: Date): string {
 }
 
 export default function PortfolioReportsAdmin() {
+  const { t } = useAppTranslation();
   const { workspace } = useApp();
   const workspaceId = workspace?.id;
 
@@ -129,11 +131,11 @@ export default function PortfolioReportsAdmin() {
 
   async function handleGenerate() {
     if (!workspaceId) {
-      toast.error('No active workspace');
+      toast.error(t('reports.no_active_workspace'));
       return;
     }
     if (periodStart > periodEnd) {
-      toast.error('Period start must be on or before period end');
+      toast.error(t('reports.period_order_error'));
       return;
     }
     try {
@@ -144,23 +146,26 @@ export default function PortfolioReportsAdmin() {
         periodEnd,
       });
       toast.success(
-        `Portfolio report generated · ${result.leaseCount} included, ${result.excludedCount} excluded`,
+        t('reports.portfolio_generated_toast', {
+          included: result.leaseCount,
+          excluded: result.excludedCount,
+        }),
       );
     } catch (e: any) {
-      toast.error(e?.message ?? 'Portfolio report failed');
+      toast.error(e?.message ?? t('reports.portfolio_failed'));
     }
   }
 
   async function handleDownload(path: string | null, name: string) {
     if (!path) {
-      toast.error('Artifact not yet available');
+      toast.error(t('reports.artifact_not_available'));
       return;
     }
     const { data, error } = await supabase.storage
       .from('lease-reports')
       .createSignedUrl(path, 120);
     if (error || !data?.signedUrl) {
-      toast.error('Could not generate download link');
+      toast.error(t('reports.download_link_failed'));
       return;
     }
     const a = document.createElement('a');
@@ -173,32 +178,32 @@ export default function PortfolioReportsAdmin() {
   return (
     <AppLayout>
       <AppHeader
-        title="Portfolio Reports"
-        subtitle="Generate ASC 842 disclosure reports across all eligible leases for a period."
+        title={t('reports.portfolio_reports_title')}
+        subtitle={t('reports.portfolio_reports_subtitle')}
       />
       <div className="px-6 py-6 space-y-6 max-w-5xl">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Generate report</CardTitle>
+            <CardTitle className="text-base">{t('reports.generate_report')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label className="text-xs">Period scope</Label>
+                <Label className="text-xs">{t('reports.period_scope')}</Label>
                 <Select value={scope} onValueChange={(v) => handleScopeChange(v as ReportScope)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="quarterly">Quarterly</SelectItem>
-                    <SelectItem value="annual">Annual</SelectItem>
-                    <SelectItem value="custom_range">Custom range</SelectItem>
+                    <SelectItem value="monthly">{t('rent_schedule.monthly')}</SelectItem>
+                    <SelectItem value="quarterly">{t('reports.scope_quarterly')}</SelectItem>
+                    <SelectItem value="annual">{t('rent_schedule.annual')}</SelectItem>
+                    <SelectItem value="custom_range">{t('reports.scope_custom')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Period start</Label>
+                <Label className="text-xs">{t('reports.period_start')}</Label>
                 <Input
                   type="date"
                   value={periodStart}
@@ -206,7 +211,7 @@ export default function PortfolioReportsAdmin() {
                 />
               </div>
               <div>
-                <Label className="text-xs">Period end</Label>
+                <Label className="text-xs">{t('reports.period_end')}</Label>
                 <Input
                   type="date"
                   value={periodEnd}
@@ -219,35 +224,33 @@ export default function PortfolioReportsAdmin() {
                 <>
                   <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                   {stage === 'rendering'
-                    ? 'Rendering PDF…'
+                    ? t('reports.rendering_pdf')
                     : stage === 'uploading'
-                      ? 'Uploading…'
+                      ? t('reports.uploading')
                       : stage === 'finalizing'
-                        ? 'Finalizing…'
-                        : 'Generating…'}
+                        ? t('reports.finalizing')
+                        : t('reports.generating_ellipsis')}
                 </>
               ) : (
-                'Generate Portfolio Report'
+                t('reports.generate_portfolio_report')
               )}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Includes only model-locked + active leases whose term overlaps
-              the selected period. Other leases are surfaced in the report's
-              exclusions section.
+              {t('reports.portfolio_report_help')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Recent portfolio reports</CardTitle>
+            <CardTitle className="text-base">{t('reports.recent_portfolio_reports')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {historyLoading ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
+              <p className="text-sm text-muted-foreground">{t('workspace.watchlist.loading')}</p>
             ) : history.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No portfolio reports yet. Generate one above.
+                {t('reports.no_portfolio_reports')}
               </p>
             ) : (
               history.map((r) => (
@@ -269,8 +272,8 @@ export default function PortfolioReportsAdmin() {
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
                       {new Date(r.generated_at).toLocaleString()} ·{' '}
-                      {r.lease_count} included · {r.excluded_lease_count}{' '}
-                      excluded
+                      {t('reports.included_count', { count: r.lease_count })} ·{' '}
+                      {t('reports.excluded_count', { count: r.excluded_lease_count })}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -308,8 +311,7 @@ export default function PortfolioReportsAdmin() {
         </Card>
 
         <p className="text-xs text-muted-foreground">
-          Looking for single-lease reports? Generate them from the lease
-          detail page's Documents tab. View the full report library at{' '}
+          {t('reports.single_lease_reports_hint')}{' '}
           <Link to="/app/reports/disclosure" className="underline">
             /app/reports/disclosure
           </Link>

@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface EscalateToConceptDialogProps {
   open: boolean;
@@ -35,6 +36,7 @@ export function EscalateToConceptDialog({
   leaseId,
   onEscalated,
 }: EscalateToConceptDialogProps) {
+  const { t } = useAppTranslation();
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -55,7 +57,7 @@ export function EscalateToConceptDialog({
       );
       if (error || !(data as any)?.ok) {
         const msg =
-          (data as any)?.error || error?.message || 'Failed to escalate';
+          (data as any)?.error || error?.message || t('documents.escalate.failed');
         toast.error(msg);
         return;
       }
@@ -65,13 +67,13 @@ export function EscalateToConceptDialog({
         newChainStepCount: number;
       };
       toast.success(
-        `Escalated back to initial approval — ${result.newChainStepCount} chain step${result.newChainStepCount === 1 ? '' : 's'} reactivated`,
+        t('documents.escalate.success', { count: result.newChainStepCount }),
       );
       onOpenChange(false);
       onEscalated();
     } catch (err) {
       console.error('escalate error:', err);
-      toast.error('Failed to escalate');
+      toast.error(t('documents.escalate.failed'));
     } finally {
       setBusy(false);
     }
@@ -83,51 +85,48 @@ export function EscalateToConceptDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowLeftCircle className="h-5 w-5 text-warning" />
-            Escalate back to initial approval
+            {t('documents.escalate.title')}
           </DialogTitle>
           <DialogDescription className="pt-2">
-            Material terms have shifted during negotiation enough to require
-            initial-approval re-validation. The lease will roll back to
-            <strong> Under Review</strong> and a fresh round of pending
-            initial-approval steps will be created. Prior approvals are preserved in the audit trail.
+            {t('documents.escalate.desc_before')}
+            <strong> {t('documents.escalate.under_review')}</strong> {t('documents.escalate.desc_after')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="rounded-md border border-warning/30 bg-warning/5 p-3 text-xs flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="font-medium text-warning">This visibly resets the workflow.</p>
+            <p className="font-medium text-warning">{t('documents.escalate.warning_title')}</p>
             <p className="text-muted-foreground">
-              Your reason text is stored on the audit log so the initial approvers
-              know what changed.
+              {t('documents.escalate.warning_desc')}
             </p>
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="reason">Reason for re-escalation (required)</Label>
+          <Label htmlFor="reason">{t('documents.escalate.reason_label')}</Label>
           <Textarea
             id="reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Counterparty pushed total commitment from $1.2M to $1.6M; rent escalation cap removed; additional 5-year extension option added."
+            placeholder={t('documents.escalate.reason_placeholder')}
             rows={4}
             disabled={busy}
             maxLength={1000}
             autoFocus
           />
           <p className="text-xs text-muted-foreground">
-            {trimmed.length} / 1000 characters
+            {t('documents.escalate.char_count', { chars: trimmed.length })}
           </p>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={!canSubmit}>
             {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-            {busy ? 'Escalating…' : 'Escalate to initial approval'}
+            {busy ? t('documents.escalate.escalating') : t('documents.escalate.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

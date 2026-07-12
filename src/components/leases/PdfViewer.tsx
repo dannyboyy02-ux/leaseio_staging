@@ -5,6 +5,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { findHighlightSpansForItems, type MatchSpan as SharedMatchSpan } from './pdfHighlightMatcher';
 
 // Use the bundled worker from the installed package
@@ -174,6 +175,7 @@ function isMetaSummary(s: string): boolean {
 }
 
 export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captureMode, onCaptureSelection, onExitCapture }: PdfViewerProps) {
+  const { t } = useAppTranslation();
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
@@ -208,8 +210,8 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
 
   const onDocumentLoadError = useCallback((err: Error) => {
     console.error('[PdfViewer] Load error:', err);
-    setError(err.message || 'Failed to load document');
-  }, []);
+    setError(err.message || t('leases.pdf.load_error_fallback'));
+  }, [t]);
 
   const prevPage = () => setCurrentPage(p => Math.max(1, p - 1));
   const nextPage = () => setCurrentPage(p => Math.min(numPages, p + 1));
@@ -412,7 +414,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
   if (!url) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        Document unavailable
+        {t('leases.pdf.unavailable')}
       </div>
     );
   }
@@ -420,7 +422,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-2 px-4 text-center">
-        <p className="text-sm text-destructive font-medium">Could not load document</p>
+        <p className="text-sm text-destructive font-medium">{t('leases.pdf.load_failed')}</p>
         <p className="text-xs text-muted-foreground">{error}</p>
       </div>
     );
@@ -430,7 +432,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
     <div ref={containerRef} className={cn('flex flex-col h-full', captureMode && 'ring-2 ring-amber-400/60 rounded')}>
       {captureMode && (
         <div className="flex items-center justify-between gap-2 px-3 py-1 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-900 shrink-0">
-          <span>Selection mode — highlight a clause in the PDF, then click <strong>Use selection</strong>.</span>
+          <span>{t('leases.pdf.selection_mode_prefix')} <strong>{t('leases.pdf.use_selection')}</strong>.</span>
           <div className="flex items-center gap-1.5">
             {onExitCapture && (
               <Button
@@ -439,7 +441,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
                 className="h-6 text-[11px] text-amber-900 hover:bg-amber-100"
                 onClick={onExitCapture}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
             )}
             <Button
@@ -449,7 +451,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
               disabled={!pendingSelectionText}
               onClick={confirmCapture}
             >
-              Use selection
+              {t('leases.pdf.use_selection')}
             </Button>
           </div>
         </div>
@@ -457,13 +459,13 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b bg-background shrink-0">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={prevPage} disabled={currentPage <= 1} title="Previous page" aria-label="Previous page">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={prevPage} disabled={currentPage <= 1} title={t('leases.pdf.prev_page')} aria-label={t('leases.pdf.prev_page')}>
             <ChevronLeft size={14} />
           </Button>
           <span className="text-xs text-muted-foreground tabular-nums">
             {numPages > 0 ? `${currentPage} / ${numPages}` : '—'}
           </span>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={nextPage} disabled={currentPage >= numPages} title="Next page" aria-label="Next page">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={nextPage} disabled={currentPage >= numPages} title={t('leases.pdf.next_page')} aria-label={t('leases.pdf.next_page')}>
             <ChevronRight size={14} />
           </Button>
           {(targetValue || targetHighlight) && (
@@ -481,29 +483,29 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
               }
               title={
                 matchStatus === 'not-found'
-                  ? `Source not located anywhere in this document: "${(targetValue || targetHighlight || '').slice(0, 60)}…"`
+                  ? t('leases.pdf.not_found_title', { text: (targetValue || targetHighlight || '').slice(0, 60) })
                   : matchStatus === 'spans-sections'
-                    ? `The AI flagged this as spanning multiple sections; no single phrase to highlight.`
+                    ? t('leases.pdf.spans_sections_title')
                     : matchStatus === 'found' && targetPage && foundOnPage && foundOnPage !== targetPage
-                      ? `AI cited page ${targetPage}; located on page ${foundOnPage} instead.`
+                      ? t('leases.pdf.relocated_title', { cited: targetPage, found: foundOnPage })
                       : undefined
               }
             >
               {matchStatus === 'found' && (foundOnPage && targetPage && foundOnPage !== targetPage
-                ? `Source highlighted (page ${foundOnPage}, AI cited ${targetPage})`
-                : 'Source highlighted')}
-              {matchStatus === 'searching' && 'Searching…'}
-              {matchStatus === 'not-found' && 'Source not located in document'}
-              {matchStatus === 'spans-sections' && 'Source spans multiple sections'}
+                ? t('leases.pdf.highlighted_moved', { found: foundOnPage, cited: targetPage })
+                : t('leases.pdf.highlighted'))}
+              {matchStatus === 'searching' && t('leases.pdf.searching')}
+              {matchStatus === 'not-found' && t('leases.pdf.not_found')}
+              {matchStatus === 'spans-sections' && t('leases.pdf.spans_sections')}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomOut} disabled={scale <= 0.5} title="Zoom out" aria-label="Zoom out">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomOut} disabled={scale <= 0.5} title={t('leases.pdf.zoom_out')} aria-label={t('leases.pdf.zoom_out')}>
             <ZoomOut size={14} />
           </Button>
           <span className="text-xs text-muted-foreground w-10 text-center">{Math.round(scale * 100)}%</span>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomIn} disabled={scale >= 2.5} title="Zoom in" aria-label="Zoom in">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={zoomIn} disabled={scale >= 2.5} title={t('leases.pdf.zoom_in')} aria-label={t('leases.pdf.zoom_in')}>
             <ZoomIn size={14} />
           </Button>
         </div>
@@ -519,7 +521,7 @@ export function PdfViewer({ url, targetPage, targetHighlight, targetValue, captu
             loading={
               <div className="flex items-center justify-center h-32 gap-2 text-muted-foreground text-sm">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading document…
+                {t('leases.pdf.loading')}
               </div>
             }
           >

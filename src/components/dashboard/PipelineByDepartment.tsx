@@ -64,7 +64,7 @@ function buildDeptSummaries(leases: LeaseRow[], days: number): DeptSummary[] {
 }
 
 export function PipelineByDepartment() {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const { workspace } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const [rawData, setRawData] = useState<LeaseRow[]>([]);
@@ -102,7 +102,7 @@ export function PipelineByDepartment() {
               : 'text-muted-foreground hover:bg-muted'
           }`}
         >
-          {d}d
+          {t('dashboard.days_abbrev', { count: d })}
         </button>
       ))}
     </div>
@@ -114,7 +114,7 @@ export function PipelineByDepartment() {
         <CardTitle className="flex items-center justify-between text-sm font-medium">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
-            Pipeline by Department
+            {t('dashboard.pipeline_by_department')}
           </div>
           {toggleUI}
         </CardTitle>
@@ -125,7 +125,7 @@ export function PipelineByDepartment() {
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : depts.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">No department data yet — open any lease and set its Department to start seeing breakdown here.</p>
+          <p className="text-sm text-muted-foreground text-center py-8">{t('dashboard.no_department_data')}</p>
         ) : (
           <div className="space-y-3">
             {depts.map((dept) => (
@@ -133,8 +133,8 @@ export function PipelineByDepartment() {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium truncate max-w-[40%]">{dept.name}</span>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>{dept.activeCount} active</span>
-                    <span>{dept.inProgressCount} in progress</span>
+                    <span>{t('dashboard.count_active', { count: dept.activeCount })}</span>
+                    <span>{t('dashboard.count_in_progress', { count: dept.inProgressCount })}</span>
                     <span className="font-medium text-foreground">{formatCurrency(dept.annualValue)}</span>
                   </div>
                 </div>

@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface NudgeApproverButtonProps {
   leaseId: string;
@@ -28,6 +29,7 @@ export function NudgeApproverButton({
   lastNudgedAt,
   disabled = false,
 }: NudgeApproverButtonProps) {
+  const { t } = useAppTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
@@ -76,11 +78,11 @@ export function NudgeApproverButton({
       if (error || !res?.ok) {
         if (res?.reason === 'cooldown' && res.retryAfterSeconds) {
           setSecondsLeft(res.retryAfterSeconds);
-          toast.message(res.error || 'Already nudged recently.');
+          toast.message(res.error || t('workflow.nudge.already_nudged'));
         } else if (res?.reason === 'no_approver') {
-          toast.error(res.error || 'No pending approver to nudge.');
+          toast.error(res.error || t('workflow.nudge.no_approver'));
         } else {
-          toast.error(res?.error || error?.message || 'Failed to send nudge');
+          toast.error(res?.error || error?.message || t('workflow.nudge.send_failed'));
         }
         return;
       }
@@ -88,15 +90,18 @@ export function NudgeApproverButton({
       const recipients = res.recipients ?? [];
       if (recipients.length > 0) {
         const shown = recipients.slice(0, 2).join(', ');
-        const more = recipients.length > 2 ? ` +${recipients.length - 2} more` : '';
-        toast.success(`Nudged ${shown}${more}`);
+        toast.success(
+          recipients.length > 2
+            ? t('workflow.nudge.nudged_more', { names: shown, count: recipients.length - 2 })
+            : t('workflow.nudge.nudged', { names: shown }),
+        );
       } else {
-        toast.success('Nudge sent to approver');
+        toast.success(t('workflow.nudge.sent'));
       }
       setSecondsLeft(COOLDOWN_SECONDS);
     } catch (err) {
       console.error('Error sending nudge:', err);
-      toast.error('Failed to send nudge');
+      toast.error(t('workflow.nudge.send_failed'));
     } finally {
       setIsLoading(false);
     }
@@ -118,13 +123,15 @@ export function NudgeApproverButton({
           ) : (
             <Bell className="h-4 w-4 mr-2" />
           )}
-          {isOnCooldown ? `Wait ${formatWait(secondsLeft)}` : 'Nudge Approver'}
+          {isOnCooldown
+            ? t('workflow.nudge.wait', { time: formatWait(secondsLeft) })
+            : t('review.nudge_approver')}
         </Button>
       </TooltipTrigger>
       <TooltipContent>
         {isOnCooldown
-          ? `You can nudge again in ${formatWait(secondsLeft)}`
-          : 'Email the pending approver a reminder'}
+          ? t('workflow.nudge.cooldown_tooltip', { time: formatWait(secondsLeft) })
+          : t('workflow.nudge.tooltip')}
       </TooltipContent>
     </Tooltip>
   );

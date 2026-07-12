@@ -1,8 +1,10 @@
 import type React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertOctagon, Clock, FileSearch, Upload } from 'lucide-react';
+import { t } from 'i18next';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface PendingApproval {
   id: string;
@@ -32,9 +34,12 @@ export interface OtherFlag {
 
 export function useNeedsAction() {
   const { workspace } = useApp();
+  // Labels below are translated at query time, so the cache is per-language:
+  // a language switch changes the key and refetches (cheap count queries).
+  const { language } = useLanguage();
 
   return useQuery({
-    queryKey: ['needs-action', workspace?.id],
+    queryKey: ['needs-action', workspace?.id, language],
     enabled: !!workspace?.id,
     refetchInterval: 30_000,
     queryFn: async () => {
@@ -79,7 +84,7 @@ export function useNeedsAction() {
         )
         .map((l) => ({
           leaseId: l.id,
-          leaseName: l.request_title ?? l.filename ?? 'Unnamed lease',
+          leaseName: l.request_title ?? l.filename ?? t('dashboard.unnamed_lease'),
           rejectionReason: (l as any).financial_rejection_reason ?? null,
         }));
 
@@ -95,8 +100,8 @@ export function useNeedsAction() {
             : 0;
           return {
             id: l.id,
-            title: l.request_title ?? l.filename ?? 'Unnamed lease',
-            department: l.requesting_department ?? 'Unknown',
+            title: l.request_title ?? l.filename ?? t('dashboard.unnamed_lease'),
+            department: l.requesting_department ?? t('dashboard.unknown_department'),
             daysWaiting,
             annualValue: (l.monthly_payment ?? 0) * 12,
           };
@@ -107,7 +112,7 @@ export function useNeedsAction() {
         .filter((cs: any) => !cs.leases?.model_locked)
         .map((cs: any) => ({
           leaseId: cs.lease_id,
-          leaseName: cs.leases?.request_title || cs.leases?.filename || 'Unnamed lease',
+          leaseName: cs.leases?.request_title || cs.leases?.filename || t('dashboard.unnamed_lease'),
         }));
 
       const otherFlags: OtherFlag[] = [];
@@ -119,7 +124,7 @@ export function useNeedsAction() {
         return now - new Date(l.status_changed_at).getTime() > fourteenDaysMs;
       }).length;
       if (stalledCount > 0) {
-        otherFlags.push({ label: 'Stalled in review', count: stalledCount, href: '/app/approvals', icon: Clock });
+        otherFlags.push({ label: t('dashboard.flag_stalled'), count: stalledCount, href: '/app/approvals', icon: Clock });
       }
 
       const noAbstractionCount = leases.filter((l) => {
@@ -133,7 +138,7 @@ export function useNeedsAction() {
         return inLifecycle && inStatus;
       }).length;
       if (noAbstractionCount > 0) {
-        otherFlags.push({ label: 'Awaiting AI abstraction', count: noAbstractionCount, href: '/app/approvals', icon: FileSearch });
+        otherFlags.push({ label: t('dashboard.flag_awaiting_abstraction'), count: noAbstractionCount, href: '/app/approvals', icon: FileSearch });
       }
 
       // Phase 3: include chain executed equivalent (fully_executed).
@@ -143,7 +148,7 @@ export function useNeedsAction() {
           !l.executed_document_url
       ).length;
       if (noDocCount > 0) {
-        otherFlags.push({ label: 'Executed \u2014 document missing', count: noDocCount, href: '/app/leases?status=active', icon: Upload });
+        otherFlags.push({ label: t('dashboard.flag_doc_missing'), count: noDocCount, href: '/app/leases?status=active', icon: Upload });
       }
 
       // Phase 6: chain_violation leases are leases whose policy-required
@@ -157,7 +162,7 @@ export function useNeedsAction() {
       ).length;
       if (chainViolationCount > 0) {
         otherFlags.unshift({
-          label: 'Chain violation \u2014 retroactive approval required',
+          label: t('dashboard.flag_chain_violation'),
           count: chainViolationCount,
           // chain_violation \u2208 the Leases "active" scope; lands on the active
           // list where the violation lease is visible. The old violations-only

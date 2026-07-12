@@ -115,7 +115,7 @@ function formatDate(value: string | null): string {
 export default function SignatorReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const { user, workspace, userFunctionalRoles, isLoading: appLoading } = useApp();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
 
@@ -156,7 +156,7 @@ export default function SignatorReview() {
           .maybeSingle();
         if (leaseError) throw leaseError;
         if (!leaseRow) {
-          if (!cancelled) setAuthError('Lease not found');
+          if (!cancelled) setAuthError(t('approvals.signator.lease_not_found'));
           return;
         }
         if (cancelled) return;
@@ -164,9 +164,7 @@ export default function SignatorReview() {
 
         if (leaseRow.lifecycle_status !== 'final_review') {
           if (!cancelled) {
-            setAuthError(
-              `This lease isn't at the final-review stage yet — it can't be reviewed here until it gets there.`,
-            );
+            setAuthError(t('approvals.signator.not_final_review'));
           }
           return;
         }
@@ -186,9 +184,7 @@ export default function SignatorReview() {
         const pendingStep = (stepRows as ChainStep[] | null)?.[0] ?? null;
         if (!pendingStep) {
           if (!cancelled) {
-            setAuthError(
-              'No pending signator step exists for this lease. The signator stage may have already been resolved or not yet inserted.',
-            );
+            setAuthError(t('approvals.signator.no_pending_step'));
           }
           return;
         }
@@ -202,7 +198,7 @@ export default function SignatorReview() {
           : false;
         if (!isAssignedUser && !holdsRole) {
           if (!cancelled) {
-            setAuthError('You are not authorized to act on this signator step.');
+            setAuthError(t('approvals.signator.not_authorized'));
           }
           return;
         }
@@ -244,7 +240,7 @@ export default function SignatorReview() {
       } catch (err: any) {
         console.error('[SignatorReview] load error:', err);
         if (!cancelled) {
-          setAuthError(err?.message || 'Failed to load signator review');
+          setAuthError(err?.message || t('approvals.signator.load_failed'));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -262,12 +258,17 @@ export default function SignatorReview() {
   const canApprove = checklistComplete && attestationLong && !busy && !!step;
 
   const placeholderHint = useMemo(() => {
-    const wsName = workspace?.name || 'the company';
+    const wsName = workspace?.name || t('approvals.signator.the_company');
     if (finalNegotiated) {
-      return `I confirm this lease commits ${wsName} to the terms in ${finalNegotiated.filename} (iteration ${finalNegotiated.iteration_number}, v${finalNegotiated.version_number}), and I have authority to bind the company.`;
+      return t('approvals.signator.attestation_placeholder_doc', {
+        workspace: wsName,
+        filename: finalNegotiated.filename,
+        iteration: finalNegotiated.iteration_number,
+        version: finalNegotiated.version_number,
+      });
     }
-    return `I confirm this lease commits ${wsName} to the negotiated terms, and I have authority to bind the company.`;
-  }, [workspace, finalNegotiated]);
+    return t('approvals.signator.attestation_placeholder', { workspace: wsName });
+  }, [workspace, finalNegotiated, t]);
 
   const handleApprove = async () => {
     if (!canApprove || !step) return;
@@ -282,15 +283,15 @@ export default function SignatorReview() {
       });
       if (error || !(data as any)?.ok) {
         const msg =
-          (data as any)?.error || error?.message || 'Failed to approve';
+          (data as any)?.error || error?.message || t('approvals.errors.failed_to_approve');
         toast.error(msg);
         return;
       }
-      toast.success('Signator approval recorded. Lease moved to pending counter-signature.');
+      toast.success(t('approvals.signator.approved_toast'));
       navigate(`/app/leases/${leaseId}`);
     } catch (err: any) {
       console.error('[SignatorReview] approve error:', err);
-      toast.error(err?.message || 'Failed to approve');
+      toast.error(err?.message || t('approvals.errors.failed_to_approve'));
     } finally {
       setBusy(false);
     }
@@ -300,7 +301,7 @@ export default function SignatorReview() {
     if (!reasonOpen || !step) return;
     const trimmed = reasonText.trim();
     if (trimmed.length === 0) {
-      toast.error('Please provide a reason.');
+      toast.error(t('approvals.signator.reason_required'));
       return;
     }
     setBusy(true);
@@ -315,21 +316,21 @@ export default function SignatorReview() {
       });
       if (error || !(data as any)?.ok) {
         const msg =
-          (data as any)?.error || error?.message || 'Failed to submit';
+          (data as any)?.error || error?.message || t('approvals.signator.submit_failed');
         toast.error(msg);
         return;
       }
       toast.success(
         action === 'reject'
-          ? 'Lease rejected.'
-          : 'Lease returned to negotiation.',
+          ? t('approvals.signator.rejected_toast')
+          : t('approvals.signator.returned_toast'),
       );
       setReasonOpen(null);
       setReasonText('');
       navigate(`/app/leases/${leaseId}`);
     } catch (err: any) {
       console.error('[SignatorReview] reason action error:', err);
-      toast.error(err?.message || 'Failed to submit');
+      toast.error(err?.message || t('approvals.signator.submit_failed'));
     } finally {
       setBusy(false);
     }
@@ -338,7 +339,7 @@ export default function SignatorReview() {
   if (appLoading || loading) {
     return (
       <AppLayout>
-        <AppHeader title="Final Review" />
+        <AppHeader title={t('approvals.signator.title')} />
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -349,25 +350,25 @@ export default function SignatorReview() {
   if (authError || !lease || !step) {
     return (
       <AppLayout>
-        <AppHeader title="Final Review" />
+        <AppHeader title={t('approvals.signator.title')} />
         <div className="max-w-2xl mx-auto py-10">
           <Card className="border-destructive/40">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-5 w-5" />
-                Cannot proceed
+                {t('approvals.signator.cannot_proceed')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                {authError || 'Unable to load the final review for this lease.'}
+                {authError || t('approvals.signator.load_error')}
               </p>
               <Button
                 variant="outline"
                 onClick={() => navigate(leaseId ? `/app/leases/${leaseId}` : '/app/dashboard')}
               >
                 <ChevronLeft className="h-4 w-4 mr-2" />
-                Back to lease
+                {t('approvals.signator.back_to_lease')}
               </Button>
             </CardContent>
           </Card>
@@ -379,8 +380,8 @@ export default function SignatorReview() {
   return (
     <AppLayout>
       <AppHeader
-        title="Final Review"
-        subtitle={lease.filename || 'Untitled lease'}
+        title={t('approvals.signator.title')}
+        subtitle={lease.filename || t('locked_lease.untitled')}
       />
 
       <div className="max-w-6xl mx-auto py-6 space-y-6">
@@ -390,12 +391,10 @@ export default function SignatorReview() {
             <ShieldCheck className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p className="font-semibold text-sm">
-                This is the moment the company is legally committed.
+                {t('approvals.signator.banner_title')}
               </p>
               <p className="text-xs text-muted-foreground">
-                Approving advances this lease to counter-signature with a binding intent
-                statement on the audit record. Reject if the deal is dead. Send back to
-                negotiation if material terms still need to change.
+                {t('approvals.signator.banner_desc')}
               </p>
             </div>
           </CardContent>
@@ -409,13 +408,15 @@ export default function SignatorReview() {
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <FileText className="h-4 w-4" />
-                    Final Negotiated Document
+                    {t('approvals.signator.final_doc_title')}
                   </CardTitle>
                   {finalNegotiated && (
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="text-[10px]">
-                        Iteration {finalNegotiated.iteration_number} · v
-                        {finalNegotiated.version_number}
+                        {t('approvals.signator.iteration_v', {
+                          iteration: finalNegotiated.iteration_number,
+                          version: finalNegotiated.version_number,
+                        })}
                       </Badge>
                       {pdfUrl && (
                         <Button
@@ -424,7 +425,7 @@ export default function SignatorReview() {
                           onClick={() => window.open(pdfUrl!, '_blank')}
                         >
                           <Download className="h-3.5 w-3.5 mr-1.5" />
-                          Open
+                          {t('approvals.signator.open')}
                         </Button>
                       )}
                     </div>
@@ -434,8 +435,7 @@ export default function SignatorReview() {
               <CardContent>
                 {!finalNegotiated ? (
                   <div className="border border-dashed rounded-md py-8 text-center text-muted-foreground text-sm">
-                    No final negotiated document on file. Return to negotiation
-                    and ask the submitter to upload one before proceeding.
+                    {t('approvals.signator.no_final_doc')}
                   </div>
                 ) : pdfUrl ? (
                   <iframe
@@ -455,7 +455,7 @@ export default function SignatorReview() {
             {allDocs.length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Document History</CardTitle>
+                  <CardTitle className="text-base">{t('approvals.signator.doc_history')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-xs">
@@ -475,8 +475,14 @@ export default function SignatorReview() {
                         >
                           <span className="truncate">{d.filename}</span>
                           <span className="text-muted-foreground shrink-0">
-                            {documentTypeLabel(d.document_type as any)} · It {d.iteration_number} v
-                            {d.version_number} · {formatDate(d.uploaded_at)}
+                            {t('approvals.signator.doc_meta', {
+                              type: t(`documents.type.${d.document_type}`, {
+                                defaultValue: documentTypeLabel(d.document_type as any),
+                              }),
+                              iteration: d.iteration_number,
+                              version: d.version_number,
+                              date: formatDate(d.uploaded_at),
+                            })}
                           </span>
                         </li>
                       ))}
@@ -490,77 +496,77 @@ export default function SignatorReview() {
           <div className="space-y-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Lease Summary</CardTitle>
+                <CardTitle className="text-base">{t('approvals.signator.lease_summary')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <SummaryRow label="Tenant" value={lease.tenant_name} />
-                <SummaryRow label="Landlord" value={lease.landlord_name} />
-                <SummaryRow label="Address" value={lease.property_address} />
+                <SummaryRow label={t('lease.tenant')} value={lease.tenant_name} />
+                <SummaryRow label={t('lease.landlord')} value={lease.landlord_name} />
+                <SummaryRow label={t('approvals.signator.address')} value={lease.property_address} />
                 <Separator />
                 <SummaryRow
-                  label="Asset type"
+                  label={t('approvals.signator.asset_type')}
                   value={lease.lease_type || lease.asset_type}
                 />
                 <SummaryRow
-                  label="Department"
+                  label={t('approvals.financial.department')}
                   value={lease.requesting_department}
                 />
-                <SummaryRow label="Region" value={lease.region} />
+                <SummaryRow label={t('approvals.signator.region')} value={lease.region} />
                 <Separator />
                 <SummaryRow
-                  label="Term"
+                  label={t('approvals.financial.term')}
                   value={
-                    lease.term_months ? `${lease.term_months} months` : null
+                    lease.term_months ? t('workflow.impact.n_months', { count: lease.term_months }) : null
                   }
                 />
                 <SummaryRow
-                  label="Monthly payment"
+                  label={t('approvals.signator.monthly_payment')}
                   value={formatCurrency(lease.monthly_payment)}
                 />
                 <SummaryRow
-                  label="Total commitment"
+                  label={t('approvals.signator.total_commitment')}
                   value={formatCurrency(lease.calc_total_commitment)}
                 />
                 <SummaryRow
-                  label="PV liability"
+                  label={t('approvals.signator.pv_liability')}
                   value={formatCurrency(lease.calc_pv_liability)}
                 />
                 <Separator />
-                <SummaryRow label="Start" value={formatDate(lease.lease_start)} />
-                <SummaryRow label="End" value={formatDate(lease.lease_end)} />
+                <SummaryRow label={t('leases.start')} value={formatDate(lease.lease_start)} />
+                <SummaryRow label={t('leases.end')} value={formatDate(lease.lease_end)} />
               </CardContent>
             </Card>
 
             {/* Documents Reviewed checklist + attestation */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Required Confirmations</CardTitle>
+                <CardTitle className="text-base">{t('approvals.signator.required_confirmations')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
                   <ChecklistItem
                     checked={docsReviewed}
                     onChange={setDocsReviewed}
-                    label="I have reviewed the final negotiated document above"
+                    label={t('approvals.signator.check_docs')}
                     disabled={!finalNegotiated || busy}
                   />
                   <ChecklistItem
                     checked={termsReviewed}
                     onChange={setTermsReviewed}
-                    label="I have reviewed the key terms and financial impact in the summary"
+                    label={t('approvals.signator.check_terms')}
                     disabled={busy}
                   />
                   <ChecklistItem
                     checked={authorityConfirmed}
                     onChange={setAuthorityConfirmed}
-                    label="I have authority to bind the company to these terms"
+                    label={t('approvals.signator.check_authority')}
                     disabled={busy}
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="attestation" className="text-xs">
-                    Intent-to-bind attestation (≥{ATTESTATION_MIN_CHARS} characters)
+                    {t('approvals.signator.attestation_label', { min: ATTESTATION_MIN_CHARS })}
                   </Label>
                   <Textarea
                     id="attestation"
@@ -584,7 +590,10 @@ export default function SignatorReview() {
                       attestationLong ? 'text-success' : 'text-muted-foreground',
                     )}
                   >
-                    {attestation.trim().length} / {ATTESTATION_MIN_CHARS}+ characters
+                    {t('workflow.common.char_count', {
+                      chars: attestation.trim().length,
+                      min: ATTESTATION_MIN_CHARS,
+                    })}
                   </p>
                 </div>
               </CardContent>
@@ -599,10 +608,10 @@ export default function SignatorReview() {
                   disabled={!canApprove}
                   title={
                     !checklistComplete
-                      ? 'Complete the checklist first'
+                      ? t('approvals.signator.title_checklist')
                       : !attestationLong
-                      ? `Attestation must be at least ${ATTESTATION_MIN_CHARS} characters`
-                      : 'Approve and advance to counter-signature'
+                      ? t('approvals.signator.title_attestation', { min: ATTESTATION_MIN_CHARS })
+                      : t('approvals.signator.title_approve')
                   }
                 >
                   {busy ? (
@@ -610,7 +619,7 @@ export default function SignatorReview() {
                   ) : (
                     <CheckCircle2 className="h-4 w-4 mr-2" />
                   )}
-                  Approve and Advance
+                  {t('approvals.signator.approve_advance')}
                 </Button>
                 <Button
                   variant="outline"
@@ -622,7 +631,7 @@ export default function SignatorReview() {
                   disabled={busy}
                 >
                   <ArrowLeft className="h-4 w-4 mr-2" />
-                  Send Back to Negotiation
+                  {t('approvals.signator.send_back_negotiation')}
                 </Button>
                 <Button
                   variant="destructive"
@@ -634,7 +643,7 @@ export default function SignatorReview() {
                   disabled={busy}
                 >
                   <XCircle className="h-4 w-4 mr-2" />
-                  Reject
+                  {t('approval.reject')}
                 </Button>
               </CardContent>
             </Card>
@@ -655,16 +664,18 @@ export default function SignatorReview() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {reasonOpen === 'reject' ? 'Reject Lease' : 'Send Back to Negotiation'}
+              {reasonOpen === 'reject'
+                ? t('approvals.signator.reject_lease')
+                : t('approvals.signator.send_back_negotiation')}
             </DialogTitle>
             <DialogDescription>
               {reasonOpen === 'reject'
-                ? 'Rejecting moves the lease to a terminal state. Provide a reason for the audit log.'
-                : 'Sending back returns the lease to in_negotiation. Provide a clear reason so the submitter knows what to revise.'}
+                ? t('approvals.signator.reject_desc')
+                : t('approvals.signator.send_back_desc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="reason">Reason</Label>
+            <Label htmlFor="reason">{t('audit.reason')}</Label>
             <Textarea
               id="reason"
               value={reasonText}
@@ -674,8 +685,8 @@ export default function SignatorReview() {
               disabled={busy}
               placeholder={
                 reasonOpen === 'reject'
-                  ? 'e.g., Counterparty walked away from agreed terms'
-                  : 'e.g., Rent escalation cap needs to be reduced from 5% to 3%'
+                  ? t('approvals.signator.reject_placeholder')
+                  : t('approvals.signator.send_back_placeholder')
               }
             />
           </div>
@@ -688,7 +699,7 @@ export default function SignatorReview() {
               }}
               disabled={busy}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant={reasonOpen === 'reject' ? 'destructive' : 'default'}
@@ -696,7 +707,7 @@ export default function SignatorReview() {
               disabled={busy || reasonText.trim().length === 0}
             >
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {reasonOpen === 'reject' ? 'Reject' : 'Send Back'}
+              {reasonOpen === 'reject' ? t('approval.reject') : t('approvals.signator.send_back')}
             </Button>
           </DialogFooter>
         </DialogContent>

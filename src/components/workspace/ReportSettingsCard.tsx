@@ -34,12 +34,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
-const DISCOUNT_METHODS: Array<{ value: string; label: string }> = [
-  { value: 'workspace_default', label: 'Workspace default' },
-  { value: 'risk_free_rate', label: 'Risk-free rate' },
-  { value: 'incremental_borrowing_rate', label: 'Incremental borrowing rate' },
-  { value: 'custom', label: 'Custom' },
+const DISCOUNT_METHODS: Array<{ value: string; labelKey: string }> = [
+  { value: 'workspace_default', labelKey: 'workspace.report_settings.method_workspace_default' },
+  { value: 'risk_free_rate', labelKey: 'workspace.report_settings.method_risk_free' },
+  { value: 'incremental_borrowing_rate', labelKey: 'workspace.report_settings.method_ibr' },
+  { value: 'custom', labelKey: 'workspace.report_settings.method_custom' },
 ];
 
 interface Props {
@@ -48,6 +49,7 @@ interface Props {
 }
 
 export function ReportSettingsCard({ workspaceId, canEdit }: Props) {
+  const { t } = useAppTranslation();
   const [orgName, setOrgName] = useState('');
   const [fiscalStart, setFiscalStart] = useState('1');
   const [rounding, setRounding] = useState('2');
@@ -90,15 +92,15 @@ export function ReportSettingsCard({ workspaceId, canEdit }: Props) {
     const round = Number(rounding);
     const retain = Number(retention);
     if (!Number.isInteger(fiscal) || fiscal < 1 || fiscal > 12) {
-      toast.error('Fiscal year start month must be between 1 and 12');
+      toast.error(t('workspace.report_settings.err_fiscal'));
       return;
     }
     if (!Number.isInteger(round) || round < 0 || round > 6) {
-      toast.error('Rounding precision must be between 0 and 6');
+      toast.error(t('workspace.report_settings.err_rounding'));
       return;
     }
     if (!Number.isInteger(retain) || retain < 1 || retain > 730) {
-      toast.error('Retention days must be between 1 and 730');
+      toast.error(t('workspace.report_settings.err_retention'));
       return;
     }
     setSaving(true);
@@ -117,42 +119,39 @@ export function ReportSettingsCard({ workspaceId, canEdit }: Props) {
       toast.error(error.message);
       return;
     }
-    toast.success('Report settings saved');
+    toast.success(t('workspace.report_settings.saved'));
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Disclosure Reports</CardTitle>
+        <CardTitle>{t('workspace.report_settings.title')}</CardTitle>
         <CardDescription>
-          Defaults applied to ASC 842 disclosure reports generated from
-          this workspace. Each report snapshots these values at
-          generation time, so reports stay reproducible after settings
-          change.
+          {t('workspace.report_settings.desc')}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
         ) : (
           <>
             <div className="space-y-2">
-              <Label htmlFor="report-org-name">Organization name on reports</Label>
+              <Label htmlFor="report-org-name">{t('workspace.report_settings.org_label')}</Label>
               <Input
                 id="report-org-name"
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 disabled={!canEdit}
-                placeholder="Defaults to workspace name"
+                placeholder={t('workspace.report_settings.org_placeholder')}
               />
               <p className="text-xs text-muted-foreground">
-                Appears in the report header and JSON metadata.
+                {t('workspace.report_settings.org_help')}
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="report-fiscal">Fiscal year start month</Label>
+                <Label htmlFor="report-fiscal">{t('workspace.report_settings.fiscal_label')}</Label>
                 <Input
                   id="report-fiscal"
                   type="number"
@@ -163,12 +162,12 @@ export function ReportSettingsCard({ workspaceId, canEdit }: Props) {
                   disabled={!canEdit}
                 />
                 <p className="text-xs text-muted-foreground">
-                  1 = January (default for calendar-year fiscal).
+                  {t('workspace.report_settings.fiscal_help')}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="report-rounding">Rounding precision (decimals)</Label>
+                <Label htmlFor="report-rounding">{t('workspace.report_settings.rounding_label')}</Label>
                 <Input
                   id="report-rounding"
                   type="number"
@@ -179,12 +178,12 @@ export function ReportSettingsCard({ workspaceId, canEdit }: Props) {
                   disabled={!canEdit}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Default 2. Range 0–6.
+                  {t('workspace.report_settings.rounding_help')}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="report-retention">Artifact retention (days)</Label>
+                <Label htmlFor="report-retention">{t('workspace.report_settings.retention_label')}</Label>
                 <Input
                   id="report-retention"
                   type="number"
@@ -195,13 +194,12 @@ export function ReportSettingsCard({ workspaceId, canEdit }: Props) {
                   disabled={!canEdit}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Reports older than this become eligible for cleanup
-                  (cron not yet implemented; tracked in KNOWN_ISSUES #12).
+                  {t('workspace.report_settings.retention_help')}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="report-method">Default discount-rate method</Label>
+                <Label htmlFor="report-method">{t('workspace.report_settings.method_label')}</Label>
                 <Select value={method} onValueChange={setMethod} disabled={!canEdit}>
                   <SelectTrigger id="report-method">
                     <SelectValue />
@@ -209,13 +207,13 @@ export function ReportSettingsCard({ workspaceId, canEdit }: Props) {
                   <SelectContent>
                     {DISCOUNT_METHODS.map((m) => (
                       <SelectItem key={m.value} value={m.value}>
-                        {m.label}
+                        {t(m.labelKey)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Methodology label captured on each report.
+                  {t('workspace.report_settings.method_help')}
                 </p>
               </div>
             </div>
@@ -230,11 +228,11 @@ export function ReportSettingsCard({ workspaceId, canEdit }: Props) {
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              {saving ? 'Saving…' : 'Save report settings'}
+              {saving ? t('workspace.autosave.saving') : t('workspace.report_settings.save')}
             </Button>
             {!canEdit && (
               <p className="text-xs text-muted-foreground">
-                Read-only — only workspace admins or the owner can edit.
+                {t('workspace.report_settings.readonly')}
               </p>
             )}
           </>

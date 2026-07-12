@@ -8,6 +8,7 @@ import { AlertTriangle, ChevronRight, Upload, CheckSquare, FileSearch, Lock } fr
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface PendingItem {
   id: string;
@@ -19,6 +20,7 @@ interface PendingItem {
 }
 
 export function PendingApprovalsSection() {
+  const { t } = useAppTranslation();
   const { workspace } = useApp();
 
   const { data, isLoading } = useQuery({
@@ -48,7 +50,7 @@ export function PendingApprovalsSection() {
     const output: PendingItem[] = [];
 
     for (const lease of leases) {
-      const name = lease.filename || 'Unnamed lease';
+      const name = lease.filename || t('dashboard.unnamed_lease');
 
       // Phase 3: bucket chain-vocabulary leases the same as their legacy
       // equivalents. Each branch matches a STATE_GROUPS group.
@@ -58,7 +60,7 @@ export function PendingApprovalsSection() {
         output.push({
           id: `submitted-${lease.id}`,
           title: name,
-          description: 'Submitted — awaiting abstraction and review',
+          description: t('dashboard.submitted_desc'),
           href: `/app/leases/${lease.id}`,
           urgency: 'normal',
           icon: FileSearch,
@@ -69,7 +71,7 @@ export function PendingApprovalsSection() {
         output.push({
           id: `review-${lease.id}`,
           title: name,
-          description: 'Under review — approval decision required',
+          description: t('dashboard.under_review_desc'),
           href: `/app/leases/${lease.id}`,
           urgency: 'high',
           icon: CheckSquare,
@@ -80,7 +82,7 @@ export function PendingApprovalsSection() {
         output.push({
           id: `approved-${lease.id}`,
           title: name,
-          description: 'Approved — upload the executed document',
+          description: t('dashboard.approved_desc'),
           href: `/app/leases/${lease.id}`,
           urgency: 'high',
           icon: Upload,
@@ -91,7 +93,7 @@ export function PendingApprovalsSection() {
         output.push({
           id: `executed-${lease.id}`,
           title: name,
-          description: 'Executed — complete term review and lock model',
+          description: t('dashboard.executed_desc'),
           href: `/app/leases/${lease.id}`,
           urgency: 'normal',
           icon: Lock,
@@ -100,7 +102,7 @@ export function PendingApprovalsSection() {
     }
 
     return output.slice(0, 6);
-  }, [data]);
+  }, [data, t]);
 
   // Don't render anything if no pending items
   if (!isLoading && items.length === 0) return null;
@@ -112,7 +114,7 @@ export function PendingApprovalsSection() {
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-warning text-warning-foreground shrink-0">
             <AlertTriangle className="h-4 w-4" />
           </div>
-          Action Required
+          {t('dashboard.action_required')}
           {!isLoading && (
             <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-warning px-1.5 text-[11px] font-bold text-warning-foreground">
               {items.length}
@@ -120,7 +122,7 @@ export function PendingApprovalsSection() {
           )}
         </CardTitle>
         <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
-          <Link to="/app/leases">View All <ChevronRight className="h-3.5 w-3.5 ml-1" /></Link>
+          <Link to="/app/leases">{t('dashboard.view_all_title')} <ChevronRight className="h-3.5 w-3.5 ml-1" /></Link>
         </Button>
       </CardHeader>
       <CardContent>
@@ -149,7 +151,7 @@ export function PendingApprovalsSection() {
                 </div>
                 <div className="ml-3 flex items-center gap-2 shrink-0">
                   {item.urgency === 'high' && (
-                    <Badge variant="destructive" className="text-[10px]">Now</Badge>
+                    <Badge variant="destructive" className="text-[10px]">{t('dashboard.now_badge')}</Badge>
                   )}
                   <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
                 </div>

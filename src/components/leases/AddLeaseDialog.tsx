@@ -6,6 +6,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface AddLeaseDialogProps {
   open: boolean;
@@ -20,6 +21,7 @@ export function AddLeaseDialog({
   onRequestApproval,
   onUploadDocument,
 }: AddLeaseDialogProps) {
+  const { t } = useAppTranslation();
   function choose(action: () => void) {
     onOpenChange(false);
     action();
@@ -29,9 +31,9 @@ export function AddLeaseDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add a Lease</DialogTitle>
+          <DialogTitle>{t('leases.add_dialog.title')}</DialogTitle>
           <DialogDescription>
-            How would you like to add this lease?
+            {t('leases.add_dialog.desc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -45,9 +47,9 @@ export function AddLeaseDialog({
               <ClipboardList className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="font-semibold text-sm text-foreground">Request Approval</p>
+              <p className="font-semibold text-sm text-foreground">{t('leases.add_dialog.request_approval')}</p>
               <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                For leases not yet signed. Submit for manager and finance review before the commitment is made.
+                {t('leases.add_dialog.request_approval_desc')}
               </p>
             </div>
           </button>
@@ -61,9 +63,9 @@ export function AddLeaseDialog({
               <Upload className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="font-semibold text-sm text-foreground">Upload Document</p>
+              <p className="font-semibold text-sm text-foreground">{t('leases.add_dialog.upload_document')}</p>
               <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                For leases you already have signed. AI extracts the terms immediately — no approval needed.
+                {t('leases.add_dialog.upload_document_desc')}
               </p>
             </div>
           </button>

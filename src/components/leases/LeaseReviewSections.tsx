@@ -50,11 +50,12 @@ export { SECTION_CONFIG, findFieldLabel, type SectionKey };
 
 // Confidence badge component
 export const ConfidenceBadge = ({ confidence }: { confidence: number | null }) => {
+  const { t } = useLanguage();
   if (confidence === null) {
     return (
       <Badge variant="outline" className="text-[9px] h-4 font-medium text-muted-foreground bg-muted">
         <HelpCircle size={8} className="mr-0.5" />
-        N/A
+        {t('leases.review_sections.na')}
       </Badge>
     );
   }
@@ -160,7 +161,7 @@ export function SectionCard({
   sourceViewable = true,
   hideConfidence = false,
 }: SectionCardProps) {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const [isEditing, setIsEditing] = useState(!isLocked);
   // When the lease unlocks (isLocked transitions true → false), reflect that
   // in the section's editing state so the user doesn't have to also click the
@@ -202,12 +203,13 @@ export function SectionCard({
       <CardHeader className="bg-muted/30 border-b py-3">
         <CardTitle className="text-sm font-bold flex items-center gap-2">
           <Icon size={16} className="text-primary" />
-          {section.title}
+          {t(`lease_review.section_config.${sectionKey}.title`, { defaultValue: section.title })}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
         {section.fields.map((field) => {
           const fieldConfidence = getFieldConfidence(extractedJson, field.id);
+          const fieldLabel = t(`lease_review.field_labels.${field.id}`, { defaultValue: field.label });
           const fieldPage = getFieldPage(extractedJson, field.id);
           const fieldSourceText = getFieldSourceText(extractedJson, field.id);
           const isAIExtracted = fieldConfidence !== null;
@@ -245,7 +247,7 @@ export function SectionCard({
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />
-                  {field.label}
+                  {fieldLabel}
                   {!isModelLocked && !hideConfidence && <ConfidenceBadge confidence={fieldConfidence} />}
                 </Label>
                 {/* The single "verify against the source document" affordance —
@@ -259,11 +261,11 @@ export function SectionCard({
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); locateInPdf(); }}
-                    title={`See where the AI found this — page ${fieldPage}`}
+                    title={t('leases.review_sections.view_source_title', { page: fieldPage })}
                     className="inline-flex items-center gap-1 shrink-0 text-[10px] font-medium text-muted-foreground rounded px-1 py-0.5 transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#CC785C]"
                   >
                     <Sparkles size={11} className="fill-[#CC785C] text-[#CC785C]" />
-                    View in document
+                    {t('leases.review_sections.view_in_document')}
                   </button>
                 )}
               </div>
@@ -282,7 +284,7 @@ export function SectionCard({
                     onFocus={handleFieldFocus}
                     onBlur={() => onFieldBlur(field.id)}
                     disabled={isReadOnly}
-                    placeholder={`No ${field.label.toLowerCase()} extracted`}
+                    placeholder={t('leases.review_sections.no_field_extracted', { field: fieldLabel.toLowerCase() })}
                     className={cn(
                       "text-sm resize-none overflow-hidden min-h-[60px]",
                       getFieldBorderClass(field.id),
@@ -310,11 +312,11 @@ export function SectionCard({
                     }}
                   >
                     <SelectTrigger className={cn("text-sm", getFieldBorderClass(field.id))}>
-                      <SelectValue placeholder="Select asset type" />
+                      <SelectValue placeholder={t('leases.review_sections.select_asset_type')} />
                     </SelectTrigger>
                     <SelectContent>
-                      {assetTypes.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      {assetTypes.map((at) => (
+                        <SelectItem key={at} value={at}>{at}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -331,7 +333,7 @@ export function SectionCard({
                     onFocus={handleFieldFocus}
                     onBlur={() => onFieldBlur(field.id)}
                     disabled={isReadOnly}
-                    placeholder="No asset type specified"
+                    placeholder={t('leases.review_sections.no_asset_type')}
                     className={cn(
                       "text-sm",
                       getFieldBorderClass(field.id),
@@ -372,7 +374,7 @@ export function SectionCard({
                         termUnit === 'months' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'
                       )}
                       onClick={() => setTermUnit('months')}
-                    >Mo</button>
+                    >{t('leases.review_sections.months_abbr')}</button>
                     <button
                       type="button"
                       className={cn(
@@ -380,7 +382,7 @@ export function SectionCard({
                         termUnit === 'years' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'
                       )}
                       onClick={() => setTermUnit('years')}
-                    >Yr</button>
+                    >{t('leases.review_sections.years_abbr')}</button>
                   </div>
                 </div>
               )}
@@ -408,7 +410,7 @@ export function SectionCard({
                       onFocus={handleFieldFocus}
                       onBlur={() => onFieldBlur(field.id)}
                       disabled={false}
-                      placeholder={`No ${field.label.toLowerCase()} extracted`}
+                      placeholder={t('leases.review_sections.no_field_extracted', { field: fieldLabel.toLowerCase() })}
                       className={cn(
                         "text-sm",
                         getFieldBorderClass(field.id),
@@ -429,7 +431,7 @@ export function SectionCard({
                     onFocus={handleFieldFocus}
                     onBlur={() => onFieldBlur(field.id)}
                     disabled={isReadOnly}
-                    placeholder={`No ${field.label.toLowerCase()} extracted`}
+                    placeholder={t('leases.review_sections.no_field_extracted', { field: fieldLabel.toLowerCase() })}
                     className={cn(
                       "text-sm",
                       getFieldBorderClass(field.id),
@@ -442,7 +444,7 @@ export function SectionCard({
 
               {!value && field.type !== 'term' && (
                 <p className="text-[10px] text-muted-foreground mt-1 italic">
-                  Field is empty — not extracted or not present in document
+                  {t('leases.review_sections.field_empty')}
                 </p>
               )}
             </div>
@@ -476,6 +478,7 @@ interface RisksSectionProps {
 }
 
 export function RisksSection({ risks, onJumpToPage, sourceViewable = true, leaseId, onRisksChanged }: RisksSectionProps) {
+  const { t } = useLanguage();
   const [dismissTarget, setDismissTarget] = useState<Risk | null>(null);
   const [dismissReason, setDismissReason] = useState<string>('');
   const [dismissing, setDismissing] = useState<boolean>(false);
@@ -514,7 +517,7 @@ export function RisksSection({ risks, onJumpToPage, sourceViewable = true, lease
       // Defend against silent 0-row updates from a future RLS gap — without
       // this check, RLS could swallow the write and the toast would lie.
       if (!updatedRows || updatedRows.length === 0) {
-        throw new Error('No rows updated — likely a permissions issue. Contact your workspace admin.');
+        throw new Error(t('leases.risk.no_rows_updated'));
       }
 
       // Audit log entry — keeps reporting and compliance trail intact.
@@ -531,13 +534,13 @@ export function RisksSection({ risks, onJumpToPage, sourceViewable = true, lease
         },
       });
 
-      toast.success(`Dismissed risk: ${dismissTarget.title}`);
+      toast.success(t('leases.risk.dismissed', { title: dismissTarget.title }));
       setDismissTarget(null);
       setDismissReason('');
       onRisksChanged?.();
     } catch (err: any) {
       console.error('[RisksSection] dismiss failed:', err);
-      toast.error(`Could not dismiss risk: ${err?.message ?? 'unknown error'}`);
+      toast.error(t('leases.risk.dismiss_failed', { message: err?.message ?? t('leases.risk.unknown_error') }));
     } finally {
       setDismissing(false);
     }
@@ -549,12 +552,12 @@ export function RisksSection({ risks, onJumpToPage, sourceViewable = true, lease
         <CardHeader className="bg-muted/30 border-b py-3">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-600" />
-            Risks
+            {t('leases.risk.risks_title')}
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-4">
           <p className="text-sm text-muted-foreground text-center py-4">
-            No risks identified for this lease.
+            {t('leases.risk.none_identified')}
           </p>
         </CardContent>
       </Card>
@@ -569,7 +572,7 @@ export function RisksSection({ risks, onJumpToPage, sourceViewable = true, lease
         <CardHeader className="bg-muted/30 border-b py-3">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
             <AlertTriangle size={16} className="text-amber-600" />
-            Risks
+            {t('leases.risk.risks_title')}
             <Badge variant="outline" className="ml-1">
               {risks.length}
             </Badge>
@@ -582,21 +585,23 @@ export function RisksSection({ risks, onJumpToPage, sourceViewable = true, lease
                 <h4 className="font-medium text-sm">{risk.title}</h4>
                 <div className="flex items-center gap-1 shrink-0">
                   <Badge className={cn('text-[10px]', getSeverityColor(risk.severity))}>
-                    {risk.severity}
+                    {['low', 'medium', 'high'].includes(risk.severity.toLowerCase())
+                      ? t(`leases.risk.severity_${risk.severity.toLowerCase()}`)
+                      : risk.severity}
                   </Badge>
                   {canDismiss && (
                     <Button
                       variant="outline"
                       size="sm"
                       className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 hover:border-destructive/40"
-                      title="Dismiss this risk — it will be removed from this lease and excluded from all reports"
+                      title={t('leases.risk.dismiss_hint')}
                       onClick={() => {
                         setDismissTarget(risk);
                         setDismissReason('');
                       }}
                     >
                       <X size={11} />
-                      Dismiss
+                      {t('leases.risk.dismiss')}
                     </Button>
                   )}
                 </div>
@@ -614,7 +619,7 @@ export function RisksSection({ risks, onJumpToPage, sourceViewable = true, lease
                       className="h-auto p-0 ml-2 text-xs"
                       onClick={() => onJumpToPage(risk.citation_page || undefined, risk.citation_snippet || undefined)}
                     >
-                      (Page {risk.citation_page})
+                      {t('leases.risk.citation_page', { page: risk.citation_page })}
                     </Button>
                   )}
                 </div>
@@ -635,32 +640,30 @@ export function RisksSection({ risks, onJumpToPage, sourceViewable = true, lease
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Dismiss this risk?</AlertDialogTitle>
+            <AlertDialogTitle>{t('leases.risk.dismiss_confirm_title')}</AlertDialogTitle>
             <AlertDialogDescription>
               <strong className="block mb-1">{dismissTarget?.title}</strong>
-              Once dismissed, this risk will be hidden from the workbench and excluded from
-              every report, export, and analysis surface for this lease. The action is logged
-              in the audit trail.
+              {t('leases.risk.dismiss_confirm_desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Reason (optional)</Label>
+            <Label className="text-xs font-medium text-muted-foreground">{t('leases.risk.reason_optional')}</Label>
             <Textarea
               value={dismissReason}
               onChange={(e) => setDismissReason(e.target.value)}
-              placeholder="e.g. Standard provision in our portfolio; no action needed"
+              placeholder={t('leases.risk.dismiss_reason_placeholder')}
               rows={3}
               disabled={dismissing}
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={dismissing}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={dismissing}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDismiss}
               disabled={dismissing}
               className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
-              {dismissing ? 'Dismissing…' : 'Dismiss risk'}
+              {dismissing ? t('leases.risk.dismissing') : t('leases.risk.dismiss_cta')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

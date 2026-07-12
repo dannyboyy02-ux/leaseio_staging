@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useGenerateLeaseReport } from '@/hooks/useGenerateLeaseReport';
 
 interface LeaseReportRow {
@@ -56,6 +57,7 @@ function statusBadgeVariant(
 }
 
 export default function LeaseReportDetail() {
+  const { t } = useAppTranslation();
   const { leaseId, reportId } = useParams<{ leaseId: string; reportId: string }>();
   const navigate = useNavigate();
   const [report, setReport] = useState<LeaseReportRow | null>(null);
@@ -72,7 +74,7 @@ export default function LeaseReportDetail() {
       try {
         if (!reportId) {
           if (!cancelled) {
-            setLoadError('Missing report id in URL');
+            setLoadError(t('reports.missing_report_id'));
             setLoading(false);
           }
           return;
@@ -130,14 +132,14 @@ export default function LeaseReportDetail() {
 
   async function handleDownload(path: string | null, kind: 'pdf' | 'json') {
     if (!path) {
-      toast.error(`${kind.toUpperCase()} not yet available`);
+      toast.error(t('reports.kind_not_available', { kind: kind.toUpperCase() }));
       return;
     }
     const { data, error } = await supabase.storage
       .from('lease-reports')
       .createSignedUrl(path, 120);
     if (error || !data?.signedUrl) {
-      toast.error('Could not generate download link');
+      toast.error(t('reports.download_link_failed'));
       return;
     }
     const a = document.createElement('a');
@@ -151,18 +153,18 @@ export default function LeaseReportDetail() {
     if (!leaseId) return;
     try {
       const result = await regenerate(leaseId);
-      toast.success('New report generated');
+      toast.success(t('reports.new_report_generated'));
       navigate(`/app/leases/${leaseId}/reports/${result.reportId}`);
     } catch (e: any) {
-      toast.error(e?.message ?? 'Regeneration failed');
+      toast.error(e?.message ?? t('reports.regeneration_failed'));
     }
   }
 
   if (loading) {
     return (
       <AppLayout>
-        <AppHeader title="Report" />
-        <div className="px-6 py-8 text-sm text-muted-foreground">Loading…</div>
+        <AppHeader title={t('reports.report_title')} />
+        <div className="px-6 py-8 text-sm text-muted-foreground">{t('workspace.watchlist.loading')}</div>
       </AppLayout>
     );
   }
@@ -170,10 +172,10 @@ export default function LeaseReportDetail() {
   if (!report) {
     return (
       <AppLayout>
-        <AppHeader title="Report not found" />
+        <AppHeader title={t('reports.report_not_found')} />
         <div className="px-6 py-8 space-y-3">
           <p className="text-sm text-muted-foreground">
-            The requested report does not exist or you do not have access.
+            {t('reports.report_not_found_desc')}
           </p>
           {loadError && (
             <p className="text-xs text-red-700 font-mono">
@@ -182,7 +184,7 @@ export default function LeaseReportDetail() {
           )}
           <Button asChild variant="outline">
             <Link to={`/app/leases/${leaseId ?? ''}`}>
-              <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to lease
+              <ArrowLeft className="h-4 w-4 mr-1.5" /> {t('reports.back_to_lease')}
             </Link>
           </Button>
         </div>
@@ -197,14 +199,14 @@ export default function LeaseReportDetail() {
   return (
     <AppLayout>
       <AppHeader
-        title="ASC 842 Disclosure Report"
-        subtitle={`${report.organization_name_at_gen ?? ''} · Generated ${generatedAtDisplay}`}
+        title={t('reports.asc842_report_title')}
+        subtitle={`${report.organization_name_at_gen ?? ''} · ${t('reports.generated_on', { date: generatedAtDisplay })}`}
       />
       <div className="px-6 py-6 space-y-6 max-w-5xl">
         <div className="flex items-center justify-between">
           <Button asChild variant="outline" size="sm">
             <Link to={`/app/leases/${report.lease_id ?? leaseId ?? ''}`}>
-              <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to lease
+              <ArrowLeft className="h-4 w-4 mr-1.5" /> {t('reports.back_to_lease')}
             </Link>
           </Button>
           <div className="flex items-center gap-2">
@@ -216,26 +218,22 @@ export default function LeaseReportDetail() {
               disabled={regenerating}
             >
               <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-              Regenerate
+              {t('reports.regenerate')}
             </Button>
           </div>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Liability disclaimer</CardTitle>
+            <CardTitle className="text-base">{t('reports.liability_disclaimer')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 mb-1">
-                LeaseIO Data Report — Not a Financial Statement
+                {t('reports.not_financial_statement')}
               </p>
               <p className="text-xs text-amber-900 leading-relaxed">
-                This report contains structured lease data extracted, verified,
-                and audited inside LeaseIO. It is NOT a financial statement and
-                does not constitute accounting, legal, or tax advice. The
-                customer is solely responsible for using this data correctly in
-                their accounting and reporting.
+                {t('reports.disclaimer_body')}
               </p>
             </div>
           </CardContent>
@@ -243,7 +241,7 @@ export default function LeaseReportDetail() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Artifacts</CardTitle>
+            <CardTitle className="text-base">{t('reports.artifacts')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
@@ -252,7 +250,7 @@ export default function LeaseReportDetail() {
                 <div>
                   <p className="text-sm font-medium">PDF</p>
                   <p className="text-xs text-muted-foreground">
-                    {report.pdf_storage_path ?? (isProcessing ? 'Pending…' : 'Not available')}
+                    {report.pdf_storage_path ?? (isProcessing ? t('reports.pending_ellipsis') : t('reports.not_available'))}
                   </p>
                 </div>
               </div>
@@ -262,16 +260,16 @@ export default function LeaseReportDetail() {
                 disabled={!isReady}
                 onClick={() => handleDownload(report.pdf_storage_path, 'pdf')}
               >
-                <Download className="h-3.5 w-3.5 mr-1.5" /> Download PDF
+                <Download className="h-3.5 w-3.5 mr-1.5" /> {t('reports.download_pdf')}
               </Button>
             </div>
             <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <FileJson className="h-4 w-4 text-emerald-700" />
                 <div>
-                  <p className="text-sm font-medium">JSON (structured data)</p>
+                  <p className="text-sm font-medium">{t('reports.json_structured')}</p>
                   <p className="text-xs text-muted-foreground">
-                    {report.json_storage_path ?? 'Pending…'}
+                    {report.json_storage_path ?? t('reports.pending_ellipsis')}
                   </p>
                 </div>
               </div>
@@ -281,7 +279,7 @@ export default function LeaseReportDetail() {
                 disabled={!report.json_storage_path}
                 onClick={() => handleDownload(report.json_storage_path, 'json')}
               >
-                <Download className="h-3.5 w-3.5 mr-1.5" /> Download JSON
+                <Download className="h-3.5 w-3.5 mr-1.5" /> {t('reports.download_json')}
               </Button>
             </div>
           </CardContent>
@@ -290,7 +288,7 @@ export default function LeaseReportDetail() {
         {report.error_message && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base text-red-700">Error</CardTitle>
+              <CardTitle className="text-base text-red-700">{t('reports.error_title')}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-red-700">{report.error_message}</p>
@@ -300,27 +298,26 @@ export default function LeaseReportDetail() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Forensic snapshot</CardTitle>
+            <CardTitle className="text-base">{t('reports.forensic_snapshot')}</CardTitle>
           </CardHeader>
           <CardContent className="text-xs space-y-1">
             <p>
-              <span className="text-muted-foreground">Report ID:</span>{' '}
+              <span className="text-muted-foreground">{t('reports.report_id_label')}</span>{' '}
               <code className="font-mono">{report.id}</code>
             </p>
             <p>
-              <span className="text-muted-foreground">Discount rate methodology:</span>{' '}
+              <span className="text-muted-foreground">{t('reports.discount_rate_method_label')}</span>{' '}
               {report.discount_rate_method_at_gen ?? 'workspace_default'}
             </p>
             {report.expires_at && (
               <p>
-                <span className="text-muted-foreground">Expires:</span>{' '}
+                <span className="text-muted-foreground">{t('reports.expires_label')}</span>{' '}
                 {new Date(report.expires_at).toLocaleDateString()}
               </p>
             )}
             <p className="text-muted-foreground pt-2">
-              Workspace report settings at the moment of generation are
-              captured in the row's <code>workspace_settings_snapshot</code>{' '}
-              JSON for full reproducibility.
+              {t('reports.snapshot_note_prefix')} <code>workspace_settings_snapshot</code>{' '}
+              {t('reports.snapshot_note_suffix')}
             </p>
           </CardContent>
         </Card>

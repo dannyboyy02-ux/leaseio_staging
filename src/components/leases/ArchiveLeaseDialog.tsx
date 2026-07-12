@@ -9,6 +9,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Archive } from 'lucide-react';
+import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 // #79: the Leases-list action is restorable ARCHIVE, not hard-delete — same
 // semantics (and wording) as the detail page, so "archive" never gets confused
@@ -26,6 +27,7 @@ export function ArchiveLeaseDialog({
   leaseName,
   onConfirm,
 }: ArchiveLeaseDialogProps) {
+  const { t } = useAppTranslation();
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -34,19 +36,15 @@ export function ArchiveLeaseDialog({
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
               <Archive className="h-5 w-5 text-muted-foreground" />
             </div>
-            <AlertDialogTitle>Archive Lease</AlertDialogTitle>
+            <AlertDialogTitle>{t('archive.dialog_title')}</AlertDialogTitle>
           </div>
           <AlertDialogDescription className="pt-2">
-            Archive <span className="font-medium text-foreground">"{leaseName}"</span>? It will be
-            moved out of the active list but kept in full — find it again by setting the
-            <span className="font-medium text-foreground"> Status</span> filter to
-            <span className="font-medium text-foreground"> Archived</span>, and restore it any time
-            from its row or the lease's detail page. Nothing is deleted.
+            {t('archive.dialog_desc', { name: leaseName })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Archive</AlertDialogAction>
+          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>{t('archive.archive')}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
