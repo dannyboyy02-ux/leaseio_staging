@@ -24,8 +24,18 @@ Owner: "the walkthrough didn't do a good job on UI polish through Settings/Works
 - **[MEDIUM] Card-header inconsistency — RESOLVED** via a shared `SectionCardHeader` (icon + title + right-aligned autosave chip) used by every section card.
 - **[LOW] Timezone list — RESOLVED** (AZ/HI/AK/UTC + London/Paris/India/Singapore/Tokyo/Sydney/São Paulo). Owned-empty state gained a "Create your first workspace" CTA; member-of "Switch to" icon corrected (ArrowRightLeft, not ExternalLink). Default-approver assignee no longer displayed twice (Select trigger is static "Change"/"Assign").
 
+**Reviewer round on the autosave pass (security+integrity+auditor+polish, 2026-07-12) — fixed in the follow-up commit:** the roles/config loader-honesty class (a swallowed load error rendered false-empty/default state that one autosave click would then persist over real data — full-replace roles wipe being the worst case; now every loader tracks its error, shows a "Try again" panel, and its card's writers stay BLOCKED until a load succeeds); thresholds NaN/Infinity→silent-NULL clear (validated + display normalized to stored); asset-type revert baseline mismatch (`persistedRef` now mirrors the state defaults); backdoor toggle routed through `persistWorkspace` (chip + no-rows check, optimistic); validation failures now show the error chip, not just a toast; in-flight disables on list controls; undo toasts on remove; Enter commits text fields; empty-name revert explains itself; mobile role label says "Workflow admin"; a11y labels on the approver controls; watchlist save/delete errors humanized; Switch-to/Transfer icon collision resolved.
+
 **Still filed:**
-- **[HIGH] Body copy on the default landing panel + most of WorkspaceSettings is hardcoded English** while the rail is i18n'd — a Spanish admin gets a Spanish rail wrapping English panels (`WorkspaceManagement.tsx` + `WorkspaceSettings.tsx`, many lines). Large but mechanical; own ticket (the autosave pass added a handful more English strings — "Changes save automatically", the read-only notice, chip labels — include them in the sweep).
+- **[HIGH] Body copy on the default landing panel + most of WorkspaceSettings is hardcoded English** while the rail is i18n'd — a Spanish admin gets a Spanish rail wrapping English panels (`WorkspaceManagement.tsx` + `WorkspaceSettings.tsx`, many lines). Large but mechanical; own ticket (the autosave pass added a handful more English strings — "Changes save automatically", the read-only notice, chip labels, error panels — include them in the sweep).
+- **[LOW] persistRoles residual lost-update window** — two role writes in flight together (same-batch events / out-of-order completion) could last-writer-wins-drop the earlier one; success doesn't re-sync from the DB. Mitigated by disable-while-saving; fix = per-key write queue or sequence token. (security+integrity)
+- **[LOW] Rapid role toggles are swallowed by the whole-card in-flight disable** — safe but frictional for "check, check, check" configuration; fix = queue/merge changes or disable only the toggled row. (polish)
+- **[LOW] Members screen speaks two feedback languages** — `MembersPanel`/`MemberRoleSelect` still toast while the sibling cards chip; give MembersPanel the SectionCardHeader+chip treatment (component is reused in the My Workspaces sheet). (polish)
+- **[LOW] Autosave chip is out of view on tall cards** (roles grid, long option lists) — success has no signal at the point of interaction; consider the bottom microcopy doubling as live status. (polish)
+- **[LOW] Blur-persist doesn't flush on unmount-without-blur** (browser Back mid-edit discards a typed-but-unblurred field edit) — debounce-on-change or a cleanup-effect flush. (polish)
+- **[LOW] `default_notification_days` has no server CHECK** (client validates 1..365; countersig twin has one) — add an idempotent CHECK migration; same for `covenant_threshold`/`approval_threshold` (≥ 0). (security)
+- **[LOW] Workspace config writes are unattributed in the activity log** (pre-existing; name/timezone/thresholds/countersig/asset types/option lists — only roles log via the RPC). Two of these shape approval routing; stub: a `workspace_config_changed` activity row (column, old→new, actor). (integrity)
+- **[LOW] Risk Watchlist card keeps its old plain header** while siblings use SectionCardHeader. (polish/layout)
 
 ---
 
@@ -1758,7 +1768,9 @@ green.
 
 **Severity:** Low (hygiene). All pre-existing; surfaced by lease-security-scanner + lease-code-auditor on 2026-06-12.
 
-**Stub remediation:** One hygiene pass: add the guard to all three handlers (class shape, not piecemeal), delete the dead dialog + state + branch, drop the unused imports/function.
+> **Amended 2026-07-12 (unified-autosave rewrite):** (a) is SUPERSEDED — `handleSaveAssetTypes`/`makeOptionListHandlers.handleSave` were deleted and every workspaces write now funnels through `persistWorkspace`, which carries the centralized `canEdit` gate + `.select('id')` no-rows check (including the backdoor toggle). (c) narrowed: `WorkspaceRole` import removed; still unused → `cn`, `useQuery`, `getRoleLabel`. Also orphaned by the rewrite: locale keys `workspace.save_changes` / `workspace.saving` / `workspace.read_only` in BOTH en/es (WorkspaceSettings was the sole consumer; `account.*` twins are still live — keep those). (b) unchanged.
+
+**Stub remediation:** One hygiene pass: delete the dead dialog + state + branch (b), drop `cn`/`useQuery`/`getRoleLabel` + the three orphaned `workspace.*` locale keys (both locales).
 
 ---
 
@@ -1941,6 +1953,8 @@ green.
 **Stub remediation:** Either split the name update out of `handleSaveGeneral` when non-live, or gate the General form (and the rest of WorkspaceSettings) client-side on `isReadOnlyRetention`/grace state as part of the V4 read-only UI pass. Until then, the inline rename remains the working path.
 
 **RESOLVED 2026-06-13** — `handleSaveGeneral` now attempts the bundled name+timezone update, and on rejection retries the rename ALONE (so a non-live config-guard rejection of timezone no longer blocks the rename), with a `.select('id')` 0-row check (#70 defense-in-depth) surfacing RLS no-ops as honest errors instead of false success. Full client-side read-only gating of WorkspaceSettings remains V4 read-only-UI territory.
+
+> **Superseded 2026-07-12 (unified-autosave rewrite):** `handleSaveGeneral` and its retry workaround no longer exist — name and timezone persist as SEPARATE writes (`saveName` on blur / `saveTimezone` on change), so a frozen timezone can't block a rename in the first place. The `.select('id')` no-rows check lives on in the shared `persistWorkspace` helper.
 
 ---
 

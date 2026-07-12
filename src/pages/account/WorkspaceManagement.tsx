@@ -332,7 +332,7 @@ export function WorkspaceManagementContent() {
                           variant="ghost"
                           onClick={() => switchWorkspace(ws.id)}
                         >
-                          <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                          <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
                           Switch to
                         </Button>
                       )}
@@ -352,7 +352,7 @@ export function WorkspaceManagementContent() {
                         variant="ghost"
                         onClick={() => setTransferTarget(ws)}
                       >
-                        <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
+                        <Crown className="h-3.5 w-3.5 mr-1.5" />
                         {t('workspace.transfer.cta')}
                       </Button>
                       {useGridLayout ? (

@@ -166,7 +166,8 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
       cancelForm();
       await refetch();
     } catch (err: any) {
-      toast.error(`Save failed: ${err?.message ?? 'unknown'}`);
+      console.error('Watchlist save failed:', err);
+      toast.error("Couldn't save that watchlist entry — please try again.");
     } finally {
       setSaving(false);
     }
@@ -187,7 +188,8 @@ export function RiskWatchlistManager({ workspaceId }: Props) {
       setDeleting(null);
       await refetch();
     } catch (err: any) {
-      toast.error(`Delete failed: ${err?.message ?? 'unknown'}`);
+      console.error('Watchlist delete failed:', err);
+      toast.error("Couldn't delete that watchlist entry — please try again.");
     } finally {
       setSaving(false);
     }

@@ -117,6 +117,22 @@ function SectionCardHeader({
   );
 }
 
+/** Load-failure callout: the on-screen values are NOT the stored config, so
+ *  editing is blocked until a reload succeeds (loader-honesty gate). */
+function ConfigLoadErrorNotice({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-6 text-center">
+      <p className="text-sm text-destructive font-medium">Couldn't load this workspace's configuration.</p>
+      <p className="text-xs text-muted-foreground">
+        Editing is paused so nothing gets overwritten — your stored settings are safe.
+      </p>
+      <Button size="sm" variant="outline" onClick={onRetry}>
+        Try again
+      </Button>
+    </div>
+  );
+}
+
 /** Compact view-only callout for members who can see a section but not edit
  *  it — replaces disabled Save buttons (a dead affordance) with an honest
  *  statement of why the fields are locked. */
@@ -147,7 +163,6 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     String(workspace?.defaultNotificationDays || 90)
   );
   const [backdoorEnabled, setBackdoorEnabled] = useState(false);
-  const [isSavingBackdoor, setIsSavingBackdoor] = useState(false);
   // Phase 5 — counter-signature window default. Workspace-level setting
   // that drives the due date computed when a lease enters
   // pending_counter_signature.
@@ -190,10 +205,23 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     covenantThreshold: '',
     approvalThreshold: '0',
     counterSignatureDueDays: '21',
-    assetTypeConfig: [],
+    // MUST mirror the assetTypeConfig state default — a [] baseline made a
+    // failed persist revert a never-customized workspace to an EMPTY list,
+    // and the next successful add would persist that near-empty config
+    // (code audit of 05356d4).
+    assetTypeConfig: ['Real Estate', 'Equipment', 'Vehicle', 'Other'],
     assetTypeAbbr: {},
     lists: {},
   });
+
+  // Loader honesty gates (integrity review of 05356d4): the config loaders
+  // below seed these cards' state; if a load FAILS, the UI would show
+  // built-in defaults over the workspace's real config — and autosave would
+  // then persist those defaults on the user's next add/remove/blur,
+  // overwriting real data. Writers stay blocked until their loader succeeds.
+  const [configLoadState, setConfigLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [configReloadNonce, setConfigReloadNonce] = useState(0);
+  const [countersigLoaded, setCountersigLoaded] = useState(false);
 
   // Phase 2 — functional roles state: map of user_id → Set<FunctionalRole>
   const [memberRoles, setMemberRoles] = useState<Record<string, Set<FunctionalRole>>>({});
@@ -269,17 +297,24 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     if (!workspace?.id) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('workspaces')
         .select('counter_signature_default_due_days')
         .eq('id', workspace.id)
         .maybeSingle();
       if (cancelled) return;
+      if (error) {
+        // Leave countersigLoaded false — the default '21' on screen is NOT the
+        // stored value, so blur-persist stays blocked (loader-honesty gate).
+        console.error('Failed to load counter-signature window:', error);
+        return;
+      }
       const v = (data as any)?.counter_signature_default_due_days;
       if (typeof v === 'number') {
         setCounterSignatureDueDays(String(v));
         persistedRef.current.counterSignatureDueDays = String(v);
       }
+      setCountersigLoaded(true);
     })();
     return () => {
       cancelled = true;
@@ -289,13 +324,22 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   // Load financial settings from workspaces table
   useEffect(() => {
     if (!workspace?.id) return;
+    setConfigLoadState('loading');
     supabase
       .from('workspaces')
       .select('covenant_threshold, approval_threshold, backdoor_enabled, asset_type_config, department_options, region_options, location_options, building_options')
       .eq('id', workspace.id)
       .single()
-      .then(({ data }) => {
-        if (data) {
+      .then(({ data, error }) => {
+        if (error || !data) {
+          // The defaults on screen are NOT the stored config — block this
+          // section's autosave writers so a user action can't persist
+          // built-ins over the workspace's real lists (loader-honesty gate).
+          console.error('Failed to load workspace configuration:', error);
+          setConfigLoadState('error');
+          return;
+        }
+        {
           const cov = (data as any).covenant_threshold != null ? String((data as any).covenant_threshold) : '';
           const appr = String((data as any).approval_threshold ?? 0);
           setCovenantThreshold(cov);
@@ -318,18 +362,31 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               persistedRef.current.lists[col] = (data as any)[col] as string[];
             }
           }
+          setConfigLoadState('ready');
         }
       });
-  }, [workspace?.id]);
+  }, [workspace?.id, configReloadNonce]);
 
   // Load functional roles from workspace_roles table. Extracted so the save
   // handler can re-sync the UI to the true persisted state after a failure.
+  //
+  // INTEGRITY-CRITICAL error handling (review of 05356d4): the RPC persists a
+  // FULL-REPLACE of the assignment set, so a silently-failed load that rendered
+  // an empty roster would let the user's next single toggle wipe every stored
+  // role — with a well-formed audit row. On load failure we keep prior state,
+  // flag the error, and block all role writes until a load succeeds.
+  const [rolesLoadError, setRolesLoadError] = useState(false);
   const loadRoles = useCallback(async () => {
     if (!workspace?.id) return;
-    const { data } = await (supabase as any)
+    const { data, error } = await (supabase as any)
       .from('workspace_roles')
       .select('user_id, role')
       .eq('workspace_id', workspace.id);
+    if (error) {
+      console.error('Failed to load workspace roles:', error);
+      setRolesLoadError(true);
+      return; // keep whatever state we had; do NOT render a false-empty roster
+    }
     const map: Record<string, Set<FunctionalRole>> = {};
     for (const row of (data as Array<{ user_id: string; role: string }> | null) || []) {
       if (!map[row.user_id]) map[row.user_id] = new Set();
@@ -337,6 +394,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     }
     setMemberRoles(map);
     setRolesLoaded(true);
+    setRolesLoadError(false);
   }, [workspace?.id]);
 
   useEffect(() => { void loadRoles(); }, [loadRoles]);
@@ -346,7 +404,9 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   // a toggle can never be silently lost by navigating away. On failure the
   // RPC left the stored roles untouched; re-sync the UI to that true state.
   const persistRoles = async (next: Record<string, Set<FunctionalRole>>) => {
-    if (!canEdit || !workspace?.id) return;
+    // Never write from a roster that isn't a verified read of the stored
+    // state — see the loadRoles integrity note.
+    if (!canEdit || !workspace?.id || !rolesLoaded || rolesLoadError) return;
     setStatus('roles', 'saving');
     try {
       const assignments: Array<{ user_id: string; role: FunctionalRole }> = [];
@@ -370,8 +430,12 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   };
 
   const rolesSaving = saveStatus['roles'] === 'saving';
+  // Controls stay locked until the roster is a verified read (or after a load
+  // failure) — matches the persistRoles write gate.
+  const rolesWritable = rolesLoaded && !rolesLoadError && !rolesSaving;
 
   const toggleFunctionalRole = (userId: string, role: FunctionalRole) => {
+    if (!rolesWritable) return;
     const next = { ...memberRoles };
     const current = new Set(next[userId] || []);
     if (current.has(role)) current.delete(role);
@@ -383,6 +447,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
 
   // Assign a single approver role (clears existing holder first — one person per step)
   const assignApproverRole = (role: 'manager_approver' | 'financial_approver', userId: string | null) => {
+    if (!rolesWritable) return;
     const next: Record<string, Set<FunctionalRole>> = {};
     for (const [uid, roles] of Object.entries(memberRoles)) {
       const updated = new Set(roles);
@@ -449,7 +514,10 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   const saveName = async () => {
     const name = workspaceName.trim();
     if (!name || name === persistedRef.current.name) {
-      if (!name) setWorkspaceName(persistedRef.current.name);
+      if (!name) {
+        toast.error("The workspace name can't be empty.");
+        setWorkspaceName(persistedRef.current.name);
+      }
       return;
     }
     const ok = await persistWorkspace('general', { name }, "Couldn't save the workspace name.");
@@ -478,6 +546,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     const days = parseInt(raw, 10);
     if (raw === persistedRef.current.notificationDays) return;
     if (!Number.isFinite(days) || days < 1 || days > 365) {
+      setStatus('notifications', 'error', 4000);
       toast.error('Reminder days must be between 1 and 365.');
       setNotificationDays(persistedRef.current.notificationDays);
       return;
@@ -495,10 +564,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   // Phase 5 — counter-signature window (act-on-chain-step reads this when
   // computing counter_signature_due_date; CHECK enforces 1..365 server-side).
   const saveCounterSignature = async () => {
+    // Loader-honesty gate: never blur-persist the on-screen default over a
+    // stored value we failed to read.
+    if (!countersigLoaded) return;
     const raw = counterSignatureDueDays.trim();
     if (raw === persistedRef.current.counterSignatureDueDays) return;
     const days = parseInt(raw, 10);
     if (!Number.isFinite(days) || days < 1 || days > 365) {
+      setStatus('countersig', 'error', 4000);
       toast.error('Counter-signature window must be between 1 and 365 days.');
       setCounterSignatureDueDays(persistedRef.current.counterSignatureDueDays);
       return;
@@ -513,52 +586,68 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   };
 
   // Review thresholds (housed under Approval Rules). The discount rate is
-  // saved separately by DiscountRateCard on /app/reports.
+  // saved separately by DiscountRateCard on /app/reports. Validate BEFORE
+  // building the patch: JSON serializes NaN/Infinity to null, so an
+  // unparseable value would silently CLEAR the threshold in the DB while the
+  // chip showed "Saved" (security review of 05356d4).
   const saveThresholds = async () => {
+    if (configLoadState !== 'ready') return; // loader-honesty gate
     if (
       covenantThreshold === persistedRef.current.covenantThreshold &&
       approvalThreshold === persistedRef.current.approvalThreshold
     ) return;
+    const covenant = covenantThreshold.trim() === '' ? null : parseFloat(covenantThreshold);
+    const approval = approvalThreshold.trim() === '' ? 0 : parseFloat(approvalThreshold);
+    if (
+      (covenant !== null && (!Number.isFinite(covenant) || covenant < 0)) ||
+      !Number.isFinite(approval) || approval < 0
+    ) {
+      setStatus('thresholds', 'error', 4000);
+      toast.error('Thresholds must be zero or a positive dollar amount.');
+      setCovenantThreshold(persistedRef.current.covenantThreshold);
+      setApprovalThreshold(persistedRef.current.approvalThreshold);
+      return;
+    }
     const ok = await persistWorkspace(
       'thresholds',
-      {
-        covenant_threshold: covenantThreshold ? parseFloat(covenantThreshold) : null,
-        approval_threshold: parseFloat(approvalThreshold) || 0,
-      },
+      { covenant_threshold: covenant, approval_threshold: approval },
       "Couldn't save the review thresholds.",
     );
     if (ok) {
-      persistedRef.current.covenantThreshold = covenantThreshold;
-      persistedRef.current.approvalThreshold = approvalThreshold;
+      // Normalize display to the STORED values so the field never shows ''
+      // while the DB holds 0 (display must equal storage).
+      const covStr = covenant === null ? '' : String(covenant);
+      const apprStr = String(approval);
+      setCovenantThreshold(covStr);
+      setApprovalThreshold(apprStr);
+      persistedRef.current.covenantThreshold = covStr;
+      persistedRef.current.approvalThreshold = apprStr;
     } else {
       setCovenantThreshold(persistedRef.current.covenantThreshold);
       setApprovalThreshold(persistedRef.current.approvalThreshold);
     }
   };
 
+  // Routed through persistWorkspace like every other write on this surface
+  // (same .select('id') no-rows check + chip; the old bespoke handler was the
+  // one write left without them).
   const handleSaveBackdoor = async (value: boolean) => {
-    if (!workspace?.id) return;
-    setIsSavingBackdoor(true);
-    try {
-      const { error } = await supabase
-        .from('workspaces')
-        .update({ backdoor_enabled: value } as any)
-        .eq('id', workspace.id);
-      if (error) throw error;
-      setBackdoorEnabled(value);
-      toast.success('Onboarding settings saved');
-    } catch (error) {
-      console.error('Error saving backdoor toggle:', error);
-      toast.error('Failed to save onboarding settings');
-    } finally {
-      setIsSavingBackdoor(false);
-    }
+    if (configLoadState !== 'ready') return; // loader-honesty gate
+    const prev = backdoorEnabled;
+    setBackdoorEnabled(value);
+    const ok = await persistWorkspace(
+      'onboarding',
+      { backdoor_enabled: value },
+      "Couldn't save the onboarding setting.",
+    );
+    if (!ok) setBackdoorEnabled(prev);
   };
 
   // Asset types persist on every add/remove (and abbreviation edits on blur) —
   // the old staged-then-Save model silently lost list edits when the user
   // clicked another rail item before hitting Save.
   const persistAssetTypes = async (nextConfig: string[], nextAbbr: Record<string, string>) => {
+    if (configLoadState !== 'ready') return; // loader-honesty gate
     const ok = await persistWorkspace(
       'asset_types',
       { asset_type_config: nextConfig, asset_type_abbreviations: nextAbbr },
@@ -583,12 +672,26 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
   };
 
   const handleRemoveAssetType = (type: string) => {
+    const prevConfig = assetTypeConfig;
+    const prevAbbr = assetTypeAbbr;
     const nextConfig = assetTypeConfig.filter((t) => t !== type);
     const nextAbbr = { ...assetTypeAbbr };
     delete nextAbbr[type];
     setAssetTypeConfig(nextConfig);
     setAssetTypeAbbr(nextAbbr);
     void persistAssetTypes(nextConfig, nextAbbr);
+    // Instant-persist removed the old "just don't press Save" safety net —
+    // an undo toast is its replacement (restores the abbreviation too).
+    toast(`Removed "${type}"`, {
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          setAssetTypeConfig(prevConfig);
+          setAssetTypeAbbr(prevAbbr);
+          void persistAssetTypes(prevConfig, prevAbbr);
+        },
+      },
+    });
   };
 
   const saveAssetAbbreviations = () => {
@@ -605,6 +708,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
     dbColumn: string,
   ) => {
     const persist = async (next: string[]) => {
+      if (configLoadState !== 'ready') return; // loader-honesty gate
       setOptions(next);
       const ok = await persistWorkspace(dbColumn, { [dbColumn]: next }, "Couldn't save that change.");
       if (ok) {
@@ -621,7 +725,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
         void persist([...options, trimmed]);
       },
       handleRemove: (item: string) => {
+        const prev = options;
         void persist(options.filter((o) => o !== item));
+        toast(`Removed "${item}"`, {
+          action: { label: 'Undo', onClick: () => void persist(prev) },
+        });
       },
     };
   };
@@ -671,6 +779,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
                     onBlur={() => void saveName()}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                     disabled={!canEdit}
                   />
                 </div>
@@ -690,7 +799,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   </Select>
                   <p className="text-xs text-muted-foreground">{t('workspace.timezone_desc')}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">Changes save automatically.</p>
+                {canEdit && <p className="text-xs text-muted-foreground">Changes save automatically.</p>}
               </CardContent>
             </Card>
           </TabsContent>
@@ -737,7 +846,17 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   </SectionCardHeader>
                   <CardContent className="space-y-6">
                     {/* Approval chain slots */}
-                    {membersLoading || !rolesLoaded ? (
+                    {rolesLoadError ? (
+                      <div className="flex flex-col items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-6 text-center">
+                        <p className="text-sm text-destructive font-medium">Couldn't load the current role assignments.</p>
+                        <p className="text-xs text-muted-foreground">
+                          Editing is paused so nothing gets overwritten — your stored assignments are safe.
+                        </p>
+                        <Button size="sm" variant="outline" onClick={() => void loadRoles()}>
+                          Try again
+                        </Button>
+                      </div>
+                    ) : membersLoading || !rolesLoaded ? (
                       <div className="space-y-3">
                         <Skeleton className="h-16 w-full rounded-lg" />
                         <Skeleton className="h-16 w-full rounded-lg" />
@@ -778,11 +897,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                   <Select
                                     value={assignedId ?? ''}
                                     onValueChange={(val) => assignApproverRole(role, val || null)}
-                                    disabled={rolesSaving}
+                                    disabled={!rolesWritable}
                                   >
                                     {/* Static trigger text — the assignee's avatar+name already
                                         render at left; echoing the selection here duplicated it. */}
-                                    <SelectTrigger className="h-8 text-xs w-[110px]">
+                                    <SelectTrigger
+                                      className="h-8 text-xs w-[110px]"
+                                      aria-label={`${assignedMember ? 'Change' : 'Assign'} ${label} approver`}
+                                    >
                                       {assignedMember ? 'Change' : 'Assign'}
                                     </SelectTrigger>
                                     <SelectContent>
@@ -807,7 +929,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                       size="icon"
                                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                       onClick={() => assignApproverRole(role, null)}
-                                      disabled={rolesSaving}
+                                      disabled={!rolesWritable}
                                       aria-label={`Clear ${label} assignee`}
                                     >
                                       <X className="h-3.5 w-3.5" />
@@ -878,11 +1000,11 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                                   <div className="flex gap-6 sm:contents">
                                     {(['submitter', 'admin'] as const).map((role) => (
                                       <div key={role} className="flex sm:justify-center items-center gap-2">
-                                        <span className="text-xs text-muted-foreground sm:hidden capitalize">{role}:</span>
+                                        <span className="text-xs text-muted-foreground sm:hidden">{role === 'admin' ? 'Workflow admin' : 'Submitter'}:</span>
                                         <Checkbox
                                           checked={roles.has(role)}
-                                          onCheckedChange={() => { if (canEdit && !rolesSaving) toggleFunctionalRole(member.user_id, role); }}
-                                          disabled={!canEdit || rolesSaving}
+                                          onCheckedChange={() => { if (canEdit) toggleFunctionalRole(member.user_id, role); }}
+                                          disabled={!canEdit || !rolesWritable}
                                         />
                                       </div>
                                     ))}
@@ -926,6 +1048,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       value={notificationDays}
                       onChange={(e) => setNotificationDays(e.target.value)}
                       onBlur={() => void saveNotificationDays()}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                       min="1"
                       max="365"
                       disabled={!canEdit}
@@ -942,6 +1065,9 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
           {/* Lease Configuration — admin only */}
           {isAdmin && (
             <TabsContent value="lease_config" className="space-y-6">
+              {configLoadState === 'error' && (
+                <ConfigLoadErrorNotice onRetry={() => setConfigReloadNonce((n) => n + 1)} />
+              )}
               <Card>
                 <SectionCardHeader
                   icon={Settings2}
@@ -967,12 +1093,15 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                           aria-label={`${type} abbreviation`}
                           maxLength={5}
                           className="h-7 w-20 text-center text-xs"
+                          disabled={saveStatus['asset_types'] === 'saving'}
                         />
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 text-muted-foreground hover:text-destructive"
                           onClick={() => handleRemoveAssetType(type)}
+                          disabled={saveStatus['asset_types'] === 'saving'}
+                          aria-label={`Remove ${type}`}
                         >
                           <X size={12} />
                         </Button>
@@ -987,7 +1116,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddAssetType(); } }}
                       className="text-sm"
                     />
-                    <Button variant="outline" size="sm" onClick={handleAddAssetType} disabled={!newAssetType.trim()}>
+                    <Button variant="outline" size="sm" onClick={handleAddAssetType} disabled={!newAssetType.trim() || saveStatus['asset_types'] === 'saving'}>
                       <Plus size={14} className="mr-1" />
                       Add
                     </Button>
@@ -1024,6 +1153,8 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                               size="icon"
                               className="h-6 w-6 text-muted-foreground hover:text-destructive"
                               onClick={() => handlers.handleRemove(item)}
+                              disabled={saveStatus[cfg.dbColumn] === 'saving'}
+                              aria-label={`Remove ${item}`}
                             >
                               <X size={12} />
                             </Button>
@@ -1041,7 +1172,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handlers.handleAdd(cfg.newVal); } }}
                           className="text-sm"
                         />
-                        <Button variant="outline" size="sm" onClick={() => handlers.handleAdd(cfg.newVal)} disabled={!cfg.newVal.trim()}>
+                        <Button variant="outline" size="sm" onClick={() => handlers.handleAdd(cfg.newVal)} disabled={!cfg.newVal.trim() || saveStatus[cfg.dbColumn] === 'saving'}>
                           <Plus size={14} className="mr-1" />
                           Add
                         </Button>
@@ -1067,6 +1198,9 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               point to /app/settings/approval-policies. */}
           {isAdmin && (
             <TabsContent value="approval_policies" className="space-y-6">
+              {configLoadState === 'error' && (
+                <ConfigLoadErrorNotice onRetry={() => setConfigReloadNonce((n) => n + 1)} />
+              )}
               <Card>
                 <SectionCardHeader
                   icon={GitBranch}
@@ -1113,6 +1247,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         value={approvalThreshold}
                         onChange={(e) => setApprovalThreshold(e.target.value)}
                         onBlur={() => void saveThresholds()}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                         disabled={!canEdit}
                         placeholder="0"
                         className="pl-7"
@@ -1135,6 +1270,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                         value={covenantThreshold}
                         onChange={(e) => setCovenantThreshold(e.target.value)}
                         onBlur={() => void saveThresholds()}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                         disabled={!canEdit}
                         placeholder="Optional"
                         className="pl-7"
@@ -1181,6 +1317,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                       value={counterSignatureDueDays}
                       onChange={(e) => setCounterSignatureDueDays(e.target.value)}
                       onBlur={() => void saveCounterSignature()}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                       min={1}
                       max={365}
                       disabled={!canEdit}
@@ -1203,6 +1340,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                   icon={Package}
                   title="Historical Portfolio Loader"
                   description="Enable a simplified form for loading existing leases during onboarding. Turn off when your portfolio is loaded."
+                  status={saveStatus['onboarding']}
                 />
                 <CardContent>
                   <div className="flex items-center justify-between">
@@ -1215,7 +1353,7 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
                     <Switch
                       checked={backdoorEnabled}
                       onCheckedChange={(value) => handleSaveBackdoor(value)}
-                      disabled={isSavingBackdoor}
+                      disabled={saveStatus['onboarding'] === 'saving'}
                       aria-label="Enable historical portfolio loader"
                     />
                   </div>
