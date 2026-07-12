@@ -21,15 +21,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
+import { buildAssetTypeOptions, type AssetTypeOption } from '@/lib/assetTypes';
 
-// Asset type values match the leases.asset_type CHECK constraint exactly.
-// Display labels are friendly text; the value sent to the RPC is the raw enum.
-const ASSET_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'property', label: 'Property (Real Estate)' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'vehicle', label: 'Vehicle' },
-  { value: 'other', label: 'Other' },
-];
+// Built-in asset-type options; the workspace's configured Asset Types are
+// merged in by the caller via `assetTypeOptions`. The matcher canonicalizes
+// both sides (preview_policy_resolution → canonical_asset_type), so a custom
+// label stored by LeaseReview still resolves against a 'property' rule.
+const DEFAULT_ASSET_TYPE_OPTIONS: AssetTypeOption[] = buildAssetTypeOptions();
 
 const LEASE_TYPE_OPTIONS: string[] = ['Real Estate', 'Equipment'];
 
@@ -58,9 +56,17 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workspaceId: string | null;
+  /** Workspace-resolved asset-type options (built-ins + configured Asset
+   *  Types). Falls back to the built-ins when the caller doesn't pass them. */
+  assetTypeOptions?: AssetTypeOption[];
 }
 
-export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Props) {
+export function ApprovalPolicyTestDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+  assetTypeOptions = DEFAULT_ASSET_TYPE_OPTIONS,
+}: Props) {
   const [assetType, setAssetType] = useState<string>('');
   const [leaseType, setLeaseType] = useState<string>('');
   const [department, setDepartment] = useState<string>('');
@@ -134,7 +140,7 @@ export function ApprovalPolicyTestDialog({ open, onOpenChange, workspaceId }: Pr
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ASSET_TYPE_OPTIONS.map((o) => (
+                  {assetTypeOptions.map((o) => (
                     <SelectItem key={o.value} value={o.value}>
                       {o.label}
                     </SelectItem>

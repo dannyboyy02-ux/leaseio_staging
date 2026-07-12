@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
-import { prettyAssetType } from '@/lib/assetTypes';
+import { prettyAssetType, buildAssetTypeOptions, type AssetTypeOption } from '@/lib/assetTypes';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — must stay aligned with leases.asset_type and leases.lease_type
@@ -18,12 +18,10 @@ import { prettyAssetType } from '@/lib/assetTypes';
 // contract addendum (§3 — exactly four pills in the sentence template).
 // ───────────────────────────────────────────────────────────────────────────
 
-const ASSET_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'property', label: 'Property (Real Estate)' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'vehicle', label: 'Vehicle' },
-  { value: 'other', label: 'Other' },
-];
+// Asset-type options are workspace-aware (built-ins + configured Asset Types),
+// built via buildAssetTypeOptions in @/lib/assetTypes — the single source that
+// replaced this file's former hardcoded list. Callers pass the resolved list in.
+const DEFAULT_ASSET_TYPE_OPTIONS: AssetTypeOption[] = buildAssetTypeOptions();
 
 const LEASE_TYPE_OPTIONS: string[] = ['Real Estate', 'Equipment'];
 
@@ -74,12 +72,15 @@ export function joinWithOr(values: string[]): string {
 }
 
 /** "any lease type" when both arrays empty; otherwise asset+lease combined. */
-export function leaseTypeLabel(state: MatchCriteriaState): string {
+export function leaseTypeLabel(
+  state: MatchCriteriaState,
+  options: AssetTypeOption[] = DEFAULT_ASSET_TYPE_OPTIONS,
+): string {
   const assetLabels = state.match_asset_types.map(
-    // prettyAssetType humanizes values outside the built-in option list —
+    // prettyAssetType humanizes values outside the resolved option list —
     // workspace-configured or legacy keys (e.g. 'real_estate') rendered raw
     // snake_case in the rule sentence (live walkthrough 2026-07-12).
-    (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? prettyAssetType(v),
+    (v) => options.find((o) => o.value === v)?.label ?? prettyAssetType(v),
   );
   const all = [...assetLabels, ...state.match_lease_types];
   if (all.length === 0) return 'any lease type';
@@ -130,6 +131,9 @@ interface Props {
   onChange: (next: MatchCriteriaState) => void;
   departmentSuggestions: string[];
   regionSuggestions: string[];
+  /** Workspace-resolved asset-type options (built-ins + configured Asset
+   *  Types). Falls back to the built-ins when the caller doesn't pass them. */
+  assetTypeOptions?: AssetTypeOption[];
 }
 
 export function MatchCriteriaSentence({
@@ -137,20 +141,21 @@ export function MatchCriteriaSentence({
   onChange,
   departmentSuggestions,
   regionSuggestions,
+  assetTypeOptions = DEFAULT_ASSET_TYPE_OPTIONS,
 }: Props) {
   const { language } = useLanguage();
   return (
     <p className="text-sm leading-8 text-foreground">
       When someone requests a{' '}
       <CriterionPill
-        label={leaseTypeLabel(state)}
+        label={leaseTypeLabel(state, assetTypeOptions)}
         active={isLeaseTypeActive(state)}
         color="blue"
         onClear={() =>
           onChange({ ...state, match_asset_types: [], match_lease_types: [] })
         }
       >
-        <LeaseTypeEditor state={state} onChange={onChange} />
+        <LeaseTypeEditor state={state} onChange={onChange} assetTypeOptions={assetTypeOptions} />
       </CriterionPill>
       {' '}in{' '}
       <CriterionPill
@@ -267,9 +272,11 @@ function CriterionPill({
 function LeaseTypeEditor({
   state,
   onChange,
+  assetTypeOptions,
 }: {
   state: MatchCriteriaState;
   onChange: (s: MatchCriteriaState) => void;
+  assetTypeOptions: AssetTypeOption[];
 }) {
   const toggleAsset = (v: string) => {
     const next = state.match_asset_types.includes(v)
@@ -287,7 +294,7 @@ function LeaseTypeEditor({
     <div className="space-y-3">
       <div className="space-y-1.5">
         <p className="text-xs font-medium">Asset types</p>
-        {ASSET_TYPE_OPTIONS.map((o) => (
+        {assetTypeOptions.map((o) => (
           <label
             key={o.value}
             className="flex items-center gap-2 py-0.5 cursor-pointer text-sm"

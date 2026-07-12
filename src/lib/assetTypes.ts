@@ -23,6 +23,70 @@ export function prettyAssetType(value: string | null | undefined): string {
 }
 
 /**
+ * Canonical asset-type token for EQUALITY across intake paths.
+ *
+ * `leases.asset_type` is written by three surfaces that disagree on the
+ * real-estate value: the Path-1 request form writes 'property', the AI
+ * classifier writes 'real_estate', and the LeaseReview dropdown writes the
+ * configured label ("Real Estate"). They are one asset class. Approval rules
+ * store one of these forms in `match_asset_types` and the matcher compared it
+ * to the lease's value with an EXACT string match — so a rule built as
+ * 'property' silently failed to route an AI-classified 'real_estate' lease.
+ *
+ * Canonicalize both sides before comparing. `normalizeAssetKey` already folds
+ * 'real_estate'/'Real Estate' → 'realestate'; the only remaining synonym is
+ * 'property', mapped here. Every other type (equipment/vehicle/other and any
+ * workspace-custom label) canonicalizes to its own normalized key, so exact
+ * per-workspace matching is preserved.
+ *
+ * MUST stay in lockstep with the SQL `public.canonical_asset_type(text)`
+ * (migration 20260712140000) and the Deno copy in resolve-approval-chain.
+ */
+export function canonicalAssetType(value: string | null | undefined): string {
+  const key = normalizeAssetKey(value);
+  return key === 'property' ? 'realestate' : key;
+}
+
+export interface AssetTypeOption {
+  /** Stored in approval_policies.match_asset_types / a sample-request asset_type. */
+  value: string;
+  /** Human label for the checkbox / select. */
+  label: string;
+}
+
+/** The standard asset classes every workspace has (values match what the
+ *  Path-1 request form + AI classifier store, via {@link canonicalAssetType}). */
+const BUILTIN_ASSET_OPTIONS: AssetTypeOption[] = [
+  { value: 'property', label: 'Property (Real Estate)' },
+  { value: 'equipment', label: 'Equipment' },
+  { value: 'vehicle', label: 'Vehicle' },
+  { value: 'other', label: 'Other' },
+];
+
+/**
+ * Asset-type options for the approval-rule builder + sample-request tester.
+ * Built-ins first, then any workspace-configured Asset Type
+ * (`workspaces.asset_type_config`) whose canonical key isn't already a built-in
+ * — so a custom class (e.g. "Warehouse") becomes selectable while "Real Estate"
+ * doesn't duplicate the built-in Property. Single source for the (previously
+ * four) drifting hardcoded lists. The matcher canonicalizes both sides, so a
+ * custom label stored verbatim by LeaseReview still routes.
+ */
+export function buildAssetTypeOptions(
+  configuredLabels?: readonly string[] | null,
+): AssetTypeOption[] {
+  const opts: AssetTypeOption[] = [...BUILTIN_ASSET_OPTIONS];
+  const seen = new Set(opts.map((o) => canonicalAssetType(o.value)));
+  for (const label of configuredLabels ?? []) {
+    const key = canonicalAssetType(label);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    opts.push({ value: label, label: prettyAssetType(label) });
+  }
+  return opts;
+}
+
+/**
  * Built-in shorthands for the common types, keyed by {@link normalizeAssetKey}.
  * Workspace-configured abbreviations (Phase 2b) override these; if neither
  * exists, {@link assetAbbreviation} derives one from the label.

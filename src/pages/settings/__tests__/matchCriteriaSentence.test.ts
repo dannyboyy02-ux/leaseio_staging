@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { prettyAssetType } from '@/lib/assetTypes';
 
 // Mirror of pure helpers from `src/pages/settings/MatchCriteriaSentence.tsx`.
 // The component imports radix UI / lucide-react, so we keep the test
@@ -52,9 +53,15 @@ function joinWithOr(values: string[]): string {
   return `${values.slice(0, -1).join(', ')}, or ${values[values.length - 1]}`;
 }
 
-function leaseTypeLabel(state: MatchCriteriaState): string {
+// Mirror of the component helper. It takes a resolved options list (built-ins +
+// workspace-configured Asset Types); unknown/custom values fall back to
+// prettyAssetType (NOT the raw value) — matches MatchCriteriaSentence.tsx.
+function leaseTypeLabel(
+  state: MatchCriteriaState,
+  options: Array<{ value: string; label: string }> = ASSET_TYPE_OPTIONS,
+): string {
   const assetLabels = state.match_asset_types.map(
-    (v) => ASSET_TYPE_OPTIONS.find((o) => o.value === v)?.label ?? v,
+    (v) => options.find((o) => o.value === v)?.label ?? prettyAssetType(v),
   );
   const all = [...assetLabels, ...state.match_lease_types];
   if (all.length === 0) return 'any lease type';
@@ -136,10 +143,14 @@ describe('leaseTypeLabel — combined asset+lease pill', () => {
       }),
     ).toBe('Property (Real Estate) or Real Estate');
   });
-  it('falls back to raw value when asset_type is unknown', () => {
+  it('humanizes an unknown asset_type via prettyAssetType (not raw)', () => {
     expect(
       leaseTypeLabel({ ...empty(), match_asset_types: ['unknown'] }),
-    ).toBe('unknown');
+    ).toBe('Unknown');
+    // snake_case legacy value → Title Case, matching the component.
+    expect(
+      leaseTypeLabel({ ...empty(), match_asset_types: ['real_estate'] }),
+    ).toBe('Real Estate');
   });
 });
 

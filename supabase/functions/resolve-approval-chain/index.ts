@@ -51,6 +51,16 @@ function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
 }
 
+// Canonical asset-type token for equality across intake vocabularies. Deno copy
+// of TS canonicalAssetType (src/lib/assetTypes.ts) + SQL canonical_asset_type
+// (migration 20260712140000) — KEEP IN LOCKSTEP. leases.asset_type is written
+// as 'property' (request form), 'real_estate' (AI), or a label ("Real Estate",
+// LeaseReview); an exact match let a rule silently miss the other spellings.
+function canonicalAssetType(value: string | null | undefined): string {
+  const key = (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return key === "property" ? "realestate" : key;
+}
+
 function jsonResponse(payload: unknown, status: number, origin: string | null) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -335,9 +345,19 @@ serve(async (req) => {
     const allPolicies = (policies ?? []) as PolicyRow[];
     if (allPolicies.length === 0) return { kind: "no_policies" };
 
+    const leaseAssetCanon = canonicalAssetType(liveAttrs.asset_type);
     const matched = allPolicies
       .filter((p) => {
-        if (p.match_asset_types.length > 0 && !p.match_asset_types.includes(liveAttrs.asset_type ?? "")) return false;
+        // asset_type via canonical token on both sides (property ≡ real_estate ≡
+        // "Real Estate"); must mirror the preview_policy_resolution RPC exactly.
+        // A lease with no asset type ('' after canonicalizing) never satisfies a
+        // rule that specifies asset types (matches the RPC's `<> ''` guard).
+        if (
+          p.match_asset_types.length > 0 &&
+          (leaseAssetCanon === "" || !p.match_asset_types.map(canonicalAssetType).includes(leaseAssetCanon))
+        ) {
+          return false;
+        }
         if (p.match_departments.length > 0 && !p.match_departments.includes(liveAttrs.requesting_department ?? "")) return false;
         if (p.match_min_annual_cost != null && annualCost < p.match_min_annual_cost) return false;
         if (p.match_max_annual_cost != null && annualCost > p.match_max_annual_cost) return false;

@@ -58,7 +58,7 @@ These are off-limits for this redesign:
 - **Resolver logic.** `src/lib/approvalRouting.ts` and `src/lib/approvalChainLogic.ts` are not touched.
 - **Snapshot semantics.** When a lease is submitted, the resolved chain is written to `lease_approval_chain` with the policy version. UI changes must not affect resolution timing.
 - **Validation rules.** `src/pages/settings/approvalPolicyValidation.ts` continues to enforce: exactly one default-fallback policy per workspace, `approver_user_id XOR approver_role` (never both, never neither), step ordering integrity. Error messages may be re-worded to match the new UI copy, but the rules are untouched.
-- **Aligned constants.** `ASSET_TYPE_OPTIONS` and `LEASE_TYPE_OPTIONS` in `ApprovalPolicyEditPage.tsx` must stay aligned with the `leases.asset_type` and `leases.lease_type` CHECK constraints. `FUNCTIONAL_ROLE_OPTIONS` must stay aligned with `workspace_roles`.
+- **Aligned constants.** Asset-type options come from `buildAssetTypeOptions` / `BUILTIN_ASSET_OPTIONS` in `src/lib/assetTypes.ts` (the single source, built-ins + the workspace's `asset_type_config`, canonicalized by `canonicalAssetType`) — that builder must stay aligned with the `leases.asset_type` CHECK constraint, and `canonicalAssetType` must stay in lockstep with its SQL (`public.canonical_asset_type`) and Deno (`resolve-approval-chain`) mirrors. `LEASE_TYPE_OPTIONS` must stay aligned with the `leases.lease_type` CHECK constraint. `FUNCTIONAL_ROLE_OPTIONS` (in `ChainDiagram`) must stay aligned with `workspace_roles`.
 
 ---
 
