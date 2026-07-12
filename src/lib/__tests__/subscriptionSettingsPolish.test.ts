@@ -124,8 +124,7 @@ describe('locale parity (en/es)', () => {
       'adjust_plan',
       'auto_renews_on',
       'trial_pill',
-      'add_payment_method',
-      'checkout_success',
+            'checkout_success',
       'checkout_canceled',
     ]) {
       expect(referenced, `expected source to reference account.${expected}`).toContain(expected);
@@ -233,11 +232,14 @@ describe('AccountSettings subscription tab', () => {
     expect(dialog).not.toContain('handleManagePayment();'); // no portal round-trip anymore
   });
 
-  it('downgrade routes through the adjust-plan picker to a confirmation dialog that spells out feature loss before the portal', () => {
+  it('downgrade routes through the adjust-plan picker to a confirmation dialog, then CHECKOUT (no portal)', () => {
     // The inline upgrade card + downgrade link were replaced by the "Adjust
     // plan" picker (2026-06 Claude-alignment pass). Selecting a downgrade
     // routes through handleAdjustPlanSelect → setConfirmDowngradePlan; an
-    // upgrade goes through handleUpgrade. Neither jumps straight to the portal.
+    // upgrade goes through handleUpgrade. 2026-07-12: the confirm now routes
+    // to CHECKOUT like an upgrade (the webhook cancels the displaced sub; the
+    // portal is card-management-only, so the old portal handoff would
+    // dead-end there with no plan controls).
     const router = sliceBetween(source, 'const handleAdjustPlanSelect', '};');
     expect(router).toContain('setConfirmDowngradePlan(planId)');
     expect(router).toContain('handleUpgrade(planId)');
@@ -245,7 +247,8 @@ describe('AccountSettings subscription tab', () => {
     const dialog = sliceBetween(source, 'open={!!confirmDowngradePlan}', '</AlertDialog>');
     expect(dialog).toContain("t('account.downgrade_confirm_desc')");
     expect(dialog).toContain("t('account.downgrade_confirm_cta')");
-    expect(dialog).toContain('handleManagePayment();');
+    expect(dialog).toContain('proceedWithCheckout(planId)');
+    expect(dialog).not.toContain('handleManagePayment');
   });
 
   it('renewal line renders for an active sub, but a SCHEDULED CANCEL wins over it', () => {
