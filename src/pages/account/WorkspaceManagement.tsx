@@ -30,7 +30,6 @@ import {
   Loader2,
   Settings,
   Crown,
-  ExternalLink,
   Plus,
   ArrowRightLeft,
 } from 'lucide-react';
@@ -201,7 +200,9 @@ export function WorkspaceManagementContent() {
       queryClient.invalidateQueries({ queryKey: ['account-owned-workspaces'] });
     } catch (err: any) {
       console.error('leave workspace error:', err);
-      toast.error(err?.message ?? 'Failed to leave workspace');
+      // Raw DB/RLS error strings read like stack traces to a finance user —
+      // log the real error, show a human one.
+      toast.error("Couldn't leave this workspace — please try again or contact support.");
     } finally {
       setBusy(false);
     }
@@ -258,8 +259,15 @@ export function WorkspaceManagementContent() {
             </div>
           ) : ownedMeta.length === 0 ? (
             <Card>
-              <CardContent className="py-10 text-center text-muted-foreground">
-                You don't own any workspaces yet.
+              <CardContent className="py-10 text-center space-y-3">
+                <p className="text-muted-foreground">
+                  You don't own any workspaces yet. A workspace is where your team's
+                  leases, approvals, and settings live.
+                </p>
+                <Button onClick={() => setNewWorkspaceOpen(true)}>
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Create your first workspace
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -324,7 +332,7 @@ export function WorkspaceManagementContent() {
                           variant="ghost"
                           onClick={() => switchWorkspace(ws.id)}
                         >
-                          <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                          <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
                           Switch to
                         </Button>
                       )}
@@ -344,7 +352,7 @@ export function WorkspaceManagementContent() {
                         variant="ghost"
                         onClick={() => setTransferTarget(ws)}
                       >
-                        <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
+                        <Crown className="h-3.5 w-3.5 mr-1.5" />
                         {t('workspace.transfer.cta')}
                       </Button>
                       {useGridLayout ? (
@@ -433,7 +441,9 @@ export function WorkspaceManagementContent() {
                             variant="ghost"
                             onClick={() => switchWorkspace(ws.id)}
                           >
-                            <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                            {/* ArrowRightLeft, not ExternalLink — this switches the
+                                in-app active workspace, it doesn't open a new tab. */}
+                            <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
                             Switch to
                           </Button>
                         )}
