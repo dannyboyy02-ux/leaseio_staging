@@ -23,6 +23,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -34,6 +35,10 @@ interface DeleteWorkspaceDialogProps {
   /** Counts shown in the warning copy so the owner sees what they're erasing. */
   leaseCount: number;
   memberCount: number;
+  /** True when this is the owner's ONLY workspace (no other owned or member
+   *  workspace to fall back to). Deleting it leaves them with no active
+   *  workspace, so we add an extra acknowledgement gate. */
+  isOnlyWorkspace?: boolean;
   /** Called once the edge function returns ok=true. Caller refetches AppContext. */
   onDeleted: () => void;
 }
@@ -45,17 +50,24 @@ export function DeleteWorkspaceDialog({
   workspaceName,
   leaseCount,
   memberCount,
+  isOnlyWorkspace = false,
   onDeleted,
 }: DeleteWorkspaceDialogProps) {
   const [typed, setTyped] = useState('');
+  const [ackedLast, setAckedLast] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // Reset typed input when the dialog opens or the target workspace changes.
+  // Reset inputs when the dialog opens or the target workspace changes.
   useEffect(() => {
-    if (open) setTyped('');
+    if (open) {
+      setTyped('');
+      setAckedLast(false);
+    }
   }, [open, workspaceId]);
 
-  const matches = typed === workspaceName;
+  // Name must match AND, if this is the last workspace, the consequence must be
+  // explicitly acknowledged.
+  const matches = typed === workspaceName && (!isOnlyWorkspace || ackedLast);
 
   const handleDelete = async () => {
     if (!matches || busy) return;
@@ -118,6 +130,27 @@ export function DeleteWorkspaceDialog({
             <li>Approval policies, invites, and configuration will be erased</li>
           </ul>
         </div>
+
+        {isOnlyWorkspace && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/20">
+            <p className="font-medium text-amber-800 dark:text-amber-300">
+              This is your only workspace.
+            </p>
+            <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-300/90">
+              After deleting it you'll have no active workspace and will need to
+              create a new one before you can use LeaseIO again.
+            </p>
+            <label className="mt-2 flex items-start gap-2 text-xs text-amber-900 dark:text-amber-200 cursor-pointer">
+              <Checkbox
+                checked={ackedLast}
+                onCheckedChange={(v) => setAckedLast(v === true)}
+                disabled={busy}
+                className="mt-0.5"
+              />
+              <span>I understand I'll be left without a workspace.</span>
+            </label>
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="confirm-name" className="text-sm">
