@@ -5,7 +5,9 @@ list and reference it in the commit message.
 
 ---
 
-## #161: Link/non-card customers cannot buy packs OR add workspaces — expansion revenue blocked on the mainstream payment path (HIGH)
+## #161: Link/non-card customers cannot buy packs OR add workspaces — expansion revenue blocked on the mainstream payment path (HIGH) — **FIX LANDED 2026-07-16, pending live Link-funded verification**
+
+> **Status 2026-07-16:** code-complete on the branch — both resolvers accept any method type via `describePaymentMethod`; all THREE purchase dialogs (packs, single-lease credit via `LimitReachedDialog` — a third blocked surface found during the fix — and $499 add-workspace) confirm through the new method-agnostic `confirmSavedMethodPayment()` (`src/lib/stripeConfirm.ts`, `stripe.confirmPayment` + `redirect:'if_required'`); consent copy renders the real method label; the no-method banners and the trial "card on file" banner are truthful; static pin `paymentMethodAgnosticPurchases.test.ts`; 1438/1438 green. Per the DoD this stays OPEN until each surface is driven live with a **Link**-funded sandbox transaction (requires `manage-document-pack` + `create-workspace` redeploys; pack purchases additionally still 503 until the operator creates the pack Prices — runbook Step 4). Then stamp RESOLVED.
 
 **Filed 2026-07-16 from the owner's live repro** (Business trial account "Labs Analytix", payment method = Stripe Link — the method Stripe Checkout *defaults to*). Screenshots show both purchase surfaces refusing a paying customer.
 
@@ -2079,7 +2081,9 @@ green.
 
 ---
 
-### Item #97: workspace component tests fail locally on Node ≥22 (`localStorage` undefined) — CI on Node 20 is green
+### Item #97: workspace component tests fail locally on Node ≥22 (`localStorage` undefined) — CI on Node 20 is green — **RESOLVED 2026-07-16**
+
+> **RESOLVED 2026-07-16** with option (b) from the stub, done as a vitest `setupFiles` shim rather than per-file polyfills: `src/test/setupStorage.ts` probes `localStorage`/`sessionStorage` with a real setItem/removeItem (Node ≥22's inert built-in THROWS rather than being undefined — the probe catches both shapes) and swaps a broken built-in for an in-memory `MemoryStorage`; working storage (jsdom's, or a future fixed Node) is left untouched. Wired via `vite.config.ts` `test.setupFiles`. Full suite now 1438/1438 on Node 26 locally — first green local run on modern Node. Unblocked because #161's fix had to modify `NewWorkspaceDialog.test.tsx` and the suite had to actually run to verify it. CI Node-version standardization stays with #98.
 
 **Symptom:** `npm test` on Node ≥22 (reproduced on Node 26) fails 49 tests across `src/components/workspace/__tests__/NewWorkspaceDialog.test.tsx` and `WorkspaceCommandPalette.test.tsx` with `TypeError: Cannot read properties of undefined (reading 'setItem'/'clear')` plus `ExperimentalWarning: localStorage is not available because --localstorage-file was not provided`. Root cause: Node 22 introduced a built-in experimental `localStorage` global that is inert without `--localstorage-file`; under vitest's jsdom environment it shadows jsdom's own `localStorage`, so the bare `localStorage` these tests use resolves to `undefined`. On Node 20 (no built-in) jsdom's `localStorage` is used and the tests pass. **CI runs Node 20 (`.github/workflows/ci.yml:35`) so its "Run tests" step is green** — this is a local-dev-only failure, not a code or CI regression.
 

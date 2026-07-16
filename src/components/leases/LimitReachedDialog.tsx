@@ -43,6 +43,7 @@ import { useAppTranslation } from "@/hooks/useAppTranslation";
 import { useWorkspaceQuota } from "@/hooks/useWorkspaceQuota";
 import { supabase } from "@/integrations/supabase/client";
 import { getStripe } from "@/lib/stripe";
+import { confirmSavedMethodPayment } from "@/lib/stripeConfirm";
 import { DOCUMENT_PACKS, PLANS, normalizePlanId, packPerLeasePrice } from "@/config/pricing";
 import { DocumentPackDialog } from "@/components/workspace/DocumentPackDialog";
 
@@ -171,7 +172,7 @@ export function LimitReachedDialog({
           setSingleStep("error");
           return;
         }
-        const result = await stripe.confirmCardPayment(clientSecret);
+        const result = await confirmSavedMethodPayment(stripe, clientSecret);
         if (result.error) {
           setSingleError(result.error.message ?? t("packs.error_payment"));
           setSingleStep("error");

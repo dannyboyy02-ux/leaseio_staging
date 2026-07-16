@@ -24,6 +24,7 @@ import { useApp } from "@/contexts/AppContext";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
 import { supabase } from "@/integrations/supabase/client";
 import { getStripe } from "@/lib/stripe";
+import { confirmSavedMethodPayment } from "@/lib/stripeConfirm";
 import { DOCUMENT_PACKS, PLANS, normalizePlanId, packPerLeasePrice } from "@/config/pricing";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,9 @@ interface PreviewResponse {
   ok: boolean;
   eligible: boolean;
   reason: string | null;
+  /** Human label for the saved method of ANY type ("Visa •••• 4242",
+   * "Stripe Link (a@b.com)"). Null only when no method exists. */
+  methodLabel: string | null;
   cardLast4: string | null;
   cardBrand: string | null;
   currentCapacity: number;
@@ -176,9 +180,10 @@ export function DocumentPackDialog({
         fail("generic", t("packs.error_unavailable"));
         return;
       }
-      // A 3DS challenge surfaces a bank popup over the dialog — narrate it.
+      // An authentication challenge (3DS, Link verification) surfaces a popup
+      // over the dialog — narrate it. Method-agnostic confirm (#161).
       setAwaiting3ds(true);
-      const result = await stripe.confirmCardPayment(clientSecret);
+      const result = await confirmSavedMethodPayment(stripe, clientSecret);
       clientSecretRef.current = null;
       setAwaiting3ds(false);
       if (result.error) {
@@ -393,11 +398,8 @@ export function DocumentPackDialog({
                 <li>{t("packs.consent_charge", { price: selectedPack.priceMonthly })}</li>
                 <li>{t("packs.consent_recurring", { price: selectedPack.priceMonthly })}</li>
                 <li>
-                  {preview.cardLast4
-                    ? t("packs.consent_card", {
-                        brand: preview.cardBrand ?? "card",
-                        last4: preview.cardLast4,
-                      })
+                  {preview.methodLabel
+                    ? t("packs.consent_method", { method: preview.methodLabel })
                     : t("packs.consent_card_generic")}
                 </li>
                 <li>{t("packs.consent_cancel")}</li>

@@ -22,5 +22,9 @@ export default defineConfig(({ mode }) => ({
   test: {
     globals: true,
     environment: "node",
+    // #97: Node ≥22's built-in localStorage throws without --localstorage-file
+    // and shadows the storage component tests expect — the shim swaps a broken
+    // built-in for an in-memory one (no-op where storage already works).
+    setupFiles: ["./src/test/setupStorage.ts"],
   },
 }));

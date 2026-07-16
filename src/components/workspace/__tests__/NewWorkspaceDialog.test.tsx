@@ -20,9 +20,9 @@ import {
 //   2. Buttons are disabled during the in-flight payment window
 //      (confirming / three_ds / activating).
 //   3. Each error branch renders distinct copy via the i18n keys.
-//   4. 3DS requires_action -> confirmCardPayment success -> activating ->
+//   4. 3DS requires_action -> confirmPayment success -> activating ->
 //      activated (poll observes Business+active).
-//   5. confirmCardPayment ERROR -> cancel mode called (when PI is genuinely
+//   5. confirmPayment ERROR -> cancel mode called (when PI is genuinely
 //      not succeeded) -> error branch.
 //
 // We mock supabase, @stripe/stripe-js, getStripe, useApp, useAppTranslation.
@@ -32,7 +32,7 @@ import {
 const invokeMock = vi.fn();
 const fromMock = vi.fn();
 const switchWorkspaceMock = vi.fn();
-const confirmCardPaymentMock = vi.fn();
+const confirmPaymentMock = vi.fn();
 const retrievePaymentIntentMock = vi.fn();
 const getStripeMock = vi.fn();
 
@@ -100,7 +100,7 @@ function buildFromBuilder(row: unknown) {
 
 function setupStripeMock() {
   const stripeInstance = {
-    confirmCardPayment: confirmCardPaymentMock,
+    confirmPayment: confirmPaymentMock,
     retrievePaymentIntent: retrievePaymentIntentMock,
   };
   getStripeMock.mockReturnValue(Promise.resolve(stripeInstance));
@@ -111,7 +111,7 @@ beforeEach(() => {
   invokeMock.mockReset();
   fromMock.mockReset();
   switchWorkspaceMock.mockReset();
-  confirmCardPaymentMock.mockReset();
+  confirmPaymentMock.mockReset();
   retrievePaymentIntentMock.mockReset();
   getStripeMock.mockReset();
   navigateMock.mockReset();
@@ -346,7 +346,7 @@ describe("NewWorkspaceDialog — error branches render the correct copy", () => 
 });
 
 describe("NewWorkspaceDialog — 3DS success flow", () => {
-  it("requires_action -> confirmCardPayment success -> Activating -> Activated", async () => {
+  it("requires_action -> confirmPayment success -> Activating -> Activated", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
     await advanceToConfirmStep();
@@ -362,7 +362,7 @@ describe("NewWorkspaceDialog — 3DS success flow", () => {
       error: null,
     });
     // Stripe.js confirms the payment cleanly.
-    confirmCardPaymentMock.mockResolvedValueOnce({
+    confirmPaymentMock.mockResolvedValueOnce({
       paymentIntent: { status: "succeeded" },
       error: undefined,
     });
@@ -382,8 +382,12 @@ describe("NewWorkspaceDialog — 3DS success flow", () => {
       { timeout: 5000 },
     );
 
-    // confirmCardPayment was called with the clientSecret.
-    expect(confirmCardPaymentMock).toHaveBeenCalledWith("pi_secret_xyz");
+    // confirmPayment was called with the clientSecret, method-agnostically
+    // (#161): no Elements, saved method of any type, in-page unless a redirect
+    // is genuinely required.
+    expect(confirmPaymentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ clientSecret: "pi_secret_xyz", redirect: "if_required" }),
+    );
 
     // Switch button (autoFocus) and Stay button rendered.
     expect(screen.getByRole("button", { name: /activated_switch/ })).toBeTruthy();
@@ -408,8 +412,8 @@ describe("NewWorkspaceDialog — 3DS success flow", () => {
       fireEvent.click(screen.getByRole("button", { name: /confirm_button/ }));
     });
 
-    // confirmCardPayment should NOT have been called.
-    expect(confirmCardPaymentMock).not.toHaveBeenCalled();
+    // confirmPayment should NOT have been called.
+    expect(confirmPaymentMock).not.toHaveBeenCalled();
 
     await waitFor(() =>
       expect(screen.queryByText(/workspace.create.activated_title/)).not.toBeNull(),
@@ -418,7 +422,7 @@ describe("NewWorkspaceDialog — 3DS success flow", () => {
 });
 
 describe("NewWorkspaceDialog — 3DS error -> retrievePaymentIntent guard -> cancel", () => {
-  it("on confirmCardPayment error AND PI is NOT succeeded, calls cancel mode", async () => {
+  it("on confirmPayment error AND PI is NOT succeeded, calls cancel mode", async () => {
     render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
     await advanceToConfirmStep();
 
@@ -431,7 +435,7 @@ describe("NewWorkspaceDialog — 3DS error -> retrievePaymentIntent guard -> can
       },
       error: null,
     });
-    confirmCardPaymentMock.mockResolvedValueOnce({
+    confirmPaymentMock.mockResolvedValueOnce({
       error: { code: "card_declined", message: "Your card was declined." },
     });
     retrievePaymentIntentMock.mockResolvedValueOnce({
@@ -460,7 +464,7 @@ describe("NewWorkspaceDialog — 3DS error -> retrievePaymentIntent guard -> can
     ).toBeTruthy();
   });
 
-  it("on confirmCardPayment error BUT PI is succeeded (network blip after success), does NOT cancel", async () => {
+  it("on confirmPayment error BUT PI is succeeded (network blip after success), does NOT cancel", async () => {
     render(<NewWorkspaceDialog open={true} onOpenChange={() => {}} />);
     await advanceToConfirmStep();
 
@@ -474,7 +478,7 @@ describe("NewWorkspaceDialog — 3DS error -> retrievePaymentIntent guard -> can
       error: null,
     });
     // Stripe.js threw network error AFTER PI succeeded on Stripe's side.
-    confirmCardPaymentMock.mockResolvedValueOnce({
+    confirmPaymentMock.mockResolvedValueOnce({
       error: { code: "api_connection_error", message: "Network error" },
     });
     retrievePaymentIntentMock.mockResolvedValueOnce({

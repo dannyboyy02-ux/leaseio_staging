@@ -7,13 +7,14 @@
 // plan. Full price charged on purchase, no proration, cancel-at-period-end.
 //
 // Modes (body { mode, workspaceId, packId?, subscriptionId?, idempotencyKey? }):
-//   preview — read-only: card on file + current capacity + the workspace's
-//             active packs + which catalog packs are configured. No writes.
+//   preview — read-only: saved payment method (any type) + current capacity +
+//             the workspace's active packs + configured catalog packs. No writes.
 //   confirm — create an ON-SESSION default_incomplete pack subscription on the
-//             workspace's existing Stripe customer/card; return the
-//             PaymentIntent client_secret so the client can confirm (3DS). The
-//             webhook mirrors capacity once payment succeeds. Does NOT touch the
-//             workspace row (the webhook is the sole entitlement writer).
+//             workspace's existing Stripe customer + saved method (card, Link,
+//             ACH, …); return the client_secret so the client can confirm
+//             method-agnostically (stripe.confirmPayment). The webhook mirrors
+//             capacity once payment succeeds. Does NOT touch the workspace row
+//             (the webhook is the sole entitlement writer).
 //   cancel  — set cancel_at_period_end on a pack subscription owned by this
 //             workspace; capacity persists until the period ends.
 //
@@ -32,6 +33,7 @@ import {
   packPriceId,
 } from "../_shared/document_packs.ts";
 import { resolvePeriodEndIso } from "../_shared/stripe_subscription.ts";
+import { describePaymentMethod } from "../_shared/payment_method.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -77,14 +79,32 @@ async function canManageBilling(
   return Boolean(membership);
 }
 
-// Resolve the workspace's Stripe customer (prefer the stored id) and default card.
-async function resolveCard(
+// Resolve the workspace's Stripe customer (prefer the stored id) and saved
+// payment method — ANY type (card / Stripe Link / ACH / wallet).
+//
+// #161 (2026-07-16): the old fallback listed card-type methods only, so a
+// customer whose sole saved method was Stripe Link — Checkout's DEFAULT —
+// was rejected `no_card_on_file` and locked out of every capacity purchase.
+// Client confirmation is now method-agnostic (stripe.confirmPayment with
+// redirect:'if_required' — src/lib/stripeConfirm.ts), so accepting a
+// non-card method no longer risks a stranded incomplete purchase.
+// The wire reason keeps its legacy name `no_card_on_file`; it now means
+// "no payment method of any type" (renaming would break deployed clients).
+async function resolvePaymentMethod(
   stripe: Stripe,
   _supabaseAdmin: ReturnType<typeof createClient>,
   ws: WorkspaceRow,
   userEmail: string | undefined,
 ): Promise<
-  | { ok: true; customerId: string; pmId: string; cardLast4: string | null; cardBrand: string | null }
+  | {
+      ok: true;
+      customerId: string;
+      pmId: string;
+      methodLabel: string;
+      methodType: string;
+      cardLast4: string | null;
+      cardBrand: string | null;
+    }
   | { ok: false; reason: "no_customer" | "no_card_on_file" }
 > {
   let customerId = ws.stripe_customer_id;
@@ -101,13 +121,24 @@ async function resolveCard(
     pmId = typeof dpm === "string" ? dpm : dpm?.id ?? null;
   }
   if (!pmId) {
-    const pms = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 1 });
+    // No type filter — mirror of get-billing-summary's resolution (the display
+    // surface fixed for the same incident class on 2026-07-11).
+    const pms = await stripe.paymentMethods.list({ customer: customerId, limit: 10 });
     pmId = pms.data[0]?.id ?? null;
   }
   if (!pmId) return { ok: false, reason: "no_card_on_file" };
 
   const pm = await stripe.paymentMethods.retrieve(pmId);
-  return { ok: true, customerId, pmId, cardLast4: pm.card?.last4 ?? null, cardBrand: pm.card?.brand ?? null };
+  const descriptor = describePaymentMethod(pm as unknown as Parameters<typeof describePaymentMethod>[0]);
+  return {
+    ok: true,
+    customerId,
+    pmId,
+    methodLabel: descriptor?.label ?? "Payment method on file",
+    methodType: descriptor?.type ?? "unknown",
+    cardLast4: descriptor?.type === "card" ? descriptor.last4 : null,
+    cardBrand: descriptor?.type === "card" ? descriptor.brand : null,
+  };
 }
 
 // The workspace's active/cancelable pack subscriptions, for the preview list.
@@ -261,15 +292,17 @@ serve(async (req) => {
 
   // ── PREVIEW ───────────────────────────────────────────────────────────
   if (mode === "preview") {
-    const card = await resolveCard(stripe, supabaseAdmin, ws, user.email);
-    const activePacks = card.ok ? await listActivePacks(stripe, card.customerId, workspaceId) : [];
+    const method = await resolvePaymentMethod(stripe, supabaseAdmin, ws, user.email);
+    const activePacks = method.ok ? await listActivePacks(stripe, method.customerId, workspaceId) : [];
     return jsonResponse(
       {
         ok: true,
-        eligible: card.ok,
-        reason: card.ok ? null : card.reason,
-        cardLast4: card.ok ? card.cardLast4 : null,
-        cardBrand: card.ok ? card.cardBrand : null,
+        eligible: method.ok,
+        reason: method.ok ? null : method.reason,
+        methodLabel: method.ok ? method.methodLabel : null,
+        methodType: method.ok ? method.methodType : null,
+        cardLast4: method.ok ? method.cardLast4 : null,
+        cardBrand: method.ok ? method.cardBrand : null,
         currentCapacity: Math.max(0, Number(ws.addon_document_capacity ?? 0)),
         currentCredits: Math.max(0, Number(ws.purchased_lease_credits ?? 0)),
         singleLeasePriceUsd: singleLeasePriceCents / 100,
@@ -290,21 +323,22 @@ serve(async (req) => {
     const rl = await enforceWorkspaceRateLimit(supabaseAdmin, workspaceId, "manage-document-pack", origin, 10);
     if (rl) return rl;
 
-    const card = await resolveCard(stripe, supabaseAdmin, ws, user.email);
-    if (!card.ok) return jsonResponse({ ok: false, reason: card.reason }, 402, origin);
+    const method = await resolvePaymentMethod(stripe, supabaseAdmin, ws, user.email);
+    if (!method.ok) return jsonResponse({ ok: false, reason: method.reason }, 402, origin);
 
     try {
-      // On-session one-time charge at the plan's overage rate. confirm: true
-      // settles no-3DS cards immediately; a 3DS card returns requires_action
-      // with a client_secret for the dialog to drive confirmCardPayment.
+      // On-session one-time charge at the plan's overage rate, using the saved
+      // method of ANY type. confirm: true settles no-auth methods immediately;
+      // a method needing action returns requires_action with a client_secret
+      // for the dialog's method-agnostic stripe.confirmPayment/handleNextAction.
       // The webhook (payment_intent.succeeded) grants the credit via the
       // idempotent ledger — this function never writes entitlements.
       const pi = await stripe.paymentIntents.create(
         {
           amount: singleLeasePriceCents,
           currency: "usd",
-          customer: card.customerId,
-          payment_method: card.pmId,
+          customer: method.customerId,
+          payment_method: method.pmId,
           confirm: true,
           off_session: false,
           description: "LeaseIO — single lease credit",
@@ -424,23 +458,23 @@ serve(async (req) => {
     return jsonResponse({ ok: false, reason: "pack_not_configured" }, 503, origin);
   }
 
-  const card = await resolveCard(stripe, supabaseAdmin, ws, user.email);
-  if (!card.ok) return jsonResponse({ ok: false, reason: card.reason }, 402, origin);
+  const method = await resolvePaymentMethod(stripe, supabaseAdmin, ws, user.email);
+  if (!method.ok) return jsonResponse({ ok: false, reason: method.reason }, 402, origin);
 
   try {
     const subscription = await stripe.subscriptions.create(
       {
-        customer: card.customerId,
+        customer: method.customerId,
         items: [{ price: priceId }],
-        default_payment_method: card.pmId,
+        default_payment_method: method.pmId,
         payment_behavior: "default_incomplete",
         payment_settings: { save_default_payment_method: "on_subscription" },
         // Basil (2025-03-31+) removed invoice.payment_intent; the documented
         // replacement for the default_incomplete flow is the invoice's
         // confirmation_secret (same client_secret the PI would have carried —
-        // stripe.confirmCardPayment works unchanged client-side). The old
-        // expand path was never driven live and would fail under the pinned
-        // API version (money-path audit 2026-07-11).
+        // the client's method-agnostic stripe.confirmPayment consumes it
+        // unchanged). The old expand path was never driven live and would fail
+        // under the pinned API version (money-path audit 2026-07-11).
         expand: ["latest_invoice.confirmation_secret"],
         metadata: {
           workspace_id: workspaceId,
