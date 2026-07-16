@@ -40,6 +40,14 @@ describe('#161 — charge-flow edge functions accept any saved payment method', 
       expect(src).toContain('from "../_shared/payment_method.ts"');
       expect(src).toContain('describePaymentMethod(');
     });
+
+    it(`${p} declines deferred-settlement methods (no charge-while-told-failed)`, () => {
+      const src = read(p);
+      // Bank debits settle to PI `processing`, which these instant flows can't
+      // narrate — the resolver must reject them (#161 security review).
+      expect(src).toContain('isDeferredSettlementMethod(');
+      expect(src).toContain('deferred_method_unsupported');
+    });
   }
 });
 

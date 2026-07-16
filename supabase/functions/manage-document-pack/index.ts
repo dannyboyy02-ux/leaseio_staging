@@ -33,7 +33,7 @@ import {
   packPriceId,
 } from "../_shared/document_packs.ts";
 import { resolvePeriodEndIso } from "../_shared/stripe_subscription.ts";
-import { describePaymentMethod } from "../_shared/payment_method.ts";
+import { describePaymentMethod, isDeferredSettlementMethod } from "../_shared/payment_method.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -96,16 +96,8 @@ async function resolvePaymentMethod(
   ws: WorkspaceRow,
   userEmail: string | undefined,
 ): Promise<
-  | {
-      ok: true;
-      customerId: string;
-      pmId: string;
-      methodLabel: string;
-      methodType: string;
-      cardLast4: string | null;
-      cardBrand: string | null;
-    }
-  | { ok: false; reason: "no_customer" | "no_card_on_file" }
+  | { ok: true; customerId: string; pmId: string; methodLabel: string }
+  | { ok: false; reason: "no_customer" | "no_card_on_file" | "deferred_method_unsupported" }
 > {
   let customerId = ws.stripe_customer_id;
   if (!customerId && userEmail) {
@@ -130,14 +122,17 @@ async function resolvePaymentMethod(
 
   const pm = await stripe.paymentMethods.retrieve(pmId);
   const descriptor = describePaymentMethod(pm as unknown as Parameters<typeof describePaymentMethod>[0]);
+  // Bank debits settle asynchronously (PI → `processing`); this on-session
+  // instant-capacity flow has no processing UX, so decline them truthfully
+  // rather than charge-while-saying-failed (#161 security review).
+  if (isDeferredSettlementMethod(descriptor?.type)) {
+    return { ok: false, reason: "deferred_method_unsupported" };
+  }
   return {
     ok: true,
     customerId,
     pmId,
     methodLabel: descriptor?.label ?? "Payment method on file",
-    methodType: descriptor?.type ?? "unknown",
-    cardLast4: descriptor?.type === "card" ? descriptor.last4 : null,
-    cardBrand: descriptor?.type === "card" ? descriptor.brand : null,
   };
 }
 
@@ -300,9 +295,6 @@ serve(async (req) => {
         eligible: method.ok,
         reason: method.ok ? null : method.reason,
         methodLabel: method.ok ? method.methodLabel : null,
-        methodType: method.ok ? method.methodType : null,
-        cardLast4: method.ok ? method.cardLast4 : null,
-        cardBrand: method.ok ? method.cardBrand : null,
         currentCapacity: Math.max(0, Number(ws.addon_document_capacity ?? 0)),
         currentCredits: Math.max(0, Number(ws.purchased_lease_credits ?? 0)),
         singleLeasePriceUsd: singleLeasePriceCents / 100,

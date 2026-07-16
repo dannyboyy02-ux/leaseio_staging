@@ -111,7 +111,7 @@ serve(async (req) => {
       // Stripe Link / Apple Pay / Google Pay / ACH saves a non-'card'
       // PaymentMethod, and filtering it out showed "no payment method on file"
       // for a paying customer (billing incident 2026-07-11). describePaymentMethod
-      // maps every type to a labeled descriptor. Mirrors resolveCustomerAndCard()
+      // maps every type to a labeled descriptor. Mirrors resolveCustomerAndPaymentMethod()
       // in create-workspace.
       const customer = await stripe.customers.retrieve(customerId);
       let pmId: string | null = null;

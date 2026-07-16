@@ -77,6 +77,10 @@ export function LimitReachedDialog({
   const [packDialogOpen, setPackDialogOpen] = useState(false);
   const [singleStep, setSingleStep] = useState<SingleStep>("idle");
   const [singleError, setSingleError] = useState<string | null>(null);
+  // When the failure is "no usable payment method" (none on file, or a
+  // deferred bank-debit that this instant flow can't complete), a retry is
+  // futile — the error offers an "Open billing" door instead (#161).
+  const [singleErrorNeedsBilling, setSingleErrorNeedsBilling] = useState(false);
   const [paymentPending, setPaymentPending] = useState(false);
   const preCreditsRef = useRef(0);
   const idempotencyRef = useRef<string | null>(null);
@@ -132,6 +136,7 @@ export function LimitReachedDialog({
     preCreditsRef.current = workspace.purchasedLeaseCredits ?? 0;
     setSingleStep("processing");
     setSingleError(null);
+    setSingleErrorNeedsBilling(false);
     try {
       // Reuse the consent-session key across retries so an ambiguous failure +
       // "Try payment again" can't double-charge (one key per intended purchase).
@@ -147,8 +152,13 @@ export function LimitReachedDialog({
         clientSecret?: string | null;
       };
       if (!resp?.ok) {
+        const needsBilling =
+          resp?.reason === "no_card_on_file" ||
+          resp?.reason === "no_customer" ||
+          resp?.reason === "deferred_method_unsupported";
+        setSingleErrorNeedsBilling(needsBilling);
         setSingleError(
-          resp?.reason === "no_card_on_file" || resp?.reason === "no_customer"
+          needsBilling
             ? t("packs.error_no_card")
             : resp?.reason === "payment_failed"
             ? t("packs.error_payment")
@@ -272,7 +282,18 @@ export function LimitReachedDialog({
                 <Button variant="outline" onClick={() => setSingleStep("idle")}>
                   {t("common.back")}
                 </Button>
-                <Button onClick={() => handleBuySingle()}>{t("packs.try_payment_again")}</Button>
+                {singleErrorNeedsBilling ? (
+                  <Button
+                    onClick={() => {
+                      requestClose(false);
+                      navigate("/app/settings/account?tab=billing");
+                    }}
+                  >
+                    {t("workspace.create.error_no_card_cta")}
+                  </Button>
+                ) : (
+                  <Button onClick={() => handleBuySingle()}>{t("packs.try_payment_again")}</Button>
+                )}
               </div>
             </div>
           ) : singleStep === "consent" ? (

@@ -4,11 +4,12 @@
 //
 // Lets a Business account holder create an additional workspace (up to 10),
 // each its own $499/mo Business subscription on the owner's existing Stripe
-// customer (card on file), with an explicit in-app confirmation modal.
+// customer + saved payment method (card / Stripe Link / wallet — #161), with
+// an explicit in-app confirmation modal.
 //
 // Modes (request body { mode, name?, idempotencyKey?, workspaceId? }):
-//   preview  — read-only: returns card last4 + price + eligibility so the modal
-//              can render honest consent copy. When body.workspaceId is supplied
+//   preview  — read-only: returns the saved method label + price + eligibility
+//              so the modal can render honest consent copy. When body.workspaceId is supplied
 //              AND points to a pending-creation workspace owned by the caller,
 //              ALSO returns `resume: { workspaceId, name, clientSecret }` so the
 //              dialog can re-drive the existing PaymentIntent (spec §P2.11
@@ -23,7 +24,7 @@
 //              subscription and delete the still-pending workspace.
 //
 // Authorization: Bearer JWT (verify_jwt = true). Eligibility (must own an active
-// Business workspace + under cap + has a card) is enforced server-side; the RPC
+// Business workspace + under cap + has a saved payment method) is enforced server-side; the RPC
 // is service_role-only so creation cannot bypass the paying path here.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
@@ -36,7 +37,7 @@ import {
   BUSINESS_MONTHLY_PRICE_USD,
   WORKSPACE_LIMITS,
 } from "../_shared/workspace_limits.ts";
-import { describePaymentMethod } from "../_shared/payment_method.ts";
+import { describePaymentMethod, isDeferredSettlementMethod } from "../_shared/payment_method.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -64,16 +65,8 @@ async function resolveCustomerAndPaymentMethod(
   userId: string,
   userEmail: string | undefined,
 ): Promise<
-  | {
-      ok: true;
-      customerId: string;
-      pmId: string;
-      methodLabel: string;
-      methodType: string;
-      cardLast4: string | null;
-      cardBrand: string | null;
-    }
-  | { ok: false; reason: "no_customer" | "no_card_on_file" }
+  | { ok: true; customerId: string; pmId: string; methodLabel: string }
+  | { ok: false; reason: "no_customer" | "no_card_on_file" | "deferred_method_unsupported" }
 > {
   // Prefer an authoritative customer id from an existing Business workspace.
   let customerId: string | null = null;
@@ -123,14 +116,18 @@ async function resolveCustomerAndPaymentMethod(
 
   const pm = await stripe.paymentMethods.retrieve(pmId);
   const descriptor = describePaymentMethod(pm as unknown as Parameters<typeof describePaymentMethod>[0]);
+  // Bank debits settle asynchronously (PI → `processing`); the $499
+  // add-workspace confirm has no processing UX (and its orphan-rollback would
+  // fire on a mid-settlement payment), so decline them truthfully (#161
+  // security review).
+  if (isDeferredSettlementMethod(descriptor?.type)) {
+    return { ok: false, reason: "deferred_method_unsupported" };
+  }
   return {
     ok: true,
     customerId,
     pmId,
     methodLabel: descriptor?.label ?? "Payment method on file",
-    methodType: descriptor?.type ?? "unknown",
-    cardLast4: descriptor?.type === "card" ? descriptor.last4 : null,
-    cardBrand: descriptor?.type === "card" ? descriptor.brand : null,
   };
 }
 
@@ -257,9 +254,6 @@ serve(async (req) => {
         eligible,
         reason: !card.ok ? card.reason : (bizCount ?? 0) < 1 ? "not_eligible" : (ownedCount ?? 0) >= cap ? "cap_reached" : null,
         methodLabel: card.ok ? card.methodLabel : null,
-        methodType: card.ok ? card.methodType : null,
-        cardLast4: card.ok ? card.cardLast4 : null,
-        cardBrand: card.ok ? card.cardBrand : null,
         priceMonthly: BUSINESS_MONTHLY_PRICE_USD,
         chargedToday: BUSINESS_MONTHLY_PRICE_USD,
         count: ownedCount ?? 0,
@@ -377,7 +371,7 @@ serve(async (req) => {
     if (rl) return rl;
   }
 
-  // Resolve card BEFORE the gated insert so we never create a workspace we
+  // Resolve the saved payment method BEFORE the gated insert so we never create a workspace we
   // can't bill (no_card_on_file / no_customer short-circuit here).
   const card = await resolveCustomerAndPaymentMethod(stripe, supabaseAdmin, user.id, user.email);
   if (!card.ok) return jsonResponse({ ok: false, reason: card.reason }, 402, origin);
@@ -423,9 +417,10 @@ serve(async (req) => {
   const workspaceId = result.workspace_id;
 
   // Create the subscription ON-SESSION (the customer is present and will
-  // confirm) so a 3DS card yields a completable PaymentIntent instead of a hard
-  // off-session decline. No trial, no billing_cycle_anchor (keeps "$499 today"
-  // honest). The webhook promotes the workspace once payment confirms.
+  // confirm) so a method needing action (3DS, Link verification) yields a
+  // completable PaymentIntent instead of a hard off-session decline. No trial,
+  // no billing_cycle_anchor (keeps "$499 today" honest). The webhook promotes
+  // the workspace once payment confirms.
   try {
     const subscription = await stripe.subscriptions.create(
       {

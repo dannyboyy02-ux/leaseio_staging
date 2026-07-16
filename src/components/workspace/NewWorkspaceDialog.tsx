@@ -80,8 +80,6 @@ interface PreviewData {
   /** Human label for the saved method of ANY type ("Visa •••• 4242",
    * "Stripe Link (a@b.com)") — #161. */
   methodLabel: string | null;
-  cardLast4: string | null;
-  cardBrand: string | null;
   priceMonthly: number;
   chargedToday: number;
   count: number;
@@ -119,7 +117,7 @@ const POLL_TIMEOUT_MS = 30000;
 
 // Per-device suppression of the price-awareness gate. Stored in localStorage,
 // NOT a profile column: this is an awareness nag, not legal consent — the
-// binding consent (the confirm step, with the real card + exact charge) is
+// binding consent (the confirm step, with the real payment method + exact charge) is
 // never suppressible and always renders. A new device legitimately re-shows
 // the awareness gate. Only ever set by an eligible Business owner.
 export const ACK_SUPPRESS_KEY = "workspace_create_acknowledge_dismissed";
@@ -275,9 +273,9 @@ export function NewWorkspaceDialog({
         return;
       }
       if (resp.eligible === true) {
-        // Eligibility only — do NOT cache card details here. The binding confirm
+        // Eligibility only — do NOT cache payment-method details here. The binding confirm
         // panel re-fetches via runPreview() at name → confirm so the card it
-        // shows is the live default card, never a stale snapshot from this gate.
+        // shows is the live default method, never a stale snapshot from this gate.
         setAckState("ready");
         return;
       }
@@ -289,6 +287,7 @@ export function NewWorkspaceDialog({
           break;
         case "no_card_on_file":
         case "no_customer":
+        case "deferred_method_unsupported":
           setAckState("no_card");
           break;
         case "cap_reached":
@@ -336,8 +335,6 @@ export function NewWorkspaceDialog({
         eligible?: boolean;
         reason?: string | null;
         methodLabel?: string | null;
-        cardLast4?: string | null;
-        cardBrand?: string | null;
         priceMonthly?: number;
         chargedToday?: number;
         count?: number;
@@ -358,8 +355,6 @@ export function NewWorkspaceDialog({
         setName(resp.resume.name);
         setPreview({
           methodLabel: resp.methodLabel ?? null,
-          cardLast4: resp.cardLast4 ?? null,
-          cardBrand: resp.cardBrand ?? null,
           priceMonthly: resp.priceMonthly ?? 499,
           chargedToday: resp.chargedToday ?? 499,
           count: resp.count ?? 0,
@@ -379,8 +374,6 @@ export function NewWorkspaceDialog({
       }
       setPreview({
         methodLabel: resp.methodLabel ?? null,
-        cardLast4: resp.cardLast4 ?? null,
-        cardBrand: resp.cardBrand ?? null,
         priceMonthly: resp.priceMonthly ?? 499,
         chargedToday: resp.chargedToday ?? 499,
         count: resp.count ?? 0,
@@ -615,8 +608,8 @@ export function NewWorkspaceDialog({
       >
         {/* Step 0 — price-awareness gate. Fires before the name step so the
             owner learns the money stake before investing in a name. NOT the
-            binding consent: the confirm step still shows the real card + exact
-            charge and is never suppressible. */}
+            binding consent: the confirm step still shows the real payment method
+            + exact charge and is never suppressible. */}
         {step === "acknowledge" ? (
           ackState === "loading" ? (
             <>
@@ -942,6 +935,7 @@ function ErrorPane({
       bodyKey = "workspace.create.error_cap_reached_body";
       break;
     case "no_card_on_file":
+    case "deferred_method_unsupported":
       titleKey = "workspace.create.error_no_card_title";
       bodyKey = "workspace.create.error_no_card_body";
       primaryHref = "/app/settings/account?tab=billing";

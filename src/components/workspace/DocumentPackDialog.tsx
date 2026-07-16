@@ -3,14 +3,16 @@
 // Spec: PRODUCT_STRATEGY.md Decision 4. A pack raises the workspace's monthly
 // abstraction allowance AND active-lease cap by its size while active. Each pack
 // is its own Stripe subscription (full price on purchase, no proration,
-// cancel-at-period-end), billed to the workspace's card on file.
+// cancel-at-period-end), billed to the workspace's saved payment method (card /
+// Stripe Link / wallet — #161).
 //
-// Flow mirrors NewWorkspaceDialog's on-session 3DS pattern, minus the
+// Flow mirrors NewWorkspaceDialog's on-session confirmation pattern, minus the
 // orphan-workspace teardown: a pack whose PaymentIntent never confirms simply
 // stays incomplete (Stripe abandons it; the webhook never grants capacity), so
 // there is nothing to clean up.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Loader2, CheckCircle2, CreditCard, AlertTriangle } from "lucide-react";
 import {
   Dialog,
@@ -44,8 +46,6 @@ interface PreviewResponse {
   /** Human label for the saved method of ANY type ("Visa •••• 4242",
    * "Stripe Link (a@b.com)"). Null only when no method exists. */
   methodLabel: string | null;
-  cardLast4: string | null;
-  cardBrand: string | null;
   currentCapacity: number;
   activePacks: ActivePack[];
   catalog: Array<{ id: string; size: number; priceMonthlyUsd: number; configured: boolean }>;
@@ -63,7 +63,13 @@ export function DocumentPackDialog({
 }) {
   const { workspace, refreshProfile, userRole } = useApp();
   const { t, lang } = useAppTranslation();
+  const navigate = useNavigate();
   const isAdminUser = userRole === "admin" || userRole === "owner";
+
+  function goToBilling() {
+    onOpenChange(false);
+    navigate("/app/settings/account?tab=billing");
+  }
 
   const [step, setStep] = useState<Step>("loading");
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -155,14 +161,16 @@ export function DocumentPackDialog({
           "generic",
           resp?.reason === "pack_not_configured" || resp?.reason === "pack_price_mismatch"
             ? t("packs.error_not_configured")
-            : resp?.reason === "no_card_on_file" || resp?.reason === "no_customer"
+            : resp?.reason === "no_card_on_file" ||
+              resp?.reason === "no_customer" ||
+              resp?.reason === "deferred_method_unsupported"
             ? t("packs.error_no_card")
             : t("packs.error_generic"),
         );
         return;
       }
 
-      // No-3DS card: PI already succeeded server-side.
+      // No-auth method: PI already succeeded server-side.
       if (resp.paymentIntentStatus === "succeeded") {
         await finishSuccess();
         return;
@@ -298,8 +306,11 @@ export function DocumentPackDialog({
                 {t("packs.admin_only")}
               </div>
             ) : !preview.eligible ? (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
-                {t("packs.no_card_banner")}
+              <div className="space-y-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+                <p>{t("packs.no_card_banner")}</p>
+                <Button size="sm" onClick={goToBilling}>
+                  {t("workspace.create.error_no_card_cta")}
+                </Button>
               </div>
             ) : (
               <>
