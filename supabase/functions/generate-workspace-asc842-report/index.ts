@@ -360,6 +360,9 @@ serve(async (req) => {
     .eq("workspace_id", workspaceId)
     .eq("model_locked", true)
     .eq("archived", false)
+    // #165: service_role bypasses leases_hide_soft_deleted — a soft-deleted
+    // lease must never land in a CPA-facing consolidated ASC-842 PDF.
+    .is("deleted_at", null)
     .order("lease_start", { ascending: true });
 
   if (leasesError) {

@@ -50,6 +50,11 @@ serve(async (req) => {
         'summary_share_token_expires_at'
       )
       .eq('summary_share_token', token)
+      // #165 defense-in-depth: this fn runs as service_role and bypasses the
+      // leases_hide_soft_deleted RLS, so filter soft-deleted leases explicitly.
+      // delete-lease nulls the token (primary revocation); this covers any
+      // legacy/soft-deleted row whose token survived.
+      .is('deleted_at', null)
       .single();
 
     if (leaseError || !lease) {

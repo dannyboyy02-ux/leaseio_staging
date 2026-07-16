@@ -489,7 +489,10 @@ serve(async (req) => {
       .select(
         "id, workspace_id, lifecycle_status, model_locked, model_locked_at, model_locked_by, lease_classification, lease_classification_set_at, lease_classification_set_by, signator_attestation, signator_approved_at, request_title, filename, asset_type, landlord_name, tenant_name, property_address, lease_start, lease_end, term_months, executed_monthly_payment, current_monthly_rent, monthly_payment, escalation_type, escalation_rate, renewal_options, termination_clauses, escalation_clauses, security_deposit, calc_total_commitment, calc_pv_liability, calc_straight_line_exp, calc_cash_pl_delta, extracted_json, confirmed_sections, discount_rate, discount_rate_basis, discount_rate_set_at, discount_rate_set_by",
       )
-      .eq("workspace_id", body.workspaceId);
+      .eq("workspace_id", body.workspaceId)
+      // #165: service_role bypasses leases_hide_soft_deleted — exclude
+      // soft-deleted leases from portfolio/disclosure totals.
+      .is("deleted_at", null);
 
     if (candidatesError) {
       throw new Error(`Failed to load candidate leases: ${candidatesError.message}`);
