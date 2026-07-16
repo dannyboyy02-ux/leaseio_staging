@@ -5,6 +5,31 @@ list and reference it in the commit message.
 
 ---
 
+## Approvals-management walkthrough 2026-07-16 — 11 defects re-verified on this branch; live stuck-lease proof; #5 is only HALF fixed
+
+Owner-directed walkthrough (second flagged area). Re-verified each documented approvals defect against **current-branch code** (not the old reports — the branch has had approval churn) + **live staging DB**. Owner's call: **fix in the combined workspaces+approvals pass, not now.** All items map cleanly to the ratified plan's Phase 1 (the "seven wires"), Phase 3 (setup templates/guardrails), and Phase 5 (roles) — the plan IS appropriately scoped; the risk is piecemeal half-fixes (see #5).
+
+**Live smoking gun:** a real lease has sat in `lifecycle_status='in_negotiation'` since **2026-06-09 (37 days)**, its concept stage fully approved, with a **pending `signator` step resolved to a role that ZERO users hold** (live: `signator_role_holders = 0`) and `effective_assignee_user_id IS NULL`. It entered the flagship workflow and cannot come out — the same permanent-strand shape as the 60-day-stuck extractions. (Also live: 4 policies / 1 active, so the Phase-3 setup traps are reachable, not hypothetical.)
+
+**Current-branch status of the 11 defects** (→ plan phase):
+1. **[PRESENT]** Negotiation panel unreachable — `STATE_GROUPS.post_concept_pre_signator: ['approved','in_negotiation']` (`lifecycleStates.ts:66`) → `isIntakeStage` true for `in_negotiation` (`LeaseReview.tsx:434`) → intake early-return at `:2123`, `DocumentsPanel` (`:3608`) never mounts. → Phase 1.
+2. **[PRESENT]** Nudge dead — `const isPendingApproval = false;` (`LeaseReview.tsx:438`); sole `NudgeApproverButton` mount (`:2991`) is doubly unreachable (non-intake render + hardcoded false). → Phase 1.
+3. **[PRESENT]** Signator gate broken — nothing navigates to `SignatorReview` (only the route `App.tsx:229`); queue Approve on signator steps sends no attestation → `act-on-chain-step:252` returns 400. → Phase 1.
+4. **[PRESENT]** Send-back strands — `act-on-chain-step:532-537` supersedes pending rows; `advance-to-final-review:330-348` only `UPDATE pending_since` on existing rows, **never INSERTs** a fresh signator row (its own comment claims it does). → Phase 1.
+5. **[CHANGED — HALF FIXED, ⚠ finish in the combined pass]** `d5f58c9` added `recipient_ids` to the **approver-hop** writers (`ApprovalQueue:1035`, `act-on-chain-step:777`, `advance-to-final-review:385`, `record-counter-signature:388`) — those now deliver. But the **requestor-outcome** writers still omit it: `FinancialReview.tsx:248/290/302` (approved/returned/rejected) + `ApprovalQueue.tsx:1087` (rejected); `dispatch-notifications:59-60` drops them. So the requestor still hears nothing on their own request's outcome. **Do NOT mark #5 done.** → Phase 1.
+6. **[PRESENT]** `fully_executed → active` missing — `record-counter-signature:288` sets `fully_executed` then STOPS ("PHASE 5 STOPS HERE"); no executed-mode abstraction trigger; the only `active` writer (`legacy-lease-action:402`) is gated on legacy `executed` and rejects `fully_executed`. Resolves #94 when fixed. → Phase 1.
+7. **[PRESENT]** Request-form route preview reads only `workspace_roles`, never `approval_policies` (`LeaseRequestForm.tsx:474-498` / `:139-151`) — preview contradicts actual routing when policies exist. → Phase 1.
+8. **[PRESENT, improved]** Narrow-rule-no-fallback → `no_match_no_fallback` 409 blocks every other submission; priority ties (editor default `priority:100`, `ApprovalPolicyEditPage.tsx:66`) → `ambiguous` 409. **`2ffd5d1` (canonical asset-type) cut the spurious vocabulary-mismatch 409s** but left both structural traps. → Phase 3.
+9. **[PRESENT]** "AND at the same time" stored sequentially — `ChainDiagram.tsx:147-153` `addParallelApprover` bumps `step_order`; engine keys co-activeness on EQUAL `step_order` (`approvalChainLogic.ts:122/146/441`). Needs the fix + a one-time repair migration. → Phase 3.
+10. **[PRESENT]** `signator` offered in the chain editor (`ChainDiagram.tsx:66`) but unassignable — absent from `FunctionalRole` (`types/lifecycle.ts:76`); no UI writes `workspace_roles.role='signator'` (live: 0 holders). Role-based signator steps never resolve to a user (user-pinned steps still work). → Phase 5 (assignable "Signs leases") + Phase 3.
+11. **[CHANGED — aligned, still two impls]** Tester (`preview_policy_resolution` RPC) vs live TS `matchPolicy` — `2ffd5d1` deliberately mirrored them + added `canonicalAssetTypeDrift.test.ts`; the known asset-type divergence is closed in-repo, but two implementations still exist (structural drift risk). → Phase 3.
+
+**Notification rail is otherwise healthy (live):** `notification_deliveries` shows sent rows; 9/10 activity notification rows carry recipients. The gap is specifically the requestor-outcome writers (#5).
+
+**Deploy caveat:** CLAUDE.md says the *deployed* `resolve-approval-chain` (v37/v38) may lag the repo's canonical matcher — a deploy-lag, not a code gap; verify on the next redeploy.
+
+---
+
 ## Workspaces-management walkthrough 2026-07-16 — every fragility LIVE-VERIFIED still open on this branch; two plan recommendations
 
 Owner directed a fresh walkthrough of workspaces management ("may not have been planned appropriately"). Verified against the **live staging DB/RLS/schema/trigger** + the running app (not the docs), on branch `claude/leaseio-end-to-end-review-163v6w`. Owner's call: **do NOT fix now — filed for a combined workspaces+approvals fix pass.** Every item the 2026-07-03 review flagged is confirmed unchanged (the 2026-07-12 autosave rewrite touched only the config-section surfaces, none of these). The individual items already live in the ratified plan / prior review reports; this entry is the dated live-confirmation + the delta.
