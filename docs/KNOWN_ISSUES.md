@@ -5,6 +5,12 @@ list and reference it in the commit message.
 
 ---
 
+## #166: AI metering counts LEASES, not abstraction EVENTS — executed-mode re-extractions are unmetered (MEDIUM, money; deferred to a usage-ledger beat)
+
+**Filed 2026-07-16** during the P0-g pass. The monthly-abstraction quota in `process_lease` counts DISTINCT leases with `extracted_json IS NOT NULL AND uploaded_at >= now()-30d`. Executed-mode extractions write `executed_extracted_json` / `executed_uploaded_at` (separate columns), so they never increment that count → a workspace at its monthly cap can run **unlimited executed re-extractions** (each = paid Haiku+Opus). Even the primary path under-counts: re-running extraction on the same lease is 1 counted lease but N abstraction events. The **#36 fail-open was fixed in P0-g** (a count error now fails closed with a retryable 503 instead of granting unmetered processing) — that was the acute hole. This item is the deeper model flaw: the correct fix is a per-event **usage ledger** (count abstraction events, debit on each run) rather than a lease-COUNT meter — a bolt-on OR-count would still miss same-lease re-runs and give false confidence, so it's deferred to a dedicated metering beat, NOT half-fixed here. Retry-path unmetered (#67) folds into the same ledger.
+
+---
+
 ## Full-product assessment sweep 2026-07-16 — 7 more subsystems verified on this branch (billing, direct-add, AI pipeline, dashboard, firm, reports, governance)
 
 Orchestrated walkthrough (7 parallel verification agents) after the workspaces + approvals walks, at the owner's direction to complete the full-product assessment before any remediation. Each subsystem's documented findings re-checked against **current-branch code**; cross-checked with live staging DB. **Owner's call: no fixes yet — this is the assessment.** Full per-finding detail (file:line) is in the 2026-07-03 evidence reports (`docs/reviews/2026-07-03/*.md`), now confirmed current. Headline counts of still-open findings: Billing 6 open / 3 money-path items **FIXED since review** (double-billing, serial-trials, Basil period-end — verified line-by-line); Direct-add 10 PRESENT + 1 CHANGED; AI pipeline 6 PRESENT; Dashboard 6 PRESENT; Firm layer 5 PRESENT (all HIGH); Reports 10 PRESENT; Governance 5 PRESENT.
