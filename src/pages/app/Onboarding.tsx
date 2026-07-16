@@ -81,40 +81,25 @@ export default function Onboarding() {
       //
       // intended_plan persists the user's declared choice so AccountSettings
       // can recover an abandoned Business checkout.
-      const { data: workspace, error: workspaceError } = await supabase
-        .from('workspaces')
-        .insert({
-          name: workspaceName.trim(),
-          owner_id: user.id,
-          intended_plan: selectedPlan,
-        } as any)
-        .select()
-        .single();
+      // P0-c: the first (free) workspace is created through the advisory-locked
+      // SECURITY DEFINER RPC create_first_workspace — the ONLY client path to a
+      // workspace now that the direct INSERT policy is WITH CHECK (false). The
+      // RPC atomically enforces "at most one owned workspace" (a per-row RLS
+      // count was bulk-insert-bypassable) and seeds the owner's admin membership
+      // row (#9 timestamps). owner_id is derived server-side from auth.uid().
+      // Cast: create_first_workspace isn't in the generated types until the
+      // migration is applied + types regenerated (repo bridges with `as any`, #66).
+      const { data: newWorkspaceId, error: workspaceError } = await (supabase.rpc as any)(
+        'create_first_workspace',
+        { p_name: workspaceName.trim(), p_intended_plan: selectedPlan },
+      );
 
       if (workspaceError) throw workspaceError;
-
-      // Add owner as admin (owner is tracked via workspaces.owner_id).
-      // KNOWN_ISSUES #9: invited_at + accepted_at populated explicitly so
-      // every workspace_members row has a complete timestamp trail. Without
-      // these, the owner's own row carried NULL values while invitee rows
-      // (created via accept-invite) had populated timestamps — an asymmetry
-      // that broke audit-trail clarity.
-      const nowIso = new Date().toISOString();
-      const { error: memberError } = await supabase
-        .from('workspace_members')
-        .insert({
-          workspace_id: workspace.id,
-          user_id: user.id,
-          role: 'admin',
-          invited_at: nowIso,
-          accepted_at: nowIso,
-        });
-
-      if (memberError) throw memberError;
+      const workspaceId = newWorkspaceId as unknown as string;
 
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ current_workspace_id: workspace.id } as any)
+        .update({ current_workspace_id: workspaceId } as any)
         .eq('id', user.id);
 
       if (profileError) throw profileError;
