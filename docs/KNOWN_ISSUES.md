@@ -5,6 +5,25 @@ list and reference it in the commit message.
 
 ---
 
+## Workspaces-management walkthrough 2026-07-16 — every fragility LIVE-VERIFIED still open on this branch; two plan recommendations
+
+Owner directed a fresh walkthrough of workspaces management ("may not have been planned appropriately"). Verified against the **live staging DB/RLS/schema/trigger** + the running app (not the docs), on branch `claude/leaseio-end-to-end-review-163v6w`. Owner's call: **do NOT fix now — filed for a combined workspaces+approvals fix pass.** Every item the 2026-07-03 review flagged is confirmed unchanged (the 2026-07-12 autosave rewrite touched only the config-section surfaces, none of these). The individual items already live in the ratified plan / prior review reports; this entry is the dated live-confirmation + the delta.
+
+**Live-verified still-open (evidence):**
+1. **[CRITICAL] `delete-account` cross-tenant lease destruction.** `delete-account/index.ts` deletes `leases WHERE user_id = me` under service role AND `leases.user_id → profiles(id) ON DELETE CASCADE` (live schema: `confdeltype='c'`) — a departing employee's account deletion erases every lease they uploaded into their EMPLOYER's workspace, audit trail included. → Plan Phase 0.
+2. **[CRITICAL/revenue] Unlimited free workspaces.** Live `workspaces` INSERT policy = `WITH CHECK (owner_id = auth.uid())`, no count/payment gate — the $499 paid path (`create_workspace_locked`) is bypassable by a direct browser insert. → Plan Phase 0.
+3. **[HIGH] "Leave workspace" silent no-op.** Live `workspace_members` policies: only `"Owners can remove members" USING is_workspace_owner(...)` for DELETE; NO self-delete policy. A member's browser `.delete().eq('user_id', me)` (`WorkspaceManagement.tsx:186`) matches 0 rows, no error → success toast, membership persists. → Plan Phase 5.
+4. **[HIGH] Admin member-management no-op + phantom audit.** Same owner-only UPDATE/DELETE policies, but the UI offers role-change/remove to *admins* (`canManageWorkspaceMembers = isAdmin`); their `MemberRoleSelect` UPDATE / `handleRemoveMember` DELETE match 0 rows, toast success, and write an audit row for a change that never happened. → Plan Phase 5.
+5. **[HIGH] `handle_new_user` silently discards signup data.** Live trigger body inserts ONLY `(id, email)` — first/last name, company, and the timezone the signup form collects are dropped; workspace timezone hardcodes `America/New_York`. → **RECOMMENDATION: scope explicitly (currently only loosely under Phase 3 seeding); it's a ~1-line trigger fix + passing metadata through.**
+6. **[HIGH/money] Ownership transfer keeps billing the prior owner.** `transfer_workspace_ownership_locked` swaps `owner_id` + member roles but never touches `stripe_customer_id`; the new owner's next `create-workspace` charges the EX-owner's card. → **RECOMMENDATION: promote from "v1 limitation" to Phase 0 — same silently-charges-the-wrong-party class as the #82 double-billing bug.**
+7. **[HIGH] `delete-account` cancels zero Stripe subscriptions** (no Stripe import) — departed customer billed forever. → Plan Phase 0.
+8. **[MEDIUM] Nothing seeded at creation** — `create_workspace_locked` seeds the workspace + owner member row + one activity row, but NO approval policy → fresh workspace silently auto-approves every request until an admin builds one. → Plan Phase 3.
+9. **[MEDIUM] Lead-magnet funnel auth-walled** (live: landing "Start Your Free Lease Audit" → `/login`). → Plan Phase 6.
+
+**Method note:** the destructive authenticated flows (leave/transfer/delete) were verified at the DB/RLS/schema layer (definitive for no-op behavior) rather than by clicking, because account-creation/authentication is outside what this session performs and executing them would destroy real staging data. A left-over Vite dev server on :8080 and NO created accounts.
+
+---
+
 ## #161: Link/non-card customers cannot buy packs OR add workspaces — expansion revenue blocked on the mainstream payment path (HIGH) — **FIX LANDED 2026-07-16, pending live Link-funded verification**
 
 > **Status 2026-07-16:** code-complete on the branch — both resolvers accept any method type via `describePaymentMethod`; all THREE purchase dialogs (packs, single-lease credit via `LimitReachedDialog` — a third blocked surface found during the fix — and $499 add-workspace) confirm through the new method-agnostic `confirmSavedMethodPayment()` (`src/lib/stripeConfirm.ts`, `stripe.confirmPayment` + `redirect:'if_required'`); consent copy renders the real method label; the no-method banners and the trial "card on file" banner are truthful; static pin `paymentMethodAgnosticPurchases.test.ts`; 1443/1443 green. Per the DoD this stays OPEN until each surface is driven live with a **Link**-funded sandbox transaction (requires `manage-document-pack` + `create-workspace` redeploys; pack purchases additionally still 503 until the operator creates the pack Prices — runbook Step 4). Then stamp RESOLVED.
