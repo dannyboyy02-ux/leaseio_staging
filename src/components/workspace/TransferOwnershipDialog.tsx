@@ -139,8 +139,20 @@ export function TransferOwnershipDialog({
         { body: { workspaceId, targetUserId: selected.user_id } },
       );
       if (error || !(data as any)?.ok) {
+        // supabase.functions.invoke collapses a non-2xx into a FunctionsHttpError
+        // and nulls `data`; the server's { reason, error } is only on the error's
+        // Response body (mirrors AccountSettings.extractFnReason / CancellationBanner).
+        let reason: string | null = (data as any)?.reason ?? null;
+        let serverMsg: string | null = (data as any)?.error ?? null;
+        try {
+          const body = await (error as any)?.context?.json?.();
+          reason = reason ?? (body?.reason ?? null);
+          serverMsg = serverMsg ?? (body?.error ?? null);
+        } catch { /* body not JSON — fall through */ }
         const msg =
-          (data as any)?.error || error?.message || t('workspace.transfer.failed');
+          reason === 'active_subscription'
+            ? t('workspace.transfer.active_subscription')
+            : serverMsg || error?.message || t('workspace.transfer.failed');
         toast.error(msg);
         return;
       }

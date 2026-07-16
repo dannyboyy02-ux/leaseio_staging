@@ -2122,6 +2122,7 @@
       "confirming": "Transferring…",
       "success": "Ownership of \"{{workspace}}\" transferred to {{name}}. You are now an admin.",
       "failed": "Failed to transfer ownership",
+      "active_subscription": "This workspace has an active subscription on your billing account. Cancel it first in Settings → Billing, then transfer — the new owner can subscribe on their own card.",
       "admin_member_hint": "You're an admin here — switch to this workspace to manage members under Workspaces → Members."
     },
     "create": {

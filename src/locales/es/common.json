@@ -2122,6 +2122,7 @@
       "confirming": "Transfiriendo…",
       "success": "La propiedad de \"{{workspace}}\" se transfirió a {{name}}. Ahora usted es administrador.",
       "failed": "Error al transferir la propiedad",
+      "active_subscription": "Este espacio de trabajo tiene una suscripción activa en su cuenta de facturación. Cancélela primero en Configuración → Facturación y luego transfiera; el nuevo propietario puede suscribirse con su propia tarjeta.",
       "admin_member_hint": "Usted es administrador aquí: cambie a este espacio de trabajo para administrar miembros en Espacios de trabajo → Miembros."
     },
     "create": {

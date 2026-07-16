@@ -17,9 +17,16 @@
 //   - "Missing" and "not yours" get the SAME 404 answer — no
 //     workspace-existence oracle for non-owners.
 //
-// v1 LIMITATION (surfaced in the response and the audit row): the Stripe
-// subscription stays on the original owner's customer. Control transfers;
-// billing does not.
+// BILLING SAFETY (P0-e, 2026-07-16): a workspace with an ACTIVE subscription
+// cannot be transferred. The subscription is tied to the prior owner's Stripe
+// customer; transferring anyway left the prior owner billed for a workspace they
+// no longer own AND made the new owner's next create-workspace inherit the prior
+// owner's customer/card (resolveCustomerAndPaymentMethod prefers an owned
+// Business workspace's stripe_customer_id). We now REQUIRE billing to be resolved
+// first (cancel in Settings → Billing), then transfer, then the new owner
+// subscribes on their own card. This uses only existing mechanisms and is the
+// least-surprising default; a future "transfer + re-subscribe in one step" flow
+// could relax it. Policy choice — flagged for owner confirmation.
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
@@ -118,7 +125,7 @@ serve(async (req) => {
   // stale without harm. Missing and not-yours get the same 404.
   const { data: preWs, error: preError } = await supabaseAdmin
     .from("workspaces")
-    .select("id, owner_id")
+    .select("id, owner_id, subscription_status, stripe_subscription_id")
     .eq("id", workspaceId)
     .maybeSingle();
   if (preError) {
@@ -129,10 +136,32 @@ serve(async (req) => {
       origin,
     );
   }
-  if (!preWs || (preWs as { owner_id: string }).owner_id !== user.id) {
+  const preWsRow = preWs as {
+    owner_id: string;
+    subscription_status: string | null;
+    stripe_subscription_id: string | null;
+  } | null;
+  if (!preWsRow || preWsRow.owner_id !== user.id) {
     return jsonResponse(
       { ok: false, error: "Workspace not found", reason: "not_found" },
       404,
+      origin,
+    );
+  }
+
+  // ── P0-e billing-safety guard: refuse to transfer a workspace whose
+  // subscription is billing the PRIOR owner. Resolve billing first. ──────
+  const BILLING_ACTIVE = new Set(["active", "trialing", "past_due", "unpaid"]);
+  if (BILLING_ACTIVE.has(preWsRow.subscription_status ?? "") || preWsRow.stripe_subscription_id) {
+    return jsonResponse(
+      {
+        ok: false,
+        reason: "active_subscription",
+        error:
+          "This workspace has an active subscription on your billing account. " +
+          "Cancel it first in Settings → Billing, then transfer — the new owner can subscribe on their own card.",
+      },
+      409,
       origin,
     );
   }
