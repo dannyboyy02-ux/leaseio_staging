@@ -5,6 +5,23 @@ list and reference it in the commit message.
 
 ---
 
+## #161: Link/non-card customers cannot buy packs OR add workspaces — expansion revenue blocked on the mainstream payment path (HIGH)
+
+**Filed 2026-07-16 from the owner's live repro** (Business trial account "Labs Analytix", payment method = Stripe Link — the method Stripe Checkout *defaults to*). Screenshots show both purchase surfaces refusing a paying customer.
+
+**Symptoms (owner-observed live):**
+1. Usage → "Add capacity" dialog preemptively shows *"Add a payment method in the billing portal before buying a pack"* (`packs.no_card_banner`, `DocumentPackDialog.tsx:297`) — for an account whose Billing tab correctly displays "Stripe Link (…)" as the saved method.
+2. Workspaces → "New workspace" → *"We couldn't find a saved card — Add a payment method to continue."* Same account.
+3. Billing trial banner says *"the card on file will be charged"* (`account.trial_banner_desc`, en/es) — the method on file is Link, not a card. Copy lies for every wallet/ACH customer.
+
+**Root cause (verified):** both charge surfaces resolve the payment method with `stripe.paymentMethods.list({ type: "card" })` and fail `no_card_on_file` for any non-card type — `manage-document-pack/index.ts:104-107` and `create-workspace/index.ts:107-110` — because their client confirmation is `confirmCardPayment`-only. This is the *deliberate* "card-specific charge flows reject non-card early" rule (CLAUDE.md, PR #81 scoping correction), which was correct as an anti-orphan guard but wrong as a product endpoint: **since Checkout defaults new subscribers to Link, the typical customer's only saved method is non-card, so both expansion-revenue purchases (packs + $499 add-workspace) are unavailable to the mainstream path.** The prior filing ("Enhancement (open) — non-card methods in the $499 add-workspace charge", Low-ish framing) is SUPERSEDED by this item: it under-classed the impact (it treated Link as an edge case, it is the default) and covered only one of the two blocked surfaces.
+
+**Also misleading copy (fix in the same beat):** both dialogs say "add a payment method" when one exists — the truthful message is "this purchase currently needs a card" (or better, the fix below makes the message moot); the trial banner should describe the actual method (reuse `describePaymentMethod()`'s label) or say "your payment method on file".
+
+**Fix direction (decide mechanism before building):** either (a) in-app **Payment Element** — replace `confirmCardPayment` with `stripe.confirmPayment` and let the saved Link/card/ACH method (or a fresh one) fund the PaymentIntent/subscription, preserving the current in-dialog consent UX; or (b) route packs + add-workspace through **hosted Stripe Checkout** like plan subs (webhook already routes pack subs by `metadata.addon_type` and credits by `payment_intent.succeeded`), simpler + method-agnostic but changes the felt flow to a redirect. Either way: DoD = drive each surface live with a **Link**-funded test transaction (the exact gap that let this class ship twice).
+
+---
+
 ## Settings/Workspaces LIVE walkthrough (2nd pass) 2026-07-12 — layout fixed, felt items filed
 
 Owner: "the walkthrough didn't do a good job on UI polish through Settings/Workspace; sections under My Workspaces don't stay stationary when subsections scroll." Reproduced + verified fixes in a REAL browser (local Vite against a mock Supabase, owner-shaped data). Layout reviewer + polish reviewer swept the full surface.
