@@ -34,9 +34,11 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const quota = useWorkspaceQuota();
   // Shared react-query cache with the NeedsAction card — no extra fetch.
-  const { data: needsActionData, isPending: needsActionLoading } = useNeedsAction();
+  // Defaults to the empty-state layout during load (not the 3-col grid) so a
+  // low-activity/trial workspace — the common evaluation case — doesn't
+  // reflow when the count settles at zero (layout review).
+  const { data: needsActionData } = useNeedsAction();
   const hasNeedsActionItems =
-    needsActionLoading ||
     ((needsActionData?.pendingApprovals?.length ?? 0) +
       (needsActionData?.returnedLeases?.length ?? 0) +
       (needsActionData?.unlockedLeases?.length ?? 0) +
@@ -103,7 +105,9 @@ export default function Dashboard() {
             <div className="lg:col-span-1"><LeasePipeline /></div>
           </div>
         ) : (
-          <LeasePipeline />
+          // Constrained, not full-bleed: the pipeline's thin funnel bars
+          // stretched edge-to-edge read as stranded/empty (layout + polish).
+          <div className="lg:max-w-2xl"><LeasePipeline /></div>
         )}
 
         {/* Row 2: Upcoming risks + Recent activity & AI extractions */}

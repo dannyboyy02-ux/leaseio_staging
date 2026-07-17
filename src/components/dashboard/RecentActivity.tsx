@@ -225,11 +225,7 @@ export function RecentActivity() {
               <p className="text-sm text-muted-foreground text-center py-2">{t('dashboard.no_extractions')}</p>
             ) : (
               <div>
-                {/* Latest row per lease — re-extractions of the same lease
-                    were stacking duplicate entries. */}
-                {extractionData
-                  .filter((item, i, arr) => arr.findIndex((x) => x.id === item.id) === i)
-                  .map((item) => {
+                {extractionData.map((item) => {
                   const title = item.request_title ?? item.filename ?? t('dashboard.untitled');
                   const score =
                     item.avg_confidence_score !== null

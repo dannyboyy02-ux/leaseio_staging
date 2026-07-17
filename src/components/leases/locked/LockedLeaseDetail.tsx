@@ -513,7 +513,6 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
           pendingUnlockRequest={pendingUnlockRequest}
           isRequestingUnlock={isRequestingUnlock}
           onRequestUnlock={handleRequestUnlock}
-          onApproveUnlock={handleAdminUnlock}
           onDenyUnlock={handleDenyUnlock}
           onAdminUnlock={handleAdminUnlock}
           leaseId={lease.id}

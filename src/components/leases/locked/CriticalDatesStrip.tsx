@@ -129,16 +129,20 @@ export function CriticalDatesStrip({ lease }: Props) {
             tooltip: `${t('locked_lease.critical_dates.expiration_date')}: ${format(end, 'MMM d, yyyy')}`,
           });
         }
-        // Out of window: the date lives in Lease Timing, one tab away.
+        // Out of window: the full date lives in the General tab (Lease Timing section).
       }
     }
 
     // 2. Renewal notice deadline (parsed from renewal_options text)
     const renewalRaw = extractedValue(extracted?.renewal_options);
     const renewal = renewalNoticeDeadline(renewalRaw, lease?.lease_end ?? null);
+    // 120d window (matches expiry): the renewal-NOTICE deadline is COMPUTED
+    // and lives nowhere else — the dashboard's auto-renewal risk keys on
+    // expiry, not the notice deadline — so gate it wider than rent-change to
+    // avoid hiding a notice window entirely (polish review).
     if (renewal.deadline && renewal.deadline >= today) {
       const days = differenceInCalendarDays(renewal.deadline, today);
-      if (days <= 90) out.push({
+      if (days <= 120) out.push({
         key: 'renewal_notice',
         icon: Bell,
         label: `${t('locked_lease.critical_dates.renewal_notice_in')} ${formatDistance(renewal.deadline, t)}`,

@@ -22,7 +22,6 @@ import { canonicalAssetType, prettyAssetType } from '@/lib/assetTypes';
 
 const CANONICAL_TO_BUILTIN: Record<string, string> = {
   realestate: 'property',
-  property: 'property',
   equipment: 'equipment',
   vehicle: 'vehicle',
   other: 'other',

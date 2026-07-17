@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Lock, RotateCcw, Loader2, History, MoreHorizontal, Archive, ArchiveRestore } from 'lucide-react';
+import { ChevronLeft, Lock, Loader2, History, MoreHorizontal, Archive, ArchiveRestore } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,7 +29,6 @@ interface Props {
   pendingUnlockRequest: PendingUnlockRequest | null;
   isRequestingUnlock: boolean;
   onRequestUnlock: () => void;
-  onApproveUnlock: () => void;
   onDenyUnlock: () => void;
   onAdminUnlock: () => void;
   /** Archive control props — when present, the admin archive button renders. */
@@ -48,7 +47,6 @@ export function LockedHeader({
   pendingUnlockRequest,
   isRequestingUnlock,
   onRequestUnlock,
-  onApproveUnlock,
   onDenyUnlock,
   onAdminUnlock,
   leaseId,
@@ -90,7 +88,7 @@ export function LockedHeader({
               <h1 className="font-display text-2xl font-bold text-foreground truncate max-w-[640px]">
                 {title}
               </h1>
-              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground min-w-0">
                 {lifecycleStatus ? <LifecycleStatusBadge status={lifecycleStatus as any} /> : null}
                 {/* State + action fused: the padlock chip IS the unlock control
                     (admin → unlock confirm; member → request; pending/read-only
@@ -112,7 +110,9 @@ export function LockedHeader({
                     {t('archive.deleted_badge')}
                   </span>
                 )}
-                {subtitle ? <span className="truncate">· {subtitle}</span> : null}
+                {/* min-w-0 lets truncate actually clip inside the flex row —
+                    the identity string (counterparty · rent) is now long. */}
+                {subtitle ? <span className="truncate min-w-0">· {subtitle}</span> : null}
               </div>
             </div>
           </div>
@@ -236,6 +236,7 @@ function LockControl({
   const base =
     'inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors';
 
+  // Non-actionable states: a static "Locked" / "Unlock pending" pill.
   if (readOnly) {
     return (
       <span className={`${base} bg-muted border-transparent text-foreground/80`}>
@@ -257,6 +258,10 @@ function LockControl({
     );
   }
 
+  // Actionable: ONE persistent labeled button — the padlock icon carries the
+  // "locked" state, the word carries the action. No hover-only text swap
+  // (that failed keyboard/touch and looked like a static badge at rest —
+  // polish review HIGH), and no width reflow on hover (layout review).
   const label = isAdmin
     ? pendingUnlockRequest
       ? t('locked_lease.approve_and_unlock')
@@ -268,20 +273,16 @@ function LockControl({
       type="button"
       onClick={isAdmin ? onAdminUnlock : onRequestUnlock}
       disabled={isRequestingUnlock}
-      title={label}
+      title={t('locked_lease.locked_click_to_unlock')}
       aria-label={label}
-      className={`${base} bg-muted border-transparent text-foreground/80 hover:border-amber-400 hover:bg-amber-50 hover:text-amber-800 dark:hover:bg-amber-950/30 dark:hover:text-amber-300 disabled:opacity-60 group/lock`}
+      className={`${base} border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:opacity-60`}
     >
       {isRequestingUnlock ? (
         <Loader2 className="h-3 w-3 animate-spin" />
       ) : (
-        <>
-          <Lock className="h-3 w-3 group-hover/lock:hidden" />
-          <RotateCcw className="h-3 w-3 hidden group-hover/lock:inline" />
-        </>
+        <Lock className="h-3 w-3" />
       )}
-      <span className="group-hover/lock:hidden">{t('locked_lease.locked_badge')}</span>
-      <span className="hidden group-hover/lock:inline">{label}</span>
+      {label}
     </button>
   );
 }

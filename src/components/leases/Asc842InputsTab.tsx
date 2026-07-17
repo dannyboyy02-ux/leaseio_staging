@@ -25,7 +25,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Building2, FileText, Loader2, RefreshCw, Save, Scale, SlidersHorizontal, Timer, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, Building2, FileText, Loader2, Plus, RefreshCw, Save, Scale, SlidersHorizontal, Timer, X, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1106,7 +1106,9 @@ function NumberWithBasis({
     <div className={cn('grid grid-cols-1 gap-3', basisOpen && 'sm:grid-cols-3')}>
       <div className="space-y-1">
         <Label className="text-xs">{label}</Label>
-        <div className={cn('relative', !basisOpen && 'max-w-xs')}>
+        {/* Input stays a stable max-w-xs across collapse/expand — only the
+            basis column animates in, so the amount field doesn't resize. */}
+        <div className="relative max-w-xs">
           {unit === '$' && (
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">$</span>
           )}
@@ -1124,9 +1126,10 @@ function NumberWithBasis({
           {!basisOpen && canEdit && (
             <button
               type="button"
-              className="text-xs text-primary hover:underline shrink-0"
+              className="inline-flex items-center gap-0.5 text-xs text-primary hover:underline shrink-0"
               onClick={() => setBasisOpen(true)}
             >
+              <Plus className="h-3 w-3" />
               {t('leases.asc842.add_basis')}
             </button>
           )}
@@ -1134,7 +1137,20 @@ function NumberWithBasis({
       </div>
       {basisOpen && (
         <div className="sm:col-span-2 space-y-1">
-          <Label className="text-xs">{t('leases.asc842.basis_label')}</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">{t('leases.asc842.basis_label')}</Label>
+            {/* Let an accidentally-opened empty basis collapse again in-session. */}
+            {canEdit && basisValue.trim() === '' && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setBasisOpen(false)}
+                aria-label={t('common.cancel')}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
           <Textarea
             rows={2}
             value={basisValue}

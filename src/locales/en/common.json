@@ -1000,8 +1000,6 @@
     "all_clear_lc": "all clear",
     "items_need_attention_one": "{{count}} item needs attention",
     "items_need_attention_other": "{{count}} items need attention",
-    "leases_pending_one": "{{count}} lease pending",
-    "leases_pending_other": "{{count}} leases pending",
     "on_the_horizon": "on the horizon",
     "mark_as_seen": "Mark as seen",
     "list_view": "List",
@@ -1038,9 +1036,11 @@
     "awaiting_approval_sub": "{{count}} awaiting approval",
     "expiring_120_combined": "Expiring ≤ 120 days",
     "within_90_days": "{{count}} within 90 days",
-    "n_more_updates": "{{count}} more updates",
     "pipeline_empty": "No leases in the pipeline yet.",
-    "pipeline_empty_stages": "Empty: {{stages}}"
+    "pipeline_empty_stages": "Empty: {{stages}}",
+    "none_within_120": "None within 120 days",
+    "n_more_updates_one": "{{count}} more update",
+    "n_more_updates_other": "{{count}} more updates"
   },
   "lease": {
     "review": "Review Lease",
@@ -1320,7 +1320,7 @@
       "report_viewer_hint": "Ask a workspace admin or editor to generate the disclosure report.",
       "report_after_finalize": "Available once the lease is finalized.",
       "report_failed": "Couldn't generate the disclosure report.",
-      "add_basis": "+ Add basis"
+      "add_basis": "Add basis"
     },
     "analysis_export": {
       "subtitle": "Lease Analysis Report",
@@ -2952,7 +2952,8 @@
       "expiration_date": "Expiration date",
       "parsed_from": "Parsed from"
     },
-    "per_month_suffix": "/mo"
+    "per_month_suffix": "/mo",
+    "locked_click_to_unlock": "This lease is locked — click to unlock"
   },
   "plan": {
     "free": "Free",

@@ -1000,8 +1000,6 @@
     "all_clear_lc": "todo en orden",
     "items_need_attention_one": "{{count}} elemento requiere atención",
     "items_need_attention_other": "{{count}} elementos requieren atención",
-    "leases_pending_one": "{{count}} arrendamiento pendiente",
-    "leases_pending_other": "{{count}} arrendamientos pendientes",
     "on_the_horizon": "en el horizonte",
     "mark_as_seen": "Marcar como visto",
     "list_view": "Lista",
@@ -1038,9 +1036,11 @@
     "awaiting_approval_sub": "{{count}} en espera de aprobación",
     "expiring_120_combined": "Vencen en ≤ 120 días",
     "within_90_days": "{{count}} dentro de 90 días",
-    "n_more_updates": "{{count}} actualizaciones más",
     "pipeline_empty": "Aún no hay arrendamientos en el flujo.",
-    "pipeline_empty_stages": "Vacías: {{stages}}"
+    "pipeline_empty_stages": "Vacías: {{stages}}",
+    "none_within_120": "Ninguno dentro de 120 días",
+    "n_more_updates_one": "{{count}} actualización más",
+    "n_more_updates_other": "{{count}} actualizaciones más"
   },
   "lease": {
     "review": "Revisar Arrendamiento",
@@ -1320,7 +1320,7 @@
       "report_viewer_hint": "Pida a un administrador o editor del espacio de trabajo que genere el informe de divulgación.",
       "report_after_finalize": "Disponible una vez que el arrendamiento se finalice.",
       "report_failed": "No se pudo generar el informe de divulgación.",
-      "add_basis": "+ Agregar base"
+      "add_basis": "Agregar base"
     },
     "analysis_export": {
       "subtitle": "Informe de análisis de arrendamiento",
@@ -2952,7 +2952,8 @@
       "expiration_date": "Fecha de vencimiento",
       "parsed_from": "Extraído de"
     },
-    "per_month_suffix": "/mes"
+    "per_month_suffix": "/mes",
+    "locked_click_to_unlock": "Este arrendamiento está bloqueado — haga clic para desbloquear"
   },
   "plan": {
     "free": "Gratis",
