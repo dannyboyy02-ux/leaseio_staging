@@ -87,7 +87,11 @@ export function DocumentsPanel({
       // Hydrate uploader names. RLS lets us see profiles for users we
       // share a workspace with; for cross-workspace uploaders (rare:
       // service-role inserts) we silently fall back to 'Unknown'.
-      const uploaderIds = Array.from(new Set(docs.map((d) => d.uploaded_by)));
+      // filter(Boolean): uploaded_by can be null once an uploader deletes their
+      // account (FK SET NULL). A null in the .in() list would malform the query
+      // and could suppress the OTHER (live) uploaders' names (parity with
+      // ExceptionsDashboard).
+      const uploaderIds = Array.from(new Set(docs.map((d) => d.uploaded_by).filter(Boolean)));
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, email, first_name, last_name')

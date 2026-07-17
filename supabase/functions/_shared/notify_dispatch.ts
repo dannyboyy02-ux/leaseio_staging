@@ -42,6 +42,11 @@ function copyForType(type: string | undefined): { subject: string; heading: stri
       return { subject: "Action needed: a lease is awaiting your approval", heading: "A lease needs your approval" };
     case "notify_submitter_approved":
       return { subject: "Your lease was approved", heading: "Your lease was approved" };
+    case "notify_submitter_concept_cleared":
+      return {
+        subject: "Your lease request cleared concept approval",
+        heading: "Your request cleared concept approval — you may proceed",
+      };
     case "notify_submitter_returned":
       return { subject: "Your lease was returned for revision", heading: "Your lease was returned for revision" };
     case "notify_submitter_rejected":
@@ -143,7 +148,12 @@ export async function dispatchNotificationRow(
   const message = typeof details.message === "string" && details.message.length > 0
     ? details.message
     : `${leaseName} needs your attention in LeaseIO.`;
-  const leaseLink = `${APP_URL}/app/leases/${lease.id}`;
+  // P1-2: the signator's email must deep-link to the attestation page (the only
+  // surface that collects the required intent-to-bind attestation), not the
+  // generic lease detail — otherwise the CFO lands on a page with no way to sign.
+  const leaseLink = details.notification_type === "signator_review_required"
+    ? `${APP_URL}/app/leases/${lease.id}/signator-review`
+    : `${APP_URL}/app/leases/${lease.id}`;
   const html = emailHtml(heading, message, leaseName, leaseLink);
 
   for (const userId of recipientIds) {

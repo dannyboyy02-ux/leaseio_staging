@@ -5,7 +5,8 @@
 // Byte-equivalent behavior with the Deno counterpart:
 //   supabase/functions/_shared/payment_method.ts
 // Node copy: imported by the frontend Billing tab + vitest tests.
-// Deno copy: imported by get-billing-summary and create-workspace.
+// Deno copy: imported by get-billing-summary, create-workspace, and
+// manage-document-pack (the #161 charge-flow resolvers).
 // No imports in either file — language-level types + logic only.
 //
 // WHY THIS EXISTS (billing incident 2026-07-11)
@@ -51,6 +52,30 @@ export interface PaymentMethodDescriptor {
 
 function titleCase(s: string): string {
   return s.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Deferred-settlement PaymentMethod types: a confirm resolves to a PI status of
+// `processing` (bank debits clear over days), NOT the synchronous
+// succeeded/requires_action that card + Link + wallets produce. The on-session
+// instant-capacity purchase surfaces (packs, single-lease credit,
+// $499 add-workspace) have no `processing` UX — a customer would be charged
+// while told the payment failed (#161 security review, 2026-07-16). Until those
+// surfaces branch on `processing`, decline these method types EARLY with honest
+// copy. This is a DENYLIST, not an allowlist, on purpose: the whole #161 bug was
+// over-restricting methods, so a new SYNCHRONOUS method type must never be
+// blocked here — only known-deferred bank debits are.
+export const DEFERRED_SETTLEMENT_METHOD_TYPES = new Set<string>([
+  'us_bank_account',
+  'sepa_debit',
+  'acss_debit',
+  'bacs_debit',
+  'au_becs_debit',
+  'becs_debit',
+]);
+
+/** True when the method settles asynchronously (PI → `processing`). */
+export function isDeferredSettlementMethod(type: string | null | undefined): boolean {
+  return type != null && DEFERRED_SETTLEMENT_METHOD_TYPES.has(type);
 }
 
 /**

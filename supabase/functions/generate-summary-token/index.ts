@@ -55,7 +55,7 @@ serve(async (req) => {
     // Fetch lease
     const { data: lease, error: leaseError } = await supabase
       .from('leases')
-      .select('id, workspace_id, summary_share_token, summary_shared_at, summary_share_token_expires_at, request_title, requesting_department, lifecycle_status, requestor_id')
+      .select('id, workspace_id, deleted_at, summary_share_token, summary_shared_at, summary_share_token_expires_at, request_title, requesting_department, lifecycle_status, requestor_id')
       .eq('id', lease_id)
       .single();
 
@@ -103,6 +103,17 @@ serve(async (req) => {
     if (!isOwner && !isAdminMember) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    // #165: never MINT a public link on a soft-deleted lease. delete-lease nulls
+    // the token, but this mint path could re-arm one (and it would go live the
+    // moment the lease is restored, since restore deliberately doesn't re-mint).
+    // Revoke is still allowed through (harmless no-op on an already-nulled token).
+    if ((lease as { deleted_at?: string | null }).deleted_at && action !== 'revoke') {
+      return new Response(JSON.stringify({ error: 'This lease has been deleted and cannot be shared.' }), {
+        status: 409,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }

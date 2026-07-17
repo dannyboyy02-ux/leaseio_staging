@@ -6,6 +6,12 @@ import {
   repairJsonObject,
 } from "../_shared/audit.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
+import {
+  requiresSubscriptionToProcess,
+  NO_SUBSCRIPTION_ERROR,
+  NO_SUBSCRIPTION_REASON,
+} from "../_shared/monetization.ts";
 
 // Anthropic (intelligence layer)
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
@@ -997,7 +1003,7 @@ async function checkProcessingQuota(
 
   const { data: ws } = await supabaseAdmin
     .from('workspaces')
-    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at')
+    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at, subscription_status, stripe_subscription_id, created_at')
     .eq('id', workspaceId)
     .maybeSingle();
   const wsRow = ws as {
@@ -1007,6 +1013,9 @@ async function checkProcessingQuota(
     purchased_lease_credits?: number;
     canceled_at?: string | null;
     soft_deleted_at?: string | null;
+    subscription_status?: string | null;
+    stripe_subscription_id?: string | null;
+    created_at?: string | null;
   } | null;
   const plan = (wsRow?.plan === 'business') ? 'business' : 'starter';
 
@@ -1045,6 +1054,30 @@ async function checkProcessingQuota(
     };
   }
 
+  // P0-h (Decision 1): Starter/Business is a paid product — signup routes through
+  // checkout with a 7-day trial (card up front). A workspace that NEVER started a
+  // subscription (no trial, no pay — checkout abandoned) is not entitled to
+  // process documents; without this it got the product free forever. Exemptions:
+  // 'audit' (free lead-magnet, capped by its own document_limit) and 'vault'
+  // (handled above). Shared with retry_lease so both paid-AI entry points gate
+  // identically — see _shared/monetization.ts for the grandfather rationale.
+  if (requiresSubscriptionToProcess(wsRow)) {
+    return {
+      kind: 'block',
+      response: new Response(
+        JSON.stringify({
+          ok: false,
+          error: NO_SUBSCRIPTION_ERROR,
+          reason: NO_SUBSCRIPTION_REASON,
+        }),
+        // 200 + ok:false so the client surfaces the actionable message (the
+        // upload modal reads result.error on 200; a 4xx would show a generic
+        // "non-2xx" toast — same contract as the quota_exceeded block).
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      ),
+    };
+  }
+
   // Base cap = the workspace's document_limit (webhook-managed plan entitlement,
   // the same source the client meter reads), with PLAN_QUOTAS as a fallback.
   const baseLimit = Number.isFinite(Number(wsRow?.document_limit))
@@ -1064,10 +1097,23 @@ async function checkProcessingQuota(
     .gte('uploaded_at', since30dIso)
     .not('extracted_json', 'is', null);
   if (extractionErr) {
-    // Fail open on a count error — a transient DB blip shouldn't block paying
-    // customers; the soft-quota dashboard catches drift over time.
-    console.error('[process_lease] quota: extraction count failed:', extractionErr.message);
-    return { kind: 'ok' };
+    // #36: FAIL CLOSED. Returning 'ok' here let a count error bypass the whole
+    // quota (unmetered Opus extractions — a money-integrity hole under the
+    // no-unlimited-tiers hard rule). A count error is rare and transient, so a
+    // retryable 503 costs a legitimate customer one retry while never granting
+    // free unmetered processing.
+    console.error('[process_lease] quota: extraction count failed (failing closed):', extractionErr.message);
+    return {
+      kind: 'block',
+      response: new Response(
+        JSON.stringify({
+          ok: false,
+          error: 'We could not verify your usage just now. Please try again in a moment.',
+          reason: 'quota_check_unavailable',
+        }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      ),
+    };
   }
   const monthlyExtractions = monthlyExtractionCount ?? 0;
   const overMonthly = monthlyExtractions >= limit;
@@ -1238,414 +1284,6 @@ async function extractLeaseDataWithClaude(
   return merged;
 }
 
-// Original OpenAI implementation below — retained for reference, not called
-async function _extractLeaseDataWithOpenAI_DEPRECATED(documentText: string): Promise<LeaseExtractionResult> {
-  console.log('[OpenAI] Extracting lease data...');
-  const systemPrompt = `You are an expert commercial lease abstraction specialist with 20+ years of experience analyzing real estate and equipment leases. Your task is to extract key information with the highest possible accuracy.
-
-DOMAIN KNOWLEDGE - CRITICAL LEASE TERMINOLOGY:
-
-Common term mappings you MUST recognize:
-
-- "Base Rent" / "Minimum Rent" / "Fixed Rent" / "Monthly Rent" → monthly_rent
-
-- "Commencement Date" / "Effective Date" / "Start Date" → lease_start  
-
-- "Expiration Date" / "Termination Date" / "End Date" / "Term End" → lease_end
-
-- "Landlord" / "Lessor" / "Owner" (interchangeable)
-
-- "Tenant" / "Lessee" / "Renter" (interchangeable)
-
-- "Premises" / "Demised Premises" / "Leased Premises" → property_address
-
-- "NRA" / "Rentable Square Feet" / "RSF" / "Usable Square Feet" → square_footage
-
-- "CAM" / "Common Area Maintenance" / "Operating Expenses" / "Additional Rent"
-
-- "Security Deposit" / "Damage Deposit" / "Good Faith Deposit"
-
-- "Triple Net" / "NNN" → tenant pays taxes, insurance, maintenance separately
-
-- "Gross Lease" → all-inclusive rent
-
-- "CPI" / "Consumer Price Index" → inflation-based rent increases
-
-EXTRACTION RULES - FOLLOW EXACTLY:
-
-1. Extract ONLY information explicitly stated in the document
-
-2. NEVER guess, infer, or make assumptions
-
-3. If information is not found, set value to null and confidence to 0.0
-
-4. For ambiguous data, set lower confidence score
-
-5. Dates MUST be in YYYY-MM-DD format
-
-6. Numbers should be extracted WITHOUT currency symbols or commas
-
-7. If multiple values exist (e.g., escalating rent), extract ALL periods
-
-Return data as JSON with this EXACT structure:
-
-{
-
-  "landlord_name": {
-
-    "value": "Exact legal entity name as written",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote from document (max 100 chars)"
-
-  },
-
-  "tenant_name": {
-
-    "value": "Exact legal entity name as written",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "property_address": {
-
-    "value": "Full address including city, state, zip",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "lease_start": {
-
-    "value": "YYYY-MM-DD or null",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "lease_end": {
-
-    "value": "YYYY-MM-DD or null",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "square_footage": {
-
-    "value": numeric_value_only,
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "current_monthly_rent": {
-
-    "value": numeric_amount_only,
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "rent_escalation_type": {
-
-    "value": "Description of how rent increases (e.g., '3% annual', 'CPI adjustment', 'Fixed schedule', 'None')",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "rent_commencement_date": {
-
-    "value": "YYYY-MM-DD or null",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "rent_schedule": [
-
-    {
-
-      "period_start": "YYYY-MM-DD",
-
-      "period_end": "YYYY-MM-DD or null if ongoing",
-
-      "monthly_amount": numeric_value,
-
-      "annual_amount": numeric_value,
-
-      "notes": "e.g., 'Year 1', 'After CPI adjustment'",
-
-      "confidence": 0.0-1.0
-
-    }
-
-  ],
-
-  "base_rent_amount": {
-
-    "value": "Initial base rent as string for legacy compatibility",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "base_rent_frequency": {
-
-    "value": "monthly, quarterly, or annually",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "security_deposit": {
-
-    "value": "Amount as string",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "renewal_options": {
-
-    "value": "Summary of renewal terms",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "escalation_clauses": {
-
-    "value": "Detailed description of rent escalation methodology",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "termination_clauses": {
-
-    "value": "Summary of termination provisions",
-
-    "confidence": 0.0-1.0,
-
-    "page": page_number,
-
-    "source_text": "verbatim quote"
-
-  },
-
-  "key_dates": [
-
-    {
-
-      "date": "YYYY-MM-DD",
-
-      "description": "Description of date significance",
-
-      "confidence": 0.0-1.0
-
-    }
-
-  ],
-
-  "risks": [
-
-    {
-
-      "title": "Brief risk title",
-
-      "severity": "low, medium, or high",
-
-      "explanation": "Detailed explanation of risk",
-
-      "citation_snippet": "Relevant quote from document",
-
-      "citation_page": page_number,
-
-      "confidence": 0.0-1.0
-
-    }
-
-  ]
-
-}
-
-CONFIDENCE SCORING GUIDELINES:
-
-- 0.95-1.0: Information clearly stated, no ambiguity
-
-- 0.85-0.94: Information found but slightly ambiguous format
-
-- 0.70-0.84: Information inferred from context, not explicitly stated
-
-- 0.50-0.69: Multiple possible interpretations, best guess selected
-
-- 0.00-0.49: Very uncertain or not found
-
-RISK IDENTIFICATION - Flag these issues:
-
-- Rent escalations exceeding 5% annually (HIGH severity)
-
-- Automatic renewal without advance notice requirements (MEDIUM-HIGH)
-
-- Personal guarantee requirements (MEDIUM)
-
-- Restrictions on assignment/subletting (MEDIUM)
-
-- Unclear or missing termination provisions (MEDIUM)
-
-- Landlord can terminate without cause (HIGH)
-
-- Missing force majeure clauses (LOW-MEDIUM)
-
-- Ambiguous rent calculation methodology (MEDIUM)
-
-COMMON EXTRACTION ERRORS TO AVOID:
-
-- DO NOT confuse "security deposit" with "first month's rent"
-
-- DO NOT extract partial addresses (need full address with city/state/zip)
-
-- DO NOT use placeholder dates like "TBD" or "____-__-__"
-
-- DO NOT extract dollar signs or commas in numeric amounts
-
-- DO NOT assume lease end date = start date + term (extract actual end date)
-
-- DO NOT confuse "rentable" vs "usable" square footage (prefer rentable/RSF)
-
-- DO NOT miss rent escalations buried in addendums or exhibits
-
-- DO NOT overlook percentage rent clauses in retail leases
-
-Return ONLY valid JSON. No markdown formatting, no explanation, no preamble.`;
-
-  async function extractJsonFromResponse(content: string): Promise<object> {
-    try {
-      return await repairJsonObject(content);
-    } catch (error) {
-      console.error('[OpenAI] JSON repair failed:', error);
-      console.error('[OpenAI] Failed content preview:', content.substring(0, 500));
-      throw error;
-    }
-  }
-
-  const maxRetries = 2;
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: OPENAI_MODEL,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Please analyze this lease document and extract the key information:\n\n${documentText}` }
-          ],
-          temperature: attempt === 0 ? 0.1 : 0.0,
-          max_tokens: OPENAI_MAX_TOKENS,
-          response_format: { type: "json_object" },
-        }),
-      });
-      const contentType = response.headers.get('content-type');
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[OpenAI] Request failed (attempt ${attempt + 1}):`, errorText);
-        if (errorText.trim().startsWith('<!') || errorText.includes('<html')) {
-          lastError = new Error(`OpenAI returned HTML error page (status ${response.status})`);
-          if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-          throw lastError;
-        }
-        throw new Error(`OpenAI request failed: ${response.status} - ${errorText}`);
-      }
-      if (!contentType?.includes('application/json')) {
-        await response.text(); // drain the non-JSON body before retry/throw
-        lastError = new Error(`OpenAI returned non-JSON response: ${contentType}`);
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-        throw lastError;
-      }
-      const data = await response.json();
-      if (!data.choices?.[0]?.message?.content) {
-        lastError = new Error('OpenAI response missing content');
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-        throw lastError;
-      }
-      const content = data.choices[0].message.content;
-      console.log(`[OpenAI] Tokens - prompt: ${data.usage?.prompt_tokens || 'N/A'}, completion: ${data.usage?.completion_tokens || 'N/A'}`);
-      try {
-        const parsed = await extractJsonFromResponse(content);
-        console.log('[OpenAI] Successfully parsed JSON response');
-        return parsed as LeaseExtractionResult;
-      } catch (parseError) {
-        lastError = new Error(`Failed to parse OpenAI response as JSON: ${parseError}`);
-        if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); continue; }
-        throw lastError;
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < maxRetries) { await new Promise(r => setTimeout(r, 2000 * (attempt + 1))); continue; }
-    }
-  }
-  throw lastError || new Error('All OpenAI extraction attempts failed');
-}
 
 serve(async (req) => {
   const requestOrigin = req.headers.get('origin');
@@ -1695,6 +1333,250 @@ serve(async (req) => {
     const extractionMode = (formData.get('extractionMode') as string) || 'pipeline';
     const targetLeaseId = formData.get('leaseId') as string | null;
     const workspaceIdFromRequest = formData.get('workspaceId') as string | null;
+
+    // ================================================================
+    // P1-5 — FINALIZE MODE (chain executed dead-end)
+    // ================================================================
+    // A counter-signed CHAIN lease sits at 'fully_executed' with NO AI
+    // abstraction (request leases are created status:'Ready' and never
+    // processed) and — until now — no route to 'active', so it was invisible to
+    // the active-lease cap, amendment matching, unlock, and ASC-842 reports.
+    // This human-triggered mode is the missing last step: abstract the already-
+    // stored counter-signed document into the PRIMARY term columns (so the
+    // review UI and every active-lease consumer see real terms), recompute the
+    // financial projections, then activate + model-lock the lease — mirroring
+    // the legacy upload→abstract→lock flow but keyed by leaseId with the doc read
+    // from storage (no multipart file). Runs BEFORE the file-required check.
+    if (extractionMode === 'finalize') {
+      if (!targetLeaseId || !isValidUUID(targetLeaseId)) {
+        return new Response(JSON.stringify({ error: 'leaseId is required for finalize mode and must be a valid UUID.' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: finLease, error: finFetchErr } = await supabaseAdmin
+        .from('leases')
+        .select('id, user_id, workspace_id, lifecycle_status, requestor_id, execution_owner_id, model_locked')
+        .eq('id', targetLeaseId)
+        .single();
+      if (finFetchErr || !finLease) {
+        return new Response(JSON.stringify({ error: 'Lease not found.' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Idempotent: already finalized → no-op (avoids a second Opus pass + a
+      // no-op transition if the button is double-clicked or retried).
+      if (finLease.lifecycle_status === 'active') {
+        return new Response(JSON.stringify({ ok: true, leaseId: targetLeaseId, lifecycle_status: 'active', alreadyActive: true }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (finLease.lifecycle_status !== 'fully_executed') {
+        return new Response(JSON.stringify({ error: `Finalize requires a fully-executed lease (this one is '${finLease.lifecycle_status}').`, reason: 'not_fully_executed' }), {
+          status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Authorization: the people who legitimately drive execution — the
+      // requestor / uploader / execution owner — or a workspace admin/owner.
+      let finAuthorized =
+        finLease.user_id === user.id ||
+        finLease.requestor_id === user.id ||
+        finLease.execution_owner_id === user.id;
+      if (!finAuthorized && finLease.workspace_id) {
+        const [{ data: finWs }, { data: finMember }] = await Promise.all([
+          supabaseAdmin.from('workspaces').select('owner_id').eq('id', finLease.workspace_id).maybeSingle(),
+          supabaseAdmin.from('workspace_members').select('role').eq('workspace_id', finLease.workspace_id).eq('user_id', user.id).maybeSingle(),
+        ]);
+        finAuthorized =
+          (finWs as any)?.owner_id === user.id ||
+          (finMember as any)?.role === 'admin';
+      }
+      if (!finAuthorized) {
+        return new Response(JSON.stringify({ error: 'You are not authorized to finalize this lease.' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Liveness (fail closed on canceled / vault / soft-deleted).
+      const finLiveness = await checkWorkspaceLive(supabaseAdmin, finLease.workspace_id);
+      if (!finLiveness.live) {
+        return new Response(JSON.stringify({ ok: false, error: 'subscription_inactive', reason: finLiveness.reason }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const finRateLimit = await enforceWorkspaceRateLimit(supabaseAdmin, finLease.workspace_id, 'process_lease', requestOrigin);
+      if (finRateLimit) return finRateLimit;
+      // Fetch the latest counter-signed document from the lease-documents bucket.
+      const { data: finDocRow } = await supabaseAdmin
+        .from('lease_documents')
+        .select('storage_path, filename, iteration_number, version_number')
+        .eq('lease_id', targetLeaseId)
+        .eq('document_type', 'fully_executed_counterparty_returned')
+        .order('iteration_number', { ascending: false })
+        .order('version_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!finDocRow) {
+        return new Response(JSON.stringify({ error: 'No counter-signed document found to abstract. Upload the fully-executed document first.', reason: 'no_executed_document' }), {
+          status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: finFileData, error: finDownloadErr } = await supabaseAdmin.storage
+        .from('lease-documents')
+        .download((finDocRow as any).storage_path);
+      if (finDownloadErr || !finFileData) {
+        return new Response(JSON.stringify({ error: `Could not read the counter-signed document: ${finDownloadErr?.message ?? 'download failed'}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // AI-processing consent gate (P1-04) — finalize sends a full customer
+      // document to Anthropic just like the pipeline/executed paths, so it must
+      // honor a revoked consent. Placed OUTSIDE the extraction try/catch so the
+      // consent error surfaces as a clean 403, not a generic "abstraction failed".
+      try {
+        await assertAiConsent(supabaseAdmin, user.id);
+      } catch (consentErr) {
+        return new Response(JSON.stringify({
+          error: consentErr instanceof Error ? consentErr.message : 'AI processing consent required',
+          reason: 'ai_consent_required',
+        }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      // Monthly-cap quota (the lease already exists; no credit consumed — a
+      // re-extraction over the cap just blocks, same as executed mode).
+      const finQuota = await checkProcessingQuota(supabaseAdmin, finLease.workspace_id, corsHeaders, { isNewLease: false });
+      if (finQuota.kind === 'block') return finQuota.response;
+
+      const finBytes = await finFileData.arrayBuffer();
+      const finBase64 = arrayBufferToBase64(finBytes);
+      let finData: LeaseExtractionResult;
+      try {
+        finData = await extractLeaseDataWithClaude(supabaseAdmin, finBase64, finLease.workspace_id ?? null);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        return new Response(JSON.stringify({ error: `Finalize AI abstraction failed: ${msg}` }), {
+          status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Escalation + term derivation (mirror the pipeline write block).
+      const finRawEsc = extractValue(finData.rent_escalation_type) as string | null;
+      const { escalationType: finEscType, escalationRate: finEscRate, needsEscalationReview: finNeedsEscReview } = normalizeEscalation(finRawEsc);
+      const finStart = safeDate(extractValue(finData.lease_start));
+      const finEnd = safeDate(extractValue(finData.lease_end));
+      const finTermMonths = finStart && finEnd
+        ? Math.round((new Date(finEnd).getTime() - new Date(finStart).getTime()) / (86400 * 30.4375 * 1000))
+        : null;
+      const finNow = new Date().toISOString();
+
+      // Primary-column write + activate + model-lock, all in one UPDATE so the
+      // lifecycle trigger fires once and the row is consistent.
+      const { data: finUpdated, error: finUpdateErr } = await supabaseAdmin
+        .from('leases')
+        .update({
+          landlord_name:          extractValue(finData.landlord_name),
+          tenant_name:            extractValue(finData.tenant_name),
+          property_address:       extractValue(finData.property_address),
+          lease_start:            finStart,
+          lease_end:              finEnd,
+          rent_commencement_date: safeDate(extractValue(finData.rent_commencement_date)),
+          base_rent_amount:       extractValue(finData.base_rent_amount),
+          base_rent_frequency:    extractValue(finData.base_rent_frequency),
+          current_monthly_rent:   extractValue(finData.current_monthly_rent),
+          security_deposit:       extractValue(finData.security_deposit),
+          renewal_options:        extractValue(finData.renewal_options),
+          escalation_clauses:     extractValue(finData.escalation_clauses),
+          termination_clauses:    extractValue(finData.termination_clauses),
+          rent_escalation_type:   finRawEsc,
+          escalation_type:        finEscType,
+          escalation_rate:        finEscRate,
+          needs_escalation_review: finNeedsEscReview,
+          square_footage:         extractValue(finData.square_footage),
+          term_months:            finTermMonths,
+          extracted_json:         finData,
+          processed_at:           finNow,
+          // Activate + lock the reviewed model in the same UPDATE (single trigger
+          // fire). fully_executed → active is a legal edge (VALID_TRANSITIONS).
+          lifecycle_status:       'active',
+          status_changed_at:      finNow,
+          model_locked:           true,
+          model_locked_at:        finNow,
+          model_locked_by:        user.id,
+        })
+        // Conditional on still being fully_executed so a racing second finalize
+        // (both passed the precondition, both ran extraction) writes 0 rows here
+        // and returns below WITHOUT emitting a duplicate status_change / audit
+        // row. The UI busy-guard prevents the double-click; this covers the rest.
+        .eq('id', targetLeaseId)
+        .eq('lifecycle_status', 'fully_executed')
+        .select('id');
+      if (finUpdateErr) {
+        return new Response(JSON.stringify({ error: `Failed to finalize lease: ${finUpdateErr.message}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Lost the race — another finalize already activated the lease. No-op.
+      if (!finUpdated || (finUpdated as unknown[]).length === 0) {
+        return new Response(JSON.stringify({ ok: true, leaseId: targetLeaseId, lifecycle_status: 'active', alreadyActive: true }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Lifecycle Transition Convention: status_change row with top-level
+      // from/to + mirrored details + routing_path.
+      // The activation UPDATE and these audit inserts are separate,
+      // non-transactional statements — capture+log their errors so a lifecycle
+      // transition that lands with no primary-log status_change row (the class
+      // the convention guards against) is at least visible, matching the
+      // pipeline path (integrity review). lease_state_transitions retains a
+      // parallel record via the AFTER trigger.
+      const { error: finStatusLogErr } = await supabaseAdmin.from('lease_activity_log').insert({
+        lease_id: targetLeaseId,
+        user_id: user.id,
+        activity_type: 'status_change',
+        from_status: 'fully_executed',
+        to_status: 'active',
+        details: { from: 'fully_executed', to: 'active', routing_path: 'chain', triggered_by: 'process_lease_finalize' },
+      });
+      if (finStatusLogErr) console.error('[process_lease] finalize status_change log error:', finStatusLogErr.message);
+      const { error: finTermsLogErr } = await supabaseAdmin.from('lease_activity_log').insert({
+        lease_id: targetLeaseId,
+        user_id: user.id,
+        activity_type: 'executed_terms_extracted',
+        details: { source_document: (finDocRow as any).filename, routing_path: 'chain', triggered_by: 'finalize' },
+      });
+      if (finTermsLogErr) console.error('[process_lease] finalize executed_terms_extracted log error:', finTermsLogErr.message);
+
+      // Recompute financial projections from the abstracted terms.
+      if (finStart && finTermMonths && finTermMonths > 0) {
+        const finRawRent = extractValue(finData.current_monthly_rent);
+        const finMonthlyRent = typeof finRawRent === 'number'
+          ? finRawRent
+          : typeof finRawRent === 'string' ? parseFloat(finRawRent.replace(/[^0-9.]/g, '')) || 0 : 0;
+        if (finMonthlyRent > 0) {
+          const { data: finWsRate } = await supabaseAdmin.from('workspaces').select('discount_rate').eq('id', finLease.workspace_id).single();
+          const finDiscountRate: number = (finWsRate as any)?.discount_rate ?? 5.5;
+          const finAnnualEsc: number = finEscRate ?? 0;
+          const finMonthlyDisc = Math.pow(1 + finDiscountRate / 100, 1 / 12) - 1;
+          const finPayments: number[] = [];
+          for (let m = 1; m <= finTermMonths; m++) {
+            finPayments.push(finMonthlyRent * Math.pow(1 + finAnnualEsc / 100, Math.floor((m - 1) / 12)));
+          }
+          const finTotal = finPayments.reduce((s, p) => s + p, 0);
+          const finPv = finPayments.reduce((s, p, idx) => s + p / Math.pow(1 + finMonthlyDisc, idx + 1), 0);
+          const finSl = finTotal / finTermMonths;
+          const finMid = Math.max(1, Math.floor(finTermMonths / 2));
+          const finCashDelta = finPayments.slice(0, finMid).reduce((s, p) => s + p, 0) - finSl * finMid;
+          await supabaseAdmin.from('leases').update({
+            calc_total_commitment:  Math.round(finTotal * 100) / 100,
+            calc_pv_liability:      Math.round(finPv * 100) / 100,
+            calc_straight_line_exp: Math.round(finSl * 100) / 100,
+            calc_cash_pl_delta:     Math.round(finCashDelta * 100) / 100,
+          }).eq('id', targetLeaseId);
+        }
+      }
+
+      return new Response(JSON.stringify({ ok: true, leaseId: targetLeaseId, lifecycle_status: 'active', data: finData }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!file) {
       return new Response(JSON.stringify({ error: 'No file provided' }), {
@@ -2123,10 +2005,12 @@ serve(async (req) => {
     console.log(`[process_lease] Resolved workspace_id: ${resolvedWorkspaceId}`);
 
     if (!resolvedWorkspaceId) {
-      return jsonResponse(
-        { error: 'No workspace found. Please complete account setup before uploading.' },
-        400,
-        requestOrigin,
+      // NOTE: this file returns Response objects directly (jsonResponse is not
+      // imported here) — a prior `jsonResponse(...)` call ReferenceError'd this
+      // branch into a 500 and blocked `deno check`. Match the file's idiom.
+      return new Response(
+        JSON.stringify({ error: 'No workspace found. Please complete account setup before uploading.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 

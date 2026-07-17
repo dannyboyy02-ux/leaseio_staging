@@ -70,6 +70,7 @@ interface ChainStep {
   approver_role: string | null;
   is_required: boolean;
   status: string;
+  effective_assignee_user_id: string | null;
 }
 
 interface LeaseRow {
@@ -164,7 +165,19 @@ export default function SignatorReview() {
 
         if (leaseRow.lifecycle_status !== 'final_review') {
           if (!cancelled) {
-            setAuthError(t('approvals.signator.not_final_review'));
+            // P1-2 review (MEDIUM): distinguish "not there yet" from "already
+            // past it". A lease that has MOVED PAST final_review (counter-
+            // signature / executed / terminal) is not awaiting this signature —
+            // telling the user to wait "until it gets there" is misleading.
+            const preFinalReview = [
+              'draft', 'submitted', 'under_review',
+              'concept_submitted', 'concept_under_review', 'in_negotiation',
+            ].includes(leaseRow.lifecycle_status);
+            setAuthError(
+              preFinalReview
+                ? t('approvals.signator.not_final_review')
+                : t('approvals.signator.already_resolved'),
+            );
           }
           return;
         }
@@ -173,7 +186,7 @@ export default function SignatorReview() {
         const { data: stepRows, error: stepError } = await supabase
           .from('lease_approval_chain')
           .select(
-            'id, lease_id, workspace_id, stage, step_order, parallel_group, approver_user_id, approver_role, is_required, status',
+            'id, lease_id, workspace_id, stage, step_order, parallel_group, approver_user_id, approver_role, is_required, status, effective_assignee_user_id',
           )
           .eq('lease_id', leaseId!)
           .eq('stage', 'signator')
@@ -191,12 +204,36 @@ export default function SignatorReview() {
         if (cancelled) return;
         setStep(pendingStep);
 
-        // Authorization: assignee user OR holds the role
-        const isAssignedUser = pendingStep.approver_user_id === user!.id;
-        const holdsRole = pendingStep.approver_role
-          ? userFunctionalRoles.includes(pendingStep.approver_role as any)
-          : false;
-        if (!isAssignedUser && !holdsRole) {
+        // Authorization — MUST mirror act-on-chain-step / the queue, or a
+        // legitimate actor the queue routed here is refused (P1-2 review, HIGH).
+        // Precedence (Phase 7 exclusive delegation): the resolved effective
+        // assignee wins (admin reassign / voluntary / OOO / activated policy
+        // delegate all fold into effective_assignee_user_id); only when there is
+        // no effective assignee do the original assignee / role holder apply. An
+        // active voluntary delegation to this user also authorizes.
+        const effectiveAssignee = pendingStep.effective_assignee_user_id ?? null;
+        let authorized = false;
+        if (effectiveAssignee) {
+          authorized = effectiveAssignee === user!.id;
+        } else {
+          const isAssignedUser = pendingStep.approver_user_id === user!.id;
+          const holdsRole = pendingStep.approver_role
+            ? userFunctionalRoles.includes(pendingStep.approver_role as any)
+            : false;
+          authorized = isAssignedUser || holdsRole;
+        }
+        if (!authorized) {
+          // Fall back to an active voluntary delegation TO this user for the step.
+          const { data: vd } = await supabase
+            .from('chain_step_voluntary_delegations')
+            .select('id')
+            .eq('chain_step_id', pendingStep.id)
+            .eq('delegated_to', user!.id)
+            .is('revoked_at', null)
+            .limit(1);
+          authorized = ((vd as Array<{ id: string }> | null)?.length ?? 0) > 0;
+        }
+        if (!authorized) {
           if (!cancelled) {
             setAuthError(t('approvals.signator.not_authorized'));
           }

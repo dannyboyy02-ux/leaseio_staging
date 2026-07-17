@@ -137,6 +137,22 @@ serve(async (req) => {
         continue;
       }
 
+      // ── #164: PRESERVE leases in a Vault workspace ──────────────────────
+      // The Vault tier promises read-only retention. A lease soft-deleted while
+      // the workspace was live, then converted to Vault, must be KEPT (frozen,
+      // not hard-purged) — restore resumes when the workspace goes live again.
+      // Canceled/soft-deleted workspaces are purged wholesale by their own path,
+      // so only Vault needs this skip.
+      const { data: ws } = await admin
+        .from("workspaces")
+        .select("plan")
+        .eq("id", lease.workspace_id)
+        .maybeSingle();
+      if (ws?.plan === "vault") {
+        skipped++;
+        continue;
+      }
+
       // Snapshot the activity log BEFORE the CASCADE destroys it — this is the
       // attribution chain the forensic row must carry (integrity review CRITICAL).
       const { data: activityHistory } = await admin

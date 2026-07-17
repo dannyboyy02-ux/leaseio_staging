@@ -29,6 +29,8 @@ supabase/.temp/
 
 # Claude Code agent worktrees (transient scratch sandboxes)
 .claude/worktrees/
+# Local dev-server launch config for the preview tool (environment-specific)
+.claude/launch.json
 
 # Environment variables (never commit secrets)
 .env

@@ -70,7 +70,8 @@ function generateInviteToken(): string {
 // Strict hostname-suffix match to prevent origins like `lovable.app.evil.com`.
 const ALLOWED_ORIGINS = [
   'https://theleaseio.com', 'https://www.theleaseio.com', 'https://app.theleaseio.com',
-  'https://theleaseio.lovable.app', 'http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173',
+  'https://theleaseio.lovable.app', 'http://localhost:5173', 'http://localhost:3000',
+  'http://localhost:8080', 'http://localhost:8081', 'http://127.0.0.1:5173',
 ];
 const ALLOWED_HOST_SUFFIXES = ['.lovableproject.com', '.lovable.app', '.vercel.app'];
 

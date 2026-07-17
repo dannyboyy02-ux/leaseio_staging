@@ -11,6 +11,7 @@ import {
   FileText,
   ChevronRight,
   Undo2,
+  ShieldCheck,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -62,6 +63,7 @@ interface QueueLease {
   manager_approved_at: string | null;
   financial_approved_by: string | null;
   uploaded_at: string;
+  requestor_id?: string | null;
   requestorEmail?: string;
   requestorName?: string;
 }
@@ -301,11 +303,16 @@ function ChainStepCard({
   onActed: () => void;
 }) {
   const { t } = useAppTranslation();
+  const navigate = useNavigate();
   const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'send_back' | null>(null);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   // Phase 7: voluntary delegation modal
   const [delegateOpen, setDelegateOpen] = useState(false);
+  // P1-2: a signator step cannot be actioned inline — its Approve requires an
+  // intent-to-bind attestation that only the dedicated SignatorReview page
+  // collects (a bare queue "Approve" 400s server-side). Route to that page.
+  const isSignatorStep = step.stage === 'signator';
 
   // Visual tag distinguishing source — per the Phase 2 guard rail, makes
   // it obvious where each row came from when merged with legacy ones.
@@ -393,34 +400,51 @@ function ChainStepCard({
           </div>
 
           <div className="flex flex-wrap gap-2 pt-2 border-t">
-            <Button
-              size="sm"
-              onClick={() => submit('approve')}
-              disabled={busy}
-              className="flex-1 sm:flex-none"
-            >
-              {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-1" />}
-              {t('approval.approve')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setActionDialog('send_back')}
-              disabled={busy}
-              className="flex-1 sm:flex-none"
-            >
-              {t('approvals.signator.send_back')}
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => setActionDialog('reject')}
-              disabled={busy}
-              className="flex-1 sm:flex-none"
-            >
-              <XCircle className="h-4 w-4 mr-1" />
-              {t('approval.reject')}
-            </Button>
+            {isSignatorStep ? (
+              // Signator steps: one action that opens the attestation workbench,
+              // where approve (with intent-to-bind), send back, and reject all
+              // live with proper reason/attestation collection.
+              <Button
+                size="sm"
+                onClick={() => navigate(`/app/leases/${step.lease_id}/signator-review`)}
+                disabled={busy}
+                className="flex-1 sm:flex-none"
+              >
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                {t('approvals.queue.review_and_sign')}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => submit('approve')}
+                  disabled={busy}
+                  className="flex-1 sm:flex-none"
+                >
+                  {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-1" />}
+                  {t('approval.approve')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setActionDialog('send_back')}
+                  disabled={busy}
+                  className="flex-1 sm:flex-none"
+                >
+                  {t('approvals.signator.send_back')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setActionDialog('reject')}
+                  disabled={busy}
+                  className="flex-1 sm:flex-none"
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  {t('approval.reject')}
+                </Button>
+              </>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -452,7 +476,19 @@ function ChainStepCard({
         onDelegated={onActed}
       />
 
-      <Dialog open={actionDialog !== null} onOpenChange={(o) => !o && setActionDialog(null)}>
+      {/* P1-2 (j4-approver §40): clear `comment` whenever this reason dialog
+          closes — otherwise a typed-then-cancelled reject/send-back reason
+          survives in shared state and a later bare Approve would submit it as
+          the approval's audit comment. */}
+      <Dialog
+        open={actionDialog !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setActionDialog(null);
+            setComment('');
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -476,7 +512,14 @@ function ChainStepCard({
             />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setActionDialog(null)} disabled={busy}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setActionDialog(null);
+                setComment('');
+              }}
+              disabled={busy}
+            >
               {t('common.cancel')}
             </Button>
             <Button
@@ -730,16 +773,24 @@ export default function ApprovalQueue() {
         const chainPolicyIds = Array.from(
           new Set(chainSteps.map((s) => s.policy_id).filter((p): p is string => !!p)),
         );
-        const [{ data: chainLeases }, { data: chainPolicies }] = await Promise.all([
+        const [{ data: chainLeases }, { data: chainPolicies }, { data: allLeaseSteps }] = await Promise.all([
           supabase
             .from('leases')
             .select(
-              'id, request_title, requesting_department, asset_type, monthly_payment, calc_total_commitment',
+              'id, request_title, requesting_department, asset_type, monthly_payment, calc_total_commitment, lifecycle_status',
             )
             .in('id', chainLeaseIds),
           chainPolicyIds.length > 0
             ? supabase.from('approval_policies').select('id, sla_days').in('id', chainPolicyIds)
             : Promise.resolve({ data: [] as Array<{ id: string; sla_days: number | null }> }),
+          // P1-3 intra-stage frontier: fetch EVERY step for these leases (not
+          // just this user's), so we can tell whether an earlier required step
+          // in the same stage is still pending and this card should wait its
+          // turn. RLS lets a workspace member read all chain rows in-workspace.
+          supabase
+            .from('lease_approval_chain')
+            .select('lease_id, stage, step_order, is_required, status')
+            .in('lease_id', chainLeaseIds),
         ]);
         const leaseMap = new Map(
           (chainLeases ?? []).map((l: any) => [l.id, l]),
@@ -747,18 +798,60 @@ export default function ApprovalQueue() {
         const policySlaMap = new Map<string, number | null>(
           (chainPolicies ?? []).map((p: any): [string, number | null] => [p.id, p.sla_days ?? null]),
         );
-        hydratedChainSteps = chainSteps.map((s) => {
-          const l: any = leaseMap.get(s.lease_id) ?? {};
-          return {
-            ...s,
-            request_title: l.request_title ?? null,
-            requesting_department: l.requesting_department ?? null,
-            asset_type: l.asset_type ?? null,
-            monthly_payment: l.monthly_payment ?? null,
-            calc_total_commitment: l.calc_total_commitment ?? null,
-            slaDays: s.policy_id ? policySlaMap.get(s.policy_id) ?? null : null,
-          };
-        });
+        // lease_id → all its chain steps (for the sequential-frontier check).
+        const stepsByLease = new Map<string, Array<{ stage: string; step_order: number; is_required: boolean; status: string }>>();
+        for (const st of (allLeaseSteps ?? []) as Array<any>) {
+          const arr = stepsByLease.get(st.lease_id) ?? [];
+          arr.push({ stage: st.stage, step_order: st.step_order, is_required: !!st.is_required, status: st.status });
+          stepsByLease.set(st.lease_id, arr);
+        }
+        // A step waits its turn if an EARLIER required step in the SAME stage
+        // for the same lease is still pending. (Cross-stage ordering — signator
+        // vs concept — is handled by the lifecycle gate below, which also covers
+        // the in_negotiation gap the chain state alone would miss.)
+        const hasEarlierSameStageBlocker = (
+          leaseId: string, stage: string, stepOrder: number,
+        ): boolean => {
+          const siblings = stepsByLease.get(leaseId) ?? [];
+          return siblings.some(
+            (o) => o.stage === stage && o.is_required && o.status === 'pending' && o.step_order < stepOrder,
+          );
+        };
+        // P1-2/P1-3 stage-frontier filter for signator cards. A signator row is
+        // inserted 'pending' at initial submission, so without a gate the CFO
+        // sees an actionable "Final approval" card from day 1. The card routes to
+        // SignatorReview, which ONLY accepts lifecycle==='final_review' — so this
+        // is a positive ALLOWLIST, not a concept-phase blocklist: show a signator
+        // card exactly when the lease is at final_review. That hides both the
+        // premature (concept-phase) card AND the retro/terminal ones
+        // (chain_violation / rejected / cancelled / expired / executed) that
+        // would otherwise route to SignatorReview's "cannot proceed" dead-end
+        // (P1-2 review — integrity/auditor/polish, unanimous). Any post-reroute
+        // re-attestation is a separate flow SignatorReview doesn't yet support.
+        hydratedChainSteps = chainSteps
+          .filter((s) => {
+            if (s.stage === 'signator') {
+              const lc: string | null = (leaseMap.get(s.lease_id) as any)?.lifecycle_status ?? null;
+              if (lc !== 'final_review') return false;
+            }
+            // P1-3 sequential frontier: hold a card until earlier required steps
+            // in the same stage have acted (a step-2 approver no longer sees an
+            // actionable card while step-1 is still pending).
+            if (hasEarlierSameStageBlocker(s.lease_id, s.stage, s.step_order)) return false;
+            return true;
+          })
+          .map((s) => {
+            const l: any = leaseMap.get(s.lease_id) ?? {};
+            return {
+              ...s,
+              request_title: l.request_title ?? null,
+              requesting_department: l.requesting_department ?? null,
+              asset_type: l.asset_type ?? null,
+              monthly_payment: l.monthly_payment ?? null,
+              calc_total_commitment: l.calc_total_commitment ?? null,
+              slaDays: s.policy_id ? policySlaMap.get(s.policy_id) ?? null : null,
+            };
+          });
       }
       setPendingChainSteps(hydratedChainSteps);
 
@@ -1078,13 +1171,18 @@ export default function ApprovalQueue() {
       if (error) throw new Error(error.message ?? t('approvals.errors.rejection_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
 
-      if (lease.requestorEmail) {
+      if (lease.requestor_id) {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: null,
           activity_type: 'comment',
           details: {
             notification_type: 'notify_submitter_rejected',
+            // P1-4: recipient_ids is required — dispatch-notifications skips any
+            // row without it, so previously the requestor was never told their
+            // request was rejected. (Gate on requestor_id, not requestorEmail:
+            // dispatch resolves the email from the profile itself.)
+            recipient_ids: [lease.requestor_id],
             message: `Your request "${lease.request_title}" was rejected. Reason: ${rejectReason.trim()}`,
           },
         } as any);

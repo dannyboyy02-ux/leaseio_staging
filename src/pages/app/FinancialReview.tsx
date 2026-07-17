@@ -246,6 +246,10 @@ export default function FinancialReview() {
         activity_type: 'comment',
         details: {
           notification_type: 'notify_submitter_approved',
+          // P1-4: without recipient_ids, dispatch-notifications skips the row and
+          // the requestor never hears their own request's outcome. The requestor
+          // is the person to notify here.
+          recipient_ids: lease.requestor_id ? [lease.requestor_id] : [],
           message: `Your commitment request "${lease.request_title}" has been approved (${classification} lease).`,
           covenant_headroom: covenantHeadroom,
         },
@@ -288,6 +292,7 @@ export default function FinancialReview() {
           activity_type: 'comment',
           details: {
             notification_type: 'notify_submitter_returned',
+            recipient_ids: lease.requestor_id ? [lease.requestor_id] : [],
             message: `Your commitment request "${lease.request_title}" has been returned for revision. Reason: ${rejectReason.trim()}`,
           },
         } as any);
@@ -300,6 +305,7 @@ export default function FinancialReview() {
           activity_type: 'comment',
           details: {
             notification_type: 'notify_submitter_rejected',
+            recipient_ids: lease.requestor_id ? [lease.requestor_id] : [],
             message: `Your commitment request "${lease.request_title}" has been rejected. Reason: ${rejectReason.trim()}`,
           },
         } as any);

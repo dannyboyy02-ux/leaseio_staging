@@ -415,6 +415,34 @@ export default function LeaseReview() {
     if (targetTab) setActiveTab(targetTab);
   }, [lowConfidenceFields, interactedLowConfFields]);
 
+  // P1-1: for lifecycle states whose PRIMARY action lives in the Documents tab
+  // (negotiation upload/advance/send-back, counter-signature, violation
+  // override), land the user there on first load instead of the term-review
+  // "General" tab — terms were already confirmed at concept approval, so the
+  // documents workbench is the point of the page in these states. Runs once per
+  // lease load and never overrides a later manual tab switch.
+  const didDefaultDocsTabRef = useRef(false);
+  useEffect(() => {
+    if (didDefaultDocsTabRef.current) return;
+    const s = lease?.lifecycle_status;
+    if (!s) return;
+    didDefaultDocsTabRef.current = true;
+    // Only states whose primary action actually lives in the Documents tab:
+    // in_negotiation (upload/advance/send-back), pending_counter_signature
+    // (CounterSignaturePanel), chain_violation (ChainViolationBanner). NOT
+    // final_review — its primary action is the separate signator-review route,
+    // and its Documents tab shows history only (the negotiation buttons gate on
+    // lifecycleStatus === 'in_negotiation').
+    if (
+      s === 'in_negotiation' ||
+      s === 'pending_counter_signature' ||
+      s === 'chain_violation'
+    ) {
+      setActiveTab('documents');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lease?.lifecycle_status]);
+
   // Check approval state from extracted_json
   const approvalState = useMemo(() => {
     const extractedJson = lease?.extracted_json as ExtractedJson | null;
@@ -428,19 +456,58 @@ export default function LeaseReview() {
   // posted groups as their legacy equivalents via isEquivalent. 'active'
   // is identical in both vocabularies.
   const lifecycleStatusTyped = lifecycleStatus as LifecycleStatus | undefined;
-  const isIntakeStage = lifecycleStatusTyped != null && (
-    isEquivalent(lifecycleStatusTyped, 'submitted') ||
-    isEquivalent(lifecycleStatusTyped, 'under_review') ||
-    isEquivalent(lifecycleStatusTyped, 'approved')
-  );
+  // P1-1: 'in_negotiation' shares the post_concept_pre_signator group with
+  // legacy 'approved' (STATE_GROUPS), so isEquivalent(..,'approved') is true for
+  // it — but it is NOT an intake stage. It's the Phase 4 negotiation phase whose
+  // workbench (the Documents tab hosting DocumentsPanel: upload iteration, send
+  // back, advance to final review) lives in the main render below. Routing it to
+  // the intake early-return made the entire negotiation UI unreachable. Legacy
+  // 'approved' (executed-doc upload) legitimately stays on the intake view.
+  const isIntakeStage = lifecycleStatusTyped != null &&
+    lifecycleStatusTyped !== 'in_negotiation' && (
+      isEquivalent(lifecycleStatusTyped, 'submitted') ||
+      isEquivalent(lifecycleStatusTyped, 'under_review') ||
+      isEquivalent(lifecycleStatusTyped, 'approved')
+    );
 
   // Check status states
-  const isPendingApproval = false;
+  // P1-6: resurrect the nudge. This was hardcoded `false`, so the
+  // NudgeApproverButton (its only gate) never rendered — a requestor could never
+  // nudge a stalled approver. True when the lease is genuinely WAITING ON AN
+  // APPROVER: concept approval (submitted / concept_submitted), concept review
+  // (under_review / concept_under_review), or signator review (final_review).
+  // NOT in_negotiation (waits on the submitter) or pending_counter_signature
+  // (waits on the execution owner) — nudging an approver is meaningless there.
+  const isPendingApproval = lifecycleStatusTyped != null && (
+    isEquivalent(lifecycleStatusTyped, 'submitted') ||
+    isEquivalent(lifecycleStatusTyped, 'under_review') ||
+    lifecycleStatusTyped === 'final_review'
+  );
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lifecycleStatus === 'active';
   // Lock editing when approved, posted, or pending approval — and always for
   // read-only retention (Vault) workspaces, so every field renders view-only.
   const isLocked = isPosted || isPendingApproval || isApproved || isReadOnly;
+
+  // P1-1: chain post-concept states (negotiation / signature / counter-signature /
+  // exception) reach this workbench, but its intake "review the extracted terms →
+  // confirm sections → Approve" ceremony does NOT apply to them — the concept was
+  // already approved and the forward path lives in the Documents tab (or the
+  // signator-review route for final_review). Used to strip the intake-only chrome
+  // (header approve/reopen action, the section-progress status strip, the per-tab
+  // "Reviewed" footers, and the empty source-PDF split) for these states, so the
+  // page reads as a negotiation workbench, not a re-approval screen.
+  const isPostConceptChain =
+    lifecycleStatus === 'in_negotiation' ||
+    lifecycleStatus === 'final_review' ||
+    lifecycleStatus === 'pending_counter_signature' ||
+    lifecycleStatus === 'chain_violation';
+  // Journey fix: 'fully_executed' (the finalize screen) also gets the intake
+  // chrome stripped (no confirm-sections status strip, no empty Source-Document
+  // split, no per-tab Reviewed footers) — but NOT via isPostConceptChain, which
+  // nulls the header primary action; fully_executed KEEPS its "Finalize &
+  // activate" button (its own primaryAction branch below).
+  const isPostConceptChrome = isPostConceptChain || lifecycleStatus === 'fully_executed';
 
   // Active lease unlocked for staged editing
   const isUnlockedForEditing = isPosted && !lease?.model_locked && activeChangeSet?.status === 'draft' && !isReadOnly;
@@ -453,7 +520,13 @@ export default function LeaseReview() {
   // source PDF is reached via the Documents tab. Gating here cascades to the
   // panel render, sizing, the collapse control, jumpToPage, and the per-field
   // "View in document" affordance (so it never dead-ends without a panel).
-  const showPdfPanel = (lifecycleStatus !== 'active' || !lease?.model_locked) && isWide;
+  // P1-1: a chain post-concept lease has no source PDF in the `leases` bucket
+  // (its documents live in the Documents-tab timeline / lease_documents), so the
+  // left "Source Document" pane would render an empty "PDF unavailable" panel
+  // across half the workbench. Suppress the split for those states → full-width
+  // tabs; the negotiated documents are reached via the Documents tab.
+  const showPdfPanel =
+    (lifecycleStatus !== 'active' || !lease?.model_locked) && isWide && !isPostConceptChrome;
 
   // Approval gate: every AI-extracted section must be marked reviewed.
   // No more field-level "verified" carve-out — sections are the unit of
@@ -774,55 +847,39 @@ export default function LeaseReview() {
     }
   }, [lease, stageFile, user, t]);
 
-  const handleRunAbstraction = useCallback(async () => {
+  // P1-5: the chain path's missing last step. A counter-signed chain lease sits
+  // at 'fully_executed' with no AI abstraction and no route to 'active'. This is
+  // the human-triggered "Finalize & activate": process_lease 'finalize' mode
+  // abstracts the stored counter-signed document into the primary term columns,
+  // recomputes financials, and activates + model-locks the lease. (Replaces the
+  // old dead handleRunAbstraction hook, which minted a brand-new lease and was
+  // rendered nowhere.)
+  const handleFinalize = useCallback(async () => {
     if (!lease) return;
-
     setRunningAbstraction(true);
     try {
-      let fileToProcess = stageFile;
-
-      if (!fileToProcess && lease.storage_path) {
-        const { data: existingFile, error: downloadError } = await supabase.storage
-          .from('leases')
-          .download(lease.storage_path);
-        if (downloadError) throw downloadError;
-        fileToProcess = new File([existingFile], lease.filename || 'lease.pdf', { type: 'application/pdf' });
-      }
-
-      if (!fileToProcess) {
-        toast.error(t('lease_review.toasts.executed_doc_required'));
-        return;
-      }
-
       const formData = new FormData();
-      formData.append('file', fileToProcess);
-      formData.append('leaseType', lease.parent_lease_id ? 'amendment' : 'master');
-      if (lease.parent_lease_id) formData.append('parentLeaseId', lease.parent_lease_id);
-
+      formData.append('extractionMode', 'finalize');
+      formData.append('leaseId', lease.id);
       const { data, error } = await supabase.functions.invoke('process_lease', { body: formData });
-      if (error) throw error;
-
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user?.id || null,
-        activity_type: 'comment',
-        details: {
-          message: 'Abstraction triggered',
-          generated_lease_id: data?.leaseId || null,
-        },
-      });
-
-      toast.success(t('lease_review.toasts.abstraction_started'));
-      if (data?.leaseId) {
-        navigate(`/app/leases/${data.leaseId}`);
-      }
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(t('lease_review.toasts.finalize_success'));
+      // Refresh via refetchLease() — this component loads the lease with
+      // useEffect+setLease, NOT a ['lease', leaseId] query, so invalidateQueries
+      // would be a no-op and the page would stay on the stale fully_executed
+      // workbench instead of re-rendering the now-active locked detail. Mirrors
+      // handleModelLock. refetchLease is declared below, so it's called in the
+      // body but intentionally kept out of the deps array (TDZ).
+      refetchLease();
     } catch (error) {
-      console.error('Error running abstraction:', error);
-      toast.error(t('lease_review.toasts.abstraction_failed'));
+      console.error('Error finalizing lease:', error);
+      toast.error(error instanceof Error ? error.message : t('lease_review.toasts.finalize_failed'));
     } finally {
       setRunningAbstraction(false);
     }
-  }, [lease, navigate, stageFile, user?.id, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lease, t]);
 
   // Derived rent insights — prefer current period from schedule over the initial extracted value
   const derivedInsights = useMemo(() => {
@@ -2134,6 +2191,14 @@ export default function LeaseReview() {
             }
             actions={
               <div className="flex items-center gap-2">
+                {/* P1-6: the nudge, finally reachable. A requestor (or admin) can
+                    nudge the current pending approver when their request is
+                    waiting — this intake view is where they actually see the
+                    stalled request. send-nudge resolves the live approver + the
+                    server-side cooldown. */}
+                {isPendingApproval && (isRequestor || isAdminUser) && !isReadOnly && (
+                  <NudgeApproverButton leaseId={lease.id} lastNudgedAt={lease.last_nudged_at} />
+                )}
                 <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
                   {t('lease_review.intake.approval_queue')}
                   <ChevronRight className="h-4 w-4 ml-1" />
@@ -2767,6 +2832,29 @@ export default function LeaseReview() {
   const primaryAction: PrimaryAction = (() => {
     if (isReadOnly) return null; // Vault: view + export only, no mutating primary action
     if (isProcessing) return null;
+    // P1-1: chain post-concept states drive their workflow from the Documents
+    // tab (in_negotiation: upload/advance/send-back; pending_counter_signature:
+    // CounterSignaturePanel; chain_violation: ChainViolationBanner; final_review:
+    // the separate signator-review route). The legacy header approve/reopen/lock
+    // actions do NOT apply — and 'approved' here is a legacy _approval blob the
+    // chain flow never writes, so without this guard an in_negotiation lease
+    // would render a stray "Approve/Pending Review" button (server-rejected and
+    // confusing). No header primary action for these states.
+    if (isPostConceptChain) return null;
+    // P1-5: a counter-signed chain lease at 'fully_executed' — the missing last
+    // step. Offer "Finalize & activate": abstract the executed document into the
+    // primary terms and activate + model-lock the lease. This is the human-in-
+    // the-loop trigger for the AI abstraction the chain path otherwise never got.
+    if (lifecycleStatus === 'fully_executed') {
+      return {
+        label: t('lease_review.header.finalize_activate'),
+        icon: Lock,
+        onClick: handleFinalize,
+        loading: runningAbstraction,
+        variant: 'success',
+        tooltip: t('lease_review.header.finalize_tooltip'),
+      };
+    }
     if (isUnlockedDraft) return null; // handled by Cancel + Save Changes inline
     if (unreviewedLowConfCount > 0) {
       return {
@@ -2820,6 +2908,11 @@ export default function LeaseReview() {
   // deliberately don't duplicate it here.
   const renderTabFooter = (tabKey: string) => {
     if (lease?.model_locked || isReadOnly) return null;
+    // P1-1: no per-tab "Reviewed" confirm ceremony on a chain post-concept lease
+    // — its terms were confirmed at concept approval and may still be in flux
+    // during negotiation; these footers only feed the (now-suppressed) intake
+    // approve gate and reinforce the wrong mental model.
+    if (isPostConceptChrome) return null;
     const confirmed = isTabConfirmed(tabKey);
     const nextTab = REVIEW_TABS.find(
       (tab) => tab.key !== tabKey && !tab.sections.every((s) => confirmedSections.includes(s)),
@@ -2987,8 +3080,10 @@ export default function LeaseReview() {
                   </Button>
                 )}
 
-                {/* State-specific secondary — nudge when pending */}
-                {isPendingApproval && (
+                {/* State-specific secondary — nudge when pending (the workbench
+                    path covers final_review; the intake header covers the
+                    concept stages). P1-6: gated to the people who may nudge. */}
+                {isPendingApproval && (isRequestor || isAdminUser) && !isReadOnly && (
                   <NudgeApproverButton leaseId={lease.id} lastNudgedAt={lease.last_nudged_at} />
                 )}
 
@@ -3047,8 +3142,11 @@ export default function LeaseReview() {
         />
 
         {/* The status strip drives the review-and-approve workflow. Read-only
-            (Vault) workspaces have no such decision to make, so suppress it. */}
-        {!isReadOnly && (
+            (Vault) workspaces have no such decision to make, so suppress it.
+            P1-1: chain post-concept states (negotiation/signature/etc.) are past
+            that ceremony — the strip's "confirm sections → Ready to approve"
+            answer is wrong there; the forward path is in the Documents tab. */}
+        {!isReadOnly && !isPostConceptChrome && (
           <LeaseReviewStatusStrip
             isProcessing={isProcessing}
             modelLocked={!!lease.model_locked}

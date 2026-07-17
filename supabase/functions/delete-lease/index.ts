@@ -24,6 +24,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 const RETENTION_DAYS = 14;
 
@@ -96,7 +97,7 @@ serve(async (req) => {
   // ── Load the lease (service-role: also sees already-soft-deleted rows) ──
   const { data: lease, error: leaseErr } = await admin
     .from("leases")
-    .select("id, workspace_id, lifecycle_status, model_locked, archived, deleted_at, purge_after")
+    .select("id, workspace_id, lifecycle_status, model_locked, archived, deleted_at, purge_after, summary_share_token")
     .eq("id", leaseId)
     .maybeSingle();
   if (leaseErr) {
@@ -126,10 +127,33 @@ serve(async (req) => {
     );
   }
 
+  // ── #164: workspace-liveness gate (fail closed) ─────────────────────────
+  // Every other user-invokable mutator checks this; delete-lease was added
+  // 2026-06-25 (after the 2026-06-12 vault-v1 sweep) and missed it. Without the
+  // gate a Vault (read-only retention offramp) or canceled/soft-deleted-workspace
+  // admin could POST directly and PERMANENTLY destroy leases the Vault tier
+  // promises to preserve. Soft-delete is destructive (starts the 14-day purge
+  // clock), so a non-live workspace must not reach it.
+  const liveness = await checkWorkspaceLive(admin, lease.workspace_id);
+  if (!liveness.live) {
+    return jsonResponse(
+      { ok: false, error: "This workspace is read-only; leases can't be deleted.", reason: "subscription_inactive" },
+      403,
+      origin,
+    );
+  }
+
   const now = new Date();
   const purgeAfter = new Date(now.getTime() + RETENTION_DAYS * 24 * 60 * 60 * 1000);
 
   // ── Soft-delete (service-role UPDATE; bypasses the lock + retention guards) ──
+  // #165: also REVOKE the public no-login financial-summary link. Without this,
+  // a "permanently deleted" lease kept serving its PV/classification/rent
+  // summary at /share/:token for the full 14-day window (get-summary-by-token
+  // runs as service_role and bypasses the leases_hide_soft_deleted RLS). Nulling
+  // the token is the established revocation pattern (get-summary-by-token misses
+  // a null token; see its comment). Restore does NOT re-mint it — the owner can
+  // deliberately re-share a restored lease.
   const { error: updErr } = await admin
     .from("leases")
     .update({
@@ -137,6 +161,9 @@ serve(async (req) => {
       purge_after: purgeAfter.toISOString(),
       deleted_by: user.id,
       deletion_reason: reason,
+      summary_share_token: null,
+      summary_shared_at: null,
+      summary_share_token_expires_at: null,
     })
     .eq("id", leaseId)
     .is("deleted_at", null); // guard against a concurrent double-delete
@@ -159,6 +186,8 @@ serve(async (req) => {
       prior_lifecycle_status: lease.lifecycle_status,
       was_archived: lease.archived === true,
       model_locked: lease.model_locked === true,
+      // Accurate: only true when a public link actually existed to revoke.
+      public_summary_link_revoked: lease.summary_share_token != null,
     },
   });
   if (logErr) {

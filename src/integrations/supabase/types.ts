@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.1"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       alert_rules: {
@@ -115,7 +140,7 @@ export type Database = {
       approval_policies: {
         Row: {
           created_at: string
-          created_by: string
+          created_by: string | null
           description: string | null
           id: string
           is_active: boolean
@@ -129,14 +154,15 @@ export type Database = {
           name: string
           priority: number
           separation_of_duties_override: boolean | null
+          sla_days: number | null
           updated_at: string
-          updated_by: string
+          updated_by: string | null
           version: number
           workspace_id: string
         }
         Insert: {
           created_at?: string
-          created_by: string
+          created_by?: string | null
           description?: string | null
           id?: string
           is_active?: boolean
@@ -150,14 +176,15 @@ export type Database = {
           name: string
           priority?: number
           separation_of_duties_override?: boolean | null
+          sla_days?: number | null
           updated_at?: string
-          updated_by: string
+          updated_by?: string | null
           version?: number
           workspace_id: string
         }
         Update: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           description?: string | null
           id?: string
           is_active?: boolean
@@ -171,8 +198,9 @@ export type Database = {
           name?: string
           priority?: number
           separation_of_duties_override?: boolean | null
+          sla_days?: number | null
           updated_at?: string
-          updated_by?: string
+          updated_by?: string | null
           version?: number
           workspace_id?: string
         }
@@ -192,6 +220,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      billing_dead_letters: {
+        Row: {
+          amount_cents: number | null
+          attempt_count: number
+          claimed_workspace_id: string | null
+          created_at: string
+          id: string
+          last_seen_at: string
+          purchased_by: string | null
+          raw_metadata: Json
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          source: string
+          stripe_customer_id: string | null
+          stripe_event_id: string | null
+          stripe_object_id: string
+        }
+        Insert: {
+          amount_cents?: number | null
+          attempt_count?: number
+          claimed_workspace_id?: string | null
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          purchased_by?: string | null
+          raw_metadata?: Json
+          reason: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          source: string
+          stripe_customer_id?: string | null
+          stripe_event_id?: string | null
+          stripe_object_id: string
+        }
+        Update: {
+          amount_cents?: number | null
+          attempt_count?: number
+          claimed_workspace_id?: string | null
+          created_at?: string
+          id?: string
+          last_seen_at?: string
+          purchased_by?: string | null
+          raw_metadata?: Json
+          reason?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          source?: string
+          stripe_customer_id?: string | null
+          stripe_event_id?: string | null
+          stripe_object_id?: string
+        }
+        Relationships: []
       }
       cancellation_notices: {
         Row: {
@@ -243,7 +325,7 @@ export type Database = {
           lease_id: string
           override_action: string
           override_at: string
-          override_by: string
+          override_by: string | null
           override_reason: string
           prior_assignee_role: string | null
           prior_assignee_user_id: string | null
@@ -257,7 +339,7 @@ export type Database = {
           lease_id: string
           override_action: string
           override_at?: string
-          override_by: string
+          override_by?: string | null
           override_reason: string
           prior_assignee_role?: string | null
           prior_assignee_user_id?: string | null
@@ -271,7 +353,7 @@ export type Database = {
           lease_id?: string
           override_action?: string
           override_at?: string
-          override_by?: string
+          override_by?: string | null
           override_reason?: string
           prior_assignee_role?: string | null
           prior_assignee_user_id?: string | null
@@ -327,8 +409,8 @@ export type Database = {
         Row: {
           chain_step_id: string
           delegated_at: string
-          delegated_by: string
-          delegated_to: string
+          delegated_by: string | null
+          delegated_to: string | null
           id: string
           lease_id: string
           reason: string | null
@@ -339,8 +421,8 @@ export type Database = {
         Insert: {
           chain_step_id: string
           delegated_at?: string
-          delegated_by: string
-          delegated_to: string
+          delegated_by?: string | null
+          delegated_to?: string | null
           id?: string
           lease_id: string
           reason?: string | null
@@ -351,8 +433,8 @@ export type Database = {
         Update: {
           chain_step_id?: string
           delegated_at?: string
-          delegated_by?: string
-          delegated_to?: string
+          delegated_by?: string | null
+          delegated_to?: string | null
           id?: string
           lease_id?: string
           reason?: string | null
@@ -516,6 +598,54 @@ export type Database = {
         }
         Relationships: []
       }
+      deleted_leases: {
+        Row: {
+          deleted_at: string
+          deleted_by: string | null
+          details: Json | null
+          filename: string | null
+          id: string
+          lifecycle_status_at_deletion: string | null
+          model_locked_at_deletion: boolean | null
+          original_lease_id: string
+          purge_after: string | null
+          purged_at: string
+          request_title: string | null
+          storage_objects_purged: number
+          workspace_id: string | null
+        }
+        Insert: {
+          deleted_at: string
+          deleted_by?: string | null
+          details?: Json | null
+          filename?: string | null
+          id?: string
+          lifecycle_status_at_deletion?: string | null
+          model_locked_at_deletion?: boolean | null
+          original_lease_id: string
+          purge_after?: string | null
+          purged_at?: string
+          request_title?: string | null
+          storage_objects_purged?: number
+          workspace_id?: string | null
+        }
+        Update: {
+          deleted_at?: string
+          deleted_by?: string | null
+          details?: Json | null
+          filename?: string | null
+          id?: string
+          lifecycle_status_at_deletion?: string | null
+          model_locked_at_deletion?: boolean | null
+          original_lease_id?: string
+          purge_after?: string | null
+          purged_at?: string
+          request_title?: string | null
+          storage_objects_purged?: number
+          workspace_id?: string | null
+        }
+        Relationships: []
+      }
       deleted_workspaces: {
         Row: {
           deleted_at: string
@@ -606,7 +736,7 @@ export type Database = {
       executed_term_edits: {
         Row: {
           edited_at: string
-          edited_by: string
+          edited_by: string | null
           edited_value: string | null
           field_name: string
           id: string
@@ -616,7 +746,7 @@ export type Database = {
         }
         Insert: {
           edited_at?: string
-          edited_by: string
+          edited_by?: string | null
           edited_value?: string | null
           field_name: string
           id?: string
@@ -626,7 +756,7 @@ export type Database = {
         }
         Update: {
           edited_at?: string
-          edited_by?: string
+          edited_by?: string | null
           edited_value?: string | null
           field_name?: string
           id?: string
@@ -770,7 +900,7 @@ export type Database = {
           firm_id: string
           id: string
           invited_at: string
-          invited_by: string
+          invited_by: string | null
           revoked_at: string | null
           revoked_by: string | null
           role: string
@@ -784,7 +914,7 @@ export type Database = {
           firm_id: string
           id?: string
           invited_at?: string
-          invited_by: string
+          invited_by?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
           role: string
@@ -798,7 +928,7 @@ export type Database = {
           firm_id?: string
           id?: string
           invited_at?: string
-          invited_by?: string
+          invited_by?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
           role?: string
@@ -874,7 +1004,7 @@ export type Database = {
           message: string | null
           request_direction: string
           requested_at: string
-          requested_by: string
+          requested_by: string | null
           status: string
           workspace_id: string
         }
@@ -888,7 +1018,7 @@ export type Database = {
           message?: string | null
           request_direction: string
           requested_at?: string
-          requested_by: string
+          requested_by?: string | null
           status?: string
           workspace_id: string
         }
@@ -902,7 +1032,7 @@ export type Database = {
           message?: string | null
           request_direction?: string
           requested_at?: string
-          requested_by?: string
+          requested_by?: string | null
           status?: string
           workspace_id?: string
         }
@@ -1105,7 +1235,7 @@ export type Database = {
         Row: {
           action: string
           approval_type: string
-          approver_id: string
+          approver_id: string | null
           comment: string | null
           created_at: string
           id: string
@@ -1114,7 +1244,7 @@ export type Database = {
         Insert: {
           action: string
           approval_type: string
-          approver_id: string
+          approver_id?: string | null
           comment?: string | null
           created_at?: string
           id?: string
@@ -1123,7 +1253,7 @@ export type Database = {
         Update: {
           action?: string
           approval_type?: string
-          approver_id?: string
+          approver_id?: string | null
           comment?: string | null
           created_at?: string
           id?: string
@@ -1285,7 +1415,7 @@ export type Database = {
         Row: {
           approval_type: string
           approved_at: string | null
-          approver_id: string
+          approver_id: string | null
           created_at: string
           id: string
           lease_id: string
@@ -1293,7 +1423,7 @@ export type Database = {
         Insert: {
           approval_type: string
           approved_at?: string | null
-          approver_id: string
+          approver_id?: string | null
           created_at?: string
           id?: string
           lease_id: string
@@ -1301,7 +1431,7 @@ export type Database = {
         Update: {
           approval_type?: string
           approved_at?: string | null
-          approver_id?: string
+          approver_id?: string | null
           created_at?: string
           id?: string
           lease_id?: string
@@ -1643,7 +1773,7 @@ export type Database = {
           self_approved: boolean
           status: string
           submitted_at: string | null
-          submitted_by: string
+          submitted_by: string | null
           unlock_request_id: string | null
           updated_at: string
           workspace_id: string
@@ -1660,7 +1790,7 @@ export type Database = {
           self_approved?: boolean
           status?: string
           submitted_at?: string | null
-          submitted_by: string
+          submitted_by?: string | null
           unlock_request_id?: string | null
           updated_at?: string
           workspace_id: string
@@ -1677,7 +1807,7 @@ export type Database = {
           self_approved?: boolean
           status?: string
           submitted_at?: string | null
-          submitted_by?: string
+          submitted_by?: string | null
           unlock_request_id?: string | null
           updated_at?: string
           workspace_id?: string
@@ -1824,7 +1954,7 @@ export type Database = {
           superseded_at: string | null
           superseded_by: string | null
           uploaded_at: string
-          uploaded_by: string
+          uploaded_by: string | null
           version_number: number
           workspace_id: string
         }
@@ -1843,7 +1973,7 @@ export type Database = {
           superseded_at?: string | null
           superseded_by?: string | null
           uploaded_at?: string
-          uploaded_by: string
+          uploaded_by?: string | null
           version_number: number
           workspace_id: string
         }
@@ -1862,7 +1992,7 @@ export type Database = {
           superseded_at?: string | null
           superseded_by?: string | null
           uploaded_at?: string
-          uploaded_by?: string
+          uploaded_by?: string | null
           version_number?: number
           workspace_id?: string
         }
@@ -2273,7 +2403,7 @@ export type Database = {
           exclusion_reasons: Json
           expires_at: string | null
           generated_at: string
-          generated_by: string
+          generated_by: string | null
           id: string
           json_storage_path: string | null
           lease_count: number
@@ -2296,7 +2426,7 @@ export type Database = {
           exclusion_reasons?: Json
           expires_at?: string | null
           generated_at?: string
-          generated_by: string
+          generated_by?: string | null
           id?: string
           json_storage_path?: string | null
           lease_count?: number
@@ -2319,7 +2449,7 @@ export type Database = {
           exclusion_reasons?: Json
           expires_at?: string | null
           generated_at?: string
-          generated_by?: string
+          generated_by?: string | null
           id?: string
           json_storage_path?: string | null
           lease_count?: number
@@ -2558,7 +2688,7 @@ export type Database = {
           id: string
           lease_id: string
           request_reason: string
-          requested_by: string
+          requested_by: string | null
           review_note: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -2571,7 +2701,7 @@ export type Database = {
           id?: string
           lease_id: string
           request_reason: string
-          requested_by: string
+          requested_by?: string | null
           review_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -2584,7 +2714,7 @@ export type Database = {
           id?: string
           lease_id?: string
           request_reason?: string
-          requested_by?: string
+          requested_by?: string | null
           review_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -2657,6 +2787,9 @@ export type Database = {
           counter_signed_at: string | null
           covenant_flagged: boolean | null
           current_monthly_rent: number | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deletion_reason: string | null
           discount_rate: number | null
           discount_rate_basis: string | null
           discount_rate_set_at: string | null
@@ -2719,7 +2852,9 @@ export type Database = {
           notes: string | null
           parent_lease_id: string | null
           processed_at: string | null
+          processing_started_at: string | null
           property_address: string | null
+          purge_after: string | null
           region: string | null
           rejection_reason: string | null
           renewal_options: string | null
@@ -2752,7 +2887,7 @@ export type Database = {
           unlock_requested_by: string | null
           unlock_token_expires_at: string | null
           uploaded_at: string
-          user_id: string
+          user_id: string | null
           variance_commencement_days: number | null
           variance_expiry_days: number | null
           variance_landlord_name_match: boolean | null
@@ -2795,6 +2930,9 @@ export type Database = {
           counter_signed_at?: string | null
           covenant_flagged?: boolean | null
           current_monthly_rent?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deletion_reason?: string | null
           discount_rate?: number | null
           discount_rate_basis?: string | null
           discount_rate_set_at?: string | null
@@ -2857,7 +2995,9 @@ export type Database = {
           notes?: string | null
           parent_lease_id?: string | null
           processed_at?: string | null
+          processing_started_at?: string | null
           property_address?: string | null
+          purge_after?: string | null
           region?: string | null
           rejection_reason?: string | null
           renewal_options?: string | null
@@ -2890,7 +3030,7 @@ export type Database = {
           unlock_requested_by?: string | null
           unlock_token_expires_at?: string | null
           uploaded_at?: string
-          user_id: string
+          user_id?: string | null
           variance_commencement_days?: number | null
           variance_expiry_days?: number | null
           variance_landlord_name_match?: boolean | null
@@ -2933,6 +3073,9 @@ export type Database = {
           counter_signed_at?: string | null
           covenant_flagged?: boolean | null
           current_monthly_rent?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deletion_reason?: string | null
           discount_rate?: number | null
           discount_rate_basis?: string | null
           discount_rate_set_at?: string | null
@@ -2995,7 +3138,9 @@ export type Database = {
           notes?: string | null
           parent_lease_id?: string | null
           processed_at?: string | null
+          processing_started_at?: string | null
           property_address?: string | null
+          purge_after?: string | null
           region?: string | null
           rejection_reason?: string | null
           renewal_options?: string | null
@@ -3028,7 +3173,7 @@ export type Database = {
           unlock_requested_by?: string | null
           unlock_token_expires_at?: string | null
           uploaded_at?: string
-          user_id?: string
+          user_id?: string | null
           variance_commencement_days?: number | null
           variance_expiry_days?: number | null
           variance_landlord_name_match?: boolean | null
@@ -3113,6 +3258,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      notification_deliveries: {
+        Row: {
+          activity_log_id: string
+          channel: string
+          created_at: string
+          error: string | null
+          id: string
+          lease_id: string | null
+          recipient_user_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          activity_log_id: string
+          channel?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          lease_id?: string | null
+          recipient_user_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          activity_log_id?: string
+          channel?: string
+          created_at?: string
+          error?: string | null
+          id?: string
+          lease_id?: string | null
+          recipient_user_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_deliveries_activity_log_id_fkey"
+            columns: ["activity_log_id"]
+            isOneToOne: false
+            referencedRelation: "lease_activity_log"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -3577,7 +3766,7 @@ export type Database = {
       user_out_of_office: {
         Row: {
           created_at: string
-          delegate_user_id: string
+          delegate_user_id: string | null
           ends_at: string
           id: string
           is_active: boolean
@@ -3589,7 +3778,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          delegate_user_id: string
+          delegate_user_id?: string | null
           ends_at: string
           id?: string
           is_active?: boolean
@@ -3601,7 +3790,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          delegate_user_id?: string
+          delegate_user_id?: string | null
           ends_at?: string
           id?: string
           is_active?: boolean
@@ -4127,6 +4316,7 @@ export type Database = {
         Row: {
           addon_document_capacity: number
           approval_threshold: number | null
+          asset_type_abbreviations: Json
           asset_type_config: Json | null
           backdoor_enabled: boolean
           billing_interval: string
@@ -4172,6 +4362,7 @@ export type Database = {
         Insert: {
           addon_document_capacity?: number
           approval_threshold?: number | null
+          asset_type_abbreviations?: Json
           asset_type_config?: Json | null
           backdoor_enabled?: boolean
           billing_interval?: string
@@ -4217,6 +4408,7 @@ export type Database = {
         Update: {
           addon_document_capacity?: number
           approval_threshold?: number | null
+          asset_type_abbreviations?: Json
           asset_type_config?: Json | null
           backdoor_enabled?: boolean
           billing_interval?: string
@@ -4577,9 +4769,23 @@ export type Database = {
         Returns: boolean
       }
       audit_rls_smoke_check: { Args: never; Returns: Json }
+      canonical_asset_type: { Args: { p_value: string }; Returns: string }
       consume_lease_credit: {
         Args: { p_lease_id?: string; p_workspace_id: string }
         Returns: boolean
+      }
+      create_firm_workspace_locked: {
+        Args: {
+          p_firm_id: string
+          p_idempotency_key: string
+          p_name: string
+          p_owner_id: string
+        }
+        Returns: Json
+      }
+      create_first_workspace: {
+        Args: { p_intended_plan?: string; p_name: string }
+        Returns: string
       }
       create_workspace_locked: {
         Args: { p_idempotency_key: string; p_name: string; p_owner_id: string }
@@ -4640,6 +4846,24 @@ export type Database = {
         }
         Returns: Json
       }
+      reassign_departing_user_chain_steps: {
+        Args: { p_user_id: string }
+        Returns: number
+      }
+      record_billing_dead_letter: {
+        Args: {
+          p_amount_cents?: number
+          p_claimed_workspace_id?: string
+          p_purchased_by?: string
+          p_raw_metadata?: Json
+          p_reason: string
+          p_source: string
+          p_stripe_customer_id?: string
+          p_stripe_event_id?: string
+          p_stripe_object_id: string
+        }
+        Returns: undefined
+      }
       record_field_correction: {
         Args: {
           p_corrected_value: string
@@ -4650,6 +4874,14 @@ export type Database = {
           p_user_notes?: string
         }
         Returns: string
+      }
+      reroute_reconcile_chain_steps: {
+        Args: { p_new_rows: Json; p_superseded_ids: string[] }
+        Returns: undefined
+      }
+      set_workspace_roles: {
+        Args: { p_assignments: Json; p_workspace_id: string }
+        Returns: undefined
       }
       storage_total_bytes: { Args: never; Returns: number }
       transfer_workspace_ownership_locked: {
@@ -4789,6 +5021,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       subscription_plan: ["free", "starter", "pro", "business"],

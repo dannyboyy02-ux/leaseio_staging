@@ -147,7 +147,7 @@ serve(async (req) => {
   // ── Load lease + verify workspace access ───────────────────────────
   const { data: lease, error: leaseError } = await supabaseAdmin
     .from("leases")
-    .select("id, workspace_id")
+    .select("id, workspace_id, lifecycle_status, execution_owner_id")
     .eq("id", body.leaseId)
     .maybeSingle();
   if (leaseError) {
@@ -199,6 +199,22 @@ serve(async (req) => {
       .maybeSingle();
     const role = (memberRow as { role: string } | null)?.role;
     isWriter = role === "admin" || role === "editor";
+  }
+
+  // Journey fix: the execution owner (auto-assigned as the lease's requestor at
+  // signator approval — frequently a VIEWER-role department requester) is the
+  // person responsible for chasing the counter-signature, so they MUST be able
+  // to upload the counter-signed document even without editor rights. Scoped
+  // tightly: only that one document type, only while awaiting counter-signature,
+  // only by the assigned execution owner. Without this the whole
+  // pending_counter_signature → fully_executed → finalize path dead-ends.
+  if (
+    !isWriter &&
+    (lease as { execution_owner_id?: string | null }).execution_owner_id === user.id &&
+    (lease as { lifecycle_status?: string | null }).lifecycle_status === "pending_counter_signature" &&
+    body.documentType === "fully_executed_counterparty_returned"
+  ) {
+    isWriter = true;
   }
 
   if (!isWriter) {

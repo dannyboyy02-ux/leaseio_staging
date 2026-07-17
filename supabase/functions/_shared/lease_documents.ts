@@ -129,7 +129,11 @@ export function isDocumentTypeAllowed(
       return type === 'concept_attachment' || type === 'loi' || type === 'other';
     case 'in_negotiation':
     case 'approved': // legacy mapping for chain-mode equivalence
-      return ['draft', 'redline', 'counter_redline', 'loi', 'other'].includes(type);
+      // P1-1: 'final_negotiated' MUST be uploadable here — advance-to-final-review
+      // requires one to leave in_negotiation, but the type was previously only
+      // offered at 'final_review' (unreachable without it) → an unbreakable
+      // catch-22. Kept in lockstep with src/lib/leaseDocuments.ts.
+      return ['draft', 'redline', 'counter_redline', 'final_negotiated', 'loi', 'other'].includes(type);
     case 'final_review':
       return type === 'final_negotiated' || type === 'other';
     case 'pending_counter_signature':

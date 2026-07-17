@@ -457,7 +457,7 @@ export default function AccountSettings() {
     await proceedWithCheckout(planId);
   };
 
-  const proceedWithCheckout = async (planId: string) => {
+  const proceedWithCheckout = async (planId: string, intervalOverride?: 'monthly' | 'annual') => {
     if (!workspace?.id) {
       toast.error(t('account.checkout_no_workspace'));
       return;
@@ -467,8 +467,13 @@ export default function AccountSettings() {
     setConfirmUpgradePlan(null);
 
     try {
+      // autoCheckout fires before the `?billing=` → billingInterval state effect
+      // has necessarily run, so callers that know the interval (from the URL)
+      // pass it explicitly — otherwise an Annual selection silently checks out
+      // Monthly (journey walk).
+      const interval = intervalOverride ?? billingInterval;
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { planId, workspaceId: workspace.id, billingInterval },
+        body: { planId, workspaceId: workspace.id, billingInterval: interval },
       });
 
       if (error) {
@@ -549,7 +554,14 @@ export default function AccountSettings() {
     if ((workspace.subscriptionStatus === 'active' || workspace.subscriptionStatus === 'trialing')) return;
 
     setAutoCheckoutFired(true);
-    proceedWithCheckout('business');
+    // P0-h: the plan comes from the onboarding redirect (?plan=). Starter now
+    // also auto-fires checkout (was hardcoded 'business'). Default to starter.
+    const planParam = searchParams.get('plan');
+    const checkoutPlan = planParam === 'business' ? 'business' : 'starter';
+    // Read the interval straight from the URL — don't trust billingInterval
+    // state, which the sibling `?billing=` effect may not have applied yet.
+    const urlInterval = searchParams.get('billing') === 'annual' ? 'annual' : 'monthly';
+    proceedWithCheckout(checkoutPlan, urlInterval);
 
     const next = new URLSearchParams(searchParams);
     next.delete('autoCheckout');
@@ -1197,27 +1209,37 @@ export default function AccountSettings() {
                 </div>
               )}
 
-            {/* Abandoned-checkout recovery — user selected Business during signup
-                but never completed payment. Surfaces a way back into checkout. */}
-            {workspace?.intendedPlan === 'business' &&
-              workspace.plan !== 'business' &&
-              workspace.subscriptionStatus !== 'active' &&
-              workspace.subscriptionStatus !== 'trialing' && (
+            {/* P0-h — NEVER-SUBSCRIBED recovery. A workspace that never started a
+                subscription (signup checkout abandoned/canceled) is blocked from
+                processing by the no_subscription gate; without a visible CTA the
+                user is stranded (told they "have Starter" but can't do anything).
+                Fires for BOTH plans (was Business-only), starting the 7-day trial
+                for the user's intended plan (or the current plan). Hidden for
+                vault (its own reactivation surface) and cancellation grace (its
+                own banner). */}
+            {currentPlan !== 'vault' &&
+              !workspace?.canceledAt &&
+              workspace?.subscriptionStatus !== 'active' &&
+              workspace?.subscriptionStatus !== 'trialing' &&
+              !workspace?.subscriptionStatus && (() => {
+                const startPlan = workspace?.intendedPlan === 'business' ? 'business' : currentPlan;
+                return (
                 <div className="rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
                   <div>
-                    <p className="text-sm font-medium text-foreground">{t('account.recovery_callout_title')}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{t('account.recovery_callout_desc')}</p>
+                    <p className="text-sm font-medium text-foreground">{t('account.start_trial_callout_title')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('account.start_trial_callout_desc')}</p>
                   </div>
                   {isAdminUser ? (
-                    <Button size="sm" onClick={() => proceedWithCheckout('business')} disabled={isUpgrading === 'business'}>
-                      {isUpgrading === 'business' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      {t('account.recovery_callout_cta')}
+                    <Button size="sm" onClick={() => proceedWithCheckout(startPlan)} disabled={isUpgrading !== null}>
+                      {isUpgrading !== null ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      {t('account.start_trial_callout_cta')}
                     </Button>
                   ) : (
                     <p className="text-xs text-muted-foreground">{t('account.billing_admin_only')}</p>
                   )}
                 </div>
-              )}
+                );
+              })()}
 
             {/* Plan header — calm Claude-style summary. Vault swaps in its own
                 reactivation surface in place of the generic header. */}

@@ -18,6 +18,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 
 function corsHeaders(origin: string | null): Record<string, string> {
   return baseCorsHeaders(origin, "POST, OPTIONS");
@@ -109,6 +110,20 @@ serve(async (req) => {
   // ── Idempotent: not soft-deleted → already live ─────────────────────────
   if (!lease.deleted_at) {
     return jsonResponse({ ok: true, leaseId, alreadyLive: true }, 200, origin);
+  }
+
+  // ── #164: workspace-liveness gate (fail closed) ─────────────────────────
+  // A non-live workspace is frozen read-only: no mutations, including restore.
+  // In Vault the soft-deleted lease is PRESERVED (the retention cron skips it),
+  // so freezing restore isn't data loss — normal restore resumes once the
+  // workspace is live again. Mirror of the delete-lease gate.
+  const liveness = await checkWorkspaceLive(admin, lease.workspace_id);
+  if (!liveness.live) {
+    return jsonResponse(
+      { ok: false, error: "This workspace is read-only; leases can't be restored right now.", reason: "subscription_inactive" },
+      403,
+      origin,
+    );
   }
 
   const priorPurgeAfter = lease.purge_after;

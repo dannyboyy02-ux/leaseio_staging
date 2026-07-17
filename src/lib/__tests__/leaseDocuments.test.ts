@@ -139,7 +139,7 @@ describe('isDocumentTypeAllowed', () => {
     }
   });
 
-  it('in_negotiation (and legacy "approved" equivalent) allow draft / redline / counter_redline / loi / other', () => {
+  it('in_negotiation (and legacy "approved" equivalent) allow draft / redline / counter_redline / final_negotiated / loi / other', () => {
     const negotiationStates = ['in_negotiation', 'approved'];
     for (const state of negotiationStates) {
       expect(isDocumentTypeAllowed('draft', state)).toBe(true);
@@ -147,9 +147,12 @@ describe('isDocumentTypeAllowed', () => {
       expect(isDocumentTypeAllowed('counter_redline', state)).toBe(true);
       expect(isDocumentTypeAllowed('loi', state)).toBe(true);
       expect(isDocumentTypeAllowed('other', state)).toBe(true);
+      // P1-1: final_negotiated MUST be uploadable at in_negotiation — it is the
+      // document advance-to-final-review requires to leave the state. Offering it
+      // only at final_review (unreachable without it) was an unbreakable catch-22.
+      expect(isDocumentTypeAllowed('final_negotiated', state)).toBe(true);
       // Negative cases
       expect(isDocumentTypeAllowed('concept_attachment', state)).toBe(false);
-      expect(isDocumentTypeAllowed('final_negotiated', state)).toBe(false);
       expect(isDocumentTypeAllowed('our_signed', state)).toBe(false);
       expect(isDocumentTypeAllowed('fully_executed_counterparty_returned', state)).toBe(false);
       expect(isDocumentTypeAllowed('amendment', state)).toBe(false);

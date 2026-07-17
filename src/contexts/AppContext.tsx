@@ -111,7 +111,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const workspaceSelect =
-        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end, canceled_at, grace_expires_at, soft_deleted_at, firm_id";
+        "id, name, owner_id, plan, document_limit, addon_document_capacity, purchased_lease_credits, timezone, default_notification_days, created_at, updated_at, billing_interval, subscription_status, subscription_period_end, canceled_at, grace_expires_at, soft_deleted_at, firm_id, intended_plan";
 
       let resolvedWorkspace: WorkspaceRow | null = null;
       let resolvedRole: WorkspaceRole | "owner" | null = null;

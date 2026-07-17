@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
 import { supabase } from "@/integrations/supabase/client";
 import { getStripe } from "@/lib/stripe";
+import { confirmSavedMethodPayment } from "@/lib/stripeConfirm";
 import { useApp } from "@/contexts/AppContext";
 
 // New-workspace dialog + confirmation modal — the money-stakes UX for the
@@ -28,7 +29,7 @@ import { useApp } from "@/contexts/AppContext";
 // must NOT be relaxed without re-routing through the reviewers):
 //   • idempotencyKey lives in a useRef initialized at modal-open — never in
 //     localStorage/sessionStorage, never regenerated per click.
-//   • clientSecret is cleared from state immediately after confirmCardPayment
+//   • clientSecret is cleared from state immediately after payment confirmation
 //     resolves; we never log the response body of `create-workspace`.
 //   • Modal becomes non-dismissable (Esc + overlay-click) during the in-flight
 //     payment window (confirm → 3DS → activating). The browser back/tab-close
@@ -37,7 +38,7 @@ import { useApp } from "@/contexts/AppContext";
 //   • Activation polling targets a narrow SELECT on the new workspace's
 //     subscription_status (the original AppContext.fetchProfile target literally
 //     could not observe activation — availableWorkspaces selects only id/name/plan).
-//   • On confirmCardPayment error, we call stripe.retrievePaymentIntent FIRST
+//   • On payment confirmation error, we call stripe.retrievePaymentIntent FIRST
 //     and only call mode:'cancel' when the PI is genuinely not succeeded —
 //     avoids tearing down a workspace whose payment actually completed.
 //   • Branch-aware timeout copy: PI succeeded but webhook lagged → "almost
@@ -49,7 +50,7 @@ type DialogStep =
   | "preview"       // step 1 → 2 in-flight (calling preview)
   | "confirm"       // step 2 — consent modal
   | "confirming"    // step 2 in-flight (server confirm + Stripe sub create)
-  | "three_ds"      // confirmCardPayment running
+  | "three_ds"      // payment confirmation running
   | "activating"    // PI succeeded; polling for the webhook entitlement flip
   | "activated"     // success — Switch to it / Stay here
   | "timeout_paid"  // 30s timeout, but PI did succeed (webhook lag)
@@ -62,9 +63,9 @@ type DialogStep =
 // the user out of the acknowledge panel.
 type AckState =
   | "loading"   // eligibility call in flight
-  | "ready"     // Business + card + under cap → show the price gate
+  | "ready"     // Business + saved method + under cap → show the price gate
   | "starter"   // not on Business → route to upgrade
-  | "no_card"   // no card / no Stripe customer → route to billing
+  | "no_card"   // no saved payment method (any type) / no Stripe customer → route to billing
   | "cap"       // at the workspace cap → informational
   | "error";    // eligibility call failed
 
@@ -76,8 +77,9 @@ interface ErrorState {
 }
 
 interface PreviewData {
-  cardLast4: string | null;
-  cardBrand: string | null;
+  /** Human label for the saved method of ANY type ("Visa •••• 4242",
+   * "Stripe Link (a@b.com)") — #161. */
+  methodLabel: string | null;
   priceMonthly: number;
   chargedToday: number;
   count: number;
@@ -115,7 +117,7 @@ const POLL_TIMEOUT_MS = 30000;
 
 // Per-device suppression of the price-awareness gate. Stored in localStorage,
 // NOT a profile column: this is an awareness nag, not legal consent — the
-// binding consent (the confirm step, with the real card + exact charge) is
+// binding consent (the confirm step, with the real payment method + exact charge) is
 // never suppressible and always renders. A new device legitimately re-shows
 // the awareness gate. Only ever set by an eligible Business owner.
 export const ACK_SUPPRESS_KEY = "workspace_create_acknowledge_dismissed";
@@ -271,9 +273,9 @@ export function NewWorkspaceDialog({
         return;
       }
       if (resp.eligible === true) {
-        // Eligibility only — do NOT cache card details here. The binding confirm
+        // Eligibility only — do NOT cache payment-method details here. The binding confirm
         // panel re-fetches via runPreview() at name → confirm so the card it
-        // shows is the live default card, never a stale snapshot from this gate.
+        // shows is the live default method, never a stale snapshot from this gate.
         setAckState("ready");
         return;
       }
@@ -285,6 +287,7 @@ export function NewWorkspaceDialog({
           break;
         case "no_card_on_file":
         case "no_customer":
+        case "deferred_method_unsupported":
           setAckState("no_card");
           break;
         case "cap_reached":
@@ -331,8 +334,7 @@ export function NewWorkspaceDialog({
         ok: boolean;
         eligible?: boolean;
         reason?: string | null;
-        cardLast4?: string | null;
-        cardBrand?: string | null;
+        methodLabel?: string | null;
         priceMonthly?: number;
         chargedToday?: number;
         count?: number;
@@ -352,8 +354,7 @@ export function NewWorkspaceDialog({
         setCreatedWorkspaceId(resp.resume.workspaceId);
         setName(resp.resume.name);
         setPreview({
-          cardLast4: resp.cardLast4 ?? null,
-          cardBrand: resp.cardBrand ?? null,
+          methodLabel: resp.methodLabel ?? null,
           priceMonthly: resp.priceMonthly ?? 499,
           chargedToday: resp.chargedToday ?? 499,
           count: resp.count ?? 0,
@@ -372,8 +373,7 @@ export function NewWorkspaceDialog({
         return;
       }
       setPreview({
-        cardLast4: resp.cardLast4 ?? null,
-        cardBrand: resp.cardBrand ?? null,
+        methodLabel: resp.methodLabel ?? null,
         priceMonthly: resp.priceMonthly ?? 499,
         chargedToday: resp.chargedToday ?? 499,
         count: resp.count ?? 0,
@@ -397,7 +397,7 @@ export function NewWorkspaceDialog({
     if (isResume) {
       // Resume path — workspace + subscription already exist. The preview call
       // populated clientSecretRef + createdWorkspaceId. Skip the server confirm
-      // (a re-call would create a duplicate sub) and drive confirmCardPayment
+      // (a re-call would create a duplicate sub) and drive payment confirmation
       // directly on the existing PI.
       if (!createdWorkspaceId || !clientSecretRef.current) {
         setError({ reason: "resume_unavailable" });
@@ -406,7 +406,7 @@ export function NewWorkspaceDialog({
       }
       workspaceId = createdWorkspaceId;
       clientSecret = clientSecretRef.current;
-      piStatus = null; // unknown — let the confirmCardPayment branch handle it
+      piStatus = null; // unknown — let the payment confirmation branch handle it
     } else {
       // 1) Server: create the workspace + an incomplete subscription, return
       //    the PaymentIntent client_secret. We deliberately do not log `data`.
@@ -453,7 +453,7 @@ export function NewWorkspaceDialog({
       return;
     }
 
-    // 3) Otherwise we need confirmCardPayment to drive the PI to succeeded.
+    // 3) Otherwise we need payment confirmation to drive the PI to succeeded.
     if (!clientSecret) {
       setError({ reason: "stripe_error", message: "Missing PaymentIntent client_secret" });
       setStep("error");
@@ -473,7 +473,7 @@ export function NewWorkspaceDialog({
       return;
     }
 
-    const confirmResult = await stripe.confirmCardPayment(clientSecret);
+    const confirmResult = await confirmSavedMethodPayment(stripe, clientSecret);
 
     if (confirmResult.error) {
       // Recovery discipline: re-fetch the PI before deciding to cancel — a
@@ -551,7 +551,7 @@ export function NewWorkspaceDialog({
     if (aborted) return;
 
     // Timeout — branch the copy honestly: did the PI actually succeed?
-    // clientSecretRef is null by now (we cleared after confirmCardPayment);
+    // clientSecretRef is null by now (we cleared after payment confirmation);
     // infer "paid" from workspace state instead — any non-NULL, non-incomplete
     // subscription_status is evidence the Stripe webhook is en route.
     let paid = false;
@@ -608,8 +608,8 @@ export function NewWorkspaceDialog({
       >
         {/* Step 0 — price-awareness gate. Fires before the name step so the
             owner learns the money stake before investing in a name. NOT the
-            binding consent: the confirm step still shows the real card + exact
-            charge and is never suppressible. */}
+            binding consent: the confirm step still shows the real payment method
+            + exact charge and is never suppressible. */}
         {step === "acknowledge" ? (
           ackState === "loading" ? (
             <>
@@ -801,8 +801,7 @@ export function NewWorkspaceDialog({
               <li>
                 •{" "}
                 {t("workspace.create.confirm_bullet_recurring", {
-                  brand: preview.cardBrand ?? "card",
-                  last4: preview.cardLast4 ?? "••••",
+                  method: preview.methodLabel ?? t("workspace.create.method_on_file_fallback"),
                 })}
               </li>
               <li>• {t("workspace.create.confirm_bullet_quota")}</li>
@@ -936,6 +935,7 @@ function ErrorPane({
       bodyKey = "workspace.create.error_cap_reached_body";
       break;
     case "no_card_on_file":
+    case "deferred_method_unsupported":
       titleKey = "workspace.create.error_no_card_title";
       bodyKey = "workspace.create.error_no_card_body";
       primaryHref = "/app/settings/account?tab=billing";
