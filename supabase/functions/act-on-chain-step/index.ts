@@ -245,57 +245,6 @@ serve(async (req) => {
     );
   }
 
-  // P1-2: lifecycle gate. The step's status being 'pending' is not enough — a
-  // signator row is inserted 'pending' at initial submission, so without this a
-  // signator could reject/send-back a lease that hasn't even been concept-approved
-  // (queue showed the card from day 1). Load the lease lifecycle and gate:
-  //   (a) no action of any kind on a terminal lease;
-  //   (b) signator-stage actions require the lease to have reached the signature
-  //       phase — before that (concept review / negotiation) the signator stage
-  //       has not begun. Retroactive states (chain_violation and the executed
-  //       states) are intentionally NOT blocked here — that reroute path is
-  //       governed separately.
-  const { data: lifecycleRow } = await supabaseAdmin
-    .from("leases")
-    .select("lifecycle_status")
-    .eq("id", step.lease_id)
-    .maybeSingle();
-  const leaseLifecycle =
-    (lifecycleRow as { lifecycle_status?: string | null } | null)?.lifecycle_status ?? null;
-  if (leaseLifecycle && ["rejected", "cancelled", "expired"].includes(leaseLifecycle)) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: `This lease is ${leaseLifecycle} — no further approval actions can be taken.`,
-      },
-      409,
-      origin,
-    );
-  }
-  const CONCEPT_PHASE_LIFECYCLES = [
-    "draft",
-    "submitted",
-    "under_review",
-    "concept_submitted",
-    "concept_under_review",
-    "in_negotiation",
-  ];
-  if (
-    step.stage === "signator" &&
-    leaseLifecycle &&
-    CONCEPT_PHASE_LIFECYCLES.includes(leaseLifecycle)
-  ) {
-    return jsonResponse(
-      {
-        ok: false,
-        error:
-          "This lease hasn't reached signature review yet. The signature step becomes available once the lease is advanced to Final Review.",
-      },
-      409,
-      origin,
-    );
-  }
-
   // Phase 5: signator approve requires a non-empty attestation.
   // Defense-in-depth alongside the row-level CHECK on
   // leases.signator_attestation_required (which rejects the lease
@@ -405,6 +354,58 @@ serve(async (req) => {
     return jsonResponse(
       { ok: false, error: "Forbidden: you are not authorized to act on this step." },
       403,
+      origin,
+    );
+  }
+
+  // P1-2 lifecycle gate (placed AFTER authz so it never discloses lease state to
+  // an unauthorized caller — P1-2 review, security). The step being 'pending' is
+  // not enough: a signator row is inserted 'pending' at initial submission, so a
+  // signator could otherwise reject/send-back a lease that hasn't even been
+  // concept-approved. Gate:
+  //   (a) no action of any kind on a terminal lease;
+  //   (b) signator-stage actions require the lease to have reached the signature
+  //       phase — before that (concept review / negotiation) the signator stage
+  //       has not begun. Retroactive states (chain_violation and the executed
+  //       states) are intentionally NOT blocked here — that reroute path is
+  //       governed separately.
+  const { data: lifecycleRow } = await supabaseAdmin
+    .from("leases")
+    .select("lifecycle_status")
+    .eq("id", step.lease_id)
+    .maybeSingle();
+  const leaseLifecycle =
+    (lifecycleRow as { lifecycle_status?: string | null } | null)?.lifecycle_status ?? null;
+  if (leaseLifecycle && ["rejected", "cancelled", "expired"].includes(leaseLifecycle)) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: `This lease is ${leaseLifecycle} — no further approval actions can be taken.`,
+      },
+      409,
+      origin,
+    );
+  }
+  const CONCEPT_PHASE_LIFECYCLES = [
+    "draft",
+    "submitted",
+    "under_review",
+    "concept_submitted",
+    "concept_under_review",
+    "in_negotiation",
+  ];
+  if (
+    step.stage === "signator" &&
+    leaseLifecycle &&
+    CONCEPT_PHASE_LIFECYCLES.includes(leaseLifecycle)
+  ) {
+    return jsonResponse(
+      {
+        ok: false,
+        error:
+          "This lease hasn't reached signature review yet. The signature step becomes available once the lease is advanced to Final Review.",
+      },
+      409,
       origin,
     );
   }

@@ -772,7 +772,7 @@ export default function ApprovalQueue() {
         const chainPolicyIds = Array.from(
           new Set(chainSteps.map((s) => s.policy_id).filter((p): p is string => !!p)),
         );
-        const [{ data: chainLeases }, { data: chainPolicies }] = await Promise.all([
+        const [{ data: chainLeases }, { data: chainPolicies }, { data: allLeaseSteps }] = await Promise.all([
           supabase
             .from('leases')
             .select(
@@ -782,6 +782,14 @@ export default function ApprovalQueue() {
           chainPolicyIds.length > 0
             ? supabase.from('approval_policies').select('id, sla_days').in('id', chainPolicyIds)
             : Promise.resolve({ data: [] as Array<{ id: string; sla_days: number | null }> }),
+          // P1-3 intra-stage frontier: fetch EVERY step for these leases (not
+          // just this user's), so we can tell whether an earlier required step
+          // in the same stage is still pending and this card should wait its
+          // turn. RLS lets a workspace member read all chain rows in-workspace.
+          supabase
+            .from('lease_approval_chain')
+            .select('lease_id, stage, step_order, is_required, status')
+            .in('lease_id', chainLeaseIds),
         ]);
         const leaseMap = new Map(
           (chainLeases ?? []).map((l: any) => [l.id, l]),
@@ -789,21 +797,47 @@ export default function ApprovalQueue() {
         const policySlaMap = new Map<string, number | null>(
           (chainPolicies ?? []).map((p: any): [string, number | null] => [p.id, p.sla_days ?? null]),
         );
-        // P1-2: stage-frontier filter. A signator row is inserted 'pending' at
-        // initial submission, so without this the CFO sees an actionable "Final
-        // approval" card from day 1 (and clicking it 400s server-side). Mirror
-        // the act-on-chain-step lifecycle guard: hide a signator step while the
-        // lease is still in the concept/negotiation phase — it becomes actionable
-        // only once advanced to Final Review (or a retro/executed state).
-        const CONCEPT_PHASE_LIFECYCLES = new Set([
-          'draft', 'submitted', 'under_review',
-          'concept_submitted', 'concept_under_review', 'in_negotiation',
-        ]);
+        // lease_id → all its chain steps (for the sequential-frontier check).
+        const stepsByLease = new Map<string, Array<{ stage: string; step_order: number; is_required: boolean; status: string }>>();
+        for (const st of (allLeaseSteps ?? []) as Array<any>) {
+          const arr = stepsByLease.get(st.lease_id) ?? [];
+          arr.push({ stage: st.stage, step_order: st.step_order, is_required: !!st.is_required, status: st.status });
+          stepsByLease.set(st.lease_id, arr);
+        }
+        // A step waits its turn if an EARLIER required step in the SAME stage
+        // for the same lease is still pending. (Cross-stage ordering — signator
+        // vs concept — is handled by the lifecycle gate below, which also covers
+        // the in_negotiation gap the chain state alone would miss.)
+        const hasEarlierSameStageBlocker = (
+          leaseId: string, stage: string, stepOrder: number,
+        ): boolean => {
+          const siblings = stepsByLease.get(leaseId) ?? [];
+          return siblings.some(
+            (o) => o.stage === stage && o.is_required && o.status === 'pending' && o.step_order < stepOrder,
+          );
+        };
+        // P1-2/P1-3 stage-frontier filter for signator cards. A signator row is
+        // inserted 'pending' at initial submission, so without a gate the CFO
+        // sees an actionable "Final approval" card from day 1. The card routes to
+        // SignatorReview, which ONLY accepts lifecycle==='final_review' — so this
+        // is a positive ALLOWLIST, not a concept-phase blocklist: show a signator
+        // card exactly when the lease is at final_review. That hides both the
+        // premature (concept-phase) card AND the retro/terminal ones
+        // (chain_violation / rejected / cancelled / expired / executed) that
+        // would otherwise route to SignatorReview's "cannot proceed" dead-end
+        // (P1-2 review — integrity/auditor/polish, unanimous). Any post-reroute
+        // re-attestation is a separate flow SignatorReview doesn't yet support.
         hydratedChainSteps = chainSteps
           .filter((s) => {
-            if (s.stage !== 'signator') return true;
-            const lc: string | null = (leaseMap.get(s.lease_id) as any)?.lifecycle_status ?? null;
-            return !lc || !CONCEPT_PHASE_LIFECYCLES.has(lc);
+            if (s.stage === 'signator') {
+              const lc: string | null = (leaseMap.get(s.lease_id) as any)?.lifecycle_status ?? null;
+              if (lc !== 'final_review') return false;
+            }
+            // P1-3 sequential frontier: hold a card until earlier required steps
+            // in the same stage have acted (a step-2 approver no longer sees an
+            // actionable card while step-1 is still pending).
+            if (hasEarlierSameStageBlocker(s.lease_id, s.stage, s.step_order)) return false;
+            return true;
           })
           .map((s) => {
             const l: any = leaseMap.get(s.lease_id) ?? {};

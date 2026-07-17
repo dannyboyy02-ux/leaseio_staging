@@ -28,10 +28,12 @@ describe('P1-2 — the queue routes signator steps to SignatorReview', () => {
     expect(q).toMatch(/navigate\(`\/app\/leases\/\$\{step\.lease_id\}\/signator-review`\)/);
     expect(q).toContain("approvals.queue.review_and_sign");
   });
-  it('filters premature signator cards while the lease is still pre-signature', () => {
-    expect(q).toContain('CONCEPT_PHASE_LIFECYCLES');
-    // The queue now selects the lease lifecycle and filters signator steps on it.
+  it('shows a signator card ONLY when the lease is at final_review (allowlist)', () => {
+    // P1-2 review consensus: a concept-phase blocklist still surfaced retro/
+    // terminal signator cards that dead-end at SignatorReview's final_review gate.
+    // The queue now shows a signator card exactly at final_review.
     expect(q).toContain('calc_total_commitment, lifecycle_status');
+    expect(q).toMatch(/s\.stage === 'signator'[\s\S]{0,160}lc !== 'final_review'/);
     expect(q).toMatch(/chainSteps\s*\.filter\(/);
   });
   it('clears the shared reason comment when the reject/send-back dialog closes', () => {

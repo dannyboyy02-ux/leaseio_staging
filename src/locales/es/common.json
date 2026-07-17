@@ -4073,6 +4073,7 @@
       "title": "Revisión Final",
       "lease_not_found": "Arrendamiento no encontrado",
       "not_final_review": "Este arrendamiento aún no está en la etapa de revisión final — no puede revisarse aquí hasta que llegue a ella.",
+      "already_resolved": "Este arrendamiento ya pasó la revisión de firma — ya no espera su firma.",
       "no_pending_step": "No existe un paso de firmante pendiente para este arrendamiento. La etapa de firmante puede haberse resuelto ya o aún no haberse creado.",
       "not_authorized": "No está autorizado para actuar en este paso de firmante.",
       "load_failed": "No se pudo cargar la revisión del firmante",

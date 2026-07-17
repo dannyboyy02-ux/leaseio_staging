@@ -4073,6 +4073,7 @@
       "title": "Final Review",
       "lease_not_found": "Lease not found",
       "not_final_review": "This lease isn't at the final-review stage yet — it can't be reviewed here until it gets there.",
+      "already_resolved": "This lease has already moved past signature review — it's no longer awaiting your signature.",
       "no_pending_step": "No pending signator step exists for this lease. The signator stage may have already been resolved or not yet inserted.",
       "not_authorized": "You are not authorized to act on this signator step.",
       "load_failed": "Failed to load signator review",

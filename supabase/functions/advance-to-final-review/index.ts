@@ -322,23 +322,69 @@ serve(async (req) => {
     triggering_document_id: triggeringDoc.id,
   });
 
-  // Phase 7: pending_since marks "what we're waiting on now." When the
-  // lease enters final_review, the signator chain rows (inserted at
-  // initial resolution but pending_since=null since they weren't
-  // active blockers yet) become the active blocker. Set pending_since
-  // on the lowest-step_order required signator rows.
-  const { data: signatorRows } = await supabaseAdmin
+  // Activate the signator stage for final_review. The signator rows were
+  // inserted at initial resolution. Normally they are still 'pending' (never
+  // acted) and we just set pending_since on the lowest required step_order.
+  //
+  // P1-3 (send-back re-advance strand fix): if a PRIOR signator send-back
+  // consumed the stage, those rows are now 'sent_back' (the acted step) /
+  // 'superseded' (siblings) — there are NO pending signator rows, and the
+  // old code did nothing, leaving the lease at final_review with zero
+  // actionable signator steps (SignatorReview shows "no pending step"). The
+  // engine has no other path that ever re-creates a signator row. Here we
+  // REACTIVATE the dormant signator rows in place (same assignees), clearing
+  // the prior action state, so re-advance always yields a fresh, actionable
+  // signator stage.
+  const { data: sigRowsAll } = await supabaseAdmin
     .from("lease_approval_chain")
-    .select("id, step_order")
+    .select("id, step_order, status, is_required")
     .eq("lease_id", lease.id)
-    .eq("stage", "signator")
-    .eq("status", "pending")
-    .eq("is_required", true)
-    .is("pending_since", null);
-  const sigRows = (signatorRows ?? []) as Array<{ id: string; step_order: number }>;
-  if (sigRows.length > 0) {
-    const minOrder = Math.min(...sigRows.map((r) => r.step_order));
-    const ids = sigRows.filter((r) => r.step_order === minOrder).map((r) => r.id);
+    .eq("stage", "signator");
+  const allSig = (sigRowsAll ?? []) as Array<{
+    id: string;
+    step_order: number;
+    status: string;
+    is_required: boolean;
+  }>;
+  let reactivatedSignator = false;
+  let liveSig = allSig.filter((r) => r.status === "pending");
+  if (liveSig.length === 0) {
+    const dormant = allSig.filter(
+      (r) => r.status === "sent_back" || r.status === "superseded",
+    );
+    if (dormant.length > 0) {
+      await supabaseAdmin
+        .from("lease_approval_chain")
+        .update({
+          status: "pending",
+          action_at: null,
+          action_by: null,
+          comment: null,
+          pending_since: null,
+          // Restore a CLEAN pending round: clear the prior round's resolved
+          // delegate/OOO assignment and re-arm the delegate timer, so the row
+          // reverts to its original assignee (approver_user_id / approver_role —
+          // the queue + act-on-chain-step fall back to these when
+          // effective_assignee is null) and delegation re-resolves from CURRENT
+          // OOO state. A re-negotiation can be weeks later, so a stale prior
+          // delegate must not silently own the new round. The policy config
+          // (delegate_user_id / delegate_after_days / approver_*) is preserved.
+          delegate_activated_at: null,
+          effective_assignee_user_id: null,
+          assignee_resolution_source: null,
+        })
+        .in("id", dormant.map((r) => r.id));
+      reactivatedSignator = true;
+      liveSig = dormant.map((r) => ({ ...r, status: "pending" }));
+    }
+  }
+  // Set pending_since (the active-blocker marker) on the lowest-step_order
+  // required signator row — or any row if none are required.
+  if (liveSig.length > 0) {
+    const requiredSig = liveSig.filter((r) => r.is_required);
+    const frontierSet = requiredSig.length > 0 ? requiredSig : liveSig;
+    const minOrder = Math.min(...frontierSet.map((r) => r.step_order));
+    const ids = frontierSet.filter((r) => r.step_order === minOrder).map((r) => r.id);
     if (ids.length > 0) {
       await supabaseAdmin
         .from("lease_approval_chain")
@@ -359,6 +405,9 @@ serve(async (req) => {
         triggering_document_filename: triggeringDoc.filename,
         iteration_number: triggeringDoc.iteration_number,
         version_number: triggeringDoc.version_number,
+        // P1-3: true when this re-advance reactivated a signator stage that a
+        // prior send-back had consumed (audit trail for the loop-back).
+        reactivated_signator: reactivatedSignator,
       },
     });
 
