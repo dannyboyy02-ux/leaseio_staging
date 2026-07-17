@@ -42,6 +42,11 @@ function copyForType(type: string | undefined): { subject: string; heading: stri
       return { subject: "Action needed: a lease is awaiting your approval", heading: "A lease needs your approval" };
     case "notify_submitter_approved":
       return { subject: "Your lease was approved", heading: "Your lease was approved" };
+    case "notify_submitter_concept_cleared":
+      return {
+        subject: "Your lease request cleared concept approval",
+        heading: "Your request cleared concept approval — you may proceed",
+      };
     case "notify_submitter_returned":
       return { subject: "Your lease was returned for revision", heading: "Your lease was returned for revision" };
     case "notify_submitter_rejected":

@@ -51,8 +51,9 @@ describe('P1-4 F-2/F-4 — act-on-chain-step notifies requestor + next approver'
     expect(requestorNotices).toBeGreaterThanOrEqual(3);
     expect(fn).toContain('notify_submitter_rejected');
     expect(fn).toContain('notify_submitter_returned');
-    expect(fn).toContain('notify_submitter_approved');
-    // The concept-approval "you may proceed" notice.
+    // The concept-approval "you may proceed" notice — its own type so the email
+    // subject isn't the misleading "approved" (P1-4 review).
+    expect(fn).toContain('notify_submitter_concept_cleared');
     expect(fn).toMatch(/cleared concept approval/);
   });
   it('F-4: notifies the next sequential approver when a level is crossed', () => {

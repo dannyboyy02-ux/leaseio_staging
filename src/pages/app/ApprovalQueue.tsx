@@ -63,6 +63,7 @@ interface QueueLease {
   manager_approved_at: string | null;
   financial_approved_by: string | null;
   uploaded_at: string;
+  requestor_id?: string | null;
   requestorEmail?: string;
   requestorName?: string;
 }

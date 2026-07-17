@@ -697,10 +697,12 @@ serve(async (req) => {
           );
           // F-2: THE silent gate the owner asked about — tell the requestor
           // their request cleared concept approval and they may now proceed.
+          // Its own notification_type so the email subject reads "cleared
+          // concept approval", not the fuller "approved" (P1-4 review, copy).
           await notify(
             step.lease_id,
             [leaseRequestorId ?? leaseUserId],
-            "notify_submitter_approved",
+            "notify_submitter_concept_cleared",
             "Your lease request cleared concept approval. You can now proceed to negotiate the lease terms.",
           );
         } else {
