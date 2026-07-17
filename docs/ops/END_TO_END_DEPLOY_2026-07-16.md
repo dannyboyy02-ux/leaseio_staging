@@ -15,6 +15,14 @@
 > (real Opus abstraction; every extracted term correct; all 7 lifecycle
 > transitions logged `routing_path: chain`). Evidence in the session transcript
 > and `docs/KNOWN_ISSUES.md` ("Live end-to-end chain simulation 2026-07-16").
+>
+> **2026-07-17 update: step 4 is now FULLY done.** The owner asked for the secret
+> to be set; `AUTO_NUDGE_CRON_SECRET` is registered as an edge-function secret
+> AND mirrored into `private.cron_secrets` (`id='auto_nudge'`). Verified live:
+> wrong `x-cron-secret` → 401 (fail-closed); the real value → 200
+> `{"ok":true,"scanned":2,"nudged":0,"skipped":2}` (a genuine sweep, correctly
+> nudging nothing that wasn't at a day-2/5/10 crossing). The daily 15:00 UTC
+> cron is now fully armed. NOTHING in this runbook remains owed.
 
 The whole ratified plan (Phase 0 safety/money + Phase 1 approval "seven wires")
 is committed to branch `claude/leaseio-end-to-end-review-163v6w`, pushed, and

@@ -10,7 +10,8 @@ list and reference it in the commit message.
 **Deploy executed 2026-07-16** (owner present) per `docs/ops/END_TO_END_DEPLOY_2026-07-16.md`:
 all 6 migrations applied + verified, 64 edge functions redeployed via the linked
 CLI, types regenerated, frontend merged to `main`. Nothing below is inert anymore.
-One owner item remains: `AUTO_NUDGE_CRON_SECRET` (see the runbook header).
+`AUTO_NUDGE_CRON_SECRET` was set 2026-07-17 (owner-requested) and the cron gate
+verified live (401 wrong secret / 200 real sweep) — **no deploy items remain.**
 
 ### Live end-to-end chain simulation 2026-07-16 — the full journey PASSED on deployed code
 
