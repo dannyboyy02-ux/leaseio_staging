@@ -56,8 +56,11 @@ const makeLeaseRequestSchema = (t: (key: string) => string) =>
       .string()
       .trim()
       .min(2, t('workflow.request.validation.department_required')),
-    // These three are optional — AI will extract them from the uploaded document.
-    // Filling them in unlocks the financial impact preview and approval routing.
+    // These three are optional ESTIMATES. There is no uploaded document at
+    // request time, and AI abstraction runs later (on the executed document at
+    // finalize) — NOT here — so the old "AI will extract them" copy was false.
+    // Providing estimates sharpens the financial-impact preview and, crucially,
+    // the annual cost drives policy matching for the approval route preview.
     monthlyPayment: z.coerce.number().positive().optional(),
     termMonths: z.coerce.number().int().min(1).max(360).optional(),
     startDate: z.string().optional(),
@@ -99,6 +102,16 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     approvalThreshold: number | null;
     covenantThreshold: number | null;
   }>({ discountRate: 5.5, approvalThreshold: null, covenantThreshold: null });
+  // P1-7: when the workspace has approval POLICIES, the legacy manager/financial
+  // preview lies — routing goes through the policy chain. Call the SAME resolver
+  // the tester + submission use (preview_policy_resolution) so the preview is
+  // truthful. hasActivePolicies decides which preview to render.
+  const [hasActivePolicies, setHasActivePolicies] = useState(false);
+  const [policyResolution, setPolicyResolution] = useState<
+    | { matched: true; policy_name: string; steps: Array<{ stage: string; approver_user_id: string | null; approver_role: string | null }> }
+    | { matched: false; error: string }
+    | null
+  >(null);
 
   const leaseRequestSchema = useMemo(() => makeLeaseRequestSchema(t), [t]);
 
@@ -149,6 +162,16 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           hasFinancialApprovers: roles.some((row) => row.role === 'financial_approver'),
         });
       });
+
+    // P1-7: does the workspace have ANY active approval policy? If so, routing
+    // goes through the policy chain and the legacy role preview is wrong — we
+    // switch to the real resolver below.
+    (supabase as any)
+      .from('approval_policies')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspace.id)
+      .eq('is_active', true)
+      .then(({ count }: { count: number | null }) => setHasActivePolicies((count ?? 0) > 0));
   }, [open, workspace?.id]);
 
   useEffect(() => {
@@ -157,6 +180,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
       setCalcs(null);
       setHasApprovers(null);
       setApprovalRoleState({ hasManagerApprovers: false, hasFinancialApprovers: false });
+      setHasActivePolicies(false);
+      setPolicyResolution(null);
       form.reset();
     }
   }, [open, form]);
@@ -168,6 +193,32 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   const escalationRate = form.watch('escalationRate');
   const covenantFlagged = form.watch('covenantFlagged');
   const selectedAssetType = form.watch('assetType');
+  const requestingDepartment = form.watch('requestingDepartment');
+
+  // P1-7: debounced call to the REAL policy resolver so the route preview
+  // reflects the actual approval chain (not the legacy role heuristic) whenever
+  // active policies exist. Same RPC the policy tester + submission use, so the
+  // preview cannot drift from reality. Only runs when policies exist.
+  useEffect(() => {
+    if (!open || !workspace?.id || !hasActivePolicies) {
+      setPolicyResolution(null);
+      return;
+    }
+    const annualCost = (Number(monthlyPayment) || 0) * 12;
+    const timer = setTimeout(async () => {
+      const { data, error } = await (supabase.rpc as any)('preview_policy_resolution', {
+        p_workspace_id: workspace.id,
+        p_asset_type: selectedAssetType || '',
+        p_department: requestingDepartment || '',
+        p_annual_cost: annualCost,
+        p_region: '',
+        p_lease_type: '',
+      });
+      if (error) { setPolicyResolution(null); return; }
+      setPolicyResolution(data as any);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [open, workspace?.id, hasActivePolicies, selectedAssetType, requestingDepartment, monthlyPayment]);
 
   useEffect(() => {
     const p = Number(monthlyPayment);
@@ -473,28 +524,60 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
 
         <div className="mx-4 mt-4 rounded-lg border border-border bg-muted/30 p-3">
           <p className="text-sm font-medium">{t('workflow.request.route_preview')}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
-            {approvalPreview.requiresManagerApproval && <Badge variant="secondary">{t('workflow.request.badge_manager')}</Badge>}
-            {approvalPreview.requiresFinancialApproval && <Badge variant="secondary">{t('workflow.request.badge_financial')}</Badge>}
-            <Badge variant={previewStatus === 'approved' ? 'default' : 'outline'}>
-              {previewStatus === 'approved'
-                ? t('workflow.request.badge_auto_approved')
-                : t('workflow.request.badge_posted_after')}
-            </Badge>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {approvalPreview.requiresFinancialApproval
-              ? covenantFlagged
-                ? t('workflow.request.review_covenant')
-                : workspaceSettings.approvalThreshold != null &&
-                  (calcs?.totalCashCommitment ?? 0) >= workspaceSettings.approvalThreshold
-                ? t('workflow.request.review_threshold', {
-                    amount: formatLocalizedCurrency(workspaceSettings.approvalThreshold, language),
-                  })
-                : t('workflow.request.review_settings')
-              : t('workflow.request.review_none')}
-          </p>
+          {hasActivePolicies ? (
+            // P1-7: policy-driven route via the REAL resolver — matches actual
+            // submission routing (was the legacy role heuristic, which lied when
+            // policies exist).
+            policyResolution === null ? (
+              <p className="mt-2 text-xs text-muted-foreground">{t('workflow.request.resolving_route')}</p>
+            ) : policyResolution.matched ? (
+              <>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
+                  {policyResolution.steps.some((s) => s.stage === 'concept') && (
+                    <Badge variant="secondary">{t('workflow.request.badge_concept')}</Badge>
+                  )}
+                  {policyResolution.steps.some((s) => s.stage === 'signator') && (
+                    <Badge variant="secondary">{t('workflow.request.badge_signature')}</Badge>
+                  )}
+                  <Badge variant="outline">{t('workflow.request.badge_posted_after')}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t('workflow.request.route_via_policy', { policy: policyResolution.policy_name })}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+                {t('workflow.request.no_matching_policy')}
+              </p>
+            )
+          ) : (
+            // No policies → the legacy manager/financial role flow is the truth.
+            <>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
+                {approvalPreview.requiresManagerApproval && <Badge variant="secondary">{t('workflow.request.badge_manager')}</Badge>}
+                {approvalPreview.requiresFinancialApproval && <Badge variant="secondary">{t('workflow.request.badge_financial')}</Badge>}
+                <Badge variant={previewStatus === 'approved' ? 'default' : 'outline'}>
+                  {previewStatus === 'approved'
+                    ? t('workflow.request.badge_auto_approved')
+                    : t('workflow.request.badge_posted_after')}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {approvalPreview.requiresFinancialApproval
+                  ? covenantFlagged
+                    ? t('workflow.request.review_covenant')
+                    : workspaceSettings.approvalThreshold != null &&
+                      (calcs?.totalCashCommitment ?? 0) >= workspaceSettings.approvalThreshold
+                    ? t('workflow.request.review_threshold', {
+                        amount: formatLocalizedCurrency(workspaceSettings.approvalThreshold, language),
+                      })
+                    : t('workflow.request.review_settings')
+                  : t('workflow.request.review_none')}
+              </p>
+            </>
+          )}
         </div>
 
         <div className="px-4 pb-4 overflow-y-auto">
