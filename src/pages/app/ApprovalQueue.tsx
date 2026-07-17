@@ -11,6 +11,7 @@ import {
   FileText,
   ChevronRight,
   Undo2,
+  ShieldCheck,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -301,11 +302,16 @@ function ChainStepCard({
   onActed: () => void;
 }) {
   const { t } = useAppTranslation();
+  const navigate = useNavigate();
   const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'send_back' | null>(null);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   // Phase 7: voluntary delegation modal
   const [delegateOpen, setDelegateOpen] = useState(false);
+  // P1-2: a signator step cannot be actioned inline — its Approve requires an
+  // intent-to-bind attestation that only the dedicated SignatorReview page
+  // collects (a bare queue "Approve" 400s server-side). Route to that page.
+  const isSignatorStep = step.stage === 'signator';
 
   // Visual tag distinguishing source — per the Phase 2 guard rail, makes
   // it obvious where each row came from when merged with legacy ones.
@@ -393,34 +399,51 @@ function ChainStepCard({
           </div>
 
           <div className="flex flex-wrap gap-2 pt-2 border-t">
-            <Button
-              size="sm"
-              onClick={() => submit('approve')}
-              disabled={busy}
-              className="flex-1 sm:flex-none"
-            >
-              {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-1" />}
-              {t('approval.approve')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setActionDialog('send_back')}
-              disabled={busy}
-              className="flex-1 sm:flex-none"
-            >
-              {t('approvals.signator.send_back')}
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => setActionDialog('reject')}
-              disabled={busy}
-              className="flex-1 sm:flex-none"
-            >
-              <XCircle className="h-4 w-4 mr-1" />
-              {t('approval.reject')}
-            </Button>
+            {isSignatorStep ? (
+              // Signator steps: one action that opens the attestation workbench,
+              // where approve (with intent-to-bind), send back, and reject all
+              // live with proper reason/attestation collection.
+              <Button
+                size="sm"
+                onClick={() => navigate(`/app/leases/${step.lease_id}/signator-review`)}
+                disabled={busy}
+                className="flex-1 sm:flex-none"
+              >
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                {t('approvals.queue.review_and_sign')}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => submit('approve')}
+                  disabled={busy}
+                  className="flex-1 sm:flex-none"
+                >
+                  {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-1" />}
+                  {t('approval.approve')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setActionDialog('send_back')}
+                  disabled={busy}
+                  className="flex-1 sm:flex-none"
+                >
+                  {t('approvals.signator.send_back')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setActionDialog('reject')}
+                  disabled={busy}
+                  className="flex-1 sm:flex-none"
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  {t('approval.reject')}
+                </Button>
+              </>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -452,7 +475,19 @@ function ChainStepCard({
         onDelegated={onActed}
       />
 
-      <Dialog open={actionDialog !== null} onOpenChange={(o) => !o && setActionDialog(null)}>
+      {/* P1-2 (j4-approver §40): clear `comment` whenever this reason dialog
+          closes — otherwise a typed-then-cancelled reject/send-back reason
+          survives in shared state and a later bare Approve would submit it as
+          the approval's audit comment. */}
+      <Dialog
+        open={actionDialog !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setActionDialog(null);
+            setComment('');
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -476,7 +511,14 @@ function ChainStepCard({
             />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setActionDialog(null)} disabled={busy}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setActionDialog(null);
+                setComment('');
+              }}
+              disabled={busy}
+            >
               {t('common.cancel')}
             </Button>
             <Button
@@ -734,7 +776,7 @@ export default function ApprovalQueue() {
           supabase
             .from('leases')
             .select(
-              'id, request_title, requesting_department, asset_type, monthly_payment, calc_total_commitment',
+              'id, request_title, requesting_department, asset_type, monthly_payment, calc_total_commitment, lifecycle_status',
             )
             .in('id', chainLeaseIds),
           chainPolicyIds.length > 0
@@ -747,18 +789,34 @@ export default function ApprovalQueue() {
         const policySlaMap = new Map<string, number | null>(
           (chainPolicies ?? []).map((p: any): [string, number | null] => [p.id, p.sla_days ?? null]),
         );
-        hydratedChainSteps = chainSteps.map((s) => {
-          const l: any = leaseMap.get(s.lease_id) ?? {};
-          return {
-            ...s,
-            request_title: l.request_title ?? null,
-            requesting_department: l.requesting_department ?? null,
-            asset_type: l.asset_type ?? null,
-            monthly_payment: l.monthly_payment ?? null,
-            calc_total_commitment: l.calc_total_commitment ?? null,
-            slaDays: s.policy_id ? policySlaMap.get(s.policy_id) ?? null : null,
-          };
-        });
+        // P1-2: stage-frontier filter. A signator row is inserted 'pending' at
+        // initial submission, so without this the CFO sees an actionable "Final
+        // approval" card from day 1 (and clicking it 400s server-side). Mirror
+        // the act-on-chain-step lifecycle guard: hide a signator step while the
+        // lease is still in the concept/negotiation phase — it becomes actionable
+        // only once advanced to Final Review (or a retro/executed state).
+        const CONCEPT_PHASE_LIFECYCLES = new Set([
+          'draft', 'submitted', 'under_review',
+          'concept_submitted', 'concept_under_review', 'in_negotiation',
+        ]);
+        hydratedChainSteps = chainSteps
+          .filter((s) => {
+            if (s.stage !== 'signator') return true;
+            const lc: string | null = (leaseMap.get(s.lease_id) as any)?.lifecycle_status ?? null;
+            return !lc || !CONCEPT_PHASE_LIFECYCLES.has(lc);
+          })
+          .map((s) => {
+            const l: any = leaseMap.get(s.lease_id) ?? {};
+            return {
+              ...s,
+              request_title: l.request_title ?? null,
+              requesting_department: l.requesting_department ?? null,
+              asset_type: l.asset_type ?? null,
+              monthly_payment: l.monthly_payment ?? null,
+              calc_total_commitment: l.calc_total_commitment ?? null,
+              slaDays: s.policy_id ? policySlaMap.get(s.policy_id) ?? null : null,
+            };
+          });
       }
       setPendingChainSteps(hydratedChainSteps);
 

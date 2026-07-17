@@ -3934,6 +3934,7 @@
       "step_approved": "Paso aprobado",
       "step_rejected": "Paso rechazado",
       "step_sent_back": "Paso devuelto",
+      "review_and_sign": "Revisar y firmar",
       "total": "Total",
       "submitted_on": "Enviado el {{date}}",
       "delegate_title": "Entregue este paso a un miembro del espacio de trabajo",

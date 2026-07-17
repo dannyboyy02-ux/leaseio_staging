@@ -3934,6 +3934,7 @@
       "step_approved": "Step approved",
       "step_rejected": "Step rejected",
       "step_sent_back": "Step sent back",
+      "review_and_sign": "Review & Sign",
       "total": "Total",
       "submitted_on": "Submitted {{date}}",
       "delegate_title": "Hand this step to a workspace member",

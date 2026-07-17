@@ -143,7 +143,12 @@ export async function dispatchNotificationRow(
   const message = typeof details.message === "string" && details.message.length > 0
     ? details.message
     : `${leaseName} needs your attention in LeaseIO.`;
-  const leaseLink = `${APP_URL}/app/leases/${lease.id}`;
+  // P1-2: the signator's email must deep-link to the attestation page (the only
+  // surface that collects the required intent-to-bind attestation), not the
+  // generic lease detail — otherwise the CFO lands on a page with no way to sign.
+  const leaseLink = details.notification_type === "signator_review_required"
+    ? `${APP_URL}/app/leases/${lease.id}/signator-review`
+    : `${APP_URL}/app/leases/${lease.id}`;
   const html = emailHtml(heading, message, leaseName, leaseLink);
 
   for (const userId of recipientIds) {
