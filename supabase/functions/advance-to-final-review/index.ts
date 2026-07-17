@@ -337,7 +337,7 @@ serve(async (req) => {
   // signator stage.
   const { data: sigRowsAll } = await supabaseAdmin
     .from("lease_approval_chain")
-    .select("id, step_order, status, is_required")
+    .select("id, step_order, status, is_required, created_at")
     .eq("lease_id", lease.id)
     .eq("stage", "signator");
   const allSig = (sigRowsAll ?? []) as Array<{
@@ -345,14 +345,30 @@ serve(async (req) => {
     step_order: number;
     status: string;
     is_required: boolean;
+    created_at: string;
   }>;
   let reactivatedSignator = false;
+  let reactivatedStepIds: string[] = [];
   let liveSig = allSig.filter((r) => r.status === "pending");
   if (liveSig.length === 0) {
-    const dormant = allSig.filter(
+    let dormant = allSig.filter(
       (r) => r.status === "sent_back" || r.status === "superseded",
     );
+    // Generation-scope (integrity review): reactivate ONLY the most recent
+    // signator generation. A material-change reroute that changed the signator
+    // leaves the prior assignee's row 'superseded' in-table with an OLDER
+    // created_at; reactivating it would resurrect an approver the current policy
+    // removed. Current-generation rows are inserted together at the last
+    // resolution/reroute and share the max created_at.
     if (dormant.length > 0) {
+      const maxCreated = dormant.reduce(
+        (m, r) => (r.created_at > m ? r.created_at : m),
+        dormant[0].created_at,
+      );
+      dormant = dormant.filter((r) => r.created_at === maxCreated);
+    }
+    if (dormant.length > 0) {
+      reactivatedStepIds = dormant.map((r) => r.id);
       await supabaseAdmin
         .from("lease_approval_chain")
         .update({
@@ -373,7 +389,7 @@ serve(async (req) => {
           effective_assignee_user_id: null,
           assignee_resolution_source: null,
         })
-        .in("id", dormant.map((r) => r.id));
+        .in("id", reactivatedStepIds);
       reactivatedSignator = true;
       liveSig = dormant.map((r) => ({ ...r, status: "pending" }));
     }
@@ -406,8 +422,11 @@ serve(async (req) => {
         iteration_number: triggeringDoc.iteration_number,
         version_number: triggeringDoc.version_number,
         // P1-3: true when this re-advance reactivated a signator stage that a
-        // prior send-back had consumed (audit trail for the loop-back).
+        // prior send-back had consumed (audit trail for the loop-back), plus the
+        // exact chain_step ids reactivated so chain state is reconstructable from
+        // the activity log without diffing the chain table.
         reactivated_signator: reactivatedSignator,
+        reactivated_signator_step_ids: reactivatedStepIds,
       },
     });
 

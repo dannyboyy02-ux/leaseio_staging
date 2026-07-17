@@ -23,6 +23,15 @@ describe('P1-3 — advance-to-final-review reactivates a consumed signator stage
     expect(fn).toMatch(/status: "pending",[\s\S]{0,120}action_at: null,[\s\S]{0,60}action_by: null/);
     expect(fn).toContain('reactivatedSignator');
   });
+  it('generation-scopes reactivation to the most recent signator round (max created_at)', () => {
+    // A reroute that changed the signator leaves the prior assignee superseded
+    // with an older created_at; reactivating it would resurrect a policy-removed
+    // approver. Only the max-created_at generation is reactivated.
+    expect(fn).toContain('created_at');
+    expect(fn).toContain('const maxCreated');
+    expect(fn).toMatch(/r\.created_at === maxCreated/);
+    expect(fn).toContain('reactivated_signator_step_ids');
+  });
   it('restores a CLEAN pending round — clears the prior delegate/OOO resolution + re-arms the timer', () => {
     // A re-negotiation can be weeks later; a stale prior-round delegate must not
     // silently own the new round, and the delegate timer must re-arm.
