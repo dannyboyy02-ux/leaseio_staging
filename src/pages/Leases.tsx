@@ -59,6 +59,7 @@ import {
   applyBoundaryResize,
   LEASE_HIDDEN_COLS_KEY,
   HIDEABLE_COLUMNS,
+  DEFAULT_HIDDEN_COLUMNS,
   parseStoredHidden,
   serializeHidden,
   toggleHidden,
@@ -482,6 +483,13 @@ export default function Leases() {
       ),
     [columnWidths],
   );
+  // True when hidden columns match the density default (order-insensitive) —
+  // so "Reset columns" is correctly disabled on a pristine first visit.
+  const hiddenAtDefault = useMemo(() => {
+    if (hiddenColumns.length !== DEFAULT_HIDDEN_COLUMNS.length) return false;
+    const set = new Set(hiddenColumns);
+    return DEFAULT_HIDDEN_COLUMNS.every((k) => set.has(k));
+  }, [hiddenColumns]);
 
   // Drag the boundary between two adjacent columns: the left grows by the same
   // amount the right shrinks, so the total stays 100 and the table keeps
@@ -803,10 +811,14 @@ export default function Leases() {
                   ))}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    disabled={widthsAreDefault && hiddenColumns.length === 0}
+                    disabled={widthsAreDefault && hiddenAtDefault}
                     onClick={() => {
                       resetColumnWidths();
-                      setHiddenColumns([]);
+                      // Reset to the DENSITY DEFAULT (start/end/sqft hidden),
+                      // not "show everything" — otherwise "reset" produced a
+                      // non-default state and the control read as enabled on a
+                      // pristine first visit (auditor finding, 2026-07-17).
+                      setHiddenColumns([...DEFAULT_HIDDEN_COLUMNS]);
                     }}
                   >
                     <RotateCcw className="mr-2 h-4 w-4" />

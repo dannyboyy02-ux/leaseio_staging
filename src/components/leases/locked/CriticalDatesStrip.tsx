@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { format, differenceInCalendarDays } from 'date-fns';
 import { parseToLocalDate } from '@/lib/dateFormatters';
-import { Calendar, AlertCircle, TrendingUp, Bell } from 'lucide-react';
+import { Calendar, TrendingUp, Bell } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -110,28 +110,39 @@ export function CriticalDatesStrip({ lease }: Props) {
     const out: Chip[] = [];
     const extracted = lease?.extracted_json ?? null;
 
-    // 1. Lease expiration
+    // 1. Lease expiration — only inside its action window. The lease view
+    //    is CONTEXT, not alerting: discovery is the dashboard's job (expiring
+    //    tiles / risks), and a date 3 years out earning header space on every
+    //    visit was exactly the "too much at once" problem. 120d matches the
+    //    dashboard's widest expiring window.
     if (lease?.lease_end) {
       const end = parseToLocalDate(lease.lease_end);
       if (!Number.isNaN(end.getTime()) && end >= today) {
         const days = differenceInCalendarDays(end, today);
-        out.push({
-          key: 'expiration',
-          icon: Calendar,
-          label: `${t('locked_lease.critical_dates.expires_in')} ${formatDistance(end, t)}`,
-          date: end,
-          tone: toneFromDays(days),
-          tooltip: `${t('locked_lease.critical_dates.expiration_date')}: ${format(end, 'MMM d, yyyy')}`,
-        });
+        if (days <= 120) {
+          out.push({
+            key: 'expiration',
+            icon: Calendar,
+            label: `${t('locked_lease.critical_dates.expires_in')} ${formatDistance(end, t)}`,
+            date: end,
+            tone: toneFromDays(days),
+            tooltip: `${t('locked_lease.critical_dates.expiration_date')}: ${format(end, 'MMM d, yyyy')}`,
+          });
+        }
+        // Out of window: the full date lives in the General tab (Lease Timing section).
       }
     }
 
     // 2. Renewal notice deadline (parsed from renewal_options text)
     const renewalRaw = extractedValue(extracted?.renewal_options);
     const renewal = renewalNoticeDeadline(renewalRaw, lease?.lease_end ?? null);
+    // 120d window (matches expiry): the renewal-NOTICE deadline is COMPUTED
+    // and lives nowhere else — the dashboard's auto-renewal risk keys on
+    // expiry, not the notice deadline — so gate it wider than rent-change to
+    // avoid hiding a notice window entirely (polish review).
     if (renewal.deadline && renewal.deadline >= today) {
       const days = differenceInCalendarDays(renewal.deadline, today);
-      out.push({
+      if (days <= 120) out.push({
         key: 'renewal_notice',
         icon: Bell,
         label: `${t('locked_lease.critical_dates.renewal_notice_in')} ${formatDistance(renewal.deadline, t)}`,
@@ -152,7 +163,7 @@ export function CriticalDatesStrip({ lease }: Props) {
       })
       .filter((e: any): e is { date: Date; notes: string | null } => !!e && e.date > today)
       .sort((a: any, b: any) => a.date.getTime() - b.date.getTime())[0];
-    if (nextRentChange) {
+    if (nextRentChange && differenceInCalendarDays(nextRentChange.date, today) <= 60) {
       out.push({
         key: 'next_rent_change',
         icon: TrendingUp,
@@ -163,44 +174,9 @@ export function CriticalDatesStrip({ lease }: Props) {
       });
     }
 
-    // 4. Next high-confidence key_date that we haven't already covered.
-    //    Skip entries on/after lease_end — those are post-expiration commentary
-    //    (renewal option period starts, MRV adjustment dates, expiration date
-    //    itself) and the dedicated expiration chip already conveys that signal.
-    const keyDates = Array.isArray(extracted?.key_dates) ? extracted.key_dates : [];
-    const claimedTimes = new Set(out.map((c) => c.date.getTime()));
-    const leaseEndDate = lease?.lease_end ? parseToLocalDate(lease.lease_end) : null;
-    const leaseEndMs = leaseEndDate && !Number.isNaN(leaseEndDate.getTime())
-      ? leaseEndDate.getTime()
-      : null;
-    const nextKeyDate = keyDates
-      .map((entry: any) => {
-        const d = entry?.date ? parseToLocalDate(entry.date) : null;
-        const conf = typeof entry?.confidence === 'number' ? entry.confidence : 0;
-        return d && !Number.isNaN(d.getTime()) && conf >= 0.85
-          ? { date: d, description: entry?.description ?? null }
-          : null;
-      })
-      .filter(
-        (e: any): e is { date: Date; description: string | null } =>
-          !!e
-          && e.date > today
-          && !claimedTimes.has(e.date.getTime())
-          && (leaseEndMs == null || e.date.getTime() < leaseEndMs)
-      )
-      .sort((a: any, b: any) => a.date.getTime() - b.date.getTime())[0];
-    if (nextKeyDate) {
-      out.push({
-        key: 'next_key_date',
-        icon: AlertCircle,
-        // "in 15 days", matching the sibling chips — the bare "· 15 days"
-        // didn't say whether the date was ahead or behind.
-        label: `${nextKeyDate.description ?? t('locked_lease.critical_dates.upcoming')} · ${t('locked_lease.critical_dates.in_connective')} ${formatDistance(nextKeyDate.date, t)}`,
-        date: nextKeyDate.date,
-        tone: 'neutral',
-        tooltip: format(nextKeyDate.date, 'MMM d, yyyy'),
-      });
-    }
+    // (The generic "next key date" chip is gone: it surfaced non-actionable
+    // extracted dates — "Lease agreement date (as of date)" counting down —
+    // which is anti-signal. Only chips a user can ACT on earn this row.)
 
     return out.sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [lease, t]);
@@ -210,10 +186,7 @@ export function CriticalDatesStrip({ lease }: Props) {
   return (
     <TooltipProvider>
       <div className="border-b border-border bg-muted/10">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mr-1">
-            {t('locked_lease.critical_dates.label')}
-          </span>
+        <div className="max-w-6xl mx-auto px-6 py-2.5 flex flex-wrap items-center gap-2">
           {chips.map((chip) => {
             const Icon = chip.icon;
             const pill = (

@@ -140,6 +140,12 @@ interface SectionCardProps {
    *  has been initially activated — confidence is a review-time signal, not
    *  relevant once the lease is in production use. */
   hideConfidence?: boolean;
+  /** When true, short fields lay out two-up. Must be driven by the CONTAINER's
+   *  width (the caller knows whether the PDF split is open), not a viewport
+   *  breakpoint — the card sits in a ~50%-viewport panel when the PDF shows,
+   *  where a viewport `sm:` two-up would cram fields into ~192px. Default
+   *  false → single column (safe). */
+  allowTwoUp?: boolean;
 }
 
 export function SectionCard({
@@ -157,6 +163,7 @@ export function SectionCard({
   onJumpToPage,
   sourceViewable = true,
   hideConfidence = false,
+  allowTwoUp = false,
 }: SectionCardProps) {
   const { language, t } = useLanguage();
   const [isEditing, setIsEditing] = useState(!isLocked);
@@ -203,7 +210,12 @@ export function SectionCard({
           {t(`lease_review.section_config.${sectionKey}.title`, { defaultValue: section.title })}
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-4 space-y-4">
+      {/* Two-up grid for short field types (dates, numbers, term) — but ONLY
+          when the container has room (allowTwoUp; the PDF split is closed).
+          A date in a full-width row was buying whitespace, not readability;
+          two-up in a half-viewport panel would cram it. Long types (textarea,
+          address) span both columns. */}
+      <CardContent className={cn('pt-4 grid grid-cols-1 gap-x-6 gap-y-4', allowTwoUp && 'sm:grid-cols-2')}>
         {section.fields.map((field) => {
           const fieldConfidence = getFieldConfidence(extractedJson, field.id);
           const fieldLabel = t(`lease_review.field_labels.${field.id}`, { defaultValue: field.label });
@@ -239,8 +251,9 @@ export function SectionCard({
 
           // Auto-resize ref for textareas (plain function, no hook needed)
 
+          const isShortField = field.type === 'date' || field.type === 'number' || field.type === 'term' || field.type === 'select';
           return (
-            <div key={field.id}>
+            <div key={field.id} className={cn(allowTwoUp && !isShortField && 'sm:col-span-2')}>
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />

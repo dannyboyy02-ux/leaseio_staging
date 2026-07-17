@@ -462,6 +462,17 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
     [rentSchedule, lease.current_monthly_rent]
   );
 
+  // Header subtitle = commercial identity (counterparty · rent), not
+  // provenance. Department lives in Report Attributes / the General tab.
+  const headerIdentity = useMemo(() => {
+    const counterparty = lease.executed_landlord_name || lease.landlord_name || lease.vendor_name || null;
+    const rent =
+      currentMonthlyRent != null
+        ? `${formatLocalizedCurrency(currentMonthlyRent, language)}${t('locked_lease.per_month_suffix')}`
+        : null;
+    return [counterparty, rent].filter(Boolean).join(' · ') || null;
+  }, [lease.executed_landlord_name, lease.landlord_name, lease.vendor_name, currentMonthlyRent, language, t]);
+
   const rentRows: LabelValueRow[] = useMemo(() => {
     const annual = currentMonthlyRent != null ? currentMonthlyRent * 12 : null;
     const months = remainingMonths(lease.lease_end);
@@ -495,14 +506,13 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       <div className="bg-muted/20 min-h-screen pb-12">
         <LockedHeader
           title={lease.request_title || lease.property_address || lease.filename || t('locked_lease.untitled')}
-          subtitle={lease.requesting_department}
+          subtitle={headerIdentity}
           lifecycleStatus={lease.lifecycle_status ?? null}
           isAdmin={isAdmin}
           readOnly={readOnly}
           pendingUnlockRequest={pendingUnlockRequest}
           isRequestingUnlock={isRequestingUnlock}
           onRequestUnlock={handleRequestUnlock}
-          onApproveUnlock={handleAdminUnlock}
           onDenyUnlock={handleDenyUnlock}
           onAdminUnlock={handleAdminUnlock}
           leaseId={lease.id}

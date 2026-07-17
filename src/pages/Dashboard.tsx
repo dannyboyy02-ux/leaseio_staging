@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
 import { SummaryStrip } from '@/components/dashboard/SummaryStrip';
 import { NeedsAction } from '@/components/dashboard/NeedsAction';
+import { useNeedsAction } from '@/hooks/useNeedsAction';
 import { LeasePipeline } from '@/components/dashboard/LeasePipeline';
 import { UpcomingRisks } from '@/components/dashboard/UpcomingRisks';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
@@ -32,6 +33,16 @@ export default function Dashboard() {
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   const quota = useWorkspaceQuota();
+  // Shared react-query cache with the NeedsAction card — no extra fetch.
+  // Defaults to the empty-state layout during load (not the 3-col grid) so a
+  // low-activity/trial workspace — the common evaluation case — doesn't
+  // reflow when the count settles at zero (layout review).
+  const { data: needsActionData } = useNeedsAction();
+  const hasNeedsActionItems =
+    ((needsActionData?.pendingApprovals?.length ?? 0) +
+      (needsActionData?.returnedLeases?.length ?? 0) +
+      (needsActionData?.unlockedLeases?.length ?? 0) +
+      (needsActionData?.otherFlags?.filter((f) => f.count > 0).length ?? 0)) > 0;
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [limitWallOpen, setLimitWallOpen] = useState(false);
 
@@ -84,11 +95,20 @@ export default function Dashboard() {
         {/* Phase 5 — auto-hides when nothing is in pending_counter_signature */}
         <PendingCounterSignatureCard />
 
-        {/* Row 1: Action queue (wide) + Pipeline funnel (narrow) — stacks below lg */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2"><NeedsAction /></div>
-          <div className="lg:col-span-1"><LeasePipeline /></div>
-        </div>
+        {/* Row 1: Action queue (wide) + Pipeline funnel (narrow) — stacks
+            below lg. The action card exists only when there ARE actions (the
+            KPI tile already says "all clear" once); with no actions the
+            pipeline takes the full row instead of stranding in a third. */}
+        {hasNeedsActionItems ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2"><NeedsAction /></div>
+            <div className="lg:col-span-1"><LeasePipeline /></div>
+          </div>
+        ) : (
+          // Constrained, not full-bleed: the pipeline's thin funnel bars
+          // stretched edge-to-edge read as stranded/empty (layout + polish).
+          <div className="lg:max-w-2xl"><LeasePipeline /></div>
+        )}
 
         {/* Row 2: Upcoming risks + Recent activity & AI extractions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

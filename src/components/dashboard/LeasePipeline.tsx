@@ -158,7 +158,9 @@ export function LeasePipeline() {
           </div>
         ) : (
           <div className="space-y-1">
-            {stageData.map((stage) => (
+            {/* Empty stages compress into one muted line below — five
+                full bar rows of zeros read as noise, not pipeline. */}
+            {stageData.filter((s) => s.count > 0).map((stage) => (
               <div
                 key={stage.key}
                 className="flex items-center gap-3 cursor-pointer hover:bg-muted/70 transition-colors rounded px-2 py-1.5"
@@ -190,6 +192,20 @@ export function LeasePipeline() {
                 )}
               </div>
             ))}
+            {stageData.every((s) => s.count === 0) ? (
+              <p className="text-sm text-muted-foreground text-center py-3">
+                {t('dashboard.pipeline_empty')}
+              </p>
+            ) : stageData.some((s) => s.count === 0) ? (
+              <p className="text-[11px] text-muted-foreground px-2 pt-1.5">
+                {t('dashboard.pipeline_empty_stages', {
+                  stages: stageData
+                    .filter((s) => s.count === 0)
+                    .map((s) => t(s.labelKey, { days: ACTIVE_LOOKBACK_DAYS }))
+                    .join(' · '),
+                })}
+              </p>
+            ) : null}
             <div className="pt-3 border-t mt-2 flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 {t('dashboard.total_in_progress', { count: inProgressCount })}

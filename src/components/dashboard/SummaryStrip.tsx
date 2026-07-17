@@ -6,6 +6,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { getMonthlyRent } from '@/lib/leaseCalculations';
+import { useNeedsAction } from '@/hooks/useNeedsAction';
 
 interface StatBox {
   label: string;
@@ -23,6 +24,18 @@ export function SummaryStrip() {
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
   const formatCurrencyDecimals = (value: number | null | undefined) => formatLocalizedCurrency(value, language, { cents: true });
   const navigate = useNavigate();
+  // The "Needs Action" tile is driven by the SAME source as the "Needs Your
+  // Action" card (useNeedsAction, shared react-query cache) so the two can
+  // never contradict — the card is hidden when this reads 0, so a divergent
+  // count would have shown "All clear" above a card listing work (polish
+  // review HIGH). These are MY action items, not a lifecycle-status count.
+  const { data: naData } = useNeedsAction();
+  const naTotal =
+    (naData?.pendingApprovals?.length ?? 0) +
+    (naData?.returnedLeases?.length ?? 0) +
+    (naData?.unlockedLeases?.length ?? 0) +
+    (naData?.otherFlags?.filter((f) => f.count > 0).length ?? 0);
+  const naAwaiting = naData?.pendingApprovals?.length ?? 0;
   const [stats, setStats] = useState<StatBox[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -90,31 +103,11 @@ export function SummaryStrip() {
           ? t('dashboard.avg_per_sqft', { amount: formatCurrencyDecimals(weightedAvgPerSqft) })
           : t('dashboard.portfolio_leases', { count: portfolioLeases.length });
 
-      // Stat 2: Needs Action — leases requiring human attention.
-      // Phase 3: extend with chain awaiting_concept + in_concept_review +
-      // executed_pre_active equivalents.
-      const needsActionLeases = leases.filter((l) => {
-        const s = l.lifecycle_status;
-        if (
-          s === 'submitted' || s === 'under_review' ||
-          s === 'concept_submitted' || s === 'concept_under_review'
-        ) return true;
-        if ((s === 'executed' || s === 'fully_executed') && !(l as any).executed_document_url) return true;
-        return false;
-      });
-      const needsActionCount = needsActionLeases.length;
+      // (The "Needs Action" tile is built in render from useNeedsAction so it
+      // stays in lockstep with the Needs-Your-Action card — no lifecycle-count
+      // recomputation here.)
 
-      // Stat 3: Awaiting Approval.
-      // Phase 3: include chain in_concept_review equivalent.
-      const awaitingLeases = leases.filter(
-        (l) =>
-          l.lifecycle_status === 'under_review' ||
-          l.lifecycle_status === 'concept_under_review'
-      );
-      const awaitingCount = awaitingLeases.length;
-
-
-      // Stat 4: Expiring within 90 days.
+      // Stat: Expiring within 90 days.
       // Phase 3 (KNOWN_ISSUES.md item #7): extended in place with the
       // chain executed_pre_active equivalent. Consolidation to a
       // STATE_GROUPS-derived helper is filed for a future refactor.
@@ -166,6 +159,8 @@ export function SummaryStrip() {
       const displayExpiring90Count = allExpiring90Ids.filter((id) => !dismissed90.has(id)).length;
       const displayExpiring120Count = allExpiring120Ids.filter((id) => !dismissed120.has(id)).length;
 
+      const displayExpiringTotal = displayExpiring90Count + displayExpiring120Count;
+
       setStats([
         {
           label: t('dashboard.monthly_rent'),
@@ -179,37 +174,24 @@ export function SummaryStrip() {
           href: '/app/leases?status=active',
         },
         {
-          label: t('dashboard.needs_action'),
-          primary: String(needsActionCount),
-          sub: needsActionCount === 0 ? t('dashboard.all_clear') : t('dashboard.items_need_attention', { count: needsActionCount }),
-          accent: needsActionCount > 0 ? 'blue' : 'default',
-          href: '/app/leases',
-        },
-        {
-          label: t('dashboard.awaiting_approval'),
-          primary: String(awaitingCount),
-          sub: awaitingCount === 0 ? t('dashboard.none_pending') : t('dashboard.leases_pending', { count: awaitingCount }),
-          accent: 'orange',
-          href: '/app/approvals',
-          disabled: awaitingCount === 0,
-        },
-        {
-          label: t('dashboard.expiring_90'),
-          primary: String(displayExpiring90Count),
-          sub: displayExpiring90Count > 0 ? t('dashboard.require_attention') : t('dashboard.all_clear_lc'),
-          accent: 'red',
-          href: '/app/leases?status=active&expiring=90',
-          disabled: displayExpiring90Count === 0,
-          onDismiss: displayExpiring90Count > 0 ? () => handleDismiss('90') : undefined,
-        },
-        {
-          label: t('dashboard.expiring_91_120'),
-          primary: String(displayExpiring120Count),
-          sub: displayExpiring120Count > 0 ? t('dashboard.on_the_horizon') : t('dashboard.all_clear_lc'),
-          accent: displayExpiring120Count > 0 ? 'orange' : 'default',
+          label: t('dashboard.expiring_120_combined'),
+          primary: String(displayExpiringTotal),
+          // Only ONE tile carries "all clear" on a clean workspace (that's the
+          // Needs Action tile); here a neutral datum instead of a second
+          // "all clear".
+          sub:
+            displayExpiringTotal === 0
+              ? t('dashboard.none_within_120')
+              : displayExpiring90Count > 0
+                ? t('dashboard.within_90_days', { count: displayExpiring90Count })
+                : t('dashboard.on_the_horizon'),
+          accent: displayExpiring90Count > 0 ? 'red' : displayExpiringTotal > 0 ? 'orange' : 'default',
           href: '/app/leases?status=active&expiring=120',
-          disabled: displayExpiring120Count === 0,
-          onDismiss: displayExpiring120Count > 0 ? () => handleDismiss('120') : undefined,
+          disabled: displayExpiringTotal === 0,
+          onDismiss:
+            displayExpiringTotal > 0
+              ? () => { if (displayExpiring90Count > 0) handleDismiss('90'); if (displayExpiring120Count > 0) handleDismiss('120'); }
+              : undefined,
         },
       ]);
 
@@ -223,8 +205,8 @@ export function SummaryStrip() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {[1, 2, 3, 4, 5].map((i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
           <div key={i} className="animate-pulse bg-muted h-20 rounded-lg" />
         ))}
       </div>
@@ -238,9 +220,30 @@ export function SummaryStrip() {
     default: '',
   };
 
+  // Compose the three tiles at render so the Needs Action tile reflects the
+  // live useNeedsAction count (stats[0]=monthly, stats[1]=expiring from the
+  // effect). Routes to /app/needs-action — the page that shows exactly these
+  // items — not /app/approvals (a subset) or /app/leases (a superset).
+  const needsActionTile: StatBox = {
+    label: t('dashboard.needs_action'),
+    primary: String(naTotal),
+    sub:
+      naTotal === 0
+        ? t('dashboard.all_clear')
+        : naAwaiting > 0
+          ? t('dashboard.awaiting_approval_sub', { count: naAwaiting })
+          : t('dashboard.items_need_attention', { count: naTotal }),
+    accent: naTotal > 0 ? 'blue' : 'default',
+    href: '/app/needs-action',
+    disabled: naTotal === 0,
+  };
+  const displayStats: StatBox[] = stats.length >= 2
+    ? [stats[0], needsActionTile, stats[1]]
+    : stats;
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-      {stats.map((box) => (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {displayStats.map((box) => (
         <div
           key={box.label}
           onClick={box.disabled ? undefined : () => navigate(box.href)}

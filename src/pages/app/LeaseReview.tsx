@@ -3442,6 +3442,7 @@ export default function LeaseReview() {
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
                             sourceViewable={showPdfPanel}
+                            allowTwoUp={!showPdfPanel || isPdfCollapsed}
                             onJumpToPage={jumpToPage}
                           />
                         ))}
@@ -3602,6 +3603,7 @@ export default function LeaseReview() {
                           onFieldBlur={trackFieldCorrection}
                           onFieldStaged={stageFieldImmediate}
                           sourceViewable={showPdfPanel}
+                          allowTwoUp={!showPdfPanel || isPdfCollapsed}
                           onJumpToPage={jumpToPage}
                         />
                         {renderTabFooter('vendor')}
@@ -3624,6 +3626,7 @@ export default function LeaseReview() {
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
                             sourceViewable={showPdfPanel}
+                            allowTwoUp={!showPdfPanel || isPdfCollapsed}
                             onJumpToPage={jumpToPage}
                           />
                         ))}
@@ -3665,6 +3668,7 @@ export default function LeaseReview() {
                             onFieldBlur={trackFieldCorrection}
                             onFieldStaged={stageFieldImmediate}
                             sourceViewable={showPdfPanel}
+                            allowTwoUp={!showPdfPanel || isPdfCollapsed}
                             onJumpToPage={jumpToPage}
                           />
                         ))}

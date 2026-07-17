@@ -993,9 +993,6 @@
     "confidence_pct": "{{score}}% confidence",
     "monthly_rent": "Monthly Rent",
     "needs_action": "Needs Action",
-    "awaiting_approval": "Awaiting Approval",
-    "expiring_90": "Expiring ≤ 90 Days",
-    "expiring_91_120": "Expiring 91–120 Days",
     "avg_per_sqft": "Avg {{amount}}/sqft",
     "portfolio_leases_one": "{{count}} portfolio lease",
     "portfolio_leases_other": "{{count}} portfolio leases",
@@ -1003,10 +1000,6 @@
     "all_clear_lc": "all clear",
     "items_need_attention_one": "{{count}} item needs attention",
     "items_need_attention_other": "{{count}} items need attention",
-    "none_pending": "none pending",
-    "leases_pending_one": "{{count}} lease pending",
-    "leases_pending_other": "{{count}} leases pending",
-    "require_attention": "require attention",
     "on_the_horizon": "on the horizon",
     "mark_as_seen": "Mark as seen",
     "list_view": "List",
@@ -1039,7 +1032,15 @@
     "flag_stalled": "Stalled in review",
     "flag_awaiting_abstraction": "Awaiting AI abstraction",
     "flag_doc_missing": "Executed — document missing",
-    "flag_chain_violation": "Chain violation — retroactive approval required"
+    "flag_chain_violation": "Chain violation — retroactive approval required",
+    "awaiting_approval_sub": "{{count}} awaiting approval",
+    "expiring_120_combined": "Expiring ≤ 120 days",
+    "within_90_days": "{{count}} within 90 days",
+    "pipeline_empty": "No leases in the pipeline yet.",
+    "pipeline_empty_stages": "Empty: {{stages}}",
+    "none_within_120": "None within 120 days",
+    "n_more_updates_one": "{{count}} more update",
+    "n_more_updates_other": "{{count}} more updates"
   },
   "lease": {
     "review": "Review Lease",
@@ -1318,7 +1319,8 @@
       "save_before_report": "Save your changes first — the report reads the last saved inputs.",
       "report_viewer_hint": "Ask a workspace admin or editor to generate the disclosure report.",
       "report_after_finalize": "Available once the lease is finalized.",
-      "report_failed": "Couldn't generate the disclosure report."
+      "report_failed": "Couldn't generate the disclosure report.",
+      "add_basis": "Add basis"
     },
     "analysis_export": {
       "subtitle": "Lease Analysis Report",
@@ -2659,8 +2661,6 @@
     "filter_portfolio_period": "Portfolio period",
     "report_count": "{{count}} report(s)",
     "portfolio_admin_page": "portfolio admin page",
-    "badge_lease": "lease",
-    "badge_portfolio": "portfolio",
     "commitment_by_status_desc": "Total commitment by lifecycle status across your portfolio",
     "no_lease_data": "No lease data yet.",
     "variance_outliers": "Variance Outliers",
@@ -2940,7 +2940,6 @@
       "empty_hint": "Not yet extracted from this document. Re-run AI extraction to populate."
     },
     "critical_dates": {
-      "label": "Critical dates",
       "expires_in": "Expires in",
       "renewal_notice_in": "Renewal notice due in",
       "next_rent_change_in": "Next rent change in",
@@ -2951,9 +2950,10 @@
       "month": "month",
       "months": "months",
       "expiration_date": "Expiration date",
-      "parsed_from": "Parsed from",
-      "in_connective": "in"
-    }
+      "parsed_from": "Parsed from"
+    },
+    "per_month_suffix": "/mo",
+    "locked_click_to_unlock": "This lease is locked — click to unlock"
   },
   "plan": {
     "free": "Free",
@@ -4548,6 +4548,12 @@
   "asset_types": {
     "builtin": {
       "property": "Property (Real Estate)",
+      "equipment": "Equipment",
+      "vehicle": "Vehicle",
+      "other": "Other"
+    },
+    "compact": {
+      "property": "Real estate",
       "equipment": "Equipment",
       "vehicle": "Vehicle",
       "other": "Other"

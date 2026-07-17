@@ -27,6 +27,13 @@ export function NeedsAction() {
 
   const totalCount = pendingApprovals.length + returnedLeases.length + otherFlags.filter((f) => f.count > 0).length + unlockedLeases.length;
 
+  // "Nothing to do" is already said once by the Needs Action tile above —
+  // a ~180px card repeating it was the same signal told twice. The card
+  // exists only when it has items to list.
+  if (!loading && totalCount === 0) {
+    return null;
+  }
+
   return (
     <Card className="border-l-4 border-l-orange-400 h-full">
       <CardHeader className="pb-3">

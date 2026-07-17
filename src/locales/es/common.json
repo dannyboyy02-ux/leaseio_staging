@@ -993,9 +993,6 @@
     "confidence_pct": "{{score}}% de confianza",
     "monthly_rent": "Renta Mensual",
     "needs_action": "Requiere Acción",
-    "awaiting_approval": "En Espera de Aprobación",
-    "expiring_90": "Vence ≤ 90 Días",
-    "expiring_91_120": "Vence en 91–120 Días",
     "avg_per_sqft": "Prom. {{amount}}/pie²",
     "portfolio_leases_one": "{{count}} arrendamiento en portafolio",
     "portfolio_leases_other": "{{count}} arrendamientos en portafolio",
@@ -1003,10 +1000,6 @@
     "all_clear_lc": "todo en orden",
     "items_need_attention_one": "{{count}} elemento requiere atención",
     "items_need_attention_other": "{{count}} elementos requieren atención",
-    "none_pending": "ninguna pendiente",
-    "leases_pending_one": "{{count}} arrendamiento pendiente",
-    "leases_pending_other": "{{count}} arrendamientos pendientes",
-    "require_attention": "requieren atención",
     "on_the_horizon": "en el horizonte",
     "mark_as_seen": "Marcar como visto",
     "list_view": "Lista",
@@ -1039,7 +1032,15 @@
     "flag_stalled": "Estancado en revisión",
     "flag_awaiting_abstraction": "En espera de la abstracción de IA",
     "flag_doc_missing": "Ejecutado — falta el documento",
-    "flag_chain_violation": "Violación de cadena — se requiere aprobación retroactiva"
+    "flag_chain_violation": "Violación de cadena — se requiere aprobación retroactiva",
+    "awaiting_approval_sub": "{{count}} en espera de aprobación",
+    "expiring_120_combined": "Vencen en ≤ 120 días",
+    "within_90_days": "{{count}} dentro de 90 días",
+    "pipeline_empty": "Aún no hay arrendamientos en el flujo.",
+    "pipeline_empty_stages": "Vacías: {{stages}}",
+    "none_within_120": "Ninguno dentro de 120 días",
+    "n_more_updates_one": "{{count}} actualización más",
+    "n_more_updates_other": "{{count}} actualizaciones más"
   },
   "lease": {
     "review": "Revisar Arrendamiento",
@@ -1318,7 +1319,8 @@
       "save_before_report": "Guarde sus cambios primero — el informe lee las últimas entradas guardadas.",
       "report_viewer_hint": "Pida a un administrador o editor del espacio de trabajo que genere el informe de divulgación.",
       "report_after_finalize": "Disponible una vez que el arrendamiento se finalice.",
-      "report_failed": "No se pudo generar el informe de divulgación."
+      "report_failed": "No se pudo generar el informe de divulgación.",
+      "add_basis": "Agregar base"
     },
     "analysis_export": {
       "subtitle": "Informe de análisis de arrendamiento",
@@ -2659,8 +2661,6 @@
     "filter_portfolio_period": "Período de portafolio",
     "report_count": "{{count}} informe(s)",
     "portfolio_admin_page": "página de administración de portafolio",
-    "badge_lease": "arrendamiento",
-    "badge_portfolio": "portafolio",
     "commitment_by_status_desc": "Compromiso total por estado de ciclo de vida en su portafolio",
     "no_lease_data": "Aún no hay datos de arrendamientos.",
     "variance_outliers": "Variaciones Atípicas",
@@ -2940,7 +2940,6 @@
       "empty_hint": "Aún no extraído de este documento. Vuelva a ejecutar la extracción con IA para completar."
     },
     "critical_dates": {
-      "label": "Fechas críticas",
       "expires_in": "Vence en",
       "renewal_notice_in": "Aviso de renovación en",
       "next_rent_change_in": "Próximo cambio de renta en",
@@ -2951,9 +2950,10 @@
       "month": "mes",
       "months": "meses",
       "expiration_date": "Fecha de vencimiento",
-      "parsed_from": "Extraído de",
-      "in_connective": "en"
-    }
+      "parsed_from": "Extraído de"
+    },
+    "per_month_suffix": "/mes",
+    "locked_click_to_unlock": "Este arrendamiento está bloqueado — haga clic para desbloquear"
   },
   "plan": {
     "free": "Gratis",
@@ -4548,6 +4548,12 @@
   "asset_types": {
     "builtin": {
       "property": "Propiedad (bienes raíces)",
+      "equipment": "Equipo",
+      "vehicle": "Vehículo",
+      "other": "Otro"
+    },
+    "compact": {
+      "property": "Inmueble",
       "equipment": "Equipo",
       "vehicle": "Vehículo",
       "other": "Otro"

@@ -179,7 +179,21 @@ export function RecentActivity() {
               <p className="text-sm text-muted-foreground text-center py-4">{t('dashboard.no_recent_activity')}</p>
             ) : (
               <div>
-                {activityData.map((item) => {
+                {/* Collapse consecutive runs from the same lease — one lease
+                    marching through its lifecycle was eating the whole feed
+                    with near-identical rows. The newest event's label leads;
+                    the run size shows as "· N updates". */}
+                {activityData
+                  .reduce<Array<{ item: ActivityRow; runSize: number }>>((acc, item) => {
+                    const prev = acc[acc.length - 1];
+                    if (prev && prev.item.lease_id === item.lease_id) {
+                      prev.runSize += 1;
+                    } else {
+                      acc.push({ item, runSize: 1 });
+                    }
+                    return acc;
+                  }, [])
+                  .map(({ item, runSize }) => {
                   const lease = item.leases;
                   const title = lease.request_title ?? lease.filename ?? t('dashboard.untitled');
                   const label = getActivityLabel(t, item.activity_type, lease.lifecycle_status);
@@ -191,7 +205,10 @@ export function RecentActivity() {
                       <div className={`h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{title}</p>
-                        <p className="text-xs text-muted-foreground">{label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {label}
+                          {runSize > 1 ? ` · ${t('dashboard.n_more_updates', { count: runSize - 1 })}` : ''}
+                        </p>
                       </div>
                       <span className="text-xs text-muted-foreground shrink-0">{relDate}</span>
                     </div>

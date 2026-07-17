@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Lock, RotateCcw, Loader2, History, MoreHorizontal, Archive, ArchiveRestore } from 'lucide-react';
+import { ChevronLeft, Lock, Loader2, History, MoreHorizontal, Archive, ArchiveRestore } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,7 +29,6 @@ interface Props {
   pendingUnlockRequest: PendingUnlockRequest | null;
   isRequestingUnlock: boolean;
   onRequestUnlock: () => void;
-  onApproveUnlock: () => void;
   onDenyUnlock: () => void;
   onAdminUnlock: () => void;
   /** Archive control props — when present, the admin archive button renders. */
@@ -48,7 +47,6 @@ export function LockedHeader({
   pendingUnlockRequest,
   isRequestingUnlock,
   onRequestUnlock,
-  onApproveUnlock,
   onDenyUnlock,
   onAdminUnlock,
   leaseId,
@@ -90,19 +88,31 @@ export function LockedHeader({
               <h1 className="font-display text-2xl font-bold text-foreground truncate max-w-[640px]">
                 {title}
               </h1>
-              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground min-w-0">
                 {lifecycleStatus ? <LifecycleStatusBadge status={lifecycleStatus as any} /> : null}
-                <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted text-foreground/80">
-                  <Lock className="h-3 w-3" />
-                  {t('locked_lease.locked_badge')}
-                </span>
+                {/* State + action fused: the padlock chip IS the unlock control
+                    (admin → unlock confirm; member → request; pending/read-only
+                    → static). One element instead of a pill + a button that
+                    both said "locked". Label kept — icon-only unlock controls
+                    test poorly for discoverability. */}
+                <LockControl
+                  readOnly={readOnly}
+                  isAdmin={isAdmin}
+                  pendingUnlockRequest={pendingUnlockRequest}
+                  isRequestingUnlock={isRequestingUnlock}
+                  onRequestUnlock={onRequestUnlock}
+                  onAdminUnlock={onAdminUnlock}
+                  t={t}
+                />
                 {isArchived && (
                   <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
                     <Archive className="h-3 w-3" />
                     {t('archive.deleted_badge')}
                   </span>
                 )}
-                {subtitle ? <span className="truncate">· {subtitle}</span> : null}
+                {/* min-w-0 lets truncate actually clip inside the flex row —
+                    the identity string (counterparty · rent) is now long. */}
+                {subtitle ? <span className="truncate min-w-0">· {subtitle}</span> : null}
               </div>
             </div>
           </div>
@@ -111,33 +121,8 @@ export function LockedHeader({
             {readOnly && (
               <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
             )}
-            {!readOnly && !isAdmin && !pendingUnlockRequest && (
-              <Button variant="outline" size="sm" onClick={onRequestUnlock} disabled={isRequestingUnlock}>
-                {isRequestingUnlock ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                {t('locked_lease.request_unlock')}
-              </Button>
-            )}
-            {!readOnly && !isAdmin && pendingUnlockRequest && (
-              <span className="text-xs text-muted-foreground">{t('locked_lease.unlock_pending')}</span>
-            )}
-            {!readOnly && isAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-300"
-                onClick={onAdminUnlock}
-              >
-                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                {pendingUnlockRequest ? t('locked_lease.approve_and_unlock') : t('locked_lease.admin_unlock')}
-              </Button>
-            )}
-            {/* Unlock is the only standalone action; everything else
-                (audit-trail deep link, delete/restore) lives in the
-                overflow so the header reads as one decision, not three. */}
+            {/* Unlock now lives ON the Locked chip in the badge row (state +
+                action fused); the header's action cluster is just the overflow. */}
             {leaseId && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -225,5 +210,79 @@ export function LockedHeader({
         )}
       </div>
     </div>
+  );
+}
+
+// State-and-action fused: shows the locked state; clicking it is the unlock
+// gesture appropriate to the viewer's role. Hover reveals intent via title +
+// amber affordance for admins.
+function LockControl({
+  readOnly,
+  isAdmin,
+  pendingUnlockRequest,
+  isRequestingUnlock,
+  onRequestUnlock,
+  onAdminUnlock,
+  t,
+}: {
+  readOnly: boolean;
+  isAdmin: boolean;
+  pendingUnlockRequest: PendingUnlockRequest | null;
+  isRequestingUnlock: boolean;
+  onRequestUnlock: () => void;
+  onAdminUnlock: () => void;
+  t: (k: string) => string;
+}) {
+  const base =
+    'inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors';
+
+  // Non-actionable states: a static "Locked" / "Unlock pending" pill.
+  if (readOnly) {
+    return (
+      <span className={`${base} bg-muted border-transparent text-foreground/80`}>
+        <Lock className="h-3 w-3" />
+        {t('locked_lease.locked_badge')}
+      </span>
+    );
+  }
+
+  if (!isAdmin && pendingUnlockRequest) {
+    return (
+      <span
+        className={`${base} bg-muted border-transparent text-muted-foreground`}
+        title={t('locked_lease.unlock_pending')}
+      >
+        <Lock className="h-3 w-3" />
+        {t('locked_lease.unlock_pending')}
+      </span>
+    );
+  }
+
+  // Actionable: ONE persistent labeled button — the padlock icon carries the
+  // "locked" state, the word carries the action. No hover-only text swap
+  // (that failed keyboard/touch and looked like a static badge at rest —
+  // polish review HIGH), and no width reflow on hover (layout review).
+  const label = isAdmin
+    ? pendingUnlockRequest
+      ? t('locked_lease.approve_and_unlock')
+      : t('locked_lease.admin_unlock')
+    : t('locked_lease.request_unlock');
+
+  return (
+    <button
+      type="button"
+      onClick={isAdmin ? onAdminUnlock : onRequestUnlock}
+      disabled={isRequestingUnlock}
+      title={t('locked_lease.locked_click_to_unlock')}
+      aria-label={label}
+      className={`${base} border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:opacity-60`}
+    >
+      {isRequestingUnlock ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <Lock className="h-3 w-3" />
+      )}
+      {label}
+    </button>
   );
 }
