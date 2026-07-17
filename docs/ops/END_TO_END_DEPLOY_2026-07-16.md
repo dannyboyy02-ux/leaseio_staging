@@ -1,5 +1,21 @@
 # End-to-end plan deploy runbook — Phase 0 + Phase 1 (2026-07-16)
 
+> **EXECUTED 2026-07-16 (same day, owner present — "im in").** Steps 1–3 are DONE:
+> all 6 migrations applied via MCP `apply_migration` (verified object-by-object,
+> incl. the FK self-verify), types regenerated + committed, and **64 functions**
+> deployed via the linked CLI (the 17 below + every frontend-invoked function,
+> because `_shared/cors.ts` gained `localhost:8080/:8081` and deployed copies
+> bundle a frozen snapshot). Step 4 is HALF done: the cron IS scheduled
+> (fail-closed) but the permission classifier blocked `supabase secrets set` —
+> **owner still owes** `AUTO_NUDGE_CRON_SECRET` (edge secret + matching
+> `private.cron_secrets` row `id='auto_nudge'`). Step 5 (frontend merge) executed
+> immediately after. Step 6's approval-path smoke was run as a FULL LIVE
+> SIMULATION: a real lease was driven submit → concept ×2 → negotiate (doc
+> upload) → advance → sign (attestation) → counter-sign → **Finalize & activate**
+> (real Opus abstraction; every extracted term correct; all 7 lifecycle
+> transitions logged `routing_path: chain`). Evidence in the session transcript
+> and `docs/KNOWN_ISSUES.md` ("Live end-to-end chain simulation 2026-07-16").
+
 The whole ratified plan (Phase 0 safety/money + Phase 1 approval "seven wires")
 is committed to branch `claude/leaseio-end-to-end-review-163v6w`, pushed, and
 **green** (1519 tests, `npm run typecheck` clean). It is **NOT merged to `main`**

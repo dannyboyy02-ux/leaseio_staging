@@ -5,15 +5,34 @@ list and reference it in the commit message.
 
 ---
 
-## ▶ PHASE 0 REMEDIATION — CODE COMPLETE 2026-07-16, coordinated deploy owed to owner
+## ▶ PHASE 0 REMEDIATION — CODE COMPLETE 2026-07-16, **DEPLOYED TO STAGING SAME DAY**
 
-The full Phase-0 safety/money cluster is implemented on branch
-`claude/leaseio-end-to-end-review-163v6w`, each item through 1–2 reviewer rounds
-(security + integrity) + tests (1471 green). **It is INERT on the live system
-until the owner runs the ordered deploy** in `docs/ops/PHASE0_DEPLOY_CHECKLIST_2026-07-16.md`
-(migrations FIRST, then edge-fn redeploys — several must go together, e.g. the
-delete-account migrations + its redeploy, or cross-tenant destruction is only
-half-fixed). Do NOT re-implement these; verify against the branch.
+**Deploy executed 2026-07-16** (owner present) per `docs/ops/END_TO_END_DEPLOY_2026-07-16.md`:
+all 6 migrations applied + verified, 64 edge functions redeployed via the linked
+CLI, types regenerated, frontend merged to `main`. Nothing below is inert anymore.
+One owner item remains: `AUTO_NUDGE_CRON_SECRET` (see the runbook header).
+
+### Live end-to-end chain simulation 2026-07-16 — the full journey PASSED on deployed code
+
+A real lease ("SIM Suite 210", Labs Analytix test workspace) was driven through
+the ENTIRE chain in the rendered UI against the freshly deployed functions:
+submit (P1-7 preview resolved the Darren policy truthfully) → concept step 1
+approve → step 2 released by the intra-stage frontier ONLY after step 1 (P1-3) →
+`in_negotiation` (P1-1 workbench; `final_negotiated` upload accepted AT
+in_negotiation — the catch-22 fix) → advance (plain-language signator
+notification to the chain-step cohort) → SignatorReview (3 confirmations +
+≥30-char attestation gated Approve; P1-2) → `pending_counter_signature`
+(execution owner auto-assigned; due date auto-set) → counter-signed upload +
+Confirm → `fully_executed` → **Finalize & activate (P1-5): real Opus abstraction
+extracted every term correctly** (landlord/tenant/rent $8,400/36-mo term/3%
+escalation; calc_total_commitment $311,562.72 — escalation math exact) →
+**`active` + model-locked**. All 7 lifecycle transitions logged with
+`routing_path: 'chain'` + truthful triggers; every notification row carried
+`recipient_ids` (P1-4); the finalize IS counted by the rolling quota (P0-g).
+Nudge (P1-6): three send-nudge calls traversed auth→liveness→cooldown→resolution
+correctly; recipient set went empty only because the sim's requestor == sole
+approver and the function correctly never self-nudges — a nudge landing on a
+DIFFERENT user remains unverified (needs two accounts; minor).
 
 | Item | What landed | Commit |
 |---|---|---|
