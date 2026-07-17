@@ -71,6 +71,8 @@ import { SECTION_CONFIG, findFieldLabel, type SectionKey } from "@/lib/leaseRevi
 import { AddRiskDialog, type PendingCitation } from "@/components/leases/AddRiskDialog";
 import { Tier2CorrectionDialog } from "@/components/leases/Tier2CorrectionDialog";
 import { Asc842InputsTab } from "@/components/leases/Asc842InputsTab";
+import { LeaseDiscountRateCard } from "@/components/leases/LeaseDiscountRateCard";
+import { ScrollableTabStrip, UNDERLINE_TAB_TRIGGER } from '@/components/ui/scrollable-tabs';
 import { downloadCSV } from "@/components/leases/LeaseExports";
 import { LeaseReviewStatusStrip } from "@/components/leases/LeaseReviewStatusStrip";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -2939,7 +2941,9 @@ export default function LeaseReview() {
             onClick={() => handleConfirmTab(tabKey)}
           >
             <Check size={12} />
-            {t('lease_review.tabs.reviewed')}
+            {/* Imperative label: this is the action the user takes, not the
+                state it sets — "Reviewed" read as a status indicator. */}
+            {t('lease_review.tabs.mark_reviewed')}
           </Button>
         )}
         {nextTab ? (
@@ -3090,8 +3094,11 @@ export default function LeaseReview() {
                 {/* Save draft surfaces as a visible secondary the moment
                     the form is dirty. Reversibility > frequency: it's a
                     paid feature people would resent losing work to. */}
+                {/* hidden below md: at narrow widths the title was ellipsizing
+                    to a few characters while this duplicate of the menu's
+                    Save Draft item held its ground. The menu item remains. */}
                 {isDirty && !isLocked && (
-                  <Button size="sm" variant="outline" onClick={handleSync} disabled={saving}>
+                  <Button size="sm" variant="outline" onClick={handleSync} disabled={saving} className="hidden md:inline-flex">
                     {saving ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <Save size={14} className="mr-1.5" />}
                     {t('lease_review.header.save_draft')}
                   </Button>
@@ -3167,7 +3174,12 @@ export default function LeaseReview() {
         <div className="flex-1 px-6 overflow-hidden">
           <ResizablePanelGroup
             direction="horizontal"
-            className="h-full rounded-xl border bg-background shadow-sm overflow-hidden"
+            className={cn(
+              "h-full rounded-xl border bg-background shadow-sm overflow-hidden",
+              // Chrome hugs content: without a PDF split the border caps at the
+              // column width instead of framing empty gutters across the page.
+              !showPdfPanel && "mx-auto w-full max-w-4xl",
+            )}
           >
             {/* Left Panel: PDF Viewer — shown only when lease is editable/in-review */}
             {showPdfPanel && (
@@ -3217,8 +3229,9 @@ export default function LeaseReview() {
                   pinned via `sticky` below. */}
               <div className="flex h-full flex-col bg-background overflow-y-auto">
 
-                {/* Global banners */}
-                <div className="px-4 pt-3 space-y-2">
+                {/* Global banners — same centered column as the tab content, so
+                    the alert layer and the work layer share one left rail. */}
+                <div className={cn("px-4 pt-3 space-y-2 mx-auto w-full", showPdfPanel && !isPdfCollapsed ? "max-w-2xl" : "max-w-3xl")}>
                   {showPdfPanel && isPdfCollapsed && (
                     <Button
                       variant="outline"
@@ -3382,20 +3395,24 @@ export default function LeaseReview() {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col px-4 pt-2">
                   {/* Tabs use shortened labels so the row fits the right
                       panel even at 50% split (with PDF visible). Full
-                      labels surface as tooltips. overflow-x-auto is the
-                      safety net for very narrow viewports — tabs scroll
-                      horizontally rather than disappearing off the edge. */}
-                  <TabsList className="sticky top-0 z-10 w-full shrink-0 justify-start overflow-x-auto border-b border-border bg-background">
-                    <TabsTrigger value="general" title={t('locked_lease.tabs.general')}>{t('lease_review.tabs.general')}</TabsTrigger>
-                    <TabsTrigger value="vendor" title={t('lease_review.tabs.vendor_full')}>{t('locked_lease.vendor.title')}</TabsTrigger>
-                    <TabsTrigger value="rent" title={t('locked_lease.tabs.rent')}>{t('locked_lease.tabs.rent')}</TabsTrigger>
-                    <TabsTrigger value="options" title={t('lease_review.tabs.options_full')}>{t('lease_review.tabs.options')}</TabsTrigger>
-                    <TabsTrigger value="risks" title={t('locked_lease.tabs.risks')}>{t('locked_lease.tabs.risks')}</TabsTrigger>
-                    <TabsTrigger value="documents" title={t('locked_lease.tabs.documents')}>{t('locked_lease.tabs.documents')}</TabsTrigger>
-                    <TabsTrigger value="asc842" title={t('lease_review.tabs.asc842_full')}>ASC 842</TabsTrigger>
-                  </TabsList>
+                      labels surface as tooltips. ScrollableTabStrip owns
+                      horizontal overflow (edge fades cue clipped tabs, the
+                      active tab is kept in view) so it never pans the page. */}
+                  <ScrollableTabStrip activeValue={activeTab} className="sticky top-0 z-10 shrink-0 border-b border-border bg-background">
+                    <TabsList className="w-max min-w-full justify-start rounded-none bg-background p-0 h-9">
+                      <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="general" title={t('locked_lease.tabs.general')}>{t('lease_review.tabs.general')}</TabsTrigger>
+                      <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="vendor" title={t('lease_review.tabs.vendor_full')}>{t('locked_lease.vendor.title')}</TabsTrigger>
+                      <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="rent" title={t('locked_lease.tabs.rent')}>{t('locked_lease.tabs.rent')}</TabsTrigger>
+                      <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="options" title={t('lease_review.tabs.options_full')}>{t('lease_review.tabs.options')}</TabsTrigger>
+                      <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="risks" title={t('locked_lease.tabs.risks')}>{t('locked_lease.tabs.risks')}</TabsTrigger>
+                      <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="documents" title={t('locked_lease.tabs.documents')}>{t('locked_lease.tabs.documents')}</TabsTrigger>
+                      <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="asc842" title={t('lease_review.tabs.asc842_full')}>ASC 842</TabsTrigger>
+                    </TabsList>
+                  </ScrollableTabStrip>
 
-                  <div className={cn("py-4 space-y-4 mx-auto pb-24", showPdfPanel ? "max-w-2xl" : "max-w-3xl")}>
+                  {/* pb-8 (was pb-24): the sticky footer that needed the runway
+                      was removed 2026-06-23. Collapsed-PDF counts as wide. */}
+                  <div className={cn("py-4 space-y-4 mx-auto w-full pb-8", showPdfPanel && !isPdfCollapsed ? "max-w-2xl" : "max-w-3xl")}>
 
                       {/* General Information */}
                       <TabsContent value="general" className="mt-0 space-y-4">
@@ -3679,20 +3696,42 @@ export default function LeaseReview() {
 
                       {/* ASC 842 Inputs — full per-lease capture for measurement,
                           classification, term assessment, and disclosure. The fields
-                          here are NOT extracted by the AI pipeline. */}
-                      <TabsContent value="asc842" className="mt-0">
+                          here are NOT extracted by the AI pipeline. forceMount: the
+                          tab holds unsaved local state, and the natural gesture
+                          (flip to Documents to check the PDF, flip back) must not
+                          destroy it. */}
+                      <TabsContent value="asc842" forceMount className="mt-0 data-[state=inactive]:hidden">
                         {lease?.id && lease?.workspace_id && (
-                          <Asc842InputsTab
-                            leaseId={lease.id}
-                            workspaceId={lease.workspace_id}
-                            canEdit={
-                              !isReadOnly && (
-                                userRole === 'admin' ||
-                                userRole === 'owner' ||
-                                userRole === 'editor'
-                              )
-                            }
-                          />
+                          <div className="space-y-4">
+                            <Asc842InputsTab
+                              leaseId={lease.id}
+                              workspaceId={lease.workspace_id}
+                              canEdit={
+                                !isReadOnly && (
+                                  userRole === 'admin' ||
+                                  userRole === 'owner' ||
+                                  userRole === 'editor'
+                                )
+                              }
+                              discountRate={lease.discount_rate ?? null}
+                              baseTermMonths={lease.term_months ?? null}
+                              lifecycleStatus={lifecycleStatus ?? null}
+                            />
+                            {/* The IBR/discount rate is the report's most important
+                                measurement input — surface it during capture, not
+                                only after activation (it was locked-view-only). */}
+                            <LeaseDiscountRateCard
+                              leaseId={lease.id}
+                              workspaceId={lease.workspace_id}
+                              canEdit={
+                                !isReadOnly && (
+                                  userRole === 'admin' ||
+                                  userRole === 'owner' ||
+                                  userRole === 'editor'
+                                )
+                              }
+                            />
+                          </div>
                         )}
                       </TabsContent>
 

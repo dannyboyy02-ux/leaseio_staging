@@ -177,11 +177,11 @@
       "ready_to_approve_label": "Listo para aprobar",
       "ready_to_approve_detail": "Todas las secciones requeridas están revisadas. Apruebe para avanzar el arrendamiento.",
       "ready_to_approve_detail_after_flagged": "Todos los campos señalados están revisados y las secciones confirmadas. Apruebe para avanzar el arrendamiento.",
-      "ready_to_lock_label": "Listo para bloquear",
-      "ready_to_lock_detail": "Aprobado. Bloquee el modelo para finalizar el registro del arrendamiento.",
+      "ready_to_lock_label": "Listo para finalizar",
+      "ready_to_lock_detail": "Aprobado. Finalice para bloquear el registro y activar el arrendamiento.",
       "awaiting_approval_label": "Esperando aprobación",
       "awaiting_approval_detail": "El arrendamiento está bloqueado y enviado a los aprobadores.",
-      "final_label": "Aprobado y bloqueado",
+      "final_label": "Finalizado",
       "final_detail": "El registro del arrendamiento está finalizado.",
       "marked_reviewed_toast": "Se marcaron {{sections}} como revisadas.",
       "save_review_failed": "No se pudo guardar tu revisión. Si esto continúa, tu espacio de trabajo puede ser de solo lectura."
@@ -205,10 +205,10 @@
       "upload_failed": "No se pudo subir el documento",
       "finalize_success": "Arrendamiento finalizado y activado",
       "finalize_failed": "No se pudo finalizar el arrendamiento",
-      "locked_no_changes": "Arrendamiento bloqueado (sin cambios para enviar)",
+      "locked_no_changes": "Arrendamiento finalizado (sin cambios para enviar)",
       "lock_failed": "No se pudo bloquear el arrendamiento",
       "lock_failed_with_reason": "No se pudo bloquear: {{message}}",
-      "locked_activated": "Arrendamiento bloqueado y activado",
+      "locked_activated": "Arrendamiento finalizado y activado",
       "tab_reopened": "Pestaña reabierta — arrendamiento sin aprobar y editable.",
       "base_rent_required": "El monto de renta base es obligatorio para generar un calendario",
       "escalation_rate_required": "La tasa de incremento es obligatoria para la generación del calendario anual",
@@ -330,7 +330,7 @@
       "activate": "Activar",
       "finalize_activate": "Finalizar y activar",
       "finalize_tooltip": "Abstraiga con IA el documento contrafirmado y active este arrendamiento en su portafolio.",
-      "lock": "Bloquear",
+      "lock": "Finalizar",
       "reopen": "Reabrir",
       "untitled_lease": "Arrendamiento sin título",
       "rename_lease": "Renombrar arrendamiento",
@@ -339,7 +339,7 @@
       "editing_with_count_other": "Editando — {{count}} cambios",
       "submit_for_approval": "Enviar para aprobación",
       "submit_tooltip": "Envíe sus cambios para aprobación",
-      "lock_tooltip_no_changes": "Bloquear este arrendamiento (sin cambios para enviar)",
+      "lock_tooltip_no_changes": "Finalizar este arrendamiento (sin cambios para enviar)",
       "save_draft": "Guardar borrador",
       "upload_amendment": "Subir enmienda"
     },
@@ -352,7 +352,8 @@
       "reviewed": "Revisado",
       "reviewed_unmark_title": "Revisado — haga clic para desmarcar",
       "next": "Siguiente: {{title}}",
-      "go_to": "Ir a {{title}}"
+      "go_to": "Ir a {{title}}",
+      "mark_reviewed": "Marcar como revisado"
     },
     "pdf": {
       "collapse": "Contraer el documento fuente",
@@ -393,7 +394,7 @@
     "lock_dialog": {
       "submit_title_one": "Enviar {{count}} cambio para aprobación",
       "submit_title_other": "Enviar {{count}} cambios para aprobación",
-      "lock_title": "Bloquear este arrendamiento",
+      "lock_title": "Finalizar este arrendamiento",
       "activate_title": "¿Activar este arrendamiento?",
       "desc_self_approve": "Como administrador, puede aplicar sus cambios de inmediato o enviarlos a otro administrador para aprobación.",
       "desc_submit": "Sus cambios se enviarán para aprobación financiera. Los cambios aprobados se aplican al registro activo; los rechazados se descartan.",
@@ -591,7 +592,7 @@
       "summary_desc": "PDF de 1–2 páginas — resumen financiero, cláusulas clave, riesgos",
       "generating": "Generando…",
       "generate_cta": "Generar resumen",
-      "summary_locked_hint": "Disponible después de que el arrendamiento se finalice (modelo bloqueado)"
+      "summary_locked_hint": "Disponible después de que el arrendamiento se finalice."
     },
     "panel": {
       "upload_button": "Subir documento",
@@ -950,7 +951,7 @@
     "submitted_desc": "Enviado — en espera de abstracción y revisión",
     "under_review_desc": "En revisión — se requiere decisión de aprobación",
     "approved_desc": "Aprobado — suba el documento firmado",
-    "executed_desc": "Firmado — complete la revisión de términos y bloquee el modelo",
+    "executed_desc": "Firmado — complete la revisión de términos y finalice",
     "now_badge": "Ahora",
     "awaiting_counter_signature": "En Espera de Contrafirma",
     "due_date_short": "Vence {{date}}",
@@ -1230,10 +1231,8 @@
     },
     "asc842": {
       "saved": "Entradas ASC 842 guardadas",
-      "title": "Entradas ASC 842 por arrendamiento",
-      "intro": "Estos valores NO son extraídos por el proceso de IA. Captúrelos por arrendamiento para que el informe de divulgación sea auditable. NULL = aún no capturado (distinto de cero, que significa \"capturado como cero\").",
-      "captured": "Capturado",
-      "not_captured": "No capturado",
+      "title": "Entradas ASC 842",
+      "intro": "Detalles que la IA no puede leer del contrato — asignaciones, opciones y juicios profesionales. Captúrelos aquí (o su contador puede hacerlo) y LeaseIO los incluye en el informe de divulgación ASC 842 que usted entrega a su herramienta contable. Deje un campo en blanco si no aplica o aún no lo ha evaluado — en blanco significa «no capturado», 0 significa «capturado como cero».",
       "rou_title": "Ajustes del activo por derecho de uso",
       "rou_desc": "Activo por derecho de uso = pasivo por arrendamiento + renta pagada por anticipado + costos directos iniciales − incentivos de arrendamiento − asignación para mejoras del arrendatario.",
       "tia_label": "Asignación para mejoras del arrendatario",
@@ -1260,12 +1259,12 @@
       "class_title": "Criterios de clasificación — ASC 842-10-25-2",
       "class_desc": "Si se cumple UNA de estas pruebas → clasificación como arrendamiento financiero. De lo contrario, operativo.",
       "class_1": "1. La propiedad se transfiere al arrendatario al final del plazo",
-      "class_2": "2. Opción de compra ventajosa que el arrendatario razonablemente ejercerá",
+      "class_2": "2. Opción de compra ventajosa que el arrendatario tiene certeza razonable de ejercer",
       "class_3": "3. El plazo del arrendamiento abarca la mayor parte de la vida económica restante (≥75%)",
-      "class_3_pct": "    % de la vida económica restante",
+      "class_3_pct": "% de la vida económica restante",
       "class_4": "4. VP de los pagos ≥ sustancialmente todo el valor razonable (≥90%)",
-      "class_4_pct": "    % VP / valor razonable",
-      "class_4_fv": "    Valor razonable del activo al inicio",
+      "class_4_pct": "% VP / valor razonable",
+      "class_4_fv": "Valor razonable del activo al inicio",
       "class_5": "5. Activo especializado sin uso alternativo para el arrendador",
       "class_basis_label": "Base general de la clasificación",
       "class_basis_help": "Documente la determinación para que un auditor pueda seguir el razonamiento.",
@@ -1293,7 +1292,31 @@
       "readonly_note": "Solo lectura — solo los administradores, editores o el propietario del espacio de trabajo pueden editar las entradas ASC 842.",
       "not_assessed": "Sin evaluar",
       "basis_label": "Base",
-      "basis_placeholder": "Documente la fuente/metodología para el historial de auditoría"
+      "basis_placeholder": "Documente la fuente/metodología para el historial de auditoría",
+      "summary_classification": "Clasificación",
+      "class_finance": "Arrendamiento financiero",
+      "class_operating": "Arrendamiento operativo",
+      "class_partial": "Evaluación incompleta",
+      "class_finance_reason": "{{count}} de 5 pruebas cumplidas",
+      "class_operating_reason": "Las 5 pruebas evaluadas — ninguna cumplida",
+      "class_partial_reason": "{{assessed}} de 5 pruebas evaluadas",
+      "summary_discount_rate": "Tasa de descuento",
+      "summary_not_set": "Sin definir",
+      "summary_discount_hint": "Se define en la tarjeta Tasa de descuento más abajo",
+      "summary_effective_term": "Plazo efectivo",
+      "summary_term_months": "{{months}} meses",
+      "summary_term_breakdown": "{{base}} base + {{renewal}} de renovación",
+      "summary_completion": "Capturado",
+      "sections_captured": "{{done}} de {{total}} secciones",
+      "pre_execution_hint": "La mayoría de estos datos se definen al firmar — puede volver cuando el contrato firmado esté cargado.",
+      "editable_after_lock_note": "Las entradas ASC 842 siguen siendo editables después de finalizar; cada cambio queda registrado.",
+      "unsaved_changes": "Cambios sin guardar",
+      "load_error": "No se pudieron cargar las entradas ASC 842.",
+      "generate_report": "Generar informe de divulgación",
+      "generating_report": "Generando…",
+      "report_ready": "Informe de divulgación listo.",
+      "save_before_report": "Guarde sus cambios primero — el informe lee las últimas entradas guardadas.",
+      "report_viewer_hint": "Pida a un administrador o editor del espacio de trabajo que genere el informe de divulgación."
     },
     "analysis_export": {
       "subtitle": "Informe de análisis de arrendamiento",
@@ -1479,15 +1502,13 @@
       "readonly_note": "Solo lectura — solo los administradores, editores o el propietario del espacio de trabajo pueden anular la tasa de descuento."
     },
     "review_sections": {
-      "na": "N/D",
       "no_field_extracted": "No se extrajo {{field}}",
       "select_asset_type": "Seleccione el tipo de activo",
       "no_asset_type": "No se especificó tipo de activo",
       "months_abbr": "Mes",
       "years_abbr": "Año",
       "view_source_title": "Vea dónde lo encontró la IA — página {{page}}",
-      "view_in_document": "Ver en el documento",
-      "field_empty": "El campo está vacío — no se extrajo o no está presente en el documento"
+      "view_in_document": "Ver en el documento"
     },
     "counter_signature": {
       "title": "Contrafirma",
@@ -2265,7 +2286,7 @@
       "assign": "Asignar",
       "select_aria": "{{action}} aprobador de {{label}}",
       "clear_aria": "Quitar el asignado de {{label}}",
-      "no_financial_warning": "No hay Aprobador Financiero asignado; los compromisos se detendrán después de la aprobación del gerente.",
+      "no_financial_warning": "No hay Aprobador Financiero asignado; las solicitudes de arrendamiento se detendrán después de la aprobación del gerente.",
       "workflow_title": "Roles de flujo de trabajo",
       "workflow_desc": "Solicitante: puede crear y enviar solicitudes de arrendamiento. Administrador de flujo: puede subir documentos ejecutados y revisar informes de variación; es independiente del nivel de acceso de Miembros del Equipo indicado arriba.",
       "member_col": "Miembro",
@@ -2302,9 +2323,9 @@
       "title": "Umbrales de Revisión",
       "desc": "Límites en dólares que activan la revisión financiera de nuevas solicitudes de arrendamiento.",
       "approval_label": "Umbral de Aprobación ($)",
-      "approval_help": "Las solicitudes cuyo compromiso total de efectivo supere este monto requieren revisión del Aprobador Financiero. Configure 0 para requerir revisión en todos los casos.",
+      "approval_help": "Las solicitudes cuyo compromiso total de efectivo supere este monto requieren revisión del Aprobador Financiero. Establezca 0 para requerir revisión en todas.",
       "covenant_label": "Alerta de Pasivo por Arrendamiento ($)",
-      "covenant_help": "Límite total del pasivo por arrendamientos de la cartera. Los compromisos que superen este umbral activan una alerta de riesgo de cartera.",
+      "covenant_help": "Límite total del pasivo por arrendamientos de la cartera. Los arrendamientos que superen este umbral activan una alerta de riesgo de cartera.",
       "optional": "Opcional",
       "signpost_prefix": "¿Busca la tasa de descuento? Ahora está en",
       "signpost_link": "Configuración de informes",
@@ -2619,7 +2640,7 @@
     "expires_label": "Vence:",
     "snapshot_note_prefix": "La configuración de informes del espacio de trabajo al momento de la generación queda capturada en el JSON",
     "snapshot_note_suffix": "de la fila para reproducibilidad completa.",
-    "no_finalized_leases": "Aún no hay arrendamientos finalizados — bloquee un arrendamiento primero.",
+    "no_finalized_leases": "Aún no hay arrendamientos finalizados — finalice un arrendamiento primero.",
     "consolidated_ready": "Informe consolidado listo ({{count}} arrendamientos)",
     "consolidated_failed": "No se pudo generar el informe consolidado",
     "assembling_data": "Recopilando datos de arrendamientos…",
@@ -2635,7 +2656,6 @@
     "filter_single_lease": "Arrendamiento individual",
     "filter_portfolio_period": "Período de portafolio",
     "report_count": "{{count}} informe(s)",
-    "no_reports_prefix": "Aún no hay informes. Genere uno desde la pestaña Documentos de un arrendamiento o desde la",
     "portfolio_admin_page": "página de administración de portafolio",
     "badge_lease": "arrendamiento",
     "badge_portfolio": "portafolio",
@@ -2735,7 +2755,20 @@
     "pdf_generated_label": "Generado",
     "pdf_contents": "Contenido",
     "pdf_lease_disclosure_title": "Divulgación ASC 842 — {{label}}",
-    "pdf_lease_report_title": "Informe de divulgación ASC 842 — {{label}}"
+    "pdf_lease_report_title": "Informe de divulgación ASC 842 — {{label}}",
+    "no_reports_empty": "Aún no hay informes. Abra la pestaña ASC 842 de un arrendamiento y elija «Generar informe de divulgación».",
+    "no_reports_admin_suffix": "Los consolidados de cartera están en la",
+    "no_reports_member_suffix": "Para consolidados de cartera, pida ayuda a un administrador del espacio de trabajo.",
+    "scope": {
+      "lease": "Arrendamiento individual",
+      "workspace": "Espacio de trabajo",
+      "portfolio": "Cartera"
+    },
+    "status": {
+      "ready": "Listo",
+      "expired": "Expirado",
+      "pending": "Pendiente"
+    }
   },
   "empty": {
     "no_leases": "Sin arrendamientos aún",
@@ -2776,7 +2809,9 @@
     "search_placeholder": "Buscar arrendamientos, partes, propiedades...",
     "per_month_short": "mes",
     "unknown": "Desconocido",
-    "session_expired": "La sesión expiró. Inicie sesión de nuevo."
+    "session_expired": "La sesión expiró. Inicie sesión de nuevo.",
+    "open": "Abrir",
+    "retry": "Reintentar"
   },
   "locked_lease": {
     "ai_extracted_badge": "Extraído por IA",
@@ -2910,7 +2945,8 @@
       "month": "mes",
       "months": "meses",
       "expiration_date": "Fecha de vencimiento",
-      "parsed_from": "Extraído de"
+      "parsed_from": "Extraído de",
+      "in_connective": "en"
     }
   },
   "plan": {
@@ -3905,7 +3941,7 @@
   "approvals": {
     "common": {
       "action_failed": "No se pudo completar la acción",
-      "commitment_approved": "Compromiso aprobado",
+      "commitment_approved": "Solicitud de arrendamiento aprobada",
       "request_rejected": "Solicitud rechazada"
     },
     "errors": {
@@ -3916,7 +3952,7 @@
     },
     "queue": {
       "title": "Aprobaciones",
-      "subtitle": "Revise y actúe sobre las solicitudes de compromiso que requieren su aprobación",
+      "subtitle": "Revise y actúe sobre las solicitudes de arrendamiento que requieren su aprobación",
       "tab_mine": "Requiere mi revisión",
       "tab_all": "Todas las pendientes",
       "tab_reviewed": "Revisadas",
@@ -4001,7 +4037,7 @@
       "reason_feedback_placeholder": "Motivo o comentarios...",
       "approve_apply": "Aprobar y aplicar",
       "reject_changes": "Rechazar cambios",
-      "approve_commitment_q": "¿Aprobar este compromiso?",
+      "approve_commitment_q": "¿Aprobar esta solicitud de arrendamiento?",
       "approve_commitment_desc": "Aprobar remitirá \"{{title}}\" al aprobador financiero para su revisión. Esta acción se registra en el registro de auditoría.",
       "approve_for_financial": "Aprobar para revisión financiera",
       "reject_request_q": "¿Rechazar esta solicitud?",
@@ -4012,7 +4048,7 @@
     },
     "financial": {
       "title": "Revisión Financiera",
-      "commitment_request": "Solicitud de compromiso",
+      "commitment_request": "Solicitud de arrendamiento",
       "back_to_approvals": "Volver a aprobaciones",
       "load_failed": "No se pudo cargar el arrendamiento",
       "load_error": "No se pudo cargar la revisión financiera",
@@ -4021,7 +4057,7 @@
       "review_status_before": "Esta revisión está en estado ",
       "review_status_after": ".",
       "not_financial_approver": "Usted no tiene el rol de aprobador financiero.",
-      "commitment_summary": "Resumen del compromiso",
+      "commitment_summary": "Resumen financiero",
       "department": "Departamento",
       "term": "Plazo",
       "escalation_rate": "Tasa de incremento",
@@ -4036,9 +4072,9 @@
       "not_flagged": "No marcado",
       "covenant_threshold": "Umbral de covenant",
       "existing_exposure": "Exposición financiera existente",
-      "this_commitment": "Este compromiso",
+      "this_commitment": "Este arrendamiento",
       "headroom_remaining": "Margen restante",
-      "exceed_warning": "Agregar este compromiso excedería el umbral de covenant en {{amount}}. Aprobarlo podría provocar un incumplimiento de covenant.",
+      "exceed_warning": "Agregar este arrendamiento excedería el umbral de covenant en {{amount}}. Aprobarlo podría provocar un incumplimiento.",
       "classification_title": "Clasificación del arrendamiento — Determinación del aprobador financiero",
       "classification_desc": "Revise los criterios de ASC 842 a continuación. Si algún criterio aplica, puede requerirse la clasificación como arrendamiento financiero.",
       "criteria": {
@@ -4053,14 +4089,14 @@
       "classification_pending_option": "Pendiente (debe seleccionar para aprobar)",
       "classification_required": "Debe establecer la clasificación como Operativo o Financiero antes de aprobar.",
       "confirm_approval_title": "Confirmar aprobación",
-      "confirm_approval_desc": "Está aprobando este compromiso. Confirme los detalles a continuación.",
+      "confirm_approval_desc": "Está aprobando esta solicitud de arrendamiento. Confirme los detalles a continuación.",
       "classification_set_to": "Clasificación establecida en",
       "total_commitment": "Compromiso total",
       "covenant_status": "Estado del covenant",
       "would_exceed": "Excedería el umbral",
       "within_threshold": "Dentro del umbral",
       "no_threshold": "Sin umbral configurado",
-      "approve_exceed_warning": "Advertencia: aprobar este compromiso excederá su umbral de covenant.",
+      "approve_exceed_warning": "Advertencia: aprobar este arrendamiento excederá su umbral de covenant.",
       "reject_title": "Rechazar esta solicitud",
       "reject_desc": "Proporcione un motivo. Puede devolverla al remitente para su revisión o rechazarla definitivamente.",
       "reject_reason_placeholder": "Explique el motivo del rechazo…",
@@ -4133,8 +4169,11 @@
     },
     "request": {
       "validation": {
-        "description_required": "La descripción es obligatoria",
-        "department_required": "El departamento solicitante es obligatorio"
+        "description_required": "La descripción debe tener al menos 3 caracteres.",
+        "department_required": "El departamento solicitante es obligatorio",
+        "payment_positive": "El pago mensual debe ser mayor que cero.",
+        "term_whole_months": "El plazo debe ser un número entero de meses.",
+        "term_range": "El plazo debe estar entre 1 y 360 meses."
       },
       "asset_types": {
         "equipment": "Equipo",
@@ -4145,7 +4184,7 @@
       "login_required": "Inicie sesión para enviar una solicitud",
       "submitted_toast": "Solicitud enviada",
       "submit_failed": "No se pudo enviar la solicitud",
-      "title": "Nueva solicitud de compromiso",
+      "title": "Nueva solicitud de arrendamiento",
       "subtitle": "Ingrese los términos del arrendamiento para ver el impacto financiero antes de enviar.",
       "no_approvers_title": "Sin aprobadores configurados",
       "auto_approved_admin_prefix": "Esta solicitud se aprobará automáticamente. Asigne roles de aprobación en",
@@ -4162,13 +4201,13 @@
       "resolving_route": "Resolviendo la ruta de aprobación…",
       "route_via_policy": "Se enruta por su política de aprobación \"{{policy}}\".",
       "route_auto_approve": "Su política \"{{policy}}\" aprueba automáticamente esta solicitud — no se necesita ningún paso de aprobación.",
-      "enter_details_to_preview": "Ingrese el departamento y el monto arriba para previsualizar su ruta de aprobación.",
+      "enter_details_to_preview": "Ingrese un departamento y un monto mensual para previsualizar la ruta de aprobación.",
       "no_matching_policy": "Ninguna política de aprobación coincide con estos datos todavía — un administrador podría necesitar agregar una política coincidente o de respaldo; de lo contrario, esta solicitud podría bloquearse al enviarse.",
       "review_covenant": "Se requiere revisión financiera porque esta solicitud está marcada por covenant.",
       "review_threshold": "Se requiere revisión financiera porque el compromiso total alcanza o supera el umbral de {{amount}}.",
       "review_settings": "Se requiere revisión financiera según la configuración de aprobaciones de su espacio de trabajo.",
       "review_none": "No se requieren revisores adicionales con los valores actuales.",
-      "commitment_details": "Detalles del compromiso",
+      "commitment_details": "Detalles de la solicitud",
       "asset_type": "Tipo de activo",
       "description": "Descripción",
       "description_placeholder": "¿Qué se está arrendando?",
@@ -4178,15 +4217,24 @@
       "department_placeholder": "Operaciones",
       "lease_terms": "Términos del arrendamiento",
       "monthly_payment": "Pago mensual",
-      "ai_extract_full": "(estimación opcional — mejora el enrutamiento y la vista previa)",
-      "ai_extract": "(estimación opcional)",
+      "ai_extract_full": "(opcional — mejora la vista previa de ruta y costos)",
+      "ai_extract": "(opcional)",
       "annual_escalation": "Incremento anual (%)",
       "start_date": "Fecha de inicio",
       "end_date_note": "Fecha de fin: {{date}}",
       "document": "Documento",
       "attach_label": "Adjunte cotización / borrador del arrendamiento (PDF opcional, máx. 20 MB)",
       "drop_pdf": "Suelte el PDF aquí o haga clic para buscar",
-      "submit": "Enviar solicitud"
+      "submit": "Enviar solicitud",
+      "file_too_large": "Ese PDF supera el límite de 20 MB.",
+      "file_pdf_only": "Solo se pueden adjuntar archivos PDF.",
+      "file_rejected": "No se puede adjuntar ese archivo.",
+      "impact_needs_date": "Agregue una fecha de inicio para ver la vista previa del impacto financiero.",
+      "draft_saved_note": "Su solicitud se guardó como borrador — corrija el problema y reenvíela desde la página del arrendamiento.",
+      "discard_title": "¿Descartar esta solicitud?",
+      "discard_body": "Tiene datos sin guardar. Si cierra ahora, se perderán.",
+      "discard_keep": "Seguir editando",
+      "discard_confirm": "Descartar"
     },
     "impact": {
       "title": "Impacto Financiero",
@@ -4310,7 +4358,7 @@
     "summary": {
       "pending_review": "Pendiente de revisión financiera",
       "draft_watermark": "BORRADOR — PENDIENTE DE APROBACIÓN",
-      "title": "Compromiso de arrendamiento — Resumen de impacto financiero",
+      "title": "Solicitud de arrendamiento — Resumen de impacto financiero",
       "generated": "Generado",
       "draft": "BORRADOR",
       "term": "Plazo",

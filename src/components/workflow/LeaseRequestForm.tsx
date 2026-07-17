@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
 import { supabase } from '@/integrations/supabase/client';
 import { getApprovalRequirements, getInitialStatusAfterSubmission } from '@/lib/approvalRouting';
 import {
@@ -46,6 +46,16 @@ import {
   type ChainResult,
 } from '@/lib/leaseSubmissionDecision';
 import { FinancialImpactPreview } from './FinancialImpactPreview';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const makeLeaseRequestSchema = (t: (key: string) => string) =>
   z.object({
@@ -61,8 +71,13 @@ const makeLeaseRequestSchema = (t: (key: string) => string) =>
     // finalize) — NOT here — so the old "AI will extract them" copy was false.
     // Providing estimates sharpens the financial-impact preview and, crucially,
     // the annual cost drives policy matching for the approval route preview.
-    monthlyPayment: z.coerce.number().positive().optional(),
-    termMonths: z.coerce.number().int().min(1).max(360).optional(),
+    monthlyPayment: z.coerce.number().positive(t('workflow.request.validation.payment_positive')).optional(),
+    termMonths: z.coerce
+      .number()
+      .int(t('workflow.request.validation.term_whole_months'))
+      .min(1, t('workflow.request.validation.term_range'))
+      .max(360, t('workflow.request.validation.term_range'))
+      .optional(),
     startDate: z.string().optional(),
     escalationRate: z.coerce.number().min(0).default(0),
     covenantFlagged: z.boolean().default(false),
@@ -90,6 +105,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   const isAdminRole = userRole === 'admin' || userRole === 'owner';
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [calcs, setCalcs] = useState<LeaseCalculations | null>(null);
   const [hasApprovers, setHasApprovers] = useState<boolean | null>(null);
@@ -251,12 +267,38 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
     if (acceptedFiles.length) setFile(acceptedFiles[0]);
   }, []);
 
+  // A rejected drop used to do NOTHING — the user assumed the attach was
+  // broken (or worse, that it worked). Say why the file was refused.
+  const onDropRejected = useCallback((rejections: FileRejection[]) => {
+    const code = rejections[0]?.errors?.[0]?.code;
+    if (code === 'file-too-large') {
+      toast.error(t('workflow.request.file_too_large'));
+    } else if (code === 'file-invalid-type') {
+      toast.error(t('workflow.request.file_pdf_only'));
+    } else {
+      toast.error(t('workflow.request.file_rejected'));
+    }
+  }, [t]);
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    onDropRejected,
     maxFiles: 1,
     maxSize: 20 * 1024 * 1024,
     accept: { 'application/pdf': ['.pdf'] },
   });
+
+  // Esc / overlay-click / Cancel on a filled form used to silently wipe
+  // everything (form.reset() runs on close). Route every user-initiated
+  // close through a discard confirm when there is anything to lose.
+  const formIsDirty = form.formState.isDirty || !!file;
+  const handleSheetOpenChange = useCallback((next: boolean) => {
+    if (!next && formIsDirty && !isSubmitting) {
+      setConfirmDiscardOpen(true);
+      return;
+    }
+    onOpenChange(next);
+  }, [formIsDirty, isSubmitting, onOpenChange]);
 
   const canSubmit = useMemo(
     () => !isSubmitting && !!user && !!workspace,
@@ -418,9 +460,14 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
       // four submission outcomes are unit-testable.
       const outcome = decideSubmissionOutcome(chain, legacyInitialStatus, chainError);
       if (outcome.kind === 'leave_draft') {
+        // The lease (and any attachment) already exists. Leaving the drawer
+        // open invited a second Submit — a duplicate draft — and the toast
+        // never mentioned a draft had been saved. Close and land the user ON
+        // the draft, where the retry-routing affordance lives.
         toast.error(outcome.errorMessage);
-        // Lease stays in 'draft'; resolve-approval-chain is idempotent on
-        // initialResolution=true so the user can retry.
+        toast.message(t('workflow.request.draft_saved_note'));
+        onOpenChange(false);
+        navigate(`/app/leases/${lease.id}`);
         return;
       }
 
@@ -440,7 +487,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
             lease.id,
             workspace.id,
             'manager_approver',
-            `New commitment request awaiting your review: ${values.description}`,
+            `New lease request awaiting your review: ${values.description}`,
           );
         } else if (
           finalStatus === 'under_review' &&
@@ -451,7 +498,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
             lease.id,
             workspace.id,
             'financial_approver',
-            `New commitment request awaiting financial review: ${values.description}`,
+            `New lease request awaiting financial review: ${values.description}`,
           );
         }
       } else {
@@ -461,7 +508,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           lease.id,
           workspace.id,
           outcome.chainSuccess!.firstStepAssignees,
-          `New commitment request requires your approval: ${values.description}`,
+          `New lease request requires your approval: ${values.description}`,
         );
       }
 
@@ -471,7 +518,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
       await createLeaseNotification({
         leaseId: lease.id,
         eventType: 'new_request',
-        description: `New commitment request: ${values.description}`,
+        description: `New lease request: ${values.description}`,
       });
 
       toast.success(t('workflow.request.submitted_toast'));
@@ -487,14 +534,19 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
+    <Sheet open={open} onOpenChange={handleSheetOpenChange}>
+      {/* flex-col scaffold: pinned header + footer, ONE scrolling middle with a
+          single px-6 gutter. The old single overflow pane scrolled the Submit
+          button out of reach for the whole fill-in flow. */}
+      <SheetContent side="right" className="flex h-full w-full flex-col gap-0 p-0 sm:max-w-lg">
+        <SheetHeader className="border-b px-6 pb-4 pt-6">
           <SheetTitle>{t('workflow.request.title')}</SheetTitle>
           <SheetDescription>
             {t('workflow.request.subtitle')}
           </SheetDescription>
         </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
         {/* No-approvers warning */}
         {/* P1-7: the legacy "no approvers configured — auto-approved" banner
@@ -503,7 +555,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
             would contradict the policy route below. Only show it when we KNOW
             there are no active policies (hasActivePolicies === false). */}
         {hasApprovers === false && hasActivePolicies === false && (
-          <div className="mx-4 mt-4 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:bg-amber-950/20 dark:border-amber-700">
+          <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:bg-amber-950/20 dark:border-amber-700">
             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{t('workflow.request.no_approvers_title')}</p>
@@ -531,81 +583,8 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
           </div>
         )}
 
-        <div className="mx-4 mt-4 rounded-lg border border-border bg-muted/30 p-3">
-          <p className="text-sm font-medium">{t('workflow.request.route_preview')}</p>
-          {hasActivePolicies === null ? (
-            // Policy check still loading — show neutral, never the legacy lie.
-            <p className="mt-2 text-xs text-muted-foreground">{t('workflow.request.resolving_route')}</p>
-          ) : hasActivePolicies ? (
-            // P1-7: policy-driven route via the REAL resolver — matches actual
-            // submission routing (was the legacy role heuristic, which lied when
-            // policies exist).
-            policyResolution === null ? (
-              <p className="mt-2 text-xs text-muted-foreground">{t('workflow.request.resolving_route')}</p>
-            ) : policyResolution.matched ? (
-              policyResolution.chain.length === 0 ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {t('workflow.request.route_auto_approve', { policy: policyResolution.policy_name })}
-                </p>
-              ) : (
-                <>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                    <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
-                    {policyResolution.chain.some((s) => s.stage === 'concept') && (
-                      <Badge variant="secondary">{t('workflow.request.badge_concept')}</Badge>
-                    )}
-                    {policyResolution.chain.some((s) => s.stage === 'signator') && (
-                      <Badge variant="secondary">{t('workflow.request.badge_signature')}</Badge>
-                    )}
-                    <Badge variant="outline">{t('workflow.request.badge_posted_after')}</Badge>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {t('workflow.request.route_via_policy', { policy: policyResolution.policy_name })}
-                  </p>
-                </>
-              )
-            ) : (requestingDepartment || Number(monthlyPayment) > 0) ? (
-              // Only warn about a no-match once the user has entered the fields
-              // that drive matching — otherwise a fresh, empty form greets them
-              // with an alarming "could be blocked" they can't act on.
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
-                {t('workflow.request.no_matching_policy')}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t('workflow.request.enter_details_to_preview')}
-              </p>
-            )
-          ) : (
-            // No policies → the legacy manager/financial role flow is the truth.
-            <>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
-                {approvalPreview.requiresManagerApproval && <Badge variant="secondary">{t('workflow.request.badge_manager')}</Badge>}
-                {approvalPreview.requiresFinancialApproval && <Badge variant="secondary">{t('workflow.request.badge_financial')}</Badge>}
-                <Badge variant={previewStatus === 'approved' ? 'default' : 'outline'}>
-                  {previewStatus === 'approved'
-                    ? t('workflow.request.badge_auto_approved')
-                    : t('workflow.request.badge_posted_after')}
-                </Badge>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {approvalPreview.requiresFinancialApproval
-                  ? covenantFlagged
-                    ? t('workflow.request.review_covenant')
-                    : workspaceSettings.approvalThreshold != null &&
-                      (calcs?.totalCashCommitment ?? 0) >= workspaceSettings.approvalThreshold
-                    ? t('workflow.request.review_threshold', {
-                        amount: formatLocalizedCurrency(workspaceSettings.approvalThreshold, language),
-                      })
-                    : t('workflow.request.review_settings')
-                  : t('workflow.request.review_none')}
-              </p>
-            </>
-          )}
-        </div>
 
-        <div className="px-4 pb-4 overflow-y-auto">
+        <div>
           <Form {...form}>
             <form
               id="lease-request-form"
@@ -624,7 +603,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t('workflow.request.asset_type')}</FormLabel>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {ASSET_TYPE_OPTIONS.map((option) => {
                           const Icon = option.icon;
                           const selected = selectedAssetType === option.value;
@@ -776,20 +755,27 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                     name="escalationRate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t('workflow.request.annual_escalation')}</FormLabel>
+                        <FormLabel>
+                          {t('workflow.request.annual_escalation')}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">{t('workflow.request.ai_extract')}</span>
+                        </FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            step="0.1"
-                            placeholder="3.0"
-                            value={field.value ?? ''}
-                            onChange={(e) =>
-                              field.onChange(
-                                e.target.value === '' ? 0 : Number(e.target.value),
-                              )
-                            }
-                          />
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.1"
+                              placeholder="3.0"
+                              className="pr-8"
+                              value={field.value ?? ''}
+                              onChange={(e) =>
+                                field.onChange(
+                                  e.target.value === '' ? 0 : Number(e.target.value),
+                                )
+                              }
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">%</span>
+                          </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -809,16 +795,100 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
                       <FormControl>
                         <Input type="date" {...field} />
                       </FormControl>
-                      {calcs?.endDate && (
-                        <p className="text-xs text-muted-foreground">
-                          {t('workflow.request.end_date_note', { date: calcs.endDate })}
-                        </p>
-                      )}
+                      {/* Helper line always renders (no layout shift). The
+                          impact preview requires a date — say so instead of
+                          silently withholding the drawer's headline promise
+                          behind an "optional" field. */}
+                      <p className="text-xs text-muted-foreground min-h-4">
+                        {calcs?.endDate
+                          ? t('workflow.request.end_date_note', { date: formatLocalizedDate(calcs.endDate, language) })
+                          : Number(monthlyPayment) > 0 && Number(termMonths) > 0 && !startDate
+                            ? t('workflow.request.impact_needs_date')
+                            : '\u00A0'}
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+
+              {/* ——— Approval route preview — placed AFTER the fields that
+                  feed it (department, amount): the live preview stays in view
+                  while those fields are edited, instead of greeting the user
+                  as an empty output panel above its own inputs. ——— */}
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <p className="text-sm font-medium">{t('workflow.request.route_preview')}</p>
+                {hasActivePolicies === null ? (
+                  // Policy check still loading — show neutral, never the legacy lie.
+                  <p className="mt-2 text-xs text-muted-foreground">{t('workflow.request.resolving_route')}</p>
+                ) : hasActivePolicies ? (
+                  // P1-7: policy-driven route via the REAL resolver — matches actual
+                  // submission routing (was the legacy role heuristic, which lied when
+                  // policies exist).
+                  policyResolution === null ? (
+                    <p className="mt-2 text-xs text-muted-foreground">{t('workflow.request.resolving_route')}</p>
+                  ) : policyResolution.matched ? (
+                    policyResolution.chain.length === 0 ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {t('workflow.request.route_auto_approve', { policy: policyResolution.policy_name })}
+                      </p>
+                    ) : (
+                      <>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
+                          {policyResolution.chain.some((s) => s.stage === 'concept') && (
+                            <Badge variant="secondary">{t('workflow.request.badge_concept')}</Badge>
+                          )}
+                          {policyResolution.chain.some((s) => s.stage === 'signator') && (
+                            <Badge variant="secondary">{t('workflow.request.badge_signature')}</Badge>
+                          )}
+                          <Badge variant="outline">{t('workflow.request.badge_posted_after')}</Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {t('workflow.request.route_via_policy', { policy: policyResolution.policy_name })}
+                        </p>
+                      </>
+                    )
+                  ) : (requestingDepartment || Number(monthlyPayment) > 0) ? (
+                    // Only warn about a no-match once the user has entered the fields
+                    // that drive matching — otherwise a fresh, empty form greets them
+                    // with an alarming "could be blocked" they can't act on.
+                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
+                      {t('workflow.request.no_matching_policy')}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t('workflow.request.enter_details_to_preview')}
+                    </p>
+                  )
+                ) : (
+                  // No policies → the legacy manager/financial role flow is the truth.
+                  <>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
+                      {approvalPreview.requiresManagerApproval && <Badge variant="secondary">{t('workflow.request.badge_manager')}</Badge>}
+                      {approvalPreview.requiresFinancialApproval && <Badge variant="secondary">{t('workflow.request.badge_financial')}</Badge>}
+                      <Badge variant={previewStatus === 'approved' ? 'default' : 'outline'}>
+                        {previewStatus === 'approved'
+                          ? t('workflow.request.badge_auto_approved')
+                          : t('workflow.request.badge_posted_after')}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {approvalPreview.requiresFinancialApproval
+                        ? covenantFlagged
+                          ? t('workflow.request.review_covenant')
+                          : workspaceSettings.approvalThreshold != null &&
+                            (calcs?.totalCashCommitment ?? 0) >= workspaceSettings.approvalThreshold
+                          ? t('workflow.request.review_threshold', {
+                              amount: formatLocalizedCurrency(workspaceSettings.approvalThreshold, language),
+                            })
+                          : t('workflow.request.review_settings')
+                        : t('workflow.request.review_none')}
+                    </p>
+                  </>
+                )}
+                    </div>
 
               {/* ——— Live Financial Impact Preview ——— */}
               {calcs && (
@@ -873,17 +943,43 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
             </form>
           </Form>
         </div>
+        </div>
 
-        <SheetFooter>
+        {/* Pinned: the primary action is reachable at every scroll position.
+            Submit owns the terminal slot; Cancel routes through the same
+            dirty-guard as Esc / overlay-click. */}
+        <SheetFooter className="border-t bg-background px-6 py-3 sm:justify-end">
+          <Button variant="outline" onClick={() => handleSheetOpenChange(false)}>
+            {t('common.cancel')}
+          </Button>
           <Button type="submit" form="lease-request-form" disabled={!canSubmit}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {t('workflow.request.submit')}
           </Button>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t('common.cancel')}
-          </Button>
         </SheetFooter>
       </SheetContent>
+
+      <AlertDialog open={confirmDiscardOpen} onOpenChange={setConfirmDiscardOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('workflow.request.discard_title')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('workflow.request.discard_body')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('workflow.request.discard_keep')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmDiscardOpen(false);
+                onOpenChange(false);
+              }}
+            >
+              {t('workflow.request.discard_confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }

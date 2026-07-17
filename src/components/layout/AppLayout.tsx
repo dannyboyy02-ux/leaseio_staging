@@ -57,7 +57,11 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         <AppSidebar />
         <main
           className={cn(
-            'min-h-screen',
+            // overflow-x-hidden: wide content (tab strips, tables) must scroll
+            // inside its own container — the page body never scrolls sideways.
+            // Without this, a too-wide child let the whole workbench pan
+            // horizontally, blanking the view (2026-07-17 polish walkthrough).
+            'min-h-screen overflow-x-hidden',
             !resizing && 'transition-[padding] duration-200 ease-out motion-reduce:transition-none',
           )}
           style={{ paddingLeft: mainPaddingLeft }}

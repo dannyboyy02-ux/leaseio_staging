@@ -169,7 +169,11 @@ export function SummaryStrip() {
       setStats([
         {
           label: t('dashboard.monthly_rent'),
-          primary: formatCurrency(monthlyRentSum),
+          // Compact from six figures up — "$215,375" was ellipsizing to
+          // "$215,7..." in the tile; "$215K" always fits.
+          primary: monthlyRentSum >= 100_000
+            ? formatLocalizedCurrency(monthlyRentSum, language, { compact: true })
+            : formatCurrency(monthlyRentSum),
           sub: monthlyRentSub,
           accent: 'default',
           href: '/app/leases?status=active',
