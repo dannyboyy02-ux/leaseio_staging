@@ -130,7 +130,13 @@ export function isDocumentTypeAllowed(
       return type === 'concept_attachment' || type === 'loi' || type === 'other';
     case 'in_negotiation':
     case 'approved': // legacy mapping for chain-mode equivalence
-      return ['draft', 'redline', 'counter_redline', 'loi', 'other'].includes(type);
+      // P1-1: 'final_negotiated' MUST be uploadable here — advance-to-final-review
+      // requires a final_negotiated document to leave in_negotiation, but that
+      // type was previously only offered at 'final_review' (which you can't reach
+      // without it) → an unbreakable catch-22. The server never enforced
+      // type-vs-lifecycle; only this dropdown created the deadlock. Matches the
+      // Phase 4 spec's own smoke test (uploads final_negotiated while in_negotiation).
+      return ['draft', 'redline', 'counter_redline', 'final_negotiated', 'loi', 'other'].includes(type);
     case 'final_review':
       return type === 'final_negotiated' || type === 'other';
     case 'pending_counter_signature':
