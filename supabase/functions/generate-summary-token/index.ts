@@ -198,7 +198,7 @@ serve(async (req) => {
             await resend.emails.send({
               from: Deno.env.get('RESEND_APPROVALS_FROM_EMAIL') ?? Deno.env.get('RESEND_FROM_EMAIL') ?? 'LeaseIO <noreply@notifications.theleaseio.com>',
               to: [submitterProfile.email],
-              subject: '\u2705 Your lease commitment request has been approved',
+              subject: '\u2705 Your lease request has been approved',
               html: generateApprovalEmailHtml({
                 submitterName,
                 shareUrl,
@@ -251,8 +251,8 @@ function generateApprovalEmailHtml({
         <div style="text-align: center; margin-bottom: 32px;">
           <div style="display: inline-block; background: #dcfce7; border-radius: 50%; width: 64px; height: 64px; line-height: 64px; text-align: center; font-size: 32px;">\u2705</div>
         </div>
-        <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 8px;">Commitment Approved</h1>
-        <p style="color: #6b7280; margin: 0 0 24px;">Hi ${escapeHtml(submitterName)}, your lease commitment request has been approved and is ready to move forward.</p>
+        <h1 style="font-size: 22px; font-weight: 700; color: #111827; margin: 0 0 8px;">Lease Request Approved</h1>
+        <p style="color: #6b7280; margin: 0 0 24px;">Hi ${escapeHtml(submitterName)}, your lease request has been approved and is ready to move forward.</p>
         <p style="color: #374151; margin: 0 0 16px;">View the complete Financial Impact Summary including total commitment, estimated lease liability, and P&amp;L impact:</p>
         <div style="text-align: center; margin-bottom: 28px;">
           <a href="${shareUrl}" style="display: inline-block; background: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: 600; font-size: 15px;">View Financial Impact Summary \u2192</a>

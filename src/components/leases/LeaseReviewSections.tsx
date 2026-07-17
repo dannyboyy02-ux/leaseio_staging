@@ -13,7 +13,6 @@ import {
   Sparkles,
   CheckCircle2,
   XCircle,
-  HelpCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -51,13 +50,11 @@ export { SECTION_CONFIG, findFieldLabel, type SectionKey };
 // Confidence badge component
 export const ConfidenceBadge = ({ confidence }: { confidence: number | null }) => {
   const { t } = useLanguage();
+  // No chip when the AI produced nothing for this field — the placeholder
+  // already says "No X extracted", and an "N/A" badge in the confidence slot
+  // read as "broken" rather than "not extracted" (one signal per empty field).
   if (confidence === null) {
-    return (
-      <Badge variant="outline" className="text-[9px] h-4 font-medium text-muted-foreground bg-muted">
-        <HelpCircle size={8} className="mr-0.5" />
-        {t('leases.review_sections.na')}
-      </Badge>
-    );
+    return null;
   }
 
   const percentage = Math.round(confidence * 100);
@@ -442,11 +439,9 @@ export function SectionCard({
                 </div>
               )}
 
-              {!value && field.type !== 'term' && (
-                <p className="text-[10px] text-muted-foreground mt-1 italic">
-                  {t('leases.review_sections.field_empty')}
-                </p>
-              )}
+              {/* (field_empty helper removed 2026-07-17 — the placeholder
+                  already carries the "not extracted" signal; empty fields
+                  were apologizing three times each.) */}
             </div>
           );
         })}

@@ -24,6 +24,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { supabase } from '@/integrations/supabase/client';
 import { useGenerateWorkspaceAsc842Report } from '@/hooks/useGenerateWorkspaceAsc842Report';
@@ -48,7 +50,9 @@ type Filter = 'all' | 'lease_disclosure' | 'portfolio_period';
 
 export default function DisclosureReportLibrary() {
   const { t } = useAppTranslation();
-  const { workspace } = useApp();
+  const { language } = useLanguage();
+  const { workspace, userRole } = useApp();
+  const isAdminRole = userRole === 'admin' || userRole === 'owner';
   const workspaceId = workspace?.id;
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,11 +217,20 @@ export default function DisclosureReportLibrary() {
           <CardContent className="space-y-2">
             {!loading && filtered.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {t('reports.no_reports_prefix')}{' '}
-                <Link to="/app/admin/reports" className="underline">
-                  {t('reports.portfolio_admin_page')}
-                </Link>
-                .
+                {/* Viewers can't generate — don't promise them a button that
+                    isn't there. */}
+                {userRole === 'viewer' ? t('reports.no_reports_viewer') : t('reports.no_reports_empty')}{userRole === 'viewer' ? '' : ' '}
+                {isAdminRole ? (
+                  <>
+                    {t('reports.no_reports_admin_suffix')}{' '}
+                    <Link to="/app/admin/reports" className="underline">
+                      {t('reports.portfolio_admin_page')}
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  t('reports.no_reports_member_suffix')
+                )}
               </p>
             ) : (
               filtered.map((r) => {
@@ -229,18 +242,19 @@ export default function DisclosureReportLibrary() {
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline">{isLease ? t('reports.badge_lease') : t('reports.badge_portfolio')}</Badge>
-                        <Badge variant="secondary">{r.report_scope}</Badge>
+                        {/* One axis, one badge: the localized scope carries it
+                            (the old type badge just repeated it in lowercase). */}
+                        <Badge variant="secondary">{t(`reports.scope.${r.report_scope}`, { defaultValue: r.report_scope })}</Badge>
                         <Badge variant={r.status === 'ready' ? 'default' : 'secondary'}>
-                          {r.status}
+                          {t(`reports.status.${r.status}`, { defaultValue: r.status })}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(r.generated_at).toLocaleString()}
+                        {formatLocalizedDate(r.generated_at, language, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
                         {!isLease && r.period_start && (
                           <>
                             {' · '}
-                            {r.period_start} → {r.period_end}
+                            {formatLocalizedDate(r.period_start, language)} → {formatLocalizedDate(r.period_end, language)}
                             {' · '}
                             {t('reports.included_count', { count: r.lease_count })}
                             {r.excluded_lease_count
@@ -254,7 +268,7 @@ export default function DisclosureReportLibrary() {
                       {isLease && r.lease_id && (
                         <Button asChild size="sm" variant="outline">
                           <Link to={`/app/leases/${r.lease_id}/reports/${r.id}`}>
-                            {t('firm.inbox.open')}
+                            {t('common.open')}
                           </Link>
                         </Button>
                       )}

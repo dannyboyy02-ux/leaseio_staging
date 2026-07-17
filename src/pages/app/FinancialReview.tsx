@@ -250,7 +250,7 @@ export default function FinancialReview() {
           // the requestor never hears their own request's outcome. The requestor
           // is the person to notify here.
           recipient_ids: lease.requestor_id ? [lease.requestor_id] : [],
-          message: `Your commitment request "${lease.request_title}" has been approved (${classification} lease).`,
+          message: `Your lease request "${lease.request_title}" has been approved (${classification} lease).`,
           covenant_headroom: covenantHeadroom,
         },
       } as any);
@@ -293,7 +293,7 @@ export default function FinancialReview() {
           details: {
             notification_type: 'notify_submitter_returned',
             recipient_ids: lease.requestor_id ? [lease.requestor_id] : [],
-            message: `Your commitment request "${lease.request_title}" has been returned for revision. Reason: ${rejectReason.trim()}`,
+            message: `Your lease request "${lease.request_title}" has been returned for revision. Reason: ${rejectReason.trim()}`,
           },
         } as any);
 
@@ -306,7 +306,7 @@ export default function FinancialReview() {
           details: {
             notification_type: 'notify_submitter_rejected',
             recipient_ids: lease.requestor_id ? [lease.requestor_id] : [],
-            message: `Your commitment request "${lease.request_title}" has been rejected. Reason: ${rejectReason.trim()}`,
+            message: `Your lease request "${lease.request_title}" has been rejected. Reason: ${rejectReason.trim()}`,
           },
         } as any);
 

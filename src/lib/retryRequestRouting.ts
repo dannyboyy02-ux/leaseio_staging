@@ -87,7 +87,7 @@ export async function retryRequestRouting(
 
   const finalStatus = outcome.finalStatus;
   const routingPath = outcome.routingPath;
-  const description = lease.request_title ?? 'commitment request';
+  const description = lease.request_title ?? 'lease request';
 
   // The lifecycle flip (draft → finalStatus) and its status_change audit row
   // are applied SERVER-SIDE by resolve-approval-chain in the same call (the
@@ -95,12 +95,12 @@ export async function retryRequestRouting(
   // the right approvers for the path.
   if (routingPath === 'legacy') {
     if (finalStatus === 'submitted' && approvalRequirements.requiresManagerApproval) {
-      await notifyRoleHolders(supabase, lease.id, workspaceId, 'manager_approver', `New commitment request awaiting your review: ${description}`);
+      await notifyRoleHolders(supabase, lease.id, workspaceId, 'manager_approver', `New lease request awaiting your review: ${description}`);
     } else if (finalStatus === 'under_review' && approvalRequirements.requiresFinancialApproval) {
-      await notifyRoleHolders(supabase, lease.id, workspaceId, 'financial_approver', `New commitment request awaiting financial review: ${description}`);
+      await notifyRoleHolders(supabase, lease.id, workspaceId, 'financial_approver', `New lease request awaiting financial review: ${description}`);
     }
   } else {
-    await notifyChainAssignees(supabase, lease.id, workspaceId, outcome.chainSuccess!.firstStepAssignees, `New commitment request requires your approval: ${description}`);
+    await notifyChainAssignees(supabase, lease.id, workspaceId, outcome.chainSuccess!.firstStepAssignees, `New lease request requires your approval: ${description}`);
   }
 
   // status_change audit row is written server-side by resolve-approval-chain
@@ -109,7 +109,7 @@ export async function retryRequestRouting(
   await createLeaseNotification({
     leaseId: lease.id,
     eventType: 'new_request',
-    description: `New commitment request: ${description}`,
+    description: `New lease request: ${description}`,
   });
 
   return { ok: true, finalStatus };
@@ -142,20 +142,20 @@ async function completeExistingChainRouting(
 
   const firstStepAssignees =
     (resolveResponse?.firstStepAssignees as { userId: string | null; role: string | null }[]) ?? [];
-  const description = lease.request_title ?? 'commitment request';
+  const description = lease.request_title ?? 'lease request';
 
   await notifyChainAssignees(
     supabase,
     lease.id,
     workspaceId,
     firstStepAssignees,
-    `New commitment request requires your approval: ${description}`,
+    `New lease request requires your approval: ${description}`,
   );
 
   await createLeaseNotification({
     leaseId: lease.id,
     eventType: 'new_request',
-    description: `New commitment request: ${description}`,
+    description: `New lease request: ${description}`,
   });
 
   return { ok: true, finalStatus };

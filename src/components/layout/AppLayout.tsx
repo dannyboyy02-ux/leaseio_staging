@@ -57,7 +57,13 @@ function AppLayoutInner({ children }: AppLayoutProps) {
         <AppSidebar />
         <main
           className={cn(
-            'min-h-screen',
+            // overflow-x-CLIP (not hidden): wide content (tab strips, tables)
+            // must scroll inside its own container — the page body never
+            // scrolls sideways. `hidden` would make <main> a scroll container
+            // and kill position:sticky on every window-scrolled page (app
+            // header, save bars); `clip` clips without doing that, and even
+            // blocks programmatic sideways scroll (2026-07-17 walkthrough).
+            'min-h-screen overflow-x-clip',
             !resizing && 'transition-[padding] duration-200 ease-out motion-reduce:transition-none',
           )}
           style={{ paddingLeft: mainPaddingLeft }}

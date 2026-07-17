@@ -193,7 +193,9 @@ export function CriticalDatesStrip({ lease }: Props) {
       out.push({
         key: 'next_key_date',
         icon: AlertCircle,
-        label: `${nextKeyDate.description ?? t('locked_lease.critical_dates.upcoming')} · ${formatDistance(nextKeyDate.date, t)}`,
+        // "in 15 days", matching the sibling chips — the bare "· 15 days"
+        // didn't say whether the date was ahead or behind.
+        label: `${nextKeyDate.description ?? t('locked_lease.critical_dates.upcoming')} · ${t('locked_lease.critical_dates.in_connective')} ${formatDistance(nextKeyDate.date, t)}`,
         date: nextKeyDate.date,
         tone: 'neutral',
         tooltip: format(nextKeyDate.date, 'MMM d, yyyy'),

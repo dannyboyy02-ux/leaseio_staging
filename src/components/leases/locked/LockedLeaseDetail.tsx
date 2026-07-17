@@ -4,6 +4,7 @@ import { parseToLocalDate, formatLocalizedCurrency, type SupportedLocale } from 
 import { useLanguage } from '@/contexts/LanguageContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ScrollableTabStrip, UNDERLINE_TAB_TRIGGER } from '@/components/ui/scrollable-tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, X, Plus } from 'lucide-react';
 import { AddRiskDialog, type PendingCitation } from '@/components/leases/AddRiskDialog';
@@ -77,6 +78,23 @@ const extractedValue = (extracted: any, key: string): string | null => {
   return null;
 };
 
+// Full state names → USPS codes, for extracted addresses that spell the
+// state out. Lowercased keys; includes DC.
+const US_STATE_ABBR: Record<string, string> = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
+  colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA',
+  hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA',
+  kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
+  massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS',
+  missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV',
+  'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+  'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK',
+  oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+  'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
+  virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI',
+  wyoming: 'WY', 'district of columbia': 'DC',
+};
+
 interface ParsedAddress {
   street: string | null;
   city: string | null;
@@ -122,11 +140,18 @@ const parseUsAddress = (raw: string | null | undefined): ParsedAddress => {
   // "TX 78701" or "TX 78701-1234" or just "78701"
   const stateZip = /^([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/.exec(last);
   const zipOnly = /^(\d{5}(?:-\d{4})?)$/.exec(last);
+  // Extracted addresses frequently spell the state out ("Tennessee 37203") —
+  // that shape used to fall through to unparsed, dumping the whole address in
+  // the Street slot with dashes below it.
+  const fullStateZip = /^([A-Za-z][A-Za-z .]+?)\s+(\d{5}(?:-\d{4})?)$/.exec(last);
   if (stateZip) {
     state = stateZip[1];
     zip = stateZip[2];
   } else if (zipOnly) {
     zip = zipOnly[1];
+  } else if (fullStateZip && US_STATE_ABBR[fullStateZip[1].toLowerCase()]) {
+    state = US_STATE_ABBR[fullStateZip[1].toLowerCase()];
+    zip = fullStateZip[2];
   } else {
     // Last segment isn't a state/zip pattern — bail to unparsed; preserves the raw blob.
     return { ...empty, unparsed: true, street: raw };
@@ -286,6 +311,12 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
   }, [dismissTarget, dismissReason, lease?.id, refetchRisks, t]);
   const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'obligations' | 'risks' | 'asc842' | 'documents'>('general');
   const canEditAsc842 = !readOnly && (userRole === 'admin' || userRole === 'owner' || userRole === 'editor');
+  // Mount ASC 842 on first activation, then keep mounted (forceMount) so
+  // unsaved inputs survive tab switches without eager per-view queries.
+  const [ascTabTouched, setAscTabTouched] = useState(false);
+  useEffect(() => {
+    if (activeTab === 'asc842') setAscTabTouched(true);
+  }, [activeTab]);
 
   // Fetch unlock-request status, rent schedule, and risks
   useEffect(() => {
@@ -483,16 +514,18 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
 
         <div className="max-w-6xl mx-auto px-6 py-6">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-            <TabsList className="mb-4 justify-start overflow-x-auto">
-              <TabsTrigger value="general">{t('locked_lease.tabs.general')}</TabsTrigger>
-              <TabsTrigger value="vendor">{t('locked_lease.tabs.vendor')}</TabsTrigger>
-              <TabsTrigger value="rent">{t('locked_lease.tabs.rent')}</TabsTrigger>
-              <TabsTrigger value="options">{t('locked_lease.tabs.options')}</TabsTrigger>
-              <TabsTrigger value="obligations">{t('locked_lease.tabs.obligations')}</TabsTrigger>
-              <TabsTrigger value="risks">{t('locked_lease.tabs.risks')}</TabsTrigger>
-              <TabsTrigger value="asc842">{t('locked_lease.tabs.asc842')}</TabsTrigger>
-              <TabsTrigger value="documents">{t('locked_lease.tabs.documents')}</TabsTrigger>
-            </TabsList>
+            <ScrollableTabStrip activeValue={activeTab} className="mb-4 border-b border-border">
+              <TabsList className="w-max min-w-full justify-start rounded-none bg-background p-0 h-auto items-end">
+                <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="general">{t('locked_lease.tabs.general')}</TabsTrigger>
+                <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="vendor">{t('locked_lease.tabs.vendor')}</TabsTrigger>
+                <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="rent">{t('locked_lease.tabs.rent')}</TabsTrigger>
+                <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="options">{t('locked_lease.tabs.options')}</TabsTrigger>
+                <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="obligations">{t('locked_lease.tabs.obligations')}</TabsTrigger>
+                <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="risks">{t('locked_lease.tabs.risks')}</TabsTrigger>
+                <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="asc842">{t('locked_lease.tabs.asc842')}</TabsTrigger>
+                <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="documents">{t('locked_lease.tabs.documents')}</TabsTrigger>
+              </TabsList>
+            </ScrollableTabStrip>
 
             <TabsContent value="general" className="space-y-4 mt-0">
               <SectionCard title={t('locked_lease.property.section_title')}>
@@ -671,19 +704,26 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
               </SectionCard>
             </TabsContent>
 
-            <TabsContent value="asc842" className="mt-0">
-              <Asc842InputsTab
-                leaseId={lease.id}
-                workspaceId={lease.workspace_id}
-                canEdit={canEditAsc842}
-              />
-              <div className="mt-4">
-                <LeaseDiscountRateCard
+            {/* forceMount: unsaved ASC 842 inputs must survive tab switches. */}
+            <TabsContent value="asc842" forceMount className="mt-0 data-[state=inactive]:hidden">
+              {ascTabTouched && (
+                <Asc842InputsTab
                   leaseId={lease.id}
                   workspaceId={lease.workspace_id}
                   canEdit={canEditAsc842}
+                  discountRate={lease.discount_rate ?? null}
+                  baseTermMonths={lease.term_months ?? null}
+                  lifecycleStatus={lease.lifecycle_status ?? 'active'}
+                  reportAvailable={!!lease.model_locked}
+                  discountRateSlot={
+                    <LeaseDiscountRateCard
+                      leaseId={lease.id}
+                      workspaceId={lease.workspace_id}
+                      canEdit={canEditAsc842}
+                    />
+                  }
                 />
-              </div>
+              )}
             </TabsContent>
 
             <TabsContent value="documents" className="space-y-4 mt-0">
