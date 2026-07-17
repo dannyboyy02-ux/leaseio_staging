@@ -41,11 +41,15 @@ describe('cluster 3 — ScrollableTabStrip is the shared owner of tab overflow',
 });
 
 describe('cluster 3 — the page body never scrolls sideways', () => {
-  it('AppLayout <main> includes overflow-x-hidden', () => {
+  // overflow-x-CLIP, not hidden: `hidden` would make <main> a scroll
+  // container and kill position:sticky on every window-scrolled page
+  // (layout review HIGH). Pin the corrected property.
+  it('AppLayout <main> includes overflow-x-clip (never overflow-x-hidden)', () => {
     const layout = read('src/components/layout/AppLayout.tsx');
     // Narrow to the <main> element's className block.
     const main = layout.slice(layout.indexOf('<main'), layout.indexOf('paddingLeft: mainPaddingLeft'));
-    expect(main).toContain('overflow-x-hidden');
+    expect(main).toContain('overflow-x-clip');
+    expect(main).not.toContain('overflow-x-hidden');
   });
 });
 

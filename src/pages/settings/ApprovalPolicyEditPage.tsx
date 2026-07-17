@@ -549,7 +549,7 @@ export default function ApprovalPolicyEditPage() {
         </Card>
 
         {/* Test / Save / Cancel */}
-        <div className="flex flex-wrap justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 px-6 border-t">
+        <div className="flex flex-wrap justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 pl-6 pr-20 border-t">
           <Button
             variant="outline"
             onClick={() => setTestOpen(true)}

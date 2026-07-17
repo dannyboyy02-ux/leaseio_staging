@@ -143,7 +143,7 @@ serve(async (req) => {
 
     // Build safe public response — no internal IDs, user IDs, storage paths, or workspace config
     const summary = {
-      requestTitle: lease.request_title || 'Lease Commitment',
+      requestTitle: lease.request_title || 'Lease Request',
       assetType: lease.asset_type || '',
       description: lease.request_description || '',
       vendor: lease.vendor_name || null,

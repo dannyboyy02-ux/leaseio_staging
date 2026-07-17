@@ -217,7 +217,9 @@ export default function DisclosureReportLibrary() {
           <CardContent className="space-y-2">
             {!loading && filtered.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {t('reports.no_reports_empty')}{' '}
+                {/* Viewers can't generate — don't promise them a button that
+                    isn't there. */}
+                {userRole === 'viewer' ? t('reports.no_reports_viewer') : t('reports.no_reports_empty')}{userRole === 'viewer' ? '' : ' '}
                 {isAdminRole ? (
                   <>
                     {t('reports.no_reports_admin_suffix')}{' '}
@@ -240,7 +242,8 @@ export default function DisclosureReportLibrary() {
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline">{isLease ? t('reports.badge_lease') : t('reports.badge_portfolio')}</Badge>
+                        {/* One axis, one badge: the localized scope carries it
+                            (the old type badge just repeated it in lowercase). */}
                         <Badge variant="secondary">{t(`reports.scope.${r.report_scope}`, { defaultValue: r.report_scope })}</Badge>
                         <Badge variant={r.status === 'ready' ? 'default' : 'secondary'}>
                           {t(`reports.status.${r.status}`, { defaultValue: r.status })}
@@ -251,7 +254,7 @@ export default function DisclosureReportLibrary() {
                         {!isLease && r.period_start && (
                           <>
                             {' · '}
-                            {r.period_start} → {r.period_end}
+                            {formatLocalizedDate(r.period_start, language)} → {formatLocalizedDate(r.period_end, language)}
                             {' · '}
                             {t('reports.included_count', { count: r.lease_count })}
                             {r.excluded_lease_count

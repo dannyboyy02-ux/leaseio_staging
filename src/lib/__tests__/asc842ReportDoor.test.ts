@@ -65,3 +65,17 @@ describe('cluster 2 — honest report-library empty state', () => {
     expect(block).toContain("t('reports.no_reports_member_suffix')");
   });
 });
+
+describe('report door — finalization gate (auditor HIGH follow-up)', () => {
+  it('the generate button is disabled until the lease is finalized (server only accepts model_locked)', () => {
+    const tab = readFileSync(join(root, 'src/components/leases/Asc842InputsTab.tsx'), 'utf8');
+    expect(tab).toMatch(/disabled=\{generatingReport \|\| !reportAvailable\}/);
+    expect(tab).toContain("t('leases.asc842.report_after_finalize')");
+  });
+  it('both parents pass reportAvailable from model_locked', () => {
+    const lr = readFileSync(join(root, 'src/pages/app/LeaseReview.tsx'), 'utf8');
+    const lld = readFileSync(join(root, 'src/components/leases/locked/LockedLeaseDetail.tsx'), 'utf8');
+    expect(lr).toMatch(/reportAvailable=\{!!lease\.model_locked\}/);
+    expect(lld).toMatch(/reportAvailable=\{!!lease\.model_locked\}/);
+  });
+});

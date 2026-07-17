@@ -311,6 +311,12 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
   }, [dismissTarget, dismissReason, lease?.id, refetchRisks, t]);
   const [activeTab, setActiveTab] = useState<'general' | 'vendor' | 'rent' | 'options' | 'obligations' | 'risks' | 'asc842' | 'documents'>('general');
   const canEditAsc842 = !readOnly && (userRole === 'admin' || userRole === 'owner' || userRole === 'editor');
+  // Mount ASC 842 on first activation, then keep mounted (forceMount) so
+  // unsaved inputs survive tab switches without eager per-view queries.
+  const [ascTabTouched, setAscTabTouched] = useState(false);
+  useEffect(() => {
+    if (activeTab === 'asc842') setAscTabTouched(true);
+  }, [activeTab]);
 
   // Fetch unlock-request status, rent schedule, and risks
   useEffect(() => {
@@ -509,7 +515,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
         <div className="max-w-6xl mx-auto px-6 py-6">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
             <ScrollableTabStrip activeValue={activeTab} className="mb-4 border-b border-border">
-              <TabsList className="w-max min-w-full justify-start rounded-none bg-background p-0 h-9">
+              <TabsList className="w-max min-w-full justify-start rounded-none bg-background p-0 h-auto items-end">
                 <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="general">{t('locked_lease.tabs.general')}</TabsTrigger>
                 <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="vendor">{t('locked_lease.tabs.vendor')}</TabsTrigger>
                 <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="rent">{t('locked_lease.tabs.rent')}</TabsTrigger>
@@ -700,21 +706,24 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
 
             {/* forceMount: unsaved ASC 842 inputs must survive tab switches. */}
             <TabsContent value="asc842" forceMount className="mt-0 data-[state=inactive]:hidden">
-              <Asc842InputsTab
-                leaseId={lease.id}
-                workspaceId={lease.workspace_id}
-                canEdit={canEditAsc842}
-                discountRate={lease.discount_rate ?? null}
-                baseTermMonths={lease.term_months ?? null}
-                lifecycleStatus={lease.lifecycle_status ?? 'active'}
-              />
-              <div className="mt-4">
-                <LeaseDiscountRateCard
+              {ascTabTouched && (
+                <Asc842InputsTab
                   leaseId={lease.id}
                   workspaceId={lease.workspace_id}
                   canEdit={canEditAsc842}
+                  discountRate={lease.discount_rate ?? null}
+                  baseTermMonths={lease.term_months ?? null}
+                  lifecycleStatus={lease.lifecycle_status ?? 'active'}
+                  reportAvailable={!!lease.model_locked}
+                  discountRateSlot={
+                    <LeaseDiscountRateCard
+                      leaseId={lease.id}
+                      workspaceId={lease.workspace_id}
+                      canEdit={canEditAsc842}
+                    />
+                  }
                 />
-              </div>
+              )}
             </TabsContent>
 
             <TabsContent value="documents" className="space-y-4 mt-0">

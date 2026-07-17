@@ -948,7 +948,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         {/* Pinned: the primary action is reachable at every scroll position.
             Submit owns the terminal slot; Cancel routes through the same
             dirty-guard as Esc / overlay-click. */}
-        <SheetFooter className="border-t bg-background px-6 py-3 sm:justify-end">
+        <SheetFooter className="border-t bg-background px-6 py-3 gap-2 sm:justify-end">
           <Button variant="outline" onClick={() => handleSheetOpenChange(false)}>
             {t('common.cancel')}
           </Button>

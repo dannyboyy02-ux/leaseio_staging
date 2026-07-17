@@ -184,7 +184,7 @@
       "final_label": "Finalizado",
       "final_detail": "El registro del arrendamiento está finalizado.",
       "marked_reviewed_toast": "Se marcaron {{sections}} como revisadas.",
-      "save_review_failed": "No se pudo guardar tu revisión. Si esto continúa, tu espacio de trabajo puede ser de solo lectura."
+      "save_review_failed": "No se pudo guardar su revisión. Si esto continúa, es posible que su espacio de trabajo sea de solo lectura."
     },
     "toasts": {
       "resubmit_success": "Reenviado para revisión",
@@ -206,8 +206,8 @@
       "finalize_success": "Arrendamiento finalizado y activado",
       "finalize_failed": "No se pudo finalizar el arrendamiento",
       "locked_no_changes": "Arrendamiento finalizado (sin cambios para enviar)",
-      "lock_failed": "No se pudo bloquear el arrendamiento",
-      "lock_failed_with_reason": "No se pudo bloquear: {{message}}",
+      "lock_failed": "No se pudo finalizar el arrendamiento",
+      "lock_failed_with_reason": "No se pudo finalizar: {{message}}",
       "locked_activated": "Arrendamiento finalizado y activado",
       "tab_reopened": "Pestaña reabierta — arrendamiento sin aprobar y editable.",
       "base_rent_required": "El monto de renta base es obligatorio para generar un calendario",
@@ -313,7 +313,7 @@
       "description": "Actualice los datos financieros a continuación. La solicitud se enrutará por la cadena de aprobación desde el principio.",
       "monthly_payment": "Pago mensual ($)",
       "annual_escalation": "Incremento anual (%)",
-      "covenant_checkbox": "Este compromiso puede afectar los covenants financieros",
+      "covenant_checkbox": "Este arrendamiento puede afectar los covenants financieros",
       "submit": "Reenviar para revisión"
     },
     "terminal": {
@@ -398,7 +398,7 @@
       "activate_title": "¿Activar este arrendamiento?",
       "desc_self_approve": "Como administrador, puede aplicar sus cambios de inmediato o enviarlos a otro administrador para aprobación.",
       "desc_submit": "Sus cambios se enviarán para aprobación financiera. Los cambios aprobados se aplican al registro activo; los rechazados se descartan.",
-      "desc_empty_draft": "Desbloqueó este arrendamiento pero no realizó ediciones. Bloquear ahora descartará la sesión de edición vacía y devolverá el arrendamiento a su estado bloqueado anterior.",
+      "desc_empty_draft": "Desbloqueó este arrendamiento pero no realizó ediciones. Finalizar ahora descartará la sesión de edición vacía y devolverá el arrendamiento a su estado bloqueado anterior.",
       "desc_activate": "Esta acción es irreversible. El arrendamiento pasa al estado Activo, los términos firmados se congelan y el registro aparece en el panel de Portafolio Activo.",
       "bullet_frozen": "Todos los términos firmados y campos de variación se congelan",
       "bullet_status_prefix": "El estado del arrendamiento pasa a",
@@ -915,7 +915,7 @@
     "view_all_title": "Ver Todos",
     "commitment": "Compromiso",
     "total_commitment_history": "Historial de Compromiso Total",
-    "commitment_by_month": "Compromisos de arrendamiento agrupados por mes de inicio",
+    "commitment_by_month": "Gasto comprometido por mes de inicio",
     "escalation_updated": "Incremento actualizado",
     "escalation_updated_desc": "El calendario de renta se recalculará en el próximo procesamiento del arrendamiento.",
     "save_failed": "No se pudo guardar",
@@ -1293,12 +1293,12 @@
       "not_assessed": "Sin evaluar",
       "basis_label": "Base",
       "basis_placeholder": "Documente la fuente/metodología para el historial de auditoría",
-      "summary_classification": "Clasificación",
+      "summary_classification": "Clasificación (según pruebas)",
       "class_finance": "Arrendamiento financiero",
       "class_operating": "Arrendamiento operativo",
       "class_partial": "Evaluación incompleta",
       "class_finance_reason": "{{count}} de 5 pruebas cumplidas",
-      "class_operating_reason": "Las 5 pruebas evaluadas — ninguna cumplida",
+      "class_operating_reason": "Se evaluaron las 5 pruebas — ninguna se cumplió",
       "class_partial_reason": "{{assessed}} de 5 pruebas evaluadas",
       "summary_discount_rate": "Tasa de descuento",
       "summary_not_set": "Sin definir",
@@ -1306,7 +1306,7 @@
       "summary_effective_term": "Plazo efectivo",
       "summary_term_months": "{{months}} meses",
       "summary_term_breakdown": "{{base}} base + {{renewal}} de renovación",
-      "summary_completion": "Capturado",
+      "summary_completion": "Capturadas",
       "sections_captured": "{{done}} de {{total}} secciones",
       "pre_execution_hint": "La mayoría de estos datos se definen al firmar — puede volver cuando el contrato firmado esté cargado.",
       "editable_after_lock_note": "Las entradas ASC 842 siguen siendo editables después de finalizar; cada cambio queda registrado.",
@@ -1316,7 +1316,9 @@
       "generating_report": "Generando…",
       "report_ready": "Informe de divulgación listo.",
       "save_before_report": "Guarde sus cambios primero — el informe lee las últimas entradas guardadas.",
-      "report_viewer_hint": "Pida a un administrador o editor del espacio de trabajo que genere el informe de divulgación."
+      "report_viewer_hint": "Pida a un administrador o editor del espacio de trabajo que genere el informe de divulgación.",
+      "report_after_finalize": "Disponible una vez que el arrendamiento se finalice.",
+      "report_failed": "No se pudo generar el informe de divulgación."
     },
     "analysis_export": {
       "subtitle": "Informe de análisis de arrendamiento",
@@ -2605,7 +2607,7 @@
     "finalizing": "Finalizando…",
     "generating_ellipsis": "Generando…",
     "generate_portfolio_report": "Generar Informe de Portafolio",
-    "portfolio_report_help": "Incluye solo arrendamientos activos con modelo bloqueado cuyo plazo se superpone con el período seleccionado. Los demás arrendamientos aparecen en la sección de exclusiones del informe.",
+    "portfolio_report_help": "Incluye solo arrendamientos finalizados y activos cuyo plazo se superpone con el período seleccionado. Los demás se listan como excluidos con el motivo.",
     "recent_portfolio_reports": "Informes de portafolio recientes",
     "no_portfolio_reports": "Aún no hay informes de portafolio. Genere uno arriba.",
     "included_count_one": "{{count}} incluido",
@@ -2743,7 +2745,7 @@
     "pdf_flags_col": "Alertas",
     "pdf_flags_high": "{{count}} ({{high}} altas)",
     "pdf_excluded_leases": "Arrendamientos Excluidos",
-    "pdf_reason_not_model_locked": "Modelo aún no bloqueado",
+    "pdf_reason_not_model_locked": "Aún no finalizado",
     "pdf_reason_not_active": "No está en un ciclo de vida activo",
     "pdf_reason_period_no_overlap": "El plazo no se superpone con el período",
     "pdf_reason_verification_incomplete": "Verificación incompleta",
@@ -2757,18 +2759,22 @@
     "pdf_lease_disclosure_title": "Divulgación ASC 842 — {{label}}",
     "pdf_lease_report_title": "Informe de divulgación ASC 842 — {{label}}",
     "no_reports_empty": "Aún no hay informes. Abra la pestaña ASC 842 de un arrendamiento y elija «Generar informe de divulgación».",
-    "no_reports_admin_suffix": "Los consolidados de cartera están en la",
-    "no_reports_member_suffix": "Para consolidados de cartera, pida ayuda a un administrador del espacio de trabajo.",
+    "no_reports_admin_suffix": "Los consolidados de portafolio están en la",
+    "no_reports_member_suffix": "Para consolidados de portafolio, pida ayuda a un administrador del espacio de trabajo.",
     "scope": {
-      "lease": "Arrendamiento individual",
-      "workspace": "Espacio de trabajo",
-      "portfolio": "Cartera"
+      "single_lease": "Arrendamiento individual",
+      "monthly": "Mensual",
+      "quarterly": "Trimestral",
+      "annual": "Anual",
+      "custom_range": "Rango personalizado"
     },
     "status": {
       "ready": "Listo",
-      "expired": "Expirado",
-      "pending": "Pendiente"
-    }
+      "expired": "Vencido",
+      "generating": "Generando",
+      "failed": "Fallido"
+    },
+    "no_reports_viewer": "Aún no hay informes. Los informes los genera un administrador o editor del espacio de trabajo desde la pestaña ASC 842 de un arrendamiento."
   },
   "empty": {
     "no_leases": "Sin arrendamientos aún",
@@ -4170,7 +4176,7 @@
     "request": {
       "validation": {
         "description_required": "La descripción debe tener al menos 3 caracteres.",
-        "department_required": "El departamento solicitante es obligatorio",
+        "department_required": "El departamento solicitante debe tener al menos 2 caracteres.",
         "payment_positive": "El pago mensual debe ser mayor que cero.",
         "term_whole_months": "El plazo debe ser un número entero de meses.",
         "term_range": "El plazo debe estar entre 1 y 360 meses."

@@ -62,7 +62,7 @@ export function ScrollableTabStrip({ activeValue, className, children }: Scrolla
     <div className={cn('relative min-w-0', className)}>
       <div
         ref={scrollRef}
-        className="overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="overflow-x-auto py-1 -my-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         {children}
       </div>

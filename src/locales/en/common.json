@@ -206,8 +206,8 @@
       "finalize_success": "Lease finalized and activated",
       "finalize_failed": "Failed to finalize the lease",
       "locked_no_changes": "Lease finalized (no changes to submit)",
-      "lock_failed": "Failed to lock lease",
-      "lock_failed_with_reason": "Failed to lock: {{message}}",
+      "lock_failed": "Couldn't finalize the lease",
+      "lock_failed_with_reason": "Couldn't finalize: {{message}}",
       "locked_activated": "Lease finalized and activated",
       "tab_reopened": "Tab reopened — lease unapproved and editable.",
       "base_rent_required": "Base rent amount is required to generate a schedule",
@@ -313,7 +313,7 @@
       "description": "Update the financial inputs below. The request will be routed through the approval chain from the beginning.",
       "monthly_payment": "Monthly Payment ($)",
       "annual_escalation": "Annual Escalation (%)",
-      "covenant_checkbox": "This commitment may impact financial covenants",
+      "covenant_checkbox": "This lease may impact financial covenants",
       "submit": "Resubmit for Review"
     },
     "terminal": {
@@ -398,7 +398,7 @@
       "activate_title": "Activate this lease?",
       "desc_self_approve": "As an admin you can apply your changes immediately, or route them through another admin for approval.",
       "desc_submit": "Your changes will be submitted for financial approval. Approved changes apply to the live record; rejected ones are dropped.",
-      "desc_empty_draft": "You unlocked this lease but didn't make any edits. Locking now will discard the empty edit session and return the lease to its prior locked state.",
+      "desc_empty_draft": "You unlocked this lease but didn't make any edits. Finalizing now will discard the empty edit session and return the lease to its prior locked state.",
       "desc_activate": "This action is irreversible. The lease moves to Active status, executed terms freeze, and the record appears in the Active Portfolio dashboard.",
       "bullet_frozen": "All executed terms and variance fields are frozen",
       "bullet_status_prefix": "Lease status moves to",
@@ -555,7 +555,7 @@
     "delete_failed": "Failed to delete document",
     "delete_audit_failed": "The deletion could not be recorded in the audit trail, so nothing was deleted.",
     "delete_file_pending": "The document record was cleared, but the file could not be fully removed. It will be cleaned up automatically.",
-    "locked_note": "Source documents become part of the audit record once a lease is locked and can no longer be deleted.",
+    "locked_note": "Source documents become part of the audit record once a lease is finalized and can no longer be deleted.",
     "summary_session_note": "Generated {{date}} · available until you switch tabs or leave this page",
     "upload": {
       "title": "Upload Document",
@@ -915,7 +915,7 @@
     "view_all_title": "View All",
     "commitment": "Commitment",
     "total_commitment_history": "Total Commitment History",
-    "commitment_by_month": "Lease commitments grouped by commencement month",
+    "commitment_by_month": "Committed lease spend by commencement month",
     "escalation_updated": "Escalation updated",
     "escalation_updated_desc": "Rent schedule will recalculate on next lease processing.",
     "save_failed": "Save failed",
@@ -1293,7 +1293,7 @@
       "not_assessed": "Not assessed",
       "basis_label": "Basis",
       "basis_placeholder": "Document the source/methodology for audit trail",
-      "summary_classification": "Classification",
+      "summary_classification": "Classification (per tests)",
       "class_finance": "Finance lease",
       "class_operating": "Operating lease",
       "class_partial": "Not fully assessed",
@@ -1316,7 +1316,9 @@
       "generating_report": "Generating…",
       "report_ready": "Disclosure report ready.",
       "save_before_report": "Save your changes first — the report reads the last saved inputs.",
-      "report_viewer_hint": "Ask a workspace admin or editor to generate the disclosure report."
+      "report_viewer_hint": "Ask a workspace admin or editor to generate the disclosure report.",
+      "report_after_finalize": "Available once the lease is finalized.",
+      "report_failed": "Couldn't generate the disclosure report."
     },
     "analysis_export": {
       "subtitle": "Lease Analysis Report",
@@ -2605,7 +2607,7 @@
     "finalizing": "Finalizing…",
     "generating_ellipsis": "Generating…",
     "generate_portfolio_report": "Generate Portfolio Report",
-    "portfolio_report_help": "Includes only model-locked + active leases whose term overlaps the selected period. Other leases are surfaced in the report's exclusions section.",
+    "portfolio_report_help": "Includes only finalized + active leases whose term overlaps the selected period. Other leases are surfaced in the report's exclusions section.",
     "recent_portfolio_reports": "Recent portfolio reports",
     "no_portfolio_reports": "No portfolio reports yet. Generate one above.",
     "included_count_one": "{{count}} included",
@@ -2743,7 +2745,7 @@
     "pdf_flags_col": "Flags",
     "pdf_flags_high": "{{count}} ({{high}} high)",
     "pdf_excluded_leases": "Excluded Leases",
-    "pdf_reason_not_model_locked": "Not yet model-locked",
+    "pdf_reason_not_model_locked": "Not yet finalized",
     "pdf_reason_not_active": "Not in active lifecycle",
     "pdf_reason_period_no_overlap": "Term does not overlap period",
     "pdf_reason_verification_incomplete": "Verification incomplete",
@@ -2760,15 +2762,19 @@
     "no_reports_admin_suffix": "Portfolio roll-ups live on the",
     "no_reports_member_suffix": "For portfolio roll-ups, ask a workspace admin.",
     "scope": {
-      "lease": "Single lease",
-      "workspace": "Workspace",
-      "portfolio": "Portfolio"
+      "single_lease": "Single lease",
+      "monthly": "Monthly",
+      "quarterly": "Quarterly",
+      "annual": "Annual",
+      "custom_range": "Custom range"
     },
     "status": {
       "ready": "Ready",
       "expired": "Expired",
-      "pending": "Pending"
-    }
+      "generating": "Generating",
+      "failed": "Failed"
+    },
+    "no_reports_viewer": "No reports yet. Reports are generated from a lease's ASC 842 tab by a workspace admin or editor."
   },
   "empty": {
     "no_leases": "No leases yet",
@@ -4170,7 +4176,7 @@
     "request": {
       "validation": {
         "description_required": "Description must be at least 3 characters.",
-        "department_required": "Requesting department is required",
+        "department_required": "Requesting department must be at least 2 characters.",
         "payment_positive": "Monthly payment must be greater than zero.",
         "term_whole_months": "Term must be a whole number of months.",
         "term_range": "Term must be between 1 and 360 months."

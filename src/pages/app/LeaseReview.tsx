@@ -290,6 +290,13 @@ export default function LeaseReview() {
 
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
+  // ASC 842 mounts on FIRST activation and then stays mounted (forceMount)
+  // — unsaved state survives tab switches without paying its queries on
+  // every lease view that never opens the tab.
+  const [ascTabTouched, setAscTabTouched] = useState(false);
+  useEffect(() => {
+    if (activeTab === 'asc842') setAscTabTouched(true);
+  }, [activeTab]);
   const [cancelChangeSetDialogOpen, setCancelChangeSetDialogOpen] = useState(false);
   const [lockConfirmDialogOpen, setLockConfirmDialogOpen] = useState(false);
   const [cancelingChangeSet, setCancelingChangeSet] = useState(false);
@@ -3229,9 +3236,11 @@ export default function LeaseReview() {
                   pinned via `sticky` below. */}
               <div className="flex h-full flex-col bg-background overflow-y-auto">
 
-                {/* Global banners — same centered column as the tab content, so
-                    the alert layer and the work layer share one left rail. */}
-                <div className={cn("px-4 pt-3 space-y-2 mx-auto w-full", showPdfPanel && !isPdfCollapsed ? "max-w-2xl" : "max-w-3xl")}>
+                {/* Global banners — same centered column AND the same padding
+                    topology as the tab content (outer gutter, inner max-w), so
+                    banner cards align flush with the section cards below. */}
+                <div className="px-4 pt-3">
+                  <div className={cn("space-y-2 mx-auto w-full", showPdfPanel && !isPdfCollapsed ? "max-w-2xl" : "max-w-3xl")}>
                   {showPdfPanel && isPdfCollapsed && (
                     <Button
                       variant="outline"
@@ -3390,6 +3399,7 @@ export default function LeaseReview() {
                       </CardContent>
                     </Card>
                   )}
+                  </div>
                 </div>
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col px-4 pt-2">
@@ -3399,7 +3409,7 @@ export default function LeaseReview() {
                       horizontal overflow (edge fades cue clipped tabs, the
                       active tab is kept in view) so it never pans the page. */}
                   <ScrollableTabStrip activeValue={activeTab} className="sticky top-0 z-10 shrink-0 border-b border-border bg-background">
-                    <TabsList className="w-max min-w-full justify-start rounded-none bg-background p-0 h-9">
+                    <TabsList className="w-max min-w-full justify-start rounded-none bg-background p-0 h-auto items-end">
                       <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="general" title={t('locked_lease.tabs.general')}>{t('lease_review.tabs.general')}</TabsTrigger>
                       <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="vendor" title={t('lease_review.tabs.vendor_full')}>{t('locked_lease.vendor.title')}</TabsTrigger>
                       <TabsTrigger className={UNDERLINE_TAB_TRIGGER} value="rent" title={t('locked_lease.tabs.rent')}>{t('locked_lease.tabs.rent')}</TabsTrigger>
@@ -3701,37 +3711,38 @@ export default function LeaseReview() {
                           (flip to Documents to check the PDF, flip back) must not
                           destroy it. */}
                       <TabsContent value="asc842" forceMount className="mt-0 data-[state=inactive]:hidden">
-                        {lease?.id && lease?.workspace_id && (
-                          <div className="space-y-4">
-                            <Asc842InputsTab
-                              leaseId={lease.id}
-                              workspaceId={lease.workspace_id}
-                              canEdit={
-                                !isReadOnly && (
-                                  userRole === 'admin' ||
-                                  userRole === 'owner' ||
-                                  userRole === 'editor'
-                                )
-                              }
-                              discountRate={lease.discount_rate ?? null}
-                              baseTermMonths={lease.term_months ?? null}
-                              lifecycleStatus={lifecycleStatus ?? null}
-                            />
-                            {/* The IBR/discount rate is the report's most important
-                                measurement input — surface it during capture, not
-                                only after activation (it was locked-view-only). */}
-                            <LeaseDiscountRateCard
-                              leaseId={lease.id}
-                              workspaceId={lease.workspace_id}
-                              canEdit={
-                                !isReadOnly && (
-                                  userRole === 'admin' ||
-                                  userRole === 'owner' ||
-                                  userRole === 'editor'
-                                )
-                              }
-                            />
-                          </div>
+                        {ascTabTouched && lease?.id && lease?.workspace_id && (
+                          <Asc842InputsTab
+                            leaseId={lease.id}
+                            workspaceId={lease.workspace_id}
+                            canEdit={
+                              !isReadOnly && (
+                                userRole === 'admin' ||
+                                userRole === 'owner' ||
+                                userRole === 'editor'
+                              )
+                            }
+                            discountRate={lease.discount_rate ?? null}
+                            baseTermMonths={lease.term_months ?? null}
+                            lifecycleStatus={lifecycleStatus ?? null}
+                            reportAvailable={!!lease.model_locked}
+                            discountRateSlot={
+                              /* The IBR/discount rate is the report's most
+                                 important measurement input — surfaced during
+                                 capture, inside the sticky bar's reach. */
+                              <LeaseDiscountRateCard
+                                leaseId={lease.id}
+                                workspaceId={lease.workspace_id}
+                                canEdit={
+                                  !isReadOnly && (
+                                    userRole === 'admin' ||
+                                    userRole === 'owner' ||
+                                    userRole === 'editor'
+                                  )
+                                }
+                              />
+                            }
+                          />
                         )}
                       </TabsContent>
 

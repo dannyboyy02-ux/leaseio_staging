@@ -1,7 +1,8 @@
 // ASC 842 Inputs tab — full per-lease capture for measurement,
 // classification, term assessment, and disclosure.
 //
-// Mounted in LeaseReview between Risks and Documents (forceMount — local
+// Mounted as the LAST tab in LeaseReview and between Risks and Documents
+// in LockedLeaseDetail (forceMount — local
 // state must survive tab switches; a user flips to Documents to check the
 // lease PDF mid-entry and back) and in LockedLeaseDetail. The fields here
 // are NOT extracted by the AI pipeline; they require human capture per
@@ -37,6 +38,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import { useGenerateLeaseReport } from '@/hooks/useGenerateLeaseReport';
 
 interface Props {
@@ -49,6 +52,12 @@ interface Props {
   baseTermMonths?: number | null;
   /** Current lifecycle_status — drives the pre-execution / post-finalize context notes. */
   lifecycleStatus?: string | null;
+  /** generate-lease-report only accepts finalized (model-locked) leases —
+   *  the door is shown disabled with an honest hint until then. */
+  reportAvailable?: boolean;
+  /** Rendered between the capture sections and the sticky save bar so the
+   *  bar's containing block covers the discount-rate card too. */
+  discountRateSlot?: React.ReactNode;
 }
 
 type State = {
@@ -170,8 +179,8 @@ function fromDbStr(value: string | null | undefined): string {
 // inputs are only knowable at signing, so the tab says so instead of
 // presenting 40 unanswerable fields without context.
 const PRE_EXECUTION_STATES = new Set([
-  'draft', 'submitted', 'under_review', 'concept_submitted', 'concept_under_review',
-  'in_negotiation', 'final_review', 'pending_counter_signature',
+  'draft', 'submitted', 'under_review', 'approved', 'concept_submitted',
+  'concept_under_review', 'in_negotiation', 'final_review', 'pending_counter_signature',
 ]);
 
 export function Asc842InputsTab({
@@ -181,8 +190,11 @@ export function Asc842InputsTab({
   discountRate = null,
   baseTermMonths = null,
   lifecycleStatus = null,
+  reportAvailable = false,
+  discountRateSlot = null,
 }: Props) {
   const { t } = useAppTranslation();
+  const { language } = useLanguage();
   const navigate = useNavigate();
   const [state, setState] = useState<State>(EMPTY);
   const [savedSnapshot, setSavedSnapshot] = useState<string>(fieldsOf(EMPTY));
@@ -354,7 +366,7 @@ export function Asc842InputsTab({
       toast.success(t('leases.asc842.report_ready'));
       navigate(`/app/leases/${leaseId}/reports/${result.reportId}`);
     } catch (e: any) {
-      toast.error(e?.message ?? t('leases.errors.save_failed'));
+      toast.error(e?.message ?? t('leases.asc842.report_failed'));
     }
   }, [dirty, generateReport, leaseId, navigate, t]);
 
@@ -475,7 +487,7 @@ export function Asc842InputsTab({
   return (
     <div className="space-y-4">
       {/* ─── Summary strip — the computed layer ─── */}
-      <Card className="border-blue-200 bg-blue-50/40">
+      <Card className="border-blue-200 bg-blue-50/40 dark:border-blue-900 dark:bg-blue-950/20">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-bold">{t('leases.asc842.title')}</CardTitle>
           <CardDescription className="text-xs leading-relaxed">
@@ -843,32 +855,45 @@ export function Asc842InputsTab({
         />
       </AscSectionCard>
 
+      {/* Discount rate lives INSIDE the sticky bar's containing block so the
+          bar still guards the tab's most important input. */}
+      {discountRateSlot}
+
       {/* ─── Sticky save bar — always reachable, dirty-aware ─── */}
       <div className="sticky bottom-0 z-10 -mx-1 px-1">
-        <div className="rounded-lg border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div className="rounded-lg border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 pl-4 pr-20 py-3 flex flex-wrap items-center justify-between gap-3 shadow-sm">
           <div className="text-xs text-muted-foreground min-w-0">
             {dirty ? (
               <span className="text-amber-700 font-medium">{t('leases.asc842.unsaved_changes')}</span>
             ) : state.last_updated_at ? (
               state.last_updated_by_label
                 ? t('leases.asc842.last_updated_by', {
-                    date: new Date(state.last_updated_at).toLocaleString(),
+                    date: formatLocalizedDate(state.last_updated_at, language, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
                     name: state.last_updated_by_label,
                   })
                 : t('leases.asc842.last_updated', {
-                    date: new Date(state.last_updated_at).toLocaleString(),
+                    date: formatLocalizedDate(state.last_updated_at, language, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
                   })
             ) : (
               t('leases.asc842.never_saved')
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {/* The report fn only accepts finalized (model-locked) leases —
+                pre-finalize the door shows disabled with an honest hint
+                instead of 4xx-ing with a raw server string. */}
             {canEdit ? (
               <Button
                 variant="outline"
                 onClick={handleGenerateReport}
-                disabled={generatingReport}
-                title={dirty ? t('leases.asc842.save_before_report') : undefined}
+                disabled={generatingReport || !reportAvailable}
+                title={
+                  !reportAvailable
+                    ? t('leases.asc842.report_after_finalize')
+                    : dirty
+                      ? t('leases.asc842.save_before_report')
+                      : undefined
+                }
               >
                 {generatingReport ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -877,9 +902,9 @@ export function Asc842InputsTab({
                 )}
                 {generatingReport ? t('leases.asc842.generating_report') : t('leases.asc842.generate_report')}
               </Button>
-            ) : (
+            ) : reportAvailable ? (
               <p className="text-xs text-muted-foreground">{t('leases.asc842.report_viewer_hint')}</p>
-            )}
+            ) : null}
             {canEdit && (
               <Button onClick={handleSave} disabled={saving || !dirty}>
                 {saving ? (
