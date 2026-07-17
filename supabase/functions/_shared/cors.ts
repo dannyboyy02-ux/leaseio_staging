@@ -13,6 +13,8 @@ const ALLOWED_ORIGINS = [
   "https://theleaseio.lovable.app",
   "http://localhost:5173",
   "http://localhost:3000",
+  "http://localhost:8080",
+  "http://localhost:8081",
   "http://127.0.0.1:5173",
 ];
 
