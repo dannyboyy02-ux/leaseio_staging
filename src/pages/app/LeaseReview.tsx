@@ -471,7 +471,18 @@ export default function LeaseReview() {
     );
 
   // Check status states
-  const isPendingApproval = false;
+  // P1-6: resurrect the nudge. This was hardcoded `false`, so the
+  // NudgeApproverButton (its only gate) never rendered — a requestor could never
+  // nudge a stalled approver. True when the lease is genuinely WAITING ON AN
+  // APPROVER: concept approval (submitted / concept_submitted), concept review
+  // (under_review / concept_under_review), or signator review (final_review).
+  // NOT in_negotiation (waits on the submitter) or pending_counter_signature
+  // (waits on the execution owner) — nudging an approver is meaningless there.
+  const isPendingApproval = lifecycleStatusTyped != null && (
+    isEquivalent(lifecycleStatusTyped, 'submitted') ||
+    isEquivalent(lifecycleStatusTyped, 'under_review') ||
+    lifecycleStatusTyped === 'final_review'
+  );
   const isProcessing = lease?.status === 'Processing' || lease?.status === 'Uploaded';
   const isPosted = lifecycleStatus === 'active';
   // Lock editing when approved, posted, or pending approval — and always for
@@ -2174,6 +2185,14 @@ export default function LeaseReview() {
             }
             actions={
               <div className="flex items-center gap-2">
+                {/* P1-6: the nudge, finally reachable. A requestor (or admin) can
+                    nudge the current pending approver when their request is
+                    waiting — this intake view is where they actually see the
+                    stalled request. send-nudge resolves the live approver + the
+                    server-side cooldown. */}
+                {isPendingApproval && (isRequestor || isAdminUser) && !isReadOnly && (
+                  <NudgeApproverButton leaseId={lease.id} lastNudgedAt={lease.last_nudged_at} />
+                )}
                 <Button variant="outline" size="sm" onClick={() => navigate('/app/approvals')}>
                   {t('lease_review.intake.approval_queue')}
                   <ChevronRight className="h-4 w-4 ml-1" />
@@ -3055,8 +3074,10 @@ export default function LeaseReview() {
                   </Button>
                 )}
 
-                {/* State-specific secondary — nudge when pending */}
-                {isPendingApproval && (
+                {/* State-specific secondary — nudge when pending (the workbench
+                    path covers final_review; the intake header covers the
+                    concept stages). P1-6: gated to the people who may nudge. */}
+                {isPendingApproval && (isRequestor || isAdminUser) && !isReadOnly && (
                   <NudgeApproverButton leaseId={lease.id} lastNudgedAt={lease.last_nudged_at} />
                 )}
 
