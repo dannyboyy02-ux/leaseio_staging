@@ -233,7 +233,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
   const handleStartTrial = () => {
     const plan = workspace?.intendedPlan === 'business' ? 'business' : 'starter';
     onOpenChange(false);
-    navigate(`/app/settings?tab=billing&autoCheckout=1&plan=${plan}`);
+    navigate(`/app/settings/account?tab=billing&autoCheckout=1&plan=${plan}`);
   };
 
   const handleClose = () => {

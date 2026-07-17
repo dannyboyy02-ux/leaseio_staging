@@ -502,6 +502,12 @@ export default function LeaseReview() {
     lifecycleStatus === 'final_review' ||
     lifecycleStatus === 'pending_counter_signature' ||
     lifecycleStatus === 'chain_violation';
+  // Journey fix: 'fully_executed' (the finalize screen) also gets the intake
+  // chrome stripped (no confirm-sections status strip, no empty Source-Document
+  // split, no per-tab Reviewed footers) — but NOT via isPostConceptChain, which
+  // nulls the header primary action; fully_executed KEEPS its "Finalize &
+  // activate" button (its own primaryAction branch below).
+  const isPostConceptChrome = isPostConceptChain || lifecycleStatus === 'fully_executed';
 
   // Active lease unlocked for staged editing
   const isUnlockedForEditing = isPosted && !lease?.model_locked && activeChangeSet?.status === 'draft' && !isReadOnly;
@@ -520,7 +526,7 @@ export default function LeaseReview() {
   // across half the workbench. Suppress the split for those states → full-width
   // tabs; the negotiated documents are reached via the Documents tab.
   const showPdfPanel =
-    (lifecycleStatus !== 'active' || !lease?.model_locked) && isWide && !isPostConceptChain;
+    (lifecycleStatus !== 'active' || !lease?.model_locked) && isWide && !isPostConceptChrome;
 
   // Approval gate: every AI-extracted section must be marked reviewed.
   // No more field-level "verified" carve-out — sections are the unit of
@@ -2906,7 +2912,7 @@ export default function LeaseReview() {
     // — its terms were confirmed at concept approval and may still be in flux
     // during negotiation; these footers only feed the (now-suppressed) intake
     // approve gate and reinforce the wrong mental model.
-    if (isPostConceptChain) return null;
+    if (isPostConceptChrome) return null;
     const confirmed = isTabConfirmed(tabKey);
     const nextTab = REVIEW_TABS.find(
       (tab) => tab.key !== tabKey && !tab.sections.every((s) => confirmedSections.includes(s)),
@@ -3140,7 +3146,7 @@ export default function LeaseReview() {
             P1-1: chain post-concept states (negotiation/signature/etc.) are past
             that ceremony — the strip's "confirm sections → Ready to approve"
             answer is wrong there; the forward path is in the Documents tab. */}
-        {!isReadOnly && !isPostConceptChain && (
+        {!isReadOnly && !isPostConceptChrome && (
           <LeaseReviewStatusStrip
             isProcessing={isProcessing}
             modelLocked={!!lease.model_locked}

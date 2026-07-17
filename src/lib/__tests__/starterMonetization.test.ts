@@ -32,7 +32,11 @@ describe('P0-h — onboarding routes both plans through checkout', () => {
   it('autoCheckout fires for the chosen plan (not hardcoded business)', () => {
     const acc = read('src/pages/settings/AccountSettings.tsx');
     expect(acc).toContain("searchParams.get('plan')");
-    expect(acc).toContain('proceedWithCheckout(checkoutPlan)');
+    // Journey fix: autoCheckout passes the interval from the URL explicitly, so
+    // an Annual selection isn't silently checked out Monthly (billingInterval
+    // state may not have applied yet).
+    expect(acc).toMatch(/proceedWithCheckout\(checkoutPlan, urlInterval\)/);
+    expect(acc).toMatch(/searchParams\.get\('billing'\) === 'annual'/);
   });
 });
 

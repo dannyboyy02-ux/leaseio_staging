@@ -457,7 +457,7 @@ export default function AccountSettings() {
     await proceedWithCheckout(planId);
   };
 
-  const proceedWithCheckout = async (planId: string) => {
+  const proceedWithCheckout = async (planId: string, intervalOverride?: 'monthly' | 'annual') => {
     if (!workspace?.id) {
       toast.error(t('account.checkout_no_workspace'));
       return;
@@ -467,8 +467,13 @@ export default function AccountSettings() {
     setConfirmUpgradePlan(null);
 
     try {
+      // autoCheckout fires before the `?billing=` → billingInterval state effect
+      // has necessarily run, so callers that know the interval (from the URL)
+      // pass it explicitly — otherwise an Annual selection silently checks out
+      // Monthly (journey walk).
+      const interval = intervalOverride ?? billingInterval;
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { planId, workspaceId: workspace.id, billingInterval },
+        body: { planId, workspaceId: workspace.id, billingInterval: interval },
       });
 
       if (error) {
@@ -553,7 +558,10 @@ export default function AccountSettings() {
     // also auto-fires checkout (was hardcoded 'business'). Default to starter.
     const planParam = searchParams.get('plan');
     const checkoutPlan = planParam === 'business' ? 'business' : 'starter';
-    proceedWithCheckout(checkoutPlan);
+    // Read the interval straight from the URL — don't trust billingInterval
+    // state, which the sibling `?billing=` effect may not have applied yet.
+    const urlInterval = searchParams.get('billing') === 'annual' ? 'annual' : 'monthly';
+    proceedWithCheckout(checkoutPlan, urlInterval);
 
     const next = new URLSearchParams(searchParams);
     next.delete('autoCheckout');

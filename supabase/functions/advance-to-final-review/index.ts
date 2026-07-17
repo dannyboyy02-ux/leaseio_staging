@@ -337,7 +337,7 @@ serve(async (req) => {
   // signator stage.
   const { data: sigRowsAll } = await supabaseAdmin
     .from("lease_approval_chain")
-    .select("id, step_order, status, is_required, created_at")
+    .select("id, step_order, status, is_required, created_at, approver_user_id, approver_role, effective_assignee_user_id")
     .eq("lease_id", lease.id)
     .eq("stage", "signator");
   const allSig = (sigRowsAll ?? []) as Array<{
@@ -346,6 +346,9 @@ serve(async (req) => {
     status: string;
     is_required: boolean;
     created_at: string;
+    approver_user_id: string | null;
+    approver_role: string | null;
+    effective_assignee_user_id: string | null;
   }>;
   let reactivatedSignator = false;
   let reactivatedStepIds: string[] = [];
@@ -430,18 +433,31 @@ serve(async (req) => {
       },
     });
 
-  // ── Notify the signator workspace_roles cohort ─────────────────────
-  // Phase 5 will own the actual signator approve/reject UI and chain
-  // step consumption. Phase 4's notification just lets them know their
-  // turn is up.
-  const { data: signators } = await supabaseAdmin
-    .from("workspace_roles")
-    .select("user_id")
-    .eq("workspace_id", lease.workspace_id)
-    .eq("role", "signator");
-
-  const recipientIds = ((signators ?? []) as Array<{ user_id: string }>)
-    .map((r) => r.user_id);
+  // ── Notify the ACTIVE signator(s) ──────────────────────────────────
+  // Resolve recipients from the current pending signator CHAIN STEP(s) — the
+  // assignee (effective_assignee_user_id || approver_user_id), falling back to
+  // the workspace's signator-role cohort only when the step is role-based. This
+  // used only the workspace_roles cohort, so a signator assigned to the step BY
+  // NAME (the common "the CFO, specifically" policy) was NEVER told to sign
+  // (journey walk). Mirrors send-nudge / auto-nudge-approvers.
+  const sigRecipients = new Set<string>();
+  const sigRoles = new Set<string>();
+  for (const r of liveSig) {
+    const direct = r.effective_assignee_user_id || r.approver_user_id;
+    if (direct) sigRecipients.add(direct);
+    else if (r.approver_role) sigRoles.add(r.approver_role);
+  }
+  if (sigRoles.size > 0) {
+    const { data: roleHolders } = await supabaseAdmin
+      .from("workspace_roles")
+      .select("user_id")
+      .eq("workspace_id", lease.workspace_id)
+      .in("role", Array.from(sigRoles));
+    for (const m of (roleHolders ?? []) as Array<{ user_id: string | null }>) {
+      if (m.user_id) sigRecipients.add(m.user_id);
+    }
+  }
+  const recipientIds = Array.from(sigRecipients);
 
   if (recipientIds.length > 0) {
     await supabaseAdmin.from("lease_activity_log").insert({
@@ -451,7 +467,8 @@ serve(async (req) => {
       details: {
         notification_type: "signator_review_required",
         recipient_ids: recipientIds,
-        message: "Lease has reached final_review and is awaiting your signator approval.",
+        // Plain language — no raw internal 'final_review' token (journey walk LOW).
+        message: "This lease is ready for your signature review.",
       },
     });
   }
