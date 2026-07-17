@@ -830,55 +830,32 @@ export default function LeaseReview() {
     }
   }, [lease, stageFile, user, t]);
 
-  const handleRunAbstraction = useCallback(async () => {
+  // P1-5: the chain path's missing last step. A counter-signed chain lease sits
+  // at 'fully_executed' with no AI abstraction and no route to 'active'. This is
+  // the human-triggered "Finalize & activate": process_lease 'finalize' mode
+  // abstracts the stored counter-signed document into the primary term columns,
+  // recomputes financials, and activates + model-locks the lease. (Replaces the
+  // old dead handleRunAbstraction hook, which minted a brand-new lease and was
+  // rendered nowhere.)
+  const handleFinalize = useCallback(async () => {
     if (!lease) return;
-
     setRunningAbstraction(true);
     try {
-      let fileToProcess = stageFile;
-
-      if (!fileToProcess && lease.storage_path) {
-        const { data: existingFile, error: downloadError } = await supabase.storage
-          .from('leases')
-          .download(lease.storage_path);
-        if (downloadError) throw downloadError;
-        fileToProcess = new File([existingFile], lease.filename || 'lease.pdf', { type: 'application/pdf' });
-      }
-
-      if (!fileToProcess) {
-        toast.error(t('lease_review.toasts.executed_doc_required'));
-        return;
-      }
-
       const formData = new FormData();
-      formData.append('file', fileToProcess);
-      formData.append('leaseType', lease.parent_lease_id ? 'amendment' : 'master');
-      if (lease.parent_lease_id) formData.append('parentLeaseId', lease.parent_lease_id);
-
+      formData.append('extractionMode', 'finalize');
+      formData.append('leaseId', lease.id);
       const { data, error } = await supabase.functions.invoke('process_lease', { body: formData });
-      if (error) throw error;
-
-      await supabase.from('lease_activity_log').insert({
-        lease_id: lease.id,
-        user_id: user?.id || null,
-        activity_type: 'comment',
-        details: {
-          message: 'Abstraction triggered',
-          generated_lease_id: data?.leaseId || null,
-        },
-      });
-
-      toast.success(t('lease_review.toasts.abstraction_started'));
-      if (data?.leaseId) {
-        navigate(`/app/leases/${data.leaseId}`);
-      }
+      if (error) throw new Error(error.message);
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(t('lease_review.toasts.finalize_success'));
+      queryClient.invalidateQueries({ queryKey: ['lease', leaseId] });
     } catch (error) {
-      console.error('Error running abstraction:', error);
-      toast.error(t('lease_review.toasts.abstraction_failed'));
+      console.error('Error finalizing lease:', error);
+      toast.error(error instanceof Error ? error.message : t('lease_review.toasts.finalize_failed'));
     } finally {
       setRunningAbstraction(false);
     }
-  }, [lease, navigate, stageFile, user?.id, t]);
+  }, [lease, leaseId, queryClient, t]);
 
   // Derived rent insights — prefer current period from schedule over the initial extracted value
   const derivedInsights = useMemo(() => {
@@ -2832,6 +2809,20 @@ export default function LeaseReview() {
     // would render a stray "Approve/Pending Review" button (server-rejected and
     // confusing). No header primary action for these states.
     if (isPostConceptChain) return null;
+    // P1-5: a counter-signed chain lease at 'fully_executed' — the missing last
+    // step. Offer "Finalize & activate": abstract the executed document into the
+    // primary terms and activate + model-lock the lease. This is the human-in-
+    // the-loop trigger for the AI abstraction the chain path otherwise never got.
+    if (lifecycleStatus === 'fully_executed') {
+      return {
+        label: t('lease_review.header.finalize_activate'),
+        icon: Lock,
+        onClick: handleFinalize,
+        loading: runningAbstraction,
+        variant: 'success',
+        tooltip: t('lease_review.header.finalize_tooltip'),
+      };
+    }
     if (isUnlockedDraft) return null; // handled by Cancel + Save Changes inline
     if (unreviewedLowConfCount > 0) {
       return {

@@ -6,6 +6,7 @@ import {
   repairJsonObject,
 } from "../_shared/audit.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 import {
   requiresSubscriptionToProcess,
   NO_SUBSCRIPTION_ERROR,
@@ -1332,6 +1333,230 @@ serve(async (req) => {
     const extractionMode = (formData.get('extractionMode') as string) || 'pipeline';
     const targetLeaseId = formData.get('leaseId') as string | null;
     const workspaceIdFromRequest = formData.get('workspaceId') as string | null;
+
+    // ================================================================
+    // P1-5 — FINALIZE MODE (chain executed dead-end)
+    // ================================================================
+    // A counter-signed CHAIN lease sits at 'fully_executed' with NO AI
+    // abstraction (request leases are created status:'Ready' and never
+    // processed) and — until now — no route to 'active', so it was invisible to
+    // the active-lease cap, amendment matching, unlock, and ASC-842 reports.
+    // This human-triggered mode is the missing last step: abstract the already-
+    // stored counter-signed document into the PRIMARY term columns (so the
+    // review UI and every active-lease consumer see real terms), recompute the
+    // financial projections, then activate + model-lock the lease — mirroring
+    // the legacy upload→abstract→lock flow but keyed by leaseId with the doc read
+    // from storage (no multipart file). Runs BEFORE the file-required check.
+    if (extractionMode === 'finalize') {
+      if (!targetLeaseId || !isValidUUID(targetLeaseId)) {
+        return new Response(JSON.stringify({ error: 'leaseId is required for finalize mode and must be a valid UUID.' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: finLease, error: finFetchErr } = await supabaseAdmin
+        .from('leases')
+        .select('id, user_id, workspace_id, lifecycle_status, requestor_id, execution_owner_id, model_locked')
+        .eq('id', targetLeaseId)
+        .single();
+      if (finFetchErr || !finLease) {
+        return new Response(JSON.stringify({ error: 'Lease not found.' }), {
+          status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Idempotent: already finalized → no-op (avoids a second Opus pass + a
+      // no-op transition if the button is double-clicked or retried).
+      if (finLease.lifecycle_status === 'active') {
+        return new Response(JSON.stringify({ ok: true, leaseId: targetLeaseId, lifecycle_status: 'active', alreadyActive: true }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (finLease.lifecycle_status !== 'fully_executed') {
+        return new Response(JSON.stringify({ error: `Finalize requires a fully-executed lease (this one is '${finLease.lifecycle_status}').`, reason: 'not_fully_executed' }), {
+          status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Authorization: the people who legitimately drive execution — the
+      // requestor / uploader / execution owner — or a workspace admin/owner.
+      let finAuthorized =
+        finLease.user_id === user.id ||
+        finLease.requestor_id === user.id ||
+        finLease.execution_owner_id === user.id;
+      if (!finAuthorized && finLease.workspace_id) {
+        const [{ data: finWs }, { data: finMember }] = await Promise.all([
+          supabaseAdmin.from('workspaces').select('owner_id').eq('id', finLease.workspace_id).maybeSingle(),
+          supabaseAdmin.from('workspace_members').select('role').eq('workspace_id', finLease.workspace_id).eq('user_id', user.id).maybeSingle(),
+        ]);
+        finAuthorized =
+          (finWs as any)?.owner_id === user.id ||
+          (finMember as any)?.role === 'admin';
+      }
+      if (!finAuthorized) {
+        return new Response(JSON.stringify({ error: 'You are not authorized to finalize this lease.' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Liveness (fail closed on canceled / vault / soft-deleted).
+      const finLiveness = await checkWorkspaceLive(supabaseAdmin, finLease.workspace_id);
+      if (!finLiveness.live) {
+        return new Response(JSON.stringify({ ok: false, error: 'subscription_inactive', reason: finLiveness.reason }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const finRateLimit = await enforceWorkspaceRateLimit(supabaseAdmin, finLease.workspace_id, 'process_lease', requestOrigin);
+      if (finRateLimit) return finRateLimit;
+      // Fetch the latest counter-signed document from the lease-documents bucket.
+      const { data: finDocRow } = await supabaseAdmin
+        .from('lease_documents')
+        .select('storage_path, filename, iteration_number, version_number')
+        .eq('lease_id', targetLeaseId)
+        .eq('document_type', 'fully_executed_counterparty_returned')
+        .order('iteration_number', { ascending: false })
+        .order('version_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!finDocRow) {
+        return new Response(JSON.stringify({ error: 'No counter-signed document found to abstract. Upload the fully-executed document first.', reason: 'no_executed_document' }), {
+          status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const { data: finFileData, error: finDownloadErr } = await supabaseAdmin.storage
+        .from('lease-documents')
+        .download((finDocRow as any).storage_path);
+      if (finDownloadErr || !finFileData) {
+        return new Response(JSON.stringify({ error: `Could not read the counter-signed document: ${finDownloadErr?.message ?? 'download failed'}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Monthly-cap quota (the lease already exists; no credit consumed — a
+      // re-extraction over the cap just blocks, same as executed mode).
+      const finQuota = await checkProcessingQuota(supabaseAdmin, finLease.workspace_id, corsHeaders, { isNewLease: false });
+      if (finQuota.kind === 'block') return finQuota.response;
+
+      const finBytes = await finFileData.arrayBuffer();
+      const finBase64 = arrayBufferToBase64(finBytes);
+      let finData: LeaseExtractionResult;
+      try {
+        finData = await extractLeaseDataWithClaude(supabaseAdmin, finBase64, finLease.workspace_id ?? null);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        return new Response(JSON.stringify({ error: `Finalize AI abstraction failed: ${msg}` }), {
+          status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Escalation + term derivation (mirror the pipeline write block).
+      const finRawEsc = extractValue(finData.rent_escalation_type) as string | null;
+      const { escalationType: finEscType, escalationRate: finEscRate, needsEscalationReview: finNeedsEscReview } = normalizeEscalation(finRawEsc);
+      const finStart = safeDate(extractValue(finData.lease_start));
+      const finEnd = safeDate(extractValue(finData.lease_end));
+      const finTermMonths = finStart && finEnd
+        ? Math.round((new Date(finEnd).getTime() - new Date(finStart).getTime()) / (86400 * 30.4375 * 1000))
+        : null;
+      const finNow = new Date().toISOString();
+
+      // Primary-column write + activate + model-lock, all in one UPDATE so the
+      // lifecycle trigger fires once and the row is consistent.
+      const { data: finUpdated, error: finUpdateErr } = await supabaseAdmin
+        .from('leases')
+        .update({
+          landlord_name:          extractValue(finData.landlord_name),
+          tenant_name:            extractValue(finData.tenant_name),
+          property_address:       extractValue(finData.property_address),
+          lease_start:            finStart,
+          lease_end:              finEnd,
+          rent_commencement_date: safeDate(extractValue(finData.rent_commencement_date)),
+          base_rent_amount:       extractValue(finData.base_rent_amount),
+          base_rent_frequency:    extractValue(finData.base_rent_frequency),
+          current_monthly_rent:   extractValue(finData.current_monthly_rent),
+          security_deposit:       extractValue(finData.security_deposit),
+          renewal_options:        extractValue(finData.renewal_options),
+          escalation_clauses:     extractValue(finData.escalation_clauses),
+          termination_clauses:    extractValue(finData.termination_clauses),
+          rent_escalation_type:   finRawEsc,
+          escalation_type:        finEscType,
+          escalation_rate:        finEscRate,
+          needs_escalation_review: finNeedsEscReview,
+          square_footage:         extractValue(finData.square_footage),
+          term_months:            finTermMonths,
+          extracted_json:         finData,
+          processed_at:           finNow,
+          // Activate + lock the reviewed model in the same UPDATE (single trigger
+          // fire). fully_executed → active is a legal edge (VALID_TRANSITIONS).
+          lifecycle_status:       'active',
+          status_changed_at:      finNow,
+          model_locked:           true,
+          model_locked_at:        finNow,
+          model_locked_by:        user.id,
+        })
+        // Conditional on still being fully_executed so a racing second finalize
+        // (both passed the precondition, both ran extraction) writes 0 rows here
+        // and returns below WITHOUT emitting a duplicate status_change / audit
+        // row. The UI busy-guard prevents the double-click; this covers the rest.
+        .eq('id', targetLeaseId)
+        .eq('lifecycle_status', 'fully_executed')
+        .select('id');
+      if (finUpdateErr) {
+        return new Response(JSON.stringify({ error: `Failed to finalize lease: ${finUpdateErr.message}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      // Lost the race — another finalize already activated the lease. No-op.
+      if (!finUpdated || (finUpdated as unknown[]).length === 0) {
+        return new Response(JSON.stringify({ ok: true, leaseId: targetLeaseId, lifecycle_status: 'active', alreadyActive: true }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Lifecycle Transition Convention: status_change row with top-level
+      // from/to + mirrored details + routing_path.
+      await supabaseAdmin.from('lease_activity_log').insert({
+        lease_id: targetLeaseId,
+        user_id: user.id,
+        activity_type: 'status_change',
+        from_status: 'fully_executed',
+        to_status: 'active',
+        details: { from: 'fully_executed', to: 'active', routing_path: 'chain', triggered_by: 'process_lease_finalize' },
+      });
+      await supabaseAdmin.from('lease_activity_log').insert({
+        lease_id: targetLeaseId,
+        user_id: user.id,
+        activity_type: 'executed_terms_extracted',
+        details: { source_document: (finDocRow as any).filename, routing_path: 'chain', triggered_by: 'finalize' },
+      });
+
+      // Recompute financial projections from the abstracted terms.
+      if (finStart && finTermMonths && finTermMonths > 0) {
+        const finRawRent = extractValue(finData.current_monthly_rent);
+        const finMonthlyRent = typeof finRawRent === 'number'
+          ? finRawRent
+          : typeof finRawRent === 'string' ? parseFloat(finRawRent.replace(/[^0-9.]/g, '')) || 0 : 0;
+        if (finMonthlyRent > 0) {
+          const { data: finWsRate } = await supabaseAdmin.from('workspaces').select('discount_rate').eq('id', finLease.workspace_id).single();
+          const finDiscountRate: number = (finWsRate as any)?.discount_rate ?? 5.5;
+          const finAnnualEsc: number = finEscRate ?? 0;
+          const finMonthlyDisc = Math.pow(1 + finDiscountRate / 100, 1 / 12) - 1;
+          const finPayments: number[] = [];
+          for (let m = 1; m <= finTermMonths; m++) {
+            finPayments.push(finMonthlyRent * Math.pow(1 + finAnnualEsc / 100, Math.floor((m - 1) / 12)));
+          }
+          const finTotal = finPayments.reduce((s, p) => s + p, 0);
+          const finPv = finPayments.reduce((s, p, idx) => s + p / Math.pow(1 + finMonthlyDisc, idx + 1), 0);
+          const finSl = finTotal / finTermMonths;
+          const finMid = Math.max(1, Math.floor(finTermMonths / 2));
+          const finCashDelta = finPayments.slice(0, finMid).reduce((s, p) => s + p, 0) - finSl * finMid;
+          await supabaseAdmin.from('leases').update({
+            calc_total_commitment:  Math.round(finTotal * 100) / 100,
+            calc_pv_liability:      Math.round(finPv * 100) / 100,
+            calc_straight_line_exp: Math.round(finSl * 100) / 100,
+            calc_cash_pl_delta:     Math.round(finCashDelta * 100) / 100,
+          }).eq('id', targetLeaseId);
+        }
+      }
+
+      return new Response(JSON.stringify({ ok: true, leaseId: targetLeaseId, lifecycle_status: 'active', data: finData }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!file) {
       return new Response(JSON.stringify({ error: 'No file provided' }), {
