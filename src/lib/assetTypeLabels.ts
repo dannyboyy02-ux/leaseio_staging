@@ -13,3 +13,25 @@ import type { AssetTypeOption } from '@/lib/assetTypes';
 export function localizedAssetTypeLabel(option: AssetTypeOption): string {
   return t(`asset_types.builtin.${option.value}`, { defaultValue: option.label });
 }
+
+// Raw DB token → localized compact display name for meta rows ("Real estate ·
+// Operations"). The three writer surfaces disagree on the real-estate token
+// ('property' / 'real_estate' / a workspace label) — canonicalAssetType folds
+// them; workspace-custom values fall through to Title Case untouched.
+import { canonicalAssetType, prettyAssetType } from '@/lib/assetTypes';
+
+const CANONICAL_TO_BUILTIN: Record<string, string> = {
+  realestate: 'property',
+  property: 'property',
+  equipment: 'equipment',
+  vehicle: 'vehicle',
+  other: 'other',
+};
+
+export function localizedAssetTypeName(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const builtin = CANONICAL_TO_BUILTIN[canonicalAssetType(raw)];
+  return builtin
+    ? t(`asset_types.compact.${builtin}`, { defaultValue: prettyAssetType(raw) })
+    : prettyAssetType(raw);
+}

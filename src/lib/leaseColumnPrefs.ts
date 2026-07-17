@@ -164,15 +164,27 @@ export const HIDEABLE_COLUMNS: readonly LeaseColumnKey[] = [
   'sqft',
 ];
 
-/** Parse a stored hidden-columns JSON array → canonical-ordered hideable keys. */
+/** First-visit hidden set (2026-07-17 density review): days-to-expiry is the
+ *  actionable form of the date signal, so start/end dates (the same fact as a
+ *  raw date) and sqft start hidden. Default-visible spine:
+ *  Property · Landlord · Type · Monthly · Expires-in · Status.
+ *  Any stored preference — including "show everything" — wins over this. */
+export const DEFAULT_HIDDEN_COLUMNS: readonly LeaseColumnKey[] = [
+  'lease_start',
+  'lease_end',
+  'sqft',
+];
+
+/** Parse a stored hidden-columns JSON array → canonical-ordered hideable keys.
+ *  No stored value (first visit) → the density defaults above. */
 export function parseStoredHidden(raw: string | null): LeaseColumnKey[] {
-  if (!raw) return [];
+  if (raw == null) return [...DEFAULT_HIDDEN_COLUMNS];
   try {
     const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
+    if (!Array.isArray(arr)) return [...DEFAULT_HIDDEN_COLUMNS];
     return HIDEABLE_COLUMNS.filter((k) => arr.includes(k));
   } catch {
-    return [];
+    return [...DEFAULT_HIDDEN_COLUMNS];
   }
 }
 

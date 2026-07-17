@@ -166,6 +166,8 @@ export function SummaryStrip() {
       const displayExpiring90Count = allExpiring90Ids.filter((id) => !dismissed90.has(id)).length;
       const displayExpiring120Count = allExpiring120Ids.filter((id) => !dismissed120.has(id)).length;
 
+      const displayExpiringTotal = displayExpiring90Count + displayExpiring120Count;
+
       setStats([
         {
           label: t('dashboard.monthly_rent'),
@@ -179,37 +181,35 @@ export function SummaryStrip() {
           href: '/app/leases?status=active',
         },
         {
+          // Awaiting-approval is a subset of needs-action; it reads as the
+          // sub-line here instead of double-counting as its own tile.
           label: t('dashboard.needs_action'),
           primary: String(needsActionCount),
-          sub: needsActionCount === 0 ? t('dashboard.all_clear') : t('dashboard.items_need_attention', { count: needsActionCount }),
+          sub:
+            needsActionCount === 0
+              ? t('dashboard.all_clear')
+              : awaitingCount > 0
+                ? t('dashboard.awaiting_approval_sub', { count: awaitingCount })
+                : t('dashboard.items_need_attention', { count: needsActionCount }),
           accent: needsActionCount > 0 ? 'blue' : 'default',
-          href: '/app/leases',
+          href: needsActionCount > 0 && awaitingCount > 0 ? '/app/approvals' : '/app/leases',
         },
         {
-          label: t('dashboard.awaiting_approval'),
-          primary: String(awaitingCount),
-          sub: awaitingCount === 0 ? t('dashboard.none_pending') : t('dashboard.leases_pending', { count: awaitingCount }),
-          accent: 'orange',
-          href: '/app/approvals',
-          disabled: awaitingCount === 0,
-        },
-        {
-          label: t('dashboard.expiring_90'),
-          primary: String(displayExpiring90Count),
-          sub: displayExpiring90Count > 0 ? t('dashboard.require_attention') : t('dashboard.all_clear_lc'),
-          accent: 'red',
-          href: '/app/leases?status=active&expiring=90',
-          disabled: displayExpiring90Count === 0,
-          onDismiss: displayExpiring90Count > 0 ? () => handleDismiss('90') : undefined,
-        },
-        {
-          label: t('dashboard.expiring_91_120'),
-          primary: String(displayExpiring120Count),
-          sub: displayExpiring120Count > 0 ? t('dashboard.on_the_horizon') : t('dashboard.all_clear_lc'),
-          accent: displayExpiring120Count > 0 ? 'orange' : 'default',
+          label: t('dashboard.expiring_120_combined'),
+          primary: String(displayExpiringTotal),
+          sub:
+            displayExpiringTotal === 0
+              ? t('dashboard.all_clear_lc')
+              : displayExpiring90Count > 0
+                ? t('dashboard.within_90_days', { count: displayExpiring90Count })
+                : t('dashboard.on_the_horizon'),
+          accent: displayExpiring90Count > 0 ? 'red' : displayExpiringTotal > 0 ? 'orange' : 'default',
           href: '/app/leases?status=active&expiring=120',
-          disabled: displayExpiring120Count === 0,
-          onDismiss: displayExpiring120Count > 0 ? () => handleDismiss('120') : undefined,
+          disabled: displayExpiringTotal === 0,
+          onDismiss:
+            displayExpiringTotal > 0
+              ? () => { if (displayExpiring90Count > 0) handleDismiss('90'); if (displayExpiring120Count > 0) handleDismiss('120'); }
+              : undefined,
         },
       ]);
 
@@ -223,8 +223,8 @@ export function SummaryStrip() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {[1, 2, 3, 4, 5].map((i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[1, 2, 3].map((i) => (
           <div key={i} className="animate-pulse bg-muted h-20 rounded-lg" />
         ))}
       </div>
@@ -239,7 +239,7 @@ export function SummaryStrip() {
   };
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {stats.map((box) => (
         <div
           key={box.label}

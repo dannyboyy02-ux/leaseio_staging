@@ -1093,11 +1093,20 @@ function NumberWithBasis({
   unit?: '$' | '%';
 }) {
   const { t } = useAppTranslation();
+  const basisValue = String(state[basisKey] ?? '');
+  // Basis collapses behind an affordance (2026-07-17 density review): most
+  // capture sessions fill amounts only, and an always-open two-row textarea
+  // per dollar field was the tab's single biggest space cost. Auto-open
+  // whenever a basis exists so saved audit context is never hidden.
+  const [basisOpen, setBasisOpen] = useState(basisValue.trim() !== '');
+  useEffect(() => {
+    if (basisValue.trim() !== '') setBasisOpen(true);
+  }, [basisValue]);
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className={cn('grid grid-cols-1 gap-3', basisOpen && 'sm:grid-cols-3')}>
       <div className="space-y-1">
         <Label className="text-xs">{label}</Label>
-        <div className="relative">
+        <div className={cn('relative', !basisOpen && 'max-w-xs')}>
           {unit === '$' && (
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">$</span>
           )}
@@ -1110,18 +1119,31 @@ function NumberWithBasis({
             className={cn('tabular-nums', unit === '$' && 'pl-7')}
           />
         </div>
-        {help && <p className="text-xs text-muted-foreground">{help}</p>}
+        <div className="flex items-center gap-3">
+          {help && <p className="text-xs text-muted-foreground">{help}</p>}
+          {!basisOpen && canEdit && (
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline shrink-0"
+              onClick={() => setBasisOpen(true)}
+            >
+              {t('leases.asc842.add_basis')}
+            </button>
+          )}
+        </div>
       </div>
-      <div className="sm:col-span-2 space-y-1">
-        <Label className="text-xs">{t('leases.asc842.basis_label')}</Label>
-        <Textarea
-          rows={2}
-          value={String(state[basisKey] ?? '')}
-          onChange={(e) => update(basisKey, e.target.value as any)}
-          disabled={!canEdit}
-          placeholder={t('leases.asc842.basis_placeholder')}
-        />
-      </div>
+      {basisOpen && (
+        <div className="sm:col-span-2 space-y-1">
+          <Label className="text-xs">{t('leases.asc842.basis_label')}</Label>
+          <Textarea
+            rows={2}
+            value={basisValue}
+            onChange={(e) => update(basisKey, e.target.value as any)}
+            disabled={!canEdit}
+            placeholder={t('leases.asc842.basis_placeholder')}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -141,8 +141,10 @@ describe('column visibility', () => {
 
   it('parse/serialize round-trips and drops non-hideable / malformed entries', () => {
     expect(parseStoredHidden(serializeHidden(['landlord', 'sqft']))).toEqual(['landlord', 'sqft']);
-    expect(parseStoredHidden(null)).toEqual([]);
-    expect(parseStoredHidden('{bad')).toEqual([]);
+    // First visit / unreadable prefs → the density defaults (2026-07-17):
+    // dates + sqft start hidden; days-to-expiry carries the date signal.
+    expect(parseStoredHidden(null)).toEqual(['lease_start', 'lease_end', 'sqft']);
+    expect(parseStoredHidden('{bad')).toEqual(['lease_start', 'lease_end', 'sqft']);
     expect(parseStoredHidden(JSON.stringify(['property', 'landlord', 'bogus']))).toEqual(['landlord']);
   });
 

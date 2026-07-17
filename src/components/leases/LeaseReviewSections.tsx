@@ -203,7 +203,10 @@ export function SectionCard({
           {t(`lease_review.section_config.${sectionKey}.title`, { defaultValue: section.title })}
         </CardTitle>
       </CardHeader>
-      <CardContent className="pt-4 space-y-4">
+      {/* Two-up grid for short field types (dates, numbers, term): a date
+          in a full-width row was buying whitespace, not readability. Long
+          types (textarea, address text) span both columns. */}
+      <CardContent className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
         {section.fields.map((field) => {
           const fieldConfidence = getFieldConfidence(extractedJson, field.id);
           const fieldLabel = t(`lease_review.field_labels.${field.id}`, { defaultValue: field.label });
@@ -239,8 +242,9 @@ export function SectionCard({
 
           // Auto-resize ref for textareas (plain function, no hook needed)
 
+          const isShortField = field.type === 'date' || field.type === 'number' || field.type === 'term' || field.type === 'select';
           return (
-            <div key={field.id}>
+            <div key={field.id} className={cn(!isShortField && 'sm:col-span-2')}>
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />

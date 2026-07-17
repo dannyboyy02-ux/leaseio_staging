@@ -55,16 +55,20 @@ describe('locked-lease informational layout', () => {
     expect(source).toContain('emptyHint');
   });
 
-  it('LockedHeader exposes Request Unlock for non-admins and Admin Unlock for admins', () => {
+  it('LockedHeader fuses state+action into one LockControl that routes by role', () => {
     const source = readRepoFile('src/components/leases/locked/LockedHeader.tsx');
 
-    // Non-admin path
-    expect(source).toContain('!isAdmin && !pendingUnlockRequest');
-    expect(source).toContain('onRequestUnlock');
-    // Admin path
-    expect(source).toContain('isAdmin &&');
-    expect(source).toContain('onAdminUnlock');
+    // The Locked chip IS the unlock control (2026-07-17 density review):
+    // one element instead of a "Locked" pill next to an Unlock button.
+    expect(source).toContain('function LockControl');
+    expect(source).toContain('<LockControl');
+    // Both role paths still routed through the fused control.
+    expect(source).toContain('onRequestUnlock'); // member → request
+    expect(source).toContain('onAdminUnlock');   // admin  → unlock
+    // Deny still lives on the pending-request card.
     expect(source).toContain('onDenyUnlock');
+    // Read-only renders a static chip, not a button.
+    expect(source).toContain('isAdmin ? onAdminUnlock : onRequestUnlock');
   });
 
 });

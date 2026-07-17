@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { localizedAssetTypeName } from '@/lib/assetTypeLabels';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -125,7 +126,7 @@ function LeaseQueueCard({
               )}
               <p className="text-xs text-muted-foreground mt-0.5">
                 {lease.asset_type && (
-                  <span className="capitalize">{lease.asset_type}</span>
+                  <span>{localizedAssetTypeName(lease.asset_type)}</span>
                 )}
                 {lease.requesting_department && ` \u00b7 ${lease.requesting_department}`}
               </p>
@@ -363,7 +364,7 @@ function ChainStepCard({
                 {step.request_title || t('approvals.queue.untitled_request')}
               </button>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {step.asset_type && <span className="capitalize">{step.asset_type}</span>}
+                {step.asset_type && <span>{localizedAssetTypeName(step.asset_type)}</span>}
                 {step.requesting_department && ` · ${step.requesting_department}`}
               </p>
             </div>
