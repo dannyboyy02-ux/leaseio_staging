@@ -4161,6 +4161,8 @@
       "badge_signature": "Signature",
       "resolving_route": "Resolving the approval route…",
       "route_via_policy": "Routes through your \"{{policy}}\" approval policy.",
+      "route_auto_approve": "Your \"{{policy}}\" policy auto-approves this request — no approval step needed.",
+      "enter_details_to_preview": "Enter the department and amount above to preview your approval route.",
       "no_matching_policy": "No approval policy matches these details yet — an admin may need to add a matching or fallback policy, otherwise this request could be blocked at submission.",
       "review_covenant": "Financial review is required because this request is covenant-flagged.",
       "review_threshold": "Financial review is required because the total commitment meets or exceeds the {{amount}} threshold.",

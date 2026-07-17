@@ -4161,6 +4161,8 @@
       "badge_signature": "Firma",
       "resolving_route": "Resolviendo la ruta de aprobación…",
       "route_via_policy": "Se enruta por su política de aprobación \"{{policy}}\".",
+      "route_auto_approve": "Su política \"{{policy}}\" aprueba automáticamente esta solicitud — no se necesita ningún paso de aprobación.",
+      "enter_details_to_preview": "Ingrese el departamento y el monto arriba para previsualizar su ruta de aprobación.",
       "no_matching_policy": "Ninguna política de aprobación coincide con estos datos todavía — un administrador podría necesitar agregar una política coincidente o de respaldo; de lo contrario, esta solicitud podría bloquearse al enviarse.",
       "review_covenant": "Se requiere revisión financiera porque esta solicitud está marcada por covenant.",
       "review_threshold": "Se requiere revisión financiera porque el compromiso total alcanza o supera el umbral de {{amount}}.",

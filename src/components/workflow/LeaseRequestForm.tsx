@@ -106,9 +106,13 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   // preview lies — routing goes through the policy chain. Call the SAME resolver
   // the tester + submission use (preview_policy_resolution) so the preview is
   // truthful. hasActivePolicies decides which preview to render.
-  const [hasActivePolicies, setHasActivePolicies] = useState(false);
+  // null = not yet known (still loading) — so we never flash the legacy role
+  // preview (the very lie P1-7 removes) before the policy check resolves.
+  const [hasActivePolicies, setHasActivePolicies] = useState<boolean | null>(null);
   const [policyResolution, setPolicyResolution] = useState<
-    | { matched: true; policy_name: string; steps: Array<{ stage: string; approver_user_id: string | null; approver_role: string | null }> }
+    // Mirror preview_policy_resolution's result: the chain lives under `chain`
+    // (NOT `steps`) — the canonical shape in ApprovalPolicyTestDialog.
+    | { matched: true; policy_name: string; chain: Array<{ stage: 'concept' | 'signator' }> }
     | { matched: false; error: string }
     | null
   >(null);
@@ -180,7 +184,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
       setCalcs(null);
       setHasApprovers(null);
       setApprovalRoleState({ hasManagerApprovers: false, hasFinancialApprovers: false });
-      setHasActivePolicies(false);
+      setHasActivePolicies(null);
       setPolicyResolution(null);
       form.reset();
     }
@@ -200,7 +204,7 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
   // active policies exist. Same RPC the policy tester + submission use, so the
   // preview cannot drift from reality. Only runs when policies exist.
   useEffect(() => {
-    if (!open || !workspace?.id || !hasActivePolicies) {
+    if (!open || !workspace?.id || hasActivePolicies !== true) {
       setPolicyResolution(null);
       return;
     }
@@ -493,7 +497,12 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
         </SheetHeader>
 
         {/* No-approvers warning */}
-        {hasApprovers === false && (
+        {/* P1-7: the legacy "no approvers configured — auto-approved" banner
+            reads off workspace_roles only. A policy-driven workspace can have
+            zero legacy roles yet route through the policy chain, so this banner
+            would contradict the policy route below. Only show it when we KNOW
+            there are no active policies (hasActivePolicies === false). */}
+        {hasApprovers === false && hasActivePolicies === false && (
           <div className="mx-4 mt-4 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:bg-amber-950/20 dark:border-amber-700">
             <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
             <div>
@@ -524,31 +533,47 @@ export function LeaseRequestForm({ open, onOpenChange, onSuccess }: LeaseRequest
 
         <div className="mx-4 mt-4 rounded-lg border border-border bg-muted/30 p-3">
           <p className="text-sm font-medium">{t('workflow.request.route_preview')}</p>
-          {hasActivePolicies ? (
+          {hasActivePolicies === null ? (
+            // Policy check still loading — show neutral, never the legacy lie.
+            <p className="mt-2 text-xs text-muted-foreground">{t('workflow.request.resolving_route')}</p>
+          ) : hasActivePolicies ? (
             // P1-7: policy-driven route via the REAL resolver — matches actual
             // submission routing (was the legacy role heuristic, which lied when
             // policies exist).
             policyResolution === null ? (
               <p className="mt-2 text-xs text-muted-foreground">{t('workflow.request.resolving_route')}</p>
             ) : policyResolution.matched ? (
-              <>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
-                  {policyResolution.steps.some((s) => s.stage === 'concept') && (
-                    <Badge variant="secondary">{t('workflow.request.badge_concept')}</Badge>
-                  )}
-                  {policyResolution.steps.some((s) => s.stage === 'signator') && (
-                    <Badge variant="secondary">{t('workflow.request.badge_signature')}</Badge>
-                  )}
-                  <Badge variant="outline">{t('workflow.request.badge_posted_after')}</Badge>
-                </div>
+              policyResolution.chain.length === 0 ? (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {t('workflow.request.route_via_policy', { policy: policyResolution.policy_name })}
+                  {t('workflow.request.route_auto_approve', { policy: policyResolution.policy_name })}
                 </p>
-              </>
-            ) : (
+              ) : (
+                <>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <Badge variant="outline">{t('workflow.request.badge_submit')}</Badge>
+                    {policyResolution.chain.some((s) => s.stage === 'concept') && (
+                      <Badge variant="secondary">{t('workflow.request.badge_concept')}</Badge>
+                    )}
+                    {policyResolution.chain.some((s) => s.stage === 'signator') && (
+                      <Badge variant="secondary">{t('workflow.request.badge_signature')}</Badge>
+                    )}
+                    <Badge variant="outline">{t('workflow.request.badge_posted_after')}</Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t('workflow.request.route_via_policy', { policy: policyResolution.policy_name })}
+                  </p>
+                </>
+              )
+            ) : (requestingDepartment || Number(monthlyPayment) > 0) ? (
+              // Only warn about a no-match once the user has entered the fields
+              // that drive matching — otherwise a fresh, empty form greets them
+              // with an alarming "could be blocked" they can't act on.
               <p className="mt-2 text-xs text-amber-700 dark:text-amber-500">
                 {t('workflow.request.no_matching_policy')}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t('workflow.request.enter_details_to_preview')}
               </p>
             )
           ) : (

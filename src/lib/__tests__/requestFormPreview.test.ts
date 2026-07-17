@@ -22,11 +22,24 @@ describe('P1-7 — truthful approval-route preview', () => {
     expect(frm).toMatch(/from\('approval_policies'\)[\s\S]{0,120}is_active', true/);
   });
   it('renders the policy route (or a no-match warning) instead of the legacy heuristic', () => {
-    expect(frm).toMatch(/hasActivePolicies \? \(/);
     expect(frm).toContain('route_via_policy');
     expect(frm).toContain('no_matching_policy');
     // Legacy role preview retained only for the no-policy case.
     expect(frm).toContain('approvalPreview.requiresManagerApproval');
+  });
+  it('reads the resolver result under `chain` (NOT `steps` — the real key)', () => {
+    // preview_policy_resolution returns the steps under `chain`; the earlier
+    // `.steps` read was undefined → crashed the whole SPA on the matched path.
+    expect(frm).toMatch(/policyResolution\.chain\.some/);
+    expect(frm).not.toMatch(/policyResolution\.steps/);
+  });
+  it('never flashes the legacy preview and does not alarm an empty form', () => {
+    // Tri-state: null while the policy check loads (neutral, not legacy badges);
+    // the no-match warning waits for real routing input.
+    expect(frm).toMatch(/hasActivePolicies === null \?/);
+    expect(frm).toMatch(/requestingDepartment \|\| Number\(monthlyPayment\) > 0/);
+    // The contradictory legacy "no approvers" banner is suppressed under policies.
+    expect(frm).toMatch(/hasApprovers === false && hasActivePolicies === false/);
   });
 });
 
