@@ -1170,13 +1170,18 @@ export default function ApprovalQueue() {
       if (error) throw new Error(error.message ?? t('approvals.errors.rejection_failed'));
       if ((data as any)?.error) throw new Error((data as any).error);
 
-      if (lease.requestorEmail) {
+      if (lease.requestor_id) {
         await supabase.from('lease_activity_log').insert({
           lease_id: lease.id,
           user_id: null,
           activity_type: 'comment',
           details: {
             notification_type: 'notify_submitter_rejected',
+            // P1-4: recipient_ids is required — dispatch-notifications skips any
+            // row without it, so previously the requestor was never told their
+            // request was rejected. (Gate on requestor_id, not requestorEmail:
+            // dispatch resolves the email from the profile itself.)
+            recipient_ids: [lease.requestor_id],
             message: `Your request "${lease.request_title}" was rejected. Reason: ${rejectReason.trim()}`,
           },
         } as any);

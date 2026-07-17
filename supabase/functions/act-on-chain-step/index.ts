@@ -123,6 +123,53 @@ serve(async (req) => {
     }
   }
 
+  // P1-4 (notifications F-2/F-4): write a DELIVERABLE notification row. A comment
+  // row without recipient_ids is dropped by both the fanout trigger and the
+  // dispatch cron, so before this every chain-flow outcome was silent — the
+  // requestor never learned their request was approved/rejected/returned (the
+  // owner's headline complaint), and the next sequential approver never learned
+  // it was their turn. Written server-side so a closed tab / network blip cannot
+  // lose it. Email copy for these notification_types already exists in
+  // _shared/notify_dispatch.ts (copyForType).
+  async function notify(
+    leaseId: string,
+    recipientIds: (string | null | undefined)[],
+    notificationType: string,
+    message: string,
+  ) {
+    const ids = [...new Set(recipientIds.filter((x): x is string => !!x))];
+    if (ids.length === 0) return;
+    const { error } = await supabaseAdmin.from("lease_activity_log").insert({
+      lease_id: leaseId,
+      user_id: null,
+      activity_type: "comment",
+      details: { notification_type: notificationType, recipient_ids: ids, message },
+    });
+    if (error) {
+      console.error(`[act-on-chain-step] notification insert failed (${notificationType}):`, error.message);
+    }
+  }
+
+  // Resolve {userId, role} assignees to concrete user ids (role → its
+  // workspace_roles cohort) for the next-approver notification.
+  async function resolveAssigneeUserIds(
+    workspaceId: string,
+    assignees: { userId: string | null; role: string | null }[],
+  ): Promise<string[]> {
+    const direct = assignees.map((a) => a.userId).filter((x): x is string => !!x);
+    const roles = [...new Set(assignees.map((a) => a.role).filter((x): x is string => !!x))];
+    let roleUsers: string[] = [];
+    if (roles.length > 0) {
+      const { data } = await supabaseAdmin
+        .from("workspace_roles")
+        .select("user_id")
+        .eq("workspace_id", workspaceId)
+        .in("role", roles);
+      roleUsers = ((data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id);
+    }
+    return [...new Set([...direct, ...roleUsers])];
+  }
+
   // ── Lifecycle Transition Convention (CLAUDE.md) ─────────────────────────
   // Every leases.lifecycle_status update MUST also bump status_changed_at
   // in the SAME UPDATE statement. Every status_change activity log row
@@ -511,6 +558,15 @@ serve(async (req) => {
       .update({ status: "superseded" })
       .eq("lease_id", step.lease_id)
       .eq("status", "pending");
+    // F-2: tell the requestor their request was rejected.
+    await notify(
+      step.lease_id,
+      [leaseRequestorId ?? leaseUserId],
+      "notify_submitter_rejected",
+      comment
+        ? `Your lease request was rejected. Reason: ${comment}`
+        : "Your lease request was rejected.",
+    );
   } else if (action === "send_back") {
     // Phase 5: send_back semantics differ by stage in chain mode.
     //   - concept stage send_back  → concept_submitted (Phase 2/3 behavior)
@@ -587,6 +643,18 @@ serve(async (req) => {
       .eq("lease_id", step.lease_id)
       .eq("stage", step.stage)
       .eq("status", "pending");
+    // F-2: tell the requestor their request was sent back. Signator send-back
+    // loops to negotiation; concept send-back returns for revision.
+    const sentBackToNegotiation = mode === "chain" && step.stage === "signator";
+    await notify(
+      step.lease_id,
+      [leaseRequestorId ?? leaseUserId],
+      "notify_submitter_returned",
+      (sentBackToNegotiation
+        ? "The lease was sent back to negotiation by the signator"
+        : "Your lease request was sent back for revision") +
+        (comment ? `. Reason: ${comment}` : "."),
+    );
   } else {
     // approve: load full chain to evaluate stage advancement.
     const { data: chainRows } = await supabaseAdmin
@@ -626,6 +694,14 @@ serve(async (req) => {
               triggered_by: "chain_stage_completed",
               stage: "concept",
             },
+          );
+          // F-2: THE silent gate the owner asked about — tell the requestor
+          // their request cleared concept approval and they may now proceed.
+          await notify(
+            step.lease_id,
+            [leaseRequestorId ?? leaseUserId],
+            "notify_submitter_approved",
+            "Your lease request cleared concept approval. You can now proceed to negotiate the lease terms.",
           );
         } else {
           // Legacy — byte-identical to Phase 2.
@@ -667,6 +743,17 @@ serve(async (req) => {
       if (advancedPastStepOrder(allRows, "concept", step.step_order)) {
         // Crossed a sequential level — compute who's now active.
         nextAssignees = findFirstPendingAssignees(allRows, "concept");
+
+        // F-4: the next sequential approver was previously never told it was
+        // their turn (nextAssignees was computed and returned but every caller
+        // threw it away). Notify them now, server-side.
+        const nextIds = await resolveAssigneeUserIds(step.workspace_id, nextAssignees);
+        await notify(
+          step.lease_id,
+          nextIds,
+          "notify_chain_step_users",
+          "A lease request is now awaiting your approval.",
+        );
 
         // Phase 7: set pending_since on the new active concept rows
         // (the lowest step_order among required pending rows that
