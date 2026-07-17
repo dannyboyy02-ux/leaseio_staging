@@ -45,8 +45,12 @@ describe('P1-5 — process_lease finalize mode', () => {
     expect(block).toMatch(/from_status: 'fully_executed'[\s\S]{0,120}to_status: 'active'/);
     expect(block).toMatch(/routing_path: 'chain'/);
   });
-  it('gates on liveness + monthly quota before the paid Opus pass', () => {
+  it('gates on liveness + AI consent + monthly quota before the paid Opus pass', () => {
     expect(block).toContain('checkWorkspaceLive');
+    // P1-5 security review (HIGH): finalize must honor revoked AI-processing
+    // consent, like the pipeline/executed paths.
+    expect(block).toContain('assertAiConsent');
+    expect(block).toContain("reason: 'ai_consent_required'");
     expect(block).toMatch(/checkProcessingQuota\([\s\S]{0,120}isNewLease: false/);
   });
 });

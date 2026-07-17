@@ -1427,6 +1427,18 @@ serve(async (req) => {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      // AI-processing consent gate (P1-04) — finalize sends a full customer
+      // document to Anthropic just like the pipeline/executed paths, so it must
+      // honor a revoked consent. Placed OUTSIDE the extraction try/catch so the
+      // consent error surfaces as a clean 403, not a generic "abstraction failed".
+      try {
+        await assertAiConsent(supabaseAdmin, user.id);
+      } catch (consentErr) {
+        return new Response(JSON.stringify({
+          error: consentErr instanceof Error ? consentErr.message : 'AI processing consent required',
+          reason: 'ai_consent_required',
+        }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
       // Monthly-cap quota (the lease already exists; no credit consumed — a
       // re-extraction over the cap just blocks, same as executed mode).
       const finQuota = await checkProcessingQuota(supabaseAdmin, finLease.workspace_id, corsHeaders, { isNewLease: false });
