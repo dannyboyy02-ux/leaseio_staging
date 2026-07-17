@@ -50,6 +50,19 @@ Filed-not-fixed during Phase 0 (own beats): #166 (metering counts leases not eve
 
 ---
 
+## UI-polish reviewer sweep 2026-07-17 — pre-existing findings filed (NOT introduced by the polish commit)
+
+Surfaced while reviewing the 7-cluster polish change (`polish/ui-walkthrough-fixes`); all predate it. The commit's own HIGH (ASC 842 saved-snapshot race) and the `beforeunload` half of the dirty-nav guard were fixed in-branch.
+
+- **#167 (MEDIUM, security) `lease_asc842_inputs` INSERT doesn't bind lease_id to the caller's workspace.** RLS validates `workspace_id` membership but nothing ties `lease_id` to that workspace (no composite FK / consistency trigger). An editor in workspace A holding a workspace-B lease UUID can pre-seed B's ASC inputs (only while B has no row), and `generate-lease-report` loads by `lease_id` alone under service role. Mitigated by unguessable UUIDs. Fix: workspace-consistency trigger on `lease_asc842_inputs` + `.eq('workspace_id', …)` defense-in-depth in the report fn.
+- **#168 (MEDIUM, integrity) `asc842_inputs_updated` audit row has WHO/WHEN but no WHAT** — `details` carries only `{saved_at}`, no field-level from→to diff; and an audit-insert failure is swallowed (`console.warn`) while the save still reports success. Fix: diff payload vs loaded row into `details`; surface (or retry) the audit failure.
+- **#169 (LOW) ASC 842 dirty state has no in-app navigation guard** — `beforeunload` now covers reload/close, but sidebar/back/lease-switch still discard silently; `useBlocker` needs the BrowserRouter → data-router migration.
+- **#170 (LOW) asc842 RLS write policies lack the owner_id branch** (`canEdit` includes owner; a member-row-less owner fails at RLS — fails closed; align policies with the owner-OR-member pattern or document that owners always get a member row).
+- **#171 (LOW) `generate-lease-report` has no Vault/read-only check server-side** — a Vault owner can generate reports by direct API (UI hides the button). Phase 8 spec says single-lease reports are all-tier, so likely intentional; either add the `isReadOnlyRetention` check or document the export entitlement in VAULT_TIER_SPEC.
+- **(LOW, pre-existing) `LeaseRequestForm` `created` activity insert is fire-and-forget** (error unchecked).
+
+---
+
 ## #166: AI metering counts LEASES, not abstraction EVENTS — executed-mode re-extractions are unmetered (MEDIUM, money; deferred to a usage-ledger beat)
 
 **Filed 2026-07-16** during the P0-g pass. The monthly-abstraction quota in `process_lease` counts DISTINCT leases with `extracted_json IS NOT NULL AND uploaded_at >= now()-30d`. Executed-mode extractions write `executed_extracted_json` / `executed_uploaded_at` (separate columns), so they never increment that count → a workspace at its monthly cap can run **unlimited executed re-extractions** (each = paid Haiku+Opus). Even the primary path under-counts: re-running extraction on the same lease is 1 counted lease but N abstraction events. The **#36 fail-open was fixed in P0-g** (a count error now fails closed with a retryable 503 instead of granting unmetered processing) — that was the acute hole. This item is the deeper model flaw: the correct fix is a per-event **usage ledger** (count abstraction events, debit on each run) rather than a lease-COUNT meter — a bolt-on OR-count would still miss same-lease re-runs and give false confidence, so it's deferred to a dedicated metering beat, NOT half-fixed here. Retry-path unmetered (#67) folds into the same ledger.

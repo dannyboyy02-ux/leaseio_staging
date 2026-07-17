@@ -194,6 +194,19 @@ export function Asc842InputsTab({
 
   const dirty = fieldsOf(state) !== savedSnapshot;
 
+  // Hard-navigation guard (reload / tab close / external link): the browser
+  // confirm is the only hook available under BrowserRouter. In-app route
+  // changes are not yet blocked — needs the data-router migration (filed).
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -347,6 +360,11 @@ export function Asc842InputsTab({
 
   async function handleSave() {
     setSaving(true);
+    // Snapshot what this save actually persists (the click-time state the
+    // payload below reads). Setting the saved-snapshot from post-save state
+    // instead would absorb anything typed WHILE the upsert was in flight —
+    // marking it "saved" without ever writing it (integrity review HIGH).
+    const snapshotAtSave = fieldsOf(state);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error(t('leases.errors.not_authenticated'));
@@ -410,16 +428,15 @@ export function Asc842InputsTab({
       }
 
       toast.success(t('leases.asc842.saved'));
-      setState((prev) => {
-        const next = {
-          ...prev,
-          has_row: true,
-          last_updated_at: new Date().toISOString(),
-          last_updated_by_label: user.email ?? null,
-        };
-        setSavedSnapshot(fieldsOf(next));
-        return next;
-      });
+      // Plain statement, from the click-time snapshot: edits made during the
+      // round-trip stay dirty (Save re-enables) instead of being absorbed.
+      setSavedSnapshot(snapshotAtSave);
+      setState((prev) => ({
+        ...prev,
+        has_row: true,
+        last_updated_at: new Date().toISOString(),
+        last_updated_by_label: user.email ?? null,
+      }));
     } catch (e: any) {
       toast.error(e?.message ?? t('leases.errors.save_failed'));
     } finally {
