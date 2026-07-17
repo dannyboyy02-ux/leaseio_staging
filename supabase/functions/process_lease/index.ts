@@ -1521,7 +1521,13 @@ serve(async (req) => {
 
       // Lifecycle Transition Convention: status_change row with top-level
       // from/to + mirrored details + routing_path.
-      await supabaseAdmin.from('lease_activity_log').insert({
+      // The activation UPDATE and these audit inserts are separate,
+      // non-transactional statements — capture+log their errors so a lifecycle
+      // transition that lands with no primary-log status_change row (the class
+      // the convention guards against) is at least visible, matching the
+      // pipeline path (integrity review). lease_state_transitions retains a
+      // parallel record via the AFTER trigger.
+      const { error: finStatusLogErr } = await supabaseAdmin.from('lease_activity_log').insert({
         lease_id: targetLeaseId,
         user_id: user.id,
         activity_type: 'status_change',
@@ -1529,12 +1535,14 @@ serve(async (req) => {
         to_status: 'active',
         details: { from: 'fully_executed', to: 'active', routing_path: 'chain', triggered_by: 'process_lease_finalize' },
       });
-      await supabaseAdmin.from('lease_activity_log').insert({
+      if (finStatusLogErr) console.error('[process_lease] finalize status_change log error:', finStatusLogErr.message);
+      const { error: finTermsLogErr } = await supabaseAdmin.from('lease_activity_log').insert({
         lease_id: targetLeaseId,
         user_id: user.id,
         activity_type: 'executed_terms_extracted',
         details: { source_document: (finDocRow as any).filename, routing_path: 'chain', triggered_by: 'finalize' },
       });
+      if (finTermsLogErr) console.error('[process_lease] finalize executed_terms_extracted log error:', finTermsLogErr.message);
 
       // Recompute financial projections from the abstracted terms.
       if (finStart && finTermMonths && finTermMonths > 0) {

@@ -62,6 +62,14 @@ describe('P1-5 — LeaseReview finalize action', () => {
     expect(lr).toMatch(/formData\.append\('extractionMode', 'finalize'\)/);
     expect(lr).toContain('handleFinalize');
   });
+  it('refreshes via refetchLease (this component has no [lease, leaseId] query)', () => {
+    // P1-5 review (HIGH): invalidateQueries(['lease', leaseId]) is a no-op here
+    // — the lease loads via useEffect+setLease — so the success→active-locked
+    // transition would never render. handleFinalize must call refetchLease().
+    const handler = lr.slice(lr.indexOf('const handleFinalize'), lr.indexOf('const handleFinalize') + 900);
+    expect(handler).toContain('refetchLease()');
+    expect(handler).not.toContain("invalidateQueries({ queryKey: ['lease', leaseId] })");
+  });
   it('replaced the dead handleRunAbstraction hook (which minted a new lease)', () => {
     expect(lr).not.toMatch(/const handleRunAbstraction/);
   });

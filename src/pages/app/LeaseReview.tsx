@@ -848,14 +848,21 @@ export default function LeaseReview() {
       if (error) throw new Error(error.message);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success(t('lease_review.toasts.finalize_success'));
-      queryClient.invalidateQueries({ queryKey: ['lease', leaseId] });
+      // Refresh via refetchLease() — this component loads the lease with
+      // useEffect+setLease, NOT a ['lease', leaseId] query, so invalidateQueries
+      // would be a no-op and the page would stay on the stale fully_executed
+      // workbench instead of re-rendering the now-active locked detail. Mirrors
+      // handleModelLock. refetchLease is declared below, so it's called in the
+      // body but intentionally kept out of the deps array (TDZ).
+      refetchLease();
     } catch (error) {
       console.error('Error finalizing lease:', error);
       toast.error(error instanceof Error ? error.message : t('lease_review.toasts.finalize_failed'));
     } finally {
       setRunningAbstraction(false);
     }
-  }, [lease, leaseId, queryClient, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lease, t]);
 
   // Derived rent insights — prefer current period from schedule over the initial extracted value
   const derivedInsights = useMemo(() => {

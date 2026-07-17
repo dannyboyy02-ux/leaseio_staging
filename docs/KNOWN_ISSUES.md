@@ -75,6 +75,10 @@ Owner-directed walkthrough (second flagged area). Re-verified each documented ap
 
 **Deploy caveat:** CLAUDE.md says the *deployed* `resolve-approval-chain` (v37/v38) may lag the repo's canonical matcher — a deploy-lag, not a code gap; verify on the next redeploy.
 
+**Filed (pre-existing, surfaced by the P1-5 review — own beats, NOT bundled):**
+- **LeaseReview stale-parent-UI no-op (LOW):** `DocumentsPanel.onLifecycleChanged` (`LeaseReview.tsx:~3679`), `CounterSignaturePanel.onChanged` (`~3706`), and `ChainViolationBanner.onResolved` (`~3716`) all refresh via `queryClient.invalidateQueries({ queryKey: ['lease', leaseId] })`, but this component loads the lease with `useEffect`+`setLease` — there is NO `useQuery` keyed `['lease', leaseId]` — so the invalidation is a no-op and the parent workbench stays stale after those child actions until a manual reload. Root cause identical to the P1-5 `handleFinalize` case (fixed there with `refetchLease()`). Fix: route all three through `refetchLease()`. (P1-5 handleFinalize already fixed; these three predate P1-5.)
+- **Finalize active-lease-cap (owner decision, not a bug):** finalize meters against the monthly abstraction cap only (`isNewLease:false`), not the active-lease cap — consistent with executed mode, and chain request leases never had the active-lease cap enforced (created outside `process_lease`). Preferable to stranding a fully-executed lease, but flag for an owner monetization decision.
+
 ---
 
 ## Workspaces-management walkthrough 2026-07-16 — every fragility LIVE-VERIFIED still open on this branch; two plan recommendations
