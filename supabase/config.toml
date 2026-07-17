@@ -317,3 +317,9 @@ verify_jwt = true
 # deleted_leases forensic row written first. Fail-closed if the secret is unset.
 [functions.process-lease-retention]
 verify_jwt = false
+
+# auto-nudge-approvers is cron-only (x-cron-secret = AUTO_NUDGE_CRON_SECRET):
+# P1-6 day-2/5/10 automatic escalation — nudges the current pending approver of
+# any frontier step past a milestone. Fail-closed if the secret is unset.
+[functions.auto-nudge-approvers]
+verify_jwt = false
