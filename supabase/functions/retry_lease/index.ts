@@ -8,6 +8,11 @@ import {
   repairJsonObject,
 } from "../_shared/audit.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import {
+  requiresSubscriptionToProcess,
+  NO_SUBSCRIPTION_ERROR,
+  NO_SUBSCRIPTION_REASON,
+} from "../_shared/monetization.ts";
 
 // Azure Document Intelligence (OCR layer)
 const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');
@@ -608,13 +613,16 @@ serve(async (req) => {
     if (lease.workspace_id) {
       const { data: wsLifecycle } = await supabaseAdmin
         .from('workspaces')
-        .select('canceled_at, soft_deleted_at, plan')
+        .select('canceled_at, soft_deleted_at, plan, subscription_status, stripe_subscription_id, created_at')
         .eq('id', lease.workspace_id)
         .maybeSingle();
       const wsLiveRow = wsLifecycle as {
         canceled_at?: string | null;
         soft_deleted_at?: string | null;
         plan?: string | null;
+        subscription_status?: string | null;
+        stripe_subscription_id?: string | null;
+        created_at?: string | null;
       } | null;
       if (wsLiveRow?.canceled_at) {
         return new Response(
@@ -633,6 +641,16 @@ serve(async (req) => {
             error: 'This workspace\'s subscription is inactive and it is in read-only mode. Renew the subscription to process documents again.',
             reason: 'subscription_inactive',
           }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      // Starter monetization (Decision 1, 2026-07-16): a never-subscribed
+      // workspace must start a subscription before ANY paid-AI processing. A
+      // retry burns Opus tokens exactly like a first pass, so it gets the same
+      // gate as process_lease — shared helper keeps the two in lockstep.
+      if (requiresSubscriptionToProcess(wsLiveRow)) {
+        return new Response(
+          JSON.stringify({ error: NO_SUBSCRIPTION_ERROR, reason: NO_SUBSCRIPTION_REASON }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }

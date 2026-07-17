@@ -110,13 +110,12 @@ export default function Onboarding() {
       });
 
       await refreshProfile();
-      // For Business signups, route to the subscription tab pre-armed
-      // with billing-interval intent so the upgrade modal opens to the
-      // user's choice from the landing page.
+      // P0-h (Decision 1): BOTH plans now route through checkout with a 7-day
+      // trial (card up front) — Starter is no longer free-forever. The billing
+      // tab auto-fires checkout for the chosen plan; process_lease blocks
+      // document processing until a subscription (trial) is started.
       navigate(
-        selectedPlan === 'business'
-          ? `/app/settings/account?tab=billing&billing=${selectedBilling}&autoCheckout=1`
-          : '/app/leases',
+        `/app/settings/account?tab=billing&billing=${selectedBilling}&autoCheckout=1&plan=${selectedPlan}`,
       );
     } catch (error: any) {
       toast({
@@ -318,6 +317,14 @@ export default function Onboarding() {
                           {selectedPlanConfig.maxActiveLeases === 1 ? t('onboarding_flow.lease') : t('onboarding_flow.leases')}
                         </span>
                       </div>
+                      <div className="pt-2 mt-1 border-t border-border/60 text-sm space-y-1">
+                        <p className="font-medium text-foreground">
+                          {t('onboarding_flow.starter_trial_line1', { plan: t(selectedPlanConfig.nameKey) })}
+                        </p>
+                        <p className="text-muted-foreground text-xs">
+                          {t('onboarding_flow.starter_trial_line2')}
+                        </p>
+                      </div>
                     </>
                   )}
                 </div>
@@ -331,10 +338,11 @@ export default function Onboarding() {
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         {t('onboarding_flow.creating')}
                       </>
-                    ) : selectedPlan === 'business' ? (
-                      t('onboarding_flow.continue_to_checkout')
                     ) : (
-                      t('onboarding_flow.upload_first_lease')
+                      // Both plans now route through checkout (7-day trial); the
+                      // old Starter "upload your first lease" was a false promise
+                      // — nothing could be uploaded before the subscription gate.
+                      t('onboarding_flow.continue_to_checkout')
                     )}
                   </Button>
                 </div>

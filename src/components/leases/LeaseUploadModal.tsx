@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, X, ChevronRight, HelpCircle, AlertCircle } from 'lucide-react';
+import { Upload, FileText, X, ChevronRight, HelpCircle, AlertCircle, Sparkles } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -53,10 +54,11 @@ interface ParentLease {
   lease_end: string | null;
 }
 
-type Step = 'upload' | 'classify' | 'error' | 'tier2_rejected';
+type Step = 'upload' | 'classify' | 'error' | 'tier2_rejected' | 'no_subscription';
 
 export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceeded }: LeaseUploadModalProps) {
   const { t } = useAppTranslation();
+  const navigate = useNavigate();
   const { startProcessing } = useProcessing();
   const { workspace } = useApp();
   const [step, setStep] = useState<Step>('upload');
@@ -195,6 +197,14 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
         return;
       }
 
+      // Starter monetization gate (Decision 1): a never-subscribed workspace
+      // can't process yet. Show the start-trial panel instead of a generic
+      // "Processing Failed / Try again" dead-end.
+      if (result?.reason === 'no_subscription') {
+        setStep('no_subscription');
+        return;
+      }
+
       if (result?.error) {
         throw new Error(result.error || t('leases.upload.process_failed'));
       }
@@ -217,6 +227,14 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
 
   const handleSubmit = () => performUpload(false);
   const handleTier2Override = () => performUpload(true);
+
+  // Start-trial CTA from the monetization gate: route to the Billing tab and
+  // auto-open checkout for the workspace's intended plan (Starter by default).
+  const handleStartTrial = () => {
+    const plan = workspace?.intendedPlan === 'business' ? 'business' : 'starter';
+    onOpenChange(false);
+    navigate(`/app/settings?tab=billing&autoCheckout=1&plan=${plan}`);
+  };
 
   const handleClose = () => {
     setStep('upload');
@@ -242,12 +260,14 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             {step === 'classify' && t('lease.upload.classify_title')}
             {step === 'error' && t('lease.upload.error_title')}
             {step === 'tier2_rejected' && t('leases.upload.tier2_title')}
+            {step === 'no_subscription' && t('leases.upload.no_subscription_title')}
           </DialogTitle>
           <DialogDescription>
             {step === 'upload' && t('lease.upload.upload_desc')}
             {step === 'classify' && t('lease.upload.classify_desc')}
             {step === 'error' && t('lease.upload.error_desc')}
             {step === 'tier2_rejected' && t('leases.upload.tier2_desc')}
+            {step === 'no_subscription' && t('leases.upload.no_subscription_desc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -463,6 +483,26 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
                 disabled={isUploading}
               >
                 {isUploading ? t('leases.upload.processing') : t('leases.upload.override_proceed')}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'no_subscription' && (
+          <div className="flex flex-col items-center py-8">
+            <div className="h-16 w-16 rounded-full bg-accent/10 flex items-center justify-center mb-4">
+              <Sparkles className="h-8 w-8 text-accent" />
+            </div>
+            <p className="text-sm font-medium mb-2">{t('leases.upload.no_subscription_heading')}</p>
+            <p className="text-xs text-muted-foreground text-center max-w-xs mb-6">
+              {t('leases.upload.no_subscription_body')}
+            </p>
+            <div className="flex gap-3 w-full">
+              <Button variant="outline" onClick={handleClose} className="flex-1">
+                {t('lease.upload.cancel')}
+              </Button>
+              <Button variant="accent" onClick={handleStartTrial} className="flex-1">
+                {t('leases.upload.no_subscription_cta')}
               </Button>
             </div>
           </div>

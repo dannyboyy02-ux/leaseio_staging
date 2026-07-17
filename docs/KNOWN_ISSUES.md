@@ -5,6 +5,31 @@ list and reference it in the commit message.
 
 ---
 
+## ▶ PHASE 0 REMEDIATION — CODE COMPLETE 2026-07-16, coordinated deploy owed to owner
+
+The full Phase-0 safety/money cluster is implemented on branch
+`claude/leaseio-end-to-end-review-163v6w`, each item through 1–2 reviewer rounds
+(security + integrity) + tests (1471 green). **It is INERT on the live system
+until the owner runs the ordered deploy** in `docs/ops/PHASE0_DEPLOY_CHECKLIST_2026-07-16.md`
+(migrations FIRST, then edge-fn redeploys — several must go together, e.g. the
+delete-account migrations + its redeploy, or cross-tenant destruction is only
+half-fixed). Do NOT re-implement these; verify against the branch.
+
+| Item | What landed | Commit |
+|---|---|---|
+| P0-a #164 | lease-removal liveness gates + Vault-preserve retention cron | 9530428 |
+| P0-b #165 | deleted-lease public-link revoke + deleted_at filters on token/report readers | 9530428 |
+| P0-g | process_lease: undefined jsonResponse, fail-CLOSED quota (#36), dead OpenAI removed | dc920eb |
+| P0-e | transfer-ownership blocked while a subscription bills the prior owner (**policy choice, confirm**) | ebd8bda |
+| P0-c | free-workspace hole: client INSERT `WITH CHECK(false)` + advisory-locked `create_first_workspace` RPC | fda2a1c |
+| P0-d | delete-account rebuilt (no cross-tenant destruction, Stripe cancel, zombie-proof); leases.user_id + 51 actor FKs → SET NULL | fda2a1c |
+| P0-f | #18 storage-RLS captured into a repo migration (objects.name qualified) | fda2a1c |
+| P0-h | Starter monetization: onboarding→checkout+trial (both plans); **process_lease AND retry_lease** gate never-subscribed workspaces via shared `_shared/monetization.ts`; `created_at` made immutable (grandfather-bypass HIGH-1); upload-modal start-trial dead-end fixed | (this commit) |
+
+Filed-not-fixed during Phase 0 (own beats): #166 (metering counts leases not events — usage-ledger); existing-free-workspace migration for the P0-h gate (grandfathered by cutoff for now); ASC/portfolio/amendment Business-only server gates (Phase 6/3).
+
+---
+
 ## #166: AI metering counts LEASES, not abstraction EVENTS — executed-mode re-extractions are unmetered (MEDIUM, money; deferred to a usage-ledger beat)
 
 **Filed 2026-07-16** during the P0-g pass. The monthly-abstraction quota in `process_lease` counts DISTINCT leases with `extracted_json IS NOT NULL AND uploaded_at >= now()-30d`. Executed-mode extractions write `executed_extracted_json` / `executed_uploaded_at` (separate columns), so they never increment that count → a workspace at its monthly cap can run **unlimited executed re-extractions** (each = paid Haiku+Opus). Even the primary path under-counts: re-running extraction on the same lease is 1 counted lease but N abstraction events. The **#36 fail-open was fixed in P0-g** (a count error now fails closed with a retryable 503 instead of granting unmetered processing) — that was the acute hole. This item is the deeper model flaw: the correct fix is a per-event **usage ledger** (count abstraction events, debit on each run) rather than a lease-COUNT meter — a bolt-on OR-count would still miss same-lease re-runs and give false confidence, so it's deferred to a dedicated metering beat, NOT half-fixed here. Retry-path unmetered (#67) folds into the same ledger.
@@ -17,10 +42,10 @@ Orchestrated walkthrough (7 parallel verification agents) after the workspaces +
 
 **The two most serious NEW / under-tracked items (file distinctly — not clearly in any existing item):**
 
-### #164: `delete-lease` / `restore-lease` / `process-lease-retention` skip the `checkWorkspaceLive` gate — a Vault/grace admin can permanently destroy leases (HIGH, data destruction)
+### #164: `delete-lease` / `restore-lease` / `process-lease-retention` skip the `checkWorkspaceLive` gate — a Vault/grace admin can permanently destroy leases (HIGH, data destruction) — **✅ FIX LANDED (code) 2026-07-16 (9530428), deploy owed**
 Verified 2026-07-16. `supabase/functions/{delete-lease,restore-lease,process-lease-retention}/index.ts` never import or call `checkWorkspaceLive` (grep: ZERO hits in all three) — the invariant `_shared/workspace_live.ts` declares "every user-invokable mutator must check this explicitly" and ~34 other functions honor. Both removal fns were added 2026-06-25, AFTER the 2026-06-12 vault-v1 liveness sweep, and never got the gate. A workspace admin can POST directly to the deployed function (the UI only hides the kebab — the exact "UI-only authorization" class the project flags) and soft-delete/purge any lease in a Vault (read-only offramp) or grace/soft-deleted workspace — destroying the very records the Vault tier promises to preserve. Pairs with the workspaces cross-tenant delete-account (#Workspaces-1) as the "destructive lease-removal safety" cluster. → **Phase 0.**
 
-### #165: "Delete permanently" leaves a "deleted" lease's public no-login financial summary link LIVE for the full 14-day retention window (HIGH, data exposure)
+### #165: "Delete permanently" leaves a "deleted" lease's public no-login financial summary link LIVE for the full 14-day retention window (HIGH, data exposure) — **✅ FIX LANDED (code) 2026-07-16 (9530428), deploy owed**
 Verified 2026-07-16. `delete-lease/index.ts:135-142` updates only `deleted_at`/`purge_after`/`deleted_by`/`deletion_reason` — it never nulls `summary_share_token` and deliberately leaves `lifecycle_status` unchanged. `get-summary-by-token/index.ts` runs as **service role** (bypasses the `leases_hide_soft_deleted` restrictive RLS), has no `deleted_at` filter, and its lifecycle state-gate still passes. So a lease an admin "deletes permanently" keeps serving its PV-liability / classification / rent financial summary at the public `/share/:token` URL for 14 days. The plan's Phase-0 bullet ("revoke public summary tokens on lease deletion") names this — filing it distinctly with the verified mechanism. Same pass: soft-deleted leases also flow into all THREE report generators (`generate-{lease,portfolio,workspace-asc842}-report`, all service-role, no `deleted_at` filter) → a soft-deleted lease lands in a CPA-facing consolidated ASC-842 PDF. **CLAUDE.md's "4 service-role deleted_at sites" claim is materially incomplete** (missed these 4 read sites). → **Phase 0 (token) + Phase 6 (report generators).**
 
 **Other still-present highlights (already tracked in the plan/reports; confirmed current):** direct-add lands `executed` unreviewed with no approval concept + `retry_lease` divergent degraded pipeline that strands recovered leases (Phase 4); AI metering bypasses — executed-mode uncounted + retry unmetered + #36 fail-open count (money, partly unassigned); `jsonResponse` undefined in `process_lease:2126` (latent 500 + blocks `deno check`); firm layer entirely unwired end-to-end AND **0 firms exist on staging** (never exercised live) with children born on `starter` not `business` (#113 — corrected: `starter`, not `pro`); dashboard `final_review` invisible + persona-blind "Needs Your Action"; governance change-set verbatim-string apply → 22P02 deadlock (G2) + `calc_*` never recomputed (#A7) + the whole unlock loop notifies nobody; #18 storage RLS **fixed LIVE but drifted in the repo migration** (needs `db pull`); Starter free-forever on the default signup path (Phase 0). Escalation-panel financial edits still write no activity-log row (attributability violation, Phase 6/0).

@@ -294,11 +294,16 @@ describe('process_lease pack-aware quota math', () => {
     const fn = quotaHead(read(FN));
     expect(fn.length).toBeGreaterThan(0);
     // Base limit now comes from document_limit (webhook-managed plan entitlement);
-    // the select also pulls purchased_lease_credits for the needs_credit decision
-    // and canceled_at/soft_deleted_at for the Vault V1 liveness backstop.
-    expect(fn).toContain(
-      ".select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at')",
-    );
+    // the select also pulls purchased_lease_credits for the needs_credit decision,
+    // canceled_at/soft_deleted_at for the Vault V1 liveness backstop, and
+    // subscription_status/stripe_subscription_id/created_at for the P0-h
+    // never-subscribed gate. Assert the columns individually (order-independent).
+    for (const col of [
+      'plan', 'document_limit', 'addon_document_capacity', 'purchased_lease_credits',
+      'canceled_at', 'soft_deleted_at', 'subscription_status', 'stripe_subscription_id', 'created_at',
+    ]) {
+      expect(fn).toContain(col);
+    }
   });
 
   it('clamps the addon to >= 0 so a bad value can never shrink the base cap', () => {
