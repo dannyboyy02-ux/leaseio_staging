@@ -18,7 +18,7 @@
 //   2. Scheduled daily via the companion migration (fail-closed: unset secret
 //      → 401 → nothing runs).
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
 import { dispatchNotificationRow } from "../_shared/notify_dispatch.ts";
