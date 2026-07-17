@@ -88,8 +88,6 @@ Deno.serve(async (req) => {
     const milestone = MILESTONES.find((m) => daysPending >= m.days);
     if (!milestone) { totals.skipped++; continue; }
 
-    const workspaceId = group[0].workspace_id as string;
-
     // Load lease (liveness/soft-delete gate + naming) — skip if hidden.
     const { data: lease } = await supabaseAdmin
       .from("leases")
@@ -98,6 +96,12 @@ Deno.serve(async (req) => {
       .is("deleted_at", null)
       .maybeSingle();
     if (!lease) { totals.skipped++; continue; }
+
+    // Resolve recipients from the LEASE's own workspace (the authoritative
+    // source), not the chain row's — defense-in-depth against any future
+    // chain/lease workspace divergence, since the email path isn't
+    // membership-gated (P1-6 security review).
+    const workspaceId = (lease as { workspace_id: string }).workspace_id;
 
     // Workspace liveness (canceled / vault / soft-deleted) — cached per run.
     let live = liveCache.get(workspaceId);
