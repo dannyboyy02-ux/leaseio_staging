@@ -1392,8 +1392,7 @@
       "validation_required": "Title and explanation are required",
       "citation_page_invalid": "Citation page must be a positive integer",
       "added": "Added risk: {{title}}",
-      "add_failed": "Could not add risk: {{message}}",
-      "unknown_error": "unknown error",
+      "add_failed": "Could not add the risk.",
       "selecting_banner": "Selecting in PDF",
       "selecting_hint_before": "— highlight any text, then click",
       "use_selection": "Use selection",
@@ -1434,7 +1433,7 @@
       "dismiss_cta": "Dismiss risk",
       "dismissed": "Dismissed risk: {{title}}",
       "no_rows_updated": "No rows updated — likely a permissions issue. Contact your workspace admin.",
-      "dismiss_failed": "Could not dismiss risk: {{message}}"
+      "dismiss_failed": "Could not dismiss the risk."
     },
     "upload": {
       "tier2_title": "AI says this isn't a lease",

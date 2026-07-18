@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { isPasswordValid } from '@/lib/passwordPolicy';
 import { PasswordRequirementsChecklist } from '@/components/auth/PasswordRequirementsChecklist';
+import { LanguageToggle } from '@/components/layout/LanguageToggle';
 
 // GoTrue redirects expired/used recovery links back here with error params in
 // the hash (implicit flow); auth-js swallows the error internally but leaves
@@ -109,7 +110,13 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background flex items-center justify-center px-4">
+    <div className="relative min-h-screen bg-gradient-to-b from-primary/5 via-background to-background flex items-center justify-center px-4">
+      {/* Language toggle — parity with Login/Signup/ForgotPassword; the
+          expired-link card is exactly where a Spanish-locale user lands
+          from an old email. */}
+      <div className="absolute top-4 right-4">
+        <LanguageToggle />
+      </div>
       <div className="w-full max-w-md">
         {/* Logo */}
         <Link to="/" className="flex items-center justify-center gap-2 mb-8">

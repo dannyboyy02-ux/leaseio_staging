@@ -575,7 +575,7 @@ export default function ApprovalPolicyEditPage() {
         </Card>
 
         {/* Test / Save / Cancel */}
-        <div className="flex flex-wrap justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 pl-6 pr-20 border-t">
+        <div className="flex flex-wrap items-center justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 pl-6 pr-20 border-t">
           <Button
             variant="outline"
             onClick={() => setTestOpen(true)}
@@ -585,7 +585,7 @@ export default function ApprovalPolicyEditPage() {
             {t('policy_editor.try_sample')}
           </Button>
           {testerStale && (
-            <p className="text-xs text-muted-foreground self-center">
+            <p className="text-xs text-muted-foreground min-w-0 max-w-xs">
               {t('policy_editor.tester_save_first')}
             </p>
           )}

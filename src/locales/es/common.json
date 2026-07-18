@@ -1392,8 +1392,7 @@
       "validation_required": "Se requieren el título y la explicación",
       "citation_page_invalid": "La página de la cita debe ser un número entero positivo",
       "added": "Riesgo agregado: {{title}}",
-      "add_failed": "No se pudo agregar el riesgo: {{message}}",
-      "unknown_error": "error desconocido",
+      "add_failed": "No se pudo agregar el riesgo.",
       "selecting_banner": "Seleccionando en el PDF",
       "selecting_hint_before": "— resalte cualquier texto y luego haga clic en",
       "use_selection": "Usar selección",
@@ -1434,7 +1433,7 @@
       "dismiss_cta": "Descartar riesgo",
       "dismissed": "Riesgo descartado: {{title}}",
       "no_rows_updated": "No se actualizó ningún registro; probablemente sea un problema de permisos. Contacte al administrador de su espacio de trabajo.",
-      "dismiss_failed": "No se pudo descartar el riesgo: {{message}}"
+      "dismiss_failed": "No se pudo descartar el riesgo."
     },
     "upload": {
       "tier2_title": "La IA dice que esto no es un arrendamiento",

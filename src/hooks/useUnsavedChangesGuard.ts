@@ -20,8 +20,12 @@ export function useUnsavedChangesGuard(when: boolean, options?: Options) {
   const blocker = useBlocker(
     useCallback(
       ({ currentLocation, nextLocation }) => {
-        if (!when) return false;
+        // Consume the one-shot FIRST, unconditionally — before the `when` and
+        // same-pathname checks. Otherwise a bypass() armed while clean (or
+        // eaten by a benign ?tab= navigation) survives and silently waves
+        // through a later, real navigation (auditor MEDIUM 2026-07-18).
         if (bypassRef.current) { bypassRef.current = false; return false; }
+        if (!when) return false;
         if (currentLocation.pathname === nextLocation.pathname) return false; // ?tab= / hash only
         if (isSameSurface?.(currentLocation.pathname, nextLocation.pathname)) return false;
         return !window.confirm(t('common.unsaved_nav_confirm'));
@@ -35,6 +39,12 @@ export function useUnsavedChangesGuard(when: boolean, options?: Options) {
   useEffect(() => {
     if (blocker.state === 'blocked') blocker.reset();
   }, [blocker]);
+
+  // A bypass armed for a navigation that never happened must not linger into
+  // the next dirty session.
+  useEffect(() => {
+    if (!when) bypassRef.current = false;
+  }, [when]);
 
   useEffect(() => {
     if (!when) return;

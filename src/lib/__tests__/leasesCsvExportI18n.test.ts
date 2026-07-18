@@ -80,3 +80,25 @@ describe('every reused CSV locale key resolves in both locales', () => {
     });
   }
 });
+
+describe('translated CSV headers are pairwise-unique per locale', () => {
+  // The record mapper uses computed [t(key)] properties: if two header
+  // translations ever collide within one locale, the later property silently
+  // overwrites the earlier and rowsToCsv drops an entire column with no error
+  // (integrity review 2026-07-18). This fails the moment a locale edit
+  // introduces a duplicate header string.
+  const en = JSON.parse(read('src/locales/en/common.json'));
+  const es = JSON.parse(read('src/locales/es/common.json'));
+  const get = (obj: unknown, path: string): unknown =>
+    path.split('.').reduce<unknown>(
+      (acc, k) => (acc == null ? acc : (acc as Record<string, unknown>)[k]),
+      obj,
+    );
+
+  for (const [name, locale] of [['en', en], ['es', es]] as const) {
+    it(`${name}: the nine resolved header strings are distinct`, () => {
+      const resolved = HEADER_KEYS.map((k) => get(locale, k));
+      expect(new Set(resolved).size).toBe(HEADER_KEYS.length);
+    });
+  }
+});

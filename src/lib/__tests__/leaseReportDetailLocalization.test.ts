@@ -26,7 +26,8 @@ describe('LeaseReportDetail.tsx localization (#172b)', () => {
   it('renders both dates through formatLocalizedDate with the app language', () => {
     expect(src).not.toContain('toLocaleString(');
     expect(src).not.toContain('toLocaleDateString(');
-    expect(src).toContain('formatLocalizedDate(report.generated_at, language');
+    // Consolidated onto the canonical datetime helper (polish fold 2026-07-18).
+    expect(src).toContain('formatLocalizedDateTime(report.generated_at, language');
     expect(src).toContain('formatLocalizedDate(report.expires_at, language');
   });
 

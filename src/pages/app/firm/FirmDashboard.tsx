@@ -51,12 +51,14 @@ export default function FirmDashboard() {
     queryKey: ["firm-billed-children", currentFirm?.firm_id],
     enabled: Boolean(currentFirm?.firm_id),
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      // Typed client (firms.child_workspaces_used is in the generated types) —
+      // a future column rename fails at compile time instead of silently.
+      const { data } = await supabase
         .from("firms")
         .select("child_workspaces_used")
         .eq("id", currentFirm!.firm_id)
         .maybeSingle();
-      return (data ?? null) as { child_workspaces_used: number | null } | null;
+      return data ?? null;
     },
   });
 
@@ -127,7 +129,9 @@ export default function FirmDashboard() {
             {hiddenChildren > 0 ? t("firm.dashboard.restricted_hidden", { count: hiddenChildren }) : t("firm.dashboard.no_children")}
           </Card>
         ) : (
-          <>
+          // space-y-2 keeps the note reading as the grid's caption, not an
+          // orphan section floating in the page's space-y-6 rhythm.
+          <div className="space-y-2">
             {hiddenChildren > 0 ? (
               <p className="text-xs text-muted-foreground">{t("firm.dashboard.restricted_hidden", { count: hiddenChildren })}</p>
             ) : null}
@@ -155,7 +159,7 @@ export default function FirmDashboard() {
                 </Card>
               ))}
             </div>
-          </>
+          </div>
         )}
       </PageLayout>
     </AppLayout>

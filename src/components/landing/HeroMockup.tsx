@@ -96,7 +96,11 @@ export function HeroMockup() {
                 <span className="text-xs font-medium tabular-nums text-foreground">
                   {t('landing.hero.mockup.value_renewal')}
                 </span>
-                <span className="inline-flex h-4 items-center rounded-full border border-amber-400 bg-amber-50 px-1.5 text-[9px] font-medium text-amber-600">
+                {/* 76% is tier LOW (red) in the product since the #177a band
+                    alignment — the mockup must speak the same color language
+                    (red flagged field + amber Needs Review doc chip is the
+                    real workbench story). */}
+                <span className="inline-flex h-4 items-center rounded-full border border-red-400 bg-red-50 px-1.5 text-[9px] font-medium text-red-600">
                   <AlertTriangle className="mr-0.5 h-2 w-2" />
                   {t('landing.hero.mockup.conf_renewal')}
                 </span>

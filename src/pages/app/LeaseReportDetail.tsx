@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedDate } from '@/lib/dateFormatters';
+import { formatLocalizedDate, formatLocalizedDateTime } from '@/lib/dateFormatters';
 import { mapSupabaseError } from '@/lib/userFacingError';
 import { useGenerateLeaseReport } from '@/hooks/useGenerateLeaseReport';
 
@@ -137,16 +137,7 @@ export default function LeaseReportDetail() {
   }, [report]);
 
   const generatedAtDisplay = useMemo(
-    () =>
-      report
-        ? formatLocalizedDate(report.generated_at, language, {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-          })
-        : '',
+    () => (report ? formatLocalizedDateTime(report.generated_at, language) : ''),
     [report, language],
   );
 

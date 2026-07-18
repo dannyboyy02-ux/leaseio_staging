@@ -37,6 +37,7 @@ import { cn } from '@/lib/utils';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedCurrency, formatLocalizedNumber } from '@/lib/dateFormatters';
 import { getFieldConfidence, confidenceTier } from '@/lib/extractedFieldHelpers';
+import { mapSupabaseError } from '@/lib/userFacingError';
 import type { ConfidenceScores } from '@/types/workflow';
 
 // P2-04: SECTION_CONFIG, SectionKey, findFieldLabel moved to
@@ -184,8 +185,11 @@ export function SectionCard({
     const fieldConf = getFieldConfidence(extractedJson, fieldId);
     if (fieldConf === null) return '';
     const tier = confidenceTier(fieldConf);
+    // Severity grammar: border-2 means "you must act here" — reserved for the
+    // flagged (low) tier exactly. Medium keeps a light 1px amber cue; its
+    // ConfidenceBadge already carries the advisory signal (layout review).
     if (tier === 'low') return 'border-red-400 border-2';
-    if (tier === 'medium') return 'border-amber-400 border-2';
+    if (tier === 'medium') return 'border-amber-400';
     return '';
   };
 
@@ -547,9 +551,9 @@ export function RisksSection({ risks, onJumpToPage, sourceViewable = true, lease
       setDismissTarget(null);
       setDismissReason('');
       onRisksChanged?.();
-    } catch (err: any) {
-      console.error('[RisksSection] dismiss failed:', err);
-      toast.error(t('leases.risk.dismiss_failed', { message: err?.message ?? t('leases.risk.unknown_error') }));
+    } catch (err) {
+      // #173: raw driver/trigger text never reaches the UI (helper logs it).
+      toast.error(mapSupabaseError(err, t, 'leases.risk.dismiss_failed', '[RisksSection] dismiss failed:'));
     } finally {
       setDismissing(false);
     }

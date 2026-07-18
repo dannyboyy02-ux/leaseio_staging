@@ -102,14 +102,16 @@ export default function ForgotPassword() {
                 <p className="text-sm text-muted-foreground text-center">
                   {t('auth.forgot.spam_note')}
                 </p>
-                <Button 
-                  variant="outline" 
+                {/* Forward action carries the weight; "back" is a ghost —
+                    mirrors ResetPassword's expired card (layout review). */}
+                <Button
+                  variant="outline"
                   className="w-full"
                   onClick={() => setIsSubmitted(false)}
                 >
                   {t('auth.forgot.try_another')}
                 </Button>
-                <Button asChild className="w-full">
+                <Button variant="ghost" asChild className="w-full">
                   <Link to="/login">
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     {t('auth.forgot.back_to_signin')}
