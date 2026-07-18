@@ -131,7 +131,3 @@ export function isProcessingStatus(status: string | null): boolean {
 export function isFailedStatus(status: string | null): boolean {
   return status === 'Failed';
 }
-
-export function needsReviewStatus(status: string | null): boolean {
-  return status === 'Needs Review' || status === 'Review Required' || status === 'pending_review';
-}

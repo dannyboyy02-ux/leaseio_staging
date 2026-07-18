@@ -22,9 +22,16 @@ export function FirmNotMemberState({ icon: Icon }: { icon: LucideIcon }) {
           <Icon className="h-10 w-10 mx-auto text-muted-foreground/50 mb-4" />
           <h1 className="text-xl font-semibold">{t("firm.none_title")}</h1>
           <p className="text-sm text-muted-foreground mt-2">{t("firm.none_desc")}</p>
-          <Button className="mt-6" onClick={() => navigate("/app/dashboard")}>
-            {t("firm.back_to_workspace")}
-          </Button>
+          {/* The page pitches firms — give it the primary action (create one),
+              not just an exit. The text link in onboarding was the only entry. */}
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <Button onClick={() => navigate("/app/firm/onboarding")}>
+              {t("firm.set_up_firm")}
+            </Button>
+            <Button variant="outline" onClick={() => navigate("/app/dashboard")}>
+              {t("firm.back_to_workspace")}
+            </Button>
+          </div>
         </div>
       </PageLayout>
     </AppLayout>

@@ -4,6 +4,7 @@ import { AlertOctagon, Clock, FileSearch, Upload } from 'lucide-react';
 import { t } from 'i18next';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface PendingApproval {
@@ -49,7 +50,7 @@ export function useNeedsAction() {
           // PostgREST type narrowing requires a literal string. Don't split
           // this with '+' concatenation — that widens to `string` and the
           // result type collapses to GenericStringError.
-          .select('id, request_title, filename, requesting_department, monthly_payment, submitted_for_approval_at, status_changed_at, status, executed_document_url, lifecycle_status, financial_returned_to_submitter, financial_rejection_reason')
+          .select('id, request_title, filename, requesting_department, monthly_payment, executed_monthly_payment, current_monthly_rent, submitted_for_approval_at, status_changed_at, status, executed_document_url, lifecycle_status, financial_returned_to_submitter, financial_rejection_reason, rent_schedules(period_start, period_end, monthly_amount)')
           .eq('workspace_id', workspace!.id)
           // Phase 3: include chain-vocabulary equivalents for awaiting,
           // in-review, and executed-pre-active groups.
@@ -103,7 +104,7 @@ export function useNeedsAction() {
             title: l.request_title ?? l.filename ?? t('dashboard.unnamed_lease'),
             department: l.requesting_department ?? t('dashboard.unknown_department'),
             daysWaiting,
-            annualValue: (l.monthly_payment ?? 0) * 12,
+            annualValue: getMonthlyRent(l as any) * 12,
           };
         })
         .sort((a, b) => b.daysWaiting - a.daysWaiting);

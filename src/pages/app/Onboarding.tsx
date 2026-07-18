@@ -217,7 +217,10 @@ export default function Onboarding() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Two plans (PLAN_ORDER excludes Vault) — a 4-col grid left
+                    two skinny cards stranded; 2-up stays balanced like the
+                    landing pricing. */}
+                <div className="grid sm:grid-cols-2 gap-4">
                   {PLAN_ORDER.map((planId) => {
                     const plan = PLANS[planId];
                     return (

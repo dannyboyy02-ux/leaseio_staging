@@ -9,6 +9,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 /**
  * Compact currency formatter — `$1.2M`, `$870K`, `$1.4B`. Keeps stage rows
@@ -64,8 +65,10 @@ export function LeasePipeline() {
       if (!workspace?.id) return [];
       const { data: leases } = await supabase
         .from('leases')
-        .select('lifecycle_status, monthly_payment, activated_at')
-        .eq('workspace_id', workspace.id);
+        .select('lifecycle_status, activated_at, executed_monthly_payment, current_monthly_rent, monthly_payment, rent_schedules(period_start, period_end, monthly_amount)')
+        .eq('workspace_id', workspace.id)
+        // Exclude archived leases — the rest of the dashboard already does.
+        .eq('archived', false);
       if (!leases) return [];
       const cutoff = Date.now() - ACTIVE_LOOKBACK_DAYS * 86_400_000;
       return STAGES.map((stage) => {
@@ -85,7 +88,7 @@ export function LeasePipeline() {
           return true;
         });
         const annualValue = matching.reduce(
-          (sum, l) => sum + ((l as any).monthly_payment ?? 0) * 12,
+          (sum, l) => sum + getMonthlyRent(l as any) * 12,
           0
         );
         return {
@@ -123,8 +126,9 @@ export function LeasePipeline() {
   const maxCount = Math.max(...stageData.map((s) => s.count), 1);
 
   const approvalStages = ['submitted', 'under_review', 'approved'];
+  // A single in-flight lease isn't a bottleneck — require at least 2 stacked.
   const bottleneckStage = stageData
-    .filter((s) => approvalStages.includes(s.key) && s.count > 0)
+    .filter((s) => approvalStages.includes(s.key) && s.count > 1)
     .sort((a, b) => b.count - a.count)[0]?.key ?? null;
 
   const inProgressCount = stageData

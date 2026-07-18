@@ -41,6 +41,17 @@ import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedDate } from '@/lib/dateFormatters';
 import { useGenerateLeaseReport } from '@/hooks/useGenerateLeaseReport';
+import { deriveClassification, classificationMismatches, type DerivedClassification } from '@/lib/asc842Classification';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Props {
   leaseId: string;
@@ -58,6 +69,10 @@ interface Props {
   /** Rendered between the capture sections and the sticky save bar so the
    *  bar's containing block covers the discount-rate card too. */
   discountRateSlot?: React.ReactNode;
+  /** leases.lease_classification ('finance'|'operating'|'pending'|null) — the
+   *  value the disclosure report prints. Used only to warn when the tab's
+   *  test-derived cross-check diverges; never written back. */
+  storedClassification?: string | null;
 }
 
 type State = {
@@ -192,6 +207,7 @@ export function Asc842InputsTab({
   lifecycleStatus = null,
   reportAvailable = false,
   discountRateSlot = null,
+  storedClassification = null,
 }: Props) {
   const { t } = useAppTranslation();
   const { language } = useLanguage();
@@ -203,6 +219,7 @@ export function Asc842InputsTab({
   const [saving, setSaving] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const { generate: generateReport, isWorking: generatingReport } = useGenerateLeaseReport();
+  const [mismatchDialogOpen, setMismatchDialogOpen] = useState(false);
 
   const dirty = fieldsOf(state) !== savedSnapshot;
 
@@ -327,8 +344,24 @@ export function Asc842InputsTab({
   ];
   const testsMet = classificationTests.filter((v) => v === true).length;
   const testsAssessed = classificationTests.filter((v) => v !== null).length;
-  const classification: 'finance' | 'operating' | 'partial' =
-    testsMet > 0 ? 'finance' : testsAssessed === classificationTests.length ? 'operating' : 'partial';
+  const classification: DerivedClassification = deriveClassification(classificationTests);
+
+  // Cross-check the test-derived classification against the recorded value the
+  // disclosure report actually prints. Two distinct cases:
+  //  - CONFLICT: recorded a *different concrete* class (recorded Operating,
+  //    tests derive Finance) — a genuine discrepancy; hard-gate the report.
+  //  - UNRECORDED: the lease just isn't classified yet ('pending'/null, the
+  //    common direct-upload default; classification is set at financial
+  //    approval) — informational only, don't block or contradict.
+  const derivedConcrete = classification === 'finance' || classification === 'operating';
+  const recordedPending = !storedClassification || storedClassification === 'pending';
+  const classificationConflict =
+    derivedConcrete && !recordedPending && classificationMismatches(classification, storedClassification);
+  const classificationUnrecorded = derivedConcrete && recordedPending;
+  const classLabel = (c: string): string =>
+    c === 'finance' ? t('leases.asc842.class_finance')
+    : c === 'operating' ? t('leases.asc842.class_operating')
+    : t('leases.asc842.class_pending');
 
   const renewalMonths = n(state.renewal_options_rc_term_months);
   const effectiveTermMonths =
@@ -356,11 +389,7 @@ export function Asc842InputsTab({
   const isFinalized = lifecycleStatus === 'active';
 
   // ── Report generation (the door this tab feeds) ────────────────────
-  const handleGenerateReport = useCallback(async () => {
-    if (dirty) {
-      toast.message(t('leases.asc842.save_before_report'));
-      return;
-    }
+  const runGenerate = useCallback(async () => {
     try {
       const result = await generateReport(leaseId);
       toast.success(t('leases.asc842.report_ready'));
@@ -368,7 +397,21 @@ export function Asc842InputsTab({
     } catch (e: any) {
       toast.error(e?.message ?? t('leases.asc842.report_failed'));
     }
-  }, [dirty, generateReport, leaseId, navigate, t]);
+  }, [generateReport, leaseId, navigate, t]);
+
+  const handleGenerateReport = useCallback(() => {
+    if (dirty) {
+      toast.message(t('leases.asc842.save_before_report'));
+      return;
+    }
+    // Hard-gate only a genuine conflict (recorded a different concrete class);
+    // an unclassified lease just prints "pending" honestly — no dialog.
+    if (classificationConflict) {
+      setMismatchDialogOpen(true);
+      return;
+    }
+    void runGenerate();
+  }, [dirty, classificationConflict, runGenerate, t]);
 
   async function handleSave() {
     setSaving(true);
@@ -555,6 +598,18 @@ export function Asc842InputsTab({
           )}
           {!canEdit && (
             <p className="text-xs text-muted-foreground mt-3">{t('leases.asc842.readonly_note')}</p>
+          )}
+          {/* The report prints the recorded classification, not the test-derived
+              one. A genuine conflict (recorded a different concrete class) is an
+              amber warning; an unclassified lease is a neutral heads-up. */}
+          {reportAvailable && classificationConflict && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-3 flex items-start gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              {t('leases.asc842.class_mismatch_note', { recorded: classLabel(storedClassification ?? 'pending') })}
+            </p>
+          )}
+          {reportAvailable && classificationUnrecorded && (
+            <p className="text-xs text-muted-foreground mt-3">{t('leases.asc842.class_unrecorded_note')}</p>
           )}
         </CardContent>
       </Card>
@@ -918,6 +973,26 @@ export function Asc842InputsTab({
           </div>
         </div>
       </div>
+
+      <AlertDialog open={mismatchDialogOpen} onOpenChange={setMismatchDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('leases.asc842.class_mismatch_dialog_title')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('leases.asc842.class_mismatch_dialog_body', {
+                derived: classLabel(classification),
+                recorded: classLabel(storedClassification ?? 'pending'),
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setMismatchDialogOpen(false); void runGenerate(); }}>
+              {t('leases.asc842.class_mismatch_generate_anyway')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

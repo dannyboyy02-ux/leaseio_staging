@@ -2,9 +2,15 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Sparkles, Shield, Clock, DollarSign } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function HeroSection() {
   const { t } = useLanguage();
+  const { user } = useAuth();
+  // /lease-audit is protected: a logged-out visitor would hit ProtectedRoute →
+  // /login → paid onboarding. Route them through signup carrying next so they
+  // land back on the free audit (Signup honors ?next before onboarding).
+  const auditTarget = user ? '/lease-audit' : '/signup?next=%2Flease-audit';
 
   return (
     <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-primary/5 via-background to-background">
@@ -30,7 +36,7 @@ export function HeroSection() {
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Button size="lg" asChild className="w-full sm:w-auto">
-              <Link to="/lease-audit">
+              <Link to={auditTarget}>
                 {t('landing.hero.cta_audit')}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>

@@ -24,7 +24,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   ChevronLeft,
-  Download,
+  ExternalLink,
   FileText,
   Loader2,
   ShieldCheck,
@@ -461,7 +461,7 @@ export default function SignatorReview() {
                           variant="outline"
                           onClick={() => window.open(pdfUrl!, '_blank')}
                         >
-                          <Download className="h-3.5 w-3.5 mr-1.5" />
+                          <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                           {t('approvals.signator.open')}
                         </Button>
                       )}

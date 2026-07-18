@@ -63,7 +63,8 @@ import { type ImperativePanelHandle } from "react-resizable-panels";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
-import { isFailedStatus, needsReviewStatus } from "@/components/leases/LeaseStatusBadge";
+import { isFailedStatus } from "@/components/leases/LeaseStatusBadge";
+import { localizedAssetTypeName } from "@/lib/assetTypeLabels";
 import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
 import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
 import { SectionCard, RisksSection, getFieldConfidence } from "@/components/leases/LeaseReviewSections";
@@ -2559,7 +2560,7 @@ export default function LeaseReview() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">{t('lease_review.fields.asset_type')}</p>
-                    <p className="font-medium capitalize">{lease.asset_type || '\u2014'}</p>
+                    <p className="font-medium">{lease.asset_type ? localizedAssetTypeName(lease.asset_type) : '\u2014'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">{t('lease_review.intake.escalation_rate')}</p>
@@ -3257,8 +3258,10 @@ export default function LeaseReview() {
                       renders identically after a delete and users conclude
                       the action failed. Restore reuses the archive dialog. */}
                   {lease.archived && (
-                    <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 flex items-center justify-between gap-4 flex-wrap">
-                      <p className="text-sm text-destructive min-w-0">
+                    // Neutral, not destructive-red: archive is reversible (mirrors LockedHeader).
+                    <div className="rounded-lg border border-border bg-muted p-4 flex items-center justify-between gap-4 flex-wrap">
+                      <p className="text-sm text-muted-foreground min-w-0 flex items-center gap-2">
+                        <Archive className="h-4 w-4 shrink-0" />
                         {t('archive.deleted_banner')}
                       </p>
                       {!isReadOnly && (userRole === 'admin' || userRole === 'owner') && (
@@ -3282,7 +3285,14 @@ export default function LeaseReview() {
                       readOnly={isReadOnly}
                     />
                   )}
-                  {needsReviewStatus(lease?.lifecycle_status) && (
+                  {/* Self-gating: NeedsReviewBanner returns null unless a Tier-1
+                      field is missing or low-confidence. Suppressed only for
+                      Failed leases — FailedLeaseBanner (above) already owns that
+                      state, and a failed extraction has no fields so every Tier-1
+                      field would list as "missing" (duplicate noise). The old
+                      needsReviewStatus() gate matched lifecycle strings no lease
+                      ever has, so the banner never rendered at all. */}
+                  {!isFailedStatus(lease?.status) && (
                     <NeedsReviewBanner
                       landlordName={form.landlord_name}
                       tenantName={form.tenant_name}
@@ -3730,6 +3740,7 @@ export default function LeaseReview() {
                             baseTermMonths={lease.term_months ?? null}
                             lifecycleStatus={lifecycleStatus ?? null}
                             reportAvailable={!!lease.model_locked}
+                            storedClassification={lease.lease_classification ?? null}
                             discountRateSlot={
                               /* The IBR/discount rate is the report's most
                                  important measurement input — surfaced during

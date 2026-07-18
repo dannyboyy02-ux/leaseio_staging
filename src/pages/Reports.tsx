@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, PieChart, TrendingUp, Calendar, Download, Lock, ClipboardList, FileText } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Calendar, Lock, ClipboardList, FileText } from 'lucide-react';
 import type { ComponentType } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -23,7 +23,6 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   canAccessReportsAuditLog,
   canAccessReportsDataQuality,
-  canExportReports,
 } from '@/lib/authorization';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -73,7 +72,6 @@ export default function Reports() {
   const hasAccess = canAccessFeature('business') || isReadOnlyRetention(workspace?.plan);
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const isEditor = userRole === 'editor';
-  const canExport = canExportReports(userRole);
 
   const [statusData, setStatusData] = useState<StatusCommitment[]>([]);
   const [varianceLeases, setVarianceLeases] = useState<VarianceLease[]>([]);
@@ -178,12 +176,6 @@ export default function Reports() {
       <AppHeader
         title={t('reports.title')}
         subtitle={t('reports.subtitle')}
-        actions={
-          <Button variant="outline" disabled={!canExport}>
-            <Download className="h-4 w-4 mr-2" />
-            {t('reports.export_all')}
-          </Button>
-        }
       />
 
       <PageLayout width="wide" spacing="space-y-8">
@@ -218,14 +210,9 @@ export default function Reports() {
                 </CardHeader>
                 <CardContent>
                   <CardDescription className="mb-4">{t(report.descKey)}</CardDescription>
-                  <div className="flex gap-2">
-                    <Button variant="secondary" className="flex-1" asChild={!!report.href}>
-                      {report.href ? <Link to={report.href}>{t('reports.view_report')}</Link> : <span>{t('packs.unavailable')}</span>}
-                    </Button>
-                    <Button variant="ghost" size="icon" disabled={!canExport || !report.href}>
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <Button variant="secondary" asChild={!!report.href}>
+                    {report.href ? <Link to={report.href}>{t('reports.view_report')}</Link> : <span>{t('packs.unavailable')}</span>}
+                  </Button>
                 </CardContent>
               </Card>
             ))}

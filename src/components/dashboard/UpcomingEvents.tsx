@@ -105,7 +105,7 @@ export function UpcomingEvents() {
       const { data: leases, error } = await (supabase as any)
         .from('leases')
         .select(
-          'id, filename, lease_end, executed_expiry_date, escalation_type, rent_escalation_type, executed_commencement_date, rent_commencement_date, lease_start, ' +
+          'id, filename, lease_end, executed_expiry_date, escalation_type, rent_escalation_type, needs_escalation_review, executed_commencement_date, rent_commencement_date, lease_start, ' +
           'current_monthly_rent, monthly_payment, executed_monthly_payment, extracted_json, ' +
           'rent_schedules(period_start, period_end, monthly_amount)'
         )
@@ -174,7 +174,11 @@ export function UpcomingEvents() {
         // Escalation: CPI/index leases — next anniversary of commencement date
         const escType = ((lease as any).escalation_type ?? '').toLowerCase();
         const rentEscType = ((lease as any).rent_escalation_type ?? '').toLowerCase();
-        const isCpi = ['index', 'cpi'].includes(escType) || ['index', 'cpi'].includes(rentEscType);
+        // Trust the confirmed escalation_type once reviewed; only fall back to
+        // the raw extracted hint while it still needs review (see EscalationReviewPanel).
+        const isCpi =
+          ['index', 'cpi'].includes(escType) ||
+          ((lease as any).needs_escalation_review === true && ['index', 'cpi'].includes(rentEscType));
         if (isCpi) {
           const commencementRaw =
             (lease as any).executed_commencement_date ||

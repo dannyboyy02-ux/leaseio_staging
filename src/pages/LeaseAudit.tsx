@@ -523,7 +523,7 @@ function ResultsStep({
               <Link to="/signup?plan=business">{t('lease_audit.see_business')}</Link>
             </Button>
           </div>
-          <p className="text-xs text-primary-foreground/60">{t('lease_audit.no_card')}</p>
+          <p className="text-xs text-primary-foreground/60">{t('lease_audit.trial_note')}</p>
         </CardContent>
       </Card>
     </div>

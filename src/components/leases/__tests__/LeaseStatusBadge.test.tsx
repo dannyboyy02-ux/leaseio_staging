@@ -8,7 +8,6 @@ import {
   LeaseStatusBadge,
   isProcessingStatus,
   isFailedStatus,
-  needsReviewStatus,
 } from '../LeaseStatusBadge';
 import { LifecycleStatusBadge } from '@/components/lifecycle/LifecycleStatusBadge';
 
@@ -84,12 +83,5 @@ describe('status predicates', () => {
   it('isFailedStatus covers only Failed', () => {
     expect(isFailedStatus('Failed')).toBe(true);
     expect(isFailedStatus('Ready')).toBe(false);
-  });
-
-  it('needsReviewStatus covers the review aliases', () => {
-    expect(needsReviewStatus('Needs Review')).toBe(true);
-    expect(needsReviewStatus('Review Required')).toBe(true);
-    expect(needsReviewStatus('pending_review')).toBe(true);
-    expect(needsReviewStatus('Ready')).toBe(false);
   });
 });

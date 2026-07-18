@@ -105,7 +105,8 @@ export function LockedHeader({
                   t={t}
                 />
                 {isArchived && (
-                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+                  // Archive is non-destructive (restorable) — muted, not red.
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                     <Archive className="h-3 w-3" />
                     {t('archive.deleted_badge')}
                   </span>
@@ -169,9 +170,12 @@ export function LockedHeader({
             banner the page renders identically after a delete and users
             conclude the action failed. */}
         {isArchived && (
-          <Card className="mt-3 shadow-none border border-destructive/40 bg-destructive/5">
+          // Neutral, not destructive-red: archive is reversible, not an error —
+          // but still a status callout (icon + full muted fill), not a footnote.
+          <Card className="mt-3 shadow-none border border-border bg-muted">
             <CardContent className="py-3 px-4 flex items-center justify-between gap-4 flex-wrap">
-              <p className="text-sm text-destructive min-w-0">
+              <p className="text-sm text-muted-foreground min-w-0 flex items-center gap-2">
+                <Archive className="h-4 w-4 shrink-0" />
                 {t('archive.deleted_banner')}
               </p>
               {!readOnly && isAdmin && leaseId && (
