@@ -4,12 +4,13 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Route, Navigate, Outlet, useParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppProvider } from "@/contexts/AppContext";
 import { FirmProvider } from "@/contexts/FirmContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // ─── Eager-loaded routes (kept in the main bundle for fast first paint) ────
 // Marketing + auth + legal — visited on cold loads, optimised for fast first
@@ -54,6 +55,39 @@ function KeyedLeaseReview() {
   const { leaseId } = useParams();
   return <LeaseReview key={leaseId} />;
 }
+
+// Pathless layout route for the data router (#174/#169). Two parity
+// guarantees live here: (1) the identical Suspense fallback that used to
+// wrap <Routes>; (2) the ErrorBoundary — data routers intercept route
+// render errors before main.tsx's boundary, so nesting the same boundary
+// inside the root route keeps the branded fallback (main.tsx stays as the
+// outer belt).
+function RootLayout() {
+  return (
+    <ErrorBoundary>
+      <Suspense
+        fallback={
+          <div
+            style={{
+              minHeight: "100vh",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#6b7280",
+              fontFamily:
+                '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+              fontSize: "0.875rem",
+            }}
+          >
+            Loading…
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
 const PortfolioReportsAdmin = lazy(() => import("./pages/app/PortfolioReportsAdmin"));
 const DisclosureReportLibrary = lazy(() => import("./pages/app/DisclosureReportLibrary"));
 const SignatorReview = lazy(() => import("./pages/app/SignatorReview"));
@@ -93,36 +127,15 @@ import {
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-      <AuthProvider>
-        <AppProvider>
-          <FirmProvider>
-          <LanguageProvider>
-            <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Suspense
-                fallback={
-                  <div
-                    style={{
-                      minHeight: "100vh",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#6b7280",
-                      fontFamily:
-                        '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-                      fontSize: "0.875rem",
-                    }}
-                  >
-                    Loading…
-                  </div>
-                }
-              >
-              <Routes>
+// Data router (#174/#169): createBrowserRouter replaces the old component
+// router so useBlocker (the shared unsaved-changes guard in
+// src/hooks/useUnsavedChangesGuard.ts) has a router to register against.
+// The route children below are unchanged from the <Routes> era; RootLayout
+// (above) preserves the Suspense fallback + ErrorBoundary behavior. No
+// future flags, loaders, or errorElement — behavior parity only.
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route element={<RootLayout />}>
                 {/* Public routes */}
                 <Route path="/" element={<Landing />} />
                 <Route
@@ -441,9 +454,21 @@ const App = () => (
 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />
-              </Routes>
-              </Suspense>
-              </BrowserRouter>
+    </Route>,
+  ),
+);
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+      <AuthProvider>
+        <AppProvider>
+          <FirmProvider>
+          <LanguageProvider>
+            <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <RouterProvider router={router} />
             </TooltipProvider>
           </LanguageProvider>
           </FirmProvider>

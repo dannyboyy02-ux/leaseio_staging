@@ -177,14 +177,15 @@ export function SectionCard({
   const section = SECTION_CONFIG[sectionKey];
   const Icon = section.icon;
 
+  // Border severity DERIVES from the shared confidenceTier bands (no local
+  // thresholds — #177a), so badge, border, and the review-flag cutoff can
+  // never drift apart: tier 'low' = red border = flagged field, exactly.
   const getFieldBorderClass = (fieldId: string) => {
     const fieldConf = getFieldConfidence(extractedJson, fieldId);
-    if (fieldConf !== null && fieldConf < 0.70) {
-      return 'border-red-400 border-2';
-    }
-    if (fieldConf !== null && fieldConf < 0.80) {
-      return 'border-amber-400 border-2';
-    }
+    if (fieldConf === null) return '';
+    const tier = confidenceTier(fieldConf);
+    if (tier === 'low') return 'border-red-400 border-2';
+    if (tier === 'medium') return 'border-amber-400 border-2';
     return '';
   };
 
@@ -253,7 +254,7 @@ export function SectionCard({
 
           const isShortField = field.type === 'date' || field.type === 'number' || field.type === 'term' || field.type === 'select';
           return (
-            <div key={field.id} className={cn(allowTwoUp && !isShortField && 'sm:col-span-2')}>
+            <div key={field.id} data-field-id={field.id} className={cn(allowTwoUp && !isShortField && 'sm:col-span-2')}>
               <div className="flex items-center justify-between mb-1.5">
                 <Label className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-2">
                   <FieldIcon size={12} />

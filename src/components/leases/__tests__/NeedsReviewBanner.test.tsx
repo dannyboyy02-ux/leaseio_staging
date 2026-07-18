@@ -181,14 +181,19 @@ describe('NeedsReviewBanner — 0.80 cutoff boundary', () => {
 });
 
 describe('NeedsReviewBanner — icon severity matches the field badge tiers', () => {
-  it('uses a red icon below 70% and an amber icon for 70–80%', () => {
+  // #177a aligned the shared confidenceTier low boundary with the 0.80 flag
+  // cutoff, so EVERY field this banner lists (< 0.80) is now tier 'low' →
+  // red. The amber branch is retained in the component (tier-driven, so any
+  // future band change flows through automatically) but is unreachable while
+  // the bands equal the cutoff — 0.75, previously amber, is now red.
+  it('renders every listed field with the red (low-tier) icon now that the bands align with the cutoff', () => {
     render(
       <NeedsReviewBanner
         {...ALL_PRESENT}
         extractedJson={{
           ...HIGH_CONF_JSON,
           landlord_name: { value: 'Acme LLC', confidence: 0.55 }, // tier low -> red
-          tenant_name: { value: 'Beta Corp', confidence: 0.75 }, // tier medium -> amber
+          tenant_name: { value: 'Beta Corp', confidence: 0.75 }, // tier low (was amber pre-#177a) -> red
         }}
       />,
     );
@@ -202,8 +207,8 @@ describe('NeedsReviewBanner — icon severity matches the field badge tiers', ()
     const midLi = screen
       .getByText('needs_review.low_confidence(label=Tenant Name,pct=75)')
       .closest('li');
-    expect(midLi?.querySelector('.text-amber-500')).toBeTruthy();
-    expect(midLi?.querySelector('.text-destructive')).toBeNull();
+    expect(midLi?.querySelector('.text-destructive')).toBeTruthy();
+    expect(midLi?.querySelector('.text-amber-500')).toBeNull();
   });
 });
 

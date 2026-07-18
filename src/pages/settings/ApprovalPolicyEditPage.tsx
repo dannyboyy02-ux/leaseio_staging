@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/collapsible';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { validatePolicy } from './approvalPolicyValidation';
@@ -103,6 +104,23 @@ export default function ApprovalPolicyEditPage() {
   const [saving, setSaving] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Baseline for the dirty comparison (#174/#169 + #177b). New rule: the
+  // seeded scaffold serializes identically to the initial state (uiIds are
+  // stripped, and blankStep is otherwise deterministic). Edit rule: set
+  // after load. serializePolicy is a hoisted function declaration (bottom
+  // of file), so the lazy initializer may call it.
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(() =>
+    isNew ? serializePolicy(emptyForm(), seedSingleEmptyStep(), seedSingleEmptyStep()) : null,
+  );
+  const draftSerialized = serializePolicy(form, conceptSteps, signatorSteps);
+  // Nothing is dirty before an edit-mode load completes (savedSnapshot null).
+  const isDirty = savedSnapshot !== null && draftSerialized !== savedSnapshot;
+  const { bypass } = useUnsavedChangesGuard(isDirty);
+  // #177b — preview_policy_resolution resolves against SAVED policy rows
+  // only; gate the sample tester while the draft differs from the last-saved
+  // snapshot (always for a brand-new rule — the RPC can never see a draft).
+  const testerStale = isNew || savedSnapshot === null || draftSerialized !== savedSnapshot;
 
   // Workspace-curated suggestion lists for departments/regions, plus the
   // workspace's separation-of-duties default so we can label the Inherit option.
@@ -184,7 +202,9 @@ export default function ApprovalPolicyEditPage() {
             : (p as any).separation_of_duties_override
             ? 'require'
             : 'allow';
-        setForm({
+        // Hoisted into a local so the post-load snapshot (below) serializes
+        // the exact object the form state receives.
+        const loadedForm: PolicyForm = {
           name: (p as any).name,
           description: (p as any).description ?? '',
           priority: (p as any).priority,
@@ -200,7 +220,8 @@ export default function ApprovalPolicyEditPage() {
             (p as any).match_max_annual_cost == null ? '' : String((p as any).match_max_annual_cost),
           sod_mode: sodMode,
           sla_days: (p as any).sla_days == null ? '' : String((p as any).sla_days),
-        });
+        };
+        setForm(loadedForm);
         const concept: ChainStep[] = [];
         const signator: ChainStep[] = [];
         for (const s of stepsData ?? []) {
@@ -219,6 +240,7 @@ export default function ApprovalPolicyEditPage() {
         }
         setConceptSteps(concept);
         setSignatorSteps(signator);
+        setSavedSnapshot(serializePolicy(loadedForm, concept, signator));
       } catch (err: any) {
         toast.error(err?.message ?? t('policy_editor.toast_load_failed'));
       } finally {
@@ -306,6 +328,10 @@ export default function ApprovalPolicyEditPage() {
       if (rpcErr) throw rpcErr;
 
       toast.success(isNew ? t('policy_editor.toast_created') : t('policy_editor.toast_saved'));
+      // One-shot skip for this known-safe post-save navigation — it fires
+      // before React re-renders the snapshot state, so the guard would
+      // otherwise still see the pre-save dirty comparison.
+      bypass();
       navigate('/app/settings/approval-policies');
     } catch (err: any) {
       toast.error(err?.message ?? t('policy_editor.toast_save_failed'));
@@ -553,11 +579,16 @@ export default function ApprovalPolicyEditPage() {
           <Button
             variant="outline"
             onClick={() => setTestOpen(true)}
-            disabled={saving || !workspace?.id}
+            disabled={saving || !workspace?.id || testerStale}
           >
             <FlaskConical className="h-4 w-4 mr-1.5" />
             {t('policy_editor.try_sample')}
           </Button>
+          {testerStale && (
+            <p className="text-xs text-muted-foreground self-center">
+              {t('policy_editor.tester_save_first')}
+            </p>
+          )}
           <div className="flex-1" />
           <Button variant="ghost" onClick={() => navigate('/app/settings/approval-policies')} disabled={saving}>
             {t('common.cancel')}
@@ -591,4 +622,13 @@ export default function ApprovalPolicyEditPage() {
 function stripUiId(s: ChainStep) {
   const { uiId, ...rest } = s;
   return rest;
+}
+
+// #174/#169 + #177b — canonical serialization of the editor's draft. uiIds
+// are stripped so the random seeded ids don't poison the comparison. ONE
+// snapshot mechanism serves BOTH the unsaved-changes guard (isDirty) and the
+// sample tester's save-first gate (testerStale). Function declaration (not
+// const) so the savedSnapshot lazy initializer above can call it via hoisting.
+function serializePolicy(form: PolicyForm, concept: ChainStep[], signator: ChainStep[]) {
+  return JSON.stringify({ form, concept: concept.map(stripUiId), signator: signator.map(stripUiId) });
 }

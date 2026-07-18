@@ -59,6 +59,10 @@ interface Props {
   /** Vault (read-only retention) workspaces: suppress every write affordance.
    *  Default false → non-Vault behavior is unchanged. */
   readOnly?: boolean;
+  /** #174/#169 — forwards the ASC 842 tab's dirty flag up to the page that
+   *  owns the single unsaved-changes guard (LeaseReview). This branch's tab
+   *  can be editable (canEdit={canEditAsc842}), so it needs the guard too. */
+  onAscDirtyChange?: (dirty: boolean) => void;
 }
 
 const fmtDate = (d: string | null | undefined) =>
@@ -244,7 +248,7 @@ const remainingMonths = (leaseEnd: string | null | undefined): number | null => 
   return Math.max(0, months);
 };
 
-export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Props) {
+export function LockedLeaseDetail({ lease, refetchLease, readOnly = false, onAscDirtyChange }: Props) {
   const { t } = useAppTranslation();
   const { language } = useLanguage();
   const { userRole } = useApp();
@@ -723,6 +727,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
                   leaseId={lease.id}
                   workspaceId={lease.workspace_id}
                   canEdit={canEditAsc842}
+                  onDirtyChange={onAscDirtyChange}
                   discountRate={lease.discount_rate ?? null}
                   baseTermMonths={lease.term_months ?? null}
                   lifecycleStatus={lease.lifecycle_status ?? 'active'}

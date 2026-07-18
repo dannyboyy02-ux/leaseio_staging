@@ -73,6 +73,11 @@ interface Props {
    *  value the disclosure report prints. Used only to warn when the tab's
    *  test-derived cross-check diverges; never written back. */
   storedClassification?: string | null;
+  /** #174/#169 — lifts this tab's dirty flag to the host page, which owns
+   *  the single unsaved-changes guard (the router supports ONE active
+   *  blocker; this component must NOT register its own — see
+   *  src/hooks/useUnsavedChangesGuard.ts). */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 type State = {
@@ -208,6 +213,7 @@ export function Asc842InputsTab({
   reportAvailable = false,
   discountRateSlot = null,
   storedClassification = null,
+  onDirtyChange,
 }: Props) {
   const { t } = useAppTranslation();
   const { language } = useLanguage();
@@ -223,18 +229,14 @@ export function Asc842InputsTab({
 
   const dirty = fieldsOf(state) !== savedSnapshot;
 
-  // Hard-navigation guard (reload / tab close / external link): the browser
-  // confirm is the only hook available under BrowserRouter. In-app route
-  // changes are not yet blocked — needs the data-router migration (filed).
+  // Lift the dirty signal to the page-level unsaved-changes guard
+  // (useUnsavedChangesGuard in LeaseReview / LockedLeaseDetail's host —
+  // the router supports one blocker, so the page owns it; it also covers
+  // beforeunload, replacing the hand-rolled listener that lived here).
   useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false); // unmount (e.g. locked→unlocked branch flip) clears the page flag
+  }, [dirty, onDirtyChange]);
 
   useEffect(() => {
     let cancelled = false;

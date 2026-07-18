@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { t as tGlobal } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, FlaskConical, Edit3, Copy, Archive, Loader2, Star, ChevronLeft } from 'lucide-react';
+import { Plus, FlaskConical, Edit3, Copy, Loader2, Star, ChevronLeft } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -235,11 +235,6 @@ export default function ApprovalPoliciesListPage() {
     }
   };
 
-  const archive = async (policy: Policy) => {
-    if (!confirm(t('policy_editor.list.archive_confirm', { name: policy.name }))) return;
-    await toggleActive(policy, false);
-  };
-
   return (
     <AppLayout>
       <AppHeader title={t('workspace.rules.title')} />
@@ -392,18 +387,6 @@ export default function ApprovalPoliciesListPage() {
                               <Copy className="h-4 w-4" />
                             )}
                           </Button>
-                          {p.is_active && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => archive(p)}
-                              disabled={busyId === p.id}
-                              title={t('archive.archive')}
-                            >
-                              <Archive className="h-4 w-4" />
-                            </Button>
-                          )}
                         </div>
                       </div>
                     </div>
