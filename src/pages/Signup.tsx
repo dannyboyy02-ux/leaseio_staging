@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
 import { supabase } from '@/integrations/supabase/client';
+import { isPasswordValid } from '@/lib/passwordPolicy';
+import { PasswordRequirementsChecklist } from '@/components/auth/PasswordRequirementsChecklist';
 
 // Labels resolve through the shared workspace.tz.* locale map (same
 // vocabulary as WorkspaceSettings) so en/es stay in sync in one place.
@@ -82,7 +84,7 @@ export default function Signup() {
       toast({ title: t('auth.errors.invalid_email'), description: t('auth.errors.enter_valid_email'), variant: 'destructive' });
       return false;
     }
-    if (formData.password.length < 8) {
+    if (!isPasswordValid(formData.password)) {
       toast({ title: t('auth.errors.missing_fields'), description: t('auth.errors.weak_password'), variant: 'destructive' });
       return false;
     }
@@ -268,7 +270,7 @@ export default function Signup() {
                   disabled={isLoading}
                   autoComplete="new-password"
                 />
-                <p className="text-xs text-muted-foreground">{t('auth.min_password')}</p>
+                <PasswordRequirementsChecklist password={formData.password} />
               </div>
 
               <div className="space-y-2">

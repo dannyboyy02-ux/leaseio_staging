@@ -28,6 +28,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { mapSupabaseError } from '@/lib/userFacingError';
 
 import { LockedHeader } from './LockedHeader';
 import { SectionCard } from './SectionCard';
@@ -304,9 +305,8 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       setDismissTarget(null);
       setDismissReason('');
       await refetchRisks();
-    } catch (err: any) {
-      console.error('[LockedLeaseDetail] dismiss risk failed:', err);
-      toast.error(t('locked_lease.risks.dismiss_failed', { message: err?.message ?? t('locked_lease.risks.unknown_error') }));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.risks.dismiss_failed', '[LockedLeaseDetail] dismiss risk failed:'));
     } finally {
       setDismissing(false);
     }
@@ -367,8 +367,8 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
         .eq('status', 'pending')
         .maybeSingle();
       setPendingUnlockRequest((u ?? null) as PendingUnlockRequest | null);
-    } catch (err: any) {
-      toast.error(err?.message ?? t('locked_lease.toast.unlock_request_failed'));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.toast.unlock_request_failed'));
     } finally {
       setIsRequestingUnlock(false);
     }
@@ -386,8 +386,8 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success(t('locked_lease.toast.unlocked'));
       refetchLease();
-    } catch (err: any) {
-      toast.error(err?.message ?? t('locked_lease.toast.unlock_failed'));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.toast.unlock_failed'));
     }
   }, [lease, pendingUnlockRequest, refetchLease, t]);
 
@@ -402,8 +402,8 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       toast.success(t('locked_lease.toast.unlock_denied'));
       setPendingUnlockRequest(null);
       refetchLease();
-    } catch (err: any) {
-      toast.error(err?.message ?? t('locked_lease.toast.unlock_deny_failed'));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.toast.unlock_deny_failed'));
     }
   }, [pendingUnlockRequest, refetchLease, t]);
 

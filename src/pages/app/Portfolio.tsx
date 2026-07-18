@@ -58,9 +58,6 @@ const NEUTRAL = 'hsl(215 14% 60%)';
 const deptColor = (dept: string, i: number) =>
   dept === 'Other' || dept === 'Unassigned' ? NEUTRAL : DEPT_COLORS[i % DEPT_COLORS.length];
 
-const compactCurrency = (n: number): string =>
-  n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `$${Math.round(n / 1_000)}K` : `$${Math.round(n)}`;
-
 // ---------------------------------------------------------------------------
 // Small presentational helpers
 // ---------------------------------------------------------------------------
@@ -116,7 +113,7 @@ function SectionCard({
 // ---------------------------------------------------------------------------
 
 function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentForecast> }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const max = Math.max(...data.map((b) => b.contracted + b.uncontracted), 1);
   return (
     <div>
@@ -127,7 +124,7 @@ function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentFo
           return (
             <div key={b.label} className="flex h-full flex-1 flex-col items-center justify-end">
               <span className="mb-1.5 text-[11px] font-semibold text-foreground">
-                {b.contracted > 0 ? compactCurrency(b.contracted) : '—'}
+                {b.contracted > 0 ? formatLocalizedCurrency(b.contracted, language, { compact: true }) : '—'}
               </span>
               <div className="flex w-full max-w-[40px] flex-1 flex-col justify-end">
                 {uh > 0 && (
@@ -169,12 +166,12 @@ function CommitmentForecast({ data }: { data: ReturnType<typeof rentCommitmentFo
 }
 
 function CostByDepartment({ data }: { data: ReturnType<typeof costByDepartment> }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   return (
     <div>
       <div className="mb-4 flex h-4 overflow-hidden rounded-full">
         {data.map((s, i) => (
-          <div key={s.department} title={`${s.department} · ${compactCurrency(s.annualCost)}`} style={{ width: `${s.pct}%`, background: deptColor(s.department, i) }} />
+          <div key={s.department} title={`${s.department} · ${formatLocalizedCurrency(s.annualCost, language, { compact: true })}`} style={{ width: `${s.pct}%`, background: deptColor(s.department, i) }} />
         ))}
       </div>
       <div className="flex flex-col gap-2.5">
@@ -182,7 +179,7 @@ function CostByDepartment({ data }: { data: ReturnType<typeof costByDepartment> 
           <div key={s.department} className="flex items-center gap-2 text-[13px]">
             <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: deptColor(s.department, i) }} />
             <span className="flex-1 truncate">{s.department}</span>
-            <span className="text-muted-foreground">{compactCurrency(s.annualCost)}/{t('dashboard.per_year_short')}</span>
+            <span className="text-muted-foreground">{formatLocalizedCurrency(s.annualCost, language, { compact: true })}/{t('dashboard.per_year_short')}</span>
             <span className="w-10 text-right font-semibold">{Math.round(s.pct)}%</span>
           </div>
         ))}
@@ -439,7 +436,7 @@ export default function Portfolio() {
               />
               <KpiTile
                 label={t('portfolio.kpi_blended_cost')}
-                value={kpis.blendedCostPerSqft != null ? `$${kpis.blendedCostPerSqft.toFixed(2)}` : '—'}
+                value={formatLocalizedCurrency(kpis.blendedCostPerSqft, language, { cents: true })}
                 sub={kpis.blendedCostPerSqft != null ? t('portfolio.kpi_per_sqft_yr') : t('portfolio.kpi_add_sqft')}
               />
               <KpiTile label={t('portfolio.kpi_total_footprint')} value={kpis.totalSquareFootage.toLocaleString()} title={kpis.totalSquareFootage.toLocaleString()} sub={t('portfolio.kpi_sqft_markets', { count: kpis.marketCount })} />

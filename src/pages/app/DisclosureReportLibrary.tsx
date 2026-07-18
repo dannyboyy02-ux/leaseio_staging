@@ -28,6 +28,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { formatLocalizedDate } from '@/lib/dateFormatters';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { supabase } from '@/integrations/supabase/client';
+import { mapSupabaseError } from '@/lib/userFacingError';
 import { useGenerateWorkspaceAsc842Report } from '@/hooks/useGenerateWorkspaceAsc842Report';
 
 interface ReportRow {
@@ -74,8 +75,8 @@ export default function DisclosureReportLibrary() {
       } else {
         toast.success(t('reports.consolidated_ready', { count: result.leaseCount }));
       }
-    } catch (e: any) {
-      toast.error(e?.message ?? t('reports.consolidated_failed'));
+    } catch (e) {
+      toast.error(mapSupabaseError(e, t, 'reports.consolidated_failed'));
       resetConsolidated();
     }
   }
@@ -115,20 +116,17 @@ export default function DisclosureReportLibrary() {
           .limit(200);
         if (cancelled) return;
         if (error) {
-          // eslint-disable-next-line no-console
-          console.error('[DisclosureReportLibrary] load error', error);
-          setLoadError(error.message);
-          toast.error(error.message);
+          const msg = mapSupabaseError(error, t, 'reports.load_failed', '[DisclosureReportLibrary] load error');
+          setLoadError(msg);
+          toast.error(msg);
           setLoading(false);
           return;
         }
         setRows((data ?? []) as ReportRow[]);
         setLoading(false);
-      } catch (e: any) {
+      } catch (e) {
         if (cancelled) return;
-        // eslint-disable-next-line no-console
-        console.error('[DisclosureReportLibrary] load threw', e);
-        setLoadError(e?.message ?? String(e));
+        setLoadError(mapSupabaseError(e, t, 'reports.load_failed', '[DisclosureReportLibrary] load threw'));
         setLoading(false);
       }
     }
@@ -211,7 +209,7 @@ export default function DisclosureReportLibrary() {
               {loading ? t('workspace.watchlist.loading') : t('reports.report_count', { count: filtered.length })}
             </CardTitle>
             {loadError && (
-              <p className="text-xs text-red-700 font-mono mt-2">{loadError}</p>
+              <p className="text-xs text-red-700 mt-2">{loadError}</p>
             )}
           </CardHeader>
           <CardContent className="space-y-2">

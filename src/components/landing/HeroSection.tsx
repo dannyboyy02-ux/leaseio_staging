@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight, Sparkles, Shield, Clock, DollarSign } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { HeroMockup } from './HeroMockup';
 
 export function HeroSection() {
   const { t } = useLanguage();
@@ -63,18 +64,10 @@ export function HeroSection() {
           </div>
         </div>
 
-        {/* Hero Visual Placeholder */}
-        <div className="mt-16 relative">
-          <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent z-10 pointer-events-none h-32 bottom-0 top-auto" />
-          <div className="bg-gradient-to-br from-card to-muted rounded-2xl border border-border shadow-2xl p-8 max-w-5xl mx-auto">
-            <div className="aspect-video bg-muted/50 rounded-lg flex items-center justify-center">
-              <div className="text-center">
-                <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="h-8 w-8 text-primary" />
-                </div>
-                <p className="text-muted-foreground">{t('landing.hero.demo_coming')}</p>
-              </div>
-            </div>
+        {/* Hero visual — stylized miniature of the review workbench (#176) */}
+        <div className="mt-16">
+          <div className="bg-gradient-to-br from-card to-muted rounded-2xl border border-border shadow-2xl p-4 sm:p-8 max-w-3xl mx-auto">
+            <HeroMockup />
           </div>
         </div>
       </div>
