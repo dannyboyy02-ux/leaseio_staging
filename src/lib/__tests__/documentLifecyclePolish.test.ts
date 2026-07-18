@@ -467,7 +467,8 @@ describe('LockedHeader archived state + overflow menu', () => {
   });
 
   it('renders an unmissable archived banner with an inline admin restore action', () => {
-    const banner = sliceBetween(source, 'border-destructive/40', '</Card>');
+    // Archive is non-destructive → the banner is neutral (bg-muted/40), not red.
+    const banner = sliceBetween(source, 'bg-muted/40', '</Card>');
     expect(banner).toContain("t('archive.deleted_banner')");
     // Audit D2: restore (unarchive) is a write, so it's also gated on !readOnly
     // — hidden on a read-only retention workspace.

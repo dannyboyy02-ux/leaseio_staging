@@ -47,6 +47,7 @@ const EXPECTED_CLIENT_TYPES = [
   'lease_archived',
   'lease_restored',
   'chain_violation_resolved',
+  'escalation_review_resolved',
 ] as const;
 
 // A sample of types written ONLY by edge functions — they MUST NOT be
@@ -133,10 +134,10 @@ function collectClientInsertedTypes(): Map<string, string[]> {
 describe('lease_activity_log client INSERT allowlist (#90)', () => {
   const { file, values } = allowlistMigration();
 
-  it('contains every one of the 19 expected client-emitted types', () => {
+  it('contains every one of the 20 expected client-emitted types', () => {
     const missing = EXPECTED_CLIENT_TYPES.filter((t) => !values.has(t));
     expect(missing, `allowlist in ${file} is missing expected client types`).toEqual([]);
-    expect(values.size, `${file}: allowlist should be exactly 19 types`).toBe(
+    expect(values.size, `${file}: allowlist should be exactly 20 types`).toBe(
       EXPECTED_CLIENT_TYPES.length,
     );
   });

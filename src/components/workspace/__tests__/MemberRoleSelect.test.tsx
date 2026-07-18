@@ -4,41 +4,31 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 
-// Regression coverage for the Phase 4 fix pass: a role change must write a
-// workspace_activity_log row with event_type 'member_role_changed' — NOT the
-// phantom 'member_added' it briefly logged (Phase 4 review finding). An audit
-// trail that mislabels role changes as new members silently corrupts the
-// member-history story.
+// Regression coverage for the fresh-eyes member-management fix: a role change
+// now routes through the service-role `manage-workspace-member` edge function
+// (owner-OR-admin authorization + server-side audit), because workspace_members
+// UPDATE is owner-only at RLS — the old direct client UPDATE silently failed for
+// admins. The audit write moved server-side, so the client no longer inserts.
 //
-// Also pinned:
-//   - The role UPDATE targets the member row by id.
-//   - The audit insert is fire-and-forget: an audit-write failure must not
-//     surface as a role-change failure (the role update already committed).
-//   - No audit write is attempted when workspaceId/targetUserId are absent
-//     (legacy call sites without the audit context).
+// Pinned:
+//   - A role change invokes manage-workspace-member with action 'set_role'.
+//   - ok:true → success toast + onRoleChanged.
+//   - reason 'not_authorized' / 'subscription_inactive' → the mapped toast.
+//   - A transport error → generic failure toast, onRoleChanged NOT called.
+//   - No direct workspace_members UPDATE is issued from the client.
 //
-// Radix Select isn't interactable under jsdom, so we mock the ui/select
-// module with a native <select> — the contract under test is the component's
-// update + audit logic, not Radix internals.
+// Radix Select isn't interactable under jsdom, so we mock ui/select with a
+// native <select>.
 
-// --- Mocks ----------------------------------------------------------------
-
+const invokeMock = vi.fn();
 const fromMock = vi.fn();
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
+    functions: { invoke: (...args: unknown[]) => invokeMock(...args) },
     from: (...args: unknown[]) => fromMock(...args),
-    auth: {
-      // The audit write stamps the actor from the session (Phase 3 review:
-      // actor-less rows are indistinguishable from system writes).
-      getSession: () =>
-        Promise.resolve({
-          data: { session: { user: { id: "actor-1" } } },
-          error: null,
-        }),
-    },
   },
 }));
 
@@ -47,6 +37,10 @@ vi.mock("sonner", () => ({
     success: (...args: unknown[]) => toastSuccessMock(...args),
     error: (...args: unknown[]) => toastErrorMock(...args),
   },
+}));
+
+vi.mock("@/hooks/useAppTranslation", () => ({
+  useAppTranslation: () => ({ t: (k: string) => k }),
 }));
 
 vi.mock("@/components/ui/select", () => ({
@@ -80,54 +74,18 @@ vi.mock("@/components/ui/select", () => ({
 
 import { MemberRoleSelect } from "../MemberRoleSelect";
 
-// --- Helpers --------------------------------------------------------------
-
-const updateMock = vi.fn();
-const updateEqMock = vi.fn();
-const insertMock = vi.fn();
-
-function wireSupabase({
-  updateError = null,
-  auditError = null,
-}: { updateError?: unknown; auditError?: unknown } = {}) {
-  // The update builder must be chainable: #52 added a second
-  // .eq('workspace_id', …) after .eq('id', …), so each .eq() returns the same
-  // thenable builder and the chain only resolves when awaited. updateEqMock
-  // still records every .eq() call for the assertions below.
-  const updateBuilder: { eq: (...a: unknown[]) => unknown; then: (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => unknown } = {
-    eq: (...args: unknown[]) => {
-      updateEqMock(...args);
-      return updateBuilder;
-    },
-    then: (resolve, reject) => Promise.resolve({ error: updateError }).then(resolve, reject),
-  };
-  updateMock.mockImplementation(() => updateBuilder);
-  insertMock.mockImplementation(() => Promise.resolve({ error: auditError }));
-  fromMock.mockImplementation((table: string) => {
-    if (table === "workspace_members") return { update: updateMock };
-    if (table === "workspace_activity_log") return { insert: insertMock };
-    throw new Error(`unexpected table: ${table}`);
-  });
-}
-
 beforeEach(() => {
+  invokeMock.mockReset();
   fromMock.mockReset();
-  updateMock.mockReset();
-  updateEqMock.mockReset();
-  insertMock.mockReset();
   toastSuccessMock.mockReset();
   toastErrorMock.mockReset();
-  wireSupabase();
+  invokeMock.mockResolvedValue({ data: { ok: true }, error: null });
 });
 
-afterEach(() => {
-  cleanup();
-});
+afterEach(() => cleanup());
 
-// --- Tests ----------------------------------------------------------------
-
-describe("MemberRoleSelect — audit-trail correctness", () => {
-  it("logs event_type 'member_role_changed' (NOT 'member_added') with target, new role, and previous role", async () => {
+describe("MemberRoleSelect — routes role changes through the service-role fn", () => {
+  it("invokes manage-workspace-member with action set_role and reports success", async () => {
     const onRoleChanged = vi.fn();
     render(
       <MemberRoleSelect
@@ -135,112 +93,55 @@ describe("MemberRoleSelect — audit-trail correctness", () => {
         currentRole="viewer"
         onRoleChanged={onRoleChanged}
         workspaceId="ws-1"
-        targetUserId="u2"
       />,
     );
 
-    fireEvent.change(screen.getByTestId("role-select"), {
-      target: { value: "editor" },
+    fireEvent.change(screen.getByTestId("role-select"), { target: { value: "editor" } });
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock).toHaveBeenCalledWith("manage-workspace-member", {
+      body: { action: "set_role", workspaceId: "ws-1", memberId: "member-1", role: "editor" },
     });
-
-    await waitFor(() => expect(insertMock).toHaveBeenCalledTimes(1));
-    const payload = insertMock.mock.calls[0][0] as {
-      workspace_id: string;
-      user_id: string | null;
-      event_type: string;
-      details: Record<string, unknown>;
-    };
-    expect(payload.event_type).toBe("member_role_changed");
-    expect(payload.workspace_id).toBe("ws-1");
-    // Actor stamped from the session — an actor-less permission change is
-    // indistinguishable from a system write (Phase 3 review finding).
-    expect(payload.user_id).toBe("actor-1");
-    expect(payload.details).toEqual({
-      target_user_id: "u2",
-      role: "editor",
-      previous_role: "viewer",
-    });
-
-    // The phantom event_type must never come back.
-    const eventTypes = insertMock.mock.calls.map(
-      (c) => (c[0] as { event_type: string }).event_type,
-    );
-    expect(eventTypes).not.toContain("member_added");
-
-    // The role UPDATE itself targeted the member row by id AND scoped to the
-    // workspace (#52 defense-in-depth — the predicate must be present when
-    // workspaceId is known).
-    expect(updateMock).toHaveBeenCalledWith({ role: "editor" });
-    expect(updateEqMock).toHaveBeenCalledWith("id", "member-1");
-    expect(updateEqMock).toHaveBeenCalledWith("workspace_id", "ws-1");
-    expect(onRoleChanged).toHaveBeenCalledTimes(1);
+    // The client must NOT issue a direct workspace_members write (RLS owner-only).
+    expect(fromMock).not.toHaveBeenCalled();
     expect(toastSuccessMock).toHaveBeenCalled();
-  });
-
-  it("skips the audit write when workspaceId/targetUserId are not provided (no malformed rows)", async () => {
-    render(
-      <MemberRoleSelect
-        memberId="member-1"
-        currentRole="viewer"
-        onRoleChanged={vi.fn()}
-      />,
-    );
-
-    fireEvent.change(screen.getByTestId("role-select"), {
-      target: { value: "admin" },
-    });
-
-    await waitFor(() => expect(updateEqMock).toHaveBeenCalled());
-    // #52: with no workspaceId, the workspace_id scope predicate is omitted
-    // (behavior-identical to pre-fix); only the id predicate is applied.
-    expect(updateEqMock).toHaveBeenCalledWith("id", "member-1");
-    expect(updateEqMock).not.toHaveBeenCalledWith("workspace_id", expect.anything());
-    expect(insertMock).not.toHaveBeenCalled();
-  });
-
-  it("an audit-write failure does NOT surface as a role-change failure (fire-and-forget)", async () => {
-    wireSupabase({ auditError: { message: "rls denied" } });
-    const onRoleChanged = vi.fn();
-    render(
-      <MemberRoleSelect
-        memberId="member-1"
-        currentRole="editor"
-        onRoleChanged={onRoleChanged}
-        workspaceId="ws-1"
-        targetUserId="u2"
-      />,
-    );
-
-    fireEvent.change(screen.getByTestId("role-select"), {
-      target: { value: "viewer" },
-    });
-
-    await waitFor(() => expect(insertMock).toHaveBeenCalled());
-    // Role change still reported as success; no error toast.
-    expect(toastSuccessMock).toHaveBeenCalled();
-    expect(toastErrorMock).not.toHaveBeenCalled();
     expect(onRoleChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("a failed role UPDATE shows the error toast and writes NO audit row", async () => {
-    wireSupabase({ updateError: { message: "permission denied" } });
-    const onRoleChanged = vi.fn();
-    render(
-      <MemberRoleSelect
-        memberId="member-1"
-        currentRole="viewer"
-        onRoleChanged={onRoleChanged}
-        workspaceId="ws-1"
-        targetUserId="u2"
-      />,
-    );
-
-    fireEvent.change(screen.getByTestId("role-select"), {
-      target: { value: "editor" },
-    });
-
+  it("errors without invoking when workspaceId is absent", async () => {
+    render(<MemberRoleSelect memberId="member-1" currentRole="viewer" onRoleChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("role-select"), { target: { value: "admin" } });
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
-    expect(insertMock).not.toHaveBeenCalled();
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("maps reason 'not_authorized' to the forbidden toast", async () => {
+    invokeMock.mockResolvedValue({ data: { ok: false, reason: "not_authorized" }, error: null });
+    const onRoleChanged = vi.fn();
+    render(
+      <MemberRoleSelect memberId="m1" currentRole="viewer" onRoleChanged={onRoleChanged} workspaceId="ws-1" />,
+    );
+    fireEvent.change(screen.getByTestId("role-select"), { target: { value: "editor" } });
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith("workspace.members_panel.manage_forbidden"));
+    expect(onRoleChanged).not.toHaveBeenCalled();
+  });
+
+  it("maps reason 'subscription_inactive' to the read-only toast", async () => {
+    invokeMock.mockResolvedValue({ data: { ok: false, reason: "subscription_inactive" }, error: null });
+    render(<MemberRoleSelect memberId="m1" currentRole="viewer" onRoleChanged={vi.fn()} workspaceId="ws-1" />);
+    fireEvent.change(screen.getByTestId("role-select"), { target: { value: "editor" } });
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith("workspace.members_panel.role_readonly"));
+  });
+
+  it("a transport error shows the generic failure toast and does not report success", async () => {
+    invokeMock.mockResolvedValue({ data: null, error: { message: "network" } });
+    const onRoleChanged = vi.fn();
+    render(
+      <MemberRoleSelect memberId="m1" currentRole="viewer" onRoleChanged={onRoleChanged} workspaceId="ws-1" />,
+    );
+    fireEvent.change(screen.getByTestId("role-select"), { target: { value: "editor" } });
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith("workspace.members_panel.role_update_failed"));
+    expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(onRoleChanged).not.toHaveBeenCalled();
   });
 });
