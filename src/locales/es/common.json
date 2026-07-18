@@ -4,6 +4,7 @@
     "none_title": "Aún no hay firma",
     "none_desc": "No forma parte de una firma. Las firmas permiten que una organización gestione varios espacios de trabajo juntos.",
     "back_to_workspace": "Volver al espacio de trabajo",
+    "set_up_firm": "Configurar una firma",
     "restricted_badge": "Restringido",
     "role": {
       "owner": "Propietario",
@@ -538,7 +539,7 @@
     "confirm_unarchive_desc": "Restaurar devuelve el arrendamiento al conjunto activo. Volverá a contar para su cupo de arrendamientos activos.",
     "audit_warning": "Guardado, pero la acción no pudo registrarse en el historial de auditoría.",
     "deleted_badge": "Archivado",
-    "deleted_banner": "Este arrendamiento está archivado. Ya no cuenta para sus arrendamientos activos y permanece oculto en la lista a menos que active \"Mostrar archivados\".",
+    "deleted_banner": "Este arrendamiento está archivado. Ya no cuenta para sus arrendamientos activos y permanece oculto en la lista a menos que el filtro de Estado esté en Archivados o Todos.",
     "list_archived_toast": "Arrendamiento archivado. Use Estado: Archivados para encontrarlo y restaurarlo.",
     "list_archive_failed": "No se pudo archivar el contrato",
     "dialog_title": "Archivar arrendamiento",
@@ -657,7 +658,7 @@
   },
   "amendments": {
     "delete_title": "¿Archivar esta enmienda?",
-    "delete_desc": "\"{{name}}\" se archivará (se quitará de las enmiendas activas de este arrendamiento). La acción se registra en el historial de auditoría. Un administrador puede restaurarla después desde Arrendamientos → \"Mostrar archivados\" → abrirla → Restaurar.",
+    "delete_desc": "\"{{name}}\" se archivará (se quitará de las enmiendas activas de este arrendamiento). La acción se registra en el historial de auditoría. Un administrador puede restaurarla después desde Arrendamientos → Estado: Archivados → abrirla → Restaurar.",
     "delete_success": "Enmienda archivada",
     "delete_failed": "No se pudo archivar la enmienda",
     "delete_audit_warning": "Enmienda archivada, pero la acción no pudo registrarse en el historial de auditoría.",
@@ -3136,7 +3137,8 @@
       "welcome_back": "¡Bienvenido de nuevo!",
       "signed_in": "Ha iniciado sesión exitosamente.",
       "account_created": "¡Cuenta creada!",
-      "check_email": "Por favor revise su correo para confirmar su cuenta."
+      "check_email": "Por favor revise su correo para confirmar su cuenta.",
+      "lets_get_started": "Vamos a configurarlo."
     },
     "email_placeholder": "usted@empresa.com",
     "password_placeholder": "Ingrese su contraseña",
@@ -4020,6 +4022,8 @@
       "delegate_ellipsis": "Delegar…",
       "reject_step_title": "Rechazar paso",
       "send_back_title": "Devolver al remitente",
+      "approve_step_title": "Aprobar este paso",
+      "approve_step_desc": "Esto registra su aprobación y avanza el arrendamiento al siguiente paso. No se puede deshacer una aprobación.",
       "reject_step_desc": "Rechazar marcará el arrendamiento como rechazado y reemplazará todos los demás pasos pendientes.",
       "send_back_desc": "Devolver moverá el arrendamiento de vuelta a enviado y reemplazará los pasos pendientes de la etapa actual. El remitente deberá volver a enviarlo.",
       "comment_required": "Comentario (obligatorio)",

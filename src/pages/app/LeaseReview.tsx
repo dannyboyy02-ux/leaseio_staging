@@ -64,6 +64,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { NudgeApproverButton } from "@/components/workflow/NudgeApproverButton";
 import { isFailedStatus } from "@/components/leases/LeaseStatusBadge";
+import { localizedAssetTypeName } from "@/lib/assetTypeLabels";
 import { NeedsReviewBanner } from "@/components/leases/NeedsReviewBanner";
 import { FailedLeaseBanner } from "@/components/leases/FailedLeaseBanner";
 import { SectionCard, RisksSection, getFieldConfidence } from "@/components/leases/LeaseReviewSections";
@@ -2559,7 +2560,7 @@ export default function LeaseReview() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">{t('lease_review.fields.asset_type')}</p>
-                    <p className="font-medium capitalize">{lease.asset_type || '\u2014'}</p>
+                    <p className="font-medium">{lease.asset_type ? localizedAssetTypeName(lease.asset_type) : '\u2014'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">{t('lease_review.intake.escalation_rate')}</p>

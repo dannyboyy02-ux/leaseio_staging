@@ -152,7 +152,7 @@ export default function Signup() {
 
     toast({
       title: t('auth.success.account_created'),
-      description: t('auth.success.check_email'),
+      description: t('auth.success.lets_get_started'),
     });
 
     setIsLoading(false);

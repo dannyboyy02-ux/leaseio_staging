@@ -571,7 +571,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
                   vendor_zip: lease.vendor_zip ?? null,
                 }}
                 onSaved={refetchLease}
-                readOnly={readOnly}
+                readOnly={!canEditAsc842}
               />
             </TabsContent>
 

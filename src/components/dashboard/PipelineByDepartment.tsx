@@ -83,6 +83,8 @@ export function PipelineByDepartment() {
         .from('leases')
         .select('requesting_department, lifecycle_status, monthly_payment, executed_monthly_payment, current_monthly_rent, uploaded_at, rent_schedules(period_start, period_end, monthly_amount)')
         .eq('workspace_id', workspace.id)
+        // Exclude archived leases — consistent with the rest of the dashboard.
+        .eq('archived', false)
         .not('requesting_department', 'is', null);
 
       setRawData((data as LeaseRow[]) ?? []);

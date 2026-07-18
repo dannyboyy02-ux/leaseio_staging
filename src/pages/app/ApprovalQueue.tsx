@@ -418,7 +418,7 @@ function ChainStepCard({
               <>
                 <Button
                   size="sm"
-                  onClick={() => submit('approve')}
+                  onClick={() => setActionDialog('approve')}
                   disabled={busy}
                   className="flex-1 sm:flex-none"
                 >
@@ -493,25 +493,32 @@ function ChainStepCard({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {actionDialog === 'reject'
+              {actionDialog === 'approve'
+                ? t('approvals.queue.approve_step_title')
+                : actionDialog === 'reject'
                 ? t('approvals.queue.reject_step_title')
                 : t('approvals.queue.send_back_title')}
             </DialogTitle>
             <DialogDescription>
-              {actionDialog === 'reject'
+              {actionDialog === 'approve'
+                ? t('approvals.queue.approve_step_desc')
+                : actionDialog === 'reject'
                 ? t('approvals.queue.reject_step_desc')
                 : t('approvals.queue.send_back_desc')}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label className="text-xs">{t('approvals.queue.comment_required')}</Label>
-            <Textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder={t('approvals.queue.explain_reason_placeholder')}
-              rows={3}
-            />
-          </div>
+          {/* Reject / send-back require a reason; approve is a plain confirm. */}
+          {actionDialog !== 'approve' && (
+            <div className="space-y-2">
+              <Label className="text-xs">{t('approvals.queue.comment_required')}</Label>
+              <Textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder={t('approvals.queue.explain_reason_placeholder')}
+                rows={3}
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button
               variant="ghost"
@@ -526,7 +533,7 @@ function ChainStepCard({
             <Button
               variant={actionDialog === 'reject' ? 'destructive' : 'default'}
               onClick={() => actionDialog && submit(actionDialog)}
-              disabled={busy || !comment.trim()}
+              disabled={busy || (actionDialog !== 'approve' && !comment.trim())}
             >
               {busy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
               {t('common.confirm')}

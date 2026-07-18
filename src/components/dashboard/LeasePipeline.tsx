@@ -66,7 +66,9 @@ export function LeasePipeline() {
       const { data: leases } = await supabase
         .from('leases')
         .select('lifecycle_status, activated_at, executed_monthly_payment, current_monthly_rent, monthly_payment, rent_schedules(period_start, period_end, monthly_amount)')
-        .eq('workspace_id', workspace.id);
+        .eq('workspace_id', workspace.id)
+        // Exclude archived leases — the rest of the dashboard already does.
+        .eq('archived', false);
       if (!leases) return [];
       const cutoff = Date.now() - ACTIVE_LOOKBACK_DAYS * 86_400_000;
       return STAGES.map((stage) => {
@@ -124,8 +126,9 @@ export function LeasePipeline() {
   const maxCount = Math.max(...stageData.map((s) => s.count), 1);
 
   const approvalStages = ['submitted', 'under_review', 'approved'];
+  // A single in-flight lease isn't a bottleneck — require at least 2 stacked.
   const bottleneckStage = stageData
-    .filter((s) => approvalStages.includes(s.key) && s.count > 0)
+    .filter((s) => approvalStages.includes(s.key) && s.count > 1)
     .sort((a, b) => b.count - a.count)[0]?.key ?? null;
 
   const inProgressCount = stageData

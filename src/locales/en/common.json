@@ -4,6 +4,7 @@
     "none_title": "No firm yet",
     "none_desc": "You're not part of a firm. Firms let one organization manage multiple workspaces together.",
     "back_to_workspace": "Back to workspace",
+    "set_up_firm": "Set up a firm",
     "restricted_badge": "Restricted",
     "role": {
       "owner": "Owner",
@@ -538,7 +539,7 @@
     "confirm_unarchive_desc": "Restoring puts the lease back in the active set. It will count toward your active-lease cap again.",
     "audit_warning": "Saved, but the action could not be recorded in the audit trail.",
     "deleted_badge": "Archived",
-    "deleted_banner": "This lease is archived. It no longer counts toward your active leases and is hidden from the Leases list unless \"Show archived\" is on.",
+    "deleted_banner": "This lease is archived. It no longer counts toward your active leases and is hidden from the Leases list unless the Status filter is set to Archived or All.",
     "list_archived_toast": "Lease archived. Set Status: Archived to find and restore it.",
     "list_archive_failed": "Failed to archive lease",
     "dialog_title": "Archive Lease",
@@ -657,7 +658,7 @@
   },
   "amendments": {
     "delete_title": "Archive this amendment?",
-    "delete_desc": "\"{{name}}\" will be archived (removed from this lease's active amendments). The action is recorded in the audit trail. An admin can restore it later from Leases → \"Show archived\" → open it → Restore.",
+    "delete_desc": "\"{{name}}\" will be archived (removed from this lease's active amendments). The action is recorded in the audit trail. An admin can restore it later from Leases → Status: Archived → open it → Restore.",
     "delete_success": "Amendment archived",
     "delete_failed": "Failed to archive amendment",
     "delete_audit_warning": "Amendment archived, but the action could not be recorded in the audit trail.",
@@ -3136,7 +3137,8 @@
       "welcome_back": "Welcome back!",
       "signed_in": "You have successfully signed in.",
       "account_created": "Account created!",
-      "check_email": "Please check your email to confirm your account."
+      "check_email": "Please check your email to confirm your account.",
+      "lets_get_started": "Let's get you set up."
     },
     "email_placeholder": "you@company.com",
     "password_placeholder": "Enter your password",
@@ -4020,6 +4022,8 @@
       "delegate_ellipsis": "Delegate…",
       "reject_step_title": "Reject step",
       "send_back_title": "Send back to submitter",
+      "approve_step_title": "Approve this step",
+      "approve_step_desc": "This records your approval and advances the lease to the next step. You can't undo an approval.",
       "reject_step_desc": "Rejecting will mark the lease as rejected and supersede all other pending steps.",
       "send_back_desc": "Sending back will move the lease back to submitted and supersede current-stage pending steps. The submitter must resubmit.",
       "comment_required": "Comment (required)",
