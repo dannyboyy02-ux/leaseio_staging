@@ -90,14 +90,19 @@ export function OnboardingChecklist() {
     const checkProgress = async () => {
       const completed: string[] = [];
 
-      // Check if user has uploaded any leases
-      const { count: leaseCount } = await supabase
-        .from('leases')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-      
-      if (leaseCount && leaseCount > 0) {
-        completed.push('upload');
+      // Check if THIS workspace has any leases. Scope to workspace_id, not
+      // user_id — the old query counted the user's leases across every
+      // workspace they belong to, so a brand-new workspace showed "upload"
+      // already complete.
+      if (workspace?.id) {
+        const { count: leaseCount } = await supabase
+          .from('leases')
+          .select('*', { count: 'exact', head: true })
+          .eq('workspace_id', workspace.id);
+
+        if (leaseCount && leaseCount > 0) {
+          completed.push('upload');
+        }
       }
 
       // Check if workspace has team members
@@ -124,14 +129,20 @@ export function OnboardingChecklist() {
         }
       }
 
-      // Check if user has any notifications configured
-      const { count: notificationCount } = await supabase
-        .from('lease_notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_confirmed', true);
-      
-      if (notificationCount && notificationCount > 0) {
-        completed.push('notifications');
+      // Check if THIS workspace has any confirmed notifications. lease_notifications
+      // has no workspace_id, so scope via an inner join on the parent lease —
+      // otherwise a user in multiple workspaces saw the step complete from
+      // another workspace's notifications.
+      if (workspace?.id) {
+        const { count: notificationCount } = await supabase
+          .from('lease_notifications')
+          .select('*, leases!inner(workspace_id)', { count: 'exact', head: true })
+          .eq('leases.workspace_id', workspace.id)
+          .eq('is_confirmed', true);
+
+        if (notificationCount && notificationCount > 0) {
+          completed.push('notifications');
+        }
       }
 
       setCompletedSteps(completed);

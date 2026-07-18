@@ -27,53 +27,36 @@ export function MemberRoleSelect({
   onRoleChanged,
   disabled,
   workspaceId,
-  targetUserId,
 }: MemberRoleSelectProps) {
   const { t } = useAppTranslation();
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleRoleChange = async (newRole: WorkspaceRole) => {
     if (newRole === currentRole) return;
+    if (!workspaceId) { toast.error(t('workspace.members_panel.role_update_failed')); return; }
 
     setIsUpdating(true);
     try {
-      // #52: scope the UPDATE to this workspace as well as the member PK when
-      // workspaceId is known. RLS (is_workspace_owner) already blocks
-      // cross-workspace writes; this makes the query express its own scope
-      // intent (defense-in-depth). workspaceId is optional on this component,
-      // so only add the predicate when present — no behavior change otherwise.
-      let updateQuery = supabase
-        .from('workspace_members')
-        .update({ role: newRole })
-        .eq('id', memberId);
-      if (workspaceId) {
-        updateQuery = updateQuery.eq('workspace_id', workspaceId);
+      // Route through the service-role fn: workspace_members UPDATE is owner-only
+      // at RLS, so a direct client write fails for admins. The fn authorizes
+      // owner-OR-admin and writes the audit row server-side.
+      const { data, error } = await supabase.functions.invoke('manage-workspace-member', {
+        body: { action: 'set_role', workspaceId, memberId, role: newRole },
+      });
+      if (error || !(data as any)?.ok) {
+        let reason: string | null = (data as any)?.reason ?? null;
+        try { const b = await (error as any)?.context?.json?.(); reason = reason ?? (b?.reason ?? null); } catch { /* not JSON */ }
+        toast.error(
+          reason === 'not_authorized' ? t('workspace.members_panel.manage_forbidden')
+          : reason === 'subscription_inactive' ? t('workspace.members_panel.role_readonly')
+          : t('workspace.members_panel.role_update_failed'),
+        );
+        return;
       }
-      const { error } = await updateQuery;
-
-      if (error) throw error;
-
       toast.success(t('workspace.members_panel.role_updated'));
       onRoleChanged();
-
-      // Fire-and-forget: an audit-write failure must not surface as a
-      // role-change failure — the role update above already committed.
-      if (workspaceId && targetUserId) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        (supabase as any)
-          .from('workspace_activity_log')
-          .insert({
-            workspace_id: workspaceId,
-            user_id: sessionData.session?.user?.id ?? null,
-            event_type: 'member_role_changed',
-            details: { target_user_id: targetUserId, role: newRole, previous_role: currentRole },
-          })
-          .then(({ error: auditError }: { error: unknown }) => {
-            if (auditError) console.error('Failed to log member_role_changed:', auditError);
-          });
-      }
-    } catch (error) {
-      console.error('Error updating role:', error);
+    } catch (err) {
+      console.error('Error updating role:', err);
       toast.error(t('workspace.members_panel.role_update_failed'));
     } finally {
       setIsUpdating(false);

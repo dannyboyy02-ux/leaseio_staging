@@ -678,8 +678,19 @@ export default function ApprovalQueue() {
         new Map(myReviewLeases.map((l) => [l.id, l])).values()
       );
 
+      // Legacy queue uses submitted/under_review; chain-driven leases never
+      // populate those and instead sit at concept_submitted / concept_under_review
+      // (concept stage) or final_review (signator stage) while an approver
+      // decision is pending. in_negotiation + pending_counter_signature are
+      // intentionally excluded (no approver action pending — matches the legacy
+      // 'approved'/'executed' exclusion). Lifecycle-based, NOT a raw pending-chain-
+      // row union: signator rows are inserted 'pending' at submission, so a row
+      // union would surface premature signator/negotiation entries.
       const { data: allPendingData } = await baseQuery()
-        .in('lifecycle_status', ['submitted', 'under_review'])
+        .in('lifecycle_status', [
+          'submitted', 'under_review',
+          'concept_submitted', 'concept_under_review', 'final_review',
+        ])
         .order('uploaded_at', { ascending: false });
 
       const { data: reviewedData } = await baseQuery()
@@ -692,7 +703,14 @@ export default function ApprovalQueue() {
         .from('lease_activity_log')
         .select('lease_id')
         .eq('user_id', user.id)
-        .in('activity_type', ['rejection', 'send_back']);
+        // Legacy actions: rejection / send_back. Chain actions: chain_step_*
+        // (act-on-chain-step writes these with user_id = actor) — the only trace
+        // of a chain reviewer's decision, since chain leases never populate
+        // manager_approved_by / financial_approved_by.
+        .in('activity_type', [
+          'rejection', 'send_back',
+          'chain_step_approved', 'chain_step_rejected', 'chain_step_sent_back',
+        ]);
 
       const actedLeaseIds = [...new Set((activityRows || []).map((a: any) => a.lease_id))];
       let actedLeases: any[] = [];

@@ -232,15 +232,18 @@ export default function Notifications() {
                 {alerts.map((alert, idx) => {
                   const known = ALERT_CONFIG[alert.alert_type];
                   const cfg = known ?? { icon: Bell, variant: 'default' as const };
-                  // Fanned approval/delegation notifications (#111 follow-on)
-                  // carry their notification_type as alert_type, e.g.
-                  // "notify_financial_approver" → "Financial Approver".
+                  // Fanned approval/delegation notifications (#111 follow-on) carry their
+                  // notification_type as alert_type (e.g. "notify_chain_step_users").
+                  // Resolve a localized badge label; unmapped/custom notify_<role> types
+                  // fall back to a humanized (de-prefixed) label instead of the raw enum.
                   const alertLabel = known
                     ? t(known.labelKey)
-                    : alert.alert_type
-                        .replace(/^notify_/, '')
-                        .replace(/_/g, ' ')
-                        .replace(/\b\w/g, (c) => c.toUpperCase());
+                    : t(`notifications.alert_type.${alert.alert_type}`, {
+                        defaultValue: alert.alert_type
+                          .replace(/^notify_/, '')
+                          .replace(/_/g, ' ')
+                          .replace(/\b\w/g, (c) => c.toUpperCase()),
+                      });
                   const AlertIcon = cfg.icon;
                   const isUnread = !alert.read_at;
                   return (
@@ -276,7 +279,11 @@ export default function Notifications() {
                               <span className="text-xs text-muted-foreground ml-auto">{timeAgo(alert.created_at)}</span>
                             </div>
                             <h3 className="font-medium mb-1">{alert.title}</h3>
-                            <p className="text-sm text-muted-foreground">{alert.body}</p>
+                            {/* Fanout rows write title === body (both = message);
+                                only render the grey body when it adds something. */}
+                            {alert.body.trim() && alert.body.trim() !== alert.title.trim() && (
+                              <p className="text-sm text-muted-foreground">{alert.body}</p>
+                            )}
                           </div>
                         </div>
                       </CardContent>

@@ -113,35 +113,24 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
   });
 
   const handleRemoveMember = async (memberId: string) => {
-    const target = members?.find((m) => m.id === memberId);
     try {
-      // #52: scope the DELETE to this workspace as well as the member PK.
-      // RLS (is_workspace_owner) already blocks cross-workspace writes; this
-      // makes the query express its own scope intent (defense-in-depth).
-      const { error } = await supabase
-        .from('workspace_members')
-        .delete()
-        .eq('id', memberId)
-        .eq('workspace_id', workspaceId);
-      if (error) throw error;
+      // Route through the service-role fn: workspace_members DELETE is owner-only
+      // at RLS. The fn authorizes owner-OR-admin and writes the audit server-side.
+      const { data, error } = await supabase.functions.invoke('manage-workspace-member', {
+        body: { action: 'remove', workspaceId, memberId },
+      });
+      if (error || !(data as any)?.ok) {
+        let reason: string | null = (data as any)?.reason ?? null;
+        try { const b = await (error as any)?.context?.json?.(); reason = reason ?? (b?.reason ?? null); } catch { /* not JSON */ }
+        toast.error(
+          reason === 'not_authorized'
+            ? t('workspace.members_panel.manage_forbidden')
+            : t('workspace.members_panel.remove_failed'),
+        );
+        return;
+      }
       toast.success(t('workspace.members_panel.removed'));
       refetchMembers();
-      // Fire-and-forget: an audit-write failure must not surface as a
-      // removal failure — the delete above already committed.
-      if (target) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        (supabase as any)
-          .from('workspace_activity_log')
-          .insert({
-            workspace_id: workspaceId,
-            user_id: sessionData.session?.user?.id ?? null,
-            event_type: 'member_removed',
-            details: { target_user_id: target.user_id, previous_role: target.role },
-          })
-          .then(({ error: auditError }: { error: unknown }) => {
-            if (auditError) console.error('Failed to log member_removed:', auditError);
-          });
-      }
     } catch (error) {
       console.error('Error removing member:', error);
       toast.error(t('workspace.members_panel.remove_failed'));

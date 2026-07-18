@@ -124,7 +124,7 @@ export default function Leases() {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
-  const { workspace, user, userRole, refreshProfile } = useApp();
+  const { workspace, user, userRole, refreshProfile, isLoading: appLoading } = useApp();
   // #136/#137: hide intake/archive affordances for ANY read-only workspace —
   // Vault OR a cancellation-grace/soft-deleted one (the server also blocks).
   const isReadOnly = isWorkspaceReadOnly(workspace);
@@ -222,11 +222,19 @@ export default function Leases() {
     { value: 'all', label: t('leases.expiry_all') },
     { value: '30', label: t('leases.expiring_le_30') },
     { value: '90', label: t('leases.expiring_le_90') },
-    { value: '120', label: t('leases.expiring_91_120') },
+    { value: '120', label: t('leases.expiring_le_120') },
   ];
 
   const fetchLeases = async () => {
-    if (!workspace?.id) return;
+    // No active workspace: stop the spinner instead of hanging forever (the
+    // early return used to skip the finally that clears `loading`). The
+    // render shows the app-level spinner while the workspace is still
+    // resolving (appLoading), then the empty state once it's settled.
+    if (!workspace?.id) {
+      setLeases([]);
+      setLoading(false);
+      return;
+    }
     try {
       // Workspace scoping is mandatory: a user who is a member of multiple
       // workspaces would otherwise see every workspace's leases mixed together
@@ -664,12 +672,11 @@ export default function Leases() {
       let matchesExpiration = true;
       if (expirationFilter !== 'all') {
         const days = getDaysUntilExpiration(getLeaseEnd(lease));
-        if (expirationFilter === '120') {
-          matchesExpiration = days !== null && days > 90 && days <= 120;
-        } else {
-          const filterDays = parseInt(expirationFilter, 10);
-          matchesExpiration = days !== null && days >= 0 && days <= filterDays;
-        }
+        // All bands are cumulative "within N days" so the count on a linking
+        // surface (the dashboard "Expiring ≤ 120 days" tile) matches the list
+        // it opens — a band like 91–120 hid the most-urgent ≤90-day leases.
+        const filterDays = parseInt(expirationFilter, 10);
+        matchesExpiration = days !== null && days >= 0 && days <= filterDays;
       }
 
       return matchesSearch && matchesType && matchesExpiration;
@@ -727,7 +734,7 @@ export default function Leases() {
       />
 
       <PageLayout width="wide" spacing="space-y-4">
-        {loading ? (
+        {loading || appLoading ? (
           <div className="flex h-[40vh] items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>

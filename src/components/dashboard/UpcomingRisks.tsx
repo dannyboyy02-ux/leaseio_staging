@@ -122,7 +122,10 @@ export function UpcomingRisks() {
           });
         }
 
-        if (isCpi) {
+        // CPI is a standing attribute, not a time-sensitive event, so it can
+        // clutter "Upcoming Risks" indefinitely — only surface it for leases
+        // that are still current (skip already-expired ones).
+        if (isCpi && (daysToExpiry === null || daysToExpiry >= 0)) {
           derived.push({
             leaseId: lease.id,
             title,
@@ -146,10 +149,11 @@ export function UpcomingRisks() {
         return 0;
       });
 
-      // Cap at 5 to match the dashboard's tight density (Recent Activity = 3,
-      // AI Extractions = 4). Beyond this users go to the dedicated Risks
-      // surfaces (Reports / per-lease Risks tab) for the full list.
-      setRisks(sorted.slice(0, 5));
+      // Store the full sorted list; the render caps each VIEW at 5
+      // (filteredRisks.slice(0, 5)). Pre-truncating here hid every risk past
+      // the global top 5 from the category filters — e.g. "Auto-Renew" could
+      // report "none" while such a lease approached its opt-out.
+      setRisks(sorted);
       setLoading(false);
     }
 

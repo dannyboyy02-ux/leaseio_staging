@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useToast } from '@/hooks/use-toast';
+import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 
 interface EscalationLease {
   id: string;
@@ -29,6 +30,9 @@ export function EscalationReviewPanel() {
   const { workspace } = useApp();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  // Vault / cancellation-grace / soft-deleted workspaces are read-only — the
+  // escalation edit would hit an RLS error, so hide the panel entirely.
+  const isReadOnly = isWorkspaceReadOnly(workspace);
 
   const [editingLease, setEditingLease] = useState<EscalationLease | null>(null);
   const [newEscalationType, setNewEscalationType] = useState('');
@@ -37,7 +41,7 @@ export function EscalationReviewPanel() {
 
   const { data: leases = [] } = useQuery({
     queryKey: ['escalation-review', workspace?.id],
-    enabled: !!workspace?.id,
+    enabled: !!workspace?.id && !isReadOnly,
     queryFn: async (): Promise<EscalationLease[]> => {
       const { data, error } = await supabase
         .from('leases')
@@ -58,7 +62,7 @@ export function EscalationReviewPanel() {
     },
   });
 
-  if (leases.length === 0) return null;
+  if (isReadOnly || leases.length === 0) return null;
 
   const displayName = (lease: EscalationLease) =>
     lease.tenant_name || lease.request_title || lease.filename || t('dashboard.unnamed_lease');
@@ -73,21 +77,45 @@ export function EscalationReviewPanel() {
     if (!editingLease) return;
     setSaving(true);
     try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id ?? null;
       const escalationType = newEscalationType === 'none' ? null : newEscalationType;
       const escalationRate =
         newEscalationType === 'percent' && newEscalationRate ? Number(newEscalationRate) : null;
 
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from('leases')
         .update({
           escalation_type: escalationType,
           escalation_rate: escalationRate,
+          // Mirror the human-confirmed decision into the raw extraction column
+          // so the CPI/index fallback in risk detection (UpcomingRisks/
+          // UpcomingEvents) clears; 'index' stays a CPI signal, 'none'/'percent'
+          // no longer match.
+          rent_escalation_type: escalationType,
           needs_escalation_review: false,
         })
         .eq('id', editingLease.id)
-        .eq('workspace_id', workspace!.id);
+        .eq('workspace_id', workspace!.id)
+        .select('id');
 
       if (error) throw error;
+      if (!updatedRows || updatedRows.length === 0) throw new Error('no_rows');
+
+      // Attribute the financial-data edit; best-effort (primary write committed).
+      const { error: auditError } = await supabase.from('lease_activity_log').insert({
+        lease_id: editingLease.id,
+        user_id: userId,
+        activity_type: 'escalation_review_resolved',
+        details: {
+          escalation_type: escalationType,
+          escalation_rate: escalationRate,
+          previous_escalation_type: editingLease.escalation_type,
+          previous_rent_escalation_type: editingLease.rent_escalation_type,
+          source: 'dashboard_escalation_review_panel',
+        },
+      });
+      if (auditError) console.error('Failed to log escalation resolution:', auditError);
 
       toast({
         title: t('dashboard.escalation_updated'),
@@ -96,8 +124,12 @@ export function EscalationReviewPanel() {
       queryClient.invalidateQueries({ queryKey: ['escalation-review', workspace?.id] });
       queryClient.invalidateQueries({ queryKey: ['financial-summary', workspace?.id] });
       setEditingLease(null);
-    } catch (err) {
-      toast({ title: t('dashboard.save_failed'), description: String(err), variant: 'destructive' });
+    } catch (err: any) {
+      const msg = String(err?.message ?? '');
+      const description = /lock/i.test(msg)
+        ? t('dashboard.escalation_save_locked')
+        : t('dashboard.escalation_save_failed');
+      toast({ title: t('dashboard.save_failed'), description, variant: 'destructive' });
     } finally {
       setSaving(false);
     }

@@ -40,6 +40,9 @@ export default function Signup() {
   const preselectedPlan = searchParams.get('plan') || 'starter';
   const preselectedBilling = searchParams.get('billing') === 'annual' ? 'annual' : 'monthly';
   const planDisplayName = PLAN_DISPLAY_NAMES[preselectedPlan] || 'Starter';
+  // A free-audit signup (hero CTA carries next=/lease-audit) returns the user
+  // to the audit, not paid onboarding — so don't show "Start with the X plan".
+  const isAuditIntent = (searchParams.get('next') || '').includes('/lease-audit');
   
   const [formData, setFormData] = useState({
     firstName: '',
@@ -186,7 +189,7 @@ export default function Signup() {
           <CardHeader className="text-center pb-2">
             <h1 className="font-display text-2xl font-bold text-foreground">{t('auth.create_your_account')}</h1>
             <p className="text-muted-foreground">
-              {t('auth.start_with_plan', { plan: planDisplayName })}
+              {isAuditIntent ? t('auth.start_free_audit') : t('auth.start_with_plan', { plan: planDisplayName })}
             </p>
           </CardHeader>
           <CardContent>

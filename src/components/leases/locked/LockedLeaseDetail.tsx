@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { parseToLocalDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { parseSingleCurrencyAmount } from '@/lib/securityDeposit';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -177,11 +178,11 @@ const parseUsAddress = (raw: string | null | undefined): ParsedAddress => {
  */
 const fmtSecurityDeposit = (raw: string | null | undefined, language: SupportedLocale): string | null => {
   if (!raw) return null;
-  const cleaned = raw.replace(/[^0-9.]/g, '');
-  if (!cleaned) return raw;
-  const n = Number(cleaned);
-  if (!Number.isFinite(n) || n <= 0) return raw;
-  return formatLocalizedCurrency(n, language);
+  // Only format a clean single-amount value; free-text deposits like
+  // "$5,000 (2 months)" are shown verbatim (see parseSingleCurrencyAmount —
+  // the old strip-all-non-digits path fabricated "$50,002.00").
+  const n = parseSingleCurrencyAmount(raw);
+  return n === null ? raw : formatLocalizedCurrency(n, language);
 };
 
 /**
@@ -725,6 +726,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
                   baseTermMonths={lease.term_months ?? null}
                   lifecycleStatus={lease.lifecycle_status ?? 'active'}
                   reportAvailable={!!lease.model_locked}
+                  storedClassification={lease.lease_classification ?? null}
                   discountRateSlot={
                     <LeaseDiscountRateCard
                       leaseId={lease.id}

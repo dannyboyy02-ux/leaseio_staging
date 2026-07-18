@@ -229,6 +229,11 @@ verify_jwt = true
 [functions.set-firm-access]
 verify_jwt = true
 
+# Owner-OR-admin member management (role change + removal). workspace_members
+# UPDATE/DELETE is owner-only at RLS; this is the admin authorization boundary.
+[functions.manage-workspace-member]
+verify_jwt = true
+
 # Phase 10 / #105: create the firm's per-child Stripe subscription (firm owner;
 # manual auth so a missing token returns a structured 401).
 [functions.create-firm-subscription]

@@ -48,8 +48,8 @@ export default function ForgotPassword() {
     
     if (error) {
       toast({
-        title: t('auth.errors.signin_failed'),
-        description: t('auth.errors.signin_failed'),
+        title: t('auth.errors.reset_failed'),
+        description: t('auth.errors.reset_failed_desc'),
         variant: 'destructive',
       });
       return;

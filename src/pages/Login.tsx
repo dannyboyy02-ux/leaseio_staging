@@ -10,6 +10,7 @@ import { Eye, EyeOff, FileText, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
+import { resolvePostLoginRedirect } from '@/lib/authRedirect';
 
 export default function Login() {
   const { t } = useAppTranslation();
@@ -62,9 +63,12 @@ export default function Login() {
       description: t('auth.success.signed_in'),
     });
     
+    // Honor the deep link the user was bounced off of (ProtectedRoute stashes
+    // it in location.state.from) before the ?next param; falls back to the
+    // dashboard. Guards against open-redirects and auth-page loops.
     const params = new URLSearchParams(location.search);
-    const next = params.get('next');
-    navigate(next || '/app/dashboard');
+    const destination = resolvePostLoginRedirect(location.state?.from, params.get('next'));
+    navigate(destination);
   };
 
   return (

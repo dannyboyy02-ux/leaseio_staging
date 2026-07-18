@@ -9,6 +9,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { isEquivalent, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 /**
  * Compact currency formatter — `$1.2M`, `$870K`, `$1.4B`. Keeps stage rows
@@ -64,7 +65,7 @@ export function LeasePipeline() {
       if (!workspace?.id) return [];
       const { data: leases } = await supabase
         .from('leases')
-        .select('lifecycle_status, monthly_payment, activated_at')
+        .select('lifecycle_status, activated_at, executed_monthly_payment, current_monthly_rent, monthly_payment, rent_schedules(period_start, period_end, monthly_amount)')
         .eq('workspace_id', workspace.id);
       if (!leases) return [];
       const cutoff = Date.now() - ACTIVE_LOOKBACK_DAYS * 86_400_000;
@@ -85,7 +86,7 @@ export function LeasePipeline() {
           return true;
         });
         const annualValue = matching.reduce(
-          (sum, l) => sum + ((l as any).monthly_payment ?? 0) * 12,
+          (sum, l) => sum + getMonthlyRent(l as any) * 12,
           0
         );
         return {

@@ -5,11 +5,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 
 interface LeaseRow {
   requesting_department: string | null;
   lifecycle_status: string | null;
   monthly_payment: number | null;
+  executed_monthly_payment: number | null;
+  current_monthly_rent: number | null;
+  rent_schedules: { period_start: string; period_end: string | null; monthly_amount: number | null }[] | null;
   uploaded_at: string | null;
 }
 
@@ -55,7 +59,7 @@ function buildDeptSummaries(leases: LeaseRow[], days: number): DeptSummary[] {
     if (l.lifecycle_status && IN_PROGRESS_STATUSES.includes(l.lifecycle_status)) {
       map[dept].inProgressCount += 1;
     }
-    map[dept].annualValue += (l.monthly_payment ?? 0) * 12;
+    map[dept].annualValue += getMonthlyRent(l as any) * 12;
   });
 
   return Object.values(map)
@@ -77,7 +81,7 @@ export function PipelineByDepartment() {
 
       const { data } = await supabase
         .from('leases')
-        .select('requesting_department, lifecycle_status, monthly_payment, uploaded_at')
+        .select('requesting_department, lifecycle_status, monthly_payment, executed_monthly_payment, current_monthly_rent, uploaded_at, rent_schedules(period_start, period_end, monthly_amount)')
         .eq('workspace_id', workspace.id)
         .not('requesting_department', 'is', null);
 

@@ -7,6 +7,7 @@ import { ClipboardList, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { useApp } from '@/contexts/AppContext';
 
 interface MonthPoint {
@@ -18,6 +19,9 @@ interface MonthPoint {
 interface LeaseRow {
   uploaded_at: string | null;
   monthly_payment: number | null;
+  executed_monthly_payment: number | null;
+  current_monthly_rent: number | null;
+  rent_schedules: { period_start: string; period_end: string | null; monthly_amount: number | null }[] | null;
 }
 
 export function IntakeTrend() {
@@ -36,7 +40,7 @@ export function IntakeTrend() {
 
       const { data: leases } = await supabase
         .from('leases')
-        .select('uploaded_at, monthly_payment')
+        .select('uploaded_at, monthly_payment, executed_monthly_payment, current_monthly_rent, rent_schedules(period_start, period_end, monthly_amount)')
         .eq('workspace_id', workspace.id)
         .gte('uploaded_at', cutoff.toISOString());
 
@@ -55,7 +59,7 @@ export function IntakeTrend() {
         months.push({
           month: label,
           count: monthLeases.length,
-          value: monthLeases.reduce((sum, l) => sum + (l.monthly_payment ?? 0) * 12, 0),
+          value: monthLeases.reduce((sum, l) => sum + getMonthlyRent(l as any) * 12, 0),
         });
       }
 

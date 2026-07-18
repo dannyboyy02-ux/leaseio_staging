@@ -65,12 +65,14 @@ const compactCurrency = (n: number): string =>
 // Small presentational helpers
 // ---------------------------------------------------------------------------
 
-function KpiTile({ label, value, sub }: { label: string; value: string; sub: string }) {
+function KpiTile({ label, value, sub, title }: { label: string; value: string; sub: string; title?: string }) {
   return (
     <Card>
       <CardContent className="p-4">
         <p className="text-xs leading-tight text-muted-foreground">{label}</p>
-        <p className="mt-1.5 font-display text-2xl font-bold tracking-tight">{value}</p>
+        {/* truncate + title: compact values fit the narrow tile; the full
+            figure is available on hover for anyone who needs the exact number. */}
+        <p className="mt-1.5 truncate font-display text-2xl font-bold tracking-tight" title={title}>{value}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>
       </CardContent>
     </Card>
@@ -420,10 +422,19 @@ export default function Portfolio() {
 
             {/* KPI strip */}
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-              <KpiTile label={t('portfolio.kpi_annual_occupancy')} value={formatCurrency(kpis.annualOccupancyCost)} sub={t('portfolio.kpi_across_leases', { count: kpis.leaseCount })} />
+              {/* Compact ($15.5M, not $15,485,251) so seven-figure portfolios
+                  don't clip the narrow tile; full figure on hover. Matches the
+                  compact Rent Forecast chart below. */}
+              <KpiTile
+                label={t('portfolio.kpi_annual_occupancy')}
+                value={formatLocalizedCurrency(kpis.annualOccupancyCost, language, { compact: true })}
+                title={formatCurrency(kpis.annualOccupancyCost)}
+                sub={t('portfolio.kpi_across_leases', { count: kpis.leaseCount })}
+              />
               <KpiTile
                 label={t('portfolio.kpi_remaining_commitment')}
-                value={formatCurrency(kpis.remainingCommitment)}
+                value={formatLocalizedCurrency(kpis.remainingCommitment, language, { compact: true })}
+                title={formatCurrency(kpis.remainingCommitment)}
                 sub={kpis.contractedThroughYear ? t('portfolio.kpi_undiscounted_through', { year: kpis.contractedThroughYear }) : t('portfolio.kpi_undiscounted_cash')}
               />
               <KpiTile
