@@ -29,7 +29,9 @@
       "workspaces_heading": "Workspaces",
       "no_children": "No workspaces in this firm yet.",
       "leases_n": "{{count}} leases",
-      "members_n": "{{count}} members"
+      "members_n": "{{count}} members",
+      "restricted_hidden_one": "{{count}} workspace in this firm has restricted firm access and isn't shown here, but still counts toward your firm's billing.",
+      "restricted_hidden_other": "{{count}} workspaces in this firm have restricted firm access and aren't shown here, but still count toward your firm's billing."
     },
     "inbox": {
       "title": "Firm inbox",
@@ -104,9 +106,9 @@
       "status_active": "Active",
       "status_pending": "Not set up",
       "setup_note": "Firm-level billing is being finalized. In the meantime, child workspaces keep their access.",
-      "mode_label": "Invoice detail",
-      "mode_detailed_desc": "Your invoice shows one line per workspace.",
-      "mode_summarized_desc": "Your invoice shows a single combined line.",
+      "mode_label": "Billing breakdown",
+      "mode_detailed_desc": "Sets your preference for per-workspace billing detail. Invoices currently show one combined charge; per-workspace usage appears below.",
+      "mode_summarized_desc": "Sets your preference for a single combined billing summary. Invoices show one combined charge.",
       "detailed": "Detailed",
       "summarized": "Summarized",
       "mode_failed": "Could not update invoice detail",
@@ -724,7 +726,21 @@
       "trust_setup": "5-minute setup",
       "trust_ai": "AI reads your leases in seconds",
       "trust_security": "Bank-grade security",
-      "demo_coming": "See how LeaseIO reads a lease in 60 seconds"
+      "mockup": {
+        "doc_name": "Suite 400 — Office Lease.pdf",
+        "status": "Needs Review",
+        "field_rent": "Base Rent",
+        "value_rent": "$24,500 / month",
+        "conf_rent": "98%",
+        "field_commencement": "Rent Commencement",
+        "value_commencement": "Jan 1, 2027",
+        "conf_commencement": "94%",
+        "field_renewal": "Renewal Options",
+        "value_renewal": "2 × 5 years",
+        "conf_renewal": "76%",
+        "extracted_note": "Abstracted by AI in 42 seconds",
+        "approve": "Approve lease"
+      }
     },
     "features": {
       "title": "Finance awareness, not just document storage",
@@ -1043,7 +1059,9 @@
     "pipeline_empty_stages": "Empty: {{stages}}",
     "none_within_120": "None within 120 days",
     "n_more_updates_one": "{{count}} more update",
-    "n_more_updates_other": "{{count}} more updates"
+    "n_more_updates_other": "{{count}} more updates",
+    "marked_seen_toast": "Expiring leases marked as seen",
+    "marked_seen_scope": "Hidden from this tile on this device only."
   },
   "lease": {
     "review": "Review Lease",
@@ -1151,7 +1169,9 @@
     "check_base_rent": "Rent information may be in the base rent fields",
     "add_period": "Add Period",
     "single_period": "Single Period",
-    "generate_annual": "Generate Annual Schedule"
+    "generate_annual": "Generate Annual Schedule",
+    "next_decrease": "Next Decrease",
+    "next_change": "Next Change"
   },
   "leases": {
     "title": "Leases",
@@ -1372,8 +1392,7 @@
       "validation_required": "Title and explanation are required",
       "citation_page_invalid": "Citation page must be a positive integer",
       "added": "Added risk: {{title}}",
-      "add_failed": "Could not add risk: {{message}}",
-      "unknown_error": "unknown error",
+      "add_failed": "Could not add the risk.",
       "selecting_banner": "Selecting in PDF",
       "selecting_hint_before": "— highlight any text, then click",
       "use_selection": "Use selection",
@@ -1414,7 +1433,7 @@
       "dismiss_cta": "Dismiss risk",
       "dismissed": "Dismissed risk: {{title}}",
       "no_rows_updated": "No rows updated — likely a permissions issue. Contact your workspace admin.",
-      "dismiss_failed": "Could not dismiss risk: {{message}}"
+      "dismiss_failed": "Could not dismiss the risk."
     },
     "upload": {
       "tier2_title": "AI says this isn't a lease",
@@ -2807,9 +2826,11 @@
       "ready": "Ready",
       "expired": "Expired",
       "generating": "Generating",
-      "failed": "Failed"
+      "failed": "Failed",
+      "pending": "Pending"
     },
-    "no_reports_viewer": "No reports yet. Reports are generated from a lease's ASC 842 tab by a workspace admin or editor."
+    "no_reports_viewer": "No reports yet. Reports are generated from a lease's ASC 842 tab by a workspace admin or editor.",
+    "load_failed": "Couldn't load reports."
   },
   "empty": {
     "no_leases": "No leases yet",
@@ -2852,7 +2873,8 @@
     "unknown": "Unknown",
     "session_expired": "Session expired. Please log in again.",
     "open": "Open",
-    "retry": "Retry"
+    "retry": "Retry",
+    "unsaved_nav_confirm": "You have unsaved changes. Leave this page and discard them?"
   },
   "locked_lease": {
     "ai_extracted_badge": "AI extracted",
@@ -2945,9 +2967,8 @@
       "dismissing": "Dismissing…",
       "dismiss_cta": "Dismiss risk",
       "dismissed_toast": "Dismissed risk: {{title}}",
-      "dismiss_failed": "Could not dismiss risk: {{message}}",
+      "dismiss_failed": "Couldn't dismiss the risk.",
       "dismiss_no_rows": "No rows updated — likely a permissions issue. Contact your workspace admin.",
-      "unknown_error": "unknown error",
       "capture_unavailable": "Open the lease workbench to highlight a clause in the PDF."
     },
     "documents": {
@@ -3073,7 +3094,6 @@
     "create_your_account": "Create your account",
     "start_with_plan": "Start with the {{plan}} plan",
     "start_free_audit": "Create a free account to run your lease audit.",
-    "min_password": "Minimum 8 characters",
     "agree_terms": "I agree to the",
     "terms_of_service": "Terms of Service",
     "privacy_policy": "Privacy Policy",
@@ -3104,14 +3124,20 @@
       "reset_password": "Reset Password",
       "resetting": "Resetting...",
       "weak_password_title": "Weak password",
-      "weak_password_desc": "Password must be at least 8 characters.",
+      "weak_password_desc": "Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.",
       "password_mismatch_title": "Password mismatch",
       "password_mismatch_desc": "Passwords do not match.",
       "error_title": "Error",
       "error_desc": "Failed to update password. The reset link may have expired.",
       "success_title": "Password updated!",
       "success_desc": "Your password has been successfully changed.",
-      "remember_password": "Remember your password?"
+      "remember_password": "Remember your password?",
+      "verifying_link": "Verifying your reset link…",
+      "link_invalid_title": "Link expired or invalid",
+      "link_invalid_desc": "This password reset link is no longer valid. Links expire shortly after they are sent and can only be used once. Request a new one below.",
+      "request_new_link": "Request a new link",
+      "same_password_title": "Password not changed",
+      "same_password_desc": "Your new password must be different from your current password."
     },
     "errors": {
       "missing_fields": "Missing fields",
@@ -3126,7 +3152,7 @@
       "enter_valid_email": "Please enter a valid email address.",
       "missing_first_name": "Please enter your first name.",
       "missing_last_name": "Please enter your last name.",
-      "weak_password": "Password must be at least 8 characters.",
+      "weak_password": "Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.",
       "password_mismatch": "Passwords do not match.",
       "terms_required": "Please accept the Terms and Privacy Policy.",
       "already_registered": "An account with this email already exists. Please sign in.",
@@ -3801,7 +3827,10 @@
     "details": "Error details",
     "try_again": "Try again",
     "reload_app": "Reload app",
-    "unknown": "Unknown error"
+    "unknown": "Unknown error",
+    "lease_locked": "This lease is locked — changes must go through the unlock and approval workflow.",
+    "no_permission": "You don't have permission to make this change.",
+    "network": "Network error — check your connection and try again."
   },
   "policy_editor": {
     "header_title": "Approval Rule",
@@ -3866,7 +3895,6 @@
       "copy_name": "{{name}} (copy)",
       "toast_duplicated": "Rule duplicated. Edit and activate when ready.",
       "toast_duplicate_failed": "Duplicate failed",
-      "archive_confirm": "Archive rule \"{{name}}\"? It will be deactivated and stop matching new requests.",
       "sod_toggle_desc": "When ON, every approval chain must use distinct users at each step. Individual rules can override this.",
       "sod_on": "ON — distinct users required",
       "sod_off": "OFF — same user allowed",
@@ -3980,7 +4008,8 @@
       "sod_allow": "Allow same user in multiple roles",
       "run": "Run resolution",
       "running": "Resolving…"
-    }
+    },
+    "tester_save_first": "The sample tester only checks saved rules — save this rule first to include it."
   },
   "approvals": {
     "common": {
@@ -4480,15 +4509,15 @@
     "years_value": "{{years}} yrs",
     "kpi_weighted_by_rent": "weighted by rent",
     "forecast_title": "Rent Commitment Forecast",
-    "forecast_sub": "Contractual obligations by year — see the re-leasing cliff coming",
+    "forecast_sub": "Contracted rent by year — and when current lease terms run out",
     "next_5_yrs": "Next 5 yrs",
     "forecast_empty": "Add lease end dates to see the commitment forecast.",
     "contracted_rent_legend": "Contracted rent (with escalations)",
-    "term_ends_uncontracted": "Term ends (uncontracted)",
+    "term_ends_uncontracted": "Rent after lease term ends (not committed)",
     "cost_by_department": "Cost by Department",
     "cost_by_department_sub": "Where the spend sits",
     "no_cost_data": "No cost data yet.",
-    "cost_per_sqft_title": "Cost per sqft by Location",
+    "cost_per_sqft_title": "Cost per sqft by Lease",
     "cost_per_sqft_sub": "Against the portfolio blended average",
     "no_sqft_leases": "No leases with square footage yet.",
     "watchlist_title": "Lease Watchlist",

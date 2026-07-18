@@ -29,7 +29,9 @@
       "workspaces_heading": "Espacios de trabajo",
       "no_children": "Aún no hay espacios de trabajo en esta firma.",
       "leases_n": "{{count}} contratos",
-      "members_n": "{{count}} miembros"
+      "members_n": "{{count}} miembros",
+      "restricted_hidden_one": "{{count}} espacio de trabajo de esta firma tiene el acceso de firma restringido y no se muestra aquí, pero aún cuenta para la facturación de su firma.",
+      "restricted_hidden_other": "{{count}} espacios de trabajo de esta firma tienen el acceso de firma restringido y no se muestran aquí, pero aún cuentan para la facturación de su firma."
     },
     "inbox": {
       "title": "Bandeja de la firma",
@@ -104,11 +106,11 @@
       "status_active": "Activa",
       "status_pending": "Sin configurar",
       "setup_note": "La facturación a nivel de firma se está finalizando. Mientras tanto, los espacios de trabajo conservan su acceso.",
-      "mode_label": "Detalle de la factura",
-      "mode_detailed_desc": "Su factura muestra una línea por espacio de trabajo.",
-      "mode_summarized_desc": "Su factura muestra una sola línea combinada.",
-      "detailed": "Detallada",
-      "summarized": "Resumida",
+      "mode_label": "Desglose de facturación",
+      "mode_detailed_desc": "Establece su preferencia de detalle de facturación por espacio de trabajo. Actualmente las facturas muestran un solo cargo combinado; el uso por espacio de trabajo aparece abajo.",
+      "mode_summarized_desc": "Establece su preferencia de un resumen de facturación combinado. Las facturas muestran un solo cargo combinado.",
+      "detailed": "Detallado",
+      "summarized": "Resumido",
       "mode_failed": "No se pudo actualizar el detalle de la factura",
       "mode_saved": "Detalle de la factura actualizado",
       "owner_only": "Solo el propietario de la firma puede cambiar la configuración de facturación.",
@@ -724,7 +726,21 @@
       "trust_setup": "Configuración en 5 minutos",
       "trust_ai": "La IA lee sus contratos en segundos",
       "trust_security": "Seguridad nivel bancario",
-      "demo_coming": "Vea cómo LeaseIO lee un contrato en 60 segundos"
+      "mockup": {
+        "doc_name": "Suite 400 — Contrato de Oficina.pdf",
+        "status": "Necesita Revisión",
+        "field_rent": "Renta Base",
+        "value_rent": "$24,500 / mes",
+        "conf_rent": "98%",
+        "field_commencement": "Inicio de Renta",
+        "value_commencement": "1 ene 2027",
+        "conf_commencement": "94%",
+        "field_renewal": "Opciones de Renovación",
+        "value_renewal": "2 × 5 años",
+        "conf_renewal": "76%",
+        "extracted_note": "Abstraído por IA en 42 segundos",
+        "approve": "Aprobar contrato"
+      }
     },
     "features": {
       "title": "Conciencia financiera, no solo almacenamiento de documentos",
@@ -1043,7 +1059,9 @@
     "pipeline_empty_stages": "Vacías: {{stages}}",
     "none_within_120": "Ninguno dentro de 120 días",
     "n_more_updates_one": "{{count}} actualización más",
-    "n_more_updates_other": "{{count}} actualizaciones más"
+    "n_more_updates_other": "{{count}} actualizaciones más",
+    "marked_seen_toast": "Arrendamientos por vencer marcados como vistos",
+    "marked_seen_scope": "Ocultos de esta tarjeta solo en este dispositivo."
   },
   "lease": {
     "review": "Revisar Arrendamiento",
@@ -1151,7 +1169,9 @@
     "check_base_rent": "La información de renta puede estar en los campos de renta base",
     "add_period": "Agregar período",
     "single_period": "Período único",
-    "generate_annual": "Generar calendario anual"
+    "generate_annual": "Generar calendario anual",
+    "next_decrease": "Próxima Disminución",
+    "next_change": "Próximo Cambio"
   },
   "leases": {
     "title": "Arrendamientos",
@@ -1372,8 +1392,7 @@
       "validation_required": "Se requieren el título y la explicación",
       "citation_page_invalid": "La página de la cita debe ser un número entero positivo",
       "added": "Riesgo agregado: {{title}}",
-      "add_failed": "No se pudo agregar el riesgo: {{message}}",
-      "unknown_error": "error desconocido",
+      "add_failed": "No se pudo agregar el riesgo.",
       "selecting_banner": "Seleccionando en el PDF",
       "selecting_hint_before": "— resalte cualquier texto y luego haga clic en",
       "use_selection": "Usar selección",
@@ -1414,7 +1433,7 @@
       "dismiss_cta": "Descartar riesgo",
       "dismissed": "Riesgo descartado: {{title}}",
       "no_rows_updated": "No se actualizó ningún registro; probablemente sea un problema de permisos. Contacte al administrador de su espacio de trabajo.",
-      "dismiss_failed": "No se pudo descartar el riesgo: {{message}}"
+      "dismiss_failed": "No se pudo descartar el riesgo."
     },
     "upload": {
       "tier2_title": "La IA dice que esto no es un arrendamiento",
@@ -2807,9 +2826,11 @@
       "ready": "Listo",
       "expired": "Vencido",
       "generating": "Generando",
-      "failed": "Fallido"
+      "failed": "Fallido",
+      "pending": "Pendiente"
     },
-    "no_reports_viewer": "Aún no hay informes. Los informes los genera un administrador o editor del espacio de trabajo desde la pestaña ASC 842 de un arrendamiento."
+    "no_reports_viewer": "Aún no hay informes. Los informes los genera un administrador o editor del espacio de trabajo desde la pestaña ASC 842 de un arrendamiento.",
+    "load_failed": "No se pudieron cargar los informes."
   },
   "empty": {
     "no_leases": "Sin arrendamientos aún",
@@ -2852,7 +2873,8 @@
     "unknown": "Desconocido",
     "session_expired": "La sesión expiró. Inicie sesión de nuevo.",
     "open": "Abrir",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "unsaved_nav_confirm": "Tiene cambios sin guardar. ¿Desea salir de esta página y descartarlos?"
   },
   "locked_lease": {
     "ai_extracted_badge": "Extraído por IA",
@@ -2945,9 +2967,8 @@
       "dismissing": "Descartando…",
       "dismiss_cta": "Descartar riesgo",
       "dismissed_toast": "Riesgo descartado: {{title}}",
-      "dismiss_failed": "No se pudo descartar el riesgo: {{message}}",
+      "dismiss_failed": "No se pudo descartar el riesgo.",
       "dismiss_no_rows": "No se actualizó ningún registro; probablemente sea un problema de permisos. Contacte al administrador de su espacio de trabajo.",
-      "unknown_error": "error desconocido",
       "capture_unavailable": "Abra el banco de trabajo del arrendamiento para resaltar una cláusula en el PDF."
     },
     "documents": {
@@ -3073,7 +3094,6 @@
     "create_your_account": "Cree su cuenta",
     "start_with_plan": "Comience con el plan {{plan}}",
     "start_free_audit": "Cree una cuenta gratuita para ejecutar su auditoría de arrendamientos.",
-    "min_password": "Mínimo 8 caracteres",
     "agree_terms": "Acepto los",
     "terms_of_service": "Términos de Servicio",
     "privacy_policy": "Política de Privacidad",
@@ -3104,14 +3124,20 @@
       "reset_password": "Restablecer Contraseña",
       "resetting": "Restableciendo...",
       "weak_password_title": "Contraseña débil",
-      "weak_password_desc": "La contraseña debe tener al menos 8 caracteres.",
+      "weak_password_desc": "La contraseña debe tener al menos 8 caracteres e incluir una letra mayúscula, una letra minúscula y un número.",
       "password_mismatch_title": "Las contraseñas no coinciden",
       "password_mismatch_desc": "Las contraseñas no coinciden.",
       "error_title": "Error",
       "error_desc": "No se pudo actualizar la contraseña. Es posible que el enlace haya expirado.",
       "success_title": "¡Contraseña actualizada!",
       "success_desc": "Su contraseña se ha cambiado correctamente.",
-      "remember_password": "¿Recuerda su contraseña?"
+      "remember_password": "¿Recuerda su contraseña?",
+      "verifying_link": "Verificando su enlace de restablecimiento…",
+      "link_invalid_title": "Enlace expirado o no válido",
+      "link_invalid_desc": "Este enlace para restablecer la contraseña ya no es válido. Los enlaces expiran poco después de enviarse y solo pueden usarse una vez. Solicite uno nuevo a continuación.",
+      "request_new_link": "Solicitar un enlace nuevo",
+      "same_password_title": "Contraseña sin cambios",
+      "same_password_desc": "Su nueva contraseña debe ser diferente de su contraseña actual."
     },
     "errors": {
       "missing_fields": "Campos faltantes",
@@ -3126,7 +3152,7 @@
       "enter_valid_email": "Por favor ingrese una dirección de correo válida.",
       "missing_first_name": "Por favor ingrese su nombre.",
       "missing_last_name": "Por favor ingrese su apellido.",
-      "weak_password": "La contraseña debe tener al menos 8 caracteres.",
+      "weak_password": "La contraseña debe tener al menos 8 caracteres e incluir una letra mayúscula, una letra minúscula y un número.",
       "password_mismatch": "Las contraseñas no coinciden.",
       "terms_required": "Por favor acepte los Términos y Política de Privacidad.",
       "already_registered": "Ya existe una cuenta con este correo. Por favor inicie sesión.",
@@ -3801,7 +3827,10 @@
     "details": "Detalles del error",
     "try_again": "Intentar de nuevo",
     "reload_app": "Recargar aplicación",
-    "unknown": "Error desconocido"
+    "unknown": "Error desconocido",
+    "lease_locked": "Este arrendamiento está bloqueado; los cambios deben pasar por el flujo de desbloqueo y aprobación.",
+    "no_permission": "No tiene permiso para realizar este cambio.",
+    "network": "Error de red; compruebe su conexión e inténtelo de nuevo."
   },
   "policy_editor": {
     "header_title": "Regla de Aprobación",
@@ -3866,7 +3895,6 @@
       "copy_name": "{{name}} (copia)",
       "toast_duplicated": "Regla duplicada. Edítela y actívela cuando esté lista.",
       "toast_duplicate_failed": "No se pudo duplicar",
-      "archive_confirm": "¿Archivar la regla \"{{name}}\"? Se desactivará y dejará de coincidir con nuevas solicitudes.",
       "sod_toggle_desc": "Cuando está ACTIVADO, cada cadena de aprobación debe usar usuarios distintos en cada paso. Las reglas individuales pueden anular esto.",
       "sod_on": "ACTIVADO — se requieren usuarios distintos",
       "sod_off": "DESACTIVADO — se permite el mismo usuario",
@@ -3980,7 +4008,8 @@
       "sod_allow": "Permitir el mismo usuario en varios roles",
       "run": "Ejecutar resolución",
       "running": "Resolviendo…"
-    }
+    },
+    "tester_save_first": "La prueba de ejemplo solo evalúa reglas guardadas; guarde esta regla primero para incluirla."
   },
   "approvals": {
     "common": {
@@ -4480,15 +4509,15 @@
     "years_value": "{{years}} años",
     "kpi_weighted_by_rent": "ponderado por renta",
     "forecast_title": "Pronóstico de Compromiso de Renta",
-    "forecast_sub": "Obligaciones contractuales por año — anticipe el precipicio de re-arrendamiento",
+    "forecast_sub": "Renta contratada por año — y cuándo vencen los plazos de sus arrendamientos",
     "next_5_yrs": "Próximos 5 años",
     "forecast_empty": "Agregue fechas de fin de arrendamiento para ver el pronóstico de compromiso.",
     "contracted_rent_legend": "Renta contratada (con incrementos)",
-    "term_ends_uncontracted": "Fin del plazo (no contratado)",
+    "term_ends_uncontracted": "Renta tras el fin del plazo (sin compromiso)",
     "cost_by_department": "Costo por Departamento",
     "cost_by_department_sub": "Dónde se concentra el gasto",
     "no_cost_data": "Aún no hay datos de costos.",
-    "cost_per_sqft_title": "Costo por pie² por Ubicación",
+    "cost_per_sqft_title": "Costo por pie² por Arrendamiento",
     "cost_per_sqft_sub": "Comparado con el promedio combinado del portafolio",
     "no_sqft_leases": "Aún no hay arrendamientos con superficie.",
     "watchlist_title": "Lista de Vigilancia de Arrendamientos",

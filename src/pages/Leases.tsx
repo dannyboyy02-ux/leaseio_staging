@@ -40,6 +40,9 @@ import { formatLocalizedCurrency, formatLocalizedDate, formatLocalizedNumber } f
 import { getMonthlyRent } from '@/lib/leaseCalculations';
 import { rowsToCsv } from '@/lib/csv';
 import { prettyAssetType, assetAbbreviation } from '@/lib/assetTypes';
+import { localizedAssetTypeName } from '@/lib/assetTypeLabels';
+import { localizedStatusLabel } from '@/lib/lifecycleLabels';
+import type { LifecycleStatus } from '@/lib/lifecycleStates';
 import {
   getPropertyAddress,
   getLeaseEnd,
@@ -694,17 +697,25 @@ export default function Leases() {
       toast.error(t('leases.export_empty'), { id: 'lease-export' });
       return;
     }
-    const records = filteredAndSortedLeases.map((l) => ({
-      Property: getPropertyAddress(l),
-      Type: prettyAssetType(l.asset_type),
-      Landlord: l.landlord_name ?? '',
-      'Monthly Rent': getMonthlyRent(l) || '',
-      Start: l.lease_start ?? '',
-      End: getLeaseEnd(l) ?? '',
-      'Sq Ft': l.square_footage ?? '',
-      Status: statusText(l),
-      Archived: l.archived ? 'yes' : 'no',
-    }));
+    // Localized headers + display values (the CSV is a WYSIWYG snapshot of
+    // the localized table); dates stay raw ISO and rent/sqft stay raw numbers
+    // so the machine-parseable fields are locale-independent. Status keeps the
+    // underlying lifecycle even for archived rows — the dedicated Archived
+    // column disambiguates.
+    const records = filteredAndSortedLeases.map((l) => {
+      const status = l.lifecycle_status || l.status;
+      return {
+        [t('leases.property')]: getPropertyAddress(l),
+        [t('leases.type')]: localizedAssetTypeName(l.asset_type),
+        [t('leases.landlord')]: l.landlord_name ?? '',
+        [t('leases.monthly_rent')]: getMonthlyRent(l) || '',
+        [t('leases.start')]: l.lease_start ?? '',
+        [t('leases.end')]: getLeaseEnd(l) ?? '',
+        [t('leases.sqft')]: l.square_footage ?? '',
+        [t('leases.status')]: status ? localizedStatusLabel(status as LifecycleStatus) : '',
+        [t('archive.deleted_badge')]: l.archived ? t('common.yes') : t('common.no'),
+      };
+    });
     const csv = rowsToCsv(records);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

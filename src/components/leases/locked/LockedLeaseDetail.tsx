@@ -28,6 +28,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { mapSupabaseError } from '@/lib/userFacingError';
 
 import { LockedHeader } from './LockedHeader';
 import { SectionCard } from './SectionCard';
@@ -58,6 +59,10 @@ interface Props {
   /** Vault (read-only retention) workspaces: suppress every write affordance.
    *  Default false → non-Vault behavior is unchanged. */
   readOnly?: boolean;
+  /** #174/#169 — forwards the ASC 842 tab's dirty flag up to the page that
+   *  owns the single unsaved-changes guard (LeaseReview). This branch's tab
+   *  can be editable (canEdit={canEditAsc842}), so it needs the guard too. */
+  onAscDirtyChange?: (dirty: boolean) => void;
 }
 
 const fmtDate = (d: string | null | undefined) =>
@@ -243,7 +248,7 @@ const remainingMonths = (leaseEnd: string | null | undefined): number | null => 
   return Math.max(0, months);
 };
 
-export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Props) {
+export function LockedLeaseDetail({ lease, refetchLease, readOnly = false, onAscDirtyChange }: Props) {
   const { t } = useAppTranslation();
   const { language } = useLanguage();
   const { userRole } = useApp();
@@ -304,9 +309,8 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       setDismissTarget(null);
       setDismissReason('');
       await refetchRisks();
-    } catch (err: any) {
-      console.error('[LockedLeaseDetail] dismiss risk failed:', err);
-      toast.error(t('locked_lease.risks.dismiss_failed', { message: err?.message ?? t('locked_lease.risks.unknown_error') }));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.risks.dismiss_failed', '[LockedLeaseDetail] dismiss risk failed:'));
     } finally {
       setDismissing(false);
     }
@@ -367,8 +371,8 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
         .eq('status', 'pending')
         .maybeSingle();
       setPendingUnlockRequest((u ?? null) as PendingUnlockRequest | null);
-    } catch (err: any) {
-      toast.error(err?.message ?? t('locked_lease.toast.unlock_request_failed'));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.toast.unlock_request_failed'));
     } finally {
       setIsRequestingUnlock(false);
     }
@@ -386,8 +390,8 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success(t('locked_lease.toast.unlocked'));
       refetchLease();
-    } catch (err: any) {
-      toast.error(err?.message ?? t('locked_lease.toast.unlock_failed'));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.toast.unlock_failed'));
     }
   }, [lease, pendingUnlockRequest, refetchLease, t]);
 
@@ -402,8 +406,8 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       toast.success(t('locked_lease.toast.unlock_denied'));
       setPendingUnlockRequest(null);
       refetchLease();
-    } catch (err: any) {
-      toast.error(err?.message ?? t('locked_lease.toast.unlock_deny_failed'));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.toast.unlock_deny_failed'));
     }
   }, [pendingUnlockRequest, refetchLease, t]);
 
@@ -723,6 +727,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
                   leaseId={lease.id}
                   workspaceId={lease.workspace_id}
                   canEdit={canEditAsc842}
+                  onDirtyChange={onAscDirtyChange}
                   discountRate={lease.discount_rate ?? null}
                   baseTermMonths={lease.term_months ?? null}
                   lifecycleStatus={lease.lifecycle_status ?? 'active'}

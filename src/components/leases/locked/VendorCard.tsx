@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { mapSupabaseError } from '@/lib/userFacingError';
 
 import { SectionCard } from './SectionCard';
 import { LabelValueGrid } from './LabelValueGrid';
@@ -73,9 +74,8 @@ export function VendorCard({ leaseId, initial, onSaved, readOnly = false }: Prop
       toast.success(t('locked_lease.vendor.saved'));
       onSaved?.(draft);
       setEditing(false);
-    } catch (err: any) {
-      console.error('Vendor update error:', err);
-      toast.error(err?.message ?? t('locked_lease.vendor.save_failed'));
+    } catch (err) {
+      toast.error(mapSupabaseError(err, t, 'locked_lease.vendor.save_failed', 'Vendor update error:'));
     } finally {
       setSaving(false);
     }

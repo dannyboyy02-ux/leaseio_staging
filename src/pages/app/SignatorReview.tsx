@@ -18,7 +18,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { format } from 'date-fns';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -54,7 +53,7 @@ import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
 import { documentTypeLabel } from '@/lib/leaseDocuments';
 
 const ATTESTATION_MIN_CHARS = 30;
@@ -102,15 +101,6 @@ interface DocRow {
   filename: string;
   uploaded_at: string;
   is_current_latest: boolean;
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return '—';
-  try {
-    return format(new Date(value), 'MMM d, yyyy');
-  } catch {
-    return value;
-  }
 }
 
 export default function SignatorReview() {
@@ -518,7 +508,7 @@ export default function SignatorReview() {
                               }),
                               iteration: d.iteration_number,
                               version: d.version_number,
-                              date: formatDate(d.uploaded_at),
+                              date: formatLocalizedDate(d.uploaded_at, language),
                             })}
                           </span>
                         </li>
@@ -569,8 +559,8 @@ export default function SignatorReview() {
                   value={formatCurrency(lease.calc_pv_liability)}
                 />
                 <Separator />
-                <SummaryRow label={t('leases.start')} value={formatDate(lease.lease_start)} />
-                <SummaryRow label={t('leases.end')} value={formatDate(lease.lease_end)} />
+                <SummaryRow label={t('leases.start')} value={formatLocalizedDate(lease.lease_start, language)} />
+                <SummaryRow label={t('leases.end')} value={formatLocalizedDate(lease.lease_end, language)} />
               </CardContent>
             </Card>
 

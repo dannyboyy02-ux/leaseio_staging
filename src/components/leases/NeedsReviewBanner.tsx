@@ -89,8 +89,11 @@ export function NeedsReviewBanner({
             </li>
           ))}
           {lowConfidenceFields.map((field) => {
-            // Match the per-field ConfidenceBadge: red (low) below 70%,
-            // amber (medium) for 70–80%. Keeps banner + badge in one voice.
+            // Every field this list surfaces sits below the 80% flag cutoff,
+            // and the shared confidenceTier bands now align with that cutoff
+            // (#177a) — so each listed field is tier 'low' (red). The amber
+            // branch is deliberately retained: if the bands ever shift again,
+            // the banner follows automatically instead of hardcoding red.
             const isLow = field.tier === 'low';
             const Icon = isLow ? XCircle : AlertTriangle;
             return (

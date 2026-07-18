@@ -5,9 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, CheckCircle, XCircle, Check, X } from "lucide-react";
+import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { toast } from "sonner";
+import { isPasswordValid } from '@/lib/passwordPolicy';
+import { PasswordRequirementsChecklist } from '@/components/auth/PasswordRequirementsChecklist';
 
 type Status = "loading" | "create_password" | "needs_login" | "wrong_account" | "accepting" | "success" | "error";
 
@@ -19,18 +21,6 @@ interface InviteInfo {
   role: string;
   user_exists: boolean;
 }
-
-interface PasswordRequirement {
-  labelKey: string;
-  met: (pw: string) => boolean;
-}
-
-const PASSWORD_REQUIREMENTS: PasswordRequirement[] = [
-  { labelKey: "accept_invite.password_req.min_length", met: (pw) => pw.length >= 8 },
-  { labelKey: "accept_invite.password_req.uppercase",  met: (pw) => /[A-Z]/.test(pw) },
-  { labelKey: "accept_invite.password_req.lowercase",  met: (pw) => /[a-z]/.test(pw) },
-  { labelKey: "accept_invite.password_req.number",     met: (pw) => /[0-9]/.test(pw) },
-];
 
 export default function AcceptInvite() {
   const [searchParams] = useSearchParams();
@@ -48,7 +38,7 @@ export default function AcceptInvite() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting]       = useState(false);
 
-  const passwordRequirementsMet = PASSWORD_REQUIREMENTS.every((r) => r.met(password));
+  const passwordRequirementsMet = isPasswordValid(password);
   const passwordsMatch          = password === confirmPassword && confirmPassword.length > 0;
   const canSubmitPassword       = passwordRequirementsMet && passwordsMatch && !isSubmitting;
 
@@ -226,19 +216,7 @@ export default function AcceptInvite() {
             </div>
 
             {/* Live requirements checklist */}
-            <ul className="space-y-1 text-xs px-1">
-              {PASSWORD_REQUIREMENTS.map((req) => {
-                const met = req.met(password);
-                return (
-                  <li key={req.labelKey} className={`flex items-center gap-1.5 ${met ? 'text-green-600' : 'text-muted-foreground'}`}>
-                    {met
-                      ? <Check className="h-3 w-3 shrink-0" />
-                      : <X className="h-3 w-3 shrink-0" />}
-                    {t(req.labelKey)}
-                  </li>
-                );
-              })}
-            </ul>
+            <PasswordRequirementsChecklist password={password} />
 
             <div className="space-y-1.5">
               <Label htmlFor="confirm-password">{t('auth.confirm_password')}</Label>

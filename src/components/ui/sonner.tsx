@@ -10,6 +10,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Stack toasts above the Leo assistant FAB (fixed bottom-6 right-6) so
+      // undo actions are never occluded — global fix for every sonner toast.
+      offset={88}
       toastOptions={{
         classNames: {
           toast:

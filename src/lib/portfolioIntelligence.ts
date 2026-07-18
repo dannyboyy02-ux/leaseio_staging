@@ -278,7 +278,7 @@ export function costByDepartment(
 }
 
 // ---------------------------------------------------------------------------
-// Cost per sqft by Location (vs the portfolio's OWN blended average)
+// Cost per sqft by Lease (labelled by property; vs the portfolio's OWN blended average)
 // ---------------------------------------------------------------------------
 
 export interface LocationRate {

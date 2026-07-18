@@ -19,6 +19,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { formatLocalizedDate, formatLocalizedDateTime } from '@/lib/dateFormatters';
+import { mapSupabaseError } from '@/lib/userFacingError';
 import { useGenerateLeaseReport } from '@/hooks/useGenerateLeaseReport';
 
 interface LeaseReportRow {
@@ -56,8 +59,19 @@ function statusBadgeVariant(
   }
 }
 
+// Mirrors DISCOUNT_METHODS in ReportSettingsCard.tsx — the writer of
+// workspaces.report_default_discount_method, which generate-lease-report
+// snapshots into lease_reports.discount_rate_method_at_gen.
+const DISCOUNT_METHOD_LABEL_KEYS: Record<string, string> = {
+  workspace_default: 'workspace.report_settings.method_workspace_default',
+  risk_free_rate: 'workspace.report_settings.method_risk_free',
+  incremental_borrowing_rate: 'workspace.report_settings.method_ibr',
+  custom: 'workspace.report_settings.method_custom',
+};
+
 export default function LeaseReportDetail() {
   const { t } = useAppTranslation();
+  const { language } = useLanguage();
   const { leaseId, reportId } = useParams<{ leaseId: string; reportId: string }>();
   const navigate = useNavigate();
   const [report, setReport] = useState<LeaseReportRow | null>(null);
@@ -86,20 +100,17 @@ export default function LeaseReportDetail() {
           .maybeSingle();
         if (cancelled) return;
         if (error) {
-          // eslint-disable-next-line no-console
-          console.error('[LeaseReportDetail] load error', error);
-          setLoadError(error.message);
-          toast.error(error.message);
+          const msg = mapSupabaseError(error, t, 'reports.load_failed', '[LeaseReportDetail] load error');
+          setLoadError(msg);
+          toast.error(msg);
           setLoading(false);
           return;
         }
         setReport(data as LeaseReportRow | null);
         setLoading(false);
-      } catch (e: any) {
+      } catch (e) {
         if (cancelled) return;
-        // eslint-disable-next-line no-console
-        console.error('[LeaseReportDetail] load threw', e);
-        setLoadError(e?.message ?? String(e));
+        setLoadError(mapSupabaseError(e, t, 'reports.load_failed', '[LeaseReportDetail] load threw'));
         setLoading(false);
       }
     }
@@ -126,8 +137,8 @@ export default function LeaseReportDetail() {
   }, [report]);
 
   const generatedAtDisplay = useMemo(
-    () => (report ? new Date(report.generated_at).toLocaleString() : ''),
-    [report],
+    () => (report ? formatLocalizedDateTime(report.generated_at, language) : ''),
+    [report, language],
   );
 
   async function handleDownload(path: string | null, kind: 'pdf' | 'json') {
@@ -155,8 +166,8 @@ export default function LeaseReportDetail() {
       const result = await regenerate(leaseId);
       toast.success(t('reports.new_report_generated'));
       navigate(`/app/leases/${leaseId}/reports/${result.reportId}`);
-    } catch (e: any) {
-      toast.error(e?.message ?? t('reports.regeneration_failed'));
+    } catch (e) {
+      toast.error(mapSupabaseError(e, t, 'reports.regeneration_failed'));
     }
   }
 
@@ -178,7 +189,7 @@ export default function LeaseReportDetail() {
             {t('reports.report_not_found_desc')}
           </p>
           {loadError && (
-            <p className="text-xs text-red-700 font-mono">
+            <p className="text-xs text-red-700">
               {loadError}
             </p>
           )}
@@ -196,6 +207,13 @@ export default function LeaseReportDetail() {
   const isProcessing =
     report.status === 'generating' || report.status === 'pending' || !report.pdf_storage_path;
 
+  // Localize the snapshotted discount-method token; unknown/free-text tokens
+  // fall through untranslated (repo convention for custom/user data).
+  const discountMethodToken = report.discount_rate_method_at_gen ?? 'workspace_default';
+  const discountMethodLabel = DISCOUNT_METHOD_LABEL_KEYS[discountMethodToken]
+    ? t(DISCOUNT_METHOD_LABEL_KEYS[discountMethodToken])
+    : discountMethodToken;
+
   return (
     <AppLayout>
       <AppHeader
@@ -210,7 +228,7 @@ export default function LeaseReportDetail() {
             </Link>
           </Button>
           <div className="flex items-center gap-2">
-            <Badge variant={statusBadgeVariant(report.status)}>{report.status}</Badge>
+            <Badge variant={statusBadgeVariant(report.status)}>{t(`reports.status.${report.status}`, { defaultValue: report.status })}</Badge>
             <Button
               size="sm"
               variant="outline"
@@ -307,12 +325,12 @@ export default function LeaseReportDetail() {
             </p>
             <p>
               <span className="text-muted-foreground">{t('reports.discount_rate_method_label')}</span>{' '}
-              {report.discount_rate_method_at_gen ?? 'workspace_default'}
+              {discountMethodLabel}
             </p>
             {report.expires_at && (
               <p>
                 <span className="text-muted-foreground">{t('reports.expires_label')}</span>{' '}
-                {new Date(report.expires_at).toLocaleDateString()}
+                {formatLocalizedDate(report.expires_at, language)}
               </p>
             )}
             <p className="text-muted-foreground pt-2">

@@ -69,16 +69,24 @@ export function RentScheduleTable({
   };
   const currentPeriodId = getCurrentPeriodId();
 
-  const getNextIncrease = () => {
+  const getNextChange = () => {
     const sorted = [...rentSchedule].sort(
       (a, b) => parseToLocalDate(a.period_start).getTime() - parseToLocalDate(b.period_start).getTime()
     );
-    for (const p of sorted) {
-      if (parseToLocalDate(p.period_start) > today) return { date: p.period_start, amount: p.monthly_amount };
+    for (let i = 0; i < sorted.length; i++) {
+      if (parseToLocalDate(sorted[i].period_start) > today) {
+        const nextAmount = sorted[i].monthly_amount;
+        const prevAmount = i > 0 ? sorted[i - 1].monthly_amount : currentMonthlyRent;
+        const direction: 'increase' | 'decrease' | 'change' =
+          nextAmount != null && prevAmount != null && nextAmount !== prevAmount
+            ? (nextAmount > prevAmount ? 'increase' : 'decrease')
+            : 'change';
+        return { date: sorted[i].period_start, amount: nextAmount, direction };
+      }
     }
     return null;
   };
-  const nextIncrease = getNextIncrease();
+  const nextChange = getNextChange();
 
   const startEdit = (period: RentScheduleEntry) => {
     setEditingId(period.id);
@@ -184,12 +192,20 @@ export function RentScheduleTable({
               {rentEscalationType || t('rent_schedule.not_specified')}
             </p>
           </div>
-          {nextIncrease && (
+          {nextChange && (
             <div className="bg-yellow-500/5 rounded-lg p-4 border border-yellow-500/20">
-              <p className="text-sm text-muted-foreground">{t('rent_schedule.next_increase')}</p>
-              <p className="text-lg font-medium">{formatDate(nextIncrease.date)}</p>
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  nextChange.direction === 'increase'
+                    ? 'rent_schedule.next_increase'
+                    : nextChange.direction === 'decrease'
+                      ? 'rent_schedule.next_decrease'
+                      : 'rent_schedule.next_change'
+                )}
+              </p>
+              <p className="text-lg font-medium">{formatDate(nextChange.date)}</p>
               <p className="text-sm text-yellow-600">
-                → {formatCurrency(nextIncrease.amount)}/{t('common.per_month_short')}
+                → {formatCurrency(nextChange.amount)}/{t('common.per_month_short')}
               </p>
             </div>
           )}

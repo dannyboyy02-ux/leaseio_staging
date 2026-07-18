@@ -195,8 +195,9 @@ export default function FirmBilling() {
           </Card>
         )}
 
-        {/* Billing summary mode — only meaningful once a firm subscription exists
-            (it controls how the invoice is itemized). Hidden until then (#105). */}
+        {/* Billing summary mode — stores the firm's itemization preference (echoed
+            into the billing audit log); actual per-workspace invoice line-items are
+            the #105 follow-on. Hidden until a subscription exists. */}
         {hasSubscription ? (
           <Card className="p-5 space-y-3">
             <div className="flex items-center justify-between">

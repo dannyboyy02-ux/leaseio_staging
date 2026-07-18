@@ -41,6 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { mapSupabaseError } from '@/lib/userFacingError';
 
 interface RiskTemplate {
   id: string;
@@ -257,9 +258,9 @@ export function AddRiskDialog({
       toast.success(t('leases.risk.added', { title: title.trim() }));
       onRiskAdded();
       onOpenChange(false);
-    } catch (err: any) {
-      console.error('[AddRiskDialog] save failed:', err);
-      toast.error(t('leases.risk.add_failed', { message: err?.message ?? t('leases.risk.unknown_error') }));
+    } catch (err) {
+      // #173: raw driver/trigger text never reaches the UI (helper logs it).
+      toast.error(mapSupabaseError(err, t, 'leases.risk.add_failed', '[AddRiskDialog] save failed:'));
     } finally {
       setSaving(false);
     }

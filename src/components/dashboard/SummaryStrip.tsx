@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { ArrowUpRight, Check } from 'lucide-react';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -42,14 +43,39 @@ export function SummaryStrip() {
   const expiringIds90Ref = useRef<string[]>([]);
   const expiringIds120Ref = useRef<string[]>([]);
 
-  const handleDismiss = (bucket: '90' | '120') => {
+  // Combined "mark as seen" for BOTH expiry buckets (90 + 91-120): snapshots
+  // the raw localStorage values before merging so the sonner undo action can
+  // restore the exact pre-dismiss state (same undo pattern as Leases.tsx).
+  const handleDismissExpiring = () => {
     if (!workspace?.id) return;
-    const idsRef = bucket === '90' ? expiringIds90Ref : expiringIds120Ref;
-    const key = `leaseio_dismissed_expiry${bucket}_${workspace.id}`;
-    const existing = new Set<string>(JSON.parse(localStorage.getItem(key) || '[]'));
-    idsRef.current.forEach((id) => existing.add(id));
-    localStorage.setItem(key, JSON.stringify([...existing]));
+    const key90 = `leaseio_dismissed_expiry90_${workspace.id}`;
+    const key120 = `leaseio_dismissed_expiry120_${workspace.id}`;
+    const prev90 = localStorage.getItem(key90);
+    const prev120 = localStorage.getItem(key120);
+    const set90 = new Set<string>(JSON.parse(prev90 || '[]'));
+    const set120 = new Set<string>(JSON.parse(prev120 || '[]'));
+    const added = [
+      ...expiringIds90Ref.current.filter((id) => !set90.has(id)),
+      ...expiringIds120Ref.current.filter((id) => !set120.has(id)),
+    ];
+    if (added.length === 0) return; // double-click guard: nothing new to dismiss, keep the first toast's undo valid
+    expiringIds90Ref.current.forEach((id) => set90.add(id));
+    expiringIds120Ref.current.forEach((id) => set120.add(id));
+    localStorage.setItem(key90, JSON.stringify([...set90]));
+    localStorage.setItem(key120, JSON.stringify([...set120]));
     setRefreshKey((k) => k + 1);
+    toast(t('dashboard.marked_seen_toast'), {
+      id: 'expiring-seen',
+      description: t('dashboard.marked_seen_scope'),
+      action: {
+        label: t('common.undo'),
+        onClick: () => {
+          if (prev90 === null) localStorage.removeItem(key90); else localStorage.setItem(key90, prev90);
+          if (prev120 === null) localStorage.removeItem(key120); else localStorage.setItem(key120, prev120);
+          setRefreshKey((k) => k + 1);
+        },
+      },
+    });
   };
 
   useEffect(() => {
@@ -188,10 +214,7 @@ export function SummaryStrip() {
           accent: displayExpiring90Count > 0 ? 'red' : displayExpiringTotal > 0 ? 'orange' : 'default',
           href: '/app/leases?status=active&expiring=120',
           disabled: displayExpiringTotal === 0,
-          onDismiss:
-            displayExpiringTotal > 0
-              ? () => { if (displayExpiring90Count > 0) handleDismiss('90'); if (displayExpiring120Count > 0) handleDismiss('120'); }
-              : undefined,
+          onDismiss: displayExpiringTotal > 0 ? handleDismissExpiring : undefined,
         },
       ]);
 

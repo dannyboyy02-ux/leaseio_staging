@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getFieldConfidence, confidenceTier } from '../extractedFieldHelpers';
+import { LOW_CONFIDENCE_THRESHOLD } from '@/types/workflow';
 
 // Regression coverage for the B1 fix: getFieldConfidence is the single source
 // of truth for per-field extraction confidence — the field badges, the
@@ -67,8 +68,10 @@ describe('getFieldConfidence — null cases', () => {
   });
 });
 
-// confidenceTier is the single banding used by BOTH the ConfidenceBadge and the
-// NeedsReviewBanner, so their visual severity (red/amber/green) can't drift.
+// confidenceTier is the single banding used by the ConfidenceBadge, the field
+// BORDER (getFieldBorderClass derives from it), and the NeedsReviewBanner, so
+// their visual severity (red/amber/green) can't drift. #177a aligned the low
+// boundary with the review-flag cutoff (LOW_CONFIDENCE_THRESHOLD = 80).
 describe('confidenceTier — shared severity bands', () => {
   it('bands high (>= 0.90)', () => {
     expect(confidenceTier(0.90)).toBe('high');
@@ -76,15 +79,26 @@ describe('confidenceTier — shared severity bands', () => {
     expect(confidenceTier(1)).toBe('high');
   });
 
-  it('bands medium (0.70 <= x < 0.90)', () => {
-    expect(confidenceTier(0.70)).toBe('medium');
+  it('bands medium (0.80 <= x < 0.90)', () => {
     expect(confidenceTier(0.80)).toBe('medium');
+    expect(confidenceTier(0.85)).toBe('medium');
     expect(confidenceTier(0.899)).toBe('medium');
   });
 
-  it('bands low (< 0.70)', () => {
+  it('bands low (< 0.80)', () => {
+    expect(confidenceTier(0.79)).toBe('low');
+    expect(confidenceTier(0.70)).toBe('low');
     expect(confidenceTier(0.699)).toBe('low');
     expect(confidenceTier(0.55)).toBe('low');
     expect(confidenceTier(0)).toBe('low');
+  });
+
+  it('tier-low boundary equals the review-flag cutoff (red = flagged, exactly)', () => {
+    // LeaseReview flags fields with conf < LOW_CONFIDENCE_THRESHOLD / 100.
+    // The tier bands must agree: at the cutoff → medium (not flagged),
+    // just below → low (flagged). Pinned here instead of importing the
+    // constant into extractedFieldHelpers (kept self-contained).
+    expect(confidenceTier(LOW_CONFIDENCE_THRESHOLD / 100)).toBe('medium');
+    expect(confidenceTier(LOW_CONFIDENCE_THRESHOLD / 100 - 0.001)).toBe('low');
   });
 });

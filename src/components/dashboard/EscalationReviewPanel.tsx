@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ interface EscalationLease {
   rent_escalation_type: string | null;
   escalation_rate: number | null;
   monthly_payment: number | null;
+  model_locked: boolean | null;
 }
 
 export function EscalationReviewPanel() {
@@ -30,6 +32,7 @@ export function EscalationReviewPanel() {
   const { workspace } = useApp();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   // Vault / cancellation-grace / soft-deleted workspaces are read-only — the
   // escalation edit would hit an RLS error, so hide the panel entirely.
   const isReadOnly = isWorkspaceReadOnly(workspace);
@@ -46,7 +49,7 @@ export function EscalationReviewPanel() {
       const { data, error } = await supabase
         .from('leases')
         .select(
-          'id, tenant_name, request_title, filename, escalation_type, rent_escalation_type, escalation_rate, monthly_payment'
+          'id, tenant_name, request_title, filename, escalation_type, rent_escalation_type, escalation_rate, monthly_payment, model_locked'
         )
         .eq('workspace_id', workspace!.id)
         .eq('needs_escalation_review', true)
@@ -165,15 +168,29 @@ export function EscalationReviewPanel() {
                     </p>
                   )}
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 text-xs"
-                  onClick={() => openEdit(lease)}
-                >
-                  {t('dashboard.edit_escalation')}
-                  <ChevronRight className="h-3 w-3 ml-1" />
-                </Button>
+                {lease.model_locked ? (
+                  // Locked: edits are trigger-rejected — route to the
+                  // workbench's unlock-request flow instead (#178).
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 text-xs"
+                    onClick={() => navigate(`/app/leases/${lease.id}`)}
+                  >
+                    {t('notifications.view_lease')}
+                    <ChevronRight className="h-3 w-3 ml-1" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 text-xs"
+                    onClick={() => openEdit(lease)}
+                  >
+                    {t('dashboard.edit_escalation')}
+                    <ChevronRight className="h-3 w-3 ml-1" />
+                  </Button>
+                )}
               </div>
             ))}
           </div>

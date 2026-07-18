@@ -51,6 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useIsWideViewport } from "@/hooks/use-wide-viewport";
+import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -209,6 +210,14 @@ function renderWarning(w: unknown): string {
   try { return JSON.stringify(w); } catch { return String(w); }
 }
 
+// Same-lease alias routes /app/leases/:id ↔ /app/leases/:id/review render the
+// same keyed component (no state loss) — the unsaved-changes guard must never
+// prompt when moving between them. The /\/review$/ anchor cannot match
+// /financial-review or /signator-review (hyphen, not slash), and navigating to
+// THOSE unmounts the workbench, so blocking there is correct.
+const isSameLeaseSurface = (a: string, b: string) =>
+  a.replace(/\/review$/, '') === b.replace(/\/review$/, '');
+
 export default function LeaseReview() {
   const { leaseId } = useParams<{ leaseId: string }>();
   const navigate = useNavigate();
@@ -291,6 +300,10 @@ export default function LeaseReview() {
 
   // Active tab in the review panel
   const [activeTab, setActiveTab] = useState('general');
+  // ASC 842 tab's unsaved-state signal, lifted here via onDirtyChange /
+  // onAscDirtyChange — the router supports ONE active blocker, so the page
+  // owns the single unsaved-changes guard and children report into it.
+  const [ascDirty, setAscDirty] = useState(false);
   // ASC 842 mounts on FIRST activation and then stays mounted (forceMount)
   // — unsaved state survives tab switches without paying its queries on
   // every lease view that never opens the tab.
@@ -377,8 +390,8 @@ export default function LeaseReview() {
 
   // Dirty signal — true when in-memory form differs from the last
   // persisted snapshot. Drives (a) the visible "Save draft" secondary
-  // button so reviewers can't lose work to a navigate-away, and (b) a
-  // beforeunload guard for the same reason.
+  // button so reviewers can't lose work to a navigate-away, and (b) the
+  // page's unsaved-changes guard (SPA navigation + beforeunload) below.
   // savedAt bumps on each successful handleSync; included in deps so
   // the memo re-evaluates after originalValues is repointed.
   const isDirty = useMemo(() => {
@@ -388,23 +401,22 @@ export default function LeaseReview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, savedAt]);
 
-  // Warn the reviewer before navigating away with unsaved edits. The
-  // visible "Save draft" button is the primary mitigation; this guard
-  // is belt-and-suspenders for browser back/close/reload.
-  useEffect(() => {
-    if (!isDirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [isDirty]);
+  // One guard instance covers this form AND the ASC 842 tab — the router
+  // supports a single active blocker, so the tab lifts its dirty signal here.
+  // Also owns the beforeunload twin (the old hand-rolled effect is folded in).
+  useUnsavedChangesGuard(isDirty || ascDirty, { isSameSurface: isSameLeaseSurface });
 
-  // Status strip: jump-to-first-flagged-field action. Maps the field's
-  // section to the tab that surfaces it, then switches there. (DOM-level
-  // scroll-to-field can come later — the tab switch alone covers the
-  // most common case where the user just needs to find the section.)
+  // Status strip: jump-to-first-flagged-field action. Switches to the tab
+  // that surfaces the field's section (module-level SECTION_TO_TAB), then
+  // rAF-polls until Radix mounts the tab content (inactive TabsContent is
+  // unmounted — same pattern + cap as handleSectionAdvance), scrolls the
+  // field row into view, and focuses its control. Focusing an Input/Textarea
+  // fires SectionCard's onFocus → marks the field interacted + locates it in
+  // the PDF; the explicit setInteractedLowConfFields covers controls that
+  // wire no onFocus (the asset-type Select), so repeated clicks step through
+  // the remaining flagged fields and the header count drains to reveal
+  // Pending Review / Ready to Approve. Marking lives INSIDE the found-branch
+  // only — a failed jump never silently consumes a flag.
   const handleJumpToFirstFlagged = useCallback(() => {
     const firstUnreviewed = lowConfidenceFields.find((f) => !interactedLowConfFields.has(f));
     if (!firstUnreviewed) return;
@@ -413,16 +425,26 @@ export default function LeaseReview() {
       section.fields.forEach((field) => { sectionForField[field.id] = sectionKey; });
     });
     const sectionKey = sectionForField[firstUnreviewed];
-    const sectionToTab: Record<SectionKey, string> = {
-      parties: 'general',
-      property: 'general',
-      dates: 'general',
-      vendor: 'vendor',
-      rent: 'rent',
-      options: 'options',
-    };
-    const targetTab = sectionKey ? sectionToTab[sectionKey] : 'general';
+    const targetTab = sectionKey ? SECTION_TO_TAB[sectionKey] : 'general';
     if (targetTab) setActiveTab(targetTab);
+    const selector = `[data-field-id="${firstUnreviewed}"]`;
+    let attempts = 0;
+    const tryJump = () => {
+      const el = document.querySelector(selector);
+      if (el) {
+        (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // 'input, textarea, [role="combobox"]' deliberately excludes 'button'
+        // — the per-field "View in document" button precedes the control in
+        // DOM order; this selector lands on the real field control.
+        el.querySelector<HTMLElement>('input, textarea, [role="combobox"]')?.focus({ preventScroll: true });
+        setInteractedLowConfFields((prev) => new Set([...prev, firstUnreviewed]));
+        return;
+      }
+      if (attempts++ < 10) {
+        requestAnimationFrame(tryJump);
+      }
+    };
+    requestAnimationFrame(tryJump);
   }, [lowConfidenceFields, interactedLowConfFields]);
 
   // P1-1: for lifecycle states whose PRIMARY action lives in the Documents tab
@@ -2803,7 +2825,7 @@ export default function LeaseReview() {
   // (sectioned cards, vendor stays editable). All other states fall through
   // to the existing workbench below.
   if (lease?.model_locked === true && lease?.lifecycle_status === 'active') {
-    return <LockedLeaseDetail lease={lease} refetchLease={refetchLease} readOnly={isReadOnly} />;
+    return <LockedLeaseDetail lease={lease} refetchLease={refetchLease} readOnly={isReadOnly} onAscDirtyChange={setAscDirty} />;
   }
 
   // Derive a single primary action for the header. This is the
@@ -3729,6 +3751,7 @@ export default function LeaseReview() {
                           <Asc842InputsTab
                             leaseId={lease.id}
                             workspaceId={lease.workspace_id}
+                            onDirtyChange={setAscDirty}
                             canEdit={
                               !isReadOnly && (
                                 userRole === 'admin' ||

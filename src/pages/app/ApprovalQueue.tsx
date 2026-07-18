@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { localizedAssetTypeName } from '@/lib/assetTypeLabels';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import {
   CheckCircle,
   XCircle,
@@ -89,7 +89,7 @@ function LeaseQueueCard({
   onReject: (lease: QueueLease) => void;
   onView: (lease: QueueLease) => void;
 }) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   // Phase 3: queue-specific labels preserved for both vocabularies via
   // isEquivalent. The bespoke "Awaiting X Review" strings are queue UX —
   // localizedStatusLabel('submitted') would lose that context.
@@ -169,7 +169,7 @@ function LeaseQueueCard({
             </span>
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {format(new Date(lease.uploaded_at), 'MMM d, yyyy')}
+              {formatLocalizedDate(lease.uploaded_at, language)}
             </span>
           </div>
 
@@ -303,7 +303,7 @@ function ChainStepCard({
   onView: (leaseId: string) => void;
   onActed: () => void;
 }) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const navigate = useNavigate();
   const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'send_back' | null>(null);
   const [comment, setComment] = useState('');
@@ -397,7 +397,7 @@ function ChainStepCard({
                 {t('approvals.queue.total')} <strong className="text-foreground">{fmt(step.calc_total_commitment)}</strong>
               </span>
             )}
-            <span>{t('approvals.queue.submitted_on', { date: format(new Date(step.created_at), 'MMM d, yyyy') })}</span>
+            <span>{t('approvals.queue.submitted_on', { date: formatLocalizedDate(step.created_at, language) })}</span>
           </div>
 
           <div className="flex flex-wrap gap-2 pt-2 border-t">
@@ -568,7 +568,7 @@ interface ChangeSetForReview {
 export default function ApprovalQueue() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const { user, workspace, userFunctionalRoles, userRole } = useApp();
 
   const isManagerApprover = userFunctionalRoles.includes('manager_approver');
@@ -1281,7 +1281,7 @@ export default function ApprovalQueue() {
             <div className="space-y-2">
               {executionOwnerLeases.map((l) => {
                 const dueFmt = l.counter_signature_due_date
-                  ? format(new Date(l.counter_signature_due_date), 'MMM d, yyyy')
+                  ? formatLocalizedDate(l.counter_signature_due_date, language)
                   : t('approvals.queue.no_due_date');
                 return (
                   <Card
@@ -1363,7 +1363,7 @@ export default function ApprovalQueue() {
                         {d.stage === 'signator'
                           ? t('approvals.queue.final_approval')
                           : t('approvals.queue.initial_approval')} ·{' '}
-                        {format(new Date(d.delegatedAt), 'MMM d, yyyy')}
+                        {formatLocalizedDate(d.delegatedAt, language)}
                       </p>
                     </button>
                     <Button
@@ -1510,7 +1510,7 @@ export default function ApprovalQueue() {
                                       {req.leaseName}
                                     </button>
                                     <p className="text-xs text-muted-foreground mt-0.5">
-                                      {t('approvals.queue.requested_by', { name: req.requesterName })} · {format(new Date(req.created_at), 'MMM d, yyyy')}
+                                      {t('approvals.queue.requested_by', { name: req.requesterName })} · {formatLocalizedDate(req.created_at, language)}
                                     </p>
                                   </div>
                                 </div>
@@ -1563,7 +1563,7 @@ export default function ApprovalQueue() {
                                     </button>
                                     <p className="text-xs text-muted-foreground mt-0.5">
                                       {t('approvals.queue.submitted_by_name', { name: cs.submitterName })}
-                                      {cs.submitted_at && <> · {format(new Date(cs.submitted_at), 'MMM d, yyyy')}</>}
+                                      {cs.submitted_at && <> · {formatLocalizedDate(cs.submitted_at, language)}</>}
                                     </p>
                                   </div>
                                   <Button

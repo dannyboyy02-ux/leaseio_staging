@@ -74,13 +74,18 @@ export function getFieldConfidence(
 }
 
 /**
- * Bands a 0–1 confidence into the shared tiers used by BOTH the per-field
- * ConfidenceBadge and the NeedsReviewBanner, so their visual severity can't
- * drift apart. Thresholds: high ≥ 0.90, medium ≥ 0.70, else low.
+ * Bands a 0–1 confidence into the single set of tiers used by the per-field
+ * ConfidenceBadge, the field BORDER (LeaseReviewSections.getFieldBorderClass
+ * derives from this), and the NeedsReviewBanner — one banding, so their
+ * visual severity can't drift apart. Thresholds: high ≥ 0.90, medium ≥ 0.80,
+ * else low. The low boundary deliberately equals the review-flag cutoff
+ * (LOW_CONFIDENCE_THRESHOLD = 80 in @/types/workflow; the equality is pinned
+ * by test rather than an import — that module is otherwise UI-typed) so a
+ * red field is exactly a flagged field.
  */
 export function confidenceTier(confidence: number): 'high' | 'medium' | 'low' {
   if (confidence >= 0.90) return 'high';
-  if (confidence >= 0.70) return 'medium';
+  if (confidence >= 0.80) return 'medium';
   return 'low';
 }
 
