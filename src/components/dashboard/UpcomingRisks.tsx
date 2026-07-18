@@ -48,7 +48,7 @@ export function UpcomingRisks() {
       const { data: leases } = await supabase
         .from('leases')
         // PostgREST type narrowing requires a literal string — see note in useNeedsAction.
-        .select('id, request_title, filename, lease_end, executed_expiry_date, renewal_options, escalation_type, rent_escalation_type, executed_monthly_payment, current_monthly_rent, monthly_payment, rent_schedules(period_start, period_end, monthly_amount)')
+        .select('id, request_title, filename, lease_end, executed_expiry_date, renewal_options, escalation_type, rent_escalation_type, needs_escalation_review, executed_monthly_payment, current_monthly_rent, monthly_payment, rent_schedules(period_start, period_end, monthly_amount)')
         .eq('workspace_id', workspace.id)
         // Phase 3: include chain executed equivalent (active is identical).
         .in('lifecycle_status', ['active', 'executed', 'fully_executed']);
@@ -78,9 +78,14 @@ export function UpcomingRisks() {
 
         const escalationType = (lease.escalation_type ?? '').toLowerCase();
         const rentEscalationType = (lease.rent_escalation_type ?? '').toLowerCase();
+        // Once a human has confirmed the escalation (needs_escalation_review
+        // false), trust the normalized escalation_type and ignore the raw
+        // extracted hint — otherwise a lease resolved to "None" keeps showing
+        // as CPI because its raw clause still reads "cpi".
         const isCpi =
           ['index', 'cpi'].includes(escalationType) ||
-          ['index', 'cpi'].includes(rentEscalationType);
+          (lease.needs_escalation_review === true &&
+            ['index', 'cpi'].includes(rentEscalationType));
 
         const annualRent = getMonthlyRent(lease as any) * 12;
 

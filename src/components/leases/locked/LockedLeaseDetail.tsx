@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { format } from 'date-fns';
 import { parseToLocalDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 import { parseSingleCurrencyAmount } from '@/lib/securityDeposit';
+import { localizedAssetTypeName } from '@/lib/assetTypeLabels';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -437,7 +438,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false }: Pro
       { label: t('locked_lease.property.city'), value: city, aiExtracted: cityFromAi },
       { label: t('locked_lease.property.state'), value: state, aiExtracted: stateFromAi },
       { label: t('locked_lease.property.zip'), value: zip, aiExtracted: zipFromAi },
-      { label: t('locked_lease.property.asset_type'), value: lease.asset_type },
+      { label: t('locked_lease.property.asset_type'), value: lease.asset_type ? localizedAssetTypeName(lease.asset_type) : lease.asset_type },
       { label: t('locked_lease.property.requesting_department'), value: lease.requesting_department },
     ];
   }, [lease, extracted, t]);

@@ -240,7 +240,6 @@ export function MembersPanel({ workspaceId, ownerId, canManage = true }: Members
                           currentRole={member.role as WorkspaceRole}
                           onRoleChanged={() => refetchMembers()}
                           workspaceId={workspaceId}
-                          targetUserId={member.user_id}
                         />
                         {canManage && (
                           <Button

@@ -347,9 +347,17 @@ export function Asc842InputsTab({
   const classification: DerivedClassification = deriveClassification(classificationTests);
 
   // Cross-check the test-derived classification against the recorded value the
-  // disclosure report actually prints — warn (never silently disagree) if they
-  // diverge (e.g. tab says Finance, report prints the default 'pending').
-  const classificationMismatch = classificationMismatches(classification, storedClassification);
+  // disclosure report actually prints. Two distinct cases:
+  //  - CONFLICT: recorded a *different concrete* class (recorded Operating,
+  //    tests derive Finance) — a genuine discrepancy; hard-gate the report.
+  //  - UNRECORDED: the lease just isn't classified yet ('pending'/null, the
+  //    common direct-upload default; classification is set at financial
+  //    approval) — informational only, don't block or contradict.
+  const derivedConcrete = classification === 'finance' || classification === 'operating';
+  const recordedPending = !storedClassification || storedClassification === 'pending';
+  const classificationConflict =
+    derivedConcrete && !recordedPending && classificationMismatches(classification, storedClassification);
+  const classificationUnrecorded = derivedConcrete && recordedPending;
   const classLabel = (c: string): string =>
     c === 'finance' ? t('leases.asc842.class_finance')
     : c === 'operating' ? t('leases.asc842.class_operating')
@@ -396,13 +404,14 @@ export function Asc842InputsTab({
       toast.message(t('leases.asc842.save_before_report'));
       return;
     }
-    // Warn before printing a report whose classification contradicts the tab.
-    if (classificationMismatch) {
+    // Hard-gate only a genuine conflict (recorded a different concrete class);
+    // an unclassified lease just prints "pending" honestly — no dialog.
+    if (classificationConflict) {
       setMismatchDialogOpen(true);
       return;
     }
     void runGenerate();
-  }, [dirty, classificationMismatch, runGenerate, t]);
+  }, [dirty, classificationConflict, runGenerate, t]);
 
   async function handleSave() {
     setSaving(true);
@@ -591,12 +600,16 @@ export function Asc842InputsTab({
             <p className="text-xs text-muted-foreground mt-3">{t('leases.asc842.readonly_note')}</p>
           )}
           {/* The report prints the recorded classification, not the test-derived
-              one — flag when they diverge (only once the report is generatable). */}
-          {reportAvailable && classificationMismatch && (
-            <p className="text-xs text-amber-700 dark:text-amber-500 mt-3 flex items-start gap-1.5">
+              one. A genuine conflict (recorded a different concrete class) is an
+              amber warning; an unclassified lease is a neutral heads-up. */}
+          {reportAvailable && classificationConflict && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-3 flex items-start gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
               {t('leases.asc842.class_mismatch_note', { recorded: classLabel(storedClassification ?? 'pending') })}
             </p>
+          )}
+          {reportAvailable && classificationUnrecorded && (
+            <p className="text-xs text-muted-foreground mt-3">{t('leases.asc842.class_unrecorded_note')}</p>
           )}
         </CardContent>
       </Card>

@@ -3258,8 +3258,10 @@ export default function LeaseReview() {
                       renders identically after a delete and users conclude
                       the action failed. Restore reuses the archive dialog. */}
                   {lease.archived && (
-                    <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 flex items-center justify-between gap-4 flex-wrap">
-                      <p className="text-sm text-destructive min-w-0">
+                    // Neutral, not destructive-red: archive is reversible (mirrors LockedHeader).
+                    <div className="rounded-lg border border-border bg-muted p-4 flex items-center justify-between gap-4 flex-wrap">
+                      <p className="text-sm text-muted-foreground min-w-0 flex items-center gap-2">
+                        <Archive className="h-4 w-4 shrink-0" />
                         {t('archive.deleted_banner')}
                       </p>
                       {!isReadOnly && (userRole === 'admin' || userRole === 'owner') && (

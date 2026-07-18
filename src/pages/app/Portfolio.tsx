@@ -442,7 +442,7 @@ export default function Portfolio() {
                 value={kpis.blendedCostPerSqft != null ? `$${kpis.blendedCostPerSqft.toFixed(2)}` : '—'}
                 sub={kpis.blendedCostPerSqft != null ? t('portfolio.kpi_per_sqft_yr') : t('portfolio.kpi_add_sqft')}
               />
-              <KpiTile label={t('portfolio.kpi_total_footprint')} value={kpis.totalSquareFootage.toLocaleString()} sub={t('portfolio.kpi_sqft_markets', { count: kpis.marketCount })} />
+              <KpiTile label={t('portfolio.kpi_total_footprint')} value={kpis.totalSquareFootage.toLocaleString()} title={kpis.totalSquareFootage.toLocaleString()} sub={t('portfolio.kpi_sqft_markets', { count: kpis.marketCount })} />
               <KpiTile label={t('portfolio.kpi_avg_term')} value={t('portfolio.years_value', { years: kpis.avgTermRemainingYears.toFixed(1) })} sub={t('portfolio.kpi_weighted_by_rent')} />
             </div>
 

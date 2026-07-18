@@ -47,14 +47,20 @@ serve(async (req) => {
     // Authorize owner OR admin (mirror send-invite).
     const { data: workspace } = await supabaseAdmin
       .from("workspaces").select("owner_id").eq("id", workspaceId).maybeSingle();
-    if (!workspace) return json({ ok: false, reason: "not_found", message: "Workspace not found" }, 404);
-    const ownerId = (workspace as { owner_id: string }).owner_id;
+    // Same 403 for "workspace not found" and "not owner/admin" so an
+    // authenticated caller can't use the response to enumerate which
+    // workspaces exist (avoid a not-found-vs-not-authorized oracle).
+    const ownerId = (workspace as { owner_id: string } | null)?.owner_id;
     const isOwner = ownerId === user.id;
-    if (!isOwner) {
-      const { data: membership } = await supabaseAdmin
-        .from("workspace_members").select("role")
-        .eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle();
-      if (membership?.role !== "admin")
+    if (!workspace || !isOwner) {
+      let authorized = false;
+      if (workspace && !isOwner) {
+        const { data: membership } = await supabaseAdmin
+          .from("workspace_members").select("role")
+          .eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle();
+        authorized = membership?.role === "admin";
+      }
+      if (!authorized)
         return json({ ok: false, reason: "not_authorized", message: "Only workspace owners or admins may manage members" }, 403);
     }
 
@@ -76,10 +82,13 @@ serve(async (req) => {
       const { error: updErr } = await supabaseAdmin
         .from("workspace_members").update({ role }).eq("id", memberId).eq("workspace_id", workspaceId);
       if (updErr) { console.error("[manage-workspace-member] update:", updErr.message); return json({ ok: false, reason: "write_failed" }, 400); }
-      await supabaseAdmin.from("workspace_activity_log").insert({
+      // Best-effort audit, but observe the failure — a silent audit gap on a
+      // permission change is exactly what we don't want.
+      const { error: auditErr } = await supabaseAdmin.from("workspace_activity_log").insert({
         workspace_id: workspaceId, user_id: user.id, event_type: "member_role_changed",
         details: { target_user_id: (target as { user_id: string }).user_id, role, previous_role: previousRole },
       });
+      if (auditErr) console.error("[manage-workspace-member] role-change audit insert failed:", auditErr.message);
       return json({ ok: true }, 200);
     }
 
@@ -88,14 +97,16 @@ serve(async (req) => {
     const { error: delErr } = await supabaseAdmin
       .from("workspace_members").delete().eq("id", memberId).eq("workspace_id", workspaceId);
     if (delErr) { console.error("[manage-workspace-member] delete:", delErr.message); return json({ ok: false, reason: "write_failed" }, 400); }
-    await supabaseAdmin.from("workspace_activity_log").insert({
+    const { error: auditErr } = await supabaseAdmin.from("workspace_activity_log").insert({
       workspace_id: workspaceId, user_id: user.id, event_type: "member_removed",
       details: { target_user_id: (target as { user_id: string }).user_id, previous_role: (target as { role: string }).role },
     });
+    if (auditErr) console.error("[manage-workspace-member] removal audit insert failed:", auditErr.message);
     return json({ ok: true }, 200);
   } catch (error) {
+    // Keep internal error detail in the logs only; don't echo it to the client.
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[manage-workspace-member] Error:", msg);
-    return json({ ok: false, reason: "unexpected", message: msg }, 500);
+    return json({ ok: false, reason: "unexpected" }, 500);
   }
 });

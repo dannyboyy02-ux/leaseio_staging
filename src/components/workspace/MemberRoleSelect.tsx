@@ -18,7 +18,6 @@ interface MemberRoleSelectProps {
   onRoleChanged: () => void;
   disabled?: boolean;
   workspaceId?: string;
-  targetUserId?: string;
 }
 
 export function MemberRoleSelect({

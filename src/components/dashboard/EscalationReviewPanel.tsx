@@ -86,13 +86,13 @@ export function EscalationReviewPanel() {
       const { data: updatedRows, error } = await supabase
         .from('leases')
         .update({
+          // NB: do NOT write rent_escalation_type — that column holds the raw
+          // extracted clause text (shown in the Rent Roll export + locked view
+          // as the audit source). The false CPI-risk signal is cleared at the
+          // reader instead: UpcomingRisks/UpcomingEvents ignore the raw hint
+          // once needs_escalation_review is false (a human has confirmed).
           escalation_type: escalationType,
           escalation_rate: escalationRate,
-          // Mirror the human-confirmed decision into the raw extraction column
-          // so the CPI/index fallback in risk detection (UpcomingRisks/
-          // UpcomingEvents) clears; 'index' stays a CPI signal, 'none'/'percent'
-          // no longer match.
-          rent_escalation_type: escalationType,
           needs_escalation_review: false,
         })
         .eq('id', editingLease.id)
