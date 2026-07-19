@@ -2345,10 +2345,10 @@
       "save_role": "No se pudo guardar ese cambio de rol; no se aplicó. Inténtelo de nuevo."
     },
     "approvers": {
-      "title": "Aprobadores predeterminados",
-      "desc": "La cadena de respaldo: Aprobación del Gerente y luego Aprobación Financiera. Solo dirige una solicitud de arrendamiento cuando ninguna Regla de Aprobación coincide con ella.",
-      "callout": "¿Quiere aprobadores distintos según el tipo de activo, el departamento o el tamaño de la operación? Eso es una Regla de Aprobación; las reglas siempre se ejecutan antes que esta cadena predeterminada.",
-      "setup_link": "Configurar Reglas de Aprobación →",
+      "title": "Aprobadores predeterminados: la red de seguridad de «Todo lo demás»",
+      "desc": "Cuando una solicitud de arrendamiento no coincide con ninguna de sus Reglas de aprobación, se enruta aquí: primero la Aprobación del gerente y luego la Aprobación financiera. Esta cadena aparece siempre como la última fila de su lista de Reglas de aprobación.",
+      "callout": "¿Desea aprobadores distintos según el tipo de activo, el departamento o el tamaño de la operación? Eso es una Regla de aprobación: las reglas siempre se evalúan antes que esta red de seguridad.",
+      "setup_link": "Ver sus Reglas de aprobación →",
       "load_error_title": "No se pudieron cargar las asignaciones de roles actuales.",
       "load_error_body": "La edición está pausada para que nada se sobrescriba; sus asignaciones guardadas están a salvo.",
       "step1": "Paso 1",
@@ -2403,7 +2403,8 @@
       "optional": "Opcional",
       "signpost_prefix": "¿Busca la tasa de descuento? Ahora está en",
       "signpost_link": "Configuración de informes",
-      "signpost_suffix": "en la página de Informes."
+      "signpost_suffix": "en la página de Informes.",
+      "approval_relationship_note": "Independiente de las Reglas de aprobación: este umbral evalúa el compromiso de efectivo total de la solicitud durante todo el plazo, mientras que las Reglas de aprobación se comparan con el costo anual. Ambos pueden aplicarse a la misma solicitud."
     },
     "countersig": {
       "title": "Plazo de Contrafirma",
@@ -3301,8 +3302,8 @@
     "step3_desc": "Configure alertas por email para fechas importantes",
     "step4_title": "Explore integraciones",
     "step4_desc": "Conecte con QuickBooks y otras herramientas",
-    "step3_approvers_title": "Configurar roles de aprobación",
-    "step3_approvers_desc": "Asigne aprobadores de gerencia y financieros en Espacios de trabajo → Miembros"
+    "step3_approvers_title": "Configure el enrutamiento de aprobaciones",
+    "step3_approvers_desc": "Añada una regla de aprobación o asigne aprobadores predeterminados en Configuración → Reglas de aprobación"
   },
   "onboarding_flow": {
     "workspace_name_required_title": "Se requiere nombre del espacio de trabajo",
@@ -3867,7 +3868,7 @@
     "advanced_title": "Configuración avanzada",
     "advanced_desc": "La mayoría de los administradores no necesita cambiar esto.",
     "priority_label": "Cuando dos reglas coinciden, ¿cuál gana?",
-    "priority_help": "El número más alto gana cuando varias reglas coinciden con la misma solicitud.",
+    "priority_help": "Los números más altos ganan cuando varias reglas coinciden. Si dos reglas coincidentes comparten la misma prioridad, gana la regla más antigua.",
     "sla_label": "SLA de aprobación (días)",
     "sla_help": "Los pasos pendientes durante más tiempo se marcan como “fuera de SLA” en la cola del aprobador. Déjelo en blanco para usar el valor predeterminado de 7 días.",
     "fallback_label": "Usar esta regla cuando ninguna otra coincida",
@@ -3911,7 +3912,7 @@
       "sod_on": "ACTIVADO — se requieren usuarios distintos",
       "sod_off": "DESACTIVADO — se permite el mismo usuario",
       "rules_title": "Reglas",
-      "rules_desc": "Las reglas se evalúan en orden de prioridad — gana la primera regla cuyas condiciones coincidan por completo con una nueva solicitud. Si ninguna coincide, se usa la regla de respaldo.",
+      "rules_desc": "Las reglas se evalúan en orden de prioridad: gana la primera regla cuyas condiciones coincidan por completo con una solicitud nueva. Cuando ninguna coincide, la solicitud va a los Aprobadores predeterminados que se muestran en la última fila.",
       "new_rule": "Nueva regla",
       "empty_title": "Aún no hay reglas de aprobación.",
       "empty_hint_prefix": "Haga clic en",
@@ -3921,7 +3922,38 @@
       "updated_on": "Actualizada {{date}}",
       "active": "Activa",
       "inactive": "Inactiva",
-      "duplicate": "Duplicar"
+      "duplicate": "Duplicar",
+      "everything_else_label": "Todo lo demás",
+      "everything_else_routes": "Las solicitudes que no coinciden con ninguna regla se envían a sus aprobadores predeterminados.",
+      "everything_else_manager": "Revisión del gerente: {{name}}",
+      "everything_else_financial": "Revisión financiera: {{name}}",
+      "everything_else_auto": "Aprobación automática — aún no hay reglas ni aprobadores predeterminados configurados.",
+      "no_defaults_warning_title": "Las solicitudes que no coincidan con ninguna regla serán bloqueadas",
+      "no_defaults_warning_body": "No hay aprobadores predeterminados asignados, por lo que una solicitud que no coincida con ninguna de sus reglas no podrá enviarse.",
+      "no_defaults_warning_link": "Asignar aprobadores predeterminados",
+      "load_error_title": "No se pudieron cargar sus reglas de aprobación",
+      "load_error_body": "Compruebe su conexión e inténtelo de nuevo.",
+      "retry": "Reintentar",
+      "delete": "Eliminar",
+      "delete_confirm_title": "¿Eliminar esta regla?",
+      "delete_confirm_body": "«{{name}}» nunca ha enrutado una solicitud, por lo que puede eliminarse de forma permanente. Esta acción no se puede deshacer.",
+      "delete_fallback_warning": "Esta es su regla de reserva. Sin ella, las solicitudes que no coincidan con ninguna otra regla no podrán enrutarse hasta que configure una nueva regla de reserva.",
+      "delete_in_use_title": "Esta regla ha enrutado solicitudes",
+      "delete_in_use_body": "«{{name}}» se utilizó para enrutar al menos una solicitud, por lo que se conserva para el registro de auditoría. Puede desactivarla en su lugar: dejará de aplicarse a las solicitudes nuevas.",
+      "deactivate_instead": "Desactivar en su lugar",
+      "toast_deleted": "Regla eliminada.",
+      "toast_delete_failed": "No se pudo eliminar la regla.",
+      "sod_recommend": "Se recomienda activarlo para firmas y equipos con requisitos de auditoría.",
+      "everything_else_title": "Todo lo demás",
+      "everything_else_desc": "Las solicitudes que no coinciden con ninguna regla se enrutan a sus Aprobadores predeterminados.",
+      "everything_else_chain": "{{manager}} (Gerente), luego {{financial}} (Financiero)",
+      "everything_else_slot_unassigned": "Sin asignar",
+      "everything_else_edit": "Editar personas",
+      "defaults_no_financial_warning": "No hay un Aprobador financiero asignado: las solicitudes que lleguen a la red de seguridad se detendrán tras la aprobación del gerente.",
+      "defaults_missing_warning": "No hay aprobadores predeterminados asignados. Una solicitud que no coincida con ninguna regla no podrá enrutarse y será rechazada al enviarse. Asigne aprobadores predeterminados o añada una regla que abarque todas las solicitudes.",
+      "defaults_missing_cta": "Asignar aprobadores predeterminados",
+      "empty_now_routing": "En este momento, todas las solicitudes de arrendamiento van a:",
+      "empty_templates_hint": "Comience con una plantilla o cree su propia regla:"
     },
     "sentence": {
       "when_someone_requests": "Cuando alguien solicita",
@@ -3949,7 +3981,8 @@
       "cost_from": "Desde (USD)",
       "cost_to": "Hasta (USD)",
       "cost_any_placeholder": "Cualquiera",
-      "suggestions": "Sugerencias:"
+      "suggestions": "Sugerencias:",
+      "legacy_readonly_hint": "Este filtro ya no forma parte de la configuración de reglas. Puede eliminarlo, pero no volver a añadirlo."
     },
     "chain": {
       "role_submitter": "Solicitante",
@@ -4019,9 +4052,45 @@
       "sod_inherits": "Hereda el valor predeterminado del espacio de trabajo",
       "sod_allow": "Permitir el mismo usuario en varios roles",
       "run": "Ejecutar resolución",
-      "running": "Resolviendo…"
+      "running": "Resolviendo…",
+      "uses_rule": "Esta solicitud seguiría su regla «{{name}}».",
+      "routes_heading": "Se dirigiría a:",
+      "stage_concept_tag": "aprobación de concepto",
+      "stage_signature_tag": "firma",
+      "together": "(aprueban conjuntamente)",
+      "delegate_note": "si no está disponible: {{name}}",
+      "former_member": "Miembro anterior ({{id}}…)",
+      "auto_approve_note": "Esta regla no tiene pasos de aprobación: las solicitudes que coincidan se aprueban automáticamente.",
+      "signature_inherited": "Firma: los mismos aprobadores que la primera etapa.",
+      "fallback_used_warning": "Ninguna regla específica coincidió: se utiliza su regla predeterminada.",
+      "no_match_fallback_title": "Ninguna regla coincide: la solicitud va a sus aprobadores predeterminados",
+      "no_match_fallback_body": "Las solicitudes como esta se dirigirían a: {{names}}",
+      "no_match_blocked_title": "Ninguna regla coincide y no hay aprobadores predeterminados configurados",
+      "no_match_blocked_body": "Una solicitud como esta quedaría bloqueada al enviarse. Añada una regla que coincida o configure aprobadores predeterminados en la configuración del espacio de trabajo.",
+      "inherited_note": "Los mismos aprobadores de la etapa 1: esta regla no añade un paso de firma separado.",
+      "fallback_default_title": "Se envía a sus aprobadores predeterminados",
+      "fallback_default_body": "Ninguna regla coincide con esta solicitud, por lo que sigue la ruta de aprobación predeterminada del espacio de trabajo.",
+      "blocked_title": "Esta solicitud sería bloqueada",
+      "blocked_body": "Ninguna regla coincide y no hay aprobadores predeterminados asignados. Asigne aprobadores predeterminados o añada una regla que coincida.",
+      "tie_note": "Empatada con {{names}} en la misma prioridad — gana la regla más antigua.",
+      "empty_chain_warning": "Esta regla no tiene pasos de aprobación — las solicitudes que coincidan con ella no podrán enviarse."
     },
-    "tester_save_first": "La prueba de ejemplo solo evalúa reglas guardadas; guarde esta regla primero para incluirla."
+    "tester_save_first": "La prueba de ejemplo solo evalúa reglas guardadas; guarde esta regla primero para incluirla.",
+    "save_and_test": "Guardar y probar",
+    "signal_matched": "Habría coincidido con {{n}} de sus últimas {{total}} solicitudes",
+    "signal_no_history": "Aún no hay solicitudes recientes con las que comparar.",
+    "stage2_optin_title": "¿Requerir también un paso de firma separado?",
+    "stage2_optin_desc": "Si lo omite, los aprobadores de la etapa 1 también confirmarán el acuerdo final firmado tras la negociación. Añada un paso separado si una persona distinta debe autorizarlo.",
+    "stage2_optin_add": "Añadir un paso de firma",
+    "templates": {
+      "use": "Usar esta plantilla",
+      "high_value_title": "Arrendamientos de alto valor",
+      "high_value_desc": "Las solicitudes de $100,000 o más al año reciben su propia cadena de aprobación.",
+      "property_title": "Bienes inmuebles",
+      "property_desc": "Enrute los arrendamientos de inmuebles a las personas que gestionan los bienes raíces.",
+      "vehicle_title": "Vehículos",
+      "vehicle_desc": "Los arrendamientos de flota y de vehículos siguen su propia cadena de aprobación."
+    }
   },
   "approvals": {
     "common": {
@@ -4132,7 +4201,9 @@
       "reject_request_desc": "Se notificará al remitente con su motivo. Esta acción se registra en el registro de auditoría.",
       "reason_for_rejection": "Motivo del rechazo",
       "reject_reason_placeholder": "Explique por qué se rechaza esta solicitud…",
-      "reject_request": "Rechazar solicitud"
+      "reject_request": "Rechazar solicitud",
+      "empty_admin_signpost": "El enrutamiento de aprobaciones se configura en",
+      "empty_admin_signpost_link": "Configuración → Reglas de aprobación"
     },
     "financial": {
       "title": "Revisión Financiera",
@@ -4290,7 +4361,7 @@
       "route_via_policy": "Se enruta por su política de aprobación \"{{policy}}\".",
       "route_auto_approve": "Su política \"{{policy}}\" aprueba automáticamente esta solicitud — no se necesita ningún paso de aprobación.",
       "enter_details_to_preview": "Ingrese un departamento y un monto mensual para previsualizar la ruta de aprobación.",
-      "no_matching_policy": "Ninguna política de aprobación coincide con estos datos todavía — un administrador podría necesitar agregar una política coincidente o de respaldo; de lo contrario, esta solicitud podría bloquearse al enviarse.",
+      "no_matching_policy": "Ninguna regla de aprobación coincide con estos datos y no hay aprobadores predeterminados asignados — esta solicitud será bloqueada al enviarse. Pida a un administrador que asigne aprobadores predeterminados o añada una regla que coincida.",
       "review_covenant": "Se requiere revisión financiera porque esta solicitud está marcada por covenant.",
       "review_threshold": "Se requiere revisión financiera porque el compromiso total alcanza o supera el umbral de {{amount}}.",
       "review_settings": "Se requiere revisión financiera según la configuración de aprobaciones de su espacio de trabajo.",
@@ -4323,7 +4394,9 @@
       "discard_body": "Tiene datos sin guardar. Si cierra ahora, se perderán.",
       "discard_keep": "Seguir editando",
       "discard_confirm": "Descartar",
-      "route_failed": "No se pudo enrutar esta solicitud para aprobación. Contacte a su administrador."
+      "route_failed": "No se pudo enrutar esta solicitud para aprobación. Contacte a su administrador.",
+      "department_select_placeholder": "Seleccione un departamento",
+      "route_via_default": "Ninguna regla coincide con estos datos — esta solicitud se enviará a los aprobadores predeterminados de su espacio de trabajo."
     },
     "impact": {
       "title": "Impacto Financiero",
@@ -4491,6 +4564,12 @@
       "doc_upload_failed": "No se pudo subir el documento",
       "exec_submitted": "Arrendamiento enviado para aprobación de ejecución",
       "exec_submit_failed": "No se pudo enviar para aprobación de ejecución"
+    },
+    "routing_failure": {
+      "generic": "Esta solicitud aún no se puede enrutar para su aprobación. Pida al administrador de su espacio de trabajo que complete la configuración de aprobaciones.",
+      "ambiguous_match": "Dos o más reglas de aprobación entran en conflicto para esta solicitud. Pida a su administrador que ajuste las prioridades de las reglas.",
+      "no_match_no_fallback": "Esta solicitud no coincide con ninguna regla de aprobación y no hay aprobadores predeterminados configurados. Pida a su administrador que complete la configuración de aprobaciones.",
+      "separation_violation": "La regla de aprobación correspondiente exige una persona distinta en cada paso, pero la misma persona está asignada más de una vez. Pida a su administrador que actualice la regla."
     }
   },
   "portfolio": {

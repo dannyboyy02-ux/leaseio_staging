@@ -2345,10 +2345,10 @@
       "save_role": "Couldn't save that role change — it was not applied. Please try again."
     },
     "approvers": {
-      "title": "Default approvers",
-      "desc": "The fallback chain: Manager Approval, then Financial Approval. It routes a lease request only when no Approval Rule matches it.",
-      "callout": "Want different approvers by asset type, department, or deal size? That's an Approval Rule — rules always run before this default chain.",
-      "setup_link": "Set up Approval Rules →",
+      "title": "Default approvers — the “Everything else” safety net",
+      "desc": "When a lease request matches none of your Approval Rules, it routes here: Manager Approval, then Financial Approval. This chain always appears as the last row of your Approval Rules list.",
+      "callout": "Want different approvers by asset type, department, or deal size? That's an Approval Rule — rules always run before this safety net.",
+      "setup_link": "View your Approval Rules →",
       "load_error_title": "Couldn't load the current role assignments.",
       "load_error_body": "Editing is paused so nothing gets overwritten — your stored assignments are safe.",
       "step1": "Step 1",
@@ -2403,7 +2403,8 @@
       "optional": "Optional",
       "signpost_prefix": "Looking for the discount rate? It now lives in",
       "signpost_link": "Report settings",
-      "signpost_suffix": "on the Reports page."
+      "signpost_suffix": "on the Reports page.",
+      "approval_relationship_note": "Separate from Approval Rules: this threshold checks the request's total cash commitment across the full term, while Approval Rules match on annual cost. Both can apply to the same request."
     },
     "countersig": {
       "title": "Counter-Signature Window",
@@ -3301,8 +3302,8 @@
     "step3_desc": "Set up email alerts for key dates",
     "step4_title": "Explore integrations",
     "step4_desc": "Connect with QuickBooks and other tools",
-    "step3_approvers_title": "Set up approval roles",
-    "step3_approvers_desc": "Assign manager and financial approvers in Workspaces → Members"
+    "step3_approvers_title": "Set up approval routing",
+    "step3_approvers_desc": "Add an approval rule or assign default approvers in Settings → Approval Rules"
   },
   "onboarding_flow": {
     "workspace_name_required_title": "Workspace name required",
@@ -3867,7 +3868,7 @@
     "advanced_title": "Advanced settings",
     "advanced_desc": "Most admins don't need to change these.",
     "priority_label": "When two rules fit, which wins?",
-    "priority_help": "Higher number wins when multiple rules match the same request.",
+    "priority_help": "Higher numbers win when several rules match. If two matching rules share the same priority, the older rule wins.",
     "sla_label": "Approval SLA (days)",
     "sla_help": "Steps pending longer than this are flagged “over SLA” in the approver's queue. Leave blank to use the default of 7 days.",
     "fallback_label": "Use this rule when no other rule fits",
@@ -3911,7 +3912,7 @@
       "sod_on": "ON — distinct users required",
       "sod_off": "OFF — same user allowed",
       "rules_title": "Rules",
-      "rules_desc": "Rules are checked in priority order — the first rule whose conditions all match a new request wins. If nothing matches, the fallback rule is used.",
+      "rules_desc": "Rules are checked in priority order — the first rule whose conditions all match a new request wins. When nothing matches, the request goes to the Default approvers shown in the last row.",
       "new_rule": "New rule",
       "empty_title": "No approval rules yet.",
       "empty_hint_prefix": "Click",
@@ -3921,7 +3922,38 @@
       "updated_on": "Updated {{date}}",
       "active": "Active",
       "inactive": "Inactive",
-      "duplicate": "Duplicate"
+      "duplicate": "Duplicate",
+      "everything_else_label": "Everything else",
+      "everything_else_routes": "Requests that match no rule go to your default approvers.",
+      "everything_else_manager": "Manager review: {{name}}",
+      "everything_else_financial": "Financial review: {{name}}",
+      "everything_else_auto": "Auto-approved — no rules or default approvers are set up yet.",
+      "no_defaults_warning_title": "Requests that match no rule will be blocked",
+      "no_defaults_warning_body": "No default approvers are assigned, so a request that matches none of your rules cannot be submitted.",
+      "no_defaults_warning_link": "Assign default approvers",
+      "load_error_title": "Couldn't load your approval rules",
+      "load_error_body": "Check your connection and try again.",
+      "retry": "Try again",
+      "delete": "Delete",
+      "delete_confirm_title": "Delete this rule?",
+      "delete_confirm_body": "\"{{name}}\" has never routed a request, so it can be deleted permanently. This cannot be undone.",
+      "delete_fallback_warning": "This is your fallback rule. Without it, requests that match no other rule cannot be routed until a new fallback is set.",
+      "delete_in_use_title": "This rule has routed requests",
+      "delete_in_use_body": "\"{{name}}\" was used to route at least one request, so it's kept for the audit trail. You can turn it off instead — it will stop matching new requests.",
+      "deactivate_instead": "Turn off instead",
+      "toast_deleted": "Rule deleted.",
+      "toast_delete_failed": "Couldn't delete the rule.",
+      "sod_recommend": "Recommended on for firms and audit-sensitive teams.",
+      "everything_else_title": "Everything else",
+      "everything_else_desc": "Requests that match no rule route to your Default approvers.",
+      "everything_else_chain": "{{manager}} (Manager), then {{financial}} (Financial)",
+      "everything_else_slot_unassigned": "Not assigned",
+      "everything_else_edit": "Edit people",
+      "defaults_no_financial_warning": "No Financial Approver assigned — requests that fall through to the safety net will stall after manager approval.",
+      "defaults_missing_warning": "No default approvers are assigned. A request that matches no rule cannot be routed and will be rejected at submission. Assign default approvers or add a rule that matches all requests.",
+      "defaults_missing_cta": "Assign default approvers",
+      "empty_now_routing": "Right now, every lease request goes to:",
+      "empty_templates_hint": "Start from a template, or build your own rule:"
     },
     "sentence": {
       "when_someone_requests": "When someone requests",
@@ -3949,7 +3981,8 @@
       "cost_from": "From (USD)",
       "cost_to": "To (USD)",
       "cost_any_placeholder": "Any",
-      "suggestions": "Suggestions:"
+      "suggestions": "Suggestions:",
+      "legacy_readonly_hint": "This filter is no longer part of rule setup. You can remove it, but not add it back."
     },
     "chain": {
       "role_submitter": "Submitter",
@@ -4019,9 +4052,45 @@
       "sod_inherits": "Inherits workspace default",
       "sod_allow": "Allow same user in multiple roles",
       "run": "Run resolution",
-      "running": "Resolving…"
+      "running": "Resolving…",
+      "uses_rule": "This request would follow your \"{{name}}\" rule.",
+      "routes_heading": "It would route to:",
+      "stage_concept_tag": "concept approval",
+      "stage_signature_tag": "signature",
+      "together": "(approve together)",
+      "delegate_note": "if unavailable: {{name}}",
+      "former_member": "Former member ({{id}}…)",
+      "auto_approve_note": "This rule has no approval steps — requests it matches are approved automatically.",
+      "signature_inherited": "Signature — same approvers as the first stage.",
+      "fallback_used_warning": "No specific rule matched — this uses your fallback rule.",
+      "no_match_fallback_title": "No rule matches — this goes to your Default approvers",
+      "no_match_fallback_body": "Requests like this would route to: {{names}}",
+      "no_match_blocked_title": "No rule matches and no Default approvers are set",
+      "no_match_blocked_body": "A request like this would be blocked at submission. Add a matching rule, or set Default approvers in workspace settings.",
+      "inherited_note": "Same approvers as stage 1 — this rule doesn't add a separate signature step.",
+      "fallback_default_title": "Routes to your default approvers",
+      "fallback_default_body": "No rule matches this request, so it follows the workspace default approval path.",
+      "blocked_title": "This request would be blocked",
+      "blocked_body": "No rule matches and no default approvers are assigned. Assign default approvers or add a matching rule.",
+      "tie_note": "Tied with {{names}} at the same priority — the older rule wins.",
+      "empty_chain_warning": "This rule has no approval steps — requests matching it cannot be submitted."
     },
-    "tester_save_first": "The sample tester only checks saved rules — save this rule first to include it."
+    "tester_save_first": "The sample tester only checks saved rules — save this rule first to include it.",
+    "save_and_test": "Save & test",
+    "signal_matched": "Would have matched {{n}} of your last {{total}} requests",
+    "signal_no_history": "No recent requests to compare against yet.",
+    "stage2_optin_title": "Also require a separate signature step?",
+    "stage2_optin_desc": "If you skip this, the stage 1 approvers also confirm the final signed deal after negotiation. Add a separate step if a different person must sign off.",
+    "stage2_optin_add": "Add a signature step",
+    "templates": {
+      "use": "Use this template",
+      "high_value_title": "High-value leases",
+      "high_value_desc": "Requests of $100,000 or more per year get their own approval chain.",
+      "property_title": "Real estate",
+      "property_desc": "Route property leases to the people who manage real estate.",
+      "vehicle_title": "Vehicles",
+      "vehicle_desc": "Fleet and vehicle leases follow their own approval chain."
+    }
   },
   "approvals": {
     "common": {
@@ -4132,7 +4201,9 @@
       "reject_request_desc": "The submitter will be notified with your reason. This action is recorded in the audit log.",
       "reason_for_rejection": "Reason for rejection",
       "reject_reason_placeholder": "Explain why this request is being rejected…",
-      "reject_request": "Reject Request"
+      "reject_request": "Reject Request",
+      "empty_admin_signpost": "Approval routing is configured in",
+      "empty_admin_signpost_link": "Settings → Approval Rules"
     },
     "financial": {
       "title": "Financial Review",
@@ -4290,7 +4361,7 @@
       "route_via_policy": "Routes through your \"{{policy}}\" approval policy.",
       "route_auto_approve": "Your \"{{policy}}\" policy auto-approves this request — no approval step needed.",
       "enter_details_to_preview": "Enter a department and monthly amount to preview the approval route.",
-      "no_matching_policy": "No approval policy matches these details yet — an admin may need to add a matching or fallback policy, otherwise this request could be blocked at submission.",
+      "no_matching_policy": "No approval rule matches these details and no default approvers are assigned — this request will be blocked at submission. Ask an admin to assign default approvers or add a matching rule.",
       "review_covenant": "Financial review is required because this request is covenant-flagged.",
       "review_threshold": "Financial review is required because the total commitment meets or exceeds the {{amount}} threshold.",
       "review_settings": "Financial review is required based on your workspace approval settings.",
@@ -4323,7 +4394,9 @@
       "discard_body": "You have unsaved details. Closing now will throw them away.",
       "discard_keep": "Keep editing",
       "discard_confirm": "Discard",
-      "route_failed": "Could not route this request for approval. Contact your admin."
+      "route_failed": "Could not route this request for approval. Contact your admin.",
+      "department_select_placeholder": "Select a department",
+      "route_via_default": "No rule matches these details — this request will go to your workspace default approvers."
     },
     "impact": {
       "title": "Financial Impact",
@@ -4491,6 +4564,12 @@
       "doc_upload_failed": "Failed to upload document",
       "exec_submitted": "Lease submitted for execution approval",
       "exec_submit_failed": "Failed to submit for execution approval"
+    },
+    "routing_failure": {
+      "generic": "This request can't be routed for approval yet — ask your workspace admin to finish approval setup.",
+      "ambiguous_match": "Two or more approval rules conflict for this request — ask your workspace admin to adjust rule priorities.",
+      "no_match_no_fallback": "This request doesn't match any approval rule and no default approvers are set — ask your workspace admin to finish approval setup.",
+      "separation_violation": "The matching approval rule requires a different person at each step, but the same person is assigned more than once — ask your workspace admin to update the rule."
     }
   },
   "portfolio": {
