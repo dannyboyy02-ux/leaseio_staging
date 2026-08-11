@@ -5,14 +5,44 @@ list and reference it in the commit message.
 
 ---
 
-## Customer-facing live audit 2026-08-11 (prod `main @ 8ed16aa`, walkthrough persona) — #187–#194
+## Customer-facing live audit 2026-08-11 (prod `main @ 8ed16aa`, walkthrough persona) — #187–#195
 
 Full live walkthrough on theleaseio.com as an admin customer: requestor chain end-to-end,
 direct-add + Opus extraction, archive/delete/restore, Leo, every displayed number
 cross-checked vs the staging DB, core surfaces re-walked in Spanish. **Core workflows and
 financial math verified sound** (chain completes; dashboard/portfolio/CSV figures recompute
 exactly; extraction 99% accurate). Findings artifact: `docs/reviews/2026-08-11` (published).
-Assess-only — nothing fixed. New items below. (#194 filed by the #187-fix integrity review.)
+Assess-only — nothing fixed (except #187, fixed same day). New items below. (#194 filed by the
+#187-fix integrity review; #195 by the multi-workspace pass.)
+
+**Multi-workspace verified 2026-08-11 (owner account `daniel.c.priest@gmail.com`, test-mode
+Stripe `pk_test_`):** the $499 add-workspace purchase works end-to-end on the prod domain
+(eligibility → honest consent modal → `default_incomplete` sub → client confirm → webhook
+promotes to `active`) — this closes the #186-owed prod-domain purchase smoke. Cross-workspace
+isolation solid: a freshly-created workspace shows $0/0 leases in the UI AND Leo reports 0 active
+scoped to it (Hard Rule #8 holds). Switcher lists all workspaces and reloads per-workspace data
+correctly. `delete-workspace` cancels the Stripe sub (`stripeSubscriptionsCanceled:1`) + writes
+the `deleted_workspaces` forensic row. **Coverage limit:** tier-gating from the Starter side is
+NOT testable via add-workspace — that flow always creates a **Business** workspace
+(`create-workspace` uses `BUSINESS_MONTHLY_PRICE_ID`); a Starter workspace only comes from the
+first-workspace onboarding/checkout path. Test workspace "Audit WS3" was created then deleted.
+
+### #195 (MEDIUM, UX dead-end) A member who owns no workspace is offered "New workspace" but can never satisfy the "Add a card" gate
+`create-workspace/index.ts:73-87` resolves the caller's Stripe customer only from (a) a Business
+workspace the caller **owns** (`.eq("owner_id", userId)`) or (b) a Stripe customer matching the
+caller's **email**. A user who is only a *member* of someone else's workspace (owns none) and has
+no personal Stripe history has neither → `no_customer` → the client shows "Add a card or Stripe
+Link… Settings → Billing, then try again." But Settings → Billing for that user manages a
+workspace they don't own (a different customer), so following the instruction can NEVER satisfy
+the flow — an unsatisfiable loop. Repro: walkthrough persona (member/admin of Labs Analytix, owns
+nothing) 2026-08-11 — clicking "New workspace" always returned to the "Add a card" gate even
+after a card was added to the workspace subscription. Deeper issue: a zero-owned-workspace user's
+"Create your first workspace" should route through the trial/checkout onboarding
+(`create_first_workspace` RPC), not the $499 add-a-2nd-workspace charge path. **Fix options:**
+(a) route zero-owned users to onboarding checkout; (b) let the flow create/attach a personal
+Stripe customer + collect a payment method inline (PaymentElement) instead of pointing at the
+wrong Billing page; (c) at minimum, fix the error copy so it doesn't send members to a Billing
+page that can't help them. Verified via function source + live repro 2026-08-11.
 
 ### #194 (MEDIUM, accuracy, pre-existing) Leo's lease fetch caps at `.limit(60)` with no ORDER BY — totals silently diverge from the dashboard above 60 leases
 `supabase/functions/ai-assistant/index.ts` fetches leases with `.limit(60)` and no `.order()`,
