@@ -5,24 +5,49 @@ list and reference it in the commit message.
 
 ---
 
-## Customer-facing live audit 2026-08-11 (prod `main @ 8ed16aa`, walkthrough persona) — #187–#193
+## Customer-facing live audit 2026-08-11 (prod `main @ 8ed16aa`, walkthrough persona) — #187–#194
 
 Full live walkthrough on theleaseio.com as an admin customer: requestor chain end-to-end,
 direct-add + Opus extraction, archive/delete/restore, Leo, every displayed number
 cross-checked vs the staging DB, core surfaces re-walked in Spanish. **Core workflows and
 financial math verified sound** (chain completes; dashboard/portfolio/CSV figures recompute
 exactly; extraction 99% accurate). Findings artifact: `docs/reviews/2026-08-11` (published).
-Assess-only — nothing fixed. New items below.
+Assess-only — nothing fixed. New items below. (#194 filed by the #187-fix integrity review.)
 
-### #187 (HIGH, accuracy) Leo reports a portfolio total ~29% too high and fabricates the lease count
+### #194 (MEDIUM, accuracy, pre-existing) Leo's lease fetch caps at `.limit(60)` with no ORDER BY — totals silently diverge from the dashboard above 60 leases
+`supabase/functions/ai-assistant/index.ts` fetches leases with `.limit(60)` and no `.order()`,
+then computes counts + obligation totals over that capped set. The dashboard (`SummaryStrip.tsx`)
+fetches ALL `archived=false` leases with no cap. So for any workspace with >60 non-cancelled,
+non-archived, non-deleted leases, Leo's count and total silently UNDERCOUNT vs. the dashboard, and
+*which* 60 rows survive is nondeterministic (no ORDER BY) — the exact "reconciles with no UI
+surface" trust break #187 documents, just at higher lease counts. Pre-existing (the cap predates
+the #187 fix), so filed separately per the pre-existing-issues rule rather than bundled into that
+change. **Fix:** compute counts/totals server-side over the FULL result set (a lightweight
+aggregate query for the numbers), keep the row cap only for the per-lease detail blocks, add a
+deterministic `.order()`, and note in the prompt that detail is truncated while totals are
+complete. Surfaced by the #187 integrity review 2026-08-11.
+
+### #187 (HIGH, accuracy) Leo reports a portfolio total ~29% too high and fabricates the lease count — **RESOLVED 2026-08-11 (deployed + verified live)**
 `supabase/functions/ai-assistant`. Asked "total annual rent commitment", Leo answered
 $293,957/mo · $3,527,481/yr across "12 active leases". Actual (dashboard + Portfolio): 5 active
-leases, $228,275/mo · $2.74M/yr. Leo's $293,957 exactly equals `sum(current_monthly_rent)` over
-the **7** rows with `lifecycle_status='active'` **including 2 archived leases**; the "12" count
-matches no query (fabricated). Flagship Business-tier feature returning confidently-wrong
-financial data reconciling with no UI surface. **Fix:** Leo's fetch must mirror the UI scope —
-exclude `archived=true`, restrict to the live lifecycle states the portfolio counts, and derive
-the count from that filtered set (not a model guess). Verified live 2026-08-11.
+leases, $228,275/mo · $2.74M/yr. Leo's $293,957 exactly equalled `sum(current_monthly_rent)` over
+the **7** rows with `lifecycle_status='active'` **including 2 archived leases**; the "12" was the
+`buildLeaseContext` filter `['active','executed','draft']` count (7 active-status + 5 draft) — the
+edge function literally put "TOTAL ACTIVE LEASES: 12" in the prompt.
+**FIX (2026-08-11):** the fetch now mirrors the UI scope exactly — added `.eq('archived', false)`
+and a `rent_schedules` embed; `buildLeaseContext` now uses the new pure `partitionPortfolio`
+helper (`_shared/ai_portfolio.ts`) which splits the live portfolio (`active`/`executed`/
+`fully_executed`) from in-progress pipeline (never counted as active) and sums **schedule-aware**
+rent via `currentMonthlyRent` (ported from `leaseCalculations.getCurrentMonthlyRent`), so the
+total equals the dashboard tile. System prompt gained a rule separating active-portfolio totals
+from in-progress leases. Integrity review then caught a regression the first cut introduced —
+terminal leases (`rejected`/`expired`/`chain_violation`) were bucketed as "pipeline"; folded in a
+`classifyLease` split (portfolio / pipeline / closed, via `_shared/lifecycle.ts` `groupOf`) so
+closed leases are labeled closed, not "in progress". Pinned by
+`src/lib/__tests__/aiPortfolioScope.test.ts` (18 tests). Security review clean; integrity review
+clean on the money path (the pre-existing `.limit(60)` gap is filed separately as #194).
+Deployed via linked CLI; **verified live** — Leo now answers "5 active leases · $228,275/mo ·
+$2,739,306/yr" with a note that the 6 pipeline leases are excluded. Security review clean.
 
 ### #188 (MEDIUM, i18n/UX) No in-app language switch — EN/ES toggle exists only on auth pages
 The language toggle is on login/signup only; Settings → Appearance offers theme only, and no
