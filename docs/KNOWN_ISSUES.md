@@ -5,6 +5,65 @@ list and reference it in the commit message.
 
 ---
 
+## Customer-facing live audit 2026-08-11 (prod `main @ 8ed16aa`, walkthrough persona) — #187–#193
+
+Full live walkthrough on theleaseio.com as an admin customer: requestor chain end-to-end,
+direct-add + Opus extraction, archive/delete/restore, Leo, every displayed number
+cross-checked vs the staging DB, core surfaces re-walked in Spanish. **Core workflows and
+financial math verified sound** (chain completes; dashboard/portfolio/CSV figures recompute
+exactly; extraction 99% accurate). Findings artifact: `docs/reviews/2026-08-11` (published).
+Assess-only — nothing fixed. New items below.
+
+### #187 (HIGH, accuracy) Leo reports a portfolio total ~29% too high and fabricates the lease count
+`supabase/functions/ai-assistant`. Asked "total annual rent commitment", Leo answered
+$293,957/mo · $3,527,481/yr across "12 active leases". Actual (dashboard + Portfolio): 5 active
+leases, $228,275/mo · $2.74M/yr. Leo's $293,957 exactly equals `sum(current_monthly_rent)` over
+the **7** rows with `lifecycle_status='active'` **including 2 archived leases**; the "12" count
+matches no query (fabricated). Flagship Business-tier feature returning confidently-wrong
+financial data reconciling with no UI surface. **Fix:** Leo's fetch must mirror the UI scope —
+exclude `archived=true`, restrict to the live lifecycle states the portfolio counts, and derive
+the count from that filtered set (not a model guess). Verified live 2026-08-11.
+
+### #188 (MEDIUM, i18n/UX) No in-app language switch — EN/ES toggle exists only on auth pages
+The language toggle is on login/signup only; Settings → Appearance offers theme only, and no
+other in-app control writes `leaseio.language`. A signed-in Spanish user (e.g. arrived via invite
+link) is stranded in English. Spanish itself renders cleanly once selected. **Fix:** add a
+language selector to Settings → Appearance (or profile menu) writing the existing
+`leaseio.language` key. Verified live 2026-08-11.
+
+### #189 (MEDIUM, polish/trust) Internal issue-tracker reference printed in Report settings
+Reports → Report settings → "Artifact retention (days)" help text reads verbatim: "Reports older
+than this become eligible for cleanup (cron not yet implemented; tracked in KNOWN_ISSUES #12)." A
+customer sees the internal ticket ref + an admission the feature is unbuilt, and the control is
+functionally inert. **Fix:** customer-facing copy + either wire the retention cron (#12) or
+remove the control. Verified live 2026-08-11.
+
+### #190 (LOW, convention) Same lease shown under two different names across pages
+"Northwind Estates" (`request_title`, on Leases list/dashboard/Leo) appears as "1200 Market
+Street, Suite 800, San Francisco" (`property_address`) on Portfolio + watchlist. One lease looks
+like two properties. **Fix:** unify the name field or show both. Verified live 2026-08-11.
+
+### #191 (LOW, copy) Reports "Monthly Rent Overview" chart actually plots total commitment
+Chart titled "Monthly Rent Overview" is subtitled "Total commitment by lifecycle status", axis to
+~$32M — it charts multi-year total commitment, not monthly rent. Bars are correct; title lies.
+**Fix:** retitle to match content. Verified live 2026-08-11.
+
+### #192 (LOW, extraction) Direct-upload extraction leaves `asset_type` null
+An office lease added via Upload Document extracted every field at 99% but `asset_type` came back
+null → blank "Type" on the Leases list + CSV, while the request-flow twin shows "Real estate".
+Type was inferable from the document. **Fix:** infer/persist asset_type in the direct-upload
+`process_lease` path. Verified live 2026-08-11.
+
+### #193 (DOC DRIFT) Self-serve firm onboarding is BUILT but docs say "not built"
+CLAUDE.md (Phase-10 deferred list) + #105 describe self-serve firm onboarding / firm Stripe
+checkout as deferred and firms as "operator-created only". Git shows PR #55/#56 (June 2026)
+shipped self-serve `create-firm` + hosted checkout, and the deployed `create-firm` is self-serve
+for any authenticated user (per-owner cap of 10). **Action:** reconcile CLAUDE.md + #105 to
+reflect shipped capability; re-scope whatever genuinely remains. Confirmed via git + function
+source 2026-08-11.
+
+---
+
 ## ▶ PHASE 0 REMEDIATION — CODE COMPLETE 2026-07-16, **DEPLOYED TO STAGING SAME DAY**
 
 **Deploy executed 2026-07-16** (owner present) per `docs/ops/END_TO_END_DEPLOY_2026-07-16.md`:

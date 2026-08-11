@@ -1,0 +1,174 @@
+<title>LeaseIO Customer-Facing Audit — Findings</title>
+<style>
+  :root {
+    --paper: #fbfaf7; --ink: #21262c; --ink-soft: #5a6470; --line: #e3e1da;
+    --accent: #0e6b60; --accent-soft: #e3efec; --card: #ffffff; --code-bg: #f2f1ec;
+    --crit: #b3261e; --high: #c26a12; --med: #a8890a; --low: #5a6470; --ok: #2e7d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #15181c; --ink: #d8dde2; --ink-soft: #97a1ac; --line: #2b3138;
+      --accent: #55b5a7; --accent-soft: #1c2a28; --card: #1b1f24; --code-bg: #20252b;
+      --crit: #ef7b74; --high: #e39a52; --med: #d4b94a; --low: #97a1ac; --ok: #6fbe8f;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #15181c; --ink: #d8dde2; --ink-soft: #97a1ac; --line: #2b3138;
+    --accent: #55b5a7; --accent-soft: #1c2a28; --card: #1b1f24; --code-bg: #20252b;
+    --crit: #ef7b74; --high: #e39a52; --med: #d4b94a; --low: #97a1ac; --ok: #6fbe8f;
+  }
+  :root[data-theme="light"] {
+    --paper: #fbfaf7; --ink: #21262c; --ink-soft: #5a6470; --line: #e3e1da;
+    --accent: #0e6b60; --accent-soft: #e3efec; --card: #ffffff; --code-bg: #f2f1ec;
+    --crit: #b3261e; --high: #c26a12; --med: #a8890a; --low: #5a6470; --ok: #2e7d4f;
+  }
+  html { background: var(--paper); }
+  body { background: var(--paper); color: var(--ink); font: 16px/1.65 -apple-system, "Segoe UI", system-ui, sans-serif; margin: 0; padding: 0 20px 96px; }
+  main { max-width: 880px; margin: 0 auto; }
+  h1, h2, h3 { font-family: Charter, Georgia, "Times New Roman", serif; text-wrap: balance; line-height: 1.25; }
+  h1 { font-size: 2.05rem; margin: 0 0 6px; }
+  h2 { font-size: 1.4rem; margin: 52px 0 10px; padding-top: 22px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.06rem; margin: 0; }
+  p, li { max-width: 74ch; }
+  a { color: var(--accent); }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.85em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.72rem; color: var(--accent); font-weight: 600; margin: 40px 0 4px; }
+  .meta { color: var(--ink-soft); font-size: 0.9rem; }
+  .lede { font-size: 1.06rem; max-width: 68ch; }
+  .pill { display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+  .pill.crit { color: var(--crit); border: 1.5px solid var(--crit); }
+  .pill.high { color: var(--high); border: 1.5px solid var(--high); }
+  .pill.med  { color: var(--med);  border: 1.5px solid var(--med); }
+  .pill.low  { color: var(--low);  border: 1.5px solid var(--low); }
+  .pill.ok   { color: var(--ok);   border: 1.5px solid var(--ok); }
+  .pill.doc  { color: var(--accent); border: 1.5px solid var(--accent); }
+  .scoreboard { display: flex; flex-wrap: wrap; gap: 10px; margin: 22px 0 8px; }
+  .chip { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 78px; }
+  .chip .n { font-family: Charter, Georgia, serif; font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chip .l { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+  .chip.crit .n { color: var(--crit); } .chip.high .n { color: var(--high); }
+  .chip.med .n { color: var(--med); } .chip.low .n { color: var(--low); } .chip.ok .n { color: var(--ok); }
+  .finding { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; margin: 18px 0; border-left: 4px solid var(--line); }
+  .finding.high { border-left-color: var(--high); }
+  .finding.med  { border-left-color: var(--med); }
+  .finding.low  { border-left-color: var(--low); }
+  .finding.doc  { border-left-color: var(--accent); }
+  .fhead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+  .fid { font-family: ui-monospace, Menlo, monospace; color: var(--ink-soft); font-size: 0.82rem; }
+  .loc { color: var(--ink-soft); font-size: 0.85rem; margin: 2px 0 12px; font-family: ui-monospace, Menlo, monospace; }
+  .finding h3 { margin-bottom: 2px; }
+  .kv { margin: 10px 0 0; }
+  .kv b { color: var(--ink); font-weight: 650; }
+  .evidence { background: var(--code-bg); border-radius: 8px; padding: 12px 15px; margin: 12px 0 0; font-size: 0.9rem; }
+  .evidence .row { display: flex; gap: 12px; padding: 3px 0; font-variant-numeric: tabular-nums; }
+  .evidence .row span:first-child { color: var(--ink-soft); min-width: 210px; }
+  .table-wrap { overflow-x: auto; margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-soft); font-weight: 600; padding: 7px 12px; border-bottom: 2px solid var(--line); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  ul { padding-left: 20px; } li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 18px; border-radius: 0 8px 8px 0; margin: 18px 0; }
+  .footer-note { color: var(--ink-soft); font-size: 0.85rem; margin-top: 56px; border-top: 1px solid var(--line); padding-top: 16px; }
+  strong { font-weight: 650; }
+</style>
+
+<main>
+  <p class="eyebrow">Customer-facing product audit · findings</p>
+  <h1>LeaseIO Audit — What a Customer Sees</h1>
+  <p class="meta">2026-08-11 · <strong>theleaseio.com</strong> (production, <code>main @ 8ed16aa</code>) · persona: admin in the Labs Analytix Business workspace · method: live UI walkthrough with read-only DB cross-checks · <strong>assess-only, nothing fixed</strong></p>
+
+  <p class="lede">I signed in and used the product the way a finance customer would: submitted a lease request through the full approval chain, uploaded a document for AI extraction, ran archive/delete/restore, asked the AI assistant about the portfolio, checked every displayed number against the database, and re-walked core surfaces in Spanish. The headline: <strong>the core workflows and the financial math are solid</strong> — the requestor chain completes end-to-end and every dashboard/portfolio figure recomputes exactly. The one serious problem is the flagship AI assistant, which reports a materially wrong portfolio total. Six product findings and one documentation-drift note follow, Critical → Low.</p>
+
+  <div class="scoreboard">
+    <div class="chip crit"><span class="n">0</span><span class="l">Critical</span></div>
+    <div class="chip high"><span class="n">1</span><span class="l">High</span></div>
+    <div class="chip med"><span class="n">2</span><span class="l">Medium</span></div>
+    <div class="chip low"><span class="n">3</span><span class="l">Low</span></div>
+    <div class="chip doc" style="border-left:4px solid var(--accent)"><span class="n">1</span><span class="l">Doc drift</span></div>
+    <div class="chip ok"><span class="n">9+</span><span class="l">Verified OK</span></div>
+  </div>
+
+  <h2>How to read severity</h2>
+  <p>Each rating is impact × likelihood × blast radius. <span class="pill high">HIGH</span> = a primary workflow blocked for a common case, or materially wrong financial data a finance team would act on. <span class="pill med">MEDIUM</span> = real friction or minor inaccuracy with a findable workaround. <span class="pill low">LOW</span> = polish, cosmetic, or convention drift with no decision impact. Every finding was reproduced live and, where it's a number, recomputed independently from the database.</p>
+
+  <h2>Findings</h2>
+
+  <div class="finding high">
+    <div class="fhead"><span class="pill high">HIGH</span> <span class="fid">#187</span> <h3>Leo (the AI assistant) reports a portfolio total that is ~29% too high and invents the lease count</h3></div>
+    <p class="loc">Leo assistant · <code>supabase/functions/ai-assistant</code> · Business-tier feature</p>
+    <p>Asked the built-in suggestion <em>"What is the total annual rent commitment?"</em>, Leo answered <strong>$3,527,481/yr</strong> — <strong>$293,957/mo across "12 active leases."</strong> Neither figure is right. The workspace has <strong>5 active leases</strong> and the dashboard and Portfolio both show <strong>$228,275/mo ($2.74M/yr)</strong>. Leo's monthly figure is the base-rent sum across all <strong>seven</strong> rows whose <code>lifecycle_status='active'</code> — which includes <strong>two archived leases</strong> that no customer-facing surface counts — and the "12" count is fabricated (it matches no query). This is the product's flagship differentiator ("send us your leases, we'll tell you what's in them") returning a number a finance user cannot reconcile against any screen in the app, and stating it with full confidence.</p>
+    <div class="evidence">
+      <div class="row"><span>Leo answered</span><b>$293,957 / mo · $3,527,481 / yr · "12 active leases"</b></div>
+      <div class="row"><span>Dashboard &amp; Portfolio show</span><b>$228,275 / mo · $2.74M / yr · 5 active</b></div>
+      <div class="row"><span>DB: sum(current_monthly_rent) of the 7 <code>active</code>-status rows (incl. 2 archived)</span><b>$293,956.78 ← Leo's number</b></div>
+      <div class="row"><span>DB: genuine active, non-archived leases</span><b>5</b></div>
+    </div>
+    <p class="kv"><b>Why HIGH:</b> materially wrong financial data on the headline Business-tier feature, delivered confidently, reconciling with nothing the customer can see — the exact failure the product exists to prevent. <b>Why not Critical:</b> read-only assistant (no data corruption or security boundary crossed), and a careful user could catch it against the dashboard. <b>Likely fix:</b> Leo's data fetch must apply the same scope the UI uses — exclude <code>archived=true</code>, and only count/sum the lifecycle states the portfolio treats as live; the count field should come from that same filtered set, not a model guess.</p>
+  </div>
+
+  <div class="finding med">
+    <div class="fhead"><span class="pill med">MEDIUM</span> <span class="fid">#188</span> <h3>A signed-in user cannot change language — the EN/ES toggle exists only on the login screen</h3></div>
+    <p class="loc">app shell · Settings → Appearance (theme only) · <code>leaseio.language</code> set at auth</p>
+    <p>The product ships full English + Spanish, and Spanish renders cleanly once selected (verified below). But the language toggle lives <strong>only on the auth pages</strong> (login/signup, top-right "EN"). Inside the app there is no language control anywhere — Settings → Appearance offers <em>theme</em> (Light/Dark/System) and nothing else. A Spanish-speaking user who arrives already signed in (e.g. accepted an invite link, or a teammate set up the account) is stranded in English with no way to switch, and an English user can't preview Spanish. For a product that markets bilingual support, the switch is missing from the one place a logged-in user would look.</p>
+    <p class="kv"><b>Why MEDIUM:</b> a whole advertised capability is unreachable for signed-in users, but there's a workaround (sign out, toggle at login) and it doesn't corrupt data. <b>Fix:</b> add a language selector to Settings → Appearance (or the profile menu) writing the same <code>leaseio.language</code> key the auth toggle already uses.</p>
+  </div>
+
+  <div class="finding med">
+    <div class="fhead"><span class="pill med">MEDIUM</span> <span class="fid">#189</span> <h3>Internal issue-tracker reference is printed in the customer-facing Report settings</h3></div>
+    <p class="loc">Reports → Report settings → "Artifact retention (days)" help text</p>
+    <p>The help text under the retention field reads, verbatim: <em>"Reports older than this become eligible for cleanup <strong>(cron not yet implemented; tracked in KNOWN_ISSUES #12)</strong>."</em> A paying customer is shown an internal ticket reference and an admission that the feature behind the setting they're configuring doesn't actually run. Two problems in one line: the jargon leak, and a settable control that silently does nothing.</p>
+    <p class="kv"><b>Why MEDIUM:</b> visible on a standard settings screen, erodes trust (looks unfinished / internal), and the setting is functionally inert. Not HIGH because it's copy, not data or money. <b>Fix:</b> replace with customer-facing language and either wire the retention cron or remove the control until it works.</p>
+  </div>
+
+  <div class="finding low">
+    <div class="fhead"><span class="pill low">LOW</span> <span class="fid">#190</span> <h3>The same lease appears under two different names on different pages</h3></div>
+    <p class="loc">Leases list &amp; Dashboard (uses <code>request_title</code>) vs Portfolio (uses <code>property_address</code>)</p>
+    <p>The lease shown as <strong>"Northwind Estates"</strong> on the Leases list, dashboard, and in Leo appears as <strong>"1200 Market Street, Suite 800, San Francisco"</strong> on the Portfolio page and its watchlist — because those surfaces render different name fields. To a user scanning both pages, one lease looks like two different properties. Consistent naming (or showing both, e.g. "Northwind Estates — 1200 Market St") would remove the ambiguity.</p>
+    <p class="kv"><b>Why LOW:</b> cosmetic/convention; no wrong number, and both labels are truthful for that lease.</p>
+  </div>
+
+  <div class="finding low">
+    <div class="fhead"><span class="pill low">LOW</span> <span class="fid">#191</span> <h3>Reports "Monthly Rent Overview" chart is actually plotting total commitment</h3></div>
+    <p class="loc">Reports → "Monthly Rent Overview" chart</p>
+    <p>The chart titled <strong>"Monthly Rent Overview"</strong> is subtitled "Total commitment by lifecycle status" and its axis runs to ~$32M — it's charting multi-year total commitment, not monthly rent. Title and content disagree; a reader glancing at the title would misread the magnitude. Retitle to match what it shows (e.g. "Total Commitment by Status").</p>
+    <p class="kv"><b>Why LOW:</b> mislabel, not a miscalculation — the bars are correct for total commitment.</p>
+  </div>
+
+  <div class="finding low">
+    <div class="fhead"><span class="pill low">LOW</span> <span class="fid">#192</span> <h3>Direct-upload extraction leaves Asset Type blank</h3></div>
+    <p class="loc">Direct upload → <code>process_lease</code> · <code>leases.asset_type</code> null after extraction</p>
+    <p>A lease added via <strong>Upload Document</strong> extracted every field at 99% confidence (landlord, tenant, 3,850 sqft, $12,500 rent, dates, security deposit, 3% escalation — all correct), but <code>asset_type</code> came back null. The lease then shows a blank "Type" on the Leases list and in the CSV export, while the same lease added via the request flow shows "Real estate." The document is plainly an office lease, so the type was inferable. Minor, but it's a visible gap in an otherwise-perfect extraction.</p>
+    <p class="kv"><b>Why LOW:</b> one non-critical field, easily set by hand; everything financial extracted correctly.</p>
+  </div>
+
+  <div class="finding doc">
+    <div class="fhead"><span class="pill doc">DOC DRIFT</span> <span class="fid">#193</span> <h3>Docs describe self-serve firm onboarding as "not built" — it shipped in June</h3></div>
+    <p class="loc"><code>CLAUDE.md</code> + <code>KNOWN_ISSUES.md #105</code> vs <code>supabase/functions/create-firm</code> (PR #55/#56)</p>
+    <p>Not a customer-facing bug, flagged because it will mislead the next session: CLAUDE.md and KNOWN_ISSUES #105 repeatedly state self-serve firm onboarding / firm Stripe checkout is deferred and firms are "operator-created only." But git shows PR #55/#56 (June 2026) shipped <strong>self-serve <code>create-firm</code> + hosted checkout</strong>, and the deployed function is self-serve for any authenticated user (with a per-owner cap). The source-of-truth docs materially understate shipped capability — worth reconciling per the repo's own "docs are part of the change" rule.</p>
+    <p class="kv"><b>Action:</b> reconcile CLAUDE.md's Phase-10 "deferred" list and #105 to reflect that self-serve firm creation + checkout are built; re-scope whatever genuinely remains.</p>
+  </div>
+
+  <h2>Verified working (positive results)</h2>
+  <p>The audit confirmed as much as it flagged. These were exercised live and held up:</p>
+  <div class="table-wrap"><table>
+    <tr><th>Area</th><th>What was verified</th></tr>
+    <tr><td><strong>Approval chain</strong></td><td>Full requestor journey on prod: submit → concept approve → negotiation (final-negotiated upload) → signator (3 confirmations + ≥30-char attestation) → counter-signature → finalize → <code>active</code> + model-locked. Every transition logged with <code>routing_path:'chain'</code> and a truthful trigger.</td></tr>
+    <tr><td><strong>AI extraction accuracy</strong></td><td>Both the finalize and direct-upload paths extracted landlord, tenant, 3,850 sqft, $12,500 rent, Oct 2026–Sep 2029 dates, $25k deposit, 3% escalation — all correct at 99% confidence. Total-commitment math ($463,635) exact.</td></tr>
+    <tr><td><strong>Dashboard / Portfolio math</strong></td><td>Every figure recomputed against the DB: monthly rent $228,275, blended $25.08/sqft, per-lease cost/sqft ($50.00, $38.96, $31.50, $20.78), 109,216 sqft footprint — all exact and schedule-aware (uses current escalated step).</td></tr>
+    <tr><td><strong>CSV export</strong></td><td>Faithful to the on-screen table: schedule-aware rents, proper comma-quoting, explicit Archived column, no formula-injection payloads in the data.</td></tr>
+    <tr><td><strong>Lease removal</strong></td><td>Archive→restore and soft-delete→restore both work; dialog copy is honest and complete ("Nothing is deleted", 14-day window, contact-support-to-restore). Delete nulls the public summary token.</td></tr>
+    <tr><td><strong>Governance</strong></td><td>Separation-of-duties blocks the same user in two chain steps with a clear inline reason. No-policy-match submit fails safe to a draft with a recoverable "Retry routing" banner (not a dead end).</td></tr>
+    <tr><td><strong>Spanish</strong></td><td>Core surfaces render cleanly in ES (dashboard, pipeline, activity, currency "$228.3 k", dates "Hoy"); user-entered data (department names) correctly left untranslated.</td></tr>
+    <tr><td><strong>Recently-fixed items (regression check)</strong></td><td>#161 Stripe Link displays correctly in Billing · #186 Stripe.js loads on the prod domain (no "payment configuration missing") · #172 localized ES currency/dates confirmed · "Leo" rename present throughout the assistant.</td></tr>
+  </table></div>
+
+  <h2>Coverage &amp; limits</h2>
+  <ul>
+    <li><strong>Not completed:</strong> the $499 multi-workspace purchase (and thus deep cross-workspace isolation / Starter-tier gating). The flow is reachable and #186 is resolved, but the persona has no card on file and completing it requires entering card details — a prohibited action for me. Needs a card added by you (or an owner account) to finish.</li>
+    <li><strong>Firm layer:</strong> not walked this pass — the persona belongs to no firm. Now that self-serve <code>create-firm</code> is confirmed built (#193), a follow-up can audit it as a real customer flow.</li>
+    <li><strong>Roles:</strong> one admin persona. Editor/viewer read-only walls were not exercised (needs additional personas).</li>
+    <li><strong>Audit residue in the test workspace:</strong> two active model-locked leases I created ("Audit Test — 88 Commerce Park" and the direct-upload "Suite 400…"), one approval policy ("Audit — Finance requests"), and one archived-then-restored lease. Left in place (active locked leases can't be cleanly removed without the unlock-governance flow). Flag if you'd like them cleaned up.</li>
+  </ul>
+
+  <p class="footer-note">All findings reproduced live on 2026-08-11 against <code>main @ 8ed16aa</code>; numeric findings recomputed independently from the staging database via read-only SQL. New items filed to <code>docs/KNOWN_ISSUES.md</code> as #187–#193 per approval D4. No product code changed.</p>
+</main>
