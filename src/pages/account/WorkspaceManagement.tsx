@@ -33,7 +33,8 @@ import {
   Plus,
   ArrowRightLeft,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ownsAnyWorkspace } from '@/lib/workspaceOwnership';
 import { formatLocalizedDate } from '@/lib/dateFormatters';
 import {
   Card,
@@ -101,12 +102,25 @@ export function WorkspaceManagementContent() {
   // the server preview, so a Starter user sees a clear path forward instead
   // of an empty page.
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const navigate = useNavigate();
 
   // Split availableWorkspaces by ownership (we have role per row already).
   const ownedIds = useMemo(
     () => availableWorkspaces.filter((w) => w.role === 'owner').map((w) => w.id),
     [availableWorkspaces],
   );
+
+  // #195: route the "create workspace" action by ownership. A user who owns
+  // nothing has no Stripe customer, so the paid $499 add-workspace dialog
+  // dead-ends at "add a card" — send them to the free-trial onboarding
+  // (create_first_workspace + checkout) instead. Owners get the paid dialog.
+  const handleCreateWorkspace = () => {
+    if (ownsAnyWorkspace(availableWorkspaces)) {
+      setNewWorkspaceOpen(true);
+    } else {
+      navigate('/app/onboarding');
+    }
+  };
   const memberOnly = useMemo(
     () => availableWorkspaces.filter((w) => w.role !== 'owner'),
     [availableWorkspaces],
@@ -245,7 +259,7 @@ export function WorkspaceManagementContent() {
                 {t('workspace.mgmt.own_desc')}
               </p>
             </div>
-            <Button onClick={() => setNewWorkspaceOpen(true)} className="shrink-0">
+            <Button onClick={handleCreateWorkspace} className="shrink-0">
               <Plus className="h-4 w-4 mr-1.5" />
               {t('workspace.create.cta')}
             </Button>
@@ -261,10 +275,15 @@ export function WorkspaceManagementContent() {
             <Card>
               <CardContent className="py-10 text-center space-y-3">
                 <p className="text-muted-foreground">{t('workspace.mgmt.empty_body')}</p>
-                <Button onClick={() => setNewWorkspaceOpen(true)}>
+                <Button onClick={handleCreateWorkspace}>
                   <Plus className="h-4 w-4 mr-1.5" />
                   {t('workspace.mgmt.empty_cta')}
                 </Button>
+                {/* #195: preview the free-trial outcome so a zero-owned user
+                    knows the click starts a trial, not a $499 charge. */}
+                <p className="text-xs text-muted-foreground">
+                  {t('workspace.mgmt.empty_trial_hint')}
+                </p>
               </CardContent>
             </Card>
           ) : (
