@@ -13,6 +13,7 @@ import { Download, FileJson, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -181,7 +182,7 @@ export default function PortfolioReportsAdmin() {
         title={t('reports.portfolio_reports_title')}
         subtitle={t('reports.portfolio_reports_subtitle')}
       />
-      <div className="px-6 py-6 space-y-6 max-w-5xl">
+      <PageLayout>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t('reports.generate_report')}</CardTitle>
@@ -317,7 +318,7 @@ export default function PortfolioReportsAdmin() {
           </Link>
           .
         </p>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

@@ -14,6 +14,7 @@ import { ArrowLeft, Download, FileJson, FileText, RefreshCw } from 'lucide-react
 import { toast } from 'sonner';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -220,7 +221,7 @@ export default function LeaseReportDetail() {
         title={t('reports.asc842_report_title')}
         subtitle={`${report.organization_name_at_gen ?? ''} · ${t('reports.generated_on', { date: generatedAtDisplay })}`}
       />
-      <div className="px-6 py-6 space-y-6 max-w-5xl">
+      <PageLayout>
         <div className="flex items-center justify-between">
           <Button asChild variant="outline" size="sm">
             <Link to={`/app/leases/${report.lease_id ?? leaseId ?? ''}`}>
@@ -339,7 +340,7 @@ export default function LeaseReportDetail() {
             </p>
           </CardContent>
         </Card>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }
