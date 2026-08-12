@@ -1596,13 +1596,13 @@
       "pending_over_sla_other": "Pendiente {{count}} días · SLA excedido"
     },
     "chain_violation": {
-      "title": "Violación de cadena: se requiere aprobación retroactiva",
+      "title": "Aprobación incompleta: se requiere aprobación retroactiva",
       "desc": "No todos los aprobadores requeridos por la política de este arrendamiento fueron consultados antes de la firma. Los aprobadores requeridos deben aprobar retroactivamente antes de que el arrendamiento vuelva a su estado anterior, o un administrador puede reconocer y anular.",
       "awaiting": "Aprobadores requeridos pendientes de acción:",
       "unknown_approver": "Aprobador desconocido",
       "none_pending": "No se encontraron aprobadores requeridos pendientes. La anulación puede ser la resolución adecuada.",
       "ack_override": "Reconocer y anular",
-      "dialog_title": "Reconocer y anular la violación de cadena",
+      "dialog_title": "Reconocer y anular",
       "dialog_desc": "Esto omite el requisito de aprobación retroactiva y revierte el arrendamiento a su estado de ciclo de vida anterior. El motivo de la anulación se registra de forma permanente en el historial de auditoría. Úselo solo cuando la aprobación retroactiva no sea práctica (p. ej., el aprobador requerido dejó la empresa y la política necesita atención del administrador por separado).",
       "reason_label": "Motivo (≥20 caracteres, obligatorio)",
       "reason_placeholder": "p. ej., El aprobador requerido dejó la empresa; la política se está revisando por separado y este arrendamiento debe permanecer activo mientras tanto.",
@@ -1610,7 +1610,7 @@
       "override_cta": "Anular y resolver",
       "reason_min": "El motivo de la anulación debe tener al menos 20 caracteres.",
       "revert_failed": "No se pudo revertir el ciclo de vida: {{message}}",
-      "override_success": "Violación de cadena reconocida y anulada.",
+      "override_success": "Anulación registrada; el arrendamiento volvió a su estado anterior.",
       "override_failed": "No se pudo completar la anulación"
     },
     "pdf": {
@@ -3433,11 +3433,9 @@
     "creating": "Creando..."
   },
   "review": {
-    "cockpit_title": "Revisión del arrendamiento",
     "source_document": "Documento Fuente",
     "review_panel": "Panel de Revisión y Verificación",
     "save_draft": "Guardar Borrador",
-    "initializing": "Abriendo el arrendamiento…",
     "document_unavailable": "Transmisión de documento no disponible",
     "parties": "Partes y Propiedad",
     "rent_financial": "Renta y Financiero",
@@ -3457,9 +3455,6 @@
       "low": "Baja confianza",
       "na": "N/D"
     },
-    "post_lease": "Publicar Arrendamiento",
-    "posting": "Publicando...",
-    "review_fields": "Por favor revise todos los campos resaltados antes de finalizar",
     "nudge_approver": "Recordar al Aprobador"
   },
   "accept_invite": {
@@ -4486,7 +4481,7 @@
     "markets_count_other": "{{count}} mercados",
     "business_gate_title": "Inteligencia de Portafolio es una función del plan Business",
     "business_gate_desc": "Actualice a Business para desbloquear el costo de ocupación del portafolio, el pronóstico de compromiso de renta, la composición de costos y la lista de vigilancia de arrendamientos.",
-    "empty_title": "La inteligencia de portafolio aparece después de registrar arrendamientos",
+    "empty_title": "La inteligencia de portafolio aparece cuando agrega arrendamientos",
     "empty_desc": "Cuando haya arrendamientos activos, esta página resume el costo de ocupación, el pronóstico de compromiso, la composición de costos y las alertas de fechas críticas.",
     "missing_area_one": "{{missing}} de {{count}} arrendamiento sin superficie — excluido de las métricas de $/pie².",
     "missing_area_other": "{{missing}} de {{count}} arrendamientos sin superficie — excluidos de las métricas de $/pie².",

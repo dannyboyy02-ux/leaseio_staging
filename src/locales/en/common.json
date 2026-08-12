@@ -1596,13 +1596,13 @@
       "pending_over_sla_other": "Pending {{count}} days · over SLA"
     },
     "chain_violation": {
-      "title": "Chain violation — retroactive approval required",
+      "title": "Approval incomplete — retroactive approval required",
       "desc": "This lease's policy-required approvers were not all consulted before execution. Required approvers must retroactively approve before the lease returns to its prior status, or an admin can acknowledge and override.",
       "awaiting": "Required approvers awaiting action:",
       "unknown_approver": "Unknown approver",
       "none_pending": "No pending required approvers found. The override path may be the appropriate resolution.",
       "ack_override": "Acknowledge and Override",
-      "dialog_title": "Acknowledge and Override Chain Violation",
+      "dialog_title": "Acknowledge and override",
       "dialog_desc": "This bypasses the retroactive-approval requirement and reverts the lease to its prior lifecycle status. The override reason is captured permanently in the audit log. Use only when retroactive approval is impractical (e.g., the required approver has left the company and the policy needs admin attention separately).",
       "reason_label": "Reason (≥20 characters, required)",
       "reason_placeholder": "e.g., Required approver left the company; policy is being revised separately and this lease needs to remain active in the meantime.",
@@ -1610,7 +1610,7 @@
       "override_cta": "Override and Resolve",
       "reason_min": "Override reason must be at least 20 characters.",
       "revert_failed": "Failed to revert lifecycle: {{message}}",
-      "override_success": "Chain violation acknowledged and overridden.",
+      "override_success": "Override recorded — lease reverted to its prior status.",
       "override_failed": "Override failed"
     },
     "pdf": {
@@ -2389,7 +2389,7 @@
     },
     "countersig": {
       "title": "Counter-Signature Window",
-      "desc": "Default number of days from signator approval until the counter-signed document is expected. Reminders fire 7 days before, on the due date, and at 7 / 14 / 28 days overdue.",
+      "desc": "Default number of days from signatory approval until the counter-signed document is expected. Reminders fire 7 days before, on the due date, and at 7 / 14 / 28 days overdue.",
       "label": "Default counter-signature window (days)",
       "help": "Must be between 1 and 365 days. Default: 21."
     },
@@ -3433,11 +3433,9 @@
     "creating": "Creating..."
   },
   "review": {
-    "cockpit_title": "Lease review",
     "source_document": "Source Document",
     "review_panel": "Review & Verification Panel",
     "save_draft": "Save Draft",
-    "initializing": "Opening lease…",
     "document_unavailable": "Document stream unavailable",
     "parties": "Parties & Property",
     "rent_financial": "Rent & Financial",
@@ -3457,9 +3455,6 @@
       "low": "Low confidence",
       "na": "N/A"
     },
-    "post_lease": "Post Lease",
-    "posting": "Posting...",
-    "review_fields": "Please review all highlighted fields before finalizing",
     "nudge_approver": "Nudge Approver"
   },
   "accept_invite": {
@@ -4187,11 +4182,11 @@
       "already_resolved": "This lease has already moved past signature review — it's no longer awaiting your signature.",
       "no_pending_step": "This lease has already moved past final review, so there's nothing to sign here. Head back to the lease to see its current status.",
       "not_authorized": "You're not authorized to review and sign this lease.",
-      "load_failed": "Failed to load signator review",
+      "load_failed": "Failed to load signature review",
       "the_company": "the company",
       "attestation_placeholder_doc": "I confirm this lease commits {{workspace}} to the terms in {{filename}} (iteration {{iteration}}, v{{version}}), and I have authority to bind the company.",
       "attestation_placeholder": "I confirm this lease commits {{workspace}} to the negotiated terms, and I have authority to bind the company.",
-      "approved_toast": "Signator approval recorded. Lease moved to pending counter-signature.",
+      "approved_toast": "Signatory approval recorded. Lease moved to pending counter-signature.",
       "reason_required": "Please provide a reason.",
       "submit_failed": "Failed to submit",
       "rejected_toast": "Lease rejected.",
@@ -4486,7 +4481,7 @@
     "markets_count_other": "{{count}} markets",
     "business_gate_title": "Portfolio Intelligence is a Business-plan feature",
     "business_gate_desc": "Upgrade to Business to unlock portfolio occupancy cost, the rent-commitment forecast, cost composition, and the lease watchlist.",
-    "empty_title": "Portfolio intelligence appears after posting leases",
+    "empty_title": "Portfolio intelligence appears once you add leases",
     "empty_desc": "Once leases are active, this page summarizes occupancy cost, the commitment forecast, cost composition, and critical-date flags.",
     "missing_area_one": "{{missing}} of {{count}} lease missing square footage — excluded from $/sqft metrics.",
     "missing_area_other": "{{missing}} of {{count}} leases missing square footage — excluded from $/sqft metrics.",
