@@ -32,6 +32,7 @@ import {
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -378,7 +379,7 @@ export default function SignatorReview() {
     return (
       <AppLayout>
         <AppHeader title={t('approvals.signator.title')} />
-        <div className="max-w-2xl mx-auto py-10">
+        <PageLayout width="narrow">
           <Card className="border-destructive/40">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
@@ -399,7 +400,7 @@ export default function SignatorReview() {
               </Button>
             </CardContent>
           </Card>
-        </div>
+        </PageLayout>
       </AppLayout>
     );
   }
@@ -411,7 +412,7 @@ export default function SignatorReview() {
         subtitle={lease.filename || t('locked_lease.untitled')}
       />
 
-      <div className="max-w-6xl mx-auto py-6 space-y-6">
+      <PageLayout width="wide">
         {/* High-stakes banner */}
         <Card className="border-l-4 border-l-destructive">
           <CardContent className="py-4 flex items-start gap-3">
@@ -676,7 +677,7 @@ export default function SignatorReview() {
             </Card>
           </div>
         </div>
-      </div>
+      </PageLayout>
 
       {/* Reason dialog */}
       <Dialog

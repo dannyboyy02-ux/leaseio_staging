@@ -4,6 +4,7 @@ import { Bell, CheckCircle2, ChevronDown, CheckSquare, RotateCcw, Unlock } from 
 import { Badge } from '@/components/ui/badge';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { cn } from '@/lib/utils';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -33,7 +34,7 @@ export default function NeedsActionPage() {
         title={t('dashboard.needs_your_action')}
         subtitle={!loading && totalCount > 0 ? t('dashboard.items_require_attention', { count: totalCount }) : undefined}
       />
-      <div className="p-6">
+      <PageLayout width="narrow" spacing="">
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
@@ -47,7 +48,7 @@ export default function NeedsActionPage() {
             <p className="text-sm text-muted-foreground mt-1">{t('dashboard.no_actions_required_now')}</p>
           </div>
         ) : (
-          <div className="space-y-6 max-w-3xl">
+          <div className="space-y-6">
             {pendingApprovals.length > 0 && (
               <div>
                 <button
@@ -198,7 +199,7 @@ export default function NeedsActionPage() {
             )}
           </div>
         )}
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

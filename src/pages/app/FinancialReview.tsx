@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -328,9 +329,9 @@ export default function FinancialReview() {
     return (
       <AppLayout>
         <AppHeader title={t('approvals.financial.title')} />
-        <div className="p-6 space-y-4">
+        <PageLayout spacing="space-y-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-lg" />)}
-        </div>
+        </PageLayout>
       </AppLayout>
     );
   }
@@ -354,7 +355,7 @@ export default function FinancialReview() {
         }
       />
 
-      <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto">
+      <PageLayout>
         {!canAct && (
           <div className="rounded-lg border border-muted bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
             {t('approvals.financial.review_status_before')}<strong>{localizedStatusLabel(lease.lifecycle_status as LifecycleStatus)}</strong>{t('approvals.financial.review_status_after')}
@@ -613,7 +614,7 @@ export default function FinancialReview() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </PageLayout>
 
       {/* Approve Confirmation Dialog */}
       <Dialog open={approveDialogOpen} onOpenChange={(o) => !o && setApproveDialogOpen(false)}>
