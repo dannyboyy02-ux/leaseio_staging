@@ -20,8 +20,8 @@ import {
 
 // The viewport below which the sidebar stops being a fixed rail and becomes an
 // off-canvas drawer (FS-1). Matches Tailwind's `md` breakpoint so viewport-keyed
-// `md:` utilities and this logic agree.
-export const SIDEBAR_MOBILE_MAX = 767;
+// `md:` utilities and this logic agree. Module-local — only the query below uses it.
+const SIDEBAR_MOBILE_MAX = 767;
 const MOBILE_MEDIA_QUERY = `(max-width: ${SIDEBAR_MOBILE_MAX}px)`;
 
 interface SidebarPrefs {
