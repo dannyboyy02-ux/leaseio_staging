@@ -18,6 +18,8 @@ import { UpcomingEvents } from '@/components/dashboard/UpcomingEvents';
 import { EscalationReviewPanel } from '@/components/dashboard/EscalationReviewPanel';
 import { PendingCounterSignatureCard } from '@/components/dashboard/PendingCounterSignatureCard';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
+import { AddLeaseDialog } from '@/components/leases/AddLeaseDialog';
+import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useApp } from '@/contexts/AppContext';
 import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
@@ -43,17 +45,22 @@ export default function Dashboard() {
       (needsActionData?.returnedLeases?.length ?? 0) +
       (needsActionData?.unlockedLeases?.length ?? 0) +
       (needsActionData?.otherFlags?.filter((f) => f.count > 0).length ?? 0)) > 0;
+  const [addLeaseDialogOpen, setAddLeaseDialogOpen] = useState(false);
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [limitWallOpen, setLimitWallOpen] = useState(false);
 
-  // Limit wall gate — don't let a user build a request the workspace can't
-  // fulfill. The server re-checks at extraction time; this is UX, not
-  // enforcement.
-  const handleNewRequest = () => {
+  // FS-2: the Dashboard's primary CTA now opens the SAME two-path chooser as
+  // the Leases page (Request approval / Upload document) instead of jumping
+  // straight to the approval-request form — so a user holding an already-signed
+  // lease can reach the upload path from the default screen. Limit wall gate:
+  // at the cap, open the wall instead of the chooser (server re-checks in
+  // process_lease; this is UX, not enforcement).
+  const handleAddLease = () => {
     if (quota.blocked) {
       setLimitWallOpen(true);
     } else {
-      setCreateDrawerOpen(true);
+      setAddLeaseDialogOpen(true);
     }
   };
 
@@ -73,9 +80,9 @@ export default function Dashboard() {
         actions={
           isReadOnly ? undefined : (
             <div className="flex items-center gap-2">
-              <Button variant="accent" onClick={handleNewRequest}>
+              <Button variant="accent" onClick={handleAddLease}>
                 <Plus className="h-4 w-4 mr-2" />
-                {t('dashboard.new_request')}
+                {t('leases.add_lease')}
               </Button>
             </div>
           )
@@ -126,10 +133,27 @@ export default function Dashboard() {
         </div>
       </PageLayout>
 
+      <AddLeaseDialog
+        open={addLeaseDialogOpen}
+        onOpenChange={setAddLeaseDialogOpen}
+        onRequestApproval={() => setCreateDrawerOpen(true)}
+        onUploadDocument={() => setUploadModalOpen(true)}
+      />
+
       <LeaseRequestForm
         open={createDrawerOpen}
         onOpenChange={setCreateDrawerOpen}
         onSuccess={handleLeaseCreated}
+      />
+
+      <LeaseUploadModal
+        open={uploadModalOpen}
+        onOpenChange={setUploadModalOpen}
+        onSuccess={handleLeaseCreated}
+        onQuotaExceeded={() => {
+          setUploadModalOpen(false);
+          setLimitWallOpen(true);
+        }}
       />
 
       <LimitReachedDialog open={limitWallOpen} onOpenChange={setLimitWallOpen} />

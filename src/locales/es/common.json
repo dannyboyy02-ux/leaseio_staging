@@ -241,7 +241,7 @@
       "download_link_failed": "No se pudo generar el enlace de descarga"
     },
     "processing": {
-      "initializing": "Inicializando el área de revisión...",
+      "initializing": "Abriendo el arrendamiento…",
       "title": "Procesando arrendamiento",
       "description": "Nuestra IA está extrayendo los términos y datos clave de su documento. Esto suele tardar entre 30 y 90 segundos.",
       "elapsed": "{{time}} transcurridos",
@@ -670,7 +670,7 @@
     "uploaded_on": "Subida el {{date}}",
     "open_aria": "Abrir {{name}}",
     "archive_aria": "Archivar {{name}}",
-    "status_posted": "Registrada",
+    "status_posted": "Finalizada",
     "fields": {
       "lease_start": "Inicio del arrendamiento",
       "lease_end": "Fin del arrendamiento",
@@ -994,7 +994,7 @@
       "final_review": "Revisión final",
       "pending_counter_signature": "En espera de contrafirma",
       "fully_executed": "Totalmente firmado",
-      "chain_violation": "Violación de cadena"
+      "chain_violation": "Aprobación incompleta"
     },
     "activity_created": "Arrendamiento creado",
     "activity_status_to": "Estado → {{status}}",
@@ -1051,7 +1051,7 @@
     "flag_stalled": "Estancado en revisión",
     "flag_awaiting_abstraction": "En espera de la abstracción de IA",
     "flag_doc_missing": "Ejecutado — falta el documento",
-    "flag_chain_violation": "Violación de cadena — se requiere aprobación retroactiva",
+    "flag_chain_violation": "Aprobación incompleta — se requiere aprobación retroactiva",
     "awaiting_approval_sub": "{{count}} en espera de aprobación",
     "expiring_120_combined": "Vencen en ≤ 120 días",
     "within_90_days": "{{count}} dentro de 90 días",
@@ -1445,7 +1445,7 @@
       "process_failed": "No se pudo procesar el arrendamiento",
       "unexpected_error": "Ocurrió un error inesperado",
       "loading_leases": "Cargando arrendamientos...",
-      "no_posted_leases": "No hay arrendamientos disponibles",
+      "no_posted_leases": "No hay arrendamientos finalizados disponibles",
       "unknown_tenant": "Arrendatario desconocido",
       "unknown_landlord": "Arrendador desconocido",
       "submitting": "Enviando...",
@@ -1642,7 +1642,7 @@
       "policy_short": "política {{id}}…",
       "no_prior_policy": "(sin política previa)",
       "system": "sistema",
-      "chain_violation_badge": "Violación de cadena",
+      "chain_violation_badge": "Aprobación incompleta",
       "triggered_by": "activado por {{name}}",
       "lifecycle_label": "Ciclo de vida:",
       "steps_label": "Pasos:",
@@ -1669,7 +1669,7 @@
       "new_approvers_other": "+{{count}} aprobadores nuevos requeridos",
       "prior_superseded_one": "· {{count}} paso previo reemplazado",
       "prior_superseded_other": "· {{count}} pasos previos reemplazados",
-      "violation_note": "El reenrutamiento ocurrió después de que este arrendamiento se firmó, por lo que entró en el estado chain_violation. Se notificará a los aprobadores retroactivos requeridos, o un administrador puede reconocer y anular.",
+      "violation_note": "El reenrutamiento ocurrió después de que este arrendamiento se firmó, por lo que su aprobación ahora está incompleta. Se notificará a los aprobadores retroactivos requeridos, o un administrador puede reconocer y anular.",
       "got_it": "Entendido",
       "view_history": "Ver historial de reenrutamientos"
     },
@@ -3268,7 +3268,7 @@
     "coming_soon": "Próximamente",
     "faq_title": "Preguntas Frecuentes",
     "faq1_q": "¿Cómo subo un arrendamiento?",
-    "faq1_a": "Vaya al Panel o a la página de Arrendamientos y haga clic en 'Subir Arrendamiento'. Puede arrastrar y soltar un PDF o hacer clic para buscar en sus archivos.",
+    "faq1_a": "En el Panel o en la página de Arrendamientos, haga clic en 'Agregar arrendamiento' y luego elija 'Subir documento'. Puede arrastrar y soltar un PDF o hacer clic para buscar en sus archivos.",
     "faq2_q": "¿Cuánto tiempo tarda la extracción con IA?",
     "faq2_a": "La mayoría de los documentos se procesan en 1-2 minutos. Los documentos complejos con muchas páginas pueden tardar un poco más.",
     "faq3_q": "¿Puedo editar los datos extraídos?",
@@ -3434,11 +3434,11 @@
     "creating": "Creando..."
   },
   "review": {
-    "cockpit_title": "Cabina de Abstracción",
+    "cockpit_title": "Revisión del arrendamiento",
     "source_document": "Documento Fuente",
     "review_panel": "Panel de Revisión y Verificación",
     "save_draft": "Guardar Borrador",
-    "initializing": "Inicializando Cabina...",
+    "initializing": "Abriendo el arrendamiento…",
     "document_unavailable": "Transmisión de documento no disponible",
     "parties": "Partes y Propiedad",
     "rent_financial": "Renta y Financiero",
@@ -3460,7 +3460,7 @@
     },
     "post_lease": "Publicar Arrendamiento",
     "posting": "Publicando...",
-    "review_fields": "Por favor revise todos los campos resaltados antes de publicar",
+    "review_fields": "Por favor revise todos los campos resaltados antes de finalizar",
     "nudge_approver": "Recordar al Aprobador"
   },
   "accept_invite": {
@@ -3639,7 +3639,7 @@
   },
   "needs_review": {
     "title": "Revisión necesaria",
-    "intro": "Revise los siguientes elementos antes de publicar este arrendamiento:",
+    "intro": "Revise los siguientes elementos antes de finalizar este arrendamiento:",
     "missing": "Falta {{label}}",
     "low_confidence": "Verifique {{label}}: la extracción fue menos precisa aquí ({{pct}}%)"
   },
@@ -3787,7 +3787,7 @@
       "lifecycle_label": "Ciclo de vida:",
       "steps_label": "Pasos:",
       "superseded": "{{count}} reemplazados",
-      "would_violate": "Entraría en chain_violation",
+      "would_violate": "Requeriría aprobación retroactiva",
       "open_lease": "Abrir arrendamiento",
       "trigger": "Activar reenrutamiento manual",
       "trigger_short": "Activar reenrutamiento",
@@ -4186,8 +4186,8 @@
       "lease_not_found": "Arrendamiento no encontrado",
       "not_final_review": "Este arrendamiento aún no está en la etapa de revisión final — no puede revisarse aquí hasta que llegue a ella.",
       "already_resolved": "Este arrendamiento ya pasó la revisión de firma — ya no espera su firma.",
-      "no_pending_step": "No existe un paso de firmante pendiente para este arrendamiento. La etapa de firmante puede haberse resuelto ya o aún no haberse creado.",
-      "not_authorized": "No está autorizado para actuar en este paso de firmante.",
+      "no_pending_step": "Este arrendamiento ya pasó la revisión final, así que no hay nada que firmar aquí. Vuelva al arrendamiento para ver su estado actual.",
+      "not_authorized": "No está autorizado para revisar y firmar este arrendamiento.",
       "load_failed": "No se pudo cargar la revisión del firmante",
       "the_company": "la empresa",
       "attestation_placeholder_doc": "Confirmo que este arrendamiento compromete a {{workspace}} con los términos de {{filename}} (iteración {{iteration}}, v{{version}}), y que tengo autoridad para obligar a la empresa.",
@@ -4270,8 +4270,8 @@
       "badge_manager": "Revisión del gerente",
       "badge_financial": "Revisión financiera",
       "badge_auto_approved": "Aprobación automática",
-      "badge_posted_after": "Publicado tras la aprobación",
-      "badge_concept": "Aprobación de concepto",
+      "badge_posted_after": "Finalizado tras la aprobación",
+      "badge_concept": "Aprobación inicial",
       "badge_signature": "Firma",
       "resolving_route": "Resolviendo la ruta de aprobación…",
       "route_via_policy": "Se enruta por su política de aprobación \"{{policy}}\".",
@@ -4348,7 +4348,7 @@
       "select_placeholder": "Seleccione el arrendamiento principal...",
       "search_placeholder": "Busque por nombre de archivo, arrendatario o arrendador...",
       "loading": "Cargando arrendamientos...",
-      "none_found": "No se encontraron arrendamientos publicados.",
+      "none_found": "No se encontraron arrendamientos finalizados.",
       "ends_colon": "Termina: {{date}}"
     },
     "delegation": {
@@ -4577,12 +4577,12 @@
       "final_review": "Revisión final",
       "pending_counter_signature": "En espera de contrafirma",
       "fully_executed": "Totalmente ejecutado",
-      "chain_violation": "Violación de cadena",
+      "chain_violation": "Aprobación incompleta",
       "Processing": "Procesando",
       "Uploaded": "Cargado",
       "Failed": "Fallido",
       "Ready": "Listo",
-      "Posted": "Registrado"
+      "Posted": "Finalizado"
     },
     "status_short": {
       "draft": "Borrador",
@@ -4600,7 +4600,7 @@
       "final_review": "Final",
       "pending_counter_signature": "Contrafirma",
       "fully_executed": "Ejecutado",
-      "chain_violation": "Violación"
+      "chain_violation": "Incompleta"
     },
     "stage": {
       "concept": "Aprobación inicial",
