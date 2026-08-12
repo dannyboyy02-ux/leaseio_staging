@@ -911,7 +911,6 @@
     "rent_payment_due": "Pago de renta pendiente",
     "cpi_adjustment_due": "Ajuste CPI Pendiente",
     "properties": "propiedades",
-    "new_request": "Nueva solicitud",
     "needs_your_action": "Requiere Su Acción",
     "items_require_attention_one": "{{count}} elemento requiere atención",
     "items_require_attention_other": "{{count}} elementos requieren atención",

@@ -911,7 +911,6 @@
     "rent_payment_due": "Rent payment due",
     "cpi_adjustment_due": "CPI Adjustment Due",
     "properties": "properties",
-    "new_request": "New Request",
     "needs_your_action": "Needs Your Action",
     "items_require_attention_one": "{{count}} item requires attention",
     "items_require_attention_other": "{{count}} items require attention",
