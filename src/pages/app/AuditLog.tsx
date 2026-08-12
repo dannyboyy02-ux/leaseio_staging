@@ -14,6 +14,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLayout } from "@/components/layout/PageLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -247,7 +248,7 @@ export default function AuditLog() {
         }
       />
 
-      <div className="p-6 space-y-6">
+      <PageLayout width="wide">
         {/* Known evidence gap (#76, resolved 2026-06-12): a constraint
             defect silently rejected several event types for ~5 weeks. The
             data is unrecoverable; disclosing the hole is the only honest
@@ -432,7 +433,7 @@ export default function AuditLog() {
             </div>
           )}
         </Card>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }
