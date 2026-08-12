@@ -329,7 +329,7 @@ export default function FinancialReview() {
     return (
       <AppLayout>
         <AppHeader title={t('approvals.financial.title')} />
-        <PageLayout spacing="space-y-4">
+        <PageLayout>
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-lg" />)}
         </PageLayout>
       </AppLayout>

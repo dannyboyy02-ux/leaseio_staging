@@ -54,6 +54,11 @@ const importsAppHeader = (src: string) =>
   /from\s+['"]@\/components\/layout\/AppHeader['"]/.test(src);
 const importsPageLayout = (src: string) =>
   /from\s+['"]@\/components\/layout\/PageLayout['"]/.test(src);
+// Require the JSX to actually render <PageLayout>, not merely import it — so a
+// page that imports-but-doesn't-use it (e.g. a partial revert) still fails.
+const rendersPageLayout = (src: string) => /<PageLayout[\s/>]/.test(src);
+const adoptsPageLayout = (src: string) =>
+  importsPageLayout(src) && rendersPageLayout(src);
 
 const allTsx = [
   ...walkTsx(join(repoRoot, 'src', 'pages')),
@@ -72,7 +77,7 @@ describe('PageLayout adoption pin (FS-3)', () => {
       .map(rel)
       .filter(
         (r) =>
-          !importsPageLayout(readFileSync(join(repoRoot, r), 'utf8')) && !(r in ALLOWLIST),
+          !adoptsPageLayout(readFileSync(join(repoRoot, r), 'utf8')) && !(r in ALLOWLIST),
       );
     expect(
       violations,
@@ -94,8 +99,8 @@ describe('PageLayout adoption pin (FS-3)', () => {
         continue;
       }
       if (!importsAppHeader(src)) stale.push(`${key} (no longer imports AppHeader)`);
-      else if (importsPageLayout(src))
-        stale.push(`${key} (now imports PageLayout — remove from allowlist)`);
+      else if (adoptsPageLayout(src))
+        stale.push(`${key} (now renders PageLayout — remove from allowlist)`);
     }
     expect(
       stale,
