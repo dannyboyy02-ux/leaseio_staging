@@ -2,7 +2,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Mail, Book, ExternalLink } from "lucide-react";
+import { Mail, ExternalLink } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Support() {
@@ -17,8 +17,9 @@ export default function Support() {
       
       <div className="p-6">
         <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
-          {/* Email Support */}
-          <Card>
+          {/* Email Support. (The old "Documentation — Coming Soon" card was a
+              disabled dead-end (FS-14); removed until real docs exist.) */}
+          <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Mail className="h-5 w-5 text-primary" />
@@ -35,23 +36,7 @@ export default function Support() {
               </Button>
             </CardContent>
           </Card>
-          
-          {/* Documentation */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Book className="h-5 w-5 text-primary" />
-                {t('support.docs_title')}
-              </CardTitle>
-              <CardDescription>{t('support.docs_desc')}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" disabled>
-                {t('support.coming_soon')}
-              </Button>
-            </CardContent>
-          </Card>
-          
+
           {/* FAQ */}
           <Card className="md:col-span-2">
             <CardHeader>

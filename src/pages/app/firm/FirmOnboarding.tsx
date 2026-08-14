@@ -136,6 +136,13 @@ export default function FirmOnboarding() {
             <Button className="w-full" onClick={createFirm} disabled={busy || name.trim().length < 2 || !billingEmail.trim()}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>{t("firm.onboarding.continue")}<ArrowRight className="h-4 w-4 ml-1" /></>}
             </Button>
+            {/* FS-16: nothing is committed yet at this step, so the wizard must
+                offer a way out. (Steps 2/3 are forward-only by design — each
+                Continue is a server commit — so they get the "later" escape
+                below instead of a misleading Back.) */}
+            <button className="w-full text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate("/app/firm")} disabled={busy}>
+              {t("common.cancel")}
+            </button>
           </Card>
         ) : step === "workspace" ? (
           <Card className="p-5 space-y-4">
@@ -147,6 +154,12 @@ export default function FirmOnboarding() {
             <Button className="w-full" onClick={addWorkspace} disabled={busy || !wsName.trim()}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>{t("firm.onboarding.continue")}<ArrowRight className="h-4 w-4 ml-1" /></>}
             </Button>
+            {/* The firm already exists at this point — same "finish later"
+                escape the billing step offers (FirmDashboard handles a firm
+                with no child workspaces). */}
+            <button className="w-full text-xs text-muted-foreground hover:text-foreground" onClick={() => navigate("/app/firm")} disabled={busy}>
+              {t("firm.onboarding.do_later")}
+            </button>
           </Card>
         ) : (
           <Card className="p-5 space-y-4 text-center">

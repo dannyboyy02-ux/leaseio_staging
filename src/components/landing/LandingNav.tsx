@@ -68,7 +68,7 @@ export function LandingNav() {
               <Link to="/login">{t('landing.nav.sign_in')}</Link>
             </Button>
             <Button asChild>
-              <Link to="/signup">{t('landing.nav.get_started')}</Link>
+              <Link to="/signup">{t('landing.hero.cta_trial')}</Link>
             </Button>
           </div>
 
@@ -107,7 +107,7 @@ export function LandingNav() {
                 <Link to="/login">{t('landing.nav.sign_in')}</Link>
               </Button>
               <Button asChild className="w-full">
-                <Link to="/signup">{t('landing.nav.get_started')}</Link>
+                <Link to="/signup">{t('landing.hero.cta_trial')}</Link>
               </Button>
             </div>
           </div>

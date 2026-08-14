@@ -876,7 +876,7 @@
       "contact": "Contact",
       "privacy": "Privacy Policy",
       "terms": "Terms of Service",
-      "copyright": "© 2024 LeaseIO. All rights reserved."
+      "copyright": "© {{year}} LeaseIO. All rights reserved."
     }
   },
   "dashboard": {
@@ -1934,7 +1934,7 @@
     "firm_fallback": "your firm",
     "auto_renews_on": "Auto renews on {{date}}",
     "plan_benefit_starter": "15 AI abstractions per month · up to 3 users",
-    "plan_benefit_business": "50 AI abstractions per month · unlimited users · AI assistant",
+    "plan_benefit_business": "50 AI abstractions per month · unlimited users · Leo AI assistant",
     "plan_benefit_vault": "Read-only retention · full export anytime",
     "adjust_plan": "Adjust plan",
     "adjust_plan_title": "Adjust your plan",
@@ -1980,7 +1980,7 @@
     "free": "Free",
     "per_month": "/mo",
     "downgrade_confirm_title": "Downgrade to {{plan}}?",
-    "downgrade_confirm_desc": "Downgrading ends access to Business features — the embedded AI assistant, portfolio intelligence, amendment comparison, and unlimited users. Your leases and data are kept. You'll confirm the switch at checkout, and your current plan stops billing automatically.",
+    "downgrade_confirm_desc": "Downgrading ends access to Business features — the Leo AI assistant, portfolio intelligence, amendment comparison, and unlimited users. Your leases and data are kept. You'll confirm the switch at checkout, and your current plan stops billing automatically.",
     "downgrade_confirm_cta": "Continue to checkout",
     "upgrade_confirm_title": "Confirm plan change",
     "upgrade_confirm_desc": "You're upgrading from {{from}} to {{to}}. You'll confirm the exact amount on the checkout page before anything is charged.",
@@ -2110,7 +2110,7 @@
     "archive_title": "Archive a lease — free",
     "archive_desc": "No longer tracking a lease? Archive it to free a slot at no cost.",
     "upgrade_title": "Upgrade to Business",
-    "upgrade_desc": "${{price}}/month — {{included}} abstractions and active leases included, plus the AI assistant, portfolio intelligence, and unlimited users.",
+    "upgrade_desc": "${{price}}/month — {{included}} abstractions and active leases included, plus the Leo AI assistant, portfolio intelligence, and unlimited users.",
     "pack_title": "Add a capacity pack",
     "pack_desc": "From ${{price}} per lease (packs from ${{monthly}}/mo) — raises your limit. Cancel anytime.",
     "single_title": "Buy 1 lease — ${{price}} one-time",
@@ -3063,7 +3063,7 @@
       "15_abstractions_mo": "15 AI abstractions/month",
       "50_abstractions_mo": "50 AI abstractions/month",
       "3_users": "Up to 3 users",
-      "ai_assistant": "Embedded AI assistant (Ask Leo)",
+      "ai_assistant": "Leo, the embedded AI assistant",
       "portfolio_intelligence": "Portfolio intelligence",
       "amendment_comparison": "Amendment comparison",
       "vault_read_only": "Read-only repository — view everything you stored",
@@ -3264,9 +3264,6 @@
     "email_title": "Email Support",
     "email_desc": "Send us an email and we'll get back to you within 24 hours.",
     "contact_email": "Contact Support",
-    "docs_title": "Documentation",
-    "docs_desc": "Browse our guides and tutorials to get started.",
-    "coming_soon": "Coming Soon",
     "faq_title": "Frequently Asked Questions",
     "faq1_q": "How do I upload a lease?",
     "faq1_a": "On the Dashboard or Leases page, click 'Add Lease', then choose 'Upload Document'. You can drag and drop a PDF or click to browse your files.",
@@ -3330,7 +3327,7 @@
   "audit": {
     "title": "Audit Log",
     "subtitle": "Track all lease state transitions and changes",
-    "gap_notice": "Known gap: due to a logging defect, events of the following types were not recorded between May 8 and June 12, 2026 — counter-signature received/overdue, out-of-office routing and revocation, delegation activation/creation, deactivated-approver reassignment, document iteration uploads, final-review returns, and unlock denials. The defect is fixed; the missing records are not recoverable.",
+    "gap_notice": "Known gap: a logging issue (since fixed) prevented events of the following types from being recorded between May 8 and June 12, 2026 — counter-signature received/overdue, out-of-office routing and revocation, delegation activation/creation, deactivated-approver reassignment, document iteration uploads, final-review returns, and unlock denials. Records from that window are not recoverable.",
     "export_csv": "Export CSV",
     "filters": "Filters",
     "lease_id": "Lease ID",
@@ -3504,10 +3501,6 @@
   "not_found": {
     "message": "Oops! Page not found",
     "return_home": "Return to Home"
-  },
-  "index": {
-    "title": "Welcome to Your Blank App",
-    "subtitle": "Start building your amazing project here!"
   },
   "privacy": {
     "title": "Privacy Policy",
@@ -3802,7 +3795,7 @@
   "assistant": {
     "title": "Ask Leo",
     "subtitle": "Answers from your lease portfolio",
-    "open_aria": "Open AI assistant",
+    "open_aria": "Open Leo, the AI assistant",
     "business_required": "Business plan required",
     "upgrade_desc": "Upgrade to Business to ask questions about your lease portfolio.",
     "empty_prompt": "Ask anything about your lease portfolio. Leo answers from your actual data.",
@@ -4066,7 +4059,7 @@
       "revoke_failed_toast": "Could not revoke the delegation.",
       "delegation_revoked": "Delegation revoked — the step is back in your queue.",
       "approved_forwarded": "Approved — forwarded to financial review",
-      "nothing_here": "Nothing here",
+      "nothing_here": "All caught up",
       "no_items": "No items to show in this tab",
       "counter_signature_follow_up": "Counter-signature follow-up ({{count}})",
       "no_due_date": "No due date",

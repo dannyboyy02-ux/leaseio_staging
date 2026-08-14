@@ -876,7 +876,7 @@
       "contact": "Contacto",
       "privacy": "Política de Privacidad",
       "terms": "Términos de Servicio",
-      "copyright": "© 2024 LeaseIO. Todos los derechos reservados."
+      "copyright": "© {{year}} LeaseIO. Todos los derechos reservados."
     }
   },
   "dashboard": {
@@ -1934,7 +1934,7 @@
     "firm_fallback": "su firma",
     "auto_renews_on": "Se renueva automáticamente el {{date}}",
     "plan_benefit_starter": "15 abstracciones de IA al mes · hasta 3 usuarios",
-    "plan_benefit_business": "50 abstracciones de IA al mes · usuarios ilimitados · asistente de IA",
+    "plan_benefit_business": "50 abstracciones de IA al mes · usuarios ilimitados · asistente de IA Leo",
     "plan_benefit_vault": "Retención de solo lectura · exportación completa cuando quiera",
     "adjust_plan": "Ajustar plan",
     "adjust_plan_title": "Ajuste su plan",
@@ -1980,7 +1980,7 @@
     "free": "Gratis",
     "per_month": "/mes",
     "downgrade_confirm_title": "¿Cambiar al plan {{plan}}?",
-    "downgrade_confirm_desc": "Al bajar de plan perderá acceso a las funciones Business: el asistente de IA integrado, la inteligencia de portafolio, la comparación de enmiendas y los usuarios ilimitados. Sus arrendamientos y datos se conservan. Confirmará el cambio al pagar y su plan actual deja de facturarse automáticamente.",
+    "downgrade_confirm_desc": "Al bajar de plan perderá acceso a las funciones Business: el asistente de IA Leo, la inteligencia de portafolio, la comparación de enmiendas y los usuarios ilimitados. Sus arrendamientos y datos se conservan. Confirmará el cambio al pagar y su plan actual deja de facturarse automáticamente.",
     "downgrade_confirm_cta": "Continuar al pago",
     "upgrade_confirm_title": "Confirmar cambio de plan",
     "upgrade_confirm_desc": "Está actualizando de {{from}} a {{to}}. Confirmará el monto exacto en la página de pago antes de cualquier cargo.",
@@ -2110,7 +2110,7 @@
     "archive_title": "Archivar un arrendamiento — gratis",
     "archive_desc": "¿Ya no da seguimiento a un arrendamiento? Archívelo para liberar un espacio sin costo.",
     "upgrade_title": "Actualizar a Business",
-    "upgrade_desc": "${{price}}/mes — {{included}} abstracciones y arrendamientos activos incluidos, más el asistente de IA, inteligencia de portafolio y usuarios ilimitados.",
+    "upgrade_desc": "${{price}}/mes — {{included}} abstracciones y arrendamientos activos incluidos, más el asistente de IA Leo, inteligencia de portafolio y usuarios ilimitados.",
     "pack_title": "Agregar un paquete de capacidad",
     "pack_desc": "Desde ${{price}} por arrendamiento (paquetes desde ${{monthly}}/mes) — aumenta su límite. Cancele cuando quiera.",
     "single_title": "Comprar 1 arrendamiento — ${{price}} pago único",
@@ -3063,7 +3063,7 @@
       "15_abstractions_mo": "15 abstracciones con IA/mes",
       "50_abstractions_mo": "50 abstracciones con IA/mes",
       "3_users": "Hasta 3 usuarios",
-      "ai_assistant": "Asistente de IA integrado (Pregúntele a Leo)",
+      "ai_assistant": "Leo, el asistente de IA integrado",
       "portfolio_intelligence": "Inteligencia de portafolio",
       "amendment_comparison": "Comparación de enmiendas",
       "vault_read_only": "Repositorio de solo lectura: vea todo lo que almacenó",
@@ -3264,9 +3264,6 @@
     "email_title": "Soporte por Email",
     "email_desc": "Envíenos un email y le responderemos dentro de 24 horas.",
     "contact_email": "Contactar Soporte",
-    "docs_title": "Documentación",
-    "docs_desc": "Explore nuestras guías y tutoriales para comenzar.",
-    "coming_soon": "Próximamente",
     "faq_title": "Preguntas Frecuentes",
     "faq1_q": "¿Cómo subo un arrendamiento?",
     "faq1_a": "En el Panel o en la página de Arrendamientos, haga clic en 'Agregar arrendamiento' y luego elija 'Subir documento'. Puede arrastrar y soltar un PDF o hacer clic para buscar en sus archivos.",
@@ -3330,7 +3327,7 @@
   "audit": {
     "title": "Registro de Auditoría",
     "subtitle": "Rastree todas las transiciones de estado de arrendamientos y cambios",
-    "gap_notice": "Brecha conocida: debido a un defecto de registro, los eventos de los siguientes tipos no se registraron entre el 8 de mayo y el 12 de junio de 2026 — contrafirma recibida/vencida, enrutamiento y revocación de fuera de oficina, activación/creación de delegación, reasignación de aprobador desactivado, cargas de iteraciones de documentos, devoluciones de revisión final y denegaciones de desbloqueo. El defecto está corregido; los registros faltantes no son recuperables.",
+    "gap_notice": "Brecha conocida: un problema de registro (ya corregido) impidió que se registraran los eventos de los siguientes tipos entre el 8 de mayo y el 12 de junio de 2026 — contrafirma recibida/vencida, enrutamiento y revocación de fuera de oficina, activación/creación de delegación, reasignación de aprobador desactivado, cargas de iteraciones de documentos, devoluciones de revisión final y denegaciones de desbloqueo. Los registros de ese período no son recuperables.",
     "export_csv": "Exportar CSV",
     "filters": "Filtros",
     "lease_id": "ID de Arrendamiento",
@@ -3504,10 +3501,6 @@
   "not_found": {
     "message": "¡Ups! Página no encontrada",
     "return_home": "Volver al inicio"
-  },
-  "index": {
-    "title": "Bienvenido a su aplicación en blanco",
-    "subtitle": "¡Comience a construir su proyecto increíble aquí!"
   },
   "privacy": {
     "title": "Política de Privacidad",
@@ -3802,7 +3795,7 @@
   "assistant": {
     "title": "Pregúntele a Leo",
     "subtitle": "Respuestas desde su portafolio de arrendamientos",
-    "open_aria": "Abrir asistente de IA",
+    "open_aria": "Abrir Leo, el asistente de IA",
     "business_required": "Se requiere el plan Business",
     "upgrade_desc": "Actualice a Business para hacer preguntas sobre su portafolio de arrendamientos.",
     "empty_prompt": "Pregunte lo que quiera sobre su portafolio de arrendamientos. Leo responde a partir de sus datos reales.",
@@ -4066,7 +4059,7 @@
       "revoke_failed_toast": "No se pudo revocar la delegación.",
       "delegation_revoked": "Delegación revocada — el paso está de vuelta en su bandeja.",
       "approved_forwarded": "Aprobado — remitido a revisión financiera",
-      "nothing_here": "Nada por aquí",
+      "nothing_here": "Todo al día",
       "no_items": "No hay elementos para mostrar en esta pestaña",
       "counter_signature_follow_up": "Seguimiento de contrafirma ({{count}})",
       "no_due_date": "Sin fecha límite",

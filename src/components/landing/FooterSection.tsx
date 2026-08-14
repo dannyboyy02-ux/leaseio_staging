@@ -83,7 +83,8 @@ export function FooterSection() {
 
         <div className="pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            {t('landing.footer.copyright')}
+            {/* Auto-year: the © line can never go stale again (FS-11). */}
+            {t('landing.footer.copyright', { year: new Date().getFullYear() })}
           </p>
         </div>
       </div>

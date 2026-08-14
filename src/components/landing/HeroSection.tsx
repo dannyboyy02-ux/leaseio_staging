@@ -34,16 +34,18 @@ export function HeroSection() {
             {t('landing.hero.subheadline')}
           </p>
 
-          {/* CTAs */}
+          {/* CTAs — ONE primary (FS-10): the trial is THE next step; the free
+              audit is the demoted secondary so a first-timer isn't choosing
+              between two equal-weight buttons. */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Button size="lg" asChild className="w-full sm:w-auto">
-              <Link to={auditTarget}>
-                {t('landing.hero.cta_audit')}
+              <Link to="/signup">
+                {t('landing.hero.cta_trial')}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button size="lg" variant="outline" asChild className="w-full sm:w-auto">
-              <Link to="/signup">{t('landing.hero.cta_trial')}</Link>
+              <Link to={auditTarget}>{t('landing.hero.cta_audit')}</Link>
             </Button>
           </div>
 

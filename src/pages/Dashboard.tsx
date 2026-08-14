@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -19,9 +20,11 @@ import { EscalationReviewPanel } from '@/components/dashboard/EscalationReviewPa
 import { PendingCounterSignatureCard } from '@/components/dashboard/PendingCounterSignatureCard';
 import { LeaseRequestForm } from '@/components/workflow/LeaseRequestForm';
 import { AddLeaseDialog } from '@/components/leases/AddLeaseDialog';
+import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useApp } from '@/contexts/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
@@ -49,6 +52,27 @@ export default function Dashboard() {
   const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [limitWallOpen, setLimitWallOpen] = useState(false);
+
+  // FS-9: a brand-new workspace used to render the checklist PLUS ~7 empty
+  // analytics widgets — a wall that diluted the one gesture that matters
+  // (add the first lease). One cheap head-count picks the layout. Archived
+  // leases still count (that's not a first run); soft-deleted rows are
+  // already hidden from authenticated reads by RLS. While the count loads
+  // (undefined) we render the full grid — the common, has-data case — so
+  // existing workspaces never flash the first-run hero.
+  const { data: leaseCount } = useQuery({
+    queryKey: ['dashboard-any-lease', workspace?.id],
+    enabled: !!workspace?.id,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('leases')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', workspace!.id);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+  const firstRun = leaseCount === 0;
 
   // FS-2: the Dashboard's primary CTA now opens the SAME two-path chooser as
   // the Leases page (Request approval / Upload document) instead of jumping
@@ -93,6 +117,13 @@ export default function Dashboard() {
         {/* Onboarding — auto-hides when all steps complete or dismissed */}
         <OnboardingChecklist />
 
+        {firstRun ? (
+          // First run (0 leases): the checklist + one hero with the Add-Lease
+          // chooser. The analytics widgets stay hidden until there's a lease
+          // for them to describe (FS-9).
+          <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
+        ) : (
+          <>
         {/* KPI strip — monthly rent, pipeline value, awaiting approval, expiring */}
         <SummaryStrip />
 
@@ -131,6 +162,8 @@ export default function Dashboard() {
           <PipelineByDepartment />
           <IntakeTrend />
         </div>
+          </>
+        )}
       </PageLayout>
 
       <AddLeaseDialog
