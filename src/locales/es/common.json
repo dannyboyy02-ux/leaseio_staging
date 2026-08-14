@@ -3671,7 +3671,8 @@
   "readonly": {
     "lease_note": "Este espacio de trabajo es de solo lectura: puede ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas.",
     "viewer_note": "Su rol en este espacio de trabajo es de solo lectura: puede ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas.",
-    "write_rejected": "Su cambio no se guardó: no tiene permiso para editar este arrendamiento."
+    "write_rejected": "Su cambio no se guardó: no tiene permiso para editar este arrendamiento.",
+    "firm_lease_note": "Puede ver todos los arrendamientos de este espacio de trabajo y editar los que usted creó."
   },
   "routing_failed": {
     "title": "El enrutamiento de aprobación no se completó",
@@ -4314,7 +4315,8 @@
       "discard_title": "¿Descartar esta solicitud?",
       "discard_body": "Tiene datos sin guardar. Si cierra ahora, se perderán.",
       "discard_keep": "Seguir editando",
-      "discard_confirm": "Descartar"
+      "discard_confirm": "Descartar",
+      "route_failed": "No se pudo enrutar esta solicitud para aprobación. Contacte a su administrador."
     },
     "impact": {
       "title": "Impacto Financiero",

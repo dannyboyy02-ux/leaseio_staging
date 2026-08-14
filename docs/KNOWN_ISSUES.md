@@ -56,7 +56,11 @@ arm 3 grants any `workspace_roles` functional-role holder (a viewer holding fina
 `lease_activity_log`. None burn paid AI. **Fix shape:** a follow-up security migration tightening
 the own-lease arms with a role check (mirror the Wave-5 pattern) + sweep the sibling tables;
 decide whether own-lease editing by demoted creators is a feature or a hole first. Surfaced by
-the Wave-5 integrity + security reviews.
+the Wave-5 integrity + security reviews. *#197 addendum (2026-08-14):* the direct-viewer
+override in the new INSERT firm arm is one-directional — a firm staffer later demoted to a
+direct viewer row loses intake (override works) but keeps edit rights on their own
+previously-created leases via arm (a) above; #197 makes "viewer with own leases" reachable for
+the first time. Same fix shape as (a).
 
 ### #197 (MEDIUM, product decision) Firm-derived staff lost client-side lease-request creation — RESOLVED 2026-08-14 (owner decision: YES, firm staff get intake)
 `has_workspace_permission` has no firm branch, so the Wave-5 INSERT policy (deliberately matching
@@ -69,14 +73,85 @@ CAN create leases in child workspaces.** All three lockstep gates moved together
 `leases_insert_own_editor_plus` with the Phase-9 firm arm (`firm_id` set, `restrict_firm_access`
 false, `is_firm_member`) **plus a direct-viewer override** — a direct `workspace_members` viewer
 row out-ranks the firm allowance, so RLS and the role gate agree; (2) `_shared/role_gate.ts`
-`callerCanProcessLeases` gained the matching firm branch (owner → direct admin/editor → direct
-viewer BLOCKS → firm membership on a non-restricted child), redeployed in `process_lease` +
-`retry_lease`; (3) the client intake predicates (Dashboard/Leases/ImportHistory) allow
+`callerCanProcessLeases` gained the matching firm branch (workspace owner → direct admin/editor
+→ direct viewer BLOCKS → firm check), delegating to the new membership-shaped
+`isFirmStaffOfWorkspace()` helper (same file) — which carries the **firm-OWNER arm** (SQL
+`is_firm_member` counts `firms.owner_id`; the pre-fold `firm_members`-only lookup would have
+dead-ended the CPA-principal persona behind CTAs the client showed them — polish + integrity
+HIGH, folded). The pre-apply security review also found two further owner-or-direct-member
+chokepoints the capability dead-ended behind, both now consulting the same helper:
+`process_lease`'s `resolveAuthorizedWorkspaceId` (direct-upload path 403'd before the role gate
+could run) and `resolve-approval-chain`'s submission auth (a firm staffer's draft was
+permanently stuck). Redeploy set: `process_lease`, `retry_lease`, `resolve-approval-chain` (all
+bundle the frozen `role_gate.ts` snapshot);
+(3) the client intake predicates (Dashboard/Leases/ImportHistory) allow
 firm-derived sessions via the new `useFirmIntakeAccess()` hook (`!userRole` + workspace.firmId ∈
-firmMemberships). LeaseReview needed no change — its predicate is `userRole === 'viewer'` only,
-and the own-lease UPDATE arm already lets firm staff confirm their own leases. UPDATE policy
+firmMemberships). LeaseReview: the own-lease UPDATE arm already lets firm staff confirm their
+OWN leases; the polish fold added a per-lease read-only guard for COLLEAGUES' leases
+(`!userRole && lease.user_id !== user.id` → read-only + `readonly.firm_lease_note`) so the
+workbench never renders editable fields whose saves the RLS would bounce. UPDATE policy
 deliberately NOT widened (firm staff edit only their OWN leases; colleagues' require direct
-membership).
+membership). All gates pinned by `firmStaffIntake197.test.ts`. Follow-ons filed: #201 (firm
+child monetization gate — decision), #202 (audit display names), #203 (firm-blind SELECT
+policies cluster), #204 (quota banner/limit-wall firm doors).
+
+### #201 (HIGH, product decision + honesty) A never-subscribed firm-bound child is blocked from processing and sold a 7-day trial it structurally cannot start
+`applyFirmSubscription` (stripe-webhook) propagates `plan='business'` to children but never
+stamps `subscription_status`/`stripe_subscription_id`, and `_shared/monetization.ts`
+`requiresSubscriptionToProcess` has no firm awareness — so any post-2026-07-16 child bound
+without its own past subscription hits `no_subscription` on every upload. The LeaseUploadModal
+panel then sells "your 7-day free trial starts at checkout", but the billing tab is locked
+("Managed by your firm") and autoCheckout 403s `firm_managed`: a promise the workspace cannot
+keep, permanently. Newly-intake-capable firm staff (#197) are the users who will hit it.
+**Decision needed (owner):** exempt firm-bound children whose FIRM has a live subscription in
+`requiresSubscriptionToProcess` (server half); then swap the modal's trial CTA for a
+firm-managed panel (reuse `limit_wall.firm_managed_*` copy) when `workspace.firmId` is set (UI
+half). Zero current impact (no firms in prod). Surfaced by the #197 polish review.
+
+### #202 (MEDIUM, audit display) Pure firm staff render as '—' in every audit surface — the profiles SELECT coworker arm requires a workspace_members row
+Attribution STORAGE is intact (`user_id` UUIDs on created/status_change/document rows), but
+`profiles_select_own_or_coworker` only exposes a profile whose owner has a `workspace_members`
+row — pure firm staff have none, so AuditLog (`row.profiles?.email || '—'`), RecentActivity,
+and ApprovalQueue requestor names can't resolve them for anyone, including direct members.
+"Every change is attributable" degrades to "attributable only by raw UUID". **Fix shape:** new
+security migration re-creating the profiles SELECT policy with a firm-coworker arm (profile
+owner is firm staff of a non-restricted firm-bound workspace the caller can access), scoped so
+a DIFFERENT firm's staff never become visible; route through pre-apply security review.
+Pre-existing shape, newly reachable via #197. Surfaced by the #197 integrity review.
+
+### #203 (MEDIUM, firm UX degradation) Direct-membership-shaped SELECT policies silently degrade the firm-staff request flow (notifications, banner truth, chain visibility, doc attachment)
+Four related non-firm-aware gates, all fail-closed but felt: (a) `workspace_roles` SELECT —
+`notifyRoleHolders` reads zero rows for firm staff → legacy-routing submissions notify NOBODY
+(the lifecycle flip itself is correct, server-side); (b) same blindness makes LeaseRequestForm's
+`hasApprovers`/`hasActivePolicies` read empty → the "no approvers — auto-approved" banner can
+lie to a firm staffer; (c) `lease_approval_chain` SELECT gates on direct members (Phase-10 D1) →
+the firm-staff requestor can't see their own lease's chain progress in LeaseReview; (d)
+`lease_documents` table INSERT + storage bucket INSERT have no firm arm → firm staff can't
+attach negotiation docs to their OWN lease (the process_lease upload path is unaffected — it
+never touches storage client-side). **Fix shape:** rewrite (a)/(c) onto `is_workspace_member()`;
+(b) falls out of (a); (d) is an owner scope question ("does #197 intake include negotiation-doc
+attachment?"). Route through pre-apply security review as one cluster. Surfaced by the #197
+integrity + security reviews.
+
+### #204 (MEDIUM, lying door) QuotaWarningBanner's "Upgrade now / View plans" CTA renders on firm-bound children and leads to a locked billing page; LimitReachedDialog's firm wall has no door for firm admins
+At 80%/95% quota the banner promises an action the destination immediately retracts ("Managed
+by your firm") — the same class the limit wall already fixed with its `firmBound` branch. And
+the limit wall's firm-managed note ("Ask your firm owner to add capacity") offers only Close —
+even to firm_admins who could act one nav away at `/app/firm/billing`. **Fix shape:** when
+`workspace.firmId` is set, point the banner CTA at `/app/firm/billing` for firm users (or drop
+the button + extend the guidance copy); add a secondary "Go to firm billing" button to both
+firm branches of LimitReachedDialog. Pre-existing, untouched by the #197 diff; firm staff are
+the users who will drive a child toward quota. Surfaced by the #197 polish review.
+
+### #200 (LOW, dead code + latent gate drift) `AppContext.hasPermission` has zero consumers and its `!userRole → false` arm encodes the pre-#197 stance
+`src/contexts/AppContext.tsx:443-454` exports a `hasPermission` helper nobody calls. Beyond the
+dead weight, its `!userRole → false` arm would deny firm-derived sessions the `'leases'`
+permission — if anyone wires it up later it silently reintroduces the #197 regression through a
+fourth, undocumented gate (the three real gates are the INSERT policy, `role_gate.ts`, and
+`useFirmIntakeAccess`). **Fix shape:** delete it, or add the firm-derived arm + a lockstep
+comment pointing at #197. Root cause: helper predates the firm layer and survived the
+hasPermission-consolidation deferral. Surfaced by the #197 code audit (pre-existing — filed, not
+bundled).
 
 ### #198 (LOW, denial UX) `retry_lease`'s 403 `read_only_role` is swallowed into generic "retry failed"; `role_gate` conflates lookup errors with denial
 `supabase.functions.invoke` turns non-2xx into `FunctionsHttpError`, so `FailedLeaseBanner` and

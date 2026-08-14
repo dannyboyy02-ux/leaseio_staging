@@ -241,11 +241,6 @@ export default function LeaseReview() {
   // database discarded. Riding the Vault plumbing gives viewers the complete,
   // honest read-only experience through every gate below in one place.
   const isViewerRole = userRole === 'viewer';
-  const isReadOnly = isWorkspaceReadOnly(workspace) || isViewerRole;
-  // The note names the actual cause: workspace state wins over role framing.
-  const readOnlyNoteKey = isWorkspaceReadOnly(workspace)
-    ? 'readonly.lease_note'
-    : 'readonly.viewer_note';
   const [tier2CorrectionOpen, setTier2CorrectionOpen] = useState(false);
   const [showAmendmentDialog, setShowAmendmentDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
@@ -254,6 +249,21 @@ export default function LeaseReview() {
   const { language, t } = useLanguage();
   
   const [lease, setLease] = useState<any | null>(null);
+  // #197: firm-derived sessions (userRole null) are intake-capable, but the
+  // leases UPDATE policy keeps them to their OWN leases — a colleague's lease
+  // must render read-only here, not as an editable workbench whose every save
+  // bounces off the zero-row backstops. Until the lease loads, firm sessions
+  // default read-only (flips open on own leases — safer than a flash of
+  // editable on a lease that turns out to be foreign).
+  const isForeignFirmLease = !userRole && (!lease || lease.user_id !== user?.id);
+  const isReadOnly = isWorkspaceReadOnly(workspace) || isViewerRole || isForeignFirmLease;
+  // The note names the actual cause: workspace state wins over role framing;
+  // the firm variant explains the own-vs-colleague split.
+  const readOnlyNoteKey = isWorkspaceReadOnly(workspace)
+    ? 'readonly.lease_note'
+    : isViewerRole
+      ? 'readonly.viewer_note'
+      : 'readonly.firm_lease_note';
   const [risks, setRisks] = useState<Risk[]>([]);
   const [addRiskOpen, setAddRiskOpen] = useState<boolean>(false);
   const [pdfCaptureMode, setPdfCaptureMode] = useState<boolean>(false);

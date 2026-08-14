@@ -1,10 +1,25 @@
 import { describe, it, expect } from 'vitest';
+import i18n from 'i18next';
+import enCommon from '../../locales/en/common.json';
 import {
   decideSubmissionOutcome,
   type ChainSuccess,
   type ChainLegacyFallback,
   type ChainFailure,
 } from '../leaseSubmissionDecision';
+
+// The default failure message renders through i18next at call time (#197
+// polish fold — it was a hardcoded English literal). Initialize the shared
+// singleton with the REAL en resources so the exact-string pins below assert
+// what users actually see.
+await i18n.init({
+  lng: 'en',
+  fallbackLng: 'en',
+  defaultNS: 'common',
+  ns: ['common'],
+  resources: { en: { common: enCommon } },
+  interpolation: { escapeValue: false },
+});
 
 // ─── The four LeaseRequestForm submission scenarios ──────────────────────
 //

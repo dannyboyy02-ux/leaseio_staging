@@ -206,7 +206,8 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
       }
 
       // Wave 5b viewer/role gate backstop: the UI hides intake for viewers,
-      // but a stale tab (or firm-derived access) can still reach here. Surface
+      // but a stale tab (or a direct-viewer / removed-member session) can
+      // still reach here (#197: firm-derived access is ALLOWED now). Surface
       // the LOCALIZED explanation with no retry — the English server string
       // in a "Try again" failure frame was a lying dead-end.
       if (result?.reason === 'read_only_role') {

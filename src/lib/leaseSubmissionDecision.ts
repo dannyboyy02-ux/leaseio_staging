@@ -18,6 +18,8 @@
 //   path this helper prefers the server-returned finalStatus.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { t } from 'i18next';
+
 export type ChainSuccess = {
   ok: true;
   legacyFallback: false;
@@ -69,8 +71,14 @@ export type SubmissionOutcome =
       errorMessage: string;
     };
 
-const DEFAULT_FAILURE_MESSAGE =
-  'Could not route this request for approval. Contact your admin.';
+// Resolved at CALL time, not module load — non-component modules use the
+// i18next singleton directly (locale rule; the toast was a hardcoded English
+// literal until the #197 polish review caught it), and the active language
+// isn't known at import.
+const defaultFailureMessage = () =>
+  t('workflow.request.route_failed', {
+    defaultValue: 'Could not route this request for approval. Contact your admin.',
+  });
 
 /**
  * Decide what to do with a freshly created (draft) lease based on the
@@ -97,11 +105,11 @@ export function decideSubmissionOutcome(
   if (chainError) {
     return {
       kind: 'leave_draft',
-      errorMessage: chainError.message ?? DEFAULT_FAILURE_MESSAGE,
+      errorMessage: chainError.message ?? defaultFailureMessage(),
     };
   }
   if (!chainResult) {
-    return { kind: 'leave_draft', errorMessage: DEFAULT_FAILURE_MESSAGE };
+    return { kind: 'leave_draft', errorMessage: defaultFailureMessage() };
   }
 
   // Resolver returned ok=false (ambiguous_match, no_match_no_fallback,
@@ -109,7 +117,7 @@ export function decideSubmissionOutcome(
   if (chainResult.ok === false) {
     return {
       kind: 'leave_draft',
-      errorMessage: chainResult.error || DEFAULT_FAILURE_MESSAGE,
+      errorMessage: chainResult.error || defaultFailureMessage(),
     };
   }
 

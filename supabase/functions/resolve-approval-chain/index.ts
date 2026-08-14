@@ -35,6 +35,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { getCorsHeaders as baseCorsHeaders } from "../_shared/cors.ts";
 import { enforceWorkspaceRateLimit } from "../_shared/audit.ts";
+import { isFirmStaffOfWorkspace } from "../_shared/role_gate.ts";
 import {
   type ChainStepLike,
   checkSeparationOfDuties,
@@ -299,6 +300,12 @@ serve(async (req) => {
       .eq("user_id", user.id)
       .maybeSingle();
     isMember = Boolean(member);
+  }
+  // #197: firm staff of the owning firm count as members of a non-restricted
+  // child (is_workspace_member's firm arm). They can create drafts now, so
+  // submission must recognize them too — else the request is stuck in draft.
+  if (!isMember) {
+    isMember = await isFirmStaffOfWorkspace(supabaseAdmin, workspaceId, user.id);
   }
   if (!isMember) {
     return jsonResponse(

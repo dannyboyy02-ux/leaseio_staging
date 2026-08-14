@@ -3671,7 +3671,8 @@
   "readonly": {
     "lease_note": "This workspace is read-only — you can view and export, but editing, approvals, and uploads are disabled.",
     "viewer_note": "Your role in this workspace is view-only — you can view and export, but editing, approvals, and uploads are disabled.",
-    "write_rejected": "Your change wasn't saved — you don't have permission to edit this lease."
+    "write_rejected": "Your change wasn't saved — you don't have permission to edit this lease.",
+    "firm_lease_note": "You can view all of this workspace's leases and edit the ones you created."
   },
   "routing_failed": {
     "title": "Approval routing didn't finish",
@@ -4314,7 +4315,8 @@
       "discard_title": "Discard this request?",
       "discard_body": "You have unsaved details. Closing now will throw them away.",
       "discard_keep": "Keep editing",
-      "discard_confirm": "Discard"
+      "discard_confirm": "Discard",
+      "route_failed": "Could not route this request for approval. Contact your admin."
     },
     "impact": {
       "title": "Financial Impact",

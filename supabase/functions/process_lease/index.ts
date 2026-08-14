@@ -14,6 +14,7 @@ import {
 } from "../_shared/monetization.ts";
 import {
   callerCanProcessLeases,
+  isFirmStaffOfWorkspace,
   READ_ONLY_ROLE_ERROR,
   READ_ONLY_ROLE_REASON,
 } from "../_shared/role_gate.ts";
@@ -297,8 +298,15 @@ async function resolveAuthorizedWorkspaceId(
       .maybeSingle();
 
     if (membershipError) throw new Error(`Failed to validate workspace membership: ${membershipError.message}`);
-    if (!membership) throw new Error('Unauthorized workspace access.');
-    return membership.workspace_id;
+    if (membership) return membership.workspace_id;
+    // #197: firm staff are members-in-effect of a non-restricted child
+    // (is_workspace_member's firm arm). Without this arm the direct-upload
+    // path 403s here, BEFORE the role gate that now admits them. Role
+    // semantics (viewer read-only etc.) stay the role gate's job.
+    if (await isFirmStaffOfWorkspace(supabaseAdmin, requestedWorkspaceId, userId)) {
+      return requestedWorkspaceId;
+    }
+    throw new Error('Unauthorized workspace access.');
   }
 
   // Fallback when the caller didn't specify a workspace. The original
