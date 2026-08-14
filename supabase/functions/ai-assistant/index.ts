@@ -7,6 +7,7 @@ import {
   type LifecycleStatus,
 } from "../_shared/lifecycle.ts";
 import { FIELD_MAX, NAME_MAX, truncate, summarizeRisks } from "../_shared/ai_context.ts";
+import { currentMonthlyRent, partitionPortfolio } from "../_shared/ai_portfolio.ts";
 
 function getCorsHeaders(requestOrigin: string | null): Record<string, string> {
   return baseCorsHeaders(requestOrigin, "POST, OPTIONS");
@@ -28,72 +29,85 @@ function formatCurrency(val: number | null | undefined): string {
   return `$${val.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function buildLeaseContext(leases: any[], workspaceName: string): string {
-  // KNOWN_ISSUES #6: 'needs_review' is not a valid lifecycle_status value
-  // (it never existed in the CHECK constraint). The .includes() for it always
-  // returned false. Removed; behavior unchanged.
-  const activeLeases = leases.filter(l =>
-    ['active', 'executed', 'draft'].includes(l.lifecycle_status)
-  );
+function renderLeaseBlock(lease: any): string[] {
+  // F1: every variable-length field below is bounded (truncate / summarizeRisks)
+  // so a verbose lease can't blow up the prompt — total size is capped at
+  // (lease count × a fixed per-lease budget).
+  const name = truncate(lease.request_title || lease.filename || lease.id, NAME_MAX) ?? 'unknown';
+  const monthly = currentMonthlyRent(lease) || null;
 
-  const totalMonthly = activeLeases.reduce((sum, l) => {
-    const monthly =
-      Number(l.executed_monthly_payment) ||
-      Number(l.current_monthly_rent) ||
-      Number(l.monthly_payment) || 0;
-    return sum + monthly;
-  }, 0);
+  const json = lease.extracted_json as Record<string, unknown> | null;
+  const address = truncate(json ? extractValue(json.property_address) : null, NAME_MAX);
+  const securityDeposit = truncate(json ? extractValue(json.security_deposit) : null, FIELD_MAX);
+  const renewalOptions = truncate(json ? extractValue(json.renewal_options) : null, FIELD_MAX);
+  const terminationClauses = truncate(json ? extractValue(json.termination_clauses) : null, FIELD_MAX);
+  const escalationClauses = truncate(json ? extractValue(json.escalation_clauses) : null, FIELD_MAX);
+  const landlord = truncate(lease.landlord_name || extractValue(json?.landlord_name), NAME_MAX) ?? 'unknown';
+  const tenant = truncate(lease.tenant_name || extractValue(json?.tenant_name), NAME_MAX) ?? 'unknown';
+  const riskSummary = summarizeRisks(json?.risks);
+
+  return [
+    `LEASE: ${name}`,
+    `  Status: ${displayLabel(lease.lifecycle_status as LifecycleStatus)}`,
+    `  Asset type: ${lease.asset_type || 'unspecified'}`,
+    `  Landlord: ${landlord}`,
+    `  Tenant: ${tenant}`,
+    `  Address: ${address || 'unknown'}`,
+    `  Start: ${lease.lease_start || 'unknown'}`,
+    `  End: ${lease.lease_end || 'unknown'}`,
+    `  Term: ${lease.term_months ? `${lease.term_months} months` : 'unknown'}`,
+    `  Monthly rent: ${formatCurrency(monthly)}`,
+    `  Escalation type: ${lease.escalation_type || 'none'}`,
+    `  Escalation rate: ${lease.escalation_rate != null ? `${lease.escalation_rate}%` : 'N/A'}`,
+    `  Security deposit: ${securityDeposit || 'not stated'}`,
+    `  Renewal options: ${renewalOptions || 'none stated'}`,
+    `  Termination clauses: ${terminationClauses || 'none stated'}`,
+    `  Escalation clauses: ${escalationClauses || 'none stated'}`,
+    riskSummary ? `  Identified risks: ${riskSummary}` : '  Identified risks: none',
+    '',
+  ];
+}
+
+function buildLeaseContext(leases: any[], workspaceName: string): string {
+  // Mirror the UI scope exactly (#187). Archived leases are already excluded at
+  // the fetch, matching the dashboard/Portfolio. Split the remaining leases into
+  // the live portfolio (counted + summed, schedule-aware so the total equals the
+  // dashboard monthly-rent tile), the in-flight pipeline, and closed leases
+  // (rejected/expired) — each shown for context but only the portfolio counted.
+  const { portfolio, pipeline, closed, totalMonthly } = partitionPortfolio(leases);
 
   const lines: string[] = [
     `WORKSPACE: ${workspaceName}`,
-    `TOTAL ACTIVE LEASES: ${activeLeases.length}`,
-    `TOTAL MONTHLY OBLIGATION: ${formatCurrency(totalMonthly)}`,
-    `TOTAL ANNUAL OBLIGATION: ${formatCurrency(totalMonthly * 12)}`,
-    '',
-    '--- LEASE DETAILS ---',
+    `ACTIVE PORTFOLIO LEASES: ${portfolio.length}`,
+    `TOTAL MONTHLY OBLIGATION (active portfolio): ${formatCurrency(totalMonthly)}`,
+    `TOTAL ANNUAL OBLIGATION (active portfolio): ${formatCurrency(totalMonthly * 12)}`,
   ];
+  if (pipeline.length > 0) {
+    lines.push(
+      `IN-PROGRESS LEASES (still in the request/approval pipeline — NOT active, excluded from the totals above): ${pipeline.length}`,
+    );
+  }
+  if (closed.length > 0) {
+    lines.push(
+      `CLOSED LEASES (rejected or expired — finished, neither active nor in the pipeline): ${closed.length}`,
+    );
+  }
+  lines.push('', '--- ACTIVE PORTFOLIO ---');
 
-  for (const lease of activeLeases) {
-    // F1: every variable-length field below is bounded (truncate / summarizeRisks)
-    // so a verbose lease can't blow up the prompt — total size is capped at
-    // (active lease count × a fixed per-lease budget).
-    const name = truncate(lease.request_title || lease.filename || lease.id, NAME_MAX) ?? 'unknown';
-    const monthly =
-      Number(lease.executed_monthly_payment) ||
-      Number(lease.current_monthly_rent) ||
-      Number(lease.monthly_payment) || null;
+  if (portfolio.length === 0) {
+    lines.push('(no active leases in this workspace)', '');
+  } else {
+    for (const lease of portfolio) lines.push(...renderLeaseBlock(lease));
+  }
 
-    const json = lease.extracted_json as Record<string, unknown> | null;
-    const address = truncate(json ? extractValue(json.property_address) : null, NAME_MAX);
-    const securityDeposit = truncate(json ? extractValue(json.security_deposit) : null, FIELD_MAX);
-    const renewalOptions = truncate(json ? extractValue(json.renewal_options) : null, FIELD_MAX);
-    const terminationClauses = truncate(json ? extractValue(json.termination_clauses) : null, FIELD_MAX);
-    const escalationClauses = truncate(json ? extractValue(json.escalation_clauses) : null, FIELD_MAX);
-    const landlord = truncate(lease.landlord_name || extractValue(json?.landlord_name), NAME_MAX) ?? 'unknown';
-    const tenant = truncate(lease.tenant_name || extractValue(json?.tenant_name), NAME_MAX) ?? 'unknown';
-    const riskSummary = summarizeRisks(json?.risks);
+  if (pipeline.length > 0) {
+    lines.push('--- IN-PROGRESS (pipeline — NOT counted as active) ---');
+    for (const lease of pipeline) lines.push(...renderLeaseBlock(lease));
+  }
 
-    const leaseLine = [
-      `LEASE: ${name}`,
-      `  Status: ${displayLabel(lease.lifecycle_status as LifecycleStatus)}`,
-      `  Asset type: ${lease.asset_type || 'unspecified'}`,
-      `  Landlord: ${landlord}`,
-      `  Tenant: ${tenant}`,
-      `  Address: ${address || 'unknown'}`,
-      `  Start: ${lease.lease_start || 'unknown'}`,
-      `  End: ${lease.lease_end || 'unknown'}`,
-      `  Term: ${lease.term_months ? `${lease.term_months} months` : 'unknown'}`,
-      `  Monthly rent: ${formatCurrency(monthly)}`,
-      `  Escalation type: ${lease.escalation_type || 'none'}`,
-      `  Escalation rate: ${lease.escalation_rate != null ? `${lease.escalation_rate}%` : 'N/A'}`,
-      `  Security deposit: ${securityDeposit || 'not stated'}`,
-      `  Renewal options: ${renewalOptions || 'none stated'}`,
-      `  Termination clauses: ${terminationClauses || 'none stated'}`,
-      `  Escalation clauses: ${escalationClauses || 'none stated'}`,
-      riskSummary ? `  Identified risks: ${riskSummary}` : '  Identified risks: none',
-    ];
-
-    lines.push(...leaseLine, '');
+  if (closed.length > 0) {
+    lines.push('--- CLOSED (rejected / expired — finished, NOT active, NOT pipeline) ---');
+    for (const lease of closed) lines.push(...renderLeaseBlock(lease));
   }
 
   return lines.join('\n');
@@ -111,6 +125,7 @@ CRITICAL RULES:
 5. Keep answers focused and professional. Finance teams value precision over prose.
 6. If asked about something not in the data (e.g., "what will rents be in 5 years"), explain that you can only report what the leases state, not forecast.
 7. Some long clause fields are truncated to keep this brief and end with an ellipsis ("…"). When a field you are quoting ends with "…", treat it as incomplete: tell the user the full clause text is longer than shown and they should consult the source document for the complete terms. Never assume the visible portion is the whole clause.
+8. The data separates three groups: the ACTIVE PORTFOLIO (the live leases — these define "active leases" and the monthly/annual obligation totals), IN-PROGRESS leases (still moving through the request/approval pipeline), and CLOSED leases (rejected or expired — finished, neither active nor in the pipeline). When asked about active leases, counts, totals, or obligations, use ONLY the pre-computed active-portfolio figures and the ACTIVE PORTFOLIO section — never count or sum in-progress or closed leases as active, and never invent a lease count. If the user asks about the pipeline, use the IN-PROGRESS section only (do not include closed leases). Describe rejected/expired leases as closed, never as "in progress". Archived leases are excluded from this data entirely.
 
 Format numbers as currency where appropriate. Dates as Month DD, YYYY.`;
 
@@ -306,7 +321,7 @@ serve((req) => {
         // gate still works on the next call when the row is read again.
       }
 
-      // Fetch leases scoped to this workspace
+      // Fetch leases scoped to this workspace, mirroring the UI scope (#187).
       const { data: leases } = await supabaseAdmin
         .from('leases')
         .select(`
@@ -315,13 +330,18 @@ serve((req) => {
           monthly_payment, current_monthly_rent, executed_monthly_payment,
           landlord_name, tenant_name,
           escalation_type, escalation_rate,
-          extracted_json
+          extracted_json,
+          rent_schedules(period_start, period_end, monthly_amount)
         `)
         .eq('workspace_id', workspaceId)
         // KNOWN_ISSUES #6: 'failed' is not a valid lifecycle_status value
         // either; only 'cancelled' actually exists. Kept the cancelled
         // exclusion (we don't want the AI to reason over cancelled leases).
         .not('lifecycle_status', 'in', '("cancelled")')
+        // #187: exclude archived leases entirely — the dashboard, Portfolio, and
+        // active Leases list all scope to archived=false, so Leo must too, or its
+        // totals and counts diverge from every screen the customer can see.
+        .eq('archived', false)
         // Phase 3 / Hard Rule #8: Leo must never see a soft-deleted lease
         // (service-role fetch bypasses the leases_hide_soft_deleted RLS).
         .is('deleted_at', null)

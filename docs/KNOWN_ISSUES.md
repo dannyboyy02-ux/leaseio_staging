@@ -5,6 +5,120 @@ list and reference it in the commit message.
 
 ---
 
+## Customer-facing live audit 2026-08-11 (prod `main @ 8ed16aa`, walkthrough persona) — #187–#195
+
+Full live walkthrough on theleaseio.com as an admin customer: requestor chain end-to-end,
+direct-add + Opus extraction, archive/delete/restore, Leo, every displayed number
+cross-checked vs the staging DB, core surfaces re-walked in Spanish. **Core workflows and
+financial math verified sound** (chain completes; dashboard/portfolio/CSV figures recompute
+exactly; extraction 99% accurate). Findings artifact: `docs/reviews/2026-08-11` (published).
+Assess-only — nothing fixed (except #187, fixed same day). New items below. (#194 filed by the
+#187-fix integrity review; #195 by the multi-workspace pass.)
+
+**Multi-workspace verified 2026-08-11 (owner account `daniel.c.priest@gmail.com`, test-mode
+Stripe `pk_test_`):** the $499 add-workspace purchase works end-to-end on the prod domain
+(eligibility → honest consent modal → `default_incomplete` sub → client confirm → webhook
+promotes to `active`) — this closes the #186-owed prod-domain purchase smoke. Cross-workspace
+isolation solid: a freshly-created workspace shows $0/0 leases in the UI AND Leo reports 0 active
+scoped to it (Hard Rule #8 holds). Switcher lists all workspaces and reloads per-workspace data
+correctly. `delete-workspace` cancels the Stripe sub (`stripeSubscriptionsCanceled:1`) + writes
+the `deleted_workspaces` forensic row. **Coverage limit:** tier-gating from the Starter side is
+NOT testable via add-workspace — that flow always creates a **Business** workspace
+(`create-workspace` uses `BUSINESS_MONTHLY_PRICE_ID`); a Starter workspace only comes from the
+first-workspace onboarding/checkout path. Test workspace "Audit WS3" was created then deleted.
+
+### #195 (MEDIUM, UX dead-end) A member who owns no workspace is offered "New workspace" but can never satisfy the "Add a card" gate
+`create-workspace/index.ts:73-87` resolves the caller's Stripe customer only from (a) a Business
+workspace the caller **owns** (`.eq("owner_id", userId)`) or (b) a Stripe customer matching the
+caller's **email**. A user who is only a *member* of someone else's workspace (owns none) and has
+no personal Stripe history has neither → `no_customer` → the client shows "Add a card or Stripe
+Link… Settings → Billing, then try again." But Settings → Billing for that user manages a
+workspace they don't own (a different customer), so following the instruction can NEVER satisfy
+the flow — an unsatisfiable loop. Repro: walkthrough persona (member/admin of Labs Analytix, owns
+nothing) 2026-08-11 — clicking "New workspace" always returned to the "Add a card" gate even
+after a card was added to the workspace subscription. Deeper issue: a zero-owned-workspace user's
+"Create your first workspace" should route through the trial/checkout onboarding
+(`create_first_workspace` RPC), not the $499 add-a-2nd-workspace charge path. **Fix options:**
+(a) route zero-owned users to onboarding checkout; (b) let the flow create/attach a personal
+Stripe customer + collect a payment method inline (PaymentElement) instead of pointing at the
+wrong Billing page; (c) at minimum, fix the error copy so it doesn't send members to a Billing
+page that can't help them. Verified via function source + live repro 2026-08-11.
+
+### #194 (MEDIUM, accuracy, pre-existing) Leo's lease fetch caps at `.limit(60)` with no ORDER BY — totals silently diverge from the dashboard above 60 leases
+`supabase/functions/ai-assistant/index.ts` fetches leases with `.limit(60)` and no `.order()`,
+then computes counts + obligation totals over that capped set. The dashboard (`SummaryStrip.tsx`)
+fetches ALL `archived=false` leases with no cap. So for any workspace with >60 non-cancelled,
+non-archived, non-deleted leases, Leo's count and total silently UNDERCOUNT vs. the dashboard, and
+*which* 60 rows survive is nondeterministic (no ORDER BY) — the exact "reconciles with no UI
+surface" trust break #187 documents, just at higher lease counts. Pre-existing (the cap predates
+the #187 fix), so filed separately per the pre-existing-issues rule rather than bundled into that
+change. **Fix:** compute counts/totals server-side over the FULL result set (a lightweight
+aggregate query for the numbers), keep the row cap only for the per-lease detail blocks, add a
+deterministic `.order()`, and note in the prompt that detail is truncated while totals are
+complete. Surfaced by the #187 integrity review 2026-08-11.
+
+### #187 (HIGH, accuracy) Leo reports a portfolio total ~29% too high and fabricates the lease count — **RESOLVED 2026-08-11 (deployed + verified live)**
+`supabase/functions/ai-assistant`. Asked "total annual rent commitment", Leo answered
+$293,957/mo · $3,527,481/yr across "12 active leases". Actual (dashboard + Portfolio): 5 active
+leases, $228,275/mo · $2.74M/yr. Leo's $293,957 exactly equalled `sum(current_monthly_rent)` over
+the **7** rows with `lifecycle_status='active'` **including 2 archived leases**; the "12" was the
+`buildLeaseContext` filter `['active','executed','draft']` count (7 active-status + 5 draft) — the
+edge function literally put "TOTAL ACTIVE LEASES: 12" in the prompt.
+**FIX (2026-08-11):** the fetch now mirrors the UI scope exactly — added `.eq('archived', false)`
+and a `rent_schedules` embed; `buildLeaseContext` now uses the new pure `partitionPortfolio`
+helper (`_shared/ai_portfolio.ts`) which splits the live portfolio (`active`/`executed`/
+`fully_executed`) from in-progress pipeline (never counted as active) and sums **schedule-aware**
+rent via `currentMonthlyRent` (ported from `leaseCalculations.getCurrentMonthlyRent`), so the
+total equals the dashboard tile. System prompt gained a rule separating active-portfolio totals
+from in-progress leases. Integrity review then caught a regression the first cut introduced —
+terminal leases (`rejected`/`expired`/`chain_violation`) were bucketed as "pipeline"; folded in a
+`classifyLease` split (portfolio / pipeline / closed, via `_shared/lifecycle.ts` `groupOf`) so
+closed leases are labeled closed, not "in progress". Pinned by
+`src/lib/__tests__/aiPortfolioScope.test.ts` (18 tests). Security review clean; integrity review
+clean on the money path (the pre-existing `.limit(60)` gap is filed separately as #194).
+Deployed via linked CLI; **verified live** — Leo now answers "5 active leases · $228,275/mo ·
+$2,739,306/yr" with a note that the 6 pipeline leases are excluded. Security review clean.
+
+### #188 (MEDIUM, i18n/UX) No in-app language switch — EN/ES toggle exists only on auth pages
+The language toggle is on login/signup only; Settings → Appearance offers theme only, and no
+other in-app control writes `leaseio.language`. A signed-in Spanish user (e.g. arrived via invite
+link) is stranded in English. Spanish itself renders cleanly once selected. **Fix:** add a
+language selector to Settings → Appearance (or profile menu) writing the existing
+`leaseio.language` key. Verified live 2026-08-11.
+
+### #189 (MEDIUM, polish/trust) Internal issue-tracker reference printed in Report settings
+Reports → Report settings → "Artifact retention (days)" help text reads verbatim: "Reports older
+than this become eligible for cleanup (cron not yet implemented; tracked in KNOWN_ISSUES #12)." A
+customer sees the internal ticket ref + an admission the feature is unbuilt, and the control is
+functionally inert. **Fix:** customer-facing copy + either wire the retention cron (#12) or
+remove the control. Verified live 2026-08-11.
+
+### #190 (LOW, convention) Same lease shown under two different names across pages
+"Northwind Estates" (`request_title`, on Leases list/dashboard/Leo) appears as "1200 Market
+Street, Suite 800, San Francisco" (`property_address`) on Portfolio + watchlist. One lease looks
+like two properties. **Fix:** unify the name field or show both. Verified live 2026-08-11.
+
+### #191 (LOW, copy) Reports "Monthly Rent Overview" chart actually plots total commitment
+Chart titled "Monthly Rent Overview" is subtitled "Total commitment by lifecycle status", axis to
+~$32M — it charts multi-year total commitment, not monthly rent. Bars are correct; title lies.
+**Fix:** retitle to match content. Verified live 2026-08-11.
+
+### #192 (LOW, extraction) Direct-upload extraction leaves `asset_type` null
+An office lease added via Upload Document extracted every field at 99% but `asset_type` came back
+null → blank "Type" on the Leases list + CSV, while the request-flow twin shows "Real estate".
+Type was inferable from the document. **Fix:** infer/persist asset_type in the direct-upload
+`process_lease` path. Verified live 2026-08-11.
+
+### #193 (DOC DRIFT) Self-serve firm onboarding is BUILT but docs say "not built"
+CLAUDE.md (Phase-10 deferred list) + #105 describe self-serve firm onboarding / firm Stripe
+checkout as deferred and firms as "operator-created only". Git shows PR #55/#56 (June 2026)
+shipped self-serve `create-firm` + hosted checkout, and the deployed `create-firm` is self-serve
+for any authenticated user (per-owner cap of 10). **Action:** reconcile CLAUDE.md + #105 to
+reflect shipped capability; re-scope whatever genuinely remains. Confirmed via git + function
+source 2026-08-11.
+
+---
+
 ## ▶ PHASE 0 REMEDIATION — CODE COMPLETE 2026-07-16, **DEPLOYED TO STAGING SAME DAY**
 
 **Deploy executed 2026-07-16** (owner present) per `docs/ops/END_TO_END_DEPLOY_2026-07-16.md`:
