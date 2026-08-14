@@ -13,7 +13,6 @@ import {
   Pie,
   Legend,
 } from "recharts";
-import { format } from "date-fns";
 import {
   FileText,
   TrendingUp,
@@ -42,7 +41,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
 import { useApp } from "@/contexts/AppContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatLocalizedPercent } from "@/lib/dateFormatters";
+import { formatLocalizedPercent, formatLocalizedDateTime } from "@/lib/dateFormatters";
 
 interface StatsData {
   totalLeases: number;
@@ -406,7 +405,7 @@ export default function ExtractionAnalytics() {
                         {recentCorrections.map((correction) => (
                           <TableRow key={correction.id}>
                             <TableCell className="text-sm text-muted-foreground">
-                              {format(new Date(correction.corrected_at), "MMM d, HH:mm")}
+                              {formatLocalizedDateTime(correction.corrected_at, language)}
                             </TableCell>
                             <TableCell className="font-medium">
                               {formatFieldName(correction.field_name)}

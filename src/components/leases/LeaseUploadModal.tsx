@@ -205,6 +205,17 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
         return;
       }
 
+      // Wave 5b viewer/role gate backstop: the UI hides intake for viewers,
+      // but a stale tab (or firm-derived access) can still reach here. Surface
+      // the LOCALIZED explanation with no retry — the English server string
+      // in a "Try again" failure frame was a lying dead-end.
+      if (result?.reason === 'read_only_role') {
+        setErrorMessage(String(t('readonly.viewer_note')));
+        setStep('error');
+        toast.error(String(t('readonly.viewer_note')));
+        return;
+      }
+
       if (result?.error) {
         throw new Error(result.error || t('leases.upload.process_failed'));
       }
@@ -453,7 +464,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
 
         {step === 'tier2_rejected' && (
           <div className="py-2">
-            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 mb-4">
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 p-4 mb-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
                 <div className="flex-1">

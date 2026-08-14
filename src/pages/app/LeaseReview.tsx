@@ -626,7 +626,11 @@ export default function LeaseReview() {
       // 1) Save the edited fields (NOT lifecycle/approval columns — those are
       //    trigger-guarded and reset server-side in step 2). calc_* are not
       //    guarded, so persist the recompute here too.
-      const { error: saveErr } = await supabase
+      // Wave 5b: zero-row = rejected. Critical here — step 2's server-side
+      // resubmit recomputes routing from what's ACTUALLY in the DB; a silently
+      // zeroed save would route on stale financials while the UI claims the
+      // corrected values were used.
+      const { data: resubmitSaved, error: saveErr } = await supabase
         .from('leases')
         .update({
           monthly_payment: monthlyPayment,
@@ -636,8 +640,12 @@ export default function LeaseReview() {
           covenant_flagged: resubmitFields.covenantFlagged,
           ...updatedCalcs,
         } as any)
-        .eq('id', lease.id);
+        .eq('id', lease.id)
+        .select('id');
       if (saveErr) throw saveErr;
+      if (!resubmitSaved || resubmitSaved.length === 0) {
+        throw new Error(String(t('readonly.write_rejected')));
+      }
 
       // 2) Server-side: reset the approval columns, recompute the status from the
       //    saved financials, and flip lifecycle — under service role, since a
@@ -836,11 +844,12 @@ export default function LeaseReview() {
   const saveRename = useCallback(async () => {
     if (!lease) return;
     const trimmed = renameValue.trim();
-    const { error } = await supabase
+    const { data: renamed, error } = await supabase
       .from('leases')
       .update({ request_title: trimmed || null })
-      .eq('id', lease.id);
-    if (error) {
+      .eq('id', lease.id)
+      .select('id');
+    if (error || !renamed || renamed.length === 0) {
       toast.error(t('lease_review.toasts.rename_failed'));
       return;
     }
@@ -865,12 +874,18 @@ export default function LeaseReview() {
 
       if (uploadError) throw uploadError;
 
-      const { error: updateError } = await supabase
+      // Wave 5b: zero-row = rejected — and the check must precede the
+      // document_upload audit row, or we'd log an upload the DB discarded.
+      const { data: stagedRows, error: updateError } = await supabase
         .from('leases')
         .update({ storage_path: storagePath, filename: stageFile.name })
-        .eq('id', lease.id);
+        .eq('id', lease.id)
+        .select('id');
 
       if (updateError) throw updateError;
+      if (!stagedRows || stagedRows.length === 0) {
+        throw new Error(String(t('readonly.write_rejected')));
+      }
 
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
@@ -1453,13 +1468,15 @@ export default function LeaseReview() {
       const newConfirmed = [...confirmedSections, sectionKey];
       setConfirmedSections(newConfirmed);
       if (lease?.id) {
-        const { error } = await supabase
+        const { data: rows, error } = await supabase
           .from('leases')
           .update({ confirmed_sections: newConfirmed })
-          .eq('id', lease.id);
-        if (error) {
-          // #85: revert the optimistic confirm and surface; don't advance to
-          // the next section when the save was rejected.
+          .eq('id', lease.id)
+          .select('id');
+        if (error || !rows || rows.length === 0) {
+          // #85 + Wave 5b: revert the optimistic confirm and surface (zero
+          // rows = RLS-rejected, no error object); don't advance to the next
+          // section when the save was rejected.
           setConfirmedSections(prevConfirmed);
           toast.error(String(t('lease_review.strip.save_review_failed')));
           return;
@@ -1522,11 +1539,15 @@ export default function LeaseReview() {
       setLease((prev: any) => prev ? { ...prev, extracted_json: rest } : prev);
     }
     if (lease?.id) {
-      const { error } = await supabase.from('leases').update(updatePayload).eq('id', lease.id);
-      if (error) {
-        // #85: revert BOTH optimistic updates (confirm state + the approval-strip
-        // mutation) and surface, instead of showing "Tab reopened" over a write
-        // the DB rejected (e.g. Vault/grace read-only RLS).
+      const { data: rows, error } = await supabase
+        .from('leases')
+        .update(updatePayload)
+        .eq('id', lease.id)
+        .select('id');
+      if (error || !rows || rows.length === 0) {
+        // #85 + Wave 5b: revert BOTH optimistic updates (confirm state + the
+        // approval-strip mutation) and surface — zero rows means RLS rejected
+        // the write without an error object.
         setConfirmedSections(prevConfirmed);
         if (shouldRevertApproval) {
           setLease((prev: any) => prev ? { ...prev, extracted_json: prevExtractedJson } : prev);
@@ -1613,13 +1634,14 @@ export default function LeaseReview() {
       return newlyAddedTitles.join(', ');
     })();
     if (lease?.id) {
-      const { error } = await supabase
+      const { data: rows, error } = await supabase
         .from('leases')
         .update({ confirmed_sections: merged })
-        .eq('id', lease.id);
-      if (error) {
-        // #85: revert + surface; the success toast must follow a confirmed
-        // write, not precede an unchecked one.
+        .eq('id', lease.id)
+        .select('id');
+      if (error || !rows || rows.length === 0) {
+        // #85 + Wave 5b: revert + surface; the success toast must follow a
+        // confirmed write — zero rows is a rejection without an error object.
         setConfirmedSections(prevConfirmed);
         toast.error(String(t('lease_review.strip.save_review_failed')));
         return;
@@ -1803,11 +1825,18 @@ export default function LeaseReview() {
         });
       }
 
-      const { error } = await supabase
+      // Wave 5b: zero-row = rejected. Without this check a silently-zeroed
+      // save cleared the dirty flag below, DISARMING the unsaved-changes
+      // guard — the user navigates away and their typed data is gone.
+      const { data: syncedRows, error } = await supabase
         .from("leases")
         .update(updateData)
-        .eq("id", lease.id);
+        .eq("id", lease.id)
+        .select("id");
       if (error) throw error;
+      if (!syncedRows || syncedRows.length === 0) {
+        throw new Error(String(t('readonly.write_rejected')));
+      }
       // Mark current form as the new persisted snapshot so isDirty
       // returns to false (hides the visible "Save draft" button).
       originalValues.current = { ...form };
@@ -1922,12 +1951,18 @@ export default function LeaseReview() {
       // Remove the approval metadata
       const { _approval, ...restExtractedJson } = currentExtractedJson;
 
-      const { error } = await supabase
+      // Wave 5b: zero-row = rejected — don't clear _approval locally while
+      // the DB still holds it.
+      const { data: reopenedRows, error } = await supabase
         .from("leases")
         .update({ extracted_json: restExtractedJson })
-        .eq("id", lease.id);
-      
+        .eq("id", lease.id)
+        .select("id");
+
       if (error) throw error;
+      if (!reopenedRows || reopenedRows.length === 0) {
+        throw new Error(String(t('readonly.write_rejected')));
+      }
       
       // Update local state
       setLease((prev: any) => ({
@@ -1949,11 +1984,17 @@ export default function LeaseReview() {
     if (!lease || !user) return;
     setCancellingProcessing(true);
     try {
-      const { error } = await supabase
+      // Wave 5b: zero-row = rejected — the activity row below must not log a
+      // cancellation the DB discarded.
+      const { data: cancelledRows, error } = await supabase
         .from('leases')
         .update({ status: 'Failed', error_message: 'Processing cancelled by user' })
-        .eq('id', lease.id);
+        .eq('id', lease.id)
+        .select('id');
       if (error) throw error;
+      if (!cancelledRows || cancelledRows.length === 0) {
+        throw new Error(String(t('readonly.write_rejected')));
+      }
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
         user_id: user.id,
@@ -2273,7 +2314,11 @@ export default function LeaseReview() {
                     (legacy-lease-action) only allows the requestor or an
                     admin to cancel; anyone else got a confirm dialog followed
                     by a raw non-2xx error. */}
-                {!isReadOnly && (isRequestor || isAdminUser) && lifecycleStatus && !['active', 'expired', 'cancelled', 'rejected'].includes(lifecycleStatus) && (
+                {/* Wave 5b: the server (legacy-lease-action) accepts only
+                    requestor_id or a direct admin — isRequestor's user_id
+                    fallback would re-open the confirm-then-403 trap for a
+                    creator who isn't the requestor. Exact server lockstep. */}
+                {!isReadOnly && (lease?.requestor_id === user?.id || isAdminUser) && lifecycleStatus && !['active', 'expired', 'cancelled', 'rejected'].includes(lifecycleStatus) && (
                   <Button
                     variant="outline"
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"

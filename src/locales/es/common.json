@@ -559,6 +559,7 @@
     "remove_cta": "Quitar",
     "delete_success": "Documento eliminado",
     "delete_failed": "No se pudo eliminar el documento",
+    "delete_rejected": "El arrendamiento no se eliminó: no tiene permiso para eliminarlo.",
     "delete_audit_failed": "La eliminación no pudo registrarse en el historial de auditoría, por lo que no se eliminó nada.",
     "delete_file_pending": "El registro del documento se borró, pero el archivo no pudo eliminarse por completo. Se limpiará automáticamente.",
     "locked_note": "Los documentos de origen pasan a formar parte del registro de auditoría cuando un arrendamiento se bloquea y ya no pueden eliminarse.",
@@ -887,6 +888,8 @@
     "access_denied_notice": "No tiene permiso para ver esa página; consulte a un administrador del espacio de trabajo si necesita acceso.",
     "first_run_title": "Agregue su primer arrendamiento",
     "first_run_desc": "Solicite la aprobación de un nuevo arrendamiento o suba un documento firmado; la IA extrae los términos clave y su panel se completa a partir de ahí.",
+    "first_run_title_readonly": "Aún no hay arrendamientos",
+    "first_run_desc_readonly": "Cuando un editor o administrador agregue el primer arrendamiento, su panel se completará a partir de ahí. Su rol puede ver y exportar todo lo que agreguen.",
     "upload_lease": "Subir Arrendamiento",
     "create_new_lease": "Crear Nuevo Arrendamiento",
     "active_leases": "Arrendamientos Activos",
@@ -1245,6 +1248,7 @@
     "clear_filters": "Limpiar filtros",
     "empty_title": "Aún no hay arrendamientos ejecutados",
     "empty_desc": "Los arrendamientos aparecen aquí una vez que se han aprobado y ejecutado mediante el flujo de trabajo. Haga clic en 'Agregar arrendamiento' para solicitar aprobación o subir un documento firmado.",
+    "empty_readonly_desc": "Los arrendamientos aparecen aquí una vez que se han aprobado y ejecutado mediante el flujo de trabajo. Un editor o administrador puede agregar el primero.",
     "empty_ai_title": "Abstracción con IA",
     "empty_ai_desc": "Los términos clave se extraen automáticamente una vez que se ejecuta el arrendamiento.",
     "empty_approval_title": "Flujo de aprobación",
@@ -3665,7 +3669,7 @@
     "member_wall_switch": "Cambiar de espacio"
   },
   "readonly": {
-    "lease_note": "Este espacio de trabajo es de solo lectura: puedes ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas.",
+    "lease_note": "Este espacio de trabajo es de solo lectura: puede ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas.",
     "viewer_note": "Su rol en este espacio de trabajo es de solo lectura: puede ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas.",
     "write_rejected": "Su cambio no se guardó: no tiene permiso para editar este arrendamiento."
   },

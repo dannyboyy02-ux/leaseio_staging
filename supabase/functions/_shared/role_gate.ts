@@ -50,7 +50,10 @@ export async function callerCanProcessLeases(
   return role === 'admin' || role === 'editor';
 }
 
-/** Canonical user-facing copy + machine reason, mirroring the monetization gate. */
+/** Canonical user-facing copy + machine reason, mirroring the monetization gate.
+ *  Worded around ACCESS, not "your role is view-only" — the gate also blocks
+ *  firm-derived staff (no direct membership row), for whom a view-only claim
+ *  would be false (Wave 5b polish review). */
 export const READ_ONLY_ROLE_ERROR =
-  "Your role in this workspace is view-only, so it can't add or process leases. Ask a workspace admin if you need edit access.";
+  "Your access to this workspace doesn't include adding or processing leases. Ask a workspace admin if you need edit access.";
 export const READ_ONLY_ROLE_REASON = 'read_only_role';

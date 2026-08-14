@@ -132,7 +132,7 @@ export default function Leases() {
   // Vault OR a cancellation-grace/soft-deleted one (the server also blocks).
   // Wave 5: VIEWER-role members are read-only too (INSERT policy +
   // process_lease role gate now reject their intake server-side).
-  const isReadOnly = isWorkspaceReadOnly(workspace) || userRole === 'viewer';
+  const isReadOnly = isWorkspaceReadOnly(workspace) || userRole === 'viewer' || !userRole;
   // Archive is admin/owner-only (server-enforced by the #78 trigger).
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const [searchParams] = useSearchParams();

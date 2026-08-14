@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -37,13 +37,23 @@ export default function Dashboard() {
   // Wave 5: VIEWER-role members are read-only too — the server now rejects
   // their lease creation (INSERT policy + process_lease role gate), so the
   // intake CTAs must not render for them.
-  const isReadOnly = isWorkspaceReadOnly(workspace) || userRole === 'viewer';
+  const isReadOnly = isWorkspaceReadOnly(workspace) || userRole === 'viewer' || !userRole;
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   // Wave 5: RequireRole bounces denied deep-links here with the path in
   // location.state — explain the bounce instead of looking like a broken link.
   const location = useLocation();
-  const deniedPath = (location.state as { deniedPath?: string } | null)?.deniedPath;
+  // One-shot (Wave 5b): history.state survives refresh, so without clearing
+  // it the notice re-renders on every reload. Capture into state, then strip.
+  const [deniedPath] = useState(
+    () => (location.state as { deniedPath?: string } | null)?.deniedPath,
+  );
+  useEffect(() => {
+    if ((location.state as { deniedPath?: string } | null)?.deniedPath) {
+      navigate('.', { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const quota = useWorkspaceQuota();
   // Shared react-query cache with the NeedsAction card — no extra fetch.
   // Defaults to the empty-state layout during load (not the 3-col grid) so a
@@ -142,19 +152,22 @@ export default function Dashboard() {
             <EmptyLeaseState
               onAddLease={handleAddLease}
               readOnly={isReadOnly}
-              title={t('dashboard.first_run_title')}
-              description={t('dashboard.first_run_desc')}
+              // Read-only variants (Wave 5b): an imperative "Add your first
+              // lease" over a suppressed CTA is copy that lies — viewers and
+              // read-only workspaces get a descriptive title + who-can-act note.
+              title={isReadOnly ? t('dashboard.first_run_title_readonly') : t('dashboard.first_run_title')}
+              description={isReadOnly ? t('dashboard.first_run_desc_readonly') : t('dashboard.first_run_desc')}
             />
-            <OnboardingChecklist onAddLease={handleAddLease} />
+            <OnboardingChecklist onAddLease={isReadOnly ? undefined : handleAddLease} readOnly={isReadOnly} />
           </>
         ) : firstRunUndetermined ? (
           // 0 active leases and the head-count hasn't settled: hold a calm
           // checklist-only frame instead of flashing the wrong layout.
-          <OnboardingChecklist onAddLease={handleAddLease} />
+          <OnboardingChecklist onAddLease={isReadOnly ? undefined : handleAddLease} readOnly={isReadOnly} />
         ) : (
           <>
         {/* Onboarding — auto-hides when all steps complete or dismissed */}
-        <OnboardingChecklist onAddLease={handleAddLease} />
+        <OnboardingChecklist onAddLease={isReadOnly ? undefined : handleAddLease} readOnly={isReadOnly} />
 
         {/* KPI strip — monthly rent, pipeline value, awaiting approval, expiring */}
         <SummaryStrip />
