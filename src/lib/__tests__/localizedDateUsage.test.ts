@@ -35,10 +35,16 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const rel = (f: string) => f.slice(repoRoot.length + 1).replace(/\\/g, '/');
 
-// A format call whose pattern literal contains a month-name token. Matches
-// format(x, 'MMM d'), format(x, "MMMM yyyy"), etc. — not identifiers that
-// merely contain "format".
-const RAW_MONTH_FORMAT = /\bformat(?:Distance\w*)?\s*\([^)]*['"][^'"]*MMM/;
+// Detection (review fold): the first cut tried to parse the format() arg list
+// with [^)]* — which cannot cross the ')' inside `format(new Date(d), 'MMM…')`,
+// the DOMINANT offender shape, making the pin largely vacuous. Instead: flag
+// any quoted month-name literal ('MMM'/'MMMM' token) in a file that imports
+// date-fns. Numeric-only patterns (yyyy-MM-dd, MM/dd/yyyy) contain no MMM so
+// the CSV exemption survives; Intl option objects don't use MMM literals.
+const MONTH_LITERAL = /['"][^'"\n]*\bMMM/;
+const IMPORTS_DATE_FNS = /from\s+['"]date-fns['"]/;
+const RAW_MONTH_FORMAT = (src: string) =>
+  IMPORTS_DATE_FNS.test(src) && MONTH_LITERAL.test(src);
 
 describe('localized date usage pin (Wave 5)', () => {
   const files = walk(join(repoRoot, 'src')).filter(
@@ -53,7 +59,7 @@ describe('localized date usage pin (Wave 5)', () => {
     const offenders = files
       .map(rel)
       .filter((r) => !(r in ALLOWLIST))
-      .filter((r) => RAW_MONTH_FORMAT.test(readFileSync(join(repoRoot, r), 'utf8')));
+      .filter((r) => RAW_MONTH_FORMAT(readFileSync(join(repoRoot, r), 'utf8')));
     expect(
       offenders,
       'These files hard-code English month names. Use formatLocalizedDate/' +
@@ -66,7 +72,7 @@ describe('localized date usage pin (Wave 5)', () => {
   it('allowlist entries are still live', () => {
     const stale = Object.keys(ALLOWLIST).filter((k) => {
       try {
-        return !RAW_MONTH_FORMAT.test(readFileSync(join(repoRoot, k), 'utf8'));
+        return !RAW_MONTH_FORMAT(readFileSync(join(repoRoot, k), 'utf8'));
       } catch {
         return true;
       }

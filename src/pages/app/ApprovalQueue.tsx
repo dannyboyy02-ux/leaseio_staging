@@ -1499,7 +1499,9 @@ export default function ApprovalQueue() {
             <TabsContent value="governance" className="space-y-6">
               {/* Wave 5: the two admin governance dashboards had NO inbound
                   link anywhere in the app (URL-only). This tab is their
-                  natural home. */}
+                  natural home. Wave 5b: admin-gated — the tab also serves
+                  financial approvers, whose clicks these routes would bounce. */}
+              {isAdminUser && (
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" asChild>
                   <Link to="/app/admin/exceptions">{t('exceptions.title')}</Link>
@@ -1508,6 +1510,7 @@ export default function ApprovalQueue() {
                   <Link to="/app/admin/reroute-audit">{t('exceptions.reroute.title')}</Link>
                 </Button>
               </div>
+              )}
               {governanceLoading ? (
                 <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
               ) : (

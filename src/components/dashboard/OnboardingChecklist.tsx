@@ -55,9 +55,13 @@ interface OnboardingChecklistProps {
    *  Add-Lease chooser as the Dashboard hero/header instead of navigating to
    *  /app/imports — so the first-run screen prescribes ONE gesture, not two. */
   onAddLease?: () => void;
+  /** Wave 5b: viewers / read-only workspaces can't intake — suppress the
+   *  upload step entirely (like the admin-only team/approvers steps) instead
+   *  of offering a flow the server will reject. */
+  readOnly?: boolean;
 }
 
-export function OnboardingChecklist({ onAddLease }: OnboardingChecklistProps = {}) {
+export function OnboardingChecklist({ onAddLease, readOnly = false }: OnboardingChecklistProps = {}) {
   const [dismissed, setDismissed] = useState(false);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
@@ -175,9 +179,10 @@ export function OnboardingChecklist({ onAddLease }: OnboardingChecklistProps = {
   if (loadingPrefs) return null;
   if (dismissed) return null;
 
-  const visibleSteps = canManageMembers
+  const visibleSteps = (canManageMembers
     ? stepDefinitions
-    : stepDefinitions.filter((step) => step.id !== 'team' && step.id !== 'approvers');
+    : stepDefinitions.filter((step) => step.id !== 'team' && step.id !== 'approvers')
+  ).filter((step) => !(readOnly && step.id === 'upload'));
   const visibleCompletedSteps = completedSteps.filter((stepId) =>
     visibleSteps.some((step) => step.id === stepId)
   );

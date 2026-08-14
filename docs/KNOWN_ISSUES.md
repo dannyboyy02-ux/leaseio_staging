@@ -44,6 +44,49 @@ Stripe customer + collect a payment method inline (PaymentElement) instead of po
 wrong Billing page; (c) at minimum, fix the error copy so it doesn't send members to a Billing
 page that can't help them. Verified via function source + live repro 2026-08-11.
 
+## Wave 5 "honest walls" residuals (filed 2026-08-14 by the Wave-5 review gauntlet — all pre-existing or deliberate-deferral; the wave itself is merged as PRs #94 + the wave5b fold)
+
+### #196 (MEDIUM, governance, pre-existing) Viewer "read-only" has residual DB-layer write arms the Wave-5 enforcement deliberately did not close
+Wave 5 closed lease INSERT (policy `leases_insert_own_editor_plus`) + both paid-AI entry points
+(`_shared/role_gate.ts`), and the UI treats viewers as fully read-only. Remaining RLS arms a
+demoted-to-viewer user can still exercise via direct PostgREST: (a) `leases` UPDATE/DELETE
+own-lease arms (`user_id = auth.uid()` — DELETE bypasses 14-day retention entirely); (b) UPDATE
+arm 3 grants any `workspace_roles` functional-role holder (a viewer holding financial_approver);
+(c) member-wide INSERT policies on `field_corrections`, `lease_state_transitions`,
+`lease_activity_log`. None burn paid AI. **Fix shape:** a follow-up security migration tightening
+the own-lease arms with a role check (mirror the Wave-5 pattern) + sweep the sibling tables;
+decide whether own-lease editing by demoted creators is a feature or a hole first. Surfaced by
+the Wave-5 integrity + security reviews.
+
+### #197 (MEDIUM, product decision) Firm-derived staff lost client-side lease-request creation — intake for firm personas needs an owner decision
+`has_workspace_permission` has no firm branch, so the Wave-5 INSERT policy (deliberately matching
+the existing UPDATE stance) excludes firm staff with no direct `workspace_members` row; the old
+policy's firm-aware `is_workspace_member` admitted them, so `LeaseRequestForm`'s client INSERT
+regressed for that persona (the paid upload path was already closed to them pre-Wave-5). The
+wave5b fold hides intake CTAs for firm-derived sessions (`!userRole` in the read-only predicates)
+and reworded the server denial so it doesn't claim "view-only". Zero current impact (no firms
+exist in prod). **Decision needed:** should firm_admin/firm_member create leases in child
+workspaces? If yes: INSERT policy + `role_gate.ts` + the CTA predicates move together (all three
+documented for lockstep). Surfaced by the Wave-5 security + polish reviews.
+
+### #198 (LOW, denial UX) `retry_lease`'s 403 `read_only_role` is swallowed into generic "retry failed"; `role_gate` conflates lookup errors with denial
+`supabase.functions.invoke` turns non-2xx into `FunctionsHttpError`, so `FailedLeaseBanner` and
+ImportHistory's retry toast a generic failure instead of the actionable (now access-worded) denial
+— the wave5b fold added the localized `read_only_role` branch to `LeaseUploadModal` (process_lease
+200+ok:false contract), but the retry 403 path still loses the reason. Also
+`_shared/role_gate.ts` returns `false` on transient lookup errors, so an owner mid-DB-hiccup gets
+the access-denied message. **Fix:** parse `error.context`/body reason in the retry catch paths;
+return a discriminated `blocked | check_failed` from the gate and map `check_failed` to a
+retryable error. Surfaced by the Wave-5 security + integrity + auditor reviews.
+
+### #199 (MEDIUM, integrity, pre-existing) LeaseReview approve's `lease_activity_log` mirror insert is best-effort — approve-without-audit-row remains possible
+The Wave-5 backstops guarantee the approve UPDATE itself can't silently no-op, and wave5b moved
+every activity insert behind a verified write — but the approval's audit mirror still only
+`console.error`s on failure (`user_id: user?.id ?? null` is the #90-NULL family). A lost insert =
+an approved lease with no `approval` activity row. **Fix shape:** make the mirror mandatory
+(fail the approve, or queue a retry), part of the #90-NULL attribution tightening. Re-surfaced by
+the Wave-5 integrity review.
+
 ### #194 (MEDIUM, accuracy, pre-existing) Leo's lease fetch caps at `.limit(60)` with no ORDER BY — totals silently diverge from the dashboard above 60 leases
 `supabase/functions/ai-assistant/index.ts` fetches leases with `.limit(60)` and no `.order()`,
 then computes counts + obligation totals over that capped set. The dashboard (`SummaryStrip.tsx`)

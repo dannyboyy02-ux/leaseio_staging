@@ -460,7 +460,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false, onAsc
       { label: t('locked_lease.timing.month_to_month'), value: fmtBool(lease.month_to_month, t) },
       { label: t('locked_lease.timing.approved'), value: fmtDate(lease.financial_approved_at, language) },
     ];
-  }, [lease, t]);
+  }, [lease, t, language]);
 
   const currentMonthlyRent = useMemo(
     () => currentRentFromSchedule(rentSchedule) ?? lease.current_monthly_rent ?? null,
@@ -495,7 +495,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false, onAsc
   const escalationRows: LabelValueRow[] = useMemo(() => [
     { label: t('locked_lease.escalations.rate'), value: fmtPercent(lease.escalation_rate) },
     { label: t('locked_lease.escalations.clauses'), value: lease.escalation_clauses, fullWidth: true },
-  ], [lease, t, language]);
+  ], [lease, t]);
 
   const optionsRows: LabelValueRow[] = useMemo(() => {
     const purchaseOption = extractedValue(extracted, 'purchase_option');

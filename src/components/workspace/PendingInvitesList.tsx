@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Loader2, RefreshCcw, Trash2 } from "lucide-react";
-import { format, isPast } from "date-fns";
+import { isPast } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
+import { formatLocalizedDate } from "@/lib/dateFormatters";
 
 interface PendingInvite {
   id: string;
@@ -21,7 +22,7 @@ interface PendingInvitesListProps {
 }
 
 export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListProps) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   if (invites.length === 0) return null;
@@ -98,8 +99,8 @@ export function PendingInvitesList({ invites, onRefresh }: PendingInvitesListPro
                   </Badge>
                   <span className={`text-xs ${expired ? "text-destructive" : "text-muted-foreground"}`}>
                     {expired
-                      ? t("workspace.invite.expired_on", { date: format(new Date(invite.expires_at), "MMM d") })
-                      : t("workspace.invite.expires_on", { date: format(new Date(invite.expires_at), "MMM d") })}
+                      ? t("workspace.invite.expired_on", { date: formatLocalizedDate(invite.expires_at, language, { month: 'short', day: 'numeric' }) })
+                      : t("workspace.invite.expires_on", { date: formatLocalizedDate(invite.expires_at, language, { month: 'short', day: 'numeric' }) })}
                   </span>
                 </div>
               </div>

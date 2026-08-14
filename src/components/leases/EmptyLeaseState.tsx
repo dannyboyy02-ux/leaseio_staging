@@ -28,7 +28,9 @@ export function EmptyLeaseState({
         </div>
         <h3 className="text-xl font-semibold mb-2">{title ?? t('leases.empty_title')}</h3>
         <p className="text-muted-foreground max-w-md mb-6">
-          {description ?? t('leases.empty_desc')}
+          {/* readOnly default swaps the imperative "Click 'Add Lease'…" for a
+              who-can-act line — the CTA it commands is suppressed below. */}
+          {description ?? (readOnly ? t('leases.empty_readonly_desc') : t('leases.empty_desc'))}
         </p>
 
         {/* Gap to the CTA lives on the Button (mt-8) so the read-only variant —

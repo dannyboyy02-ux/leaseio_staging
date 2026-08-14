@@ -68,13 +68,22 @@ export default function ImportHistory() {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
   const { workspace, user, userRole } = useApp();
+  // Wave 5b: the page's intake affordances (upload CTAs, failed-row retry)
+  // are hidden for viewers, matching Dashboard/Leases — the server rejects
+  // them anyway (role gate in process_lease/retry_lease), so showing them
+  // was a walk into a wall.
+  const isViewerReadOnly = userRole === 'viewer' || !userRole;
   // Wave 5: the hard-delete is RLS-gated to own-lease-or-admin
   // (leases_delete_own_or_workspace_admin). Rendering it for everyone let a
   // non-owner click Delete, see a success toast, and watch the row come back
   // on refetch (RLS filtered the DELETE to 0 rows). Only show the action to
-  // callers the policy will actually allow.
+  // callers the policy will actually allow — and never to viewers: the RLS
+  // own-lease arm technically still permits a demoted viewer-creator, but the
+  // product contract says read-only (integrity review; the RLS residue is
+  // filed in KNOWN_ISSUES).
   const canDeleteRow = (imp: ImportRow) =>
-    userRole === 'admin' || userRole === 'owner' || (!!imp.user_id && imp.user_id === user?.id);
+    userRole !== 'viewer' &&
+    (userRole === 'admin' || userRole === 'owner' || (!!imp.user_id && imp.user_id === user?.id));
   const quota = useWorkspaceQuota();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [limitWallOpen, setLimitWallOpen] = useState(false);
@@ -184,11 +193,27 @@ export default function ImportHistory() {
     if (!selectedLease) return;
 
     try {
+      // Wave 5b (integrity review): delete the LEASE ROW FIRST — it is the
+      // authorization anchor (RLS admin-or-own) and the #116 trigger gate. The
+      // old order destroyed the storage object and risks BEFORE a lease delete
+      // that could then fail, leaving a live lease stripped of its source
+      // document. Storage/risks cleanup now runs only after the row is gone.
+      const { data: deletedRows, error: leaseError } = await supabase
+        .from('leases')
+        .delete()
+        .eq('id', selectedLease.id)
+        .select('id');
+
+      if (leaseError) throw leaseError;
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error(String(t('import.delete_rejected')));
+      }
+
       if (selectedLease.storage_path) {
         const { error: storageError } = await supabase.storage
           .from('leases')
           .remove([selectedLease.storage_path]);
-        
+
         if (storageError) {
           console.warn('Storage delete warning:', storageError);
         }
@@ -201,19 +226,6 @@ export default function ImportHistory() {
 
       if (risksError) {
         console.warn('Risks delete warning:', risksError);
-      }
-
-      // Wave 5: .select() so an RLS-filtered DELETE (0 rows, no error) fails
-      // loudly instead of toasting success over a row that reappears on refetch.
-      const { data: deletedRows, error: leaseError } = await supabase
-        .from('leases')
-        .delete()
-        .eq('id', selectedLease.id)
-        .select('id');
-
-      if (leaseError) throw leaseError;
-      if (!deletedRows || deletedRows.length === 0) {
-        throw new Error(String(t('readonly.write_rejected')));
       }
 
       toast.success(t('import.delete_success'));
@@ -242,10 +254,12 @@ export default function ImportHistory() {
         title={t('import.history')}
         subtitle={`${imports.length} ${t('import.documents_imported')}`}
         actions={
-          <Button variant="accent" onClick={() => openUpload()}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t('import.upload_lease')}
-          </Button>
+          isViewerReadOnly ? undefined : (
+            <Button variant="accent" onClick={() => openUpload()}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t('import.upload_lease')}
+            </Button>
+          )
         }
       />
 
@@ -263,10 +277,14 @@ export default function ImportHistory() {
             <p className="text-muted-foreground mb-4">
               {t('import.upload_first')}
             </p>
-            <Button variant="accent" onClick={() => openUpload()}>
-              <Plus className="h-4 w-4 mr-2" />
-              {t('import.upload_lease')}
-            </Button>
+            {isViewerReadOnly ? (
+              <p className="text-sm text-muted-foreground">{t('readonly.viewer_note')}</p>
+            ) : (
+              <Button variant="accent" onClick={() => openUpload()}>
+                <Plus className="h-4 w-4 mr-2" />
+                {t('import.upload_lease')}
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -330,7 +348,7 @@ export default function ImportHistory() {
                           {formatLocalizedDateTime(imp.uploaded_at, language)}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {imp.status === 'Failed' ? (
+                          {imp.status === 'Failed' && !isViewerReadOnly ? (
                             <Button
                               variant="ghost"
                               size="sm"
