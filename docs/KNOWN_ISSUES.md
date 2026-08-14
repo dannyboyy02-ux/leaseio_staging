@@ -58,16 +58,25 @@ the own-lease arms with a role check (mirror the Wave-5 pattern) + sweep the sib
 decide whether own-lease editing by demoted creators is a feature or a hole first. Surfaced by
 the Wave-5 integrity + security reviews.
 
-### #197 (MEDIUM, product decision) Firm-derived staff lost client-side lease-request creation — intake for firm personas needs an owner decision
+### #197 (MEDIUM, product decision) Firm-derived staff lost client-side lease-request creation — RESOLVED 2026-08-14 (owner decision: YES, firm staff get intake)
 `has_workspace_permission` has no firm branch, so the Wave-5 INSERT policy (deliberately matching
-the existing UPDATE stance) excludes firm staff with no direct `workspace_members` row; the old
+the existing UPDATE stance) excluded firm staff with no direct `workspace_members` row; the old
 policy's firm-aware `is_workspace_member` admitted them, so `LeaseRequestForm`'s client INSERT
-regressed for that persona (the paid upload path was already closed to them pre-Wave-5). The
-wave5b fold hides intake CTAs for firm-derived sessions (`!userRole` in the read-only predicates)
-and reworded the server denial so it doesn't claim "view-only". Zero current impact (no firms
-exist in prod). **Decision needed:** should firm_admin/firm_member create leases in child
-workspaces? If yes: INSERT policy + `role_gate.ts` + the CTA predicates move together (all three
-documented for lockstep). Surfaced by the Wave-5 security + polish reviews.
+regressed for that persona (the paid upload path was already closed to them pre-Wave-5). Zero
+production impact while open (no firms exist in prod). **Owner decision 2026-08-14: firm staff
+CAN create leases in child workspaces.** All three lockstep gates moved together (branch
+`firm-staff-intake-197`): (1) migration `20260814190000_leases_insert_firm_staff` re-creates
+`leases_insert_own_editor_plus` with the Phase-9 firm arm (`firm_id` set, `restrict_firm_access`
+false, `is_firm_member`) **plus a direct-viewer override** — a direct `workspace_members` viewer
+row out-ranks the firm allowance, so RLS and the role gate agree; (2) `_shared/role_gate.ts`
+`callerCanProcessLeases` gained the matching firm branch (owner → direct admin/editor → direct
+viewer BLOCKS → firm membership on a non-restricted child), redeployed in `process_lease` +
+`retry_lease`; (3) the client intake predicates (Dashboard/Leases/ImportHistory) allow
+firm-derived sessions via the new `useFirmIntakeAccess()` hook (`!userRole` + workspace.firmId ∈
+firmMemberships). LeaseReview needed no change — its predicate is `userRole === 'viewer'` only,
+and the own-lease UPDATE arm already lets firm staff confirm their own leases. UPDATE policy
+deliberately NOT widened (firm staff edit only their OWN leases; colleagues' require direct
+membership).
 
 ### #198 (LOW, denial UX) `retry_lease`'s 403 `read_only_role` is swallowed into generic "retry failed"; `role_gate` conflates lookup errors with denial
 `supabase.functions.invoke` turns non-2xx into `FunctionsHttpError`, so `FailedLeaseBanner` and

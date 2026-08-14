@@ -9,17 +9,16 @@
 // INSERT policy (leases_insert_own_editor_plus), mirroring how
 // _shared/monetization.ts keeps the subscription gate paired.
 //
-// Semantics (deliberately identical to public.has_workspace_permission(...,
-// 'editor'), the gate the leases UPDATE policy already uses):
-//   - workspace OWNER            -> allowed
-//   - member role admin/editor   -> allowed
-//   - member role viewer         -> blocked
-//   - no membership / any error  -> blocked (fail closed; legitimate callers
-//     are always owners or members — RLS would zero their writes anyway)
-// Firm-derived access (firm staff with no direct workspace_members row) is
-// NOT granted here — the same stance has_workspace_permission takes for the
-// UPDATE policy, so server and RLS agree. If firm staff ever need intake,
-// both gates move together.
+// Semantics (kept in lockstep with the leases INSERT policy
+// leases_insert_own_editor_plus — see 20260814190000):
+//   - workspace OWNER                       -> allowed
+//   - member role admin/editor              -> allowed
+//   - member role viewer                    -> blocked
+//   - FIRM staff of the owning firm (#197,  -> allowed
+//     owner decision 2026-08-14) unless the
+//     child set restrict_firm_access — both
+//     firm roles map to editor-or-better
+//   - no membership / any error             -> blocked (fail closed)
 
 // deno-lint-ignore no-explicit-any
 type AdminClient = any;
@@ -33,7 +32,7 @@ export async function callerCanProcessLeases(
 
   const { data: ws, error: wsErr } = await admin
     .from('workspaces')
-    .select('owner_id')
+    .select('owner_id, firm_id, restrict_firm_access')
     .eq('id', workspaceId)
     .maybeSingle();
   if (wsErr) return false; // fail closed on lookup errors
@@ -47,7 +46,27 @@ export async function callerCanProcessLeases(
     .limit(1);
   if (mErr) return false;
   const role = rows?.[0]?.role;
-  return role === 'admin' || role === 'editor';
+  if (role === 'admin' || role === 'editor') return true;
+  // A direct VIEWER row is a deliberate read-only assignment — it wins over
+  // any firm-derived allowance (a firm shouldn't out-rank an explicit "this
+  // person is read-only here").
+  if (role === 'viewer') return false;
+
+  // #197 (owner decision 2026-08-14): firm staff of the owning firm are
+  // intake-capable in child workspaces unless the child opted out — mirrors
+  // the INSERT policy's firm arm (and is_workspace_member's Phase-9 shape).
+  if (ws?.firm_id && ws?.restrict_firm_access === false) {
+    const { data: fmRows, error: fmErr } = await admin
+      .from('firm_members')
+      .select('id')
+      .eq('firm_id', ws.firm_id)
+      .eq('user_id', userId)
+      .limit(1);
+    if (fmErr) return false;
+    return (fmRows?.length ?? 0) > 0;
+  }
+
+  return false;
 }
 
 /** Canonical user-facing copy + machine reason, mirroring the monetization gate.

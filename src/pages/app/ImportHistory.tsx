@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
+import { useFirmIntakeAccess } from '@/hooks/useFirmIntakeAccess';
 import { DeleteLeaseDialog } from '@/components/leases/DeleteLeaseDialog';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
 import { isCommittedLease } from '@/lib/leaseDisposability';
@@ -71,8 +72,10 @@ export default function ImportHistory() {
   // Wave 5b: the page's intake affordances (upload CTAs, failed-row retry)
   // are hidden for viewers, matching Dashboard/Leases — the server rejects
   // them anyway (role gate in process_lease/retry_lease), so showing them
-  // was a walk into a wall.
-  const isViewerReadOnly = userRole === 'viewer' || !userRole;
+  // was a walk into a wall. #197: firm staff in a child workspace (userRole
+  // null, firm matches) get intake.
+  const firmIntake = useFirmIntakeAccess();
+  const isViewerReadOnly = userRole === 'viewer' || (!userRole && !firmIntake);
   // Wave 5: the hard-delete is RLS-gated to own-lease-or-admin
   // (leases_delete_own_or_workspace_admin). Rendering it for everyone let a
   // non-owner click Delete, see a success toast, and watch the row come back

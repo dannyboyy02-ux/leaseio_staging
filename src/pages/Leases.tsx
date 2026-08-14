@@ -31,6 +31,7 @@ import { DeleteLeaseWithRetentionDialog } from '@/components/leases/DeleteLeaseW
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
 import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
+import { useFirmIntakeAccess } from '@/hooks/useFirmIntakeAccess';
 import { AddLeaseDialog } from '@/components/leases/AddLeaseDialog';
 import { EmptyLeaseState } from '@/components/leases/EmptyLeaseState';
 import { LeaseStatusBadge } from '@/components/leases/LeaseStatusBadge';
@@ -131,8 +132,11 @@ export default function Leases() {
   // #136/#137: hide intake/archive affordances for ANY read-only workspace —
   // Vault OR a cancellation-grace/soft-deleted one (the server also blocks).
   // Wave 5: VIEWER-role members are read-only too (INSERT policy +
-  // process_lease role gate now reject their intake server-side).
-  const isReadOnly = isWorkspaceReadOnly(workspace) || userRole === 'viewer' || !userRole;
+  // process_lease role gate now reject their intake server-side). #197: firm
+  // staff in a child workspace (userRole null, firm matches) get intake.
+  const firmIntake = useFirmIntakeAccess();
+  const isReadOnly =
+    isWorkspaceReadOnly(workspace) || userRole === 'viewer' || (!userRole && !firmIntake);
   // Archive is admin/owner-only (server-enforced by the #78 trigger).
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const [searchParams] = useSearchParams();
