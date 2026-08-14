@@ -31,6 +31,7 @@ import {
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -206,7 +207,7 @@ export default function ExceptionsDashboard() {
     return (
       <AppLayout>
         <AppHeader title={t('exceptions.title')} />
-        <div className="max-w-2xl mx-auto py-10">
+        <PageLayout width="narrow">
           <Card className="border-destructive/40">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
@@ -218,7 +219,7 @@ export default function ExceptionsDashboard() {
               {t('exceptions.admin_only_desc')}
             </CardContent>
           </Card>
-        </div>
+        </PageLayout>
       </AppLayout>
     );
   }
@@ -241,7 +242,7 @@ export default function ExceptionsDashboard() {
         }
       />
 
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <PageLayout>
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -398,7 +399,7 @@ export default function ExceptionsDashboard() {
               )}
           </>
         )}
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

@@ -15,6 +15,19 @@ import { cn } from '@/lib/utils';
  * Adoption is incremental: the `/app/firm/*` pages are the first adopters; the
  * remaining content pages migrate onto this primitive page-by-page.
  *
+ * Width-tier assignment (codified 2026-08-11 after the Wave-1b layout review, so
+ * the choice stops being tribal — pick the tier by what the page renders, and
+ * keep sibling surfaces on the same tier):
+ *   - `wide`    — tables, multi-column card grids, and dashboards (Leases,
+ *                 Portfolio, Dashboard, AuditLog), plus approval WORKBENCHES whose
+ *                 column count needs the room (SignatorReview's PDF + summary).
+ *   - `default` — content / detail / report / config pages, AND single-column
+ *                 card-list dashboards (FinancialReview, ExceptionsDashboard,
+ *                 RerouteAuditDashboard) that would read sparse at max-w-7xl.
+ *   - `narrow`  — focused single-column flows: queues, forms, short messages, and
+ *                 access-denied cards (ApprovalQueue, NeedsActionPage, the *-denied
+ *                 cards on the admin dashboards).
+ *
  * Render it as a SIBLING after AppHeader, not around it — AppHeader is a
  * full-width sticky ribbon aligned to the sidebar edge and must stay outside
  * the max-width container:

@@ -498,6 +498,7 @@
     "plan_label": "Plan {{plan}}",
     "sidebar_collapse": "Contraer barra lateral",
     "sidebar_expand": "Expandir barra lateral",
+    "open_menu": "Abrir menú",
     "sidebar_resize": "Redimensionar barra lateral",
     "sidebar_reorder": "Arrastrar para reordenar",
     "approvals": "Aprobaciones"

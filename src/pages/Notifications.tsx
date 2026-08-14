@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -193,7 +194,7 @@ export default function Notifications() {
         subtitle={t('notifications.subtitle')}
       />
 
-      <div className="p-6">
+      <PageLayout width="wide">
         <Tabs defaultValue="alerts">
           <TabsList className="mb-6">
             <TabsTrigger value="alerts" className="relative">
@@ -318,7 +319,7 @@ export default function Notifications() {
             </TabsContent>
           ))}
         </Tabs>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

@@ -13,6 +13,7 @@ import { FileJson, FileText, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -166,7 +167,7 @@ export default function DisclosureReportLibrary() {
         title={t('reports.disclosure_reports_title')}
         subtitle={t('reports.disclosure_reports_subtitle')}
       />
-      <div className="px-6 py-6 space-y-4 max-w-5xl">
+      <PageLayout spacing="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t('reports.consolidated_workspace_report')}</CardTitle>
@@ -303,7 +304,7 @@ export default function DisclosureReportLibrary() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

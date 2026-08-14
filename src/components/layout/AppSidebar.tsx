@@ -148,7 +148,7 @@ export function AppSidebar() {
   const { t, language, setLanguage } = useLanguage();
   const firm = useFirm();
   const {
-    collapsed,
+    collapsed: collapsedPref,
     toggleCollapsed,
     width,
     setWidth,
@@ -157,7 +157,23 @@ export function AppSidebar() {
     setResizing,
     navOrder,
     setNavOrder,
+    isMobile,
+    mobileOpen,
+    setMobileOpen,
   } = useSidebar();
+
+  // FS-1: on mobile the sidebar is an off-canvas drawer that always shows the
+  // full (expanded) nav — the icon-rail collapse is a desktop-only preference.
+  // Shadowing `collapsed` here makes every downstream render site mobile-aware
+  // without touching each one; the drawer is always full-width + labelled.
+  const collapsed = collapsedPref && !isMobile;
+
+  // FS-1: close the drawer whenever the route changes (a nav tap should dismiss
+  // it) so the user lands on the new page, not back on the menu.
+  useEffect(() => {
+    if (isMobile) setMobileOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // Phase 10 — which navigation mode the sidebar shows.
   const firmMode = computeFirmSidebarMode({
@@ -471,34 +487,52 @@ export function AppSidebar() {
   );
 
   return (
-    <aside
-      className={cn(
-        'fixed left-0 top-0 z-40 h-screen bg-sidebar text-sidebar-foreground flex flex-col',
-        !resizing && 'transition-[width] duration-200 ease-out motion-reduce:transition-none',
+    <>
+      {/* FS-1: backdrop behind the mobile off-canvas drawer. Tap to dismiss. */}
+      {isMobile && mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-foreground/40 backdrop-blur-[1px] motion-reduce:backdrop-blur-none"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
       )}
-      style={{ width: collapsed ? SIDEBAR_COLLAPSED_WIDTH : width }}
-    >
-      {/* Collapse / expand toggle — straddles the right edge. */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label={collapsed ? t('nav.sidebar_expand') : t('nav.sidebar_collapse')}
-            className="absolute -right-3 top-[76px] z-[60] flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
-          >
-            {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right">
-          {collapsed ? t('nav.sidebar_expand') : t('nav.sidebar_collapse')}
-        </TooltipContent>
-      </Tooltip>
+      <aside
+        className={cn(
+          'fixed left-0 top-0 h-screen bg-sidebar text-sidebar-foreground flex flex-col',
+          // Desktop: fixed rail at z-40. Mobile: off-canvas drawer above the
+          // backdrop (z-50), sliding in/out on the transform.
+          isMobile ? 'z-50' : 'z-40',
+          isMobile && !mobileOpen && '-translate-x-full',
+          isMobile
+            ? 'shadow-2xl transition-transform duration-200 ease-out motion-reduce:transition-none'
+            : !resizing && 'transition-[width] duration-200 ease-out motion-reduce:transition-none',
+        )}
+        style={{ width: isMobile ? SIDEBAR_DEFAULT_WIDTH : collapsed ? SIDEBAR_COLLAPSED_WIDTH : width }}
+      >
+        {/* Collapse / expand toggle — straddles the right edge. Desktop only
+            (on mobile the drawer opens/closes from the top-bar hamburger). */}
+        {!isMobile && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                aria-label={collapsed ? t('nav.sidebar_expand') : t('nav.sidebar_collapse')}
+                className="absolute -right-3 top-[76px] z-[60] flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              {collapsed ? t('nav.sidebar_expand') : t('nav.sidebar_collapse')}
+            </TooltipContent>
+          </Tooltip>
+        )}
 
-      {/* Drag-to-resize handle (expanded only). Double-click resets to default.
-          Starts below the collapse toggle (top-[104px]) so the two edge
-          affordances don't share the same grab zone. */}
-      {!collapsed && (
+      {/* Drag-to-resize handle (expanded only, desktop only). Double-click
+          resets to default. Starts below the collapse toggle (top-[104px]) so
+          the two edge affordances don't share the same grab zone. */}
+      {!collapsed && !isMobile && (
         <Tooltip>
           <TooltipTrigger asChild>
             <div
@@ -857,5 +891,6 @@ export function AppSidebar() {
         </DropdownMenu>
       </div>
     </aside>
+    </>
   );
 }

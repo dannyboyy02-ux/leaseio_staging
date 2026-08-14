@@ -498,6 +498,7 @@
     "plan_label": "{{plan}} plan",
     "sidebar_collapse": "Collapse sidebar",
     "sidebar_expand": "Expand sidebar",
+    "open_menu": "Open menu",
     "sidebar_resize": "Resize sidebar",
     "sidebar_reorder": "Drag to reorder",
     "approvals": "Approvals"

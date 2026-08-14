@@ -33,6 +33,7 @@ import {
 
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -230,7 +231,7 @@ export default function RerouteAuditDashboard() {
     return (
       <AppLayout>
         <AppHeader title={t('exceptions.reroute.title')} />
-        <div className="max-w-2xl mx-auto py-10">
+        <PageLayout width="narrow">
           <Card className="border-destructive/40">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
@@ -242,7 +243,7 @@ export default function RerouteAuditDashboard() {
               {t('exceptions.reroute.admin_only_desc')}
             </CardContent>
           </Card>
-        </div>
+        </PageLayout>
       </AppLayout>
     );
   }
@@ -265,7 +266,7 @@ export default function RerouteAuditDashboard() {
         }
       />
 
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <PageLayout>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -376,7 +377,7 @@ export default function RerouteAuditDashboard() {
               })}
           </CardContent>
         </Card>
-      </div>
+      </PageLayout>
 
       <Dialog
         open={triggerTarget !== null}

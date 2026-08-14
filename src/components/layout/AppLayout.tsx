@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
+import { Menu, FileText } from 'lucide-react';
 import { AppSidebar } from './AppSidebar';
 import { AiAssistant } from '@/components/ai/AiAssistant';
 import { ProcessingProvider } from '@/contexts/ProcessingContext';
@@ -8,6 +9,7 @@ import { QuotaWarningBanner } from '@/components/QuotaWarningBanner';
 import { CancellationBanner, SoftDeletedWall } from '@/components/CancellationBanner';
 import { VaultBanner, VaultMemberWall } from '@/components/VaultBanner';
 import { useApp } from '@/contexts/AppContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { isReadOnlyRetention } from '@/config/pricing';
 import { SIDEBAR_COLLAPSED_WIDTH } from '@/lib/sidebarPrefs';
 import { cn } from '@/lib/utils';
@@ -26,7 +28,8 @@ export function AppLayout({ children }: AppLayoutProps) {
 
 function AppLayoutInner({ children }: AppLayoutProps) {
   const { workspace, userRole } = useApp();
-  const { collapsed, width, resizing } = useSidebar();
+  const { collapsed, width, resizing, isMobile, setMobileOpen } = useSidebar();
+  const { t } = useLanguage();
   const location = useLocation();
 
   const inSettings = location.pathname.startsWith('/app/settings');
@@ -49,7 +52,9 @@ function AppLayoutInner({ children }: AppLayoutProps) {
   // Width tracks the collapse/resize state. The transition is suppressed while
   // the user is actively dragging the resize handle (so the offset follows the
   // pointer 1:1) and under reduced-motion preferences.
-  const mainPaddingLeft = collapsed ? SIDEBAR_COLLAPSED_WIDTH : width;
+  // FS-1: below md the sidebar is an off-canvas drawer, so <main> reserves NO
+  // space for it and content spans the full width.
+  const mainPaddingLeft = isMobile ? 0 : collapsed ? SIDEBAR_COLLAPSED_WIDTH : width;
 
   return (
     <ProcessingProvider>
@@ -68,6 +73,28 @@ function AppLayoutInner({ children }: AppLayoutProps) {
           )}
           style={{ paddingLeft: mainPaddingLeft }}
         >
+          {/* FS-1: mobile top bar — the only way to reach the nav when the
+              sidebar is off-canvas. Sticky so it's always reachable. */}
+          {isMobile && (
+            <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+              <button
+                type="button"
+                onClick={() => setMobileOpen(true)}
+                aria-label={t('nav.open_menu')}
+                className="-ml-1 flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
+                  <FileText className="h-4 w-4 text-primary-foreground" />
+                </div>
+                <span className="font-display text-lg font-bold text-foreground">
+                  Lease<span className="text-primary">IO</span>
+                </span>
+              </div>
+            </header>
+          )}
           <CancellationBanner />
           <VaultBanner />
           <QuotaWarningBanner />

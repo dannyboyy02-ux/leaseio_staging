@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LeaseUploadModal } from '@/components/leases/LeaseUploadModal';
@@ -234,7 +235,7 @@ export default function ImportHistory() {
         }
       />
 
-      <div className="p-6">
+      <PageLayout width="wide">
         {loading ? (
           <div className="flex items-center justify-center h-[40vh]">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -388,7 +389,7 @@ export default function ImportHistory() {
             </div>
           </div>
         )}
-      </div>
+      </PageLayout>
 
       <LeaseUploadModal
         open={uploadModalOpen}
