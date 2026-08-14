@@ -241,7 +241,7 @@
       "download_link_failed": "Could not generate download link"
     },
     "processing": {
-      "initializing": "Initializing Cockpit...",
+      "initializing": "Opening lease…",
       "title": "Processing Lease",
       "description": "Our AI is extracting key terms and data from your document. This typically takes 30-90 seconds.",
       "elapsed": "{{time}} elapsed",
@@ -671,7 +671,7 @@
     "uploaded_on": "Uploaded {{date}}",
     "open_aria": "Open {{name}}",
     "archive_aria": "Archive {{name}}",
-    "status_posted": "Posted",
+    "status_posted": "Finalized",
     "fields": {
       "lease_start": "Lease Start",
       "lease_end": "Lease End",
@@ -912,7 +912,6 @@
     "rent_payment_due": "Rent payment due",
     "cpi_adjustment_due": "CPI Adjustment Due",
     "properties": "properties",
-    "new_request": "New Request",
     "needs_your_action": "Needs Your Action",
     "items_require_attention_one": "{{count}} item requires attention",
     "items_require_attention_other": "{{count}} items require attention",
@@ -995,7 +994,7 @@
       "final_review": "Final review",
       "pending_counter_signature": "Awaiting counter-signature",
       "fully_executed": "Fully executed",
-      "chain_violation": "Chain violation"
+      "chain_violation": "Approval incomplete"
     },
     "activity_created": "Lease created",
     "activity_status_to": "Status → {{status}}",
@@ -1052,7 +1051,7 @@
     "flag_stalled": "Stalled in review",
     "flag_awaiting_abstraction": "Awaiting AI abstraction",
     "flag_doc_missing": "Executed — document missing",
-    "flag_chain_violation": "Chain violation — retroactive approval required",
+    "flag_chain_violation": "Approval incomplete — retroactive approval required",
     "awaiting_approval_sub": "{{count}} awaiting approval",
     "expiring_120_combined": "Expiring ≤ 120 days",
     "within_90_days": "{{count}} within 90 days",
@@ -1446,7 +1445,7 @@
       "process_failed": "Failed to process lease",
       "unexpected_error": "An unexpected error occurred",
       "loading_leases": "Loading leases...",
-      "no_posted_leases": "No posted leases available",
+      "no_posted_leases": "No finalized leases available",
       "unknown_tenant": "Unknown Tenant",
       "unknown_landlord": "Unknown Landlord",
       "submitting": "Submitting...",
@@ -1598,13 +1597,13 @@
       "pending_over_sla_other": "Pending {{count}} days · over SLA"
     },
     "chain_violation": {
-      "title": "Chain violation — retroactive approval required",
+      "title": "Approval incomplete — retroactive approval required",
       "desc": "This lease's policy-required approvers were not all consulted before execution. Required approvers must retroactively approve before the lease returns to its prior status, or an admin can acknowledge and override.",
       "awaiting": "Required approvers awaiting action:",
       "unknown_approver": "Unknown approver",
       "none_pending": "No pending required approvers found. The override path may be the appropriate resolution.",
       "ack_override": "Acknowledge and Override",
-      "dialog_title": "Acknowledge and Override Chain Violation",
+      "dialog_title": "Acknowledge and override",
       "dialog_desc": "This bypasses the retroactive-approval requirement and reverts the lease to its prior lifecycle status. The override reason is captured permanently in the audit log. Use only when retroactive approval is impractical (e.g., the required approver has left the company and the policy needs admin attention separately).",
       "reason_label": "Reason (≥20 characters, required)",
       "reason_placeholder": "e.g., Required approver left the company; policy is being revised separately and this lease needs to remain active in the meantime.",
@@ -1612,7 +1611,7 @@
       "override_cta": "Override and Resolve",
       "reason_min": "Override reason must be at least 20 characters.",
       "revert_failed": "Failed to revert lifecycle: {{message}}",
-      "override_success": "Chain violation acknowledged and overridden.",
+      "override_success": "Override recorded — lease reverted to its prior status.",
       "override_failed": "Override failed"
     },
     "pdf": {
@@ -1643,7 +1642,7 @@
       "policy_short": "policy {{id}}…",
       "no_prior_policy": "(no prior policy)",
       "system": "system",
-      "chain_violation_badge": "Chain violation",
+      "chain_violation_badge": "Approval incomplete",
       "triggered_by": "triggered by {{name}}",
       "lifecycle_label": "Lifecycle:",
       "steps_label": "Steps:",
@@ -1670,7 +1669,7 @@
       "new_approvers_other": "+{{count}} new approvers required",
       "prior_superseded_one": "· {{count}} prior step superseded",
       "prior_superseded_other": "· {{count}} prior steps superseded",
-      "violation_note": "The reroute happened after this lease executed, so it has entered the chain_violation state. Required retroactive approvers will be notified, or an admin can acknowledge and override.",
+      "violation_note": "The reroute happened after this lease executed, so its approval is now incomplete. Required retroactive approvers will be notified, or an admin can acknowledge and override.",
       "got_it": "Got it",
       "view_history": "View Chain Reroute History"
     },
@@ -2391,7 +2390,7 @@
     },
     "countersig": {
       "title": "Counter-Signature Window",
-      "desc": "Default number of days from signator approval until the counter-signed document is expected. Reminders fire 7 days before, on the due date, and at 7 / 14 / 28 days overdue.",
+      "desc": "Default number of days from signatory approval until the counter-signed document is expected. Reminders fire 7 days before, on the due date, and at 7 / 14 / 28 days overdue.",
       "label": "Default counter-signature window (days)",
       "help": "Must be between 1 and 365 days. Default: 21."
     },
@@ -3270,7 +3269,7 @@
     "coming_soon": "Coming Soon",
     "faq_title": "Frequently Asked Questions",
     "faq1_q": "How do I upload a lease?",
-    "faq1_a": "Go to the Dashboard or Leases page and click 'Upload Lease'. You can drag and drop a PDF or click to browse your files.",
+    "faq1_a": "On the Dashboard or Leases page, click 'Add Lease', then choose 'Upload Document'. You can drag and drop a PDF or click to browse your files.",
     "faq2_q": "How long does AI extraction take?",
     "faq2_a": "Most documents are processed within 1-2 minutes. Complex documents with many pages may take a bit longer.",
     "faq3_q": "Can I edit extracted data?",
@@ -3438,11 +3437,9 @@
     "creating": "Creating..."
   },
   "review": {
-    "cockpit_title": "Abstraction Cockpit",
     "source_document": "Source Document",
     "review_panel": "Review & Verification Panel",
     "save_draft": "Save Draft",
-    "initializing": "Initializing Cockpit...",
     "document_unavailable": "Document stream unavailable",
     "parties": "Parties & Property",
     "rent_financial": "Rent & Financial",
@@ -3462,9 +3459,6 @@
       "low": "Low confidence",
       "na": "N/A"
     },
-    "post_lease": "Post Lease",
-    "posting": "Posting...",
-    "review_fields": "Please review all highlighted fields before posting",
     "nudge_approver": "Nudge Approver"
   },
   "accept_invite": {
@@ -3643,7 +3637,7 @@
   },
   "needs_review": {
     "title": "Review Required",
-    "intro": "Please review the following items before posting this lease:",
+    "intro": "Please review the following items before finalizing this lease:",
     "missing": "{{label}} is missing",
     "low_confidence": "Double-check {{label}} — we were less certain here ({{pct}}%)"
   },
@@ -3791,7 +3785,7 @@
       "lifecycle_label": "Lifecycle:",
       "steps_label": "Steps:",
       "superseded": "{{count}} superseded",
-      "would_violate": "Would enter chain_violation",
+      "would_violate": "Would need retroactive approval",
       "open_lease": "Open lease",
       "trigger": "Trigger Manual Reroute",
       "trigger_short": "Trigger Reroute",
@@ -4190,13 +4184,13 @@
       "lease_not_found": "Lease not found",
       "not_final_review": "This lease isn't at the final-review stage yet — it can't be reviewed here until it gets there.",
       "already_resolved": "This lease has already moved past signature review — it's no longer awaiting your signature.",
-      "no_pending_step": "No pending signator step exists for this lease. The signator stage may have already been resolved or not yet inserted.",
-      "not_authorized": "You are not authorized to act on this signator step.",
-      "load_failed": "Failed to load signator review",
+      "no_pending_step": "This lease has already moved past final review, so there's nothing to sign here. Head back to the lease to see its current status.",
+      "not_authorized": "You're not authorized to review and sign this lease.",
+      "load_failed": "Failed to load signature review",
       "the_company": "the company",
       "attestation_placeholder_doc": "I confirm this lease commits {{workspace}} to the terms in {{filename}} (iteration {{iteration}}, v{{version}}), and I have authority to bind the company.",
       "attestation_placeholder": "I confirm this lease commits {{workspace}} to the negotiated terms, and I have authority to bind the company.",
-      "approved_toast": "Signator approval recorded. Lease moved to pending counter-signature.",
+      "approved_toast": "Signatory approval recorded. Lease moved to pending counter-signature.",
       "reason_required": "Please provide a reason.",
       "submit_failed": "Failed to submit",
       "rejected_toast": "Lease rejected.",
@@ -4274,8 +4268,8 @@
       "badge_manager": "Manager review",
       "badge_financial": "Financial review",
       "badge_auto_approved": "Auto-approved",
-      "badge_posted_after": "Posted after approval",
-      "badge_concept": "Concept approval",
+      "badge_posted_after": "Finalized after approval",
+      "badge_concept": "Initial approval",
       "badge_signature": "Signature",
       "resolving_route": "Resolving the approval route…",
       "route_via_policy": "Routes through your \"{{policy}}\" approval policy.",
@@ -4352,7 +4346,7 @@
       "select_placeholder": "Select parent lease...",
       "search_placeholder": "Search by filename, tenant, or landlord...",
       "loading": "Loading leases...",
-      "none_found": "No posted leases found.",
+      "none_found": "No finalized leases found.",
       "ends_colon": "Ends: {{date}}"
     },
     "delegation": {
@@ -4491,7 +4485,7 @@
     "markets_count_other": "{{count}} markets",
     "business_gate_title": "Portfolio Intelligence is a Business-plan feature",
     "business_gate_desc": "Upgrade to Business to unlock portfolio occupancy cost, the rent-commitment forecast, cost composition, and the lease watchlist.",
-    "empty_title": "Portfolio intelligence appears after posting leases",
+    "empty_title": "Portfolio intelligence appears once you add leases",
     "empty_desc": "Once leases are active, this page summarizes occupancy cost, the commitment forecast, cost composition, and critical-date flags.",
     "missing_area_one": "{{missing}} of {{count}} lease missing square footage — excluded from $/sqft metrics.",
     "missing_area_other": "{{missing}} of {{count}} leases missing square footage — excluded from $/sqft metrics.",
@@ -4581,12 +4575,12 @@
       "final_review": "Final Review",
       "pending_counter_signature": "Awaiting Counter-Signature",
       "fully_executed": "Fully Executed",
-      "chain_violation": "Chain Violation",
+      "chain_violation": "Approval incomplete",
       "Processing": "Processing",
       "Uploaded": "Uploaded",
       "Failed": "Failed",
       "Ready": "Ready",
-      "Posted": "Posted"
+      "Posted": "Finalized"
     },
     "status_short": {
       "draft": "Draft",
@@ -4604,7 +4598,7 @@
       "final_review": "Final",
       "pending_counter_signature": "Counter-Sign",
       "fully_executed": "Executed",
-      "chain_violation": "Violation"
+      "chain_violation": "Incomplete"
     },
     "stage": {
       "concept": "Initial approval",
