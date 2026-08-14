@@ -220,7 +220,7 @@ export function UpcomingEvents() {
     return (
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             {t('dashboard.upcoming_events')}
           </CardTitle>
@@ -276,7 +276,7 @@ export function UpcomingEvents() {
     <Card className="animate-fade-up" style={{ animationDelay: '50ms' }}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             {t('dashboard.upcoming_events')}
           </CardTitle>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Shield } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionCard } from '@/components/ui/section-card';
 import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -170,14 +170,12 @@ export function UpcomingRisks() {
   const filteredRisks = activeFilter === 'all' ? risks : risks.filter((r) => r.riskType === activeFilter);
 
   return (
-    <Card className="border-amber-200">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium">
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
-          {t('dashboard.upcoming_risks')}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <SectionCard
+      icon={AlertTriangle}
+      iconClassName="text-amber-500"
+      title={t('dashboard.upcoming_risks')}
+      className="border-amber-200"
+    >
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
@@ -244,7 +242,6 @@ export function UpcomingRisks() {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
   );
 }

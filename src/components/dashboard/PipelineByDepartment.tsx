@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionCard } from '@/components/ui/section-card';
 import { Building2, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency } from '@/lib/dateFormatters';
@@ -115,17 +115,7 @@ export function PipelineByDepartment() {
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            {t('dashboard.pipeline_by_department')}
-          </div>
-          {toggleUI}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <SectionCard icon={Building2} title={t('dashboard.pipeline_by_department')} action={toggleUI}>
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -154,7 +144,6 @@ export function PipelineByDepartment() {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
   );
 }

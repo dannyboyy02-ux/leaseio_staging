@@ -142,7 +142,7 @@ export function EscalationReviewPanel() {
     <>
       <Card className="border-l-4 border-l-amber-400 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2 text-amber-700 dark:text-amber-400">
+          <CardTitle className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
             <AlertTriangle className="h-4 w-4" />
             {t('dashboard.escalation_review_title')}
             <Badge variant="secondary" className="ml-auto text-xs">

@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { FirmNotMemberState } from "@/components/firm/FirmNotMemberState";
 import { Card } from "@/components/ui/card";
+import { StatTile } from "@/components/ui/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -82,10 +83,7 @@ export default function FirmDashboard() {
   const hiddenChildren = Math.max(0, childrenCount - childUsage.length);
 
   const stat = (icon: React.ReactNode, label: string, value: React.ReactNode) => (
-    <Card className="p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">{icon}<span className="text-xs">{label}</span></div>
-      <p className="text-2xl font-semibold mt-1">{value}</p>
-    </Card>
+    <StatTile icon={icon} label={label} labelTitle={label} value={value} />
   );
 
   return (

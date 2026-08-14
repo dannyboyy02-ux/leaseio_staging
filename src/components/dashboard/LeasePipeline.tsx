@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2, AlertCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionCard } from '@/components/ui/section-card';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
@@ -136,24 +136,21 @@ export function LeasePipeline() {
     .reduce((sum, s) => sum + s.count, 0);
 
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <div className="flex items-center gap-2">
-            <BarChart2 className="h-4 w-4" />
-            {t('dashboard.lease_pipeline')}
-          </div>
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs"
-            onClick={() => navigate('/app/leases')}
-          >
-            {t('dashboard.full_pipeline')}
-          </Button>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <SectionCard
+      icon={BarChart2}
+      title={t('dashboard.lease_pipeline')}
+      className="h-full"
+      action={
+        <Button
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-xs"
+          onClick={() => navigate('/app/leases')}
+        >
+          {t('dashboard.full_pipeline')}
+        </Button>
+      }
+    >
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -220,7 +217,6 @@ export function LeasePipeline() {
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
   );
 }

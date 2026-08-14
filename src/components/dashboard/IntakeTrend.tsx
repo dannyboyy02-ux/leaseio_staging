@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionCard } from '@/components/ui/section-card';
 import { ClipboardList, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
@@ -74,14 +74,7 @@ export function IntakeTrend() {
   const isEmpty = !loading && data.every((d) => d.count === 0);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-sm font-medium">
-          <ClipboardList className="h-4 w-4" />
-          {t('dashboard.intake_trend_title')}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <SectionCard icon={ClipboardList} title={t('dashboard.intake_trend_title')}>
         {loading ? (
           <div className="flex items-center justify-center h-48">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -132,7 +125,6 @@ export function IntakeTrend() {
             </AreaChart>
           </ResponsiveContainer>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
   );
 }

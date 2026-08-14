@@ -113,7 +113,7 @@ export function PendingCounterSignatureCard() {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Clock className="h-4 w-4" />
           {t('dashboard.awaiting_counter_signature')}
           <Badge variant="secondary" className="ml-1">
