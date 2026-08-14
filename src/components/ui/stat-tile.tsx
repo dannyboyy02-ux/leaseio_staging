@@ -33,6 +33,9 @@ export interface StatTileProps {
   icon?: ReactNode;
   /** Native title on the value — reveals the full figure on hover when it truncates. */
   valueTitle?: string;
+  /** Native title on the label — reveals the full label on hover when it truncates
+   *  (labels are truncated to keep tile heights equal across a row). */
+  labelTitle?: string;
   accent?: StatTileAccent;
   /** When set, the whole tile becomes a clickable card with a hover affordance. */
   onClick?: () => void;
@@ -47,6 +50,7 @@ export function StatTile({
   sub,
   icon,
   valueTitle,
+  labelTitle,
   accent = 'default',
   onClick,
   trailing,
@@ -57,12 +61,35 @@ export function StatTile({
     <Card
       variant={interactive ? 'interactive' : 'default'}
       onClick={onClick}
-      className={cn('group p-4', ACCENT_CLASS[accent], className)}
+      // A clickable tile must be keyboard-operable: expose it as a button and
+      // activate on Enter/Space (Card is a plain div, so this doesn't come for
+      // free). Fixes the KPI shortcuts for keyboard users in one place.
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={cn(
+        'group p-4',
+        interactive &&
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        ACCENT_CLASS[accent],
+        className,
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
           {icon}
-          <span className="truncate text-xs">{label}</span>
+          <span className="truncate text-xs" title={labelTitle}>
+            {label}
+          </span>
         </div>
         {(trailing || interactive) && (
           <div className="flex shrink-0 items-center gap-1">

@@ -67,10 +67,17 @@ const deptColor = (dept: string, i: number) =>
 // (no accent/click), and `title` maps to StatTile's `valueTitle` — the full
 // figure on hover when the compact value truncates in the narrow tile.
 function KpiTile({ label, value, sub, title }: { label: string; value: string; sub: string; title?: string }) {
-  return <StatTile label={label} value={value} sub={sub} valueTitle={title} />;
+  return (
+    <StatTile label={label} labelTitle={label} value={value} sub={sub} valueTitle={title} />
+  );
 }
 
-function SectionCard({
+// Portfolio's dense, equal-height grid panel — intentionally NOT the shared
+// <SectionCard> (it needs a sub caption, flex-1 fill, and tighter p-5). Renamed
+// off "SectionCard" to avoid colliding with the shared primitive; its title
+// token is aligned to the shared font-display/text-sm/font-medium so section
+// headers read the same walking Dashboard -> Portfolio (FS-8 layout review).
+function PortfolioPanel({
   title,
   sub,
   icon: Icon,
@@ -90,7 +97,7 @@ function SectionCard({
           <div className="flex min-w-0 items-center gap-2">
             <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold">{title}</p>
+              <p className="font-display text-sm font-medium">{title}</p>
               {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
             </div>
           </div>
@@ -439,30 +446,30 @@ export default function Portfolio() {
 
             {/* Row 1 — forecast + composition */}
             <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1.7fr_1fr]">
-              <SectionCard title={t('portfolio.forecast_title')} sub={t('portfolio.forecast_sub')} icon={BarChart3} right={<Badge variant="secondary">{t('portfolio.next_5_yrs')}</Badge>}>
+              <PortfolioPanel title={t('portfolio.forecast_title')} sub={t('portfolio.forecast_sub')} icon={BarChart3} right={<Badge variant="secondary">{t('portfolio.next_5_yrs')}</Badge>}>
                 {forecastHasData ? (
                   <CommitmentForecast data={forecast} />
                 ) : (
                   <p className="py-6 text-center text-sm text-muted-foreground">{t('portfolio.forecast_empty')}</p>
                 )}
-              </SectionCard>
-              <SectionCard title={t('portfolio.cost_by_department')} sub={t('portfolio.cost_by_department_sub')} icon={Layers}>
+              </PortfolioPanel>
+              <PortfolioPanel title={t('portfolio.cost_by_department')} sub={t('portfolio.cost_by_department_sub')} icon={Layers}>
                 {depts.length > 0 ? <CostByDepartment data={depts} /> : <p className="text-sm text-muted-foreground">{t('portfolio.no_cost_data')}</p>}
-              </SectionCard>
+              </PortfolioPanel>
             </div>
 
             {/* Row 2 — benchmark + watchlist */}
             <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-[1fr_1.4fr]">
-              <SectionCard title={t('portfolio.cost_per_sqft_title')} sub={t('portfolio.cost_per_sqft_sub')} icon={Scale}>
+              <PortfolioPanel title={t('portfolio.cost_per_sqft_title')} sub={t('portfolio.cost_per_sqft_sub')} icon={Scale}>
                 {locations.rows.length > 0 ? (
                   <CostPerSqft data={locations} />
                 ) : (
                   <p className="text-sm text-muted-foreground">{t('portfolio.no_sqft_leases')}</p>
                 )}
-              </SectionCard>
-              <SectionCard title={t('portfolio.watchlist_title')} sub={t('portfolio.watchlist_sub')} icon={Flag} right={watchlist.length > 0 ? <Badge variant="secondary">{t('portfolio.items_count', { count: watchlist.length })}</Badge> : undefined}>
+              </PortfolioPanel>
+              <PortfolioPanel title={t('portfolio.watchlist_title')} sub={t('portfolio.watchlist_sub')} icon={Flag} right={watchlist.length > 0 ? <Badge variant="secondary">{t('portfolio.items_count', { count: watchlist.length })}</Badge> : undefined}>
                 <Watchlist flags={watchlist} />
-              </SectionCard>
+              </PortfolioPanel>
             </div>
 
             {/* Index-Lease Disclosure — neutral factual disclosure (kept under the new voice). */}

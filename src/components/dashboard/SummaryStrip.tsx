@@ -13,6 +13,8 @@ import { useNeedsAction } from '@/hooks/useNeedsAction';
 interface StatBox {
   label: string;
   primary: string;
+  /** Uncompacted figure for the hover title, when `primary` is abbreviated. */
+  primaryFull?: string;
   sub: string;
   accent?: 'blue' | 'orange' | 'red' | 'default';
   href: string;
@@ -196,6 +198,8 @@ export function SummaryStrip() {
           primary: monthlyRentSum >= 100_000
             ? formatLocalizedCurrency(monthlyRentSum, language, { compact: true })
             : formatCurrency(monthlyRentSum),
+          // Exact figure on hover — the compacted "$215K" hides "$215,375".
+          primaryFull: formatCurrency(monthlyRentSum),
           sub: monthlyRentSub,
           accent: 'default',
           href: '/app/leases?status=active',
@@ -231,7 +235,7 @@ export function SummaryStrip() {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="animate-pulse bg-muted h-20 rounded-lg" />
+          <div key={i} className="animate-pulse bg-muted h-24 rounded-xl" />
         ))}
       </div>
     );
@@ -265,7 +269,9 @@ export function SummaryStrip() {
         <StatTile
           key={box.label}
           label={box.label}
+          labelTitle={box.label}
           value={box.primary}
+          valueTitle={box.primaryFull ?? box.primary}
           sub={box.sub}
           accent={box.accent}
           onClick={box.disabled ? undefined : () => navigate(box.href)}

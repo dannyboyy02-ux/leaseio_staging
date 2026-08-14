@@ -89,4 +89,37 @@ describe('StatTile (FS-8)', () => {
     // stopPropagation: the card's navigation onClick must NOT fire.
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it('is keyboard-operable when interactive (role, tabindex, Enter/Space)', () => {
+    const onClick = vi.fn();
+    const { container } = render(
+      <StatTile label="Needs Action" value={3} onClick={onClick} />,
+    );
+    const card = container.firstChild as HTMLElement;
+    expect(card.getAttribute('role')).toBe('button');
+    expect(card.getAttribute('tabindex')).toBe('0');
+    fireEvent.keyDown(card, { key: 'Enter' });
+    fireEvent.keyDown(card, { key: ' ' });
+    expect(onClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('is not a button and not focusable when static', () => {
+    const { container } = render(<StatTile label="Monthly Rent" value="$215.8K" />);
+    const card = container.firstChild as HTMLElement;
+    expect(card.getAttribute('role')).toBeNull();
+    expect(card.getAttribute('tabindex')).toBeNull();
+  });
+
+  it('sets the native title on the label (hover-reveal for a truncated label)', () => {
+    render(
+      <StatTile
+        label="Annual Occupancy Cost"
+        labelTitle="Annual Occupancy Cost"
+        value="$2.6M"
+      />,
+    );
+    expect(screen.getByText('Annual Occupancy Cost').getAttribute('title')).toBe(
+      'Annual Occupancy Cost',
+    );
+  });
 });

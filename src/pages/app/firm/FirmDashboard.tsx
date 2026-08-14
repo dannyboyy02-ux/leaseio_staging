@@ -83,7 +83,7 @@ export default function FirmDashboard() {
   const hiddenChildren = Math.max(0, childrenCount - childUsage.length);
 
   const stat = (icon: React.ReactNode, label: string, value: React.ReactNode) => (
-    <StatTile icon={icon} label={label} value={value} />
+    <StatTile icon={icon} label={label} labelTitle={label} value={value} />
   );
 
   return (
