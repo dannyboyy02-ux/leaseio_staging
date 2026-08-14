@@ -3,12 +3,18 @@ import { Button } from '@/components/ui/button';
 import { FileText, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { LanguageToggle } from '@/components/layout/LanguageToggle';
 
 export function LandingNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { t } = useLanguage();
+  // A signed-in visitor's most prominent action shouldn't be signing up for
+  // an account they already have — the CTA becomes their way back in.
+  const { user } = useAuth();
+  const ctaTarget = user ? '/app/dashboard' : '/signup';
+  const ctaLabel = user ? 'landing.hero.cta_dashboard' : 'landing.hero.cta_trial';
 
   const navLinks = [
     { href: '#features', labelKey: 'landing.nav.product' },
@@ -68,7 +74,7 @@ export function LandingNav() {
               <Link to="/login">{t('landing.nav.sign_in')}</Link>
             </Button>
             <Button asChild>
-              <Link to="/signup">{t('landing.nav.get_started')}</Link>
+              <Link to={ctaTarget}>{t(ctaLabel)}</Link>
             </Button>
           </div>
 
@@ -107,7 +113,7 @@ export function LandingNav() {
                 <Link to="/login">{t('landing.nav.sign_in')}</Link>
               </Button>
               <Button asChild className="w-full">
-                <Link to="/signup">{t('landing.nav.get_started')}</Link>
+                <Link to={ctaTarget}>{t(ctaLabel)}</Link>
               </Button>
             </div>
           </div>

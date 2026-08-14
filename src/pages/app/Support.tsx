@@ -1,8 +1,9 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
+import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Mail, Book, ExternalLink } from "lucide-react";
+import { Mail, ExternalLink } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Support() {
@@ -15,9 +16,12 @@ export default function Support() {
         subtitle={t('support.description')} 
       />
       
-      <div className="p-6">
-        <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
-          {/* Email Support */}
+      {/* narrow: an action card + an FAQ list is a focused single-column page.
+          (The old hand-rolled left-aligned 2-col grid died with the FS-14
+          "Documentation — Coming Soon" card removal.) */}
+      <PageLayout width="narrow">
+          {/* Email Support. (The old "Documentation — Coming Soon" card was a
+              disabled dead-end (FS-14); removed until real docs exist.) */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -35,25 +39,9 @@ export default function Support() {
               </Button>
             </CardContent>
           </Card>
-          
-          {/* Documentation */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Book className="h-5 w-5 text-primary" />
-                {t('support.docs_title')}
-              </CardTitle>
-              <CardDescription>{t('support.docs_desc')}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" disabled>
-                {t('support.coming_soon')}
-              </Button>
-            </CardContent>
-          </Card>
-          
+
           {/* FAQ */}
-          <Card className="md:col-span-2">
+          <Card>
             <CardHeader>
               <CardTitle>{t('support.faq_title')}</CardTitle>
             </CardHeader>
@@ -74,8 +62,7 @@ export default function Support() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

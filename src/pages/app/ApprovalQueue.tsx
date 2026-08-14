@@ -1393,7 +1393,10 @@ export default function ApprovalQueue() {
   // Layout note: the renderUnifiedMyReview return wraps both the
   // Phase 5 execution-owner section + the legacy/chain unified items.
 
-  const renderList = (leases: QueueLease[], viewerMode = false) => {
+  // emptyTitle: "All caught up" congratulates on cleared WORK — right for the
+  // pending tabs, wrong for the Reviewed HISTORY tab (empty just means no
+  // reviews have happened yet), which passes its own title.
+  const renderList = (leases: QueueLease[], viewerMode = false, emptyTitle?: string) => {
     if (loading) {
       return (
         <div className="space-y-3">
@@ -1407,7 +1410,7 @@ export default function ApprovalQueue() {
       return (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <FileText className="h-12 w-12 mb-3 opacity-40" />
-          <p className="font-medium">{t('approvals.queue.nothing_here')}</p>
+          <p className="font-medium">{emptyTitle ?? t('approvals.queue.nothing_here')}</p>
           <p className="text-sm">{t('approvals.queue.no_items')}</p>
         </div>
       );
@@ -1481,7 +1484,7 @@ export default function ApprovalQueue() {
 
           <TabsContent value="mine">{renderUnifiedMyReview()}</TabsContent>
           <TabsContent value="all">{renderList(allPending, true)}</TabsContent>
-          <TabsContent value="reviewed">{renderList(reviewed, true)}</TabsContent>
+          <TabsContent value="reviewed">{renderList(reviewed, true, t('approvals.queue.no_reviews_yet'))}</TabsContent>
 
           {showGovernanceTab && (
             <TabsContent value="governance" className="space-y-6">

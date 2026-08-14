@@ -23,7 +23,6 @@ const ALLOWLIST: Record<string, string> = {
   'src/pages/app/ExtractionAnalytics.tsx': 'dev-only analytics page',
   'src/pages/app/NotificationDetail.tsx': 'not yet migrated',
   'src/pages/app/OperationsPage.tsx': 'not yet migrated',
-  'src/pages/app/Support.tsx': 'not yet migrated',
   'src/pages/settings/AccountSettings.tsx': 'not yet migrated',
   'src/pages/settings/WorkspacesSection.tsx':
     'renders its own AppHeader as a settings sub-section — not yet migrated',

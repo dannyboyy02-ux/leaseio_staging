@@ -7,9 +7,18 @@ interface EmptyLeaseStateProps {
   onAddLease: () => void;
   /** Vault / read-only retention: suppress the intake CTA (no new leases). */
   readOnly?: boolean;
+  /** Override the Leases-page default copy — the Dashboard first-run hero
+   *  passes forward-looking copy instead of "No executed leases yet". */
+  title?: string;
+  description?: string;
 }
 
-export function EmptyLeaseState({ onAddLease, readOnly = false }: EmptyLeaseStateProps) {
+export function EmptyLeaseState({
+  onAddLease,
+  readOnly = false,
+  title,
+  description,
+}: EmptyLeaseStateProps) {
   const { t } = useLanguage();
   return (
     <Card className="border-2 border-dashed border-border">
@@ -17,12 +26,14 @@ export function EmptyLeaseState({ onAddLease, readOnly = false }: EmptyLeaseStat
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted mb-6">
           <FileText className="h-10 w-10 text-muted-foreground" />
         </div>
-        <h3 className="text-xl font-semibold mb-2">{t('leases.empty_title')}</h3>
+        <h3 className="text-xl font-semibold mb-2">{title ?? t('leases.empty_title')}</h3>
         <p className="text-muted-foreground max-w-md mb-6">
-          {t('leases.empty_desc')}
+          {description ?? t('leases.empty_desc')}
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 max-w-2xl">
+        {/* Gap to the CTA lives on the Button (mt-8) so the read-only variant —
+            which suppresses the CTA — doesn't end on dangling whitespace. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl">
           <div className="text-left p-4 rounded-lg bg-muted/50">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="h-5 w-5 text-primary" />
@@ -49,7 +60,7 @@ export function EmptyLeaseState({ onAddLease, readOnly = false }: EmptyLeaseStat
         </div>
 
         {!readOnly && (
-          <Button variant="accent" size="lg" onClick={onAddLease}>
+          <Button variant="accent" size="lg" className="mt-8" onClick={onAddLease}>
             <Plus className="h-5 w-5 mr-2" />
             {t('leases.add_lease')}
             <ArrowRight className="h-5 w-5 ml-2" />

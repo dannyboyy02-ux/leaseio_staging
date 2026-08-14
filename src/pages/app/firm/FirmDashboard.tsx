@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { Building2, Inbox, Users, FileText, Layers, ArrowRight } from "lucide-react";
+import { Building2, Inbox, Users, FileText, Layers, ArrowRight, Plus } from "lucide-react";
 
 import { AppLayout } from "@/components/layout/AppLayout";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -123,8 +123,20 @@ export default function FirmDashboard() {
         {usageLoading ? (
           <p className="text-sm text-muted-foreground">{t("common.loading", { defaultValue: "Loading…" })}</p>
         ) : childUsage.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-muted-foreground">
-            {hiddenChildren > 0 ? t("firm.dashboard.restricted_hidden", { count: hiddenChildren }) : t("firm.dashboard.no_children")}
+          <Card className="p-8 text-center space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {hiddenChildren > 0 ? t("firm.dashboard.restricted_hidden", { count: hiddenChildren }) : t("firm.dashboard.no_children")}
+            </p>
+            {/* The wizard's "add a workspace later" escape lands here — this CTA
+                is what makes that promise real (it resumes the wizard at the
+                workspace step). Admin-gated: create-firm-workspace rejects
+                non-admins server-side anyway. */}
+            {hiddenChildren === 0 && currentFirmRole === "firm_admin" && (
+              <Button size="sm" onClick={() => navigate("/app/firm/onboarding")}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                {t("firm.dashboard.add_first_workspace")}
+              </Button>
+            )}
           </Card>
         ) : (
           // space-y-2 keeps the note reading as the grid's caption, not an
