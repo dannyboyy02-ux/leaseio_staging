@@ -110,7 +110,7 @@ export function PendingApprovalsSection() {
   return (
     <Card className="border-l-4 border-l-warning bg-warning/5 border-warning/30 shadow-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="flex items-center gap-2.5 text-base">
+        <CardTitle className="flex items-center gap-2 text-sm font-medium">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-warning text-warning-foreground shrink-0">
             <AlertTriangle className="h-4 w-4" />
           </div>
