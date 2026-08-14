@@ -148,7 +148,28 @@ even to firm_admins who could act one nav away at `/app/firm/billing`. **Fix sha
 `workspace.firmId` is set, point the banner CTA at `/app/firm/billing` for firm users (or drop
 the button + extend the guidance copy); add a secondary "Go to firm billing" button to both
 firm branches of LimitReachedDialog. Pre-existing, untouched by the #197 diff; firm staff are
-the users who will drive a child toward quota. Surfaced by the #197 polish review.
+the users who will drive a child toward quota. Surfaced by the #197 polish review. *#201
+addendum (2026-08-14):* third member of the cluster — `AccountSettings.tsx:~1220`'s
+"never-subscribed recovery" trial callout has no `firmBound` guard, so the exact #201 input
+class (firm-bound never-subscribed child) is still sold a trial in the Billing tab directly
+under the "managed by your firm" banner (its `proceedWithCheckout` 403s `firm_managed`). Fix
+alongside: `!firmBound &&` on the callout, matching the surrounding banners.
+
+### #205 (MEDIUM, monetization, pre-existing) Workspace-less "personal" leases bypass the P0-h gate entirely — no subscription check, no quota, no cap
+`checkProcessingQuota` returns `{ kind: 'ok' }` when the workspace id resolves null
+(`process_lease/index.ts:~1012`), and `retry_lease` wraps its whole liveness+monetization block
+in `if (lease.workspace_id)` — so a JWT-holder with zero owned workspaces and zero memberships
+who omits `workspaceId` processes leases with NO monetization gate, NO quota, and NO cap: free
+Opus burn via the legacy workspace-less path. Pre-existing (predates #201; the #201 review
+surfaced it, not caused it). **Fix shape:** reject null-workspace processing outright — the
+`create_first_workspace` RPC guarantees every user a workspace now, so the legacy path has no
+remaining legitimate persona. Root cause: the personal-lease path predates workspaces and was
+grandfathered through each gate addition. Surfaced by the #201 security review. *Same
+fail-open family (integrity review):* both entry points' `workspaces` SELECT ignores the query
+error (`const { data: ws }`), so a transient fetch error yields a null row → the pure gate
+returns false → ungated (though still quota-checked) processing with a valid `workspaceId`.
+Fix with the same beat: treat a workspace-fetch error like the #36 quota-count error — 503,
+never a pass.
 
 ### #200 (LOW, dead code + latent gate drift) `AppContext.hasPermission` has zero consumers and its `!userRole → false` arm encodes the pre-#197 stance
 `src/contexts/AppContext.tsx:443-454` exports a `hasPermission` helper nobody calls. Beyond the
@@ -168,7 +189,11 @@ ImportHistory's retry toast a generic failure instead of the actionable (now acc
 `_shared/role_gate.ts` returns `false` on transient lookup errors, so an owner mid-DB-hiccup gets
 the access-denied message. **Fix:** parse `error.context`/body reason in the retry catch paths;
 return a discriminated `blocked | check_failed` from the gate and map `check_failed` to a
-retryable error. Surfaced by the Wave-5 security + integrity + auditor reviews.
+retryable error. Surfaced by the Wave-5 security + integrity + auditor reviews. *#201 addendum
+(2026-08-14):* the retry 403 now also carries `firm_subscription_required` — when this is
+fixed, that reason must surface the FIRM panel copy (`leases.upload.firm_subscription_*`) and
+the firm-billing door, NEVER the trial CTA (mapping only `no_subscription` to the trial would
+reintroduce on the retry surface the exact lie #201 removed from the upload modal).
 
 ### #199 (MEDIUM, integrity, pre-existing) LeaseReview approve's `lease_activity_log` mirror insert is best-effort — approve-without-audit-row remains possible
 The Wave-5 backstops guarantee the approve UPDATE itself can't silently no-op, and wave5b moved

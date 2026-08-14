@@ -28,8 +28,10 @@ export interface MonetizationRow {
 
 /**
  * True when this workspace must start a subscription before any paid-AI
- * processing (first pass or retry). Callers translate a `true` into the
- * `no_subscription` response.
+ * processing (first pass or retry). Workspace-LOCAL truth only — production
+ * callers go through resolveProcessingSubscriptionGate below, which
+ * translates a `true` into a blocked result (`no_subscription`, or
+ * `firm_subscription_required` for firm-bound children, #201).
  */
 export function requiresSubscriptionToProcess(ws: MonetizationRow | null | undefined): boolean {
   if (!ws) return false;
@@ -54,7 +56,7 @@ export const NO_SUBSCRIPTION_REASON = 'no_subscription';
  *  firm-bound workspace's own checkout 403s `firm_managed`, so the trial CTA
  *  was a promise the workspace structurally could not keep. */
 export const FIRM_SUBSCRIPTION_REQUIRED_ERROR =
-  "This workspace's billing is managed by your firm, and the firm doesn't have an active subscription yet. Ask your firm admin to activate it.";
+  "This workspace's billing is managed by your firm, and the firm doesn't have an active subscription yet. Ask the firm owner to activate it.";
 export const FIRM_SUBSCRIPTION_REQUIRED_REASON = 'firm_subscription_required';
 
 // deno-lint-ignore no-explicit-any

@@ -62,7 +62,12 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
   const navigate = useNavigate();
   const { startProcessing } = useProcessing();
   const { workspace } = useApp();
-  const { isFirmUser } = useFirm();
+  // #201 polish: the firm-billing door must open on THIS workspace's firm —
+  // isFirmUser (membership in ANY firm) would send a multi-firm user (the CPA
+  // persona) to the WRONG firm's billing page, possibly showing "Active".
+  const { firmMemberships, switchFirm } = useFirm();
+  const canOpenFirmBilling =
+    !!workspace?.firmId && firmMemberships.some((m) => m.firm_id === workspace.firmId);
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [leaseType, setLeaseType] = useState<LeaseType>('master');
@@ -543,17 +548,25 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             </div>
             <p className="text-sm font-medium mb-2">{t('leases.upload.firm_subscription_heading')}</p>
             <p className="text-xs text-muted-foreground text-center max-w-xs mb-6">
-              {t('leases.upload.firm_subscription_body')}
+              {t('leases.upload.firm_subscription_body', {
+                firmName: workspace?.firmName || t('leases.upload.firm_generic'),
+              })}
             </p>
             <div className="flex gap-3 w-full">
+              {/* "Close", not "Cancel" — the upload was already rejected;
+                  there's nothing left to cancel (polish review). */}
               <Button variant="outline" onClick={handleClose} className="flex-1">
-                {t('lease.upload.cancel')}
+                {t('common.close')}
               </Button>
-              {isFirmUser && (
+              {canOpenFirmBilling && (
                 <Button
                   variant="accent"
-                  onClick={() => {
+                  onClick={async () => {
                     handleClose();
+                    // Land on THIS workspace's firm, not whichever firm was
+                    // last active — switchFirm persists the selection and
+                    // reloads the firm context before the page reads it.
+                    await switchFirm(workspace!.firmId!);
                     navigate('/app/firm/billing');
                   }}
                   className="flex-1"

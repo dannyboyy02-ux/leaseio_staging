@@ -106,7 +106,7 @@
       "not_set_up": "La facturación de la firma aún no está configurada.",
       "status_active": "Activa",
       "status_pending": "Sin configurar",
-      "setup_note": "La facturación a nivel de firma se está finalizando. Mientras tanto, los espacios de trabajo conservan su acceso.",
+      "setup_note": "Los espacios de trabajo de la firma no pueden procesar documentos hasta que se configure la facturación de la firma.",
       "mode_label": "Desglose de facturación",
       "mode_detailed_desc": "Establece su preferencia de detalle de facturación por espacio de trabajo. Actualmente las facturas muestran un solo cargo combinado; el uso por espacio de trabajo aparece abajo.",
       "mode_summarized_desc": "Establece su preferencia de un resumen de facturación combinado. Las facturas muestran un solo cargo combinado.",
@@ -125,7 +125,8 @@
       "finalizing_note": "Esto puede tardar unos segundos después del pago; no necesita volver a pagar.",
       "finalizing_delayed": "Aún sincronizando su suscripción",
       "finalizing_delayed_note": "Se recibió su pago. Esto suele resolverse en un minuto: actualice o contacte a soporte si no aparece.",
-      "refresh": "Actualizar"
+      "refresh": "Actualizar",
+      "not_owner_note": "Solo el propietario de la firma puede iniciar la facturación de la firma; contáctelo para activarla."
     },
     "onboarding": {
       "title": "Configure su firma",
@@ -1480,8 +1481,9 @@
       "firm_subscription_title": "La facturación la administra su firma",
       "firm_subscription_desc": "Este espacio de trabajo procesa documentos con la suscripción de su firma.",
       "firm_subscription_heading": "La suscripción de su firma aún no está activa",
-      "firm_subscription_body": "La facturación de este espacio de trabajo se gestiona a nivel de firma. Pida a su administrador de firma que active la suscripción para comenzar a procesar documentos.",
-      "firm_subscription_cta": "Ir a la facturación de la firma"
+      "firm_subscription_body": "{{firmName}} administra la facturación de este espacio de trabajo. Pida al propietario de la firma que active la suscripción para comenzar a procesar documentos.",
+      "firm_subscription_cta": "Ir a la facturación de la firma",
+      "firm_generic": "Su firma"
     },
     "tier2": {
       "type_asset_label": "Tipo de activo incorrecto",
