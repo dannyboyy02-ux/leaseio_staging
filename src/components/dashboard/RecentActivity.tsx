@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SectionCard } from '@/components/ui/section-card';
 import { Button } from '@/components/ui/button';
 import { Inbox, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -151,24 +151,20 @@ export function RecentActivity() {
   }, [workspace?.id]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between text-sm font-medium">
-          <div className="flex items-center gap-2">
-            <Inbox className="h-4 w-4" />
-            {t('dashboard.recent_activity')}
-          </div>
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs"
-            onClick={() => navigate('/app/leases')}
-          >
-            {t('dashboard.all_activity')}
-          </Button>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <SectionCard
+      icon={Inbox}
+      title={t('dashboard.recent_activity')}
+      action={
+        <Button
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-xs"
+          onClick={() => navigate('/app/leases')}
+        >
+          {t('dashboard.all_activity')}
+        </Button>
+      }
+    >
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -277,7 +273,6 @@ export function RecentActivity() {
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+    </SectionCard>
   );
 }
