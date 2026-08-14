@@ -189,7 +189,12 @@ export default function FirmBilling() {
                 <p className="text-xs text-muted-foreground">{t("firm.billing.setup_note")}</p>
                 {isOwner ? (
                   <Button size="sm" onClick={startCheckout}>{t("firm.billing.start")}</Button>
-                ) : null}
+                ) : (
+                  // #201 polish: the upload modal's "Go to firm billing" door
+                  // lands non-owners here — name who CAN act instead of a
+                  // buttonless dead-end (checkout is firm-owner-only).
+                  <p className="text-xs text-muted-foreground">{t("firm.billing.not_owner_note")}</p>
+                )}
               </div>
             ) : null}
           </Card>

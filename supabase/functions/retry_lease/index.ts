@@ -8,11 +8,7 @@ import {
   repairJsonObject,
 } from "../_shared/audit.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import {
-  requiresSubscriptionToProcess,
-  NO_SUBSCRIPTION_ERROR,
-  NO_SUBSCRIPTION_REASON,
-} from "../_shared/monetization.ts";
+import { resolveProcessingSubscriptionGate } from "../_shared/monetization.ts";
 import {
   callerCanProcessLeases,
   READ_ONLY_ROLE_ERROR,
@@ -631,7 +627,7 @@ serve(async (req) => {
     if (lease.workspace_id) {
       const { data: wsLifecycle } = await supabaseAdmin
         .from('workspaces')
-        .select('canceled_at, soft_deleted_at, plan, subscription_status, stripe_subscription_id, created_at')
+        .select('canceled_at, soft_deleted_at, plan, subscription_status, stripe_subscription_id, created_at, firm_id')
         .eq('id', lease.workspace_id)
         .maybeSingle();
       const wsLiveRow = wsLifecycle as {
@@ -641,6 +637,7 @@ serve(async (req) => {
         subscription_status?: string | null;
         stripe_subscription_id?: string | null;
         created_at?: string | null;
+        firm_id?: string | null;
       } | null;
       if (wsLiveRow?.canceled_at) {
         return new Response(
@@ -666,9 +663,11 @@ serve(async (req) => {
       // workspace must start a subscription before ANY paid-AI processing. A
       // retry burns Opus tokens exactly like a first pass, so it gets the same
       // gate as process_lease — shared helper keeps the two in lockstep.
-      if (requiresSubscriptionToProcess(wsLiveRow)) {
+      // #201: firm-bound children inherit entitlement from the firm sub.
+      const subGate = await resolveProcessingSubscriptionGate(supabaseAdmin, wsLiveRow);
+      if (subGate.blocked) {
         return new Response(
-          JSON.stringify({ error: NO_SUBSCRIPTION_ERROR, reason: NO_SUBSCRIPTION_REASON }),
+          JSON.stringify({ error: subGate.error, reason: subGate.reason }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, X, ChevronRight, HelpCircle, AlertCircle, Sparkles } from 'lucide-react';
+import { Upload, FileText, X, ChevronRight, HelpCircle, AlertCircle, Sparkles, Building2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useProcessing } from '@/contexts/ProcessingContext';
 import { useApp } from '@/contexts/AppContext';
+import { useFirm } from '@/contexts/FirmContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface LeaseUploadModalProps {
@@ -54,13 +55,19 @@ interface ParentLease {
   lease_end: string | null;
 }
 
-type Step = 'upload' | 'classify' | 'error' | 'tier2_rejected' | 'no_subscription';
+type Step = 'upload' | 'classify' | 'error' | 'tier2_rejected' | 'no_subscription' | 'firm_subscription';
 
 export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceeded }: LeaseUploadModalProps) {
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   const { startProcessing } = useProcessing();
   const { workspace } = useApp();
+  // #201 polish: the firm-billing door must open on THIS workspace's firm —
+  // isFirmUser (membership in ANY firm) would send a multi-firm user (the CPA
+  // persona) to the WRONG firm's billing page, possibly showing "Active".
+  const { firmMemberships, switchFirm } = useFirm();
+  const canOpenFirmBilling =
+    !!workspace?.firmId && firmMemberships.some((m) => m.firm_id === workspace.firmId);
   const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [leaseType, setLeaseType] = useState<LeaseType>('master');
@@ -205,8 +212,17 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
         return;
       }
 
+      // #201: a firm-bound child whose FIRM has no live subscription. NEVER
+      // the trial panel — this workspace's own checkout 403s firm_managed, so
+      // "start your free trial" was a promise it structurally couldn't keep.
+      if (result?.reason === 'firm_subscription_required') {
+        setStep('firm_subscription');
+        return;
+      }
+
       // Wave 5b viewer/role gate backstop: the UI hides intake for viewers,
-      // but a stale tab (or firm-derived access) can still reach here. Surface
+      // but a stale tab (or a direct-viewer / removed-member session) can
+      // still reach here (#197: firm-derived access is ALLOWED now). Surface
       // the LOCALIZED explanation with no retry — the English server string
       // in a "Try again" failure frame was a lying dead-end.
       if (result?.reason === 'read_only_role') {
@@ -272,6 +288,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             {step === 'error' && t('lease.upload.error_title')}
             {step === 'tier2_rejected' && t('leases.upload.tier2_title')}
             {step === 'no_subscription' && t('leases.upload.no_subscription_title')}
+            {step === 'firm_subscription' && t('leases.upload.firm_subscription_title')}
           </DialogTitle>
           <DialogDescription>
             {step === 'upload' && t('lease.upload.upload_desc')}
@@ -279,6 +296,7 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
             {step === 'error' && t('lease.upload.error_desc')}
             {step === 'tier2_rejected' && t('leases.upload.tier2_desc')}
             {step === 'no_subscription' && t('leases.upload.no_subscription_desc')}
+            {step === 'firm_subscription' && t('leases.upload.firm_subscription_desc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -515,6 +533,47 @@ export function LeaseUploadModal({ open, onOpenChange, onSuccess, onQuotaExceede
               <Button variant="accent" onClick={handleStartTrial} className="flex-1">
                 {t('leases.upload.no_subscription_cta')}
               </Button>
+            </div>
+          </div>
+        )}
+
+        {/* #201: firm-bound child, firm subscription not active. Informational
+            — no checkout CTA (this workspace's own checkout 403s firm_managed).
+            Firm users get a door to firm billing; direct members get honest
+            "ask your firm admin" copy instead of a trial they can't start. */}
+        {step === 'firm_subscription' && (
+          <div className="flex flex-col items-center py-8">
+            <div className="h-16 w-16 rounded-full bg-accent/10 flex items-center justify-center mb-4">
+              <Building2 className="h-8 w-8 text-accent" />
+            </div>
+            <p className="text-sm font-medium mb-2">{t('leases.upload.firm_subscription_heading')}</p>
+            <p className="text-xs text-muted-foreground text-center max-w-xs mb-6">
+              {t('leases.upload.firm_subscription_body', {
+                firmName: workspace?.firmName || t('leases.upload.firm_generic'),
+              })}
+            </p>
+            <div className="flex gap-3 w-full">
+              {/* "Close", not "Cancel" — the upload was already rejected;
+                  there's nothing left to cancel (polish review). */}
+              <Button variant="outline" onClick={handleClose} className="flex-1">
+                {t('common.close')}
+              </Button>
+              {canOpenFirmBilling && (
+                <Button
+                  variant="accent"
+                  onClick={async () => {
+                    handleClose();
+                    // Land on THIS workspace's firm, not whichever firm was
+                    // last active — switchFirm persists the selection and
+                    // reloads the firm context before the page reads it.
+                    await switchFirm(workspace!.firmId!);
+                    navigate('/app/firm/billing');
+                  }}
+                  className="flex-1"
+                >
+                  {t('leases.upload.firm_subscription_cta')}
+                </Button>
+              )}
             </div>
           </div>
         )}

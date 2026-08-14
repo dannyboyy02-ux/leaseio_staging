@@ -106,7 +106,7 @@
       "not_set_up": "Firm billing isn't set up yet.",
       "status_active": "Active",
       "status_pending": "Not set up",
-      "setup_note": "Firm-level billing is being finalized. In the meantime, child workspaces keep their access.",
+      "setup_note": "Child workspaces can't process documents until firm billing is set up.",
       "mode_label": "Billing breakdown",
       "mode_detailed_desc": "Sets your preference for per-workspace billing detail. Invoices currently show one combined charge; per-workspace usage appears below.",
       "mode_summarized_desc": "Sets your preference for a single combined billing summary. Invoices show one combined charge.",
@@ -125,7 +125,8 @@
       "finalizing_note": "This can take a few seconds after payment — no need to pay again.",
       "finalizing_delayed": "Still syncing your subscription",
       "finalizing_delayed_note": "Your payment was received. This usually clears within a minute — refresh, or contact support if it doesn't appear.",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "not_owner_note": "Only the firm owner can start firm billing — contact them to activate it."
     },
     "onboarding": {
       "title": "Set up your firm",
@@ -1476,7 +1477,13 @@
       "no_subscription_desc": "Begin your plan to process documents.",
       "no_subscription_heading": "Your 7-day free trial starts at checkout",
       "no_subscription_body": "Start your subscription to begin abstracting leases with AI. You won't be charged until the trial ends, and you can cancel anytime.",
-      "no_subscription_cta": "Start free trial"
+      "no_subscription_cta": "Start free trial",
+      "firm_subscription_title": "Billing is managed by your firm",
+      "firm_subscription_desc": "This workspace processes documents under your firm's subscription.",
+      "firm_subscription_heading": "Your firm's subscription isn't active yet",
+      "firm_subscription_body": "{{firmName}} manages billing for this workspace. Ask the firm owner to activate its subscription to begin processing documents.",
+      "firm_subscription_cta": "Go to firm billing",
+      "firm_generic": "Your firm"
     },
     "tier2": {
       "type_asset_label": "Wrong asset type",
@@ -3671,7 +3678,8 @@
   "readonly": {
     "lease_note": "This workspace is read-only — you can view and export, but editing, approvals, and uploads are disabled.",
     "viewer_note": "Your role in this workspace is view-only — you can view and export, but editing, approvals, and uploads are disabled.",
-    "write_rejected": "Your change wasn't saved — you don't have permission to edit this lease."
+    "write_rejected": "Your change wasn't saved — you don't have permission to edit this lease.",
+    "firm_lease_note": "You can view all of this workspace's leases and edit the ones you created."
   },
   "routing_failed": {
     "title": "Approval routing didn't finish",
@@ -4314,7 +4322,8 @@
       "discard_title": "Discard this request?",
       "discard_body": "You have unsaved details. Closing now will throw them away.",
       "discard_keep": "Keep editing",
-      "discard_confirm": "Discard"
+      "discard_confirm": "Discard",
+      "route_failed": "Could not route this request for approval. Contact your admin."
     },
     "impact": {
       "title": "Financial Impact",

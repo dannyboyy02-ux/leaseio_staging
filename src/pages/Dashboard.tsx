@@ -26,6 +26,7 @@ import { LimitReachedDialog } from '@/components/leases/LimitReachedDialog';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { isWorkspaceReadOnly } from '@/lib/workspaceReadOnly';
+import { useFirmIntakeAccess } from '@/hooks/useFirmIntakeAccess';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
@@ -36,8 +37,11 @@ export default function Dashboard() {
   // a cancellation-grace/soft-deleted one (the server also blocks the write).
   // Wave 5: VIEWER-role members are read-only too — the server now rejects
   // their lease creation (INSERT policy + process_lease role gate), so the
-  // intake CTAs must not render for them.
-  const isReadOnly = isWorkspaceReadOnly(workspace) || userRole === 'viewer' || !userRole;
+  // intake CTAs must not render for them. #197: firm staff in a child
+  // workspace (userRole null, firm membership matches) ARE intake-capable.
+  const firmIntake = useFirmIntakeAccess();
+  const isReadOnly =
+    isWorkspaceReadOnly(workspace) || userRole === 'viewer' || (!userRole && !firmIntake);
   const { t } = useAppTranslation();
   const navigate = useNavigate();
   // Wave 5: RequireRole bounces denied deep-links here with the path in
