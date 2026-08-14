@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { PLANS, PLAN_ORDER } from '@/config/pricing';
 import type { SubscriptionPlan } from '@/types';
 import { cn } from '@/lib/utils';
+import { ownsAnyWorkspace } from '@/lib/workspaceOwnership';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 export default function Onboarding() {
@@ -30,16 +31,29 @@ export default function Onboarding() {
   const [selectedBilling] = useState<'monthly' | 'annual'>(initialBilling);
   const [isLoading, setIsLoading] = useState(false);
   const { user } = useAuth();
-  const { refreshProfile, workspace, isLoading: appLoading } = useApp();
+  const { refreshProfile, availableWorkspaces, isLoading: appLoading } = useApp();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t } = useAppTranslation();
 
+  // #195: redirect away from onboarding only when the user already OWNS a
+  // workspace — not merely when they have a current one. A member of someone
+  // else's workspace (owns nothing) legitimately needs this flow to create
+  // their first owned workspace; the old `workspace`-based guard bounced them
+  // to the dashboard. `create_first_workspace` still enforces "at most one
+  // owned workspace" server-side as the backstop.
+  const ownsWorkspace = ownsAnyWorkspace(availableWorkspaces);
+  // An existing member (belongs to someone else's workspace) reaching this
+  // full-screen flow needs a visible way BACK into the app and a line of
+  // context so it doesn't read as being logged out into re-signup (#195
+  // polish review HIGH). Brand-new signups (no workspaces at all) keep the
+  // clean first-run framing with no back link.
+  const isExistingMember = availableWorkspaces.length > 0;
   useEffect(() => {
-    if (!appLoading && workspace) {
+    if (!appLoading && ownsWorkspace) {
       navigate('/app/dashboard', { replace: true });
     }
-  }, [workspace, appLoading, navigate]);
+  }, [ownsWorkspace, appLoading, navigate]);
 
   useEffect(() => {
     // Pre-fill workspace name from user metadata if available
@@ -133,8 +147,20 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 via-background to-background flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-3xl">
+        {/* #195: an existing member routed here to create their first owned
+            workspace needs a visible way back into the app (the full-screen
+            flow strips the app chrome). Brand-new signups don't see this. */}
+        {isExistingMember && (
+          <button
+            type="button"
+            onClick={() => navigate('/app/settings/workspaces')}
+            className="mb-4 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {t('onboarding_flow.member_back_link')}
+          </button>
+        )}
         {/* Logo */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+        <div className="flex items-center justify-center gap-2 mb-3">
           <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
             <FileText className="h-5 w-5 text-primary-foreground" />
           </div>
@@ -142,6 +168,12 @@ export default function Onboarding() {
             Lease<span className="text-primary">IO</span>
           </span>
         </div>
+        {isExistingMember && (
+          <p className="text-center text-sm text-muted-foreground mb-8">
+            {t('onboarding_flow.member_context_note')}
+          </p>
+        )}
+        {!isExistingMember && <div className="mb-5" />}
 
         {/* Progress Steps */}
         <div className="flex items-center justify-center gap-4 mb-8">

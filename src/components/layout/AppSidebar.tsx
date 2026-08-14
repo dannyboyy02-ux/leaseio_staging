@@ -47,6 +47,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import { computeFirmSidebarMode } from '@/lib/firmContext';
 import { isReadOnlyRetention } from '@/config/pricing';
 import { applyReorder, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_DEFAULT_WIDTH } from '@/lib/sidebarPrefs';
+import { ownsAnyWorkspace } from '@/lib/workspaceOwnership';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { shouldOpenCommandPalette } from '@/lib/cmdKHandler';
@@ -684,6 +685,14 @@ export function AppSidebar() {
                 with no obvious upgrade signal). */}
             <DropdownMenuItem
               onClick={() => {
+                // #195: a user who owns nothing has no Stripe customer, so the
+                // paid $499 add-workspace flow dead-ends at "add a card". Route
+                // them to the free-trial onboarding instead; owners get the
+                // paid dialog.
+                if (!ownsAnyWorkspace(availableWorkspaces)) {
+                  navigate('/app/onboarding');
+                  return;
+                }
                 setResumeWorkspaceId(null);
                 setNewWorkspaceOpen(true);
               }}
